@@ -424,6 +424,7 @@ CREATE TABLE IF NOT EXISTS generic_links (
   to_type TEXT NOT NULL,
   to_id INTEGER NOT NULL,
   section TEXT, -- optional namespace so the same owner can have several distinct drop-zone lists
+  origin TEXT NOT NULL DEFAULT 'planned', -- 'planned' | 'live' (dropped in during the session pult)
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(from_type, from_id, to_type, to_id, section)
 );

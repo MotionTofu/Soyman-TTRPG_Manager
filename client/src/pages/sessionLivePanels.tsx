@@ -79,6 +79,7 @@ function LocationsContent({ sessionId, session }: PanelProps) {
       placeholder="Перетащите сюда локацию из поиска"
       mentionText={session.idea_notes}
       mentionTypes={LOCATION_TYPES}
+      origin="live"
     />
   );
 }
@@ -93,12 +94,13 @@ function PlotCharactersContent({ sessionId, session }: PanelProps) {
       placeholder="Перетащите сюда существо или персонажа из поиска"
       mentionText={session.idea_notes}
       mentionTypes={PLOT_CHARACTER_TYPES}
+      origin="live"
     />
   );
 }
 
 function ObstaclesContent({ sessionId }: PanelProps) {
-  return <ObstacleDropZone sessionId={sessionId} />;
+  return <ObstacleDropZone sessionId={sessionId} origin="live" />;
 }
 
 function LootContent({ sessionId }: PanelProps) {
@@ -109,6 +111,7 @@ function LootContent({ sessionId }: PanelProps) {
       section="loot"
       acceptTypes={LOOT_TYPES}
       placeholder="Перетащите сюда ресурс или артефакт из поиска"
+      origin="live"
     />
   );
 }

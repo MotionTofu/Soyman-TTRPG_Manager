@@ -1,8 +1,8 @@
 import { memo, useEffect, useState, type DragEvent } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
+import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
 import type { SearchResult, SettingBeing } from "../types";
 
@@ -22,6 +22,7 @@ interface GenericLink {
   from_id: number;
   to_type: string;
   to_id: number;
+  origin: string;
 }
 
 interface Entry {
@@ -30,18 +31,24 @@ interface Entry {
   id: number;
   label: string;
   statblockShort?: string;
+  origin: string;
 }
 
 interface Props {
   sessionId: number;
+  // Passed as "live" when rendered inside the session pult, so drops made
+  // during a running session are tagged distinctly from ones planned ahead
+  // of time via the session profile page (same drop zone, different caller).
+  origin?: string;
 }
 
 // Memoized so an unrelated setState elsewhere on the session page (e.g.
 // typing in the Игровая дата fields) doesn't force this drop zone — and its
 // own fetch-on-mount effect — to re-render along with everything else.
-export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId }: Props) {
+export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, origin }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
 
   async function load() {
     const links = await api.get<GenericLink[]>(
@@ -56,10 +63,10 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId }: Pr
         try {
           if (other.type === "being") {
             const being = await api.get<SettingBeing>(`/setting-beings/${other.id}`);
-            return { linkId: l.id, type: other.type, id: other.id, label: being.name, statblockShort: being.statblock_short };
+            return { linkId: l.id, type: other.type, id: other.id, label: being.name, statblockShort: being.statblock_short, origin: l.origin };
           }
           const label = await resolveEntityLabel(other.type, other.id);
-          return { linkId: l.id, type: other.type, id: other.id, label };
+          return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin };
         } catch {
           return null;
         }
@@ -87,6 +94,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId }: Pr
       to_type: result.type,
       to_id: result.id,
       section: "enemies",
+      origin,
     });
     load();
   }
@@ -113,12 +121,31 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId }: Pr
       )}
       <div className="stack" style={{ gap: 0 }}>
         {entries.map((entry) => (
-          <div key={entry.linkId} className="resource-row stack">
+          <div
+            key={entry.linkId}
+            className="resource-row stack"
+            style={{
+              background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
+            }}
+            title={entry.origin === "live" ? "Добавлено на ходу во время сессии" : undefined}
+          >
             <div className="row" style={{ justifyContent: "space-between" }}>
               {DETAIL_ROUTES[entry.type] ? (
-                <Link to={`${DETAIL_ROUTES[entry.type]}/${entry.id}`} style={{ fontWeight: 600 }}>
+                <button
+                  type="button"
+                  onClick={() => setPreview({ type: entry.type, id: entry.id })}
+                  style={{
+                    fontWeight: 600,
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    color: "var(--accent)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
                   {entry.label}
-                </Link>
+                </button>
               ) : (
                 <span style={{ fontWeight: 600 }}>{entry.label}</span>
               )}
@@ -132,6 +159,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId }: Pr
           </div>
         ))}
       </div>
+      {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
     </div>
   );
 });

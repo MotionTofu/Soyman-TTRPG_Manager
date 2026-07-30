@@ -209,20 +209,21 @@ linksRouter.get("/", (req, res) => {
 });
 
 linksRouter.post("/", (req, res) => {
-  const { from_type, from_id, to_type, to_id, section } = req.body as {
+  const { from_type, from_id, to_type, to_id, section, origin } = req.body as {
     from_type: string;
     from_id: number;
     to_type: string;
     to_id: number;
     section?: string;
+    origin?: string;
   };
   if (!from_type || !from_id || !to_type || !to_id)
     return res.status(400).json({ error: "from_type, from_id, to_type, to_id are required" });
   const info = db
     .prepare(
-      `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section) VALUES (?, ?, ?, ?, ?)`
+      `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section, origin) VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(from_type, from_id, to_type, to_id, section ?? null);
+    .run(from_type, from_id, to_type, to_id, section ?? null, origin === "live" ? "live" : "planned");
   res.status(201).json({ ok: true, id: info.lastInsertRowid });
 });
 

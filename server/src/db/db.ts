@@ -195,6 +195,13 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "generic_links", "section")) {
     database.exec("ALTER TABLE generic_links ADD COLUMN section TEXT");
   }
+  // Distinguishes links created ahead of time via the session profile page
+  // ('planned', the default) from ones dropped in live during the session
+  // pult ('live') — the live ones get a reddish highlight on the profile
+  // page afterward so the GM can see what got added on the fly.
+  if (!columnExists(database, "generic_links", "origin")) {
+    database.exec("ALTER TABLE generic_links ADD COLUMN origin TEXT NOT NULL DEFAULT 'planned'");
+  }
   if (!columnExists(database, "character_chapters", "image_path")) {
     database.exec("ALTER TABLE character_chapters ADD COLUMN image_path TEXT");
   }

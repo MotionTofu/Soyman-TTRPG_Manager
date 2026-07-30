@@ -13,6 +13,7 @@ interface GenericLink {
   from_id: number;
   to_type: string;
   to_id: number;
+  origin: string;
 }
 
 interface Entry {
@@ -20,6 +21,7 @@ interface Entry {
   type: string;
   id: number;
   label: string;
+  origin: string;
 }
 
 interface Props {
@@ -35,6 +37,10 @@ interface Props {
   // linkId: null and can't be removed here (edit the text instead).
   mentionText?: string;
   mentionTypes?: string[];
+  // Passed as "live" by the session pult's panels so drops made during a
+  // running session are tagged distinctly from ones planned ahead of time
+  // via the session profile page (same drop zone, different call site).
+  origin?: string;
 }
 
 // Memoized — see ObstacleDropZone's comment. acceptTypes/mentionTypes are
@@ -49,6 +55,7 @@ export const SectionDropZone = memo(function SectionDropZone({
   placeholder,
   mentionText,
   mentionTypes,
+  origin,
 }: Props) {
   const [linkEntries, setLinkEntries] = useState<Entry[]>([]);
   const [mentionEntries, setMentionEntries] = useState<Entry[]>([]);
@@ -66,7 +73,7 @@ export const SectionDropZone = memo(function SectionDropZone({
             ? { type: l.to_type, id: l.to_id }
             : { type: l.from_type, id: l.from_id };
         const label = await resolveEntityLabel(other.type, other.id);
-        return { linkId: l.id, type: other.type, id: other.id, label };
+        return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin };
       })
     );
     setLinkEntries(resolved);
@@ -90,6 +97,7 @@ export const SectionDropZone = memo(function SectionDropZone({
         type: m.type,
         id: m.id,
         label: await resolveEntityLabel(m.type, m.id),
+        origin: "planned",
       }))
     ).then((rows) => {
       if (!cancelled) setMentionEntries(rows);
@@ -116,6 +124,7 @@ export const SectionDropZone = memo(function SectionDropZone({
       to_type: result.type,
       to_id: result.id,
       section,
+      origin,
     });
     load();
   }
@@ -141,7 +150,11 @@ export const SectionDropZone = memo(function SectionDropZone({
           <div
             key={`${entry.type}-${entry.id}`}
             className="resource-row row"
-            style={{ justifyContent: "space-between" }}
+            style={{
+              justifyContent: "space-between",
+              background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
+            }}
+            title={entry.origin === "live" ? "Добавлено на ходу во время сессии" : undefined}
             draggable
             onDragStart={(e) => {
               e.dataTransfer.setData(
