@@ -18,7 +18,7 @@ import type {
   Statblock,
 } from "../types";
 
-const ACCEPT_TYPES = ["being", "character"];
+const ACCEPT_TYPES = ["being", "character", "compendium_entry"];
 
 // Same 10-color palette used nowhere else yet — deterministic per condition
 // name (hash → index) so a given condition always gets the same chip color
@@ -98,7 +98,8 @@ export function InitiativeTracker({ sessionId }: Props) {
     type: string,
     id: number
   ): Promise<{ dexModifier: number; maxHp: number | null; currentHp: number | null }> {
-    if (type !== "being" && type !== "character") return { dexModifier: 0, maxHp: null, currentHp: null };
+    if (type !== "being" && type !== "character" && type !== "compendium_entry")
+      return { dexModifier: 0, maxHp: null, currentHp: null };
     try {
       const rows = await api.get<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`);
       const dnd = rows.find((s) => s.format === "dnd_character" || s.format === "dnd_creature");
@@ -413,7 +414,8 @@ export function InitiativeTracker({ sessionId }: Props) {
                   >
                     😐
                   </button>
-                  {entry.entity_type === "being" && confirmRerollId !== entry.id && (
+                  {(entry.entity_type === "being" || entry.entity_type === "compendium_entry") &&
+                    confirmRerollId !== entry.id && (
                     <button
                       type="button"
                       className="comp-mini"
