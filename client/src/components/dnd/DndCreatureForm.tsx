@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type {
   CompendiumEntry,
   DndAbilityKey,
@@ -1671,16 +1671,50 @@ export function DndCreatureEdit({
   );
 }
 
+// One collapsible statblock line — like the character sheet's spell rows: a
+// clickable summary (name + optional mechanical line) that expands to show
+// the full description, instead of always dumping the whole text inline.
+// Rows with no description just render flat (nothing to expand).
+function SbEntryRow({
+  name,
+  extra,
+  mech,
+  description,
+}: {
+  name?: string;
+  extra?: ReactNode;
+  mech?: string;
+  description: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = !!description.trim();
+  return (
+    <div className="sb-entry">
+      <div
+        className={`sb-entry-row${hasDetail ? " sb-entry-toggle" : ""}`}
+        onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
+      >
+        {name && <strong>{name}</strong>}
+        {extra}
+        {mech && <span className="muted"> {mech}</span>}
+        {hasDetail && <span className="sb-entry-caret">{open ? "▾" : "▸"}</span>}
+      </div>
+      {open && hasDetail && (
+        <div className="sb-entry-detail">
+          <MentionText text={description} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[] }) {
   if (values.length === 0) return null;
   return (
     <>
       <div className="sb-section">{title}</div>
       {values.map((f, i) => (
-        <div key={i} className="sb-entry">
-          {f.name && <strong>{f.name}. </strong>}
-          <MentionText text={f.description} />
-        </div>
+        <SbEntryRow key={i} name={f.name ? `${f.name}.` : undefined} description={f.description} />
       ))}
     </>
   );
@@ -1708,16 +1742,14 @@ function SbActionGroup({ title, values }: { title: string; values: DndCreatureAc
   return (
     <>
       <div className="sb-section">{title}</div>
-      {values.map((a, i) => {
-        const mech = formatAction(a);
-        return (
-          <div key={i} className="sb-entry">
-            {a.name && <strong>{a.name}. </strong>}
-            {mech && <>{mech}. </>}
-            <MentionText text={a.description} />
-          </div>
-        );
-      })}
+      {values.map((a, i) => (
+        <SbEntryRow
+          key={i}
+          name={a.name ? `${a.name}.` : undefined}
+          mech={formatAction(a)}
+          description={a.description}
+        />
+      ))}
     </>
   );
 }
@@ -1807,6 +1839,9 @@ function DndCreatureViewMini({ value, theme, density }: { value: DndCreatureData
   );
 }
 
+const DND_CREATURE_VIEW_TABS = ["Обзор", "Действия", "Особенности"] as const;
+type DndCreatureViewTab = (typeof DND_CREATURE_VIEW_TABS)[number];
+
 export function DndCreatureView({
   value,
   theme,
@@ -1818,6 +1853,11 @@ export function DndCreatureView({
   density?: string | null;
   compact?: boolean;
 }) {
+  // Not URL-synced / not lifted to props — same reasoning as the character
+  // sheet's view tab state: several statblocks can render on one page (e.g.
+  // a bestiary list), each needs its own independent tab.
+  const [tab, setTab] = useState<DndCreatureViewTab>("Обзор");
+
   if (compact) return <DndCreatureViewMini value={value} theme={theme} density={density} />;
 
   const metaParts = [
@@ -1843,6 +1883,15 @@ export function DndCreatureView({
     .filter(Boolean)
     .join(", ");
   const advantageParts = [...value.saveAdvantageConditions, value.saveAdvantageMagic ? "магии" : ""].filter(Boolean);
+
+  const hasActions =
+    value.actions.length > 0 ||
+    value.bonusActions.length > 0 ||
+    value.reactions.length > 0 ||
+    value.legendary.resistanceEnabled ||
+    value.legendary.actionsEnabled ||
+    value.legendary.lairEnabled ||
+    value.spellcasting.enabled;
 
   return (
     <div className={statblockScopeClass(theme, density)}>
@@ -1881,163 +1930,182 @@ export function DndCreatureView({
             ))}
           </div>
 
-          <div className="sb-props">
-            {saveList.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Спасброски</span> {saveList.join(", ")}
-              </div>
-            )}
-            {skillList.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Навыки</span> {skillList.join(", ")}
-              </div>
-            )}
-            {value.damageVulnerabilities.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Уязвимости</span> {value.damageVulnerabilities.join(", ")}
-              </div>
-            )}
-            {value.damageResistances.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Сопротивления</span> {value.damageResistances.join(", ")}
-              </div>
-            )}
-            {value.damageImmunities.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Иммунитет к урону</span> {value.damageImmunities.join(", ")}
-              </div>
-            )}
-            {value.conditionImmunities.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Иммунитет к состояниям</span> {value.conditionImmunities.join(", ")}
-              </div>
-            )}
-            {advantageParts.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Преимущество на спасброски от</span> {advantageParts.join(", ")}
-              </div>
-            )}
-            {value.defenseNotes && (
-              <div>
-                <MentionText text={value.defenseNotes} />
-              </div>
-            )}
-            {sensesText && (
-              <div>
-                <span className="sb-prop-label">Чувства</span> {sensesText}
-              </div>
-            )}
-            {value.perceptionNote && (
-              <div>
-                <MentionText text={value.perceptionNote} />
-              </div>
-            )}
-            {value.languages && (
-              <div>
-                <span className="sb-prop-label">Языки</span> {value.languages}
-              </div>
-            )}
-            {(value.habitat || value.treasure) && (
-              <div>
-                {value.habitat && (
-                  <>
-                    <span className="sb-prop-label">Среда обитания</span> {value.habitat}{" "}
-                  </>
-                )}
-                {value.treasure && (
-                  <>
-                    <span className="sb-prop-label">Сокровища</span> {value.treasure}
-                  </>
-                )}
-              </div>
-            )}
-            {value.equipment.length > 0 && (
-              <div>
-                <span className="sb-prop-label">Снаряжение</span>{" "}
-                {value.equipment.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
-              </div>
-            )}
-            {(value.loot.items.length > 0 || value.loot.currency.length > 0) && (
-              <div>
-                <span className="sb-prop-label">Лут</span>{" "}
-                {value.loot.items.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
-                {value.loot.items.length > 0 && value.loot.currency.length > 0 && "; "}
-                {value.loot.currency
-                  .map((c) => {
-                    const avg = averageDiceFormula(c.formula);
-                    return `${c.label}: ${c.formula}${avg !== null ? ` (≈ ${avg})` : ""}`;
-                  })
-                  .join(", ")}
-              </div>
-            )}
+          <div className="tabs">
+            {DND_CREATURE_VIEW_TABS.map((t) => (
+              <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
+                {t}
+              </button>
+            ))}
           </div>
 
-          {value.spellcasting.enabled && (
-            <>
-              <div className="sb-section">Заклинательная способность</div>
-              <div className="sb-entry">
-                {value.spellcasting.ability && (
-                  <>Основная характеристика: {ABILITY_LABELS.find((a) => a.key === value.spellcasting.ability)?.label}. </>
-                )}
-                {value.spellcasting.slots.length > 0 && (
-                  <>Ячейки: {value.spellcasting.slots.map((s) => `${s.level} круг — ${s.slots}`).join(", ")}. </>
-                )}
-              </div>
-              {value.spellcasting.spells.map((s, i) => (
-                <div key={i} className="sb-entry">
-                  <strong>{s.name || "Без названия"}</strong> ({s.level === 0 ? "заговор" : `круг ${s.level}`}, {formatSpellFrequency(s)})
-                  {s.description && (
+          {tab === "Обзор" && (
+            <div className="sb-props">
+              {saveList.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Спасброски</span> {saveList.join(", ")}
+                </div>
+              )}
+              {skillList.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Навыки</span> {skillList.join(", ")}
+                </div>
+              )}
+              {value.damageVulnerabilities.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Уязвимости</span> {value.damageVulnerabilities.join(", ")}
+                </div>
+              )}
+              {value.damageResistances.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Сопротивления</span> {value.damageResistances.join(", ")}
+                </div>
+              )}
+              {value.damageImmunities.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Иммунитет к урону</span> {value.damageImmunities.join(", ")}
+                </div>
+              )}
+              {value.conditionImmunities.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Иммунитет к состояниям</span> {value.conditionImmunities.join(", ")}
+                </div>
+              )}
+              {advantageParts.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Преимущество на спасброски от</span> {advantageParts.join(", ")}
+                </div>
+              )}
+              {value.defenseNotes && (
+                <div>
+                  <MentionText text={value.defenseNotes} />
+                </div>
+              )}
+              {sensesText && (
+                <div>
+                  <span className="sb-prop-label">Чувства</span> {sensesText}
+                </div>
+              )}
+              {value.perceptionNote && (
+                <div>
+                  <MentionText text={value.perceptionNote} />
+                </div>
+              )}
+              {value.languages && (
+                <div>
+                  <span className="sb-prop-label">Языки</span> {value.languages}
+                </div>
+              )}
+              {(value.habitat || value.treasure) && (
+                <div>
+                  {value.habitat && (
                     <>
-                      {" — "}
-                      <MentionText text={s.description} />
+                      <span className="sb-prop-label">Среда обитания</span> {value.habitat}{" "}
+                    </>
+                  )}
+                  {value.treasure && (
+                    <>
+                      <span className="sb-prop-label">Сокровища</span> {value.treasure}
                     </>
                   )}
                 </div>
-              ))}
-            </>
-          )}
-
-          <SbFeatureGroup title="Особенности" values={value.traits} />
-          <SbActionGroup title="Действия" values={value.actions} />
-          <SbActionGroup title="Бонусные действия" values={value.bonusActions} />
-          <SbActionGroup title="Реакции" values={value.reactions} />
-
-          {value.legendary.resistanceEnabled && (
-            <div className="sb-entry">
-              <span className="sb-prop-label">Легендарные сопротивления</span> {value.legendary.resistanceCount ?? "—"}/день
+              )}
+              {value.equipment.length > 0 && (
+                <div>
+                  <span className="sb-prop-label">Снаряжение</span>{" "}
+                  {value.equipment.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
+                </div>
+              )}
+              {(value.loot.items.length > 0 || value.loot.currency.length > 0) && (
+                <div>
+                  <span className="sb-prop-label">Лут</span>{" "}
+                  {value.loot.items.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
+                  {value.loot.items.length > 0 && value.loot.currency.length > 0 && "; "}
+                  {value.loot.currency
+                    .map((c) => {
+                      const avg = averageDiceFormula(c.formula);
+                      return `${c.label}: ${c.formula}${avg !== null ? ` (≈ ${avg})` : ""}`;
+                    })
+                    .join(", ")}
+                </div>
+              )}
+              {value.notes && (
+                <>
+                  <div className="sb-section">Заметки</div>
+                  <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
+                    <MentionText text={value.notes} />
+                  </div>
+                </>
+              )}
             </div>
           )}
-          {value.legendary.actionsEnabled && (
+
+          {tab === "Действия" && (
             <>
-              <div className="sb-section">
-                Легендарные действия
-                {value.legendary.actionPoints !== null ? ` (Очков: ${value.legendary.actionPoints} за раунд)` : ""}
-              </div>
-              {value.legendary.actions.map((a, i) => {
-                const mech = formatAction(a);
-                return (
-                  <div key={i} className="sb-entry">
-                    {a.name && <strong>{a.name}</strong>} <span className="muted">(Стоимость: {a.cost})</span>
-                    {mech && <>. {mech}</>}
-                    {a.description && (
+              {value.spellcasting.enabled && (
+                <>
+                  <div className="sb-section">Заклинательная способность</div>
+                  <div className="sb-entry">
+                    {value.spellcasting.ability && (
                       <>
-                        {". "}
-                        <MentionText text={a.description} />
+                        Основная характеристика: {ABILITY_LABELS.find((a) => a.key === value.spellcasting.ability)?.label}.{" "}
                       </>
                     )}
+                    {value.spellcasting.slots.length > 0 && (
+                      <>Ячейки: {value.spellcasting.slots.map((s) => `${s.level} круг — ${s.slots}`).join(", ")}. </>
+                    )}
                   </div>
-                );
-              })}
+                  {value.spellcasting.spells.map((s, i) => (
+                    <SbEntryRow
+                      key={i}
+                      name={s.name || "Без названия"}
+                      extra={
+                        <span className="muted">
+                          {" "}
+                          ({s.level === 0 ? "заговор" : `круг ${s.level}`}, {formatSpellFrequency(s)})
+                        </span>
+                      }
+                      description={s.description}
+                    />
+                  ))}
+                </>
+              )}
+
+              <SbActionGroup title="Действия" values={value.actions} />
+              <SbActionGroup title="Бонусные действия" values={value.bonusActions} />
+              <SbActionGroup title="Реакции" values={value.reactions} />
+
+              {value.legendary.resistanceEnabled && (
+                <div className="sb-entry">
+                  <span className="sb-prop-label">Легендарные сопротивления</span> {value.legendary.resistanceCount ?? "—"}/день
+                </div>
+              )}
+              {value.legendary.actionsEnabled && (
+                <>
+                  <div className="sb-section">
+                    Легендарные действия
+                    {value.legendary.actionPoints !== null ? ` (Очков: ${value.legendary.actionPoints} за раунд)` : ""}
+                  </div>
+                  {value.legendary.actions.map((a, i) => (
+                    <SbEntryRow
+                      key={i}
+                      name={a.name || undefined}
+                      extra={<span className="muted"> (Стоимость: {a.cost})</span>}
+                      mech={formatAction(a)}
+                      description={a.description}
+                    />
+                  ))}
+                </>
+              )}
+              {value.legendary.lairEnabled && <SbActionGroup title="Действия логова" values={value.legendary.lairActions} />}
+
+              {!hasActions && <p className="muted">Действий пока нет.</p>}
             </>
           )}
-          {value.legendary.lairEnabled && <SbActionGroup title="Действия логова" values={value.legendary.lairActions} />}
 
-          {value.notes && (
+          {tab === "Особенности" && (
             <>
-              <div className="sb-section">Заметки</div>
-              <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={value.notes} />
-              </div>
+              <SbFeatureGroup title="Особенности" values={value.traits} />
+              {value.traits.length === 0 && <p className="muted">Особенностей пока нет.</p>}
             </>
           )}
         </div>
