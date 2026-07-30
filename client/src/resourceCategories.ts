@@ -1,8 +1,9 @@
-export type ResourceCategory = "folder" | "pdf" | "image" | "audio" | "link" | "other";
+export type ResourceCategory = "folder" | "pdf" | "map" | "image" | "audio" | "link" | "other";
 
 export const RESOURCE_CATEGORIES: { key: ResourceCategory; label: string; icon: string }[] = [
   { key: "folder", label: "Папки", icon: "📁" },
   { key: "pdf", label: "PDF", icon: "📕" },
+  { key: "map", label: "Карты", icon: "🗺" },
   { key: "image", label: "Изображения", icon: "🖼" },
   { key: "audio", label: "Звуки", icon: "🎵" },
   { key: "link", label: "Внешние ссылки", icon: "🔗" },

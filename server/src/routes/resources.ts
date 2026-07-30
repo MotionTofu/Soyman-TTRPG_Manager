@@ -428,10 +428,15 @@ resourcesRouter.post("/from-location-map", async (req, res) => {
     )
     .get(session_id) as { m: number };
 
+  // type must be 'link' (the value every other resource row gets from the
+  // normal creation path — see POST / above) not 'file': SessionDetailPage
+  // only ever passes session.resources.filter(r => r.type === "link") into
+  // ResourcesSection, so any other value silently hides the row from the
+  // session's Ресурсы tab despite the row existing in the DB.
   const info = db
     .prepare(
       `INSERT INTO resources (name, type, scope, session_id, template_format, file_path, category, position)
-       VALUES (?, 'file', 'session', ?, 'text', ?, 'image', ?)`
+       VALUES (?, 'link', 'session', ?, 'text', ?, 'map', ?)`
     )
     .run(`Карта: ${location.name}`, session_id, target, maxPos.m + 1);
 
