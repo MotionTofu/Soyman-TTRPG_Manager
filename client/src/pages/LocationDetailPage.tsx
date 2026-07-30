@@ -317,6 +317,8 @@ export function LocationDetailPage() {
       {tab === "Карта" && (
         <LocationMap
           locationId={locationId}
+          locationName={location.name}
+          settingId={location.setting_id}
           mapImageUrl={location.map_image_url}
           pins={location.pins}
           mapMaxZoom={location.map_max_zoom}

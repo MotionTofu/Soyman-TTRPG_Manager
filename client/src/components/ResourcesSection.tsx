@@ -148,6 +148,15 @@ export const ResourcesSection = memo(function ResourcesSection({
     loadAttached();
   }
 
+  // A bag item can carry a location's map (type "location_map", id =
+  // location id) instead of an actual resource — see LocationMap.tsx's
+  // "В мешок" button. The from-location-map endpoint copies the map image
+  // into the session's own resources, same as its "→ В сессию" flow.
+  async function attachLocationMap(locationId: number) {
+    await api.post("/resources/from-location-map", { location_id: locationId, session_id: entityId });
+    onChange();
+  }
+
   async function detachResource(linkId: number) {
     await api.del(`/links/${linkId}`);
     loadAttached();
@@ -166,6 +175,7 @@ export const ResourcesSection = memo(function ResourcesSection({
     if (raw) {
       const result: SearchResult = JSON.parse(raw);
       if (result.type === "resource") await attachResource(result.id);
+      else if (result.type === "location_map" && scope === "session") await attachLocationMap(result.id);
       return;
     }
     const files = Array.from(e.dataTransfer.files ?? []);

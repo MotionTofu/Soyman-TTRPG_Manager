@@ -9,10 +9,14 @@ import { Modal } from "./Modal";
 import { DETAIL_ROUTES, ENTITY_TYPE_LABELS } from "../entityTypes";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { LocationCascadePicker } from "./LocationCascadePicker";
-import type { LocationPin, SearchResult, SessionSummary, SettingLocation } from "../types";
+import { SendMapToSessionModal } from "./SendMapToSessionModal";
+import { addToBag } from "../bag";
+import type { LocationPin, SearchResult, SettingLocation } from "../types";
 
 interface Props {
   locationId: number;
+  locationName: string;
+  settingId: number | null;
   mapImageUrl: string | null;
   pins: LocationPin[];
   mapMaxZoom: number | null;
@@ -126,6 +130,8 @@ function computeImageBox(
 
 export function LocationMap({
   locationId,
+  locationName,
+  settingId,
   mapImageUrl,
   pins,
   mapMaxZoom,
@@ -158,10 +164,6 @@ export function LocationMap({
   const [transferKeepCopy, setTransferKeepCopy] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
-  const [sendSessions, setSendSessions] = useState<SessionSummary[]>([]);
-  const [sendTarget, setSendTarget] = useState<number | null>(null);
-  const [sending, setSending] = useState(false);
-  const [sendDone, setSendDone] = useState(false);
   const [pinQuery, setPinQuery] = useState("");
   const [pinDropdownOpen, setPinDropdownOpen] = useState(false);
   const [pinTarget, setPinTarget] = useState<ResolvedPin | null>(null);
@@ -308,22 +310,8 @@ export function LocationMap({
     onChange();
   }
 
-  function openSendToSession() {
-    setSendTarget(null);
-    setSendDone(false);
-    setSendOpen(true);
-    api.get<SessionSummary[]>("/calendar").then(setSendSessions);
-  }
-
-  async function sendToSession() {
-    if (sendTarget == null) return;
-    setSending(true);
-    try {
-      await api.post("/resources/from-location-map", { location_id: locationId, session_id: sendTarget });
-      setSendDone(true);
-    } finally {
-      setSending(false);
-    }
+  function addMapToBag() {
+    addToBag({ type: "location_map", id: locationId, title: `Карта: ${locationName}` });
   }
 
   async function transferMap() {
@@ -779,7 +767,10 @@ export function LocationMap({
                   ⇄ Перенести карту
                 </button>
               )}
-              <button type="button" onClick={openSendToSession}>
+              <button type="button" onClick={addMapToBag}>
+                🎒 В мешок
+              </button>
+              <button type="button" onClick={() => setSendOpen(true)}>
                 → В сессию
               </button>
               <button type="button" onClick={() => setFullscreen(true)} title="Развернуть на весь экран">
@@ -944,36 +935,7 @@ export function LocationMap({
         </Modal>
       )}
       {sendOpen && (
-        <Modal onClose={() => setSendOpen(false)}>
-          <h3>Отправить карту в сессию</h3>
-          {sendDone ? (
-            <div className="stack">
-              <p>Карта добавлена в ресурсы сессии.</p>
-              <button onClick={() => setSendOpen(false)}>Закрыть</button>
-            </div>
-          ) : (
-            <div className="stack">
-              <select
-                value={sendTarget ?? ""}
-                onChange={(e) => setSendTarget(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">— выберите сессию —</option>
-                {sendSessions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.campaign_name} — {s.date}
-                    {s.title ? ` (${s.title})` : ""}
-                  </option>
-                ))}
-              </select>
-              <div className="row">
-                <button className="primary" disabled={sendTarget == null || sending} onClick={sendToSession}>
-                  {sending ? "Отправляю…" : "Отправить"}
-                </button>
-                <button onClick={() => setSendOpen(false)}>Отмена</button>
-              </div>
-            </div>
-          )}
-        </Modal>
+        <SendMapToSessionModal locationId={locationId} settingId={settingId} onClose={() => setSendOpen(false)} />
       )}
     </>
   );
