@@ -5,6 +5,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import {
   LocationsPanel,
   PlotCharactersPanel,
+  ObstaclesPanel,
   LootPanel,
   RosterPanel,
   SecretsPanel,
@@ -125,6 +126,7 @@ export function SessionLivePage() {
         <div className="stack" style={{ flex: 1, minWidth: 260 }}>
           <LocationsPanel {...panelProps} />
           <PlotCharactersPanel {...panelProps} />
+          <ObstaclesPanel {...panelProps} />
           <LootPanel {...panelProps} />
           <RosterPanel {...panelProps} />
         </div>

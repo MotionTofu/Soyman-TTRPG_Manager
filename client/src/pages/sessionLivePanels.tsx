@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 import { SectionDropZone } from "../components/SectionDropZone";
+import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { LazyDetails } from "../components/LazyDetails";
 import { SecretsTracker } from "../components/SecretsTracker";
@@ -18,6 +19,7 @@ const LOOT_TYPES = ["resource", "artifact"];
 export type SessionPanelKey =
   | "locations"
   | "plotCharacters"
+  | "obstacles"
   | "loot"
   | "roster"
   | "secrets"
@@ -28,6 +30,7 @@ export type SessionPanelKey =
 export const SESSION_PANEL_TITLES: Record<SessionPanelKey, string> = {
   locations: "Локации",
   plotCharacters: "Сюжетные персонажи",
+  obstacles: "Препятствия",
   loot: "Потенциальный лут",
   roster: "Состав кампании",
   secrets: "Тайны и зацепки",
@@ -92,6 +95,10 @@ function PlotCharactersContent({ sessionId, session }: PanelProps) {
       mentionTypes={PLOT_CHARACTER_TYPES}
     />
   );
+}
+
+function ObstaclesContent({ sessionId }: PanelProps) {
+  return <ObstacleDropZone sessionId={sessionId} />;
 }
 
 function LootContent({ sessionId }: PanelProps) {
@@ -177,6 +184,7 @@ function CompendiumContent({ campaign }: PanelProps) {
 export const SESSION_PANEL_CONTENT: Record<SessionPanelKey, (props: PanelProps) => ReactElement> = {
   locations: LocationsContent,
   plotCharacters: PlotCharactersContent,
+  obstacles: ObstaclesContent,
   loot: LootContent,
   roster: RosterContent,
   secrets: SecretsContent,
@@ -204,6 +212,14 @@ export function PlotCharactersPanel(props: PanelProps) {
       actions={<PopoutButton sessionId={props.sessionId} panelKey="plotCharacters" />}
     >
       <PlotCharactersContent {...props} />
+    </LazyDetails>
+  );
+}
+
+export function ObstaclesPanel(props: PanelProps) {
+  return (
+    <LazyDetails title={SESSION_PANEL_TITLES.obstacles} actions={<PopoutButton sessionId={props.sessionId} panelKey="obstacles" />}>
+      <ObstaclesContent {...props} />
     </LazyDetails>
   );
 }
