@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { api, getAuthToken, setAuthToken } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
 import { SearchPanel } from "./SearchPanel";
 import { NavWidget } from "./NavWidget";
+import { PreviewDock } from "./PreviewDock";
 import { NavIcon, type NavIconName } from "../components/NavIcons";
 import { ParticleField } from "../components/ParticleField";
 import { AudioPlayerBar } from "../audioPlayer";
@@ -103,6 +104,12 @@ export function AppShell() {
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
   const navBottomItems = isPlayer ? PLAYER_NAV_BOTTOM_ITEMS : GM_NAV_BOTTOM_ITEMS;
 
+  // Пульт сессии swaps the main nav sidebar for a drag-and-drop preview
+  // dock (see PreviewDock) instead — a GM running a live session gets a
+  // place to keep creature/location previews visible instead of the app
+  // nav they're not using mid-session.
+  const isLivePult = /^\/sessions\/\d+\/live$/.test(useLocation().pathname);
+
   // Below the .app-shell CSS breakpoint the nav and search panel become
   // off-canvas drawers (see index.css) instead of permanent grid columns —
   // these two toggle them. Desktop-width layouts ignore this state (no
@@ -141,37 +148,41 @@ export function AppShell() {
           }}
         />
       )}
-      <nav className={`app-nav${navOpen ? " open" : ""}`}>
-        <ParticleField count={10} className="header-particles" />
-        <img src="/logo.png" alt="SoyMan — TTRPG Manager" className="brand-logo" />
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) => (isActive ? "active" : "")}
-            onClick={() => setNavOpen(false)}
-          >
-            <NavIcon name={item.icon} />
-            {item.label}
-          </NavLink>
-        ))}
-        <div className="nav-bottom">
-          <ParticleField count={10} className="footer-particles" />
-          {navBottomItems.map((item) => (
+      {isLivePult ? (
+        <PreviewDock />
+      ) : (
+        <nav className={`app-nav${navOpen ? " open" : ""}`}>
+          <ParticleField count={10} className="header-particles" />
+          <img src="/logo.png" alt="SoyMan — TTRPG Manager" className="brand-logo" />
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setNavOpen(false)}
             >
               <NavIcon name={item.icon} />
               {item.label}
             </NavLink>
           ))}
-          {!isPlayer && <BackupButton />}
-          <LogoutButton username={user?.username} />
-        </div>
-      </nav>
+          <div className="nav-bottom">
+            <ParticleField count={10} className="footer-particles" />
+            {navBottomItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => (isActive ? "active" : "")}
+              >
+                <NavIcon name={item.icon} />
+                {item.label}
+              </NavLink>
+            ))}
+            {!isPlayer && <BackupButton />}
+            <LogoutButton username={user?.username} />
+          </div>
+        </nav>
+      )}
       <main className={`app-content${isPlayer ? "" : " has-player"}`}>
         <Outlet />
       </main>

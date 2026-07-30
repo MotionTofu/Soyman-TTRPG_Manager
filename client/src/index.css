@@ -500,6 +500,32 @@ h1, h2, h3 {
   gap: 4px;
 }
 
+.preview-dock {
+  overflow-y: auto;
+}
+.preview-dock.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
+.preview-dock-header {
+  font-weight: 600;
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.preview-dock-placeholder {
+  padding: 8px 6px;
+  font-size: 0.9em;
+}
+.preview-dock-list {
+  gap: 10px;
+}
+.preview-dock-card {
+  padding: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
 /* Decorative drift-particle field, reused behind the nav logo, section
    headings, and the search panel title — colored via the active theme's
    own --accent, so every theme gets a "thematic" tint for free. Purely
