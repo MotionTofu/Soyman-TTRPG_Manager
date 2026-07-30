@@ -68,6 +68,7 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [rollingId, setRollingId] = useState<number | null>(null);
   const [hpErrorId, setHpErrorId] = useState<number | null>(null);
+  const [confirmRerollId, setConfirmRerollId] = useState<number | null>(null);
   const [conditionPickerFor, setConditionPickerFor] = useState<number | null>(null);
   const [conditionOptions, setConditionOptions] = useState<{ id: number; name: string }[]>([]);
   const { playPlaylist } = useAudioPlayer();
@@ -370,7 +371,7 @@ export function InitiativeTracker({ sessionId }: Props) {
                   >
                     😐
                   </button>
-                  {entry.entity_type === "being" && (
+                  {entry.entity_type === "being" && confirmRerollId !== entry.id && (
                     <button
                       type="button"
                       className="comp-mini"
@@ -381,10 +382,39 @@ export function InitiativeTracker({ sessionId }: Props) {
                       }
                       style={hpErrorId === entry.id ? { color: "var(--danger, #c0392b)" } : undefined}
                       disabled={rollingId === entry.id}
-                      onClick={() => rerollHp(entry)}
+                      onClick={() => {
+                        if (entry.max_hp != null) setConfirmRerollId(entry.id);
+                        else rerollHp(entry);
+                      }}
                     >
                       {hpErrorId === entry.id ? "⚠" : "♥"}
                     </button>
+                  )}
+                  {confirmRerollId === entry.id && (
+                    <span className="row" style={{ gap: 2, alignItems: "center" }}>
+                      <span className="muted" style={{ fontSize: "0.8em" }}>
+                        Уверены?
+                      </span>
+                      <button
+                        type="button"
+                        className="comp-mini"
+                        title="Да, перебросить"
+                        onClick={() => {
+                          setConfirmRerollId(null);
+                          rerollHp(entry);
+                        }}
+                      >
+                        Да
+                      </button>
+                      <button
+                        type="button"
+                        className="comp-mini"
+                        title="Отмена"
+                        onClick={() => setConfirmRerollId(null)}
+                      >
+                        Нет
+                      </button>
+                    </span>
                   )}
                   <button type="button" className="comp-mini" title="Убрать" onClick={() => remove(entry.id)}>
                     ✕
@@ -407,8 +437,13 @@ export function InitiativeTracker({ sessionId }: Props) {
                 </div>
               )}
               {hpPct != null && (
-                <div className="initiative-hp-bar-track" title={`ХП: ${entry.current_hp ?? "—"} / ${entry.max_hp}`}>
-                  <div className="initiative-hp-bar-fill" style={{ width: `${hpPct}%` }} />
+                <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                  <span className="muted" style={{ fontSize: "0.8em", whiteSpace: "nowrap" }}>
+                    ХП: {entry.current_hp ?? "—"} / {entry.max_hp}
+                  </span>
+                  <div className="initiative-hp-bar-track" style={{ flex: 1 }}>
+                    <div className="initiative-hp-bar-fill" style={{ width: `${hpPct}%` }} />
+                  </div>
                 </div>
               )}
             </div>
