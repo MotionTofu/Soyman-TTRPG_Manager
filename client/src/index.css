@@ -2678,6 +2678,15 @@ input.litm-theme-title {
 .rt-h2 { font-size: 1.25em; margin: 3px 0; }
 .rt-h3 { font-size: 1.1em; margin: 2px 0; }
 
+.rt-quote {
+  display: block;
+  margin: 4px 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--accent);
+  font-style: italic;
+  color: var(--muted, #999);
+}
+
 .rt-toolbar {
   display: flex;
   align-items: center;

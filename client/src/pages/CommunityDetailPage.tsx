@@ -16,6 +16,7 @@ import { formatImportantDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { TagChips } from "../components/TagChips";
+import { loadThumbnailStyles } from "../thumbnailStyles";
 import type { DateRecurrence, SearchResult, SettingCommunityDetail, SettingLocation } from "../types";
 
 const TABS = [
@@ -23,16 +24,10 @@ const TABS = [
   "Представители",
   "Места обитания",
   "Вложенные сообщества",
-  "Текущая ситуация",
-  "История",
   "Связи",
   "Галерея",
   "Упоминания",
 ] as const;
-
-const SECTION_BY_TAB: Record<string, string> = {
-  "Текущая ситуация": "current_situation",
-};
 
 export function CommunityDetailPage() {
   const { id } = useParams();
@@ -41,7 +36,7 @@ export function CommunityDetailPage() {
 
   const [community, setCommunity] = useState<SettingCommunityDetail | null>(null);
   const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [tab, selectTab] = useTabState(TABS, "История");
+  const [tab, selectTab] = useTabState(TABS, "Досье");
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [membersDragOver, setMembersDragOver] = useState(false);
@@ -55,6 +50,7 @@ export function CommunityDetailPage() {
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const calendar = useSettingCalendar(community?.setting_id);
+  const thumbnailStyles = loadThumbnailStyles();
 
   function refresh() {
     api.get<SettingCommunityDetail>(`/setting-communities/${communityId}`).then((c) => {
@@ -244,6 +240,108 @@ export function CommunityDetailPage() {
         <div className="stack">
           <details className="card">
             <summary className="sb-section" style={{ margin: 0 }}>
+              История
+            </summary>
+            <div className="stack">
+              <ChapterList
+                ownerId={communityId}
+                ownerType="community"
+                apiBase="/setting-communities"
+                section="history"
+                chapters={community.chapters.filter((c) => c.section === "history")}
+                onChange={refresh}
+                titlePrefix="Статья"
+                addLabel="статью"
+                defaultSettingId={community.setting_id}
+              />
+              <details className="card">
+                <summary className="sb-section" style={{ margin: 0 }}>
+                  Важные даты
+                </summary>
+                <div className="stack">
+                  <span className="muted">
+                    Эти даты отмечаются на календаре сеттинга и переносятся в календари связанных с ним
+                    кампаний.
+                  </span>
+                  <div className="row">
+                    <input
+                      placeholder="Название (напр. День основания)"
+                      value={dateTitle}
+                      onChange={(e) => setDateTitle(e.target.value)}
+                    />
+                    <select
+                      value={dateRecurrence}
+                      onChange={(e) => setDateRecurrence(e.target.value as DateRecurrence)}
+                    >
+                      <option value="once">Разовое</option>
+                      <option value="annual">Ежегодное</option>
+                      <option value="monthly">Ежемесячное</option>
+                    </select>
+                    {dateRecurrence === "once" && (
+                      <input
+                        type="number"
+                        placeholder="Год"
+                        style={{ width: 80 }}
+                        value={dateYear}
+                        onChange={(e) => setDateYear(e.target.value)}
+                      />
+                    )}
+                    {dateRecurrence !== "monthly" && (
+                      <select value={dateMonth} onChange={(e) => setDateMonth(e.target.value)}>
+                        <option value="">Месяц…</option>
+                        {(calendar?.months ?? []).map((m) => (
+                          <option key={m.id} value={m.position}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <input
+                      type="number"
+                      placeholder="День"
+                      style={{ width: 70 }}
+                      value={dateDay}
+                      onChange={(e) => setDateDay(e.target.value)}
+                    />
+                    <button className="primary" onClick={addImportantDate}>
+                      Добавить
+                    </button>
+                  </div>
+                  <div className="stack">
+                    {community.important_dates.map((d) => (
+                      <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
+                        <span>
+                          <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [])}
+                        </span>
+                        <button className="comp-mini" onClick={() => removeImportantDate(d.id)}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {community.important_dates.length === 0 && <p className="muted">Важных дат пока нет.</p>}
+                  </div>
+                </div>
+              </details>
+            </div>
+          </details>
+          <details className="card">
+            <summary className="sb-section" style={{ margin: 0 }}>
+              Текущая ситуация
+            </summary>
+            <ChapterList
+              ownerId={communityId}
+              ownerType="community"
+              apiBase="/setting-communities"
+              section="current_situation"
+              chapters={community.chapters.filter((c) => c.section === "current_situation")}
+              onChange={refresh}
+              titlePrefix="Статья"
+              addLabel="статью"
+              defaultSettingId={community.setting_id}
+            />
+          </details>
+          <details className="card">
+            <summary className="sb-section" style={{ margin: 0 }}>
               Цели
             </summary>
             <ChapterList
@@ -275,101 +373,6 @@ export function CommunityDetailPage() {
             />
           </details>
         </div>
-      )}
-
-      {tab === "История" && (
-        <div className="stack">
-          <ChapterList
-            ownerId={communityId}
-            ownerType="community"
-            apiBase="/setting-communities"
-            section="history"
-            chapters={community.chapters.filter((c) => c.section === "history")}
-            onChange={refresh}
-            titlePrefix="Статья"
-            addLabel="статью"
-            defaultSettingId={community.setting_id}
-          />
-          <details className="card">
-            <summary className="sb-section" style={{ margin: 0 }}>
-              Важные даты
-            </summary>
-            <div className="stack">
-              <span className="muted">
-                Эти даты отмечаются на календаре сеттинга и переносятся в календари связанных с ним
-                кампаний.
-              </span>
-              <div className="row">
-                <input
-                  placeholder="Название (напр. День основания)"
-                  value={dateTitle}
-                  onChange={(e) => setDateTitle(e.target.value)}
-                />
-                <select value={dateRecurrence} onChange={(e) => setDateRecurrence(e.target.value as DateRecurrence)}>
-                  <option value="once">Разовое</option>
-                  <option value="annual">Ежегодное</option>
-                  <option value="monthly">Ежемесячное</option>
-                </select>
-                {dateRecurrence === "once" && (
-                  <input
-                    type="number"
-                    placeholder="Год"
-                    style={{ width: 80 }}
-                    value={dateYear}
-                    onChange={(e) => setDateYear(e.target.value)}
-                  />
-                )}
-                {dateRecurrence !== "monthly" && (
-                  <select value={dateMonth} onChange={(e) => setDateMonth(e.target.value)}>
-                    <option value="">Месяц…</option>
-                    {(calendar?.months ?? []).map((m) => (
-                      <option key={m.id} value={m.position}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  type="number"
-                  placeholder="День"
-                  style={{ width: 70 }}
-                  value={dateDay}
-                  onChange={(e) => setDateDay(e.target.value)}
-                />
-                <button className="primary" onClick={addImportantDate}>
-                  Добавить
-                </button>
-              </div>
-              <div className="stack">
-                {community.important_dates.map((d) => (
-                  <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
-                    <span>
-                      <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [])}
-                    </span>
-                    <button className="danger" onClick={() => removeImportantDate(d.id)}>
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {community.important_dates.length === 0 && <p className="muted">Важных дат пока нет.</p>}
-              </div>
-            </div>
-          </details>
-        </div>
-      )}
-
-      {SECTION_BY_TAB[tab] && (
-        <ChapterList
-          ownerId={communityId}
-          ownerType="community"
-          apiBase="/setting-communities"
-          section={SECTION_BY_TAB[tab]}
-          chapters={community.chapters.filter((c) => c.section === SECTION_BY_TAB[tab])}
-          onChange={refresh}
-          titlePrefix="Статья"
-          addLabel="статью"
-          defaultSettingId={community.setting_id}
-        />
       )}
 
       {tab === "Представители" && (
@@ -445,19 +448,41 @@ export function CommunityDetailPage() {
           >
             <span className="muted">Перетащите локацию из поиска, чтобы добавить место обитания.</span>
           </div>
-          <div className="grid-cards">
-            {community.locations.map((l) => (
-              <div key={l.id} className="card">
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <Link to={`/locations/${l.id}`}>
-                    <h3>{l.name}</h3>
-                  </Link>
-                  <button className="danger" onClick={() => removeLocation(l.id)}>
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="entity-row-list">
+            {community.locations.map((l) => {
+              // The community detail endpoint only returns {id, name} for
+              // habitats — cross-reference the setting's full location list
+              // (already loaded for the drop-zone picker) for thumbnail/kind.
+              const full = locations.find((loc) => loc.id === l.id);
+              const url = full?.thumbnail_image_url || full?.avatar_image_url;
+              const isBg = thumbnailStyles.locations === "background" && !!url;
+              return (
+                <Link
+                  key={l.id}
+                  to={`/locations/${l.id}`}
+                  className={`entity-row${isBg ? " entity-row-bg" : ""}`}
+                  style={isBg ? { backgroundImage: `url("${url}")` } : undefined}
+                >
+                  {thumbnailStyles.locations === "banner" && url && (
+                    <img src={url} alt="" className="entity-row-thumb" />
+                  )}
+                  <span className="entity-row-name">{l.name}</span>
+                  <span className="muted">{full?.kind}</span>
+                  <span className="entity-row-actions">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        removeLocation(l.id);
+                      }}
+                    >
+                      Убрать отсюда
+                    </button>
+                  </span>
+                </Link>
+              );
+            })}
             {community.locations.length === 0 && <p className="muted">Мест обитания пока нет.</p>}
           </div>
         </div>

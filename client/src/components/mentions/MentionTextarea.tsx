@@ -177,6 +177,11 @@ export const MentionTextarea = memo(function MentionTextarea({
       e.preventDefault();
       triggerInternalLink();
     }
+    // Alt+W: wraps the selection in a quote block, alongside the toolbar button.
+    if (e.altKey && e.code === "KeyW") {
+      e.preventDefault();
+      wrapSelection("{quote}", "{/quote}", "цитата");
+    }
   }
 
   // Wraps the current selection in `before`/`after` (used for **bold** and
@@ -372,6 +377,9 @@ export const MentionTextarea = memo(function MentionTextarea({
         </button>
         <button type="button" className="rt-btn" title="Курсив" onMouseDown={(e) => e.preventDefault()} onClick={() => wrapSelection("*", "*", "курсив")}>
           <em>К</em>
+        </button>
+        <button type="button" className="rt-btn" title="Цитата (Alt+W)" onMouseDown={(e) => e.preventDefault()} onClick={() => wrapSelection("{quote}", "{/quote}", "цитата")}>
+          ❝
         </button>
         <span className="rt-sep" />
         <button type="button" className="rt-btn" title="Заголовок 1" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleHeading(1)}>

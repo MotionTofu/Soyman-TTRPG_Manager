@@ -415,7 +415,7 @@ export function SensesEditor({
               onChange={(e) => onChange(value.map((v) => (v.name === s.name ? { ...v, distance: e.target.value } : v)))}
             />
             фт.
-            <button type="button" onClick={() => onChange(value.filter((v) => v.name !== s.name))}>
+            <button type="button" className="comp-mini" onClick={() => onChange(value.filter((v) => v.name !== s.name))}>
               ✕
             </button>
           </span>
@@ -865,7 +865,7 @@ export function ActionListEdit<T extends DndCreatureAction>({
                 />
               </label>
             )}
-            <button type="button" onClick={() => remove(i)}>
+            <button type="button" className="comp-mini" onClick={() => remove(i)}>
               ✕
             </button>
           </div>
@@ -1135,7 +1135,7 @@ export function EquipmentEditor({
           <input placeholder="Название" value={item.name} onChange={(e) => update(i, { name: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
           <input placeholder="Кол-во" value={item.qty} onChange={(e) => update(i, { qty: e.target.value })} style={{ width: 70 }} />
           <input placeholder="Заметки" value={item.notes} onChange={(e) => update(i, { notes: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
-          <button type="button" onClick={() => remove(i)}>
+          <button type="button" className="comp-mini" onClick={() => remove(i)}>
             ✕
           </button>
         </div>
@@ -1227,7 +1227,7 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
           <div key={i} className="row" style={{ gap: 6 }}>
             <input placeholder="Название" value={it.name} onChange={(e) => updateItem(i, { name: e.target.value })} style={{ flex: 1 }} />
             <input placeholder="Кол-во" value={it.qty} onChange={(e) => updateItem(i, { qty: e.target.value })} style={{ width: 70 }} />
-            <button type="button" onClick={() => removeItem(i)}>
+            <button type="button" className="comp-mini" onClick={() => removeItem(i)}>
               ✕
             </button>
           </div>
@@ -1254,7 +1254,7 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
                 🎲 Бросить
               </button>
               {rolled[i] !== undefined && <span className="muted">→ {rolled[i]}</span>}
-              <button type="button" onClick={() => removeCurrency(i)}>
+              <button type="button" className="comp-mini" onClick={() => removeCurrency(i)}>
                 ✕
               </button>
             </div>

@@ -36,7 +36,7 @@ const FeatureRow = memo(function FeatureRow({
     <div className="dnd-feature-row">
       <div className="row">
         <input placeholder="Название" value={value.name} onChange={(e) => onChangeName(e.target.value)} />
-        <button type="button" onClick={onRemove}>
+        <button type="button" className="comp-mini" onClick={onRemove}>
           ✕
         </button>
       </div>

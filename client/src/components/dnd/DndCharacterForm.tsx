@@ -438,7 +438,7 @@ const DndProficienciesEdit = memo(function DndProficienciesEdit({
                   {formatModifier(abilityModifier(abilities[p.abilityKey]) + profBonus)}
                 </span>
               )}
-              <button type="button" onClick={() => remove(i)}>
+              <button type="button" className="comp-mini" onClick={() => remove(i)}>
                 ✕
               </button>
             </div>
@@ -1288,7 +1288,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 ▴
               </button>
             </span>
-            <button type="button" onClick={() => onRemoveClass(i)}>
+            <button type="button" className="comp-mini" onClick={() => onRemoveClass(i)}>
               ✕
             </button>
           </div>
@@ -1346,7 +1346,7 @@ const EquipmentItemRow = memo(function EquipmentItemRow({
       <input placeholder="Кол-во" value={item.qty} onChange={(e) => onChangeQty(e.target.value)} style={{ flex: 1 }} />
       <input placeholder="Вес" value={item.weight} onChange={(e) => onChangeWeight(e.target.value)} style={{ flex: 1 }} />
       <input placeholder="Заметка" value={item.notes} onChange={(e) => onChangeNotes(e.target.value)} style={{ flex: 2 }} />
-      <button type="button" onClick={onRemove}>
+      <button type="button" className="comp-mini" onClick={onRemove}>
         ✕
       </button>
     </div>
@@ -1440,7 +1440,7 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
           value={section.name}
           onChange={(e) => onNameChange(e.target.value)}
         />
-        <button type="button" onClick={onRemoveSection}>
+        <button type="button" className="comp-mini" onClick={onRemoveSection}>
           ✕ Раздел
         </button>
       </div>

@@ -8,7 +8,7 @@ import { DETAIL_ROUTES } from "../../entityTypes";
 // starting with #/##/### is a heading, a line starting with "- " is a
 // bullet-list item (consecutive "- " lines are grouped into one <ul>).
 const TOKEN_RE =
-  /\[\[(\w+):(\d+)\|([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\{span([^}]*)\}|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/;
+  /\[\[(\w+):(\d+)\|([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\{span([^}]*)\}|\{quote\}|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/;
 
 function parseSpanAttrs(attrs: string): CSSProperties {
   const style: CSSProperties = {};
@@ -89,6 +89,22 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
           </span>
         );
         pos = closeIdx + "{/span}".length;
+      }
+      key++;
+    } else if (full === "{quote}") {
+      const openEnd = pos + idx + full.length;
+      const closeIdx = text.indexOf("{/quote}", openEnd);
+      if (closeIdx === -1) {
+        nodes.push(<span key={`${keyPrefix}-${key++}`}>{full}</span>);
+        pos = openEnd;
+      } else {
+        const inner = text.slice(openEnd, closeIdx);
+        nodes.push(
+          <span key={`${keyPrefix}-${key}`} className="rt-quote">
+            {parseInline(inner, `${keyPrefix}-${key}`)}
+          </span>
+        );
+        pos = closeIdx + "{/quote}".length;
       }
       key++;
     } else if (boldText != null) {
