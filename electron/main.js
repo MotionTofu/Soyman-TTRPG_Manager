@@ -125,8 +125,19 @@ function waitForServer(url, attempt = 0) {
 // no publish feed configured and would just log noisy errors every launch.
 autoUpdater.autoInstallOnAppQuit = false;
 
+// Mirrors every autoUpdater event to the renderer (as "update-status") so the
+// in-app "Проверить обновления" button (Настройки → О программе) can show
+// live progress, not just the native menu/dialog flow.
 function setupAutoUpdater(win) {
+  const send = (payload) => {
+    if (!win.isDestroyed()) win.webContents.send("update-status", payload);
+  };
+  autoUpdater.on("checking-for-update", () => send({ status: "checking" }));
+  autoUpdater.on("update-available", (info) => send({ status: "available", version: info.version }));
+  autoUpdater.on("update-not-available", () => send({ status: "not-available" }));
+  autoUpdater.on("download-progress", (p) => send({ status: "downloading", percent: p.percent }));
   autoUpdater.on("update-downloaded", async (info) => {
+    send({ status: "downloaded", version: info.version });
     const result = await dialog.showMessageBox(win, {
       type: "info",
       title: "Обновление готово",
@@ -139,6 +150,7 @@ function setupAutoUpdater(win) {
   });
   autoUpdater.on("error", (err) => {
     console.error("Auto-update error:", err);
+    send({ status: "error", message: String(err) });
   });
 }
 
@@ -190,6 +202,18 @@ ipcMain.handle("pick-folder", async () => {
   const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
+});
+
+ipcMain.handle("get-app-version", () => app.getVersion());
+
+ipcMain.handle("check-for-updates", () => {
+  if (!isPackaged) return { ok: false, reason: "dev" };
+  checkForUpdates();
+  return { ok: true };
+});
+
+ipcMain.handle("quit-and-install", () => {
+  autoUpdater.quitAndInstall();
 });
 
 async function createWindow() {

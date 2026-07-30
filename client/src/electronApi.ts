@@ -1,5 +1,16 @@
+export interface UpdateStatus {
+  status: "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+  version?: string;
+  percent?: number;
+  message?: string;
+}
+
 export interface ElectronAPI {
   pickFolder: () => Promise<string | null>;
+  getAppVersion: () => Promise<string>;
+  checkForUpdates: () => Promise<{ ok: boolean; reason?: string }>;
+  quitAndInstall: () => Promise<void>;
+  onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
 }
 
 declare global {

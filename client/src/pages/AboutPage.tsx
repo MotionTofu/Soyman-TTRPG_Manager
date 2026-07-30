@@ -1,7 +1,58 @@
+import { useEffect, useState } from "react";
+import { hasElectronAPI, type UpdateStatus } from "../electronApi";
+
+function UpdateCard() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
+
+  useEffect(() => {
+    if (!hasElectronAPI()) return;
+    window.electronAPI!.getAppVersion().then(setVersion);
+    return window.electronAPI!.onUpdateStatus(setUpdate);
+  }, []);
+
+  if (!hasElectronAPI()) return null;
+
+  async function check() {
+    setUpdate({ status: "checking" });
+    const result = await window.electronAPI!.checkForUpdates();
+    if (!result.ok) setUpdate({ status: "error", message: "Проверка обновлений недоступна в этом режиме запуска" });
+  }
+
+  const statusText: Record<UpdateStatus["status"], string> = {
+    checking: "Проверяем обновления…",
+    available: `Доступна версия ${update?.version ?? ""} — скачиваем…`,
+    "not-available": "У вас последняя версия",
+    downloading: `Скачивание… ${update?.percent ? Math.round(update.percent) + "%" : ""}`,
+    downloaded: `Версия ${update?.version ?? ""} скачана и готова к установке`,
+    error: update?.message || "Не удалось проверить обновления",
+  };
+
+  return (
+    <div className="card stack">
+      <h3>Обновления</h3>
+      <p className="muted">Текущая версия: {version ?? "…"}</p>
+      <div className="row" style={{ gap: 8, alignItems: "center" }}>
+        <button onClick={check} disabled={update?.status === "checking" || update?.status === "downloading"}>
+          Проверить обновления
+        </button>
+        {update?.status === "downloaded" && (
+          <button className="primary" onClick={() => window.electronAPI!.quitAndInstall()}>
+            Установить и перезапустить
+          </button>
+        )}
+        {update && <span className="muted">{statusText[update.status]}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function AboutPage() {
   return (
     <div className="stack" style={{ maxWidth: 780 }}>
       <h1>О программе</h1>
+
+      <UpdateCard />
 
       <div className="card stack">
         <h3>Как это всё случилось</h3>
