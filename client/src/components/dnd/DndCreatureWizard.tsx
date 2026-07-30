@@ -431,7 +431,13 @@ export function DndCreatureWizard({
       )}
 
       {step === "Заклинания" && (
-        <SpellcastingEditor value={draft.spellcasting} onChange={(v) => setDraft({ ...draft, spellcasting: v })} />
+        <SpellcastingEditor
+          value={draft.spellcasting}
+          onChange={(v) => setDraft({ ...draft, spellcasting: v })}
+          systemId={systemId}
+          abilities={draft.abilities}
+          proficiencyBonus={draft.challenge.proficiencyBonus ?? 0}
+        />
       )}
 
       {step === "Действия" && (

@@ -23,6 +23,7 @@ import type {
 } from "../../types";
 import {
   ABILITY_LABELS,
+  ABILITY_NAME_TO_KEY,
   AbilityScoresEdit,
   ALL_SKILLS,
   SKILLS_BY_ABILITY,
@@ -31,7 +32,14 @@ import {
   emptySavingThrowProfs,
   formatModifier,
 } from "./AbilityScores";
-import { loadDndEquipmentEntries, loadDndMechanicsGroup, findDndSystemId, type DndMechanicsOption } from "./dndCompendium";
+import {
+  loadDndEquipmentEntries,
+  loadDndMechanicsGroup,
+  loadDndSpellsByLevel,
+  findDndSystemId,
+  type DndMechanicsOption,
+  type DndSpellOption,
+} from "./dndCompendium";
 import { MECHANICS_CREATURE_TYPE_GROUP, MECHANICS_ALIGNMENT_GROUP } from "../../compendium";
 import { FeatureListEdit } from "./FeatureList";
 import { MentionTextarea } from "../mentions/MentionTextarea";
@@ -40,6 +48,8 @@ import { statblockScopeClass } from "../../statblockThemes";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
 import { averageDiceFormula, rollDiceFormula } from "./diceRoll";
+import { PipTrack } from "../litm/PipTrack";
+import { api } from "../../api/client";
 
 export const CREATURE_SIZES = ["Крошечный", "Маленький", "Средний", "Большой", "Огромный", "Громадный"] as const;
 export const DIE_SIZES = [4, 6, 8, 10, 12] as const;
@@ -460,28 +470,248 @@ function ChecklistEditor({
   );
 }
 
+// Fetches a compendium spell's mechanical fields and converts them into a
+// creature spell's roll-type/bonus/save-DC — same idea as the character
+// sheet's fetchSpellMeta, but a creature has no "spell attack bonus" field
+// of its own to read live, so the bonus/DC are computed once at add-time
+// from the creature's own spellcasting ability + proficiency bonus (passed
+// in), matching how spellToAction already treats these fields elsewhere.
+async function fetchCreatureSpellMeta(
+  entryId: number,
+  ability: DndAbilityKey | "",
+  proficiencyBonus: number,
+  abilities: DndAbilityScores
+): Promise<Partial<DndCreatureSpell>> {
+  try {
+    const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
+    const attackSave = typeof entry.data.attack_save === "string" ? entry.data.attack_save : "";
+    const damage = typeof entry.data.damage === "string" ? entry.data.damage : "";
+    const healing = typeof entry.data.healing === "string" ? entry.data.healing : "";
+    const abilityMod = ability ? abilityModifier(abilities[ability]) : 0;
+    let rollType: DndAttackRollType | undefined;
+    let bonus: number | null = null;
+    let saveAbility: DndAbilityKey | "" = "";
+    let saveDC: number | null = null;
+    if (attackSave.startsWith("Атака")) {
+      rollType = "attack";
+      bonus = abilityMod + proficiencyBonus;
+    } else if (attackSave.startsWith("Спасбросок")) {
+      rollType = "save";
+      saveAbility = ABILITY_NAME_TO_KEY[attackSave.replace("Спасбросок", "").trim()] ?? "";
+      saveDC = 8 + abilityMod + proficiencyBonus;
+    }
+    return { rollType, bonus, saveAbility, saveDC, damage: damage || healing || undefined, description: entry.description || "" };
+  } catch {
+    return {};
+  }
+}
+
+// One circle (or the cantrips row, level 0) of the creature's spell list —
+// mirrors DndSpellLevelSection's compendium-search add flow and PipTrack
+// slot display from the character sheet, instead of the free-text-only
+// fields this used to have.
+function CreatureSpellLevelSection({
+  level,
+  systemId,
+  value,
+  onChange,
+  ability,
+  proficiencyBonus,
+  abilities,
+}: {
+  level: number;
+  systemId: number | null;
+  value: DndCreatureSpellcasting;
+  onChange: (v: DndCreatureSpellcasting) => void;
+  ability: DndAbilityKey | "";
+  proficiencyBonus: number;
+  abilities: DndAbilityScores;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [options, setOptions] = useState<DndSpellOption[]>([]);
+
+  useEffect(() => {
+    if (!adding || !systemId) return;
+    loadDndSpellsByLevel(systemId, level).then(setOptions);
+  }, [adding, systemId, level]);
+
+  const slots = value.slots.find((s) => s.level === level)?.slots ?? 0;
+  const spellsAtLevel = value.spells.filter((s) => s.level === level);
+  const filtered = query.trim() ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase())) : options;
+
+  function setSlots(n: number) {
+    const exists = value.slots.some((s) => s.level === level);
+    const nextSlots = exists
+      ? value.slots.map((s) => (s.level === level ? { ...s, slots: n } : s))
+      : [...value.slots, { level, slots: n }].sort((a, b) => a.level - b.level);
+    onChange({ ...value, slots: nextSlots });
+  }
+  async function addSpell(entryId: number | null, name: string) {
+    setAdding(false);
+    setQuery("");
+    const meta = entryId ? await fetchCreatureSpellMeta(entryId, ability, proficiencyBonus, abilities) : {};
+    onChange({ ...value, spells: [...value.spells, { name, level, frequency: "atwill", perDayCount: null, description: "", ...meta }] });
+  }
+  function updateSpell(entry: DndCreatureSpell, patch: Partial<DndCreatureSpell>) {
+    const idx = value.spells.indexOf(entry);
+    onChange({ ...value, spells: value.spells.map((s, i) => (i === idx ? { ...s, ...patch } : s)) });
+  }
+  function removeSpell(entry: DndCreatureSpell) {
+    onChange({ ...value, spells: value.spells.filter((s) => s !== entry) });
+  }
+
+  const label = level === 0 ? "Заговоры" : `Круг ${level}`;
+
+  return (
+    <details className="dnd-spell-level-card" open>
+      <summary className="row dnd-spell-level-summary" style={{ justifyContent: "space-between" }}>
+        <span>{label}</span>
+        {level > 0 && (
+          <span onClick={(e) => e.stopPropagation()} className="row" style={{ gap: 10 }}>
+            <PipTrack value={slots} max={9} onChange={setSlots} />
+          </span>
+        )}
+      </summary>
+      <div className="stack" style={{ marginTop: 6, gap: 4 }}>
+        {spellsAtLevel.length === 0 && <span className="muted">Пусто</span>}
+        {spellsAtLevel.map((s) => (
+          <div key={value.spells.indexOf(s)} className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontWeight: 600, minWidth: 140 }}>{s.name}</span>
+            <select value={s.frequency} onChange={(e) => updateSpell(s, { frequency: e.target.value as DndCreatureSpellFrequency })}>
+              <option value="atwill">Бесконечно</option>
+              <option value="perday">N раз/день</option>
+              <option value="slots">По ячейкам</option>
+            </select>
+            {s.frequency === "perday" && (
+              <input
+                type="number"
+                style={{ width: 50 }}
+                min={1}
+                value={s.perDayCount ?? 1}
+                onChange={(e) => updateSpell(s, { perDayCount: Number(e.target.value) || 1 })}
+              />
+            )}
+            <select
+              value={s.rollType ?? ""}
+              onChange={(e) => updateSpell(s, { rollType: (e.target.value || undefined) as DndAttackRollType | undefined })}
+              title="Механика для автодобавления в Действия"
+            >
+              <option value="">Без урона</option>
+              <option value="attack">Бросок атаки</option>
+              <option value="save">Спасбросок</option>
+            </select>
+            {s.rollType === "attack" && (
+              <input
+                type="number"
+                placeholder="Бонус"
+                style={{ width: 50 }}
+                value={s.bonus ?? ""}
+                onChange={(e) => updateSpell(s, { bonus: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            )}
+            {s.rollType === "save" && (
+              <>
+                <select value={s.saveAbility ?? ""} onChange={(e) => updateSpell(s, { saveAbility: e.target.value as DndAbilityKey | "" })}>
+                  <option value="">—</option>
+                  {ABILITY_LABELS.map(({ key, label }) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  placeholder="СЛ"
+                  style={{ width: 50 }}
+                  value={s.saveDC ?? ""}
+                  onChange={(e) => updateSpell(s, { saveDC: e.target.value === "" ? null : Number(e.target.value) })}
+                />
+              </>
+            )}
+            {s.rollType && (
+              <input placeholder="Урон/лечение" value={s.damage ?? ""} onChange={(e) => updateSpell(s, { damage: e.target.value })} style={{ width: 120 }} />
+            )}
+            <input
+              placeholder="Описание"
+              value={s.description}
+              onChange={(e) => updateSpell(s, { description: e.target.value })}
+              style={{ flex: 1, minWidth: 140 }}
+            />
+            <button type="button" className="comp-mini danger" onClick={() => removeSpell(s)}>
+              ✕
+            </button>
+          </div>
+        ))}
+        {adding ? (
+          <div className="dnd-spell-add">
+            <input
+              autoFocus
+              placeholder="Название заклинания…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && query.trim()) addSpell(null, query.trim());
+                if (e.key === "Escape") setAdding(false);
+              }}
+            />
+            {filtered.length > 0 && (
+              <div className="mention-dropdown">
+                {filtered.slice(0, 8).map((o) => (
+                  <div
+                    key={o.id}
+                    className="mention-dropdown-item"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      addSpell(o.id, o.name);
+                    }}
+                  >
+                    {o.name}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button type="button" onClick={() => setAdding(false)}>
+              Отмена
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="comp-mini" onClick={() => setAdding(true)} style={{ alignSelf: "flex-start" }}>
+            + Добавить заклинание
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
 export function SpellcastingEditor({
   value,
   onChange,
+  systemId,
+  abilities,
+  proficiencyBonus,
 }: {
   value: DndCreatureSpellcasting;
   onChange: (v: DndCreatureSpellcasting) => void;
+  systemId: number | null;
+  abilities: DndAbilityScores;
+  proficiencyBonus: number;
 }) {
-  function addSpell() {
-    onChange({ ...value, spells: [...value.spells, { name: "", level: 0, frequency: "atwill", perDayCount: null, description: "" }] });
+  const maxCircle = value.slots.length > 0 ? Math.max(...value.slots.map((s) => s.level)) : 0;
+
+  function setMaxCircle(n: number) {
+    if (n === 0) {
+      onChange({ ...value, slots: [] });
+      return;
+    }
+    const nextSlots = [];
+    for (let l = 1; l <= n; l++) {
+      nextSlots.push(value.slots.find((s) => s.level === l) ?? { level: l, slots: 1 });
+    }
+    onChange({ ...value, slots: nextSlots });
   }
-  function updateSpell(i: number, patch: Partial<DndCreatureSpell>) {
-    onChange({ ...value, spells: value.spells.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) });
-  }
-  function removeSpell(i: number) {
-    onChange({ ...value, spells: value.spells.filter((_, idx) => idx !== i) });
-  }
-  function addSlotLevel() {
-    const used = new Set(value.slots.map((s) => s.level));
-    const next = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((l) => !used.has(l));
-    if (!next) return;
-    onChange({ ...value, slots: [...value.slots, { level: next, slots: 1 }].sort((a, b) => a.level - b.level) });
-  }
+
   return (
     <div className="stack">
       <label className="row" style={{ gap: 6 }}>
@@ -490,136 +720,51 @@ export function SpellcastingEditor({
       </label>
       {value.enabled && (
         <>
-          <label className="row" style={{ gap: 6 }}>
-            Основная характеристика
-            <select value={value.ability} onChange={(e) => onChange({ ...value, ability: e.target.value as DndAbilityKey | "" })}>
-              <option value="">—</option>
-              {ABILITY_LABELS.map(({ key, label }) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="stack" style={{ gap: 4 }}>
-            <span className="sb-prop-label">Ячейки заклинаний по уровням</span>
-            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-              {value.slots.map((s) => (
-                <span key={s.level} className="row" style={{ gap: 4 }}>
-                  Круг {s.level}
-                  <input
-                    type="number"
-                    style={{ width: 50 }}
-                    min={0}
-                    value={s.slots}
-                    onChange={(e) =>
-                      onChange({ ...value, slots: value.slots.map((sl) => (sl.level === s.level ? { ...sl, slots: Number(e.target.value) || 0 } : sl)) })
-                    }
-                  />
-                  <button type="button" onClick={() => onChange({ ...value, slots: value.slots.filter((sl) => sl.level !== s.level) })}>
-                    ✕
-                  </button>
-                </span>
-              ))}
-              <button type="button" onClick={addSlotLevel} disabled={value.slots.length >= 9}>
-                + круг
-              </button>
-            </div>
+          <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+            <label className="row" style={{ gap: 6 }}>
+              Основная характеристика
+              <select value={value.ability} onChange={(e) => onChange({ ...value, ability: e.target.value as DndAbilityKey | "" })}>
+                <option value="">—</option>
+                {ABILITY_LABELS.map(({ key, label }) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="row" style={{ gap: 6 }}>
+              Кругов заклинаний
+              <select value={maxCircle} onChange={(e) => setMaxCircle(Number(e.target.value))}>
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                  <option key={n} value={n}>
+                    {n === 0 ? "Нет" : n}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <div className="stack" style={{ gap: 4 }}>
-            <span className="sb-prop-label">Заклинания</span>
-            {value.spells.map((s, i) => (
-              <div key={i} className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                <input
-                  placeholder="Название"
-                  value={s.name}
-                  onChange={(e) => updateSpell(i, { name: e.target.value })}
-                  style={{ flex: 1, minWidth: 140 }}
-                />
-                <select value={s.level} onChange={(e) => updateSpell(i, { level: Number(e.target.value) })}>
-                  <option value={0}>Заговор</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => (
-                    <option key={l} value={l}>
-                      Круг {l}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={s.frequency}
-                  onChange={(e) => updateSpell(i, { frequency: e.target.value as DndCreatureSpellFrequency })}
-                >
-                  <option value="atwill">Бесконечно</option>
-                  <option value="perday">N раз/день</option>
-                  <option value="slots">По ячейкам</option>
-                </select>
-                {s.frequency === "perday" && (
-                  <input
-                    type="number"
-                    style={{ width: 50 }}
-                    min={1}
-                    value={s.perDayCount ?? 1}
-                    onChange={(e) => updateSpell(i, { perDayCount: Number(e.target.value) || 1 })}
-                  />
-                )}
-                <select
-                  value={s.rollType ?? ""}
-                  onChange={(e) => updateSpell(i, { rollType: (e.target.value || undefined) as DndAttackRollType | undefined })}
-                  title="Механика для автодобавления в Действия"
-                >
-                  <option value="">Без урона</option>
-                  <option value="attack">Бросок атаки</option>
-                  <option value="save">Спасбросок</option>
-                </select>
-                {s.rollType === "attack" && (
-                  <input
-                    type="number"
-                    placeholder="Бонус"
-                    style={{ width: 50 }}
-                    value={s.bonus ?? ""}
-                    onChange={(e) => updateSpell(i, { bonus: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
-                )}
-                {s.rollType === "save" && (
-                  <>
-                    <select value={s.saveAbility ?? ""} onChange={(e) => updateSpell(i, { saveAbility: e.target.value as DndAbilityKey | "" })}>
-                      <option value="">—</option>
-                      {ABILITY_LABELS.map(({ key, label }) => (
-                        <option key={key} value={key}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      placeholder="СЛ"
-                      style={{ width: 50 }}
-                      value={s.saveDC ?? ""}
-                      onChange={(e) => updateSpell(i, { saveDC: e.target.value === "" ? null : Number(e.target.value) })}
-                    />
-                  </>
-                )}
-                {s.rollType && (
-                  <input
-                    placeholder="Урон"
-                    value={s.damage ?? ""}
-                    onChange={(e) => updateSpell(i, { damage: e.target.value })}
-                    style={{ width: 120 }}
-                  />
-                )}
-                <input
-                  placeholder="Описание"
-                  value={s.description}
-                  onChange={(e) => updateSpell(i, { description: e.target.value })}
-                  style={{ flex: 2, minWidth: 160 }}
-                />
-                <button type="button" onClick={() => removeSpell(i)}>
-                  ✕
-                </button>
-              </div>
+          <div className="stack" style={{ gap: 6 }}>
+            <CreatureSpellLevelSection
+              level={0}
+              systemId={systemId}
+              value={value}
+              onChange={onChange}
+              ability={value.ability}
+              proficiencyBonus={proficiencyBonus}
+              abilities={abilities}
+            />
+            {Array.from({ length: maxCircle }, (_, i) => i + 1).map((l) => (
+              <CreatureSpellLevelSection
+                key={l}
+                level={l}
+                systemId={systemId}
+                value={value}
+                onChange={onChange}
+                ability={value.ability}
+                proficiencyBonus={proficiencyBonus}
+                abilities={abilities}
+              />
             ))}
-            <button type="button" onClick={addSpell} style={{ alignSelf: "flex-start" }}>
-              + заклинание
-            </button>
           </div>
         </>
       )}
@@ -874,7 +1019,7 @@ export function LegendaryEditor({
       {value.actionsEnabled && (
         <>
           <label className="row" style={{ gap: 4 }}>
-            Очков за ход
+            Очков за раунд
             <input
               type="number"
               style={{ width: 50 }}
@@ -1420,7 +1565,13 @@ export function DndCreatureEdit({
         <input value={value.languages} onChange={(e) => onChange({ ...value, languages: e.target.value })} />
       </label>
 
-      <SpellcastingEditor value={value.spellcasting} onChange={(v) => onChange({ ...value, spellcasting: v })} />
+      <SpellcastingEditor
+        value={value.spellcasting}
+        onChange={(v) => onChange({ ...value, spellcasting: v })}
+        systemId={systemId}
+        abilities={value.abilities}
+        proficiencyBonus={value.challenge.proficiencyBonus ?? 0}
+      />
 
       <div className="row">
         <label style={{ flex: 1 }}>
@@ -1822,7 +1973,7 @@ export function DndCreatureView({
             <>
               <div className="sb-section">
                 Легендарные действия
-                {value.legendary.actionPoints !== null ? ` (Очков: ${value.legendary.actionPoints} за ход)` : ""}
+                {value.legendary.actionPoints !== null ? ` (Очков: ${value.legendary.actionPoints} за раунд)` : ""}
               </div>
               {value.legendary.actions.map((a, i) => {
                 const mech = formatAction(a);

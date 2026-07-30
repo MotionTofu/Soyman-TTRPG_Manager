@@ -67,6 +67,7 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [rollingId, setRollingId] = useState<number | null>(null);
+  const [hpErrorId, setHpErrorId] = useState<number | null>(null);
   const [conditionPickerFor, setConditionPickerFor] = useState<number | null>(null);
   const [conditionOptions, setConditionOptions] = useState<{ id: number; name: string }[]>([]);
   const { playPlaylist } = useAudioPlayer();
@@ -170,9 +171,13 @@ export function InitiativeTracker({ sessionId }: Props) {
   async function rerollHp(entry: InitiativeEntry) {
     if (!entry.entity_type || !entry.entity_id) return;
     setRollingId(entry.id);
+    setHpErrorId(null);
     try {
       const info = await resolveStatblockInfo(entry.entity_type, entry.entity_id);
-      if (info.maxHp == null) return;
+      if (info.maxHp == null) {
+        setHpErrorId(entry.id);
+        return;
+      }
       await api.put(`/initiative-entries/${entry.id}`, { max_hp: info.maxHp, current_hp: info.maxHp });
       load();
     } finally {
@@ -369,11 +374,16 @@ export function InitiativeTracker({ sessionId }: Props) {
                     <button
                       type="button"
                       className="comp-mini"
-                      title="Бросить ХП"
+                      title={
+                        hpErrorId === entry.id
+                          ? "Не удалось определить ХП — у существа не задана формула хит-костей в статблоке"
+                          : "Бросить ХП"
+                      }
+                      style={hpErrorId === entry.id ? { color: "var(--danger, #c0392b)" } : undefined}
                       disabled={rollingId === entry.id}
                       onClick={() => rerollHp(entry)}
                     >
-                      ♥
+                      {hpErrorId === entry.id ? "⚠" : "♥"}
                     </button>
                   )}
                   <button type="button" className="comp-mini" title="Убрать" onClick={() => remove(entry.id)}>
