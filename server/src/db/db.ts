@@ -1018,6 +1018,9 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "initiative_entries", "current_hp")) {
     database.exec("ALTER TABLE initiative_entries ADD COLUMN current_hp INTEGER");
   }
+  if (!columnExists(database, "initiative_entries", "temp_hp")) {
+    database.exec("ALTER TABLE initiative_entries ADD COLUMN temp_hp INTEGER");
+  }
   if (!columnExists(database, "initiative_entries", "dead")) {
     database.exec("ALTER TABLE initiative_entries ADD COLUMN dead INTEGER NOT NULL DEFAULT 0");
   }

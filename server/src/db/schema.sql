@@ -669,6 +669,7 @@ CREATE TABLE IF NOT EXISTS initiative_entries (
   initiative INTEGER,
   max_hp INTEGER,
   current_hp INTEGER,
+  temp_hp INTEGER,
   dead INTEGER NOT NULL DEFAULT 0,
   conditions TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))

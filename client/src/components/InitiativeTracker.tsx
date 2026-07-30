@@ -69,6 +69,8 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [rollingId, setRollingId] = useState<number | null>(null);
   const [hpErrorId, setHpErrorId] = useState<number | null>(null);
   const [confirmRerollId, setConfirmRerollId] = useState<number | null>(null);
+  const [hpEditId, setHpEditId] = useState<number | null>(null);
+  const [hpAmount, setHpAmount] = useState("");
   const [conditionPickerFor, setConditionPickerFor] = useState<number | null>(null);
   const [conditionOptions, setConditionOptions] = useState<{ id: number; name: string }[]>([]);
   const { playPlaylist } = useAudioPlayer();
@@ -195,6 +197,46 @@ export function InitiativeTracker({ sessionId }: Props) {
     const current = parseConditions(entry.conditions);
     const next = current.includes(name) ? current.filter((c) => c !== name) : [...current, name];
     await api.put(`/initiative-entries/${entry.id}`, { conditions: next });
+    load();
+  }
+
+  function closeHpEditor() {
+    setHpEditId(null);
+    setHpAmount("");
+  }
+
+  // Temp HP absorbs damage first (standard 5e rule) — whatever's left over
+  // after the temp pool is exhausted comes out of current HP, floored at 0.
+  async function applyDamage(entry: InitiativeEntry) {
+    const amount = Number(hpAmount);
+    if (!amount || amount < 0) return;
+    const temp = entry.temp_hp ?? 0;
+    const fromTemp = Math.min(temp, amount);
+    const remaining = amount - fromTemp;
+    const current = entry.current_hp ?? entry.max_hp ?? 0;
+    await api.put(`/initiative-entries/${entry.id}`, {
+      temp_hp: temp - fromTemp,
+      current_hp: Math.max(0, current - remaining),
+    });
+    closeHpEditor();
+    load();
+  }
+
+  async function applyHeal(entry: InitiativeEntry) {
+    const amount = Number(hpAmount);
+    if (!amount || amount < 0) return;
+    const current = entry.current_hp ?? 0;
+    const capped = entry.max_hp != null ? Math.min(entry.max_hp, current + amount) : current + amount;
+    await api.put(`/initiative-entries/${entry.id}`, { current_hp: capped });
+    closeHpEditor();
+    load();
+  }
+
+  async function applyTempHp(entry: InitiativeEntry) {
+    const amount = Number(hpAmount);
+    if (!amount || amount < 0) return;
+    await api.put(`/initiative-entries/${entry.id}`, { temp_hp: (entry.temp_hp ?? 0) + amount });
+    closeHpEditor();
     load();
   }
 
@@ -440,10 +482,49 @@ export function InitiativeTracker({ sessionId }: Props) {
                 <div className="row" style={{ gap: 6, alignItems: "center" }}>
                   <span className="muted" style={{ fontSize: "0.8em", whiteSpace: "nowrap" }}>
                     ХП: {entry.current_hp ?? "—"} / {entry.max_hp}
+                    {entry.temp_hp ? ` (+${entry.temp_hp})` : ""}
                   </span>
-                  <div className="initiative-hp-bar-track" style={{ flex: 1 }}>
+                  <div
+                    className="initiative-hp-bar-track"
+                    style={{ flex: 1, cursor: "pointer" }}
+                    title="Изменить ХП"
+                    onClick={() => {
+                      setHpEditId(entry.id);
+                      setHpAmount("");
+                    }}
+                  >
                     <div className="initiative-hp-bar-fill" style={{ width: `${hpPct}%` }} />
+                    {entry.max_hp && entry.temp_hp ? (
+                      <div
+                        className="initiative-hp-bar-temp"
+                        style={{ width: `${Math.min(100, (100 * entry.temp_hp) / entry.max_hp)}%` }}
+                      />
+                    ) : null}
                   </div>
+                </div>
+              )}
+              {hpEditId === entry.id && (
+                <div className="initiative-hp-editor row" style={{ gap: 4, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    autoFocus
+                    placeholder="Кол-во"
+                    value={hpAmount}
+                    onChange={(e) => setHpAmount(e.target.value)}
+                    style={{ width: 64 }}
+                  />
+                  <button type="button" className="comp-mini" onClick={() => applyDamage(entry)}>
+                    Урон
+                  </button>
+                  <button type="button" className="comp-mini" onClick={() => applyHeal(entry)}>
+                    Лечение
+                  </button>
+                  <button type="button" className="comp-mini" onClick={() => applyTempHp(entry)}>
+                    +Врем. ХП
+                  </button>
+                  <button type="button" className="comp-mini" title="Закрыть" onClick={closeHpEditor}>
+                    ✕
+                  </button>
                 </div>
               )}
             </div>

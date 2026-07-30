@@ -3249,7 +3249,8 @@ input.litm-theme-title {
   font-size: 0.9em;
 }
 .initiative-hp-bar-track {
-  height: 4px;
+  position: relative;
+  height: 6px;
   border-radius: 2px;
   background: color-mix(in srgb, var(--border) 60%, transparent);
   overflow: hidden;
@@ -3258,6 +3259,18 @@ input.litm-theme-title {
   height: 100%;
   background: #c0392b;
   transition: width 0.2s ease;
+}
+.initiative-hp-bar-temp {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #4a90d9;
+  transition: width 0.2s ease;
+}
+.initiative-hp-editor {
+  padding: 4px 2px 2px;
+  border-top: 1px dashed var(--border);
 }
 .resource-row-thumb {
   width: 24px;

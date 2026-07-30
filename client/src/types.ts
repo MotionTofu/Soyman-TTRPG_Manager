@@ -1132,6 +1132,7 @@ export interface InitiativeEntry {
   initiative: number | null;
   max_hp: number | null;
   current_hp: number | null;
+  temp_hp: number | null;
   dead: boolean | number;
   conditions: string; // JSON-encoded string[], parse before use
   created_at: string;

@@ -33,11 +33,12 @@ initiativeEntriesRouter.post("/", (req, res) => {
 });
 
 initiativeEntriesRouter.put("/:id", (req, res) => {
-  const { initiative, name, max_hp, current_hp, dead, conditions } = req.body as {
+  const { initiative, name, max_hp, current_hp, temp_hp, dead, conditions } = req.body as {
     initiative?: number | null;
     name?: string;
     max_hp?: number | null;
     current_hp?: number | null;
+    temp_hp?: number | null;
     dead?: boolean;
     conditions?: string[];
   };
@@ -47,6 +48,7 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
        name = COALESCE(?, name),
        max_hp = CASE WHEN ? THEN ? ELSE max_hp END,
        current_hp = CASE WHEN ? THEN ? ELSE current_hp END,
+       temp_hp = CASE WHEN ? THEN ? ELSE temp_hp END,
        dead = CASE WHEN ? THEN ? ELSE dead END,
        conditions = CASE WHEN ? THEN ? ELSE conditions END
      WHERE id = ?`
@@ -57,6 +59,8 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
     max_hp ?? null,
     current_hp !== undefined ? 1 : 0,
     current_hp ?? null,
+    temp_hp !== undefined ? 1 : 0,
+    temp_hp ?? null,
     dead !== undefined ? 1 : 0,
     dead ? 1 : 0,
     conditions !== undefined ? 1 : 0,
