@@ -30,7 +30,7 @@
   "nsis": {
     "oneClick": true,
     "perMachine": false,
-    "allowToChangeInstallation": false,
+    "allowToChangeInstallationDirectory": false,
     "artifactName": "RPG-Manager-Full-Setup-${version}.exe"
   },
   "publish": [
