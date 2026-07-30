@@ -1337,293 +1337,323 @@ export function DndCreatureEdit({
 
   return (
     <div className="stack dnd-card">
-      <div className="row">
-        <input
-          placeholder="Название существа"
-          value={value.name}
-          onChange={(e) => onChange({ ...value, name: e.target.value })}
-          style={{ flex: 1 }}
-        />
-        <select value={value.challenge.rating} onChange={(e) => onChange({ ...value, challenge: { rating: e.target.value, proficiencyBonus: computeProficiencyBonusForCR(e.target.value) } })}>
-          <option value="">— УО —</option>
-          {CR_VALUES.map((cr) => (
-            <option key={cr} value={cr}>
-              {cr}
-            </option>
-          ))}
-        </select>
-        <label className="row" style={{ gap: 4 }}>
-          Бонус мастерства
+      <details className="card stack" open>
+        <summary>
+          <strong className="entry-title">База</strong>
+        </summary>
+        <div className="row">
           <input
-            type="number"
-            style={{ width: 50 }}
-            value={value.challenge.proficiencyBonus ?? ""}
-            onChange={(e) => onChange({ ...value, challenge: { ...value.challenge, proficiencyBonus: e.target.value === "" ? null : Number(e.target.value) } })}
+            placeholder="Название существа"
+            value={value.name}
+            onChange={(e) => onChange({ ...value, name: e.target.value })}
+            style={{ flex: 1 }}
           />
-        </label>
-      </div>
-
-      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-        <select value={value.size} onChange={(e) => onChange({ ...value, size: e.target.value })}>
-          {CREATURE_SIZES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          value={value.creatureType}
-          onChange={(e) => onChange({ ...value, creatureType: e.target.value })}
-          style={{ flex: 1 }}
-        >
-          <option value="">— тип существа —</option>
-          {value.creatureType && !creatureTypeOptions.some((o) => o.name === value.creatureType) && (
-            <option value={value.creatureType}>{value.creatureType}</option>
-          )}
-          {creatureTypeOptions.map((o) => (
-            <option key={o.id} value={o.name}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={value.alignment}
-          onChange={(e) => onChange({ ...value, alignment: e.target.value })}
-          style={{ flex: 1 }}
-        >
-          <option value="">— мировоззрение —</option>
-          {value.alignment && !alignmentOptions.some((o) => o.name === value.alignment) && (
-            <option value={value.alignment}>{value.alignment}</option>
-          )}
-          {alignmentOptions.map((o) => (
-            <option key={o.id} value={o.name}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
-        <label className="row" style={{ gap: 4 }}>
-          КД
-          <input
-            type="number"
-            style={{ width: 56 }}
-            value={value.armorClass.value ?? ""}
-            onChange={(e) => onChange({ ...value, armorClass: { ...value.armorClass, value: e.target.value === "" ? null : Number(e.target.value) } })}
-          />
-          <input
-            placeholder="напр. натуральная броня"
-            value={value.armorClass.note}
-            onChange={(e) => onChange({ ...value, armorClass: { ...value.armorClass, note: e.target.value } })}
-            style={{ width: 160 }}
-          />
-        </label>
-        <label className="row" style={{ gap: 4 }}>
-          Кости хитов
-          <input
-            type="number"
-            style={{ width: 44 }}
-            value={value.hitPoints.diceCount ?? ""}
-            onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, diceCount: e.target.value === "" ? null : Number(e.target.value) } })}
-          />
-          к
-          <select
-            value={value.hitPoints.dieSize ?? ""}
-            onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, dieSize: e.target.value === "" ? null : Number(e.target.value) } })}
-          >
-            <option value="">—</option>
-            {DIE_SIZES.map((d) => (
-              <option key={d} value={d}>
-                к{d}
+          <select value={value.challenge.rating} onChange={(e) => onChange({ ...value, challenge: { rating: e.target.value, proficiencyBonus: computeProficiencyBonusForCR(e.target.value) } })}>
+            <option value="">— УО —</option>
+            {CR_VALUES.map((cr) => (
+              <option key={cr} value={cr}>
+                {cr}
               </option>
             ))}
           </select>
-          <span className="muted">бонус</span>
-          <input
-            type="number"
-            style={{ width: 50 }}
-            value={value.hitPoints.bonus ?? ""}
-            onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, bonus: e.target.value === "" ? null : Number(e.target.value) } })}
-          />
-          {(value.hitPoints.diceCount || value.hitPoints.formula) && <span className="muted">≈ {formatHitPoints(value.hitPoints)}</span>}
-        </label>
-        <label className="row" style={{ gap: 4 }}>
-          Бонус инициативы
-          <input
-            type="number"
-            style={{ width: 50 }}
-            value={value.initiativeBonus ?? ""}
-            onChange={(e) => onChange({ ...value, initiativeBonus: e.target.value === "" ? null : Number(e.target.value) })}
-          />
-        </label>
-      </div>
-
-      <SpeedEditor value={value.speed} onChange={(v) => onChange({ ...value, speed: v })} />
-
-      <AbilityScoresEdit value={value.abilities} onChange={setAbilities} />
-
-      <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
-        <div className="stack" style={{ gap: 4 }}>
-          <span className="sb-prop-label">Спасброски</span>
-          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-            {ABILITY_LABELS.map(({ key, label }) => (
-              <label key={key} className="row" style={{ gap: 4 }}>
-                <input type="checkbox" checked={value.savingThrowProfs[key]} onChange={() => toggleSave(key)} />
-                {label}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="stack" style={{ gap: 4 }}>
-          <span className="sb-prop-label">Навыки</span>
-          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-            {ALL_SKILLS.map((skill) => (
-              <label key={skill} className="row" style={{ gap: 4 }}>
-                <input type="checkbox" checked={!!value.skillProfs[skill]} onChange={() => toggleSkill(skill)} />
-                {skill}
-              </label>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <ChecklistEditor
-        label="Уязвимости к урону"
-        value={value.damageVulnerabilities}
-        onChange={(v) => onChange({ ...value, damageVulnerabilities: v })}
-        options={damageTypes}
-      />
-      <ChecklistEditor
-        label="Сопротивления урону"
-        value={value.damageResistances}
-        onChange={(v) => onChange({ ...value, damageResistances: v })}
-        options={damageTypes}
-      />
-      <ChecklistEditor
-        label="Иммунитет к урону"
-        value={value.damageImmunities}
-        onChange={(v) => onChange({ ...value, damageImmunities: v })}
-        options={damageTypes}
-      />
-      <ChecklistEditor
-        label="Иммунитет к состояниям"
-        value={value.conditionImmunities}
-        onChange={(v) => onChange({ ...value, conditionImmunities: v })}
-        options={conditions}
-      />
-      <div className="stack" style={{ gap: 4 }}>
-        <span className="sb-prop-label">Преимущество на спасброски от</span>
-        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          {conditions.map((c) => (
-            <label key={c.id} className="row" style={{ gap: 4 }}>
-              <input type="checkbox" checked={value.saveAdvantageConditions.includes(c.name)} onChange={() => toggleSaveAdvantageCondition(c.name)} />
-              {c.name}
-            </label>
-          ))}
           <label className="row" style={{ gap: 4 }}>
+            Бонус мастерства
             <input
-              type="checkbox"
-              checked={value.saveAdvantageMagic}
-              onChange={(e) => onChange({ ...value, saveAdvantageMagic: e.target.checked })}
+              type="number"
+              style={{ width: 50 }}
+              value={value.challenge.proficiencyBonus ?? ""}
+              onChange={(e) => onChange({ ...value, challenge: { ...value.challenge, proficiencyBonus: e.target.value === "" ? null : Number(e.target.value) } })}
             />
-            Магии
           </label>
         </div>
-      </div>
-      <label>
-        Дополнительно (защита)
-        <MentionTextarea value={value.defenseNotes} onChange={(v) => onChange({ ...value, defenseNotes: v })} rows={2} />
-      </label>
 
-      <div className="stack" style={{ gap: 4 }}>
-        <span className="sb-prop-label">Чувства</span>
-        <SensesEditor value={value.sensesList} onChange={(v) => onChange({ ...value, sensesList: v })} options={senseOptions} />
-      </div>
-      <label>
-        Особенности восприятия
-        <input
-          placeholder="напр. преимущество на Внимание/восприятие, полагающееся на слух"
-          value={value.perceptionNote}
-          onChange={(e) => onChange({ ...value, perceptionNote: e.target.value })}
-        />
-      </label>
-      <label className="row" style={{ gap: 4 }}>
-        Пассивная Внимательность
-        <input
-          type="number"
-          style={{ width: 50 }}
-          value={value.passivePerception ?? ""}
-          onChange={(e) => onChange({ ...value, passivePerception: e.target.value === "" ? null : Number(e.target.value) })}
-        />
-        <button type="button" onClick={() => onChange({ ...value, passivePerception: computePassivePerception(value) })}>
-          Авто
-        </button>
-      </label>
-      <label>
-        Языки
-        <input value={value.languages} onChange={(e) => onChange({ ...value, languages: e.target.value })} />
-      </label>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <select value={value.size} onChange={(e) => onChange({ ...value, size: e.target.value })}>
+            {CREATURE_SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select
+            value={value.creatureType}
+            onChange={(e) => onChange({ ...value, creatureType: e.target.value })}
+            style={{ flex: 1 }}
+          >
+            <option value="">— тип существа —</option>
+            {value.creatureType && !creatureTypeOptions.some((o) => o.name === value.creatureType) && (
+              <option value={value.creatureType}>{value.creatureType}</option>
+            )}
+            {creatureTypeOptions.map((o) => (
+              <option key={o.id} value={o.name}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={value.alignment}
+            onChange={(e) => onChange({ ...value, alignment: e.target.value })}
+            style={{ flex: 1 }}
+          >
+            <option value="">— мировоззрение —</option>
+            {value.alignment && !alignmentOptions.some((o) => o.name === value.alignment) && (
+              <option value={value.alignment}>{value.alignment}</option>
+            )}
+            {alignmentOptions.map((o) => (
+              <option key={o.id} value={o.name}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <SpellcastingEditor
-        value={value.spellcasting}
-        onChange={(v) => onChange({ ...value, spellcasting: v })}
-        systemId={systemId}
-        abilities={value.abilities}
-        proficiencyBonus={value.challenge.proficiencyBonus ?? 0}
-      />
+        <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
+          <label className="row" style={{ gap: 4 }}>
+            КД
+            <input
+              type="number"
+              style={{ width: 56 }}
+              value={value.armorClass.value ?? ""}
+              onChange={(e) => onChange({ ...value, armorClass: { ...value.armorClass, value: e.target.value === "" ? null : Number(e.target.value) } })}
+            />
+            <input
+              placeholder="напр. натуральная броня"
+              value={value.armorClass.note}
+              onChange={(e) => onChange({ ...value, armorClass: { ...value.armorClass, note: e.target.value } })}
+              style={{ width: 160 }}
+            />
+          </label>
+          <label className="row" style={{ gap: 4 }}>
+            Кости хитов
+            <input
+              type="number"
+              style={{ width: 44 }}
+              value={value.hitPoints.diceCount ?? ""}
+              onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, diceCount: e.target.value === "" ? null : Number(e.target.value) } })}
+            />
+            к
+            <select
+              value={value.hitPoints.dieSize ?? ""}
+              onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, dieSize: e.target.value === "" ? null : Number(e.target.value) } })}
+            >
+              <option value="">—</option>
+              {DIE_SIZES.map((d) => (
+                <option key={d} value={d}>
+                  к{d}
+                </option>
+              ))}
+            </select>
+            <span className="muted">бонус</span>
+            <input
+              type="number"
+              style={{ width: 50 }}
+              value={value.hitPoints.bonus ?? ""}
+              onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, bonus: e.target.value === "" ? null : Number(e.target.value) } })}
+            />
+            {(value.hitPoints.diceCount || value.hitPoints.formula) && <span className="muted">≈ {formatHitPoints(value.hitPoints)}</span>}
+          </label>
+          <label className="row" style={{ gap: 4 }}>
+            Бонус инициативы
+            <input
+              type="number"
+              style={{ width: 50 }}
+              value={value.initiativeBonus ?? ""}
+              onChange={(e) => onChange({ ...value, initiativeBonus: e.target.value === "" ? null : Number(e.target.value) })}
+            />
+          </label>
+        </div>
 
-      <div className="row">
-        <label style={{ flex: 1 }}>
-          Среда обитания
-          <input value={value.habitat} onChange={(e) => onChange({ ...value, habitat: e.target.value })} />
+        <SpeedEditor value={value.speed} onChange={(v) => onChange({ ...value, speed: v })} />
+      </details>
+
+      <details className="card stack" open>
+        <summary>
+          <strong className="entry-title">Характеристики</strong>
+        </summary>
+        <AbilityScoresEdit value={value.abilities} onChange={setAbilities} />
+
+        <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
+          <div className="stack" style={{ gap: 4 }}>
+            <span className="sb-prop-label">Спасброски</span>
+            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+              {ABILITY_LABELS.map(({ key, label }) => (
+                <label key={key} className="row" style={{ gap: 4 }}>
+                  <input type="checkbox" checked={value.savingThrowProfs[key]} onChange={() => toggleSave(key)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="stack" style={{ gap: 4 }}>
+            <span className="sb-prop-label">Навыки</span>
+            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+              {ALL_SKILLS.map((skill) => (
+                <label key={skill} className="row" style={{ gap: 4 }}>
+                  <input type="checkbox" checked={!!value.skillProfs[skill]} onChange={() => toggleSkill(skill)} />
+                  {skill}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="sb-prop-label">Чувства</span>
+          <SensesEditor value={value.sensesList} onChange={(v) => onChange({ ...value, sensesList: v })} options={senseOptions} />
+        </div>
+        <label>
+          Особенности восприятия
+          <input
+            placeholder="напр. преимущество на Внимание/восприятие, полагающееся на слух"
+            value={value.perceptionNote}
+            onChange={(e) => onChange({ ...value, perceptionNote: e.target.value })}
+          />
         </label>
-        <label style={{ flex: 1 }}>
-          Сокровища
-          <input value={value.treasure} onChange={(e) => onChange({ ...value, treasure: e.target.value })} />
+        <label className="row" style={{ gap: 4 }}>
+          Пассивная Внимательность
+          <input
+            type="number"
+            style={{ width: 50 }}
+            value={value.passivePerception ?? ""}
+            onChange={(e) => onChange({ ...value, passivePerception: e.target.value === "" ? null : Number(e.target.value) })}
+          />
+          <button type="button" onClick={() => onChange({ ...value, passivePerception: computePassivePerception(value) })}>
+            Авто
+          </button>
         </label>
-      </div>
+        <label>
+          Языки
+          <input value={value.languages} onChange={(e) => onChange({ ...value, languages: e.target.value })} />
+        </label>
+      </details>
 
-      <EquipmentEditor value={value.equipment} onChange={(v) => onChange({ ...value, equipment: v })} systemId={systemId} />
-      <LootEditor value={value.loot} onChange={(v) => onChange({ ...value, loot: v })} />
+      <details className="card stack" open>
+        <summary>
+          <strong className="entry-title">Защита</strong>
+        </summary>
+        <ChecklistEditor
+          label="Уязвимости к урону"
+          value={value.damageVulnerabilities}
+          onChange={(v) => onChange({ ...value, damageVulnerabilities: v })}
+          options={damageTypes}
+        />
+        <ChecklistEditor
+          label="Сопротивления урону"
+          value={value.damageResistances}
+          onChange={(v) => onChange({ ...value, damageResistances: v })}
+          options={damageTypes}
+        />
+        <ChecklistEditor
+          label="Иммунитет к урону"
+          value={value.damageImmunities}
+          onChange={(v) => onChange({ ...value, damageImmunities: v })}
+          options={damageTypes}
+        />
+        <ChecklistEditor
+          label="Иммунитет к состояниям"
+          value={value.conditionImmunities}
+          onChange={(v) => onChange({ ...value, conditionImmunities: v })}
+          options={conditions}
+        />
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="sb-prop-label">Преимущество на спасброски от</span>
+          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+            {conditions.map((c) => (
+              <label key={c.id} className="row" style={{ gap: 4 }}>
+                <input type="checkbox" checked={value.saveAdvantageConditions.includes(c.name)} onChange={() => toggleSaveAdvantageCondition(c.name)} />
+                {c.name}
+              </label>
+            ))}
+            <label className="row" style={{ gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={value.saveAdvantageMagic}
+                onChange={(e) => onChange({ ...value, saveAdvantageMagic: e.target.checked })}
+              />
+              Магии
+            </label>
+          </div>
+        </div>
+        <label>
+          Дополнительно (защита)
+          <MentionTextarea value={value.defenseNotes} onChange={(v) => onChange({ ...value, defenseNotes: v })} rows={2} />
+        </label>
+      </details>
 
-      <FeatureListEdit title="Особенности (Traits)" values={value.traits} onChange={setTraits} />
+      <details className="card stack" open>
+        <summary>
+          <strong className="entry-title">Заклинания</strong>
+        </summary>
+        <SpellcastingEditor
+          value={value.spellcasting}
+          onChange={(v) => onChange({ ...value, spellcasting: v })}
+          systemId={systemId}
+          abilities={value.abilities}
+          proficiencyBonus={value.challenge.proficiencyBonus ?? 0}
+        />
+      </details>
 
-      <AddSpellActionButton
-        spells={value.spellcasting.spells}
-        actions={value.actions}
-        onAdd={(a) => setActions([...value.actions, a])}
-      />
-      <ActionListEdit
-        title="Действия (Actions)"
-        values={value.actions}
-        onChange={setActions}
-        headerColorClass="dnd-header-actions"
-        abilities={value.abilities}
-        proficiencyBonus={value.challenge.proficiencyBonus}
-      />
-      <ActionListEdit
-        title="Бонусные действия"
-        values={value.bonusActions}
-        onChange={setBonusActions}
-        headerColorClass="dnd-header-bonus"
-        abilities={value.abilities}
-        proficiencyBonus={value.challenge.proficiencyBonus}
-      />
-      <ActionListEdit
-        title="Реакции"
-        values={value.reactions}
-        onChange={setReactions}
-        headerColorClass="dnd-header-reactions"
-        abilities={value.abilities}
-        proficiencyBonus={value.challenge.proficiencyBonus}
-      />
-      <LegendaryEditor
-        value={value.legendary}
-        onChange={setLegendary}
-        abilities={value.abilities}
-        proficiencyBonus={value.challenge.proficiencyBonus}
-      />
+      <details className="card stack" open>
+        <summary>
+          <strong className="entry-title">Действия</strong>
+        </summary>
+        <FeatureListEdit title="Особенности (Traits)" values={value.traits} onChange={setTraits} />
+
+        <AddSpellActionButton
+          spells={value.spellcasting.spells}
+          actions={value.actions}
+          onAdd={(a) => setActions([...value.actions, a])}
+        />
+        <ActionListEdit
+          title="Действия (Actions)"
+          values={value.actions}
+          onChange={setActions}
+          headerColorClass="dnd-header-actions"
+          abilities={value.abilities}
+          proficiencyBonus={value.challenge.proficiencyBonus}
+        />
+        <ActionListEdit
+          title="Бонусные действия"
+          values={value.bonusActions}
+          onChange={setBonusActions}
+          headerColorClass="dnd-header-bonus"
+          abilities={value.abilities}
+          proficiencyBonus={value.challenge.proficiencyBonus}
+        />
+        <ActionListEdit
+          title="Реакции"
+          values={value.reactions}
+          onChange={setReactions}
+          headerColorClass="dnd-header-reactions"
+          abilities={value.abilities}
+          proficiencyBonus={value.challenge.proficiencyBonus}
+        />
+        <LegendaryEditor
+          value={value.legendary}
+          onChange={setLegendary}
+          abilities={value.abilities}
+          proficiencyBonus={value.challenge.proficiencyBonus}
+        />
+      </details>
+
+      <details className="card stack" open>
+        <summary>
+          <strong className="entry-title">Снаряжение</strong>
+        </summary>
+        <div className="row">
+          <label style={{ flex: 1 }}>
+            Среда обитания
+            <input value={value.habitat} onChange={(e) => onChange({ ...value, habitat: e.target.value })} />
+          </label>
+          <label style={{ flex: 1 }}>
+            Сокровища
+            <input value={value.treasure} onChange={(e) => onChange({ ...value, treasure: e.target.value })} />
+          </label>
+        </div>
+
+        <EquipmentEditor value={value.equipment} onChange={(v) => onChange({ ...value, equipment: v })} systemId={systemId} />
+        <LootEditor value={value.loot} onChange={(v) => onChange({ ...value, loot: v })} />
+      </details>
 
       <label>
         Заметки
