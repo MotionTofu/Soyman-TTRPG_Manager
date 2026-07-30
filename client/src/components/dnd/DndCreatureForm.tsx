@@ -1271,9 +1271,11 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
 export function DndCreatureEdit({
   value,
   onChange,
+  theme,
 }: {
   value: DndCreatureData;
   onChange: (v: DndCreatureData) => void;
+  theme?: string | null;
 }) {
   // Same fix as DndCharacterEdit/LitMCharacterEdit: a keystroke in any one
   // field used to replace the whole DndCreatureData object and hand every
@@ -1335,8 +1337,14 @@ export function DndCreatureEdit({
     onChange({ ...value, saveAdvantageConditions: list });
   }
 
+  // Edit mode intentionally does NOT wrap in the full statblockScopeClass()
+  // (sb-scope) — that pulls in the theme's --paper/--ink/background vars
+  // meant for the parchment-style view mode and would reskin the plain
+  // form inputs. Only the Гравюра header-emphasis rule needs to reach edit
+  // mode, so it's gated on this narrow class instead.
+  const isGravura = !theme || theme === "color" || theme === "print";
   return (
-    <div className="stack dnd-card">
+    <div className={`stack dnd-card${isGravura ? " sb-edit-gravura" : ""}`}>
       <details className="card stack" open>
         <summary>
           <strong className="entry-title">База</strong>

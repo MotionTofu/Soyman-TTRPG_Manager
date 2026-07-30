@@ -88,6 +88,36 @@
   --line: #1a1a1a;
   --border: #1a1a1a;
 }
+/* Гравюра (both цвет and ч/б печать) — section headers larger, brighter,
+   bold in both view mode (.sb-section) and edit mode (.entry-title in the
+   grouped <details> cards, .sb-prop-label inline field labels, and the
+   dnd-header-* action-list titles), per user request that this apply
+   "как в режиме редактирования, так и в режиме просмотра". */
+.theme-color .sb-section,
+.theme-print .sb-section,
+.theme-color .dnd-spell-level-summary,
+.theme-print .dnd-spell-level-summary {
+  font-size: 18px;
+  font-weight: 700;
+  filter: brightness(1.25);
+}
+/* Same emphasis for edit-mode section headers — scoped to .sb-edit-gravura
+   rather than .sb-scope.theme-*, since edit mode deliberately skips the
+   full sb-scope wrapper (that also carries the parchment paper/ink vars,
+   which would reskin plain form inputs). */
+.sb-edit-gravura .entry-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  filter: brightness(1.25);
+}
+.sb-edit-gravura .dnd-header-actions,
+.sb-edit-gravura .dnd-header-bonus,
+.sb-edit-gravura .dnd-header-reactions,
+.sb-edit-gravura .dnd-header-legendary {
+  font-weight: 700;
+  filter: brightness(1.15);
+}
 .sb-scope.theme-cyberpunk {
   --sb-accent: #ff2bd6;
   --paper: #0c0f12;
@@ -149,8 +179,7 @@
   letter-spacing: 0.5px;
 }
 .theme-steampunk .sb-abilities > div {
-  border-radius: 50%;
-  aspect-ratio: 1;
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -299,6 +328,17 @@
 .theme-rustic .sb-name {
   font-size: calc(var(--fs-title) * 1.4);
 }
+/* Amatic SC (the theme's display font) is very thin at the section-header
+   scale and reads poorly there, even though it works fine for the big
+   .sb-name title above. Section headers fall back to the readable body
+   serif instead, with extra weight/size to still stand out. */
+.theme-rustic .sb-section,
+.theme-rustic .dnd-spell-level-summary {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
 .sb-scope.theme-disney {
   --sb-accent: #8a6fd6;
   --paper: #fbf6ff;
@@ -427,6 +467,11 @@
 .theme-barovia .sb-vitals > div,
 .theme-barovia .sb-abilities > div {
   background: rgba(60, 42, 26, 0.06);
+}
+.theme-barovia .sb-section,
+.theme-barovia .dnd-spell-level-summary {
+  font-size: 19px;
+  letter-spacing: 1.5px;
 }
 /* ---- Древнеславянский ---- */
 .sb-scope.theme-slavic {

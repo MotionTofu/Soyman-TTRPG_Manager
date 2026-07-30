@@ -19,9 +19,11 @@ export const STATBLOCK_THEMES: { id: string; label: string }[] = [
 ];
 
 // "color" (Гравюра) is the default — the base .sb-scope vars already are
-// that theme, so no extra class needed.
+// that theme. It still gets its own class (theme-color) so Гравюра-only
+// CSS (e.g. bolder section headers) can target it without leaking onto
+// every other theme that also falls back to the unscoped .sb-section rule.
 export function statblockThemeClass(theme: string | null | undefined): string {
-  return theme && theme !== "color" ? `theme-${theme}` : "";
+  return `theme-${theme || "color"}`;
 }
 
 export function statblockScopeClass(theme: string | null | undefined, density: string | null | undefined): string {

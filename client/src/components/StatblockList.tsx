@@ -480,6 +480,7 @@ function StatblockCard({
                   setDndValue(v);
                   setContent(JSON.stringify(v));
                 }}
+                theme={theme}
               />
             )}
             {!isLitm && !isDnd && (
