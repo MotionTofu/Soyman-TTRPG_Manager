@@ -1,0 +1,3746 @@
+/* Theme tokens — these defaults mirror the "Классическая" built-in theme in
+   themes.ts byte-for-byte (see applyTheme()), so this :root block is only
+   the pre-JS fallback / FOUC guard, not a second source of truth. */
+:root {
+  --bg: #16141c;
+  --bg-panel: #1e1c26;
+  --bg-elevated: #262330;
+  --border: #35313f;
+  --text: #cac5d6;
+  --text-bright: #e9e6f0;
+  --text-dim: #9d97ad;
+  --accent: #b08968;
+  --accent-text: #201a14;
+  --accent-soft: #b089682a;
+  --accent-2: #7c9885;
+  --primary-bg: #b08968;
+  --primary-text: #201a14;
+  --font-display: 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Segoe UI', system-ui, sans-serif;
+  --card-radius: 6px;
+  --card-border-width: 1px;
+  --card-clip: none;
+  --card-band-bg: var(--bg-panel);
+  --card-band-image: none;
+  --page-texture: none;
+  --card-body-texture: none;
+  --name-transform: none;
+  --name-stroke: none;
+  --status-planned: #bdccdb;
+  --status-planned-fg: #243342;
+  --status-held: #c5dccb;
+  --status-held-fg: #2c4332;
+  --status-cancelled: #dbbdbd;
+  --status-cancelled-fg: #422424;
+  --status-rescheduled: #dfd5b1;
+  --status-rescheduled-fg: #463c18;
+  --role-gm: #a78bfa;
+  --role-gm-soft: #a78bfa22;
+  --role-player: #7a2438;
+  --role-player-soft: #7a243822;
+  --pay-paid: #fbbf24;
+  --pay-paid-soft: #fbbf2422;
+  --pay-free: #4ade80;
+  --pay-free-soft: #4ade8022;
+  /* Name/title size scale — same on every theme, this is about scale not
+     color/shape, so it lives here rather than in themes.ts. */
+  --text-name: 18px;
+  --text-name-sub: 14px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  width: 100%;
+  /* Safety net: no single element (a fixed-position bar with hardcoded
+     desktop-column insets, a too-wide table, whatever) should be able to
+     force the whole page wider than the viewport and produce sideways
+     scroll — especially on phones, where that reads as "everything spills
+     off the edges" rather than a scrollable widget. */
+  overflow-x: hidden;
+  /* Kills the native "rubber band" overscroll bounce (dragging past the top/
+     bottom/edge of the page, seeing it stretch, then snap back) on mobile
+     browsers. This is a separate mechanism from overflow-x:hidden above —
+     it happens at the viewport/document level even when nothing is actually
+     overflowing, and on a phone it eats touch-drag gestures that would
+     otherwise be used for in-app navigation (swiping a drawer, dragging a
+     slider, etc.), which is why it "interferes with navigation". */
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--bg);
+  background-image: var(--page-texture);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-bright);
+  border-radius: var(--card-radius);
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover {
+  border-color: var(--accent);
+}
+button.primary {
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-text);
+  font-weight: 600;
+  text-transform: var(--name-transform);
+}
+
+input, select, textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 6px 8px;
+}
+
+h1, h2, h3 {
+  margin: 0 0 8px 0;
+  font-family: var(--font-display);
+  text-transform: var(--name-transform);
+}
+
+.card {
+  background: var(--bg-panel);
+  background-image: var(--card-body-texture);
+  border: var(--card-border-width) solid var(--border);
+  border-radius: var(--card-radius);
+  clip-path: var(--card-clip);
+  padding: 14px;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.badge.planned { background: var(--status-planned); color: var(--status-planned-fg); }
+.badge.held { background: var(--status-held); color: var(--status-held-fg); }
+.badge.cancelled { background: var(--status-cancelled); color: var(--status-cancelled-fg); }
+.badge.rescheduled { background: var(--status-rescheduled); color: var(--status-rescheduled-fg); }
+
+/* Neutral tag badge for non-status labels (type/category/tag) — never reuse
+   the session-status colors above for these. */
+.badge.tag { background: var(--bg-elevated); color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--border); }
+
+.tag-chip-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.tag-chip-remove {
+  background: none;
+  border: none;
+  padding: 0 0 0 4px;
+  margin: 0;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tag-chip-add {
+  box-shadow: inset 0 0 0 1px dashed var(--border);
+  padding: 1px 6px;
+}
+.tag-chip-add input {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  width: 70px;
+  color: var(--text-dim);
+}
+.tag-chip-add input:focus {
+  outline: none;
+}
+
+/* One-row-per-item list layout (requirement 4: creatures/communities). */
+.entity-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.entity-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--card-radius);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+.entity-row:hover {
+  border-color: var(--accent);
+}
+.entity-row-thumb {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--card-radius);
+  object-fit: cover;
+  background: var(--bg-inset, var(--bg));
+}
+.entity-row-bg {
+  background-size: cover;
+  background-position: center;
+}
+.entity-row-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.2) 100%);
+}
+.entity-row-bg > * {
+  position: relative;
+}
+.entity-row-bg .entity-row-name,
+.entity-row-bg .muted {
+  color: #fff;
+}
+.entity-row-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entity-row-tags {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.entity-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.entity-row-actions button {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.location-cascade {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.location-cascade-breadcrumb {
+  font-size: 12px;
+}
+.location-cascade-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* One color per entity type, reused consistently in breadcrumbs, the entity
+   header chip, search results, and link cards. */
+.entity-type-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  border: 1px solid currentColor;
+}
+.entity-type-chip.campaign { color: #d4a373; }
+.entity-type-chip.setting { color: #93c5a0; }
+.entity-type-chip.player { color: #7ea8d8; }
+.entity-type-chip.character { color: #c48fd6; }
+.entity-type-chip.location { color: #5fc2b3; }
+.entity-type-chip.being { color: #e08a4f; }
+.entity-type-chip.community { color: #a98fe0; }
+.entity-type-chip.artifact { color: #e0c15f; }
+.entity-type-chip.resource { color: #8fa8e0; }
+.entity-type-chip.mastering { color: #d67ea3; }
+.entity-type-chip.session { color: #a3a35f; }
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+/* "Список"/"Таблица" view modes (ViewModeToggle) — reuse each page's own
+   card markup as-is (title/badges/muted lines), just laid out as a single
+   compact column instead of a tile grid. Thumbnails/banners are hidden
+   since a dense list has no room for them. "Таблица" additionally adds
+   zebra striping and a shared border so rows read as a table without every
+   page having to define its own column set. */
+.grid-cards.mode-list,
+.grid-cards.mode-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.grid-cards.mode-table {
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+}
+.grid-cards.mode-list .card,
+.grid-cards.mode-table .card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.grid-cards.mode-table .card {
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+}
+.grid-cards.mode-table .card:last-child {
+  border-bottom: none;
+}
+.grid-cards.mode-table .card:nth-child(even) {
+  background: var(--bg-elevated);
+}
+.grid-cards.mode-list .card h3,
+.grid-cards.mode-table .card h3 {
+  margin: 0;
+  min-width: 160px;
+  flex-shrink: 0;
+}
+.grid-cards.mode-list .card > img,
+.grid-cards.mode-table .card > img,
+.grid-cards.mode-list .card .campaign-thumb,
+.grid-cards.mode-table .card .campaign-thumb,
+.grid-cards.mode-list .card .campaign-card-band,
+.grid-cards.mode-table .card .campaign-card-band {
+  display: none;
+}
+
+.roster-grid {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.roster-card {
+  position: relative;
+}
+
+.roster-card-thumb-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.8;
+  z-index: 2;
+}
+.roster-card-thumb-btn:hover {
+  opacity: 1;
+  border-color: var(--accent);
+}
+/* .setting-card-bg > * (background thumbnail style) resets children to
+   position:relative to sit above its ::before overlay — pull this one
+   back to absolute so it stays pinned to the corner instead of the flow. */
+.roster-card.setting-card-bg > .roster-card-thumb-btn {
+  position: absolute;
+}
+
+.roster-card-name {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.roster-card-actions button {
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: normal;
+  flex: 1 1 auto;
+}
+
+.btn-capsule {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+}
+
+.visibility-picker {
+  position: relative;
+}
+.visibility-picker-panel {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  z-index: 20;
+  min-width: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.grid-cards h3 {
+  font-size: var(--text-name);
+}
+.entry-title {
+  font-size: var(--text-name);
+}
+
+.campaign-thumb {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  margin-bottom: 8px;
+}
+
+/* Decorative stand-in for .campaign-thumb when a card has no uploaded
+   image — themed via --card-band-bg/--card-band-image so every theme gets
+   its own header treatment instead of blank space. */
+.campaign-card-band {
+  width: 100%;
+  height: 90px;
+  border-radius: var(--card-radius);
+  margin-bottom: 8px;
+  background: var(--card-band-bg);
+  background-image: var(--card-band-image);
+  background-size: cover;
+  background-position: center;
+}
+
+.campaign-bg-layer {
+  position: fixed;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.15;
+  z-index: -1;
+  pointer-events: none;
+}
+.campaign-bg-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, var(--bg) 0%, transparent 30%, var(--bg) 100%);
+}
+
+/* App shell layout */
+.app-shell {
+  display: grid;
+  grid-template-columns: 200px 1fr 320px;
+  height: 100vh;
+}
+
+.app-nav {
+  position: relative;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Decorative drift-particle field, reused behind the nav logo, section
+   headings, and the search panel title — colored via the active theme's
+   own --accent, so every theme gets a "thematic" tint for free. Purely
+   visual (pointer-events:none) and cheap: a handful of small absolutely
+   positioned dots animated with CSS transform/opacity only. */
+.particle-field {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+.header-particles {
+  inset: 0 0 auto 0;
+  height: 140px;
+  overflow: hidden;
+}
+.footer-particles {
+  inset: auto 0 0 0;
+  height: 140px;
+  overflow: hidden;
+}
+.particle-field-dot {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 5px 1px var(--accent);
+  opacity: 0.3;
+  animation-name: particle-field-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes particle-field-float {
+  0% { transform: translate(0, 0); opacity: 0.2; }
+  50% { transform: translate(var(--dx), var(--dy)); opacity: 0.65; }
+  100% { transform: translate(0, 0); opacity: 0.2; }
+}
+
+/* Per-theme particle "shape" — everything above gives every theme a plain
+   colored dot for free (via --accent); these overrides swap in a themed
+   glyph/shape for a few themes where a plain dot doesn't read as thematic.
+   Purely CSS (content + :nth-child for variety), no JS involved, so this
+   stays free even when the theme is switched without a page reload. */
+
+/* Киберпанк — falling-code digits instead of dots. */
+:root[data-theme-id="cyberpunk"] .particle-field-dot {
+  width: auto !important;
+  height: auto !important;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  font-family: var(--font-body), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-shadow: 0 0 4px var(--accent);
+}
+:root[data-theme-id="cyberpunk"] .particle-field-dot::before { content: "0"; }
+:root[data-theme-id="cyberpunk"] .particle-field-dot:nth-child(3n+1)::before { content: "1"; }
+
+/* Андедовский — drifting little spirits/bones. */
+:root[data-theme-id="undead"] .particle-field-dot {
+  width: auto !important;
+  height: auto !important;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  font-size: 12px;
+  filter: grayscale(1) brightness(1.3);
+}
+:root[data-theme-id="undead"] .particle-field-dot::before { content: "👻"; }
+:root[data-theme-id="undead"] .particle-field-dot:nth-child(2n)::before { content: "🦴"; }
+
+/* Баблгам — soap-bubble look (radial highlight + rim) instead of a flat dot. */
+:root[data-theme-id="anime"] .particle-field-dot {
+  background: radial-gradient(circle at 32% 30%, #ffffffcc 0%, var(--accent) 55%, transparent 100%);
+  box-shadow: 0 0 4px 1px var(--accent), inset 0 0 3px 0 #ffffff99;
+  border: 1px solid #ffffff66;
+}
+
+/* Фейский — small sparkles instead of round dots. */
+:root[data-theme-id="fey"] .particle-field-dot {
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 61% 35%, 100% 50%, 61% 65%, 50% 100%, 39% 65%, 0% 50%, 39% 35%);
+}
+
+/* Wraps a page's <h1> so a particle-field can float around/behind it
+   without affecting layout (inline-block sizes to the heading itself). */
+.section-heading {
+  position: relative;
+  display: inline-block;
+}
+.section-heading .particle-field {
+  inset: -14px -22px;
+  overflow: visible;
+}
+.section-heading h1 {
+  position: relative;
+  z-index: 1;
+}
+
+/* Same treatment, sized for the "Поиск" label in the search panel. */
+.search-heading {
+  position: relative;
+  display: inline-block;
+}
+.search-heading .particle-field {
+  inset: -10px -16px;
+  overflow: visible;
+}
+.search-heading strong {
+  position: relative;
+  z-index: 1;
+}
+
+.app-nav .brand-logo {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--card-radius);
+  margin-bottom: 16px;
+}
+
+.app-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--card-radius);
+  color: var(--text);
+}
+.app-nav a:hover {
+  background: var(--bg-elevated);
+  text-decoration: none;
+}
+.app-nav a.active {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  font-weight: 600;
+}
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.app-content {
+  overflow-y: auto;
+  /* Per the CSS Overflow spec, an element with overflow-y set but overflow-x
+     left at its 'visible' default has that visible value computed to 'auto'
+     instead — so this was already its own independent horizontal scroll
+     container, separate from html/body's overflow-x:hidden "safety net"
+     above. Any sub-pixel overflow inside it (grid rounding, a slightly-too-
+     wide row) let iOS Safari rubber-band the whole page sideways on touch,
+     which is what the "оверскролл"/"утягивает в сторону" reports were.
+     Locking it down here removes that independent scroll axis entirely. */
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.app-content.has-player {
+  padding-bottom: 72px;
+}
+
+.page-fill {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Mobile top bar (hamburger + logo + search toggle) — hidden by default;
+   the breakpoint below both reveals it and turns .app-nav/.search-panel-slot
+   into off-canvas drawers those buttons toggle open/closed. Desktop-width
+   layouts never render this bar's buttons as functional (AppShell still
+   mounts them, but they're display:none here). */
+.mobile-topbar {
+  display: none;
+}
+
+.search-panel-slot {
+  display: contents;
+}
+
+/* Same wrapper-div-in-a-grid problem as .search-panel-slot above, and the
+   same fix — without this, the wrapper (block by default) becomes an actual
+   grid item of .app-shell on desktop, even though its child
+   (.audio-player-bar) is position:fixed and doesn't need a grid cell at all.
+   An unaccounted-for extra grid row shrinks the row .app-nav/.app-content/
+   .search-panel actually get, so they stop reaching the true bottom of the
+   viewport — reads as the sidebar/pinned-pages content being mysteriously
+   "lifted" off the bottom edge. This rule was only ever defined inside the
+   mobile media query (where the wrapper becomes the real drawer), so desktop
+   never had it — bug from when the mobile drawer was added, not a new one. */
+.audio-player-slot {
+  display: contents;
+}
+
+.search-panel {
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.search-panel.horizontal {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  border-left: none;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.search-panel.horizontal input:not([type="checkbox"]) {
+  width: 220px;
+}
+.search-panel.horizontal .search-input-wrap {
+  width: 220px;
+}
+
+.search-input-row {
+  align-items: center;
+}
+.search-input-row .search-input-wrap {
+  flex: 1;
+}
+.search-input-wrap {
+  position: relative;
+  display: flex;
+}
+.search-input-wrap input {
+  width: 100%;
+  padding-right: 26px;
+}
+.search-input-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.search-input-clear:hover {
+  color: var(--accent);
+}
+.search-panel.horizontal .filters {
+  gap: 4px;
+}
+.search-panel.horizontal .stack {
+  flex-direction: row;
+  flex-wrap: wrap;
+  flex: 1;
+  gap: 8px;
+}
+.search-panel.horizontal .search-result {
+  padding: 4px 8px;
+}
+.search-panel.horizontal .search-pins {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+}
+
+.search-panel .filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.search-panel .filters label {
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bag-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.bag-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.bag-cell {
+  aspect-ratio: 1;
+  border-radius: var(--card-radius);
+  border: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 2px;
+}
+.bag-cell-empty {
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
+}
+.bag-cell-empty:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.bag-cell-filled {
+  background: var(--bg-elevated);
+  border-style: solid;
+  cursor: grab;
+}
+.bag-cell-label {
+  font-size: 9px;
+  line-height: 1.15;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+.bag-cell-remove {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 14px;
+  height: 14px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.bag-cell-filled:hover .bag-cell-remove {
+  opacity: 1;
+}
+
+.search-pins {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.search-pin-row a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 8px 10px;
+  cursor: grab;
+}
+.search-result:active {
+  cursor: grabbing;
+}
+.search-result-goto {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 39px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: var(--card-radius);
+}
+.search-result-goto:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Floating nav widget — theme-aware via the same CSS vars as .card. */
+.nav-widget {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.nav-widget-left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: column;
+  border-left: none;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.nav-widget-right {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: column;
+  border-right: none;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.nav-widget-top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: row;
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.nav-widget-bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: row;
+  border-bottom: none;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.nav-widget-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--card-radius);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.nav-widget-button:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--accent);
+}
+.nav-widget-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.nav-widget-button .nav-icon {
+  width: 20px;
+  height: 20px;
+}
+.nav-widget-compact .nav-widget-button {
+  padding: 8px;
+}
+.search-result .type {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.drop-zone {
+  border: 1px dashed var(--border);
+  border-radius: var(--card-radius);
+  padding: 10px;
+  min-height: 40px;
+}
+.drop-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th, td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.thumbnail-style-table {
+  white-space: nowrap;
+}
+.thumbnail-style-table th {
+  vertical-align: bottom;
+}
+.thumbnail-style-table th button {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.thumbnail-style-table input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Month calendar */
+.month-calendar {
+  display: grid;
+  /* minmax(0, 1fr), not plain 1fr: a bare 1fr track still won't shrink below
+     its content's min-content width, and a long unbroken .dot label (e.g.
+     "13:00 Кампания") is wider than a 7th of a phone screen — without the
+     0 floor the whole grid (and everything sharing its scroll container,
+     since overflow-x:hidden clips rather than scrolls) gets pushed past the
+     viewport and the right-hand columns/UI go dark. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.month-calendar .weekday {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 4px;
+}
+.month-calendar .day {
+  min-height: 64px;
+  min-width: 0; /* lets the cell actually shrink to its minmax(0,1fr) track */
+  border: var(--card-border-width) solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 4px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.month-calendar .day:hover {
+  border-color: var(--accent);
+}
+.month-calendar .day.empty {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+.month-calendar .day .num {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.month-calendar .dot {
+  font-size: 11.5px;
+  border-radius: var(--card-radius);
+  padding: 2px 6px;
+  color: #0d0d10;
+  overflow-wrap: anywhere;
+}
+.month-calendar .dot.planned { background: var(--status-planned); color: var(--status-planned-fg); }
+.month-calendar .dot.held { background: var(--status-held); color: var(--status-held-fg); }
+.month-calendar .dot.cancelled { background: var(--status-cancelled); color: var(--status-cancelled-fg); }
+.month-calendar .dot.rescheduled { background: var(--status-rescheduled); color: var(--status-rescheduled-fg); }
+.month-calendar .dot.pay-paid { box-shadow: inset 0 0 0 1px #f2d43d; }
+.month-calendar .dot.pay-negotiable { box-shadow: inset 0 0 0 1px #b8860b; }
+/* Player-role games (кампании, где текущий пользователь — игрок, не мастер)
+   swap each status's own bg/fg pair — same status palette, inverted, so a
+   day's role reads at a glance without a separate legend. */
+.month-calendar .dot.role-player { background: var(--role-player); color: var(--text-bright); }
+.month-calendar .dot.role-player.planned { background: var(--status-planned-fg); color: var(--status-planned); }
+.month-calendar .dot.role-player.held { background: var(--status-held-fg); color: var(--status-held); }
+.month-calendar .dot.role-player.cancelled { background: var(--status-cancelled-fg); color: var(--status-cancelled); }
+.month-calendar .dot.role-player.rescheduled { background: var(--status-rescheduled-fg); color: var(--status-rescheduled); }
+.month-calendar .dot.kind-session { background: var(--status-held); color: var(--status-held-fg); }
+.month-calendar .dot.kind-event { background: var(--accent); color: var(--accent-text); }
+.month-calendar .dot.kind-event.important { background: #d9534f; color: #fff; font-weight: 600; }
+.month-calendar .dot.kind-date { background: var(--bg-elevated); color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--border); }
+.month-calendar .day.today {
+  background: rgba(72, 160, 150, 0.10);
+  box-shadow: inset 0 0 0 2px rgba(72, 160, 150, 0.35);
+}
+.badge.role-player-badge { background: var(--role-player); color: var(--text-bright); }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal {
+  background: var(--bg-panel);
+  border: var(--card-border-width) solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 20px;
+  width: 420px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.modal:has(.crop-viewport) {
+  width: auto;
+}
+.modal:has(.mention-picker-modal) {
+  width: 480px;
+}
+.mention-picker-results {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.mention-picker-community-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+.mention-picker-community-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  width: 50%;
+}
+.mention-picker-community-table label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+  cursor: pointer;
+}
+.being-community-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+.being-community-table td {
+  padding: 4px 8px;
+  width: 25%;
+}
+.being-community-table label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+  font-size: 11px;
+  cursor: pointer;
+}
+.crop-viewport {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+  cursor: grab;
+  touch-action: none;
+  border-radius: var(--card-radius);
+}
+.crop-viewport:active {
+  cursor: grabbing;
+}
+.crop-viewport img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.tabs button {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 8px 12px;
+  color: var(--text-dim);
+}
+.tabs button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Для игроков: bigger tap-friendly section headers (accordion, one open at
+   a time) whose items open the full-screen PlayerContentReader instead of
+   dumping every article's full text into the page at once. */
+.player-section-header {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 14px 16px;
+  background: var(--bg-panel);
+  border: var(--card-border-width) solid var(--border);
+  border-radius: var(--card-radius);
+}
+.player-section-header.open {
+  border-color: var(--accent);
+}
+.player-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 4px 4px 4px;
+}
+.player-section-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+}
+.player-section-item:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+}
+
+.player-reader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+}
+.player-reader-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.player-reader-section {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.player-reader-close {
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+}
+.player-reader-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px 60px 20px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+.player-reader-title {
+  font-size: 26px;
+  margin: 0 0 16px 0;
+}
+.player-reader-tapzone {
+  position: absolute;
+  top: 56px;
+  bottom: 40px;
+  width: 15%;
+  min-width: 36px;
+  max-width: 64px;
+  background: transparent;
+  border: none;
+  font-size: 28px;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+.player-reader-tapzone:hover {
+  opacity: 1;
+}
+.player-reader-tapzone-left {
+  left: 0;
+}
+.player-reader-tapzone-right {
+  right: 0;
+}
+.player-reader-progress {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.plane-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .plane-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+details.card summary {
+  cursor: pointer;
+  font-weight: 600;
+  border-radius: var(--card-radius);
+  margin: -4px -6px;
+  padding: 4px 6px;
+}
+details.card summary:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+}
+details.card[open] summary {
+  margin-bottom: 10px;
+}
+
+/* Below this width the 3-column app-shell (nav / content / search) doesn't
+   fit a phone screen — nav and the search panel become off-canvas drawers
+   toggled by the mobile top bar (see AppShell.tsx's navOpen/searchOpen).
+   Both drawers use position:fixed, so they're removed from the grid flow
+   entirely; only .mobile-topbar and .app-content remain as grid items. */
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  /* .tabs is a plain flex row with no wrap — fine on desktop where there's
+     room, but a page with 5-6 tabs (e.g. a character profile) overflows the
+     viewport width on a phone since flex items never wrap by default. Wrap
+     onto multiple rows instead of letting the row force horizontal scroll. */
+  .tabs {
+    flex-wrap: wrap;
+  }
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .mobile-topbar-button {
+    background: transparent;
+    border: none;
+    font-size: 22px;
+    line-height: 1;
+    padding: 4px 8px;
+    color: var(--text);
+  }
+  .mobile-topbar-logo {
+    height: 32px;
+    width: auto;
+    border-radius: 4px;
+  }
+  .mobile-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 45;
+  }
+  .app-nav {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 240px;
+    max-width: 82vw;
+    z-index: 50;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  .app-nav.open {
+    transform: translateX(0);
+  }
+  .search-panel-slot {
+    display: block;
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(340px, 90vw);
+    z-index: 50;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+  }
+  .search-panel-slot.open {
+    transform: translateX(0);
+  }
+  .search-panel-slot .search-panel {
+    height: 100%;
+  }
+  .app-content {
+    padding: 16px;
+  }
+  /* Descriptive blurb under the page heading on Главная/Системы — useful
+     context on desktop, but on a phone it's just extra scrolling before the
+     actual content. */
+  .page-subtitle {
+    display: none;
+  }
+  /* .row is the app's generic flex-row helper, used everywhere for button
+     groups, label+value pairs, form controls side by side — dozens of call
+     sites, none of which wrap by default. Any row with more than ~2 items
+     (or with items wide enough on their own) overflows a phone screen. This
+     is the single broadest fix for "buttons causing horizontal scroll" —
+     letting rows wrap onto a second line is always safer on mobile than
+     letting them force the page wider. */
+  .row {
+    flex-wrap: wrap;
+  }
+  /* Floating scroll/back/pin widget duplicates native mobile browser gestures
+     and just overlaps content on a narrow screen — hide it below this width. */
+  .nav-widget {
+    display: none;
+  }
+
+  /* Every entity detail page (character, location, being, system, ...)
+     shares this "Редактировать [имя] / Архивировать" button row via
+     .entity-header-actions. The full Russian labels are wide enough that
+     two of them side by side overflow a phone screen. Shrink to icon-only
+     on mobile — .danger already marks the archive/delete button on every
+     page using this pattern, and the edit button is always the first,
+     non-danger child (some pages, e.g. Settings, also put Export/Import
+     buttons in this same row — those keep their text and just wrap, via
+     flex-wrap below, rather than being misread as "edit"). Text stays in
+     the DOM (just visually hidden via font-size:0) so screen readers still
+     get the real label. */
+  .entity-header-actions {
+    flex-wrap: wrap;
+  }
+  .entity-header-actions button:first-child:not(.danger),
+  .entity-header-actions button.danger {
+    padding: 6px 10px;
+    font-size: 0;
+    position: relative;
+  }
+  .entity-header-actions button:first-child:not(.danger)::before {
+    font-size: 15px;
+    content: "✎";
+  }
+  .entity-header-actions button.danger::before {
+    font-size: 15px;
+    content: "✕";
+  }
+
+  /* The audio bar's left:200px/right:320px insets assume the desktop
+     3-column grid — on a phone that leaves negative width and is exactly
+     what pushed the whole page sideways. Below this breakpoint it's a
+     GM-only bottom drawer (players never see it at all — see AppShell.tsx)
+     toggled from the mobile top bar instead of a permanently docked bar,
+     since a phone screen has no room to spare for a bar that's always on. */
+  .audio-player-slot {
+    display: contents;
+  }
+  .audio-player-slot .audio-player-bar {
+    left: 0;
+    right: 0;
+    max-width: 100vw;
+    overflow-x: auto;
+    z-index: 50;
+    transform: translateY(100%);
+    transition: transform 0.2s ease;
+  }
+  .audio-player-slot.open .audio-player-bar {
+    transform: translateY(0);
+  }
+  .app-content.has-player {
+    /* No longer permanently docked on mobile — don't reserve space for it. */
+    padding-bottom: 16px;
+  }
+}
+
+.character-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.character-layout > .stack {
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .character-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.character-avatar-col {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.character-avatar {
+  width: 176px;
+  height: 176px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.character-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+.character-avatar-upload {
+  cursor: pointer;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 6px 12px;
+  font-size: 13px;
+  text-align: center;
+  width: 100%;
+  white-space: nowrap;
+}
+.character-avatar-upload:hover {
+  border-color: var(--accent);
+}
+
+.avatar-upload-label {
+  position: relative;
+  display: block;
+  cursor: pointer;
+  border-radius: var(--card-radius);
+}
+.avatar-upload-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
+  padding: 8px;
+  border-radius: var(--card-radius);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.avatar-upload-label:hover .avatar-upload-hint {
+  opacity: 1;
+}
+
+/* This block must stay AFTER the base .character-avatar-col/.character-avatar
+   rules above — same selector specificity, so source order decides the
+   winner, and a media query placed earlier in the file loses to a later
+   plain rule regardless of the media condition. (This bit the previous
+   version of this fix: the override was written but silently never applied
+   because it came before the base rule.) */
+@media (max-width: 700px) {
+  /* position: sticky only makes sense in the two-column desktop layout,
+     where the avatar's grid row is as tall as the (often long) content
+     column next to it, so there's room to actually stick while scrolling
+     past. Once the layout collapses to one column, that row is just the
+     avatar's own height — sticky has nothing to stick across, so the
+     avatar just scrolls inline like everything else but keeps the
+     positioning quirks that (on WebKit in particular) can make a sticky
+     grid item report extra width and force sideways scroll. Drop sticky
+     entirely on mobile and shrink to a compact row header instead of a
+     dedicated full-width photo block. */
+  .character-avatar-col {
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .character-avatar,
+  .character-avatar-placeholder {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+  }
+  .avatar-upload-hint {
+    font-size: 12px;
+  }
+}
+
+.player-list-letter {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 13px;
+  padding-left: 4px;
+}
+.player-list-row {
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: var(--card-radius);
+  color: inherit;
+  text-decoration: none;
+}
+.player-list-row:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+}
+.player-list-row + .player-list-row {
+  border-top: 1px solid var(--border);
+}
+.player-list-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex: 0 0 auto;
+}
+.player-list-avatar-placeholder {
+  opacity: 0.4;
+}
+.player-list-notes-preview {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 480px;
+}
+
+.roster-avatar {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: block;
+}
+.roster-avatar-placeholder {
+  opacity: 0.4;
+}
+.being-avatar {
+  width: 176px;
+  height: 176px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: block;
+}
+.player-avatar {
+  width: 228px;
+  height: 228px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: block;
+}
+.location-avatar {
+  width: 176px;
+  height: 176px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: block;
+}
+.community-avatar {
+  width: 176px;
+  height: 176px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: block;
+}
+
+.chapter-image {
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.chapter-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+
+.gallery-thumbnail-upload {
+  gap: 10px;
+}
+.gallery-thumbnail-preview {
+  width: 108px;
+  height: 39px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+.gallery-thumb-wrap {
+  aspect-ratio: 1;
+  cursor: grab;
+}
+.gallery-thumb-wrap:active {
+  cursor: grabbing;
+}
+.gallery-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  cursor: pointer;
+  display: block;
+}
+.gallery-thumb:hover {
+  border-color: var(--accent);
+}
+.gallery-upload-tile {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--card-radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 8px;
+}
+.gallery-upload-tile:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.modal:has(.lightbox-content) {
+  width: auto;
+  max-width: 92vw;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+.lightbox-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-panel);
+  border: var(--card-border-width) solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 16px;
+}
+.lightbox-image-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-image {
+  max-width: min(80vw, 900px);
+  max-height: 75vh;
+  object-fit: contain;
+  border-radius: var(--card-radius);
+}
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 28px;
+  line-height: 1;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  border: none;
+}
+.lightbox-nav-prev {
+  left: 8px;
+}
+.lightbox-nav-next {
+  right: 8px;
+}
+
+.upcoming-notice-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.upcoming-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.upcoming-notice-close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  padding: 2px 6px;
+}
+
+.finance-summary-card {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.finance-summary-card .stat {
+  display: flex;
+  flex-direction: column;
+}
+.finance-summary-card .stat .value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.context-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  z-index: 100;
+}
+.context-menu button {
+  background: transparent;
+  border: none;
+  text-align: left;
+  border-radius: var(--card-radius);
+  padding: 6px 10px;
+}
+.context-menu button:hover {
+  background: var(--bg-panel);
+  border-color: transparent;
+}
+.context-menu button.danger {
+  color: var(--status-cancelled);
+}
+
+.entity-header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Profile page titles (Campaign/Setting/System) that now double as the "back
+   to Обзор" control, since the Обзор tab button was removed from the tab
+   row — looks exactly like the plain heading it replaces, just clickable. */
+.entity-title-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.entity-title-link:hover {
+  text-decoration: underline;
+}
+.entity-header-actions button.danger {
+  border-color: var(--status-cancelled);
+  color: var(--status-cancelled);
+}
+
+.nav-bottom {
+  position: relative;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-bottom a {
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.nav-bottom a.active {
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+}
+.nav-bottom .nav-icon {
+  width: 15px;
+  height: 15px;
+}
+.nav-bottom-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: var(--card-radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.nav-bottom-button:hover {
+  background: var(--bg-elevated);
+  border-color: transparent;
+}
+.nav-bottom-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.timeline-entry {
+  border-left: 2px solid var(--accent);
+  padding-left: 12px;
+}
+.timeline-entry p {
+  margin: 4px 0 0 0;
+}
+.timeline-date {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-weight: 600;
+}
+
+.setting-card-bg {
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  color: #fff;
+}
+.setting-card-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(22, 20, 28, 0.25) 0%, rgba(22, 20, 28, 0.92) 100%);
+  border-radius: var(--card-radius);
+}
+.setting-card-bg > * {
+  position: relative;
+  z-index: 1;
+}
+
+.litm-theme-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.litm-theme-card {
+  min-width: 0;
+}
+.litm-theme-header {
+  margin: -14px -14px 8px -14px;
+  padding: 8px 14px;
+  border-radius: var(--card-radius) var(--card-radius) 0 0;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.litm-theme-header.litm-power-origin { background: rgba(76, 175, 80, 0.28); }
+.litm-theme-header.litm-power-adventure { background: rgba(229, 57, 53, 0.28); }
+.litm-theme-header.litm-power-greatness { background: rgba(156, 39, 176, 0.28); }
+.litm-theme-header.litm-header-backpack { background: rgba(160, 110, 70, 0.32); }
+.litm-theme-header.litm-header-fellowship { background: rgba(64, 176, 166, 0.28); }
+.litm-theme-header.litm-header-story { background: rgba(196, 178, 94, 0.22); }
+.litm-theme-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.litm-theme-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+input.litm-theme-title {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  width: 100%;
+}
+.litm-theme-subtitle {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.litm-tracks {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.litm-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.litm-track-label {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.litm-tag-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.litm-tag {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--card-radius);
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.litm-tag-power {
+  color: #cf9a5c;
+  background: rgba(207, 154, 92, 0.12);
+}
+.litm-tag-weak {
+  color: var(--text-dim);
+  background: rgba(157, 151, 173, 0.1);
+}
+.litm-tag button {
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  line-height: 1;
+  color: inherit;
+}
+.litm-tag-add {
+  background: transparent;
+  border: 1px dashed var(--border);
+  justify-content: flex-start;
+}
+.litm-tag-add input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  padding: 0 4px;
+  font-size: 12px;
+}
+.litm-tag-add button {
+  border-left: 1px solid var(--border);
+}
+
+.litm-character-form > label,
+.litm-theme-card > label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.dnd-card > label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+/* Plain <input>/<label> siblings placed side by side in a .row (e.g. race,
+   background, alignment) have no intrinsic width of their own, so the
+   browser falls back to each input's default UA size (~170px) and the row
+   blows out the whole card. Give each a sane basis and let the row wrap
+   instead of forcing the whole page to overflow horizontally. */
+.dnd-card .row {
+  flex-wrap: wrap;
+}
+.dnd-card .row > input,
+.dnd-card .row > label {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+/* Inline checkbox/pip-track fields (Вдохновение, Спасброски от смерти) size
+   to their own content instead of stretching to the 120px basis above —
+   that basis fights their natural (wider) content width and produces
+   uneven, jumbled wrapping among the plain КД/Инициатива/Скорость inputs. */
+.dnd-card .row > label.dnd-inline-field {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+.dnd-title {
+  font-size: 17px;
+}
+.dnd-topline {
+  flex-wrap: wrap;
+}
+
+.dnd-abilities-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 8px;
+}
+.dnd-ability-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+}
+.dnd-ability-label {
+  font-size: 10px;
+  color: var(--muted, var(--text-dim));
+  letter-spacing: 0.5px;
+}
+.dnd-ability-score {
+  font-size: 15px;
+  font-weight: 600;
+}
+.dnd-ability-input {
+  width: 44px;
+  text-align: center;
+  padding: 2px;
+  font-weight: 600;
+}
+.dnd-ability-mod {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.dnd-ability-save {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.dnd-ability-save.is-proficient {
+  color: var(--accent);
+  font-weight: 600;
+}
+.dnd-ability-save-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 400;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.dnd-ability-save-toggle.is-proficient {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.dnd-abilities-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* A derived value shown where an editable <input> used to be (proficiency
+   bonus, spell DC/attack bonus) — same box, but not focusable/editable. */
+.dnd-computed-field {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6em;
+  padding: 2px 8px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+}
+.dnd-ability-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dnd-save-skill-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 4px;
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+}
+.dnd-save-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.dnd-save-row input[type="checkbox"] {
+  align-self: center;
+  margin: 0;
+  flex-shrink: 0;
+}
+.dnd-save-dot {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--muted, var(--text-dim));
+}
+.dnd-save-row.is-proficient .dnd-save-dot,
+.dnd-save-row.is-proficient .dnd-save-dot-btn {
+  color: var(--accent);
+}
+.dnd-save-row.is-expertise .dnd-save-name {
+  font-weight: 700;
+}
+.dnd-save-dot-btn {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted, var(--text-dim));
+  cursor: pointer;
+}
+.dnd-save-dot-btn:hover {
+  color: var(--accent);
+}
+.dnd-save-name {
+  flex: 1;
+  white-space: normal;
+  word-break: break-word;
+  font-size: 12px;
+  color: var(--muted, var(--text-dim));
+}
+.dnd-save-row.is-proficient .dnd-save-name {
+  color: var(--ink, var(--text-bright));
+}
+.dnd-save-row-throw {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+/* Source tint for skills granted by class / background / both — hue is
+   fixed, but mixing against the theme's own paper color keeps the tone in
+   step with light/dark/steampunk-etc. themes. */
+.dnd-save-row.skill-source-class {
+  background: color-mix(in oklab, dodgerblue 24%, var(--paper, var(--bg-elevated)));
+  border-radius: 4px;
+}
+.dnd-save-row.skill-source-background {
+  background: color-mix(in oklab, seagreen 24%, var(--paper, var(--bg-elevated)));
+  border-radius: 4px;
+}
+.dnd-save-row.skill-source-both {
+  background: color-mix(in oklab, crimson 22%, var(--paper, var(--bg-elevated)));
+  border-radius: 4px;
+}
+.dnd-skill-remaining {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in oklab, crimson 70%, var(--ink, var(--text-bright)));
+}
+.dnd-save-value {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Навыки tab gets its own full page (unlike the compact under-abilities
+   summary that .dnd-save-skill-col also serves), so it can afford — and
+   benefits from — bigger, easier-to-read rows during play. */
+.dnd-skills-tab {
+  gap: 6px;
+  padding: 10px 8px;
+}
+.dnd-skills-tab .dnd-save-row {
+  font-size: 14.5px;
+  gap: 6px;
+}
+.dnd-skills-tab .dnd-save-name {
+  font-size: 14.5px;
+}
+.dnd-skills-tab .dnd-save-value {
+  font-size: 14.5px;
+}
+.dnd-skills-tab .dnd-save-dot-btn {
+  font-size: 14.5px;
+}
+
+.dnd-equipment-section {
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dnd-equipment-section.drag-over {
+  outline: 1px dashed var(--accent);
+}
+.dnd-equipment-section-name {
+  font-weight: 600;
+  flex: 1;
+}
+.dnd-equipment-item-row {
+  cursor: grab;
+  align-items: center;
+}
+.dnd-equipment-view-list {
+  margin: 0;
+  padding-left: 18px;
+}
+.dnd-equipment-quick-row {
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: -4px;
+}
+.dnd-equipment-quick-row:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 90%, var(--ink, var(--text-bright)));
+}
+.dnd-equipment-name-link {
+  cursor: pointer;
+}
+.dnd-equip-toggle {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+.dnd-equip-toggle.is-equipped {
+  opacity: 1;
+  color: var(--accent, inherit);
+}
+/* Breaks the table out to the same edges as the rest of the card (ignoring
+   .sb-body's own --pad-x side padding) and falls back to horizontal scroll
+   instead of being silently clipped by .app-content's overflow-x:hidden —
+   the "Дальность"/"Урон" columns together are often wider than the padded
+   column, especially next to the 200px avatar sidebar on desktop. */
+.dnd-attacks-table-wrap {
+  overflow-x: auto;
+  margin: 4px calc(-1 * var(--pad-x, 0px)) 0;
+  padding: 0 var(--pad-x, 0px);
+}
+.dnd-attacks-table {
+  font-size: 13px;
+  margin-top: 4px;
+  min-width: 480px;
+}
+.dnd-attacks-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 4px 8px;
+}
+.dnd-attacks-table td {
+  padding: 4px 8px;
+  vertical-align: top;
+}
+.dnd-equipment-add-btn {
+  margin-top: 4px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+@media (max-width: 700px) {
+  .dnd-equipment-view-list .dnd-equipment-quick-row {
+    font-size: calc(1em * 0.85);
+  }
+}
+
+.dnd-classes-block {
+  gap: 6px;
+}
+.dnd-class-row {
+  flex-wrap: wrap;
+}
+.dnd-class-row > select,
+.dnd-class-row > input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.dnd-class-level-input {
+  flex: 0 0 50px !important;
+  text-align: center;
+}
+.dnd-class-level-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.dnd-level-step-btn {
+  flex: 0 0 22px;
+  min-height: 0;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+}
+
+.dnd-proficiency-dropzone {
+  border: 1px dashed var(--border);
+  border-radius: var(--card-radius);
+  padding: 8px;
+  min-height: 36px;
+}
+.dnd-proficiency-dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.dnd-proficiency-row {
+  flex-wrap: wrap;
+}
+.dnd-proficiency-name {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.dnd-proficiency-value {
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.dnd-proficiency-view-item {
+  white-space: nowrap;
+}
+
+.dnd-spell-list {
+  min-height: 28px;
+}
+.dnd-spell-list.drag-over {
+  outline: 1px dashed var(--accent);
+  border-radius: var(--card-radius);
+}
+.dnd-spell-row {
+  font-size: 13px;
+}
+.dnd-spell-row.comp-row {
+  padding: 3px 6px;
+  margin: 0 -6px;
+}
+.dnd-spell-row.is-prepared {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-left: 3px solid var(--accent);
+  padding-left: 5px;
+  font-weight: 600;
+}
+.dnd-spell-row.is-prepared-once {
+  font-weight: 600;
+}
+.dnd-spell-name {
+  font-size: 12px;
+}
+.dnd-feature-article summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: var(--card-radius);
+}
+.dnd-feature-article summary:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+}
+.dnd-feature-article[open] summary {
+  margin-bottom: 4px;
+}
+/* MentionText renders paragraph breaks as literal "\n" text nodes (see
+   components/mentions/MentionText.tsx) — without pre-wrap those collapse to
+   nothing and every line runs together. .dnd-spell-description already has
+   this; this class was missed when features got the same collapsible
+   treatment. */
+.dnd-feature-article {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.dnd-feature-article summary {
+  white-space: normal;
+}
+.dnd-spell-meta {
+  color: var(--muted, var(--text-dim));
+  font-size: 11px;
+  font-weight: 400;
+}
+.dnd-spell-name-link {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.dnd-spell-description {
+  font-size: 11px;
+  color: var(--muted, var(--text-dim));
+  padding: 4px 8px 8px;
+  white-space: pre-wrap;
+}
+.dnd-equipment-tags {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text, inherit);
+  padding: 4px 8px 0;
+}
+.sb-compendium-link {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.sb-compendium-link:hover {
+  color: var(--accent);
+}
+.dnd-personality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+.dnd-personality-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dnd-spell-actions {
+  /* Unlike the compendium's browse-only hover reveal, these are the primary
+     controls in an active edit form — always visible. */
+  opacity: 1;
+}
+.dnd-prepared-badge {
+  color: var(--accent);
+  margin-left: auto;
+}
+.dnd-spell-add {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dnd-feature-section {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.dnd-feature-section.drag-over {
+  outline: 1px dashed var(--accent);
+  border-radius: var(--card-radius);
+}
+.dnd-feature-header {
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: -2px -2px 8px -2px;
+  padding: 4px 8px;
+  border-radius: var(--card-radius);
+  background: var(--bg-elevated);
+}
+.dnd-header-actions { background: rgba(166, 91, 91, 0.24); }
+.dnd-header-bonus { background: rgba(91, 127, 166, 0.24); }
+.dnd-header-reactions { background: rgba(176, 151, 61, 0.22); }
+.dnd-header-legendary { background: rgba(156, 39, 176, 0.2); }
+.dnd-feature-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mention-link {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mention-textarea-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.mention-textarea-wrap textarea {
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+}
+.mention-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 60;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 20;
+}
+.mention-dropdown-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.mention-dropdown-item.active,
+.mention-dropdown-item:hover {
+  background: var(--bg-elevated);
+}
+.ext-link {
+  color: var(--accent-2);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.rt-h {
+  display: inline-block;
+  font-weight: 700;
+}
+.rt-h1 { font-size: 1.5em; margin: 4px 0; }
+.rt-h2 { font-size: 1.25em; margin: 3px 0; }
+.rt-h3 { font-size: 1.1em; margin: 2px 0; }
+
+.rt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* Formatting controls used to be this row mounted permanently above every
+   MentionTextarea (a dozen controls, the single biggest source of
+   horizontal overflow app-wide) — hidden outright below 860px as a result.
+   Now the row only renders inside the flyout below, opened on demand from
+   a small trigger button, so it no longer needs to be hidden on mobile —
+   formatting is reachable there again. */
+.rt-format-trigger-wrap {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 4px;
+}
+.rt-format-trigger {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  cursor: pointer;
+}
+.rt-format-trigger:hover {
+  border-color: var(--accent);
+}
+.rt-format-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  z-index: 25;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  width: min(360px, calc(100vw - 40px));
+  flex-wrap: wrap;
+}
+.rt-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  cursor: pointer;
+}
+.rt-btn:hover {
+  border-color: var(--accent);
+}
+.rt-color-btn {
+  position: relative;
+  overflow: hidden;
+  padding: 2px 6px;
+}
+.rt-color-btn input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+.rt-select {
+  padding: 2px 4px;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  cursor: pointer;
+  max-width: 110px;
+}
+.rt-select:hover {
+  border-color: var(--accent);
+}
+.rt-ul {
+  margin: 4px 0;
+  padding-left: 1.4em;
+}
+.rt-ul li {
+  margin: 2px 0;
+}
+.rt-table-wrap {
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.rt-table {
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.rt-table th,
+.rt-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+}
+.rt-table th {
+  background: var(--bg-elevated);
+  font-weight: 600;
+}
+.rt-table-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.rt-table-editor-row input {
+  width: 120px;
+}
+.rt-table-editor-row:first-child input {
+  font-weight: 600;
+}
+.rt-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+}
+.rt-link-wrap {
+  position: relative;
+}
+.rt-link-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 6px;
+  z-index: 20;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rt-link-menu-item {
+  text-align: left;
+}
+.rt-link-external {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.rt-link-external input {
+  width: 100%;
+}
+
+.mention-dropdown-type {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.location-map-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.location-map-wrap {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 300px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  line-height: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.location-map-wrap.drag-over {
+  border-color: var(--accent);
+}
+.location-map-inner {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+.location-map-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.location-map-zoom-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: normal;
+}
+.location-map-zoom-controls button {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  font-size: 13px;
+}
+.location-map-legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  font-size: 12px;
+  line-height: normal;
+  pointer-events: none;
+}
+.location-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.location-map-legend-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid;
+  flex-shrink: 0;
+}
+.location-map-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+.location-map-fullscreen-bar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.location-map-fullscreen-bar .search-panel {
+  flex: 1;
+}
+.location-map-fullscreen-close {
+  flex-shrink: 0;
+  margin: 0 12px;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+}
+.location-map-fullscreen .location-map-card {
+  padding: 12px;
+}
+.location-map-pin-search {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.location-map-pin-search input {
+  flex: 1;
+}
+.location-map-pin-search-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 90px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 20;
+}
+.location-map-pin-search-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.location-map-pin-search-item:hover {
+  background: var(--bg-elevated);
+}
+.location-map-pin {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+.location-map-pin.selected {
+  z-index: 10;
+}
+.location-map-pin-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.location-map-pin-label {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 14px 18px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 10;
+  align-items: center;
+  gap: 6px;
+}
+.location-map-pin-label button {
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  line-height: 1;
+  color: inherit;
+}
+.location-map-pin:hover .location-map-pin-label,
+.location-map-pin-label.always {
+  display: flex;
+}
+/* Background tinted by entity type instead of a text label — being/character
+   share red (character gets a distinct border + slightly larger label to
+   still stand out from beings at a glance), location is teal, artifact is
+   gold. */
+.location-map-pin-label.pin-label-being {
+  background: #5c2320;
+  border-color: #c0392b;
+  color: #f5d5d0;
+}
+.location-map-pin-label.pin-label-character {
+  background: #5c2320;
+  border: 2px solid #e0724a;
+  color: #f5d5d0;
+  font-size: 13px;
+  padding: 15px 19px;
+}
+.location-map-pin-label.pin-label-location {
+  background: #16403d;
+  border-color: #2f8f7a;
+  color: #cdf0ea;
+}
+.location-map-pin-label.pin-label-artifact {
+  background: #5c4a12;
+  border-color: #c9a227;
+  color: #f3e6b8;
+}
+.location-map-pin.selected .location-map-pin-dot {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px var(--bg);
+}
+.location-map-pin-toolbar {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 12px;
+  font-size: 14px;
+  white-space: nowrap;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+.location-map-pin-toolbar button {
+  font-size: 13px;
+  padding: 5px 10px;
+}
+.location-map-pin-toolbar input[type="color"] {
+  width: 34px;
+  height: 26px;
+  padding: 0 2px;
+}
+.location-map-pin-toolbar input[type="range"] {
+  width: 110px;
+}
+.location-map-pin-toolbar label {
+  gap: 6px;
+  align-items: center;
+}
+
+.relation-graph-wrap {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  cursor: grab;
+}
+.relation-graph-wrap svg text {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+}
+.relation-graph-wrap:active {
+  cursor: grabbing;
+}
+.entity-search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 260px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 20;
+}
+.entity-search-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.entity-search-item:hover {
+  background: var(--bg-elevated);
+}
+.relation-graph-focus-panel {
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--bg-panel);
+}
+.relation-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.relation-graph-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 8px;
+}
+.relation-graph-fullscreen-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.relation-graph-fullscreen .relation-graph-wrap {
+  min-height: 0;
+}
+
+.litm-companion-drop {
+  flex: 1;
+  min-height: 32px;
+  border: 1px dashed var(--border);
+  border-radius: var(--card-radius);
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+}
+.litm-tag-companion {
+  color: #e07bb0;
+  background: rgba(224, 123, 176, 0.14);
+  border-color: rgba(224, 123, 176, 0.4);
+}
+.litm-tag-companion-input {
+  flex: 1;
+  color: #e07bb0;
+}
+
+.litm-improvements {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.litm-improvement-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+}
+.litm-improvement-text {
+  flex: 1;
+}
+
+.resource-thumb {
+  max-width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+}
+.resource-link-button {
+  align-self: flex-start;
+  cursor: pointer;
+}
+.resource-drop-zone {
+  border: 1px dashed transparent;
+  border-radius: var(--card-radius);
+  padding: 6px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.resource-drop-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.resource-drop-zone > details > summary {
+  border-radius: var(--card-radius);
+  padding: 4px 6px;
+  margin: -4px -6px;
+  transition: background 0.1s;
+}
+.resource-drop-zone > details > summary:hover {
+  background: var(--bg-elevated);
+}
+.playlist-header {
+  border-radius: var(--card-radius);
+  transition: background 0.1s;
+}
+.playlist-header:hover {
+  background: var(--bg-elevated);
+}
+.resource-row {
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.resource-row:last-child {
+  border-bottom: none;
+}
+.initiative-current {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-left: 3px solid var(--accent);
+  padding-left: 5px;
+}
+.initiative-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.initiative-tile:last-child {
+  border-bottom: none;
+}
+.initiative-dead {
+  opacity: 0.45;
+}
+.initiative-actions .comp-mini {
+  padding: 2px 5px;
+  min-width: 0;
+}
+.initiative-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.initiative-condition-chip {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.initiative-condition-picker {
+  gap: 2px;
+  padding: 6px 4px 2px;
+  border-top: 1px dashed var(--border);
+  font-size: 0.9em;
+}
+.initiative-hp-bar-track {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  overflow: hidden;
+}
+.initiative-hp-bar-fill {
+  height: 100%;
+  background: #c0392b;
+  transition: width 0.2s ease;
+}
+.resource-row-thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.resource-row-audio {
+  width: 220px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.resource-row-audio::-webkit-media-controls-panel {
+  background-color: transparent;
+}
+.playlist-block {
+  padding: 10px 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.playlist-block.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.playlist-track-row {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.playlist-track-row:last-child {
+  border-bottom: none;
+}
+.playlist-track-play-btn {
+  padding: 0 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.playlist-track-play-btn:hover {
+  opacity: 0.7;
+}
+.audio-player-bar {
+  position: fixed;
+  left: 200px;
+  right: 320px;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+}
+.audio-player-bar button {
+  padding: 2px 8px;
+}
+.audio-player-bar-empty {
+  justify-content: space-between;
+}
+.audio-player-suggestion {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 0;
+  font-size: 13px;
+}
+.audio-player-suggestion:hover {
+  text-decoration: underline;
+}
+.audio-player-bar button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.audio-player-track {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 25vw;
+  flex-shrink: 0;
+}
+.audio-player-time {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.audio-player-seek {
+  flex: 1;
+  min-width: 80px;
+}
+.audio-player-volume {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.volume-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 10px 8px;
+  z-index: 50;
+}
+.volume-slider-vertical {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 20px;
+  height: 90px;
+}
+.audio-player-playlist-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+.playlist-nav-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 8px;
+  min-width: 260px;
+  max-height: 360px;
+  overflow-y: auto;
+  z-index: 50;
+}
+.setting-links-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 50;
+}
+.playlist-nav-group > summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.playlist-nav-subgroup > summary {
+  cursor: pointer;
+  padding: 2px 0 2px 10px;
+  color: var(--text-dim);
+}
+.playlist-nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 10px 4px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.playlist-nav-item:hover {
+  background: var(--bg-panel);
+}
+.audio-player-stop {
+  margin-left: auto;
+}
+
+.image-hint {
+  font-size: 11px;
+  display: block;
+  max-width: 220px;
+}
+
+.backup-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.backup-info {
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-all;
+  padding: 0 10px;
+}
+.backup-info.error {
+  color: var(--status-cancelled);
+}
+
+.archive-row {
+  display: grid;
+  grid-template-columns: 100px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* --- System compendium: dense collapsible entry rows --- */
+.comp-list {
+  display: flex;
+  flex-direction: column;
+}
+.comp-node {
+  border-bottom: 1px solid rgba(53, 49, 63, 0.4);
+}
+.comp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: var(--card-radius);
+  font-size: var(--text-name);
+}
+.comp-row:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+}
+
+/* Shared "click almost anywhere to expand" header row, used by card-based
+   collapsible lists (CampaignEntryList, TaskTracker, SettingEntryList,
+   CampaignPlayerSectionsTab) — same interaction as .comp-row above and the
+   native <details><summary> rows elsewhere, just for plain divs. Action
+   buttons inside must stopPropagation() so they don't also trigger toggle. */
+.collapsible-header {
+  cursor: pointer;
+  border-radius: var(--card-radius);
+  margin: -4px -6px;
+  padding: 4px 6px;
+}
+.collapsible-header:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+}
+.comp-children .comp-row {
+  font-size: var(--text-name-sub);
+}
+.comp-row-focus {
+  background: var(--accent-soft);
+  border-radius: var(--card-radius);
+}
+.comp-toggle {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  width: 1em;
+  font-size: 0.7em;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.comp-row:hover .comp-toggle {
+  color: var(--accent);
+}
+.comp-toggle-disabled {
+  opacity: 0.3;
+}
+.comp-drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  user-select: none;
+}
+.comp-drag-handle:active {
+  cursor: grabbing;
+}
+.comp-name {
+  font-weight: 600;
+}
+.comp-level {
+  font-size: 0.55em;
+  color: var(--text-dim);
+}
+.comp-class-short-desc {
+  font-style: italic;
+  font-size: 0.6em;
+  opacity: 0.7;
+}
+.comp-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  font-size: 0.5em;
+}
+.comp-row:hover .comp-actions {
+  opacity: 1;
+}
+.comp-mini {
+  padding: 1px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.comp-mini.danger {
+  color: var(--status-cancelled);
+}
+.sort-toggle button {
+  padding: 2px 8px;
+  font-size: 11px;
+  background: transparent;
+}
+.sort-toggle button.active-sort {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.comp-body {
+  margin-left: 1em;
+  padding: 2px 0 8px;
+}
+.comp-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.comp-children {
+  margin-left: 1em;
+}
+.comp-level-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+.setting-player-row {
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border-radius: var(--card-radius);
+}
+.setting-player-row:hover {
+  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+}
+.comp-category summary.comp-level-label {
+  cursor: pointer;
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-bright, inherit);
+  padding: 6px 4px;
+}
+.comp-category summary.comp-level-label:hover {
+  color: var(--accent);
+}
+.comp-level-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 20px;
+  margin-bottom: 5px;
+}
+.comp-level-label-row .comp-level-label {
+  margin-top: 0;
+}
+.comp-level-label-row .comp-mini {
+  padding: 0 5px;
+  line-height: 1.3;
+}
+
+/* CheatSheets print templates — hidden on screen, and while printing,
+   everything else on the page is hidden too (visibility, not display, so
+   layout/DOM position doesn't matter for the print-target itself). */
+.cheatsheet-print-root {
+  display: none;
+}
+body.printing-cheatsheet * {
+  visibility: hidden;
+}
+body.printing-cheatsheet .cheatsheet-print-root {
+  display: block;
+  visibility: visible;
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  color: #111;
+}
+body.printing-cheatsheet .cheatsheet-print-root * {
+  visibility: visible;
+}
+.cheatsheet-sheet {
+  box-sizing: border-box;
+  font-family: Georgia, serif;
+  padding: 10mm;
+}
+.cheatsheet-sheet[data-format="a4"] {
+  width: 297mm;
+  min-height: 210mm;
+}
+.cheatsheet-sheet[data-format="a5"] {
+  width: 148mm;
+  min-height: 210mm;
+}
+.cheatsheet-combo {
+  display: flex;
+  flex-direction: row;
+}
+.cheatsheet-combo .cheatsheet-sheet {
+  border-right: 1px dashed #999;
+}
+.cheatsheet-combo .cheatsheet-sheet:last-child {
+  border-right: none;
+}
+.cheatsheet-sheet h2 {
+  margin: 0 0 8px;
+}
+.cheatsheet-sheet h3 {
+  margin: 10px 0 4px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.cheatsheet-columns {
+  display: flex;
+  gap: 16px;
+}
+.cheatsheet-columns section {
+  flex: 1;
+}
+.cheatsheet-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.cheatsheet-line {
+  border-bottom: 1px solid #999;
+  height: 1px;
+}
+.combat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #ccc;
+  padding: 6px 0;
+}
+.combat-row-name {
+  min-width: 160px;
+}
+.combat-row-note {
+  font-size: 11px;
+}
+.combat-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.fill-box {
+  display: inline-block;
+  width: 28px;
+  height: 16px;
+  border: 1px solid #333;
+}
+.fill-box.wide {
+  width: 48px;
+}
+.combat-boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  flex: 1;
+}
+.combat-boxes span {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #333;
+}

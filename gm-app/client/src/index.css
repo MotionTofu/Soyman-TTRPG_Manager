@@ -1,0 +1,170 @@
+:root {
+  --bg: #1c1a17;
+  --bg-elevated: #262320;
+  --border: #3a352f;
+  --text: #e8e2d8;
+  --muted: #a89f92;
+  --accent: #c9a24a;
+  --radius: 6px;
+  color-scheme: dark;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mention-link {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+  /* Kills the native "rubber band" overscroll bounce on mobile — dragging
+     past the top/bottom/edge stretches the page then snaps back, which eats
+     touch gestures meant for in-app navigation. */
+  overscroll-behavior: none;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.app-body {
+  flex: 1;
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+button {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  min-height: 44px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  touch-action: manipulation;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #1c1a17;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+textarea {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 8px;
+  font-family: inherit;
+  font-size: 16px;
+  width: 100%;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background: #6bbf6b;
+}
+
+.status-dot.offline {
+  background: #888;
+}
+
+.error {
+  color: #e07a5f;
+}
+
+.entry-title {
+  font-size: 1.1em;
+}
+
+a {
+  color: var(--accent);
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.image-grid button {
+  padding: 0;
+  min-height: 0;
+  overflow: hidden;
+  aspect-ratio: 1;
+}
+
+.image-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

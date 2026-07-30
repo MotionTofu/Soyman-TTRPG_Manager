@@ -1,0 +1,43 @@
+{
+  "appId": "com.rpgmanager.app.full",
+  "productName": "RPG Manager (с системами)",
+  "asar": false,
+  "directories": {
+    "output": "release/full"
+  },
+  "files": [
+    "electron/**/*",
+    "server/dist/**/*",
+    "server/package.json",
+    "client/dist/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "server/node_modules",
+      "to": "app/server/node_modules"
+    },
+    {
+      "from": "seed-full",
+      "to": "seed"
+    }
+  ],
+  "win": {
+    "target": ["portable", "nsis"]
+  },
+  "portable": {
+    "artifactName": "RPG-Manager-Full-${version}.exe"
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowToChangeInstallation": false,
+    "artifactName": "RPG-Manager-Full-Setup-${version}.exe"
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "YOUR_GITHUB_USERNAME",
+      "repo": "YOUR_REPO_NAME"
+    }
+  ]
+}

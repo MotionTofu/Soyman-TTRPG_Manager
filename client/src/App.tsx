@@ -1,0 +1,137 @@
+import { lazy, Suspense } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AppShell } from "./layout/AppShell";
+import { LoginGate } from "./components/LoginGate";
+import { RealtimeListener } from "./RealtimeListener";
+import { useCurrentUser } from "./api/currentUser";
+
+// Every route below is its own chunk (Vite code-splits on dynamic import)
+// instead of one large bundle — mainly matters for the hosted web/server
+// deployment's first load; the local Electron app loads from disk either
+// way. Each page is a named export, so the lazy() factory re-shapes it to
+// the { default } shape React.lazy expects.
+const HomeCalendarPage = lazy(() => import("./pages/HomeCalendarPage").then((m) => ({ default: m.HomeCalendarPage })));
+const PlayerHomePage = lazy(() => import("./pages/PlayerHomePage").then((m) => ({ default: m.PlayerHomePage })));
+const CampaignsListPage = lazy(() => import("./pages/CampaignsListPage").then((m) => ({ default: m.CampaignsListPage })));
+const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage").then((m) => ({ default: m.CampaignDetailPage })));
+const SessionDetailPage = lazy(() => import("./pages/SessionDetailPage").then((m) => ({ default: m.SessionDetailPage })));
+const SessionLivePage = lazy(() => import("./pages/SessionLivePage").then((m) => ({ default: m.SessionLivePage })));
+const SessionPanelPopoutPage = lazy(() =>
+  import("./pages/SessionPanelPopoutPage").then((m) => ({ default: m.SessionPanelPopoutPage }))
+);
+const PlayersListPage = lazy(() => import("./pages/PlayersListPage").then((m) => ({ default: m.PlayersListPage })));
+const PlayerDetailPage = lazy(() => import("./pages/PlayerDetailPage").then((m) => ({ default: m.PlayerDetailPage })));
+const SettingsListPage = lazy(() => import("./pages/SettingsListPage").then((m) => ({ default: m.SettingsListPage })));
+const SettingDetailPage = lazy(() => import("./pages/SettingDetailPage").then((m) => ({ default: m.SettingDetailPage })));
+const SystemsListPage = lazy(() => import("./pages/SystemsListPage").then((m) => ({ default: m.SystemsListPage })));
+const SystemDetailPage = lazy(() => import("./pages/SystemDetailPage").then((m) => ({ default: m.SystemDetailPage })));
+const ResourcesListPage = lazy(() => import("./pages/ResourcesListPage").then((m) => ({ default: m.ResourcesListPage })));
+const MasteringPage = lazy(() => import("./pages/MasteringPage").then((m) => ({ default: m.MasteringPage })));
+const CharacterDetailPage = lazy(() => import("./pages/CharacterDetailPage").then((m) => ({ default: m.CharacterDetailPage })));
+const ArchivePage = lazy(() => import("./pages/ArchivePage").then((m) => ({ default: m.ArchivePage })));
+const LocationDetailPage = lazy(() => import("./pages/LocationDetailPage").then((m) => ({ default: m.LocationDetailPage })));
+const BeingDetailPage = lazy(() => import("./pages/BeingDetailPage").then((m) => ({ default: m.BeingDetailPage })));
+const ArtifactDetailPage = lazy(() => import("./pages/ArtifactDetailPage").then((m) => ({ default: m.ArtifactDetailPage })));
+const CommunityDetailPage = lazy(() => import("./pages/CommunityDetailPage").then((m) => ({ default: m.CommunityDetailPage })));
+const CompendiumEntryRedirectPage = lazy(() =>
+  import("./pages/CompendiumEntryRedirectPage").then((m) => ({ default: m.CompendiumEntryRedirectPage }))
+);
+const GraphPage = lazy(() => import("./pages/GraphPage").then((m) => ({ default: m.GraphPage })));
+const StoragesSettingsPage = lazy(() => import("./pages/StoragesSettingsPage").then((m) => ({ default: m.StoragesSettingsPage })));
+const AppearanceSettingsPage = lazy(() =>
+  import("./pages/AppearanceSettingsPage").then((m) => ({ default: m.AppearanceSettingsPage }))
+);
+const AboutPage = lazy(() => import("./pages/AboutPage").then((m) => ({ default: m.AboutPage })));
+const InvitationsPage = lazy(() => import("./pages/InvitationsPage").then((m) => ({ default: m.InvitationsPage })));
+const MyCharactersPage = lazy(() => import("./pages/MyCharactersPage").then((m) => ({ default: m.MyCharactersPage })));
+const PlayerCabinetPage = lazy(() =>
+  import("./pages/PlayerCabinetPage").then((m) => ({ default: m.PlayerCabinetPage }))
+);
+const PlayerCampaignsListPage = lazy(() =>
+  import("./pages/PlayerCampaignsListPage").then((m) => ({ default: m.PlayerCampaignsListPage }))
+);
+const PlayerCampaignPage = lazy(() => import("./pages/PlayerCampaignPage").then((m) => ({ default: m.PlayerCampaignPage })));
+const PlayerSettingsListPage = lazy(() =>
+  import("./pages/PlayerSettingsListPage").then((m) => ({ default: m.PlayerSettingsListPage }))
+);
+const PlayerSettingPage = lazy(() => import("./pages/PlayerSettingPage").then((m) => ({ default: m.PlayerSettingPage })));
+
+// GM tokens see the full CampaignsListPage/CampaignDetailPage (unfiltered
+// admin data); player tokens get the read-only "what the GM revealed"
+// equivalent instead — /api/campaigns/** is 403 for them (see
+// services/playerAccess.ts), so rendering the GM page would just show empty
+// error states.
+function HomeRoute() {
+  const { user, loading } = useCurrentUser();
+  if (loading) return null;
+  return user?.role === "player" ? <PlayerHomePage /> : <HomeCalendarPage />;
+}
+function CampaignsRoute() {
+  const { user, loading } = useCurrentUser();
+  if (loading) return null;
+  return user?.role === "player" ? <PlayerCampaignsListPage /> : <CampaignsListPage />;
+}
+function CampaignDetailRoute() {
+  const { user, loading } = useCurrentUser();
+  if (loading) return null;
+  return user?.role === "player" ? <PlayerCampaignPage /> : <CampaignDetailPage />;
+}
+function SettingsRoute() {
+  const { user, loading } = useCurrentUser();
+  if (loading) return null;
+  return user?.role === "player" ? <PlayerSettingsListPage /> : <SettingsListPage />;
+}
+function SettingDetailRoute() {
+  const { user, loading } = useCurrentUser();
+  if (loading) return null;
+  return user?.role === "player" ? <PlayerSettingPage /> : <SettingDetailPage />;
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <LoginGate>
+        <RealtimeListener />
+        <Suspense fallback={<p className="muted" style={{ padding: 24 }}>Загрузка…</p>}>
+          <Routes>
+            {/* Outside <AppShell> on purpose — a popped-out panel window
+                (see sessionLivePanels.tsx) has no room to spare for the
+                sidebar/search/audio-bar chrome that wraps every other route. */}
+            <Route path="/sessions/:id/live/panel/:panelKey" element={<SessionPanelPopoutPage />} />
+            <Route element={<AppShell />}>
+              <Route path="/" element={<HomeRoute />} />
+              <Route path="/campaigns" element={<CampaignsRoute />} />
+              <Route path="/campaigns/:id" element={<CampaignDetailRoute />} />
+              <Route path="/sessions/:id" element={<SessionDetailPage />} />
+              <Route path="/sessions/:id/live" element={<SessionLivePage />} />
+              <Route path="/players" element={<PlayersListPage />} />
+              <Route path="/my-characters" element={<MyCharactersPage />} />
+              <Route path="/cabinet" element={<PlayerCabinetPage />} />
+              <Route path="/players/:id" element={<PlayerDetailPage />} />
+              <Route path="/settings" element={<SettingsRoute />} />
+              <Route path="/settings/:id" element={<SettingDetailRoute />} />
+              <Route path="/systems" element={<SystemsListPage />} />
+              <Route path="/systems/:id" element={<SystemDetailPage />} />
+              <Route path="/resources" element={<ResourcesListPage />} />
+              <Route path="/mastering" element={<MasteringPage />} />
+              <Route path="/characters/:id" element={<CharacterDetailPage />} />
+              <Route path="/locations/:id" element={<LocationDetailPage />} />
+              <Route path="/beings/:id" element={<BeingDetailPage />} />
+              <Route path="/artifacts/:id" element={<ArtifactDetailPage />} />
+              <Route path="/communities/:id" element={<CommunityDetailPage />} />
+              <Route path="/compendium/:id" element={<CompendiumEntryRedirectPage />} />
+              <Route path="/graph" element={<GraphPage />} />
+              <Route path="/storages" element={<StoragesSettingsPage />} />
+              <Route path="/appearance" element={<AppearanceSettingsPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/invitations" element={<InvitationsPage />} />
+              <Route path="/archive" element={<ArchivePage />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </LoginGate>
+    </BrowserRouter>
+  );
+}
+
+export default App;

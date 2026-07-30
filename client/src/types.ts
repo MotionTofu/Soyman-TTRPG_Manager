@@ -1,0 +1,1318 @@
+export interface System {
+  id: number;
+  name: string;
+  description: string;
+  folder_path: string | null;
+  thumbnail_image_path: string | null;
+  thumbnail_image_url: string | null;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface SystemSection {
+  id: number;
+  system_id: number;
+  position: number;
+  name: string;
+  kind: string;
+  created_at: string;
+}
+
+export interface CompendiumEntry {
+  id: number;
+  system_id: number;
+  section_id: number;
+  parent_id: number | null;
+  kind: string;
+  name: string;
+  level: number | null;
+  data: Record<string, unknown>;
+  description: string;
+  position: number;
+  created_at: string;
+}
+
+export interface StorageProfile {
+  id: string;
+  name: string;
+  dbDir: string;
+  vaultRoot: string;
+  createdAt: string;
+}
+
+export interface GalleryImage {
+  id: number;
+  owner_type: "character" | "being" | "location" | "community" | "campaign_player_section";
+  owner_id: number;
+  image_path: string;
+  image_url: string;
+  caption: string;
+  position: number;
+  created_at: string;
+}
+
+export interface Module {
+  id: number;
+  type: "system" | "setting";
+  name: string;
+  source: "local" | "imported";
+  enabled: number;
+  system_id: number | null;
+  setting_id: number | null;
+  created_at: string;
+}
+
+export type PaymentType = "free" | "paid" | "negotiable";
+export type CampaignType = "campaign" | "oneshot";
+export type PaymentFrequency = "per_session" | "per_month";
+export type RateSplit = "per_person" | "per_table";
+
+export interface Setting {
+  id: number;
+  name: string;
+  description: string;
+  background_image_path: string | null;
+  background_image_url: string | null;
+  thumbnail_image_path: string | null;
+  thumbnail_image_url: string | null;
+  folder_path: string | null;
+  calendar_era: string;
+  pinned_calendar_year: number | null;
+  pinned_calendar_month: number | null;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface CalendarMonth {
+  id: number;
+  setting_id: number;
+  position: number;
+  name: string;
+  days: number;
+}
+
+export interface CalendarWeekday {
+  id: number;
+  setting_id: number;
+  position: number;
+  name: string;
+}
+
+export interface SettingCalendar {
+  months: CalendarMonth[];
+  weekdays: CalendarWeekday[];
+  era: string;
+}
+
+export type DateRecurrence = "once" | "annual" | "monthly";
+
+export interface ImportantDate {
+  id: number;
+  owner_type: "being" | "community";
+  owner_id: number;
+  owner_name?: string;
+  title: string;
+  recurrence: DateRecurrence;
+  year: number | null;
+  month: number | null;
+  day: number;
+  created_at: string;
+}
+
+export interface CampaignCalendarEvent {
+  id: number;
+  campaign_id: number;
+  title: string;
+  description: string;
+  inworld_year: number;
+  inworld_month: number;
+  inworld_day: number;
+  important: number;
+  created_at: string;
+}
+
+export interface SettingCalendarEvent {
+  id: number;
+  setting_id: number;
+  title: string;
+  description: string;
+  inworld_year: number;
+  inworld_month: number;
+  inworld_day: number;
+  important: number;
+  visible_to_players: number;
+  created_at: string;
+}
+
+export type CampaignRole = "gm" | "player";
+
+export interface Campaign {
+  id: number;
+  name: string;
+  role: CampaignRole;
+  system_id: number | null;
+  system_name?: string;
+  setting_id: number | null;
+  setting_name?: string;
+  status: string;
+  type: CampaignType;
+  payment_type: PaymentType;
+  payment_frequency: PaymentFrequency;
+  rate_split: RateSplit;
+  session_rate: number;
+  currency: string;
+  background_image_path: string | null;
+  background_image_url: string | null;
+  thumbnail_image_path: string | null;
+  thumbnail_image_url: string | null;
+  group_theme_litm: string | null;
+  pinned_calendar_year: number | null;
+  pinned_calendar_month: number | null;
+  player_count?: number;
+  held_sessions_count?: number;
+  next_planned_date?: string | null;
+  folder_path: string | null;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export type RosterStatus = "active" | "left";
+
+export interface RosterPlayer extends Player {
+  roster_status: RosterStatus;
+}
+
+export interface CampaignDetail extends Campaign {
+  roster: RosterPlayer[];
+  finance: { earned: number; heldSessions: number };
+}
+
+export interface Player {
+  id: number;
+  name: string;
+  notes: string;
+  folder_path: string | null;
+  created_at: string;
+  archived_at: string | null;
+  thumbnail_image_url: string | null;
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
+}
+
+export interface CharacterChapter {
+  id: number;
+  character_id: number;
+  section: "backstory" | "personal_arc" | "current_situation" | "future_thoughts" | "inventory";
+  title: string;
+  content: string;
+  image_path: string | null;
+  image_url: string | null;
+  created_at: string;
+}
+
+export interface Character {
+  id: number;
+  player_id: number;
+  player_name?: string;
+  campaign_id: number | null;
+  campaign_name?: string | null;
+  campaign_setting_id?: number | null;
+  character_name: string;
+  short_name: string | null;
+  backstory: string;
+  statblock: string;
+  current_situation: string;
+  personal_arc: string;
+  future_thoughts: string;
+  connections_notes: string;
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
+  thumbnail_image_path: string | null;
+  thumbnail_image_url: string | null;
+  folder_path: string | null;
+  created_at: string;
+  archived_at: string | null;
+  chapters?: CharacterChapter[];
+  important_dates?: ImportantDate[];
+}
+
+export interface PlayerDetail extends Player {
+  characters: Character[];
+}
+
+export interface GmReminder {
+  id: number;
+  target_type: "player" | "campaign";
+  target_id: number;
+  message: string;
+  created_at: string;
+}
+
+export type StatblockFormat =
+  | "text"
+  | "litm_character"
+  | "litm_challenge"
+  | "dnd_character"
+  | "dnd_creature";
+
+export interface Statblock {
+  id: number;
+  owner_type: "character" | "being" | "compendium_entry";
+  owner_id: number;
+  kind: "short" | "full";
+  format: StatblockFormat;
+  content: string;
+  note: string;
+  theme: string | null;
+  density: string | null;
+  created_at: string;
+}
+
+export type LitMPower = "" | "origin" | "adventure" | "greatness";
+
+export interface LitMImprovement {
+  text: string;
+  active: boolean;
+}
+
+export interface LitMThemeCard {
+  power: LitMPower;
+  themeType: string;
+  name: string;
+  powerTags: string[];
+  weaknessTags: string[];
+  quest: string;
+  improve: number;
+  abandon: number;
+  milestone: number;
+  specialImprovements: LitMImprovement[];
+}
+
+export interface LitMCharacterData {
+  characterName: string;
+  playerName: string;
+  promise: string;
+  quest: string;
+  fellowshipRelationship: string;
+  companionCharacterType?: string;
+  companionCharacterId?: number;
+  companionCharacterName?: string;
+  companionRelationshipTag: string;
+  quintessences: string;
+  backpack: string[];
+  specialImprovements: string;
+  notes: string;
+  themes: LitMThemeCard[];
+  storyThemes: LitMThemeCard[];
+  fellowshipTheme: LitMThemeCard;
+}
+
+export interface LitMChallengeData {
+  title: string;
+  role: string;
+  might: number;
+  tagsAndStatuses: string;
+  limits: string;
+  threatsConsequences: string;
+  specialFeatures: string;
+}
+
+export interface DndAbilityScores {
+  str: number;
+  dex: number;
+  con: number;
+  int: number;
+  wis: number;
+  cha: number;
+}
+
+export interface DndFeature {
+  name: string;
+  description: string;
+  // Set only for features auto-filled from a class/subclass/species pick —
+  // the id of that class/subclass/species compendium entry, so picking a
+  // different one can find-and-replace just its own features without
+  // touching features from other classes (multiclass) or hand-added ones.
+  sourceParentId?: number | null;
+  // The compendium feature entry's own level (class/subclass features only),
+  // shown next to the name.
+  level?: number | null;
+}
+
+// One class entry in a (possibly multiclassed) character's class list.
+// *Id fields are set when picked from the system's compendium (enables
+// hit-die lookup for requirement 8); the Name fields are always kept in sync
+// so the statblock still displays sensibly for freehand/legacy entries with
+// no compendium link (id null).
+export interface DndClassEntry {
+  classId: number | null;
+  className: string;
+  subclassId: number | null;
+  subclassName: string;
+  level: number;
+  // The class's "choose N of these skills" pool/count (from its compendium
+  // entry's skill_choice_options/skill_choice_count), captured when picked so
+  // the sheet can show a remaining-picks counter and highlight which checked
+  // skills came from this class. Empty/0 for freehand classes with no
+  // compendium link.
+  skillChoiceOptions: string[];
+  skillChoiceCount: number;
+  // The class's spellcasting ability (compendium entry's data.spellcasting_ability,
+  // a single Russian ability name e.g. "Харизма"), used to compute the
+  // character's spell save DC / spell attack bonus. Empty for non-casters.
+  spellcastingAbility: string;
+}
+
+export type DndAbilityKey = keyof DndAbilityScores;
+
+// 0 = not proficient, 1 = proficient (bonus once), 2 = expertise (bonus x2).
+export type DndSkillProfLevel = 0 | 1 | 2;
+
+// 0 = not prepared, 1 = prepared, 2 = always prepared (same star, click cycles through).
+export type DndSpellPreparedState = 0 | 1 | 2;
+
+export interface DndCharacterData {
+  // Which system's compendium (classes/species/backgrounds/spells) powers
+  // this statblock's pickers. Independent of owner type — a Character
+  // defaults it from the campaign's system, a Being has none to infer so it's
+  // picked explicitly.
+  systemId: number | null;
+
+  characterName: string;
+  playerName: string;
+
+  classes: DndClassEntry[];
+  raceId: number | null;
+  raceName: string;
+  raceTypeName: string; // creature type of the picked species, e.g. "гуманоид"
+  backgroundId: number | null;
+  backgroundName: string;
+  // Skills granted by the picked background (from its compendium entry's
+  // `skills` field), captured at pick time so the sheet can highlight which
+  // checked skills came from the background regardless of later edits.
+  backgroundSkillNames: string[];
+  alignment: string;
+  experiencePoints: string;
+
+  abilities: DndAbilityScores;
+  proficiencyBonus: string;
+  inspiration: boolean;
+
+  savingThrowProfs: Record<DndAbilityKey, boolean>;
+  skillProfs: Record<string, DndSkillProfLevel>;
+
+  armorClass: string;
+  initiative: string;
+  speed: string;
+  hitPointMax: string;
+  hitPointsCurrent: string;
+  hitPointsTemp: string;
+  // Temporary bonus to max HP (e.g. Aid) — stacks on top of hitPointMax for
+  // the healing cap, tracked separately so restoring/removing the effect
+  // doesn't require editing the character's real max HP.
+  hitPointMaxTemp: string;
+  hitDice: string;
+  deathSaveSuccesses: number;
+  deathSaveFailures: number;
+
+  attacks: DndFeature[];
+  equipmentSections: DndEquipmentSection[];
+  attunementCount: number;
+
+  speciesFeatures: DndFeature[];
+  classFeatures: DndFeature[];
+  feats: DndFeature[];
+  specialAbilities: DndFeature[];
+  proficiencies: DndProficiencyEntry[];
+
+  personalityTraits: string;
+  ideals: string;
+  bonds: string;
+  flaws: string;
+
+  spellcasting: string;
+  // Extra flat bonus to the computed spell save DC (feats, magic items, …),
+  // editable only in edit mode — the base 8 + ability mod + proficiency
+  // bonus is always derived, never stored directly.
+  spellDcMisc: string;
+  // Same idea as spellDcMisc, but for the spell attack bonus.
+  spellAttackMisc: string;
+  // Cantrips (level 0) — no slots, always shown regardless of spellSlotLevels.
+  cantrips: DndSpellEntry[];
+  // Requirement 11/12: 0-9 configurable count of active spell-level sections;
+  // slot/spell arrays are always length 9 (indices 0-8 = levels 1-9) so data
+  // beyond the current count survives lowering it and reappears if raised.
+  spellSlotLevels: number;
+  spellSlotPips: number[];
+  // Slots currently expended per level (0..spellSlotPips[i]) — separate from
+  // the max-slots-per-level pips above, which only change on level-up/edit.
+  // Quick-clicked in view mode during play, reset manually on a long rest.
+  spellSlotsUsed: number[];
+  spellsByLevel: DndSpellEntry[][];
+  notes: string;
+  // Extra flat КЗ bonus not captured by equipped items (e.g. Shield/Mage
+  // Armor spell effects) — added on top of computeArmorClass()'s result.
+  manualAcBonus: string;
+  // Class-resource pools (Ресурсы tab) keyed by dndResources.ts's resource
+  // key, e.g. "sorcery_points". Max is always computed from classes + this
+  // bonus; only current-used and the external bonus are ever stored.
+  resourceUsed: Record<string, number>;
+  resourceBonus: Record<string, number>;
+}
+
+export interface DndEquipmentItem {
+  name: string;
+  qty: string;
+  weight: string;
+  notes: string;
+  // Set when added from the compendium (picker/drag-drop) rather than typed
+  // by hand — enables click-to-view-description and, for armor/magic items,
+  // participation in the computed КЗ.
+  entryId?: number | null;
+  equipped?: boolean;
+  // Snapshotted armor/AC-bonus fields from the compendium entry at add time
+  // (same idea as DndSpellEntry's cached meta) — computeArmorClass() reads
+  // these without a live lookup.
+  armorType?: string;
+  ac?: string;
+  maxDexBonus?: string;
+  acBonus?: string;
+  // Same idea, for weapons — set only when the compendium entry has a
+  // damage value, so an equipped item can be told apart from armor/plain
+  // gear without a separate "is this a weapon" flag.
+  weaponDamage?: string;
+  weaponAttackMelee?: boolean;
+  weaponAttackRanged?: boolean;
+  weaponProperties?: string;
+  weaponMastery?: string;
+}
+
+export interface DndEquipmentSection {
+  name: string;
+  items: DndEquipmentItem[];
+}
+
+// A dropped/typed proficiency or language. abilityKey is set only for
+// entries that compute a bonus (tools/weapons/armor); languages and other
+// non-computed proficiencies leave it null and show no value.
+export interface DndProficiencyEntry {
+  entryId: number | null;
+  name: string;
+  abilityKey: DndAbilityKey | null;
+}
+
+export interface DndSpellEntry {
+  entryId: number | null;
+  name: string;
+  prepared: DndSpellPreparedState;
+  // Set only for spells auto-filled from a species/subclass's "Обретаемые
+  // заклинания" pick — the id of that compendium entry, so picking a
+  // different species/subclass can find-and-replace just its own granted
+  // spells without touching hand-added ones (mirrors DndFeature.sourceParentId).
+  sourceParentId?: number | null;
+  // Snapshotted from the compendium entry when added, so the row can show
+  // "школа | время накладывания | компоненты | концентрация | ритуал"
+  // without re-fetching on every render.
+  concentration?: boolean;
+  ritual?: boolean;
+  school?: string;
+  castingTime?: string;
+  range?: string;
+  duration?: string;
+  componentV?: boolean;
+  componentS?: boolean;
+  componentM?: boolean;
+  materialComponent?: string;
+  category?: string;
+  attackSave?: string;
+  damage?: string;
+  healing?: string;
+  upcast?: string;
+}
+
+export interface DndCreatureSpeed {
+  walk: number | null;
+  fly: number | null;
+  swim: number | null;
+  climb: number | null;
+  burrow: number | null;
+  hover: boolean;
+  note: string;
+}
+
+export interface DndCreatureHitPoints {
+  diceCount: number | null;
+  dieSize: number | null; // 4|6|8|10|12
+  bonus: number | null;
+  // Legacy free-text formula, e.g. "45 (6к10+18)" — kept as a display
+  // fallback for statblocks whose HP couldn't be parsed into the fields
+  // above (see normalizeDndCreature).
+  formula: string;
+}
+
+export interface DndCreatureArmorClass {
+  value: number | null;
+  note: string; // "натуральная броня", "кольчуга" и т.п.
+}
+
+export interface DndCreatureChallenge {
+  rating: string; // "1/4", "5" и т.д.
+  proficiencyBonus: number | null;
+}
+
+export type DndCreatureSpellFrequency = "atwill" | "perday" | "slots";
+
+export interface DndCreatureSpellSlotLevel {
+  level: number;
+  slots: number;
+}
+
+export type DndAttackRollType = "attack" | "save";
+
+export interface DndCreatureSpell {
+  name: string;
+  level: number; // 0 = заговор
+  frequency: DndCreatureSpellFrequency;
+  perDayCount: number | null;
+  description: string;
+  // Mechanical fields mirrored from DndCreatureAction, filled in only for
+  // combat spells — lets a spell be added as an action row (see "Добавить
+  // из заклинаний" in the wizard) without re-typing its bonus/save/damage.
+  rollType?: DndAttackRollType;
+  bonus?: number | null;
+  saveAbility?: DndAbilityKey | "";
+  saveDC?: number | null;
+  damage?: string;
+}
+
+export interface DndCreatureSpellcasting {
+  enabled: boolean;
+  ability: DndAbilityKey | "";
+  slots: DndCreatureSpellSlotLevel[];
+  spells: DndCreatureSpell[];
+}
+
+export interface DndCreatureSense {
+  name: string;
+  distance: string;
+}
+
+export type DndActionCategory = "attack" | "movement" | "healing" | "defense" | "other";
+
+export interface DndCreatureAction {
+  name: string;
+  category: DndActionCategory;
+  // Category "attack" only: marks this row as a multiattack summary — no
+  // roll/bonus/damage of its own, just descriptive text referencing the
+  // creature's other attacks (matches how real 5e statblocks phrase it).
+  isMultiattack?: boolean;
+  rollType?: DndAttackRollType;
+  bonus?: number | null;
+  saveAbility?: DndAbilityKey | "";
+  saveDC?: number | null;
+  damage?: string;
+  description: string;
+  // Set when this row was added via "Добавить из заклинаний" — the source
+  // spell's name, so it isn't offered for re-adding.
+  sourceSpellName?: string;
+}
+
+export interface DndLegendaryActionEntry extends DndCreatureAction {
+  cost: number;
+}
+
+export interface DndCreatureLegendary {
+  resistanceEnabled: boolean;
+  resistanceCount: number | null;
+  actionsEnabled: boolean;
+  actionPoints: number | null;
+  actions: DndLegendaryActionEntry[];
+  lairEnabled: boolean;
+  lairActions: DndCreatureAction[];
+}
+
+export interface DndCreatureEquipmentItem {
+  name: string;
+  qty: string;
+  notes: string;
+  entryId?: number | null;
+}
+
+export interface DndCreatureLootItem {
+  name: string;
+  qty: string;
+}
+
+export interface DndCreatureLootCurrency {
+  label: string;
+  formula: string;
+}
+
+export interface DndCreatureLoot {
+  items: DndCreatureLootItem[];
+  currency: DndCreatureLootCurrency[];
+}
+
+export interface DndCreatureData {
+  name: string;
+  size: string;
+  creatureType: string;
+  alignment: string;
+  armorClass: DndCreatureArmorClass;
+  hitPoints: DndCreatureHitPoints;
+  speed: DndCreatureSpeed;
+  initiativeBonus: number | null;
+  challenge: DndCreatureChallenge;
+  abilities: DndAbilityScores;
+  savingThrowProfs: Record<DndAbilityKey, boolean>;
+  skillProfs: Record<string, boolean>;
+  damageVulnerabilities: string[];
+  damageResistances: string[];
+  damageImmunities: string[];
+  conditionImmunities: string[];
+  saveAdvantageConditions: string[];
+  saveAdvantageMagic: boolean;
+  defenseNotes: string;
+  sensesList: DndCreatureSense[];
+  perceptionNote: string;
+  passivePerception: number | null;
+  languages: string;
+  spellcasting: DndCreatureSpellcasting;
+  traits: DndFeature[];
+  actions: DndCreatureAction[];
+  bonusActions: DndCreatureAction[];
+  reactions: DndCreatureAction[];
+  legendary: DndCreatureLegendary;
+  habitat: string;
+  treasure: string;
+  equipment: DndCreatureEquipmentItem[];
+  loot: DndCreatureLoot;
+  notes: string;
+}
+
+export type SessionStatus = "planned" | "held" | "cancelled" | "rescheduled";
+
+// A session that @-mentions some other entity — see GET /links/mentioning-sessions.
+export interface MentioningSession {
+  id: number;
+  date: string;
+  title: string | null;
+  session_number: number | null;
+  campaign_id: number;
+  campaign_name: string;
+}
+
+export interface SessionSummary {
+  id: number;
+  campaign_id: number;
+  campaign_name?: string;
+  date: string;
+  title: string | null;
+  status: SessionStatus;
+  payment_override: PaymentType | null;
+  effective_payment_type: PaymentType;
+  session_number?: number;
+  rescheduled_to_id: number | null;
+  rescheduled_from_id: number | null;
+  campaign_role?: CampaignRole;
+  main_events?: string;
+  idea_notes?: string;
+  inworld_year: number | null;
+  inworld_month: number | null;
+  inworld_day: number | null;
+  inworld_year_end: number | null;
+  inworld_month_end: number | null;
+  inworld_day_end: number | null;
+  start_time: string | null;
+}
+
+export interface AttendanceRow {
+  player_id: number;
+  name: string;
+  attended: number;
+  amount_paid: number;
+}
+
+export interface SessionDetail extends SessionSummary {
+  stake_override: number | null;
+  idea_notes: string;
+  main_events: string;
+  main_events_visible: number;
+  combat_active: number;
+  combat_turn_entry_id: number | null;
+  battle_playlist_id: number | null;
+  folder_path: string | null;
+  campaign_payment_type: PaymentType;
+  campaign_session_rate: number;
+  currency: string;
+  attendance: AttendanceRow[];
+  resources: Resource[];
+  earned: number;
+  archived_at: string | null;
+}
+
+export interface Resource {
+  id: number;
+  name: string;
+  type: string;
+  // Sub-grouping within the "link" type (folder/pdf/image/audio/link/other)
+  // — see client/src/resourceCategories.ts. Only session Ресурсы rows set
+  // this today; other resource lists leave it null.
+  category?: string | null;
+  scope: "global" | "campaign" | "session" | "setting" | "system";
+  campaign_id: number | null;
+  session_id: number | null;
+  setting_id: number | null;
+  system_id: number | null;
+  system_name?: string;
+  setting_name?: string;
+  template_kind: "short" | "full" | null;
+  template_format?: StatblockFormat;
+  file_path: string | null;
+  file_url?: string | null;
+  link_url: string | null;
+  tags: string;
+  notes: string;
+  created_at: string;
+  archived_at: string | null;
+  // Only populated by GET /resources — settings this resource was tagged
+  // into additionally, on top of its single "home" setting_id (see
+  // resource_setting_links / POST|DELETE /resources/:id/settings).
+  also_in_settings?: number[];
+  // Only populated by GET /resources — computed on read via fs.stat, not
+  // stored; null when there's no file_path or the file is missing.
+  size_bytes?: number | null;
+}
+
+export interface PlaylistItem {
+  id: number;
+  position: number;
+  resource_id: number;
+  name: string;
+  resource_name: string;
+  custom_name: string | null;
+  src: string | null;
+}
+
+export interface Playlist {
+  id: number;
+  name: string;
+  scope: "session" | "setting";
+  session_id: number | null;
+  setting_id: number | null;
+  created_at: string;
+  item_count: number;
+  // Only present on GET /playlists (no filter) — used to group the player's
+  // playlist-navigation menu by owning session/setting.
+  session_date?: string | null;
+  campaign_name?: string | null;
+  setting_name?: string | null;
+  // Only present on GET /playlists (no filter) — see Resource.also_in_settings.
+  also_in_settings?: number[];
+}
+
+export interface PlaylistDetail extends Playlist {
+  items: PlaylistItem[];
+}
+
+export interface MasteringNote {
+  id: number;
+  category: "prep" | "live" | "knowledge";
+  system_id: number | null;
+  system_name?: string;
+  title: string;
+  content: string;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface Preproduction {
+  campaign_id: number;
+  adventure_challenge: string;
+  gameplay_styles: string;
+  background: string;
+  adventure_stakes_hooks: string;
+  threads_clues_lore: string;
+}
+
+export interface SettingLocation {
+  id: number;
+  setting_id: number;
+  parent_id: number | null;
+  name: string;
+  short_name: string | null;
+  kind: string;
+  description: string;
+  folder_path: string | null;
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
+  thumbnail_image_path: string | null;
+  thumbnail_image_url: string | null;
+  map_image_path: string | null;
+  map_image_url: string | null;
+  map_max_zoom: number | null;
+  map_start_zoom: number | null;
+  map_goto_zoom: number | null;
+  map_labels_always: number;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface LocationPin {
+  id: number;
+  location_id: number;
+  target_type: string;
+  target_id: number;
+  x: number;
+  y: number;
+  color: string | null;
+  size: number | null;
+  border_color: string | null;
+  created_at: string;
+}
+
+export interface LocationChapter {
+  id: number;
+  location_id: number;
+  title: string;
+  content: string;
+  visible_to_players: boolean | number;
+  created_at: string;
+}
+
+export interface SettingLocationDetail extends SettingLocation {
+  children: SettingLocation[];
+  ancestors: { id: number; name: string }[];
+  pins: LocationPin[];
+  chapters: LocationChapter[];
+  inhabitant_beings: SettingBeing[];
+  inhabitant_communities: { id: number; name: string }[];
+  important_dates: ImportantDate[];
+}
+
+export type BeingCategory = "bestiary" | "key_figure" | "influential" | "notable";
+
+export interface SettingBeing {
+  id: number;
+  setting_id: number;
+  name: string;
+  short_name: string | null;
+  category: BeingCategory;
+  location_id: number | null;
+  locations: { id: number; name: string }[];
+  base_monster_id: number | null;
+  base_monster_name: string | null;
+  statblock_short: string;
+  statblock_full: string;
+  history: string;
+  behavior: string;
+  tags: string[];
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
+  thumbnail_image_path: string | null;
+  thumbnail_image_url: string | null;
+  folder_path: string | null;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface SettingCommunity {
+  id: number;
+  setting_id: number;
+  parent_id: number | null;
+  name: string;
+  description: string;
+  history: string;
+  current_situation: string;
+  features: string;
+  goals: string;
+  tags: string[];
+  folder_path: string | null;
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
+  thumbnail_image_path: string | null;
+  thumbnail_image_url: string | null;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface CommunityChapter {
+  id: number;
+  community_id: number;
+  section: string;
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+export interface SettingCommunityDetail extends SettingCommunity {
+  members: SettingBeing[];
+  children: SettingCommunity[];
+  ancestors: { id: number; name: string }[];
+  chapters: CommunityChapter[];
+  locations: { id: number; name: string }[];
+  important_dates: ImportantDate[];
+}
+
+export interface BeingEvent {
+  id: number;
+  being_id: number;
+  session_id: number | null;
+  session_date?: string;
+  campaign_name?: string;
+  title: string;
+  description: string;
+  created_at: string;
+}
+
+export interface BeingRelation {
+  id: number;
+  being_a_id: number;
+  being_b_id: number;
+  being_a_name: string;
+  being_b_name: string;
+  relation_type: string;
+  description: string;
+  created_at: string;
+}
+
+export type RelationTone = "positive" | "negative" | "neutral" | "mixed";
+export type RelationEntityType = "being" | "character" | "community";
+
+// Directional: from_* feels `tone` about to_* — not assumed mutual. The API
+// always returns each row alongside `other_type`/`other_id`/`other_name`,
+// pre-resolved to whichever side isn't the entity the request was scoped to.
+export interface EntityRelation {
+  id: number;
+  from_type: RelationEntityType;
+  from_id: number;
+  to_type: RelationEntityType;
+  to_id: number;
+  other_type: RelationEntityType;
+  other_id: number;
+  other_name: string | null;
+  tone: RelationTone;
+  label: string;
+  description: string;
+  created_at: string;
+}
+
+export interface EntityRelationsResponse {
+  outgoing: EntityRelation[];
+  incoming: EntityRelation[];
+}
+
+export interface BeingChapter {
+  id: number;
+  being_id: number;
+  section: "history" | "behavior" | "current_situation";
+  title: string;
+  content: string;
+  campaign_id: number | null;
+  campaign_name: string | null;
+  important: boolean | number;
+  visible_to_players: boolean | number;
+  created_at: string;
+}
+
+export interface SettingBeingDetail extends SettingBeing {
+  events: BeingEvent[];
+  relations: BeingRelation[];
+  communities: { id: number; name: string }[];
+  important_dates: ImportantDate[];
+  chapters: BeingChapter[];
+}
+
+export interface Artifact {
+  id: number;
+  setting_id: number;
+  name: string;
+  short_name: string | null;
+  owner: string;
+  power: string;
+  history: string;
+  notes: string;
+  file_path: string | null;
+  folder_path: string | null;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface AppSettings {
+  home_background_path: string | null;
+  home_background_url: string | null;
+  fade_duration_ms: number;
+}
+
+export interface SearchResult {
+  type: string;
+  id: number;
+  title: string;
+  subtitle?: string;
+  system_id?: number;
+  section_id?: number;
+  // Only populated for type === "compendium_entry": the entry's own kind
+  // (item/spell/mechanic_item/…) and level, so a drop target can act on a
+  // dragged search result without a second fetch.
+  kind?: string;
+  level?: number | null;
+  // Only set for kind === "mechanic_item" entries that carry a governing
+  // ability (tool proficiencies) — see CompendiumSection's TOOL_ABILITY_FIELD.
+  ability?: string;
+  // Human-readable owning setting/campaign/system, e.g. "Сеттинг: Асгард" —
+  // shown next to the type chip so same-named entities across different
+  // settings/campaigns are distinguishable.
+  context?: string;
+}
+
+export interface ArchiveItem {
+  type: string;
+  id: number;
+  title: string;
+  subtitle?: string;
+  archived_at: string;
+}
+
+// A single file moved to _Archive after the last remaining link to its
+// content was removed and the user chose "отправить в архив" over "удалить
+// навсегда" — see server/src/services/vaultDedup.ts.
+export interface ArchivedFile {
+  id: number;
+  original_owner_type: string;
+  original_owner_id: number;
+  original_name: string;
+  archive_path: string;
+  size: number;
+  archived_at: string;
+}
+
+export interface LinkNote {
+  id: number;
+  link_id: number;
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+export interface CampaignEntry {
+  id: number;
+  campaign_id: number;
+  category: "notes" | "quotes" | "tasks" | "secrets" | "gm_notes" | "post_production";
+  title: string;
+  content: string;
+  status: "none" | "done" | "failed";
+  priority: number;
+  created_at: string;
+}
+
+export type WorldExplorationKind = "being" | "location" | "item" | "event";
+
+export interface WorldExplorationEntry {
+  id: number;
+  campaign_id: number;
+  player_id: number;
+  player_name?: string;
+  kind: WorldExplorationKind;
+  name: string;
+  description: string;
+  extra_field: string;
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
+  folder_path: string;
+  created_at: string;
+}
+
+export interface InitiativeEntry {
+  id: number;
+  session_id: number;
+  entity_type: string | null;
+  entity_id: number | null;
+  name: string;
+  dex_modifier: number;
+  initiative: number | null;
+  max_hp: number | null;
+  current_hp: number | null;
+  dead: boolean | number;
+  conditions: string; // JSON-encoded string[], parse before use
+  created_at: string;
+}
+
+export interface SettingEntry {
+  id: number;
+  setting_id: number;
+  category: "notes";
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+export interface SettingCalendarEra {
+  id: number;
+  setting_id: number;
+  name: string;
+  start_year: number;
+  created_at: string;
+}
+
+export type CampaignPlayerSectionKind = "gallery" | "articles";
+
+export interface CampaignPlayerSection {
+  id: number;
+  campaign_id: number;
+  name: string;
+  kind: CampaignPlayerSectionKind;
+  folder_path: string | null;
+  position: number;
+  created_at: string;
+}
+
+export interface CampaignPlayerArticle {
+  id: number;
+  section_id: number;
+  title: string;
+  content: string;
+  position: number;
+  created_at: string;
+}
+
+// Backs both the campaign "Для игроков" tab and the setting one — see
+// schema.sql's comment on player_visibility_grants for the full target_type list.
+export type VisibilityTargetType =
+  | "campaign_player_section"
+  | "campaign_player_article"
+  | "setting_location"
+  | "setting_being"
+  | "setting_community"
+  | "setting_calendar_event";
+
+export interface PlayerVisibilityGrant {
+  id: number;
+  campaign_id: number;
+  player_id: number;
+  target_type: VisibilityTargetType;
+  target_id: number;
+  created_at: string;
+}
+
+// Player-role campaign view (GET /api/player/campaigns/:id/visible etc.) —
+// same shapes the player-app reads, reused here so the desktop client's own
+// player-role account gets the same "what the GM revealed" view instead of
+// the GM-only CampaignDetailPage. See server/src/routes/player.ts.
+export interface VisibleSession {
+  id: number;
+  date: string;
+  title: string | null;
+  main_events: string;
+}
+
+export interface VisibleSecret {
+  id: number;
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+export interface VisibleArticle {
+  id: number;
+  title: string;
+  content: string;
+  created_at: string;
+  location_name?: string;
+  being_name?: string;
+}
+
+export interface VisibleChronicleEvent {
+  id: number;
+  title: string;
+  description: string;
+  inworld_year: number;
+  inworld_month: number;
+  inworld_day: number;
+}
+
+export interface SessionScheduleEntry {
+  id: number;
+  date: string;
+  start_time: string | null;
+  title: string | null;
+  status: string;
+}
+
+export interface VisibleCampaignContent {
+  campaign: { id: number; name: string; setting_id: number | null; system_id: number | null };
+  sessions: VisibleSession[];
+  schedule: SessionScheduleEntry[];
+  secrets: VisibleSecret[];
+  locationArticles: VisibleArticle[];
+  beingArticles: VisibleArticle[];
+  chronicleEvents: VisibleChronicleEvent[];
+}
+
+export interface PlayerSectionArticle {
+  id: number;
+  title: string;
+  content: string;
+}
+
+export interface PlayerSectionImage {
+  id: number;
+  image_url: string;
+  caption: string;
+}
+
+export interface PlayerSection {
+  id: number;
+  name: string;
+  kind: "gallery" | "articles";
+  articles?: PlayerSectionArticle[];
+  images?: PlayerSectionImage[];
+}
+
+export interface SettingPlayerLocation {
+  id: number;
+  name: string;
+  description: string;
+}
+
+export interface SettingPlayerBeing {
+  id: number;
+  name: string;
+  category: string;
+  history: string;
+  behavior: string;
+}
+
+export interface SettingPlayerCommunity {
+  id: number;
+  name: string;
+  description: string;
+}
+
+export interface SettingPlayerChronicleEvent {
+  id: number;
+  title: string;
+  description: string;
+  inworld_year: number;
+  inworld_month: number;
+  inworld_day: number;
+}
+
+export interface SettingPlayerContent {
+  locations: SettingPlayerLocation[];
+  beings: SettingPlayerBeing[];
+  communities: SettingPlayerCommunity[];
+  chronicleEvents: SettingPlayerChronicleEvent[];
+}
+
+export interface MyCampaignSummary {
+  campaign_id: number;
+  campaign_name: string;
+}
+
+export interface PartyMember {
+  id: number;
+  character_name: string;
+  player_name: string;
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
+}

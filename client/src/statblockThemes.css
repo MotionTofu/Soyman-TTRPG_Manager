@@ -1,0 +1,782 @@
+/* Statblock theme system — ported from design_handoff_statblocks/statblocks.html.
+   Scoped entirely under .sb-scope so it never leaks into the app's own
+   theme (--bg/--accent/etc from themes.ts) and vice versa: independent
+   token namespace, independent per-statblock selection. */
+@font-face {
+  font-family: 'CyberpunkRus';
+  src: url('/fonts/Cyberpunk_RUS_BY_LYAJKA.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Steamy';
+  src: url('/fonts/Steamy.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'BubbleGum';
+  src: url('/fonts/BubbleGum.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'DOSFont';
+  src: url('/fonts/DOSFont.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Greengoth';
+  src: url('/fonts/GOTHIC_Greengoth.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Bulgariamodernav3';
+  src: url('/fonts/Bulgariamodernav3-00R9.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+.sb-scope {
+  --sb-accent: #2e4636;
+  --paper: #faf7ef;
+  --ink: #26251f;
+  --muted: #6d6a5d;
+  --label: color-mix(in oklab, var(--sb-accent) 72%, #99937f);
+  --accent: var(--sb-accent);
+  --head-bg: var(--sb-accent);
+  --head-ink: #f2ead6;
+  --head-rule: 0 solid transparent;
+  --line: #b9b19c;
+  --border: #d8d2c2;
+  --font-display: 'Alegreya SC', serif;
+  --font-body: 'EB Garamond', serif;
+  --name-transform: none;
+  --name-tracking: 0.5px;
+  --name-stroke: none;
+  --name-shadow: none;
+  --section-transform: none;
+  --label-transform: none;
+  --radius-card: 6px;
+  --radius-cell: 0px;
+  --card-border-width: 1px;
+  --body-style: normal;
+  --fs: 15px;
+  --fs-sm2: 14.5px;
+  --fs-big: 19px;
+  --fs-title: 24px;
+  --fs-label: 11.5px;
+  --fs-label2: 12.5px;
+  --pad-x: 26px;
+  --pad-y: 20px;
+  --pad-head: 18px;
+  --sec-gap: 16px;
+  font-family: var(--font-body);
+  font-style: var(--body-style);
+  color: var(--ink);
+}
+.sb-scope.theme-print {
+  --paper: #fff;
+  --ink: #1a1a1a;
+  --muted: #555;
+  --label: #444;
+  --accent: #1a1a1a;
+  --head-bg: #fff;
+  --head-ink: #1a1a1a;
+  --head-rule: 2px solid #1a1a1a;
+  --line: #1a1a1a;
+  --border: #1a1a1a;
+}
+.sb-scope.theme-cyberpunk {
+  --sb-accent: #ff2bd6;
+  --paper: #0c0f12;
+  --ink: #cfe9ec;
+  --muted: #8a7a95;
+  --label: #c23fa8;
+  --accent: #ff2bd6;
+  --head-bg: #0f1a1c;
+  --head-ink: #ff2bd6;
+  --head-rule: 1px solid #7a2a68;
+  --line: #7a2a68;
+  --border: #7a2a68;
+  --font-display: 'JetBrains Mono', monospace;
+  --font-body: 'Oswald', sans-serif;
+  --name-transform: uppercase;
+  --section-transform: uppercase;
+  --name-shadow: 1px 1px 0 #f2e600;
+}
+.theme-cyberpunk .sb-name {
+  font-family: 'CyberpunkRus', monospace;
+  letter-spacing: 1px;
+}
+.theme-cyberpunk .sb-section::before {
+  content: '// ';
+}
+.theme-cyberpunk .sb-head {
+  position: relative;
+  overflow: hidden;
+}
+.theme-cyberpunk .sb-head::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 20px 20px 0;
+  border-color: transparent #4ef0ff transparent transparent;
+  opacity: 0.85;
+}
+.sb-scope.theme-steampunk {
+  --sb-accent: #e8c979;
+  --paper: #2a2119;
+  --ink: #e8d9b8;
+  --muted: #b8a67e;
+  --label: #b8863f;
+  --accent: #e8c979;
+  --head-bg: #3a2e18;
+  --head-ink: #e8c979;
+  --head-rule: 3px double #b8863f;
+  --line: #8a6a34;
+  --border: #8a6a34;
+  --font-display: 'Bitter', serif;
+  --font-body: 'Bitter', serif;
+}
+.theme-steampunk .sb-name {
+  font-family: 'Steamy', 'Bitter', serif;
+  letter-spacing: 0.5px;
+}
+.theme-steampunk .sb-abilities > div {
+  border-radius: 50%;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.sb-scope.theme-noir {
+  --sb-accent: #1c1c1c;
+  --paper: #e8e4da;
+  --ink: #1c1c1c;
+  --muted: #5a5548;
+  --label: #5a5548;
+  --accent: #1c1c1c;
+  --head-bg: #1c1c1c;
+  --head-ink: #e8e4da;
+  --head-rule: 0 solid transparent;
+  --line: #2a2a2a;
+  --border: #2a2a2a;
+  --font-display: 'Cormorant SC', serif;
+  --font-body: 'PT Mono', monospace;
+}
+.theme-noir .sb-card {
+  position: relative;
+  overflow: hidden;
+}
+.theme-noir .sb-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0 3px, transparent 3px 22px);
+  pointer-events: none;
+}
+.sb-scope.theme-anime {
+  --sb-accent: #ff6b9d;
+  --paper: #fff8f2;
+  --ink: #3a2c33;
+  --muted: #8a6f7a;
+  --label: #ff6b9d;
+  --accent: #ff6b9d;
+  --head-bg: linear-gradient(115deg, #ff6b9d 0%, #ff6b9d 40%, #ffb86b 100%);
+  --head-ink: #fff;
+  --head-rule: 0 solid transparent;
+  --line: #ffd1e2;
+  --border: #ff6b9d;
+  --font-display: 'Baloo 2', sans-serif;
+  --font-body: 'Nunito', sans-serif;
+  --radius-card: 20px;
+  --radius-cell: 14px;
+}
+.theme-anime .sb-name {
+  font-family: 'BubbleGum', 'Baloo 2', sans-serif;
+}
+.theme-anime .sb-vitals,
+.theme-anime .sb-abilities {
+  gap: 6px;
+  border: none;
+}
+.theme-anime .sb-vitals > div,
+.theme-anime .sb-abilities > div {
+  background: #ffe3ee;
+  border: none;
+}
+.sb-scope.theme-fey {
+  --sb-accent: #4a5e3a;
+  --paper: #f3f7ec;
+  --ink: #3c4a2f;
+  --muted: #5c6b4c;
+  --label: #7a9463;
+  --accent: #4a5e3a;
+  --head-bg: linear-gradient(135deg, #cfe3b3, #e6d6f0);
+  --head-ink: #4a5e3a;
+  --head-rule: 0 solid transparent;
+  --line: #b9d1a0;
+  --border: #b9d1a0;
+  --font-display: 'Comfortaa', sans-serif;
+  --font-body: 'Cormorant', serif;
+  --radius-card: 22px;
+  --radius-cell: 14px;
+  --body-style: italic;
+}
+.sb-scope.theme-aberrant {
+  --sb-accent: #b366e8;
+  --paper: #0e0c14;
+  --ink: #c4b8d4;
+  --muted: #8a7a9c;
+  --label: #7fd88a;
+  --accent: #b366e8;
+  --head-bg: radial-gradient(ellipse at 30% -10%, #3a1f4a, #0e0c14 70%);
+  --head-ink: #b366e8;
+  --head-rule: 1px solid #4a2f5c;
+  --line: #4a2f5c;
+  --border: #4a2f5c;
+  --font-display: 'PT Serif', serif;
+  --font-body: 'PT Serif', serif;
+}
+.theme-aberrant .sb-card {
+  clip-path: polygon(0 0, 100% 0, 100% 97%, 98% 100%, 0 100%);
+}
+.theme-aberrant .sb-name {
+  font-style: italic;
+  transform: skewX(-2deg);
+  display: inline-block;
+}
+.theme-aberrant .sb-abilities,
+.theme-aberrant .sb-vitals {
+  font-family: 'JetBrains Mono', monospace;
+}
+.theme-aberrant .sb-label,
+.theme-aberrant .sb-prop-label {
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 1px;
+}
+.sb-scope.theme-undead {
+  --sb-accent: #d8d2c4;
+  --paper: #0a0a0b;
+  --ink: #a9a49c;
+  --muted: #6b6459;
+  --label: #8a8478;
+  --accent: #d8d2c4;
+  --head-bg: #111113;
+  --head-ink: #d8d2c4;
+  --head-rule: 1px solid #47433c;
+  --line: #2c2c30;
+  --border: #2c2c30;
+  --font-display: 'Yeseva One', serif;
+  --font-body: 'PT Serif', serif;
+}
+.sb-scope.theme-rustic {
+  --sb-accent: #7a5c38;
+  --paper: #efe6d3;
+  --ink: #4a3a26;
+  --muted: #7a5c38;
+  --label: #7a5c38;
+  --accent: #7a5c38;
+  --head-bg: #7a5c38;
+  --head-ink: #f3e8cf;
+  --head-rule: 4px solid #5c4526;
+  --line: #b89b68;
+  --border: #9c7b4f;
+  --font-display: 'Amatic SC', sans-serif;
+  --font-body: 'Merriweather', serif;
+  --card-border-width: 2px;
+}
+.theme-rustic .sb-label,
+.theme-rustic .sb-prop-label {
+  font-size: 14px;
+}
+.theme-rustic .sb-name {
+  font-size: calc(var(--fs-title) * 1.4);
+}
+.sb-scope.theme-disney {
+  --sb-accent: #8a6fd6;
+  --paper: #fbf6ff;
+  --ink: #4a3a63;
+  --muted: #8a6fd6;
+  --label: #8a6fd6;
+  --accent: #8a6fd6;
+  --head-bg: linear-gradient(160deg, #a9c9ff, #d9b8ff 55%, #ffd9ec);
+  --head-ink: #fff;
+  --head-rule: 0 solid transparent;
+  --line: #e6d9ff;
+  --border: #cbb8f0;
+  --font-display: 'Comfortaa', sans-serif;
+  --font-body: 'Nunito', sans-serif;
+  --radius-card: 26px;
+  --radius-cell: 16px;
+}
+.theme-disney .sb-name {
+  font-family: 'DOSFont', 'Comfortaa', sans-serif;
+}
+.theme-disney .sb-vitals,
+.theme-disney .sb-abilities {
+  border: none;
+}
+.theme-disney .sb-vitals > div {
+  background: #f2ecff;
+}
+.theme-disney .sb-abilities > div {
+  background: #fff0f8;
+  border: none;
+}
+.sb-scope.theme-comic {
+  --sb-accent: #ff3b30;
+  --paper: #fff6de;
+  --ink: #1a1a1a;
+  --muted: #1a1a1a;
+  --label: #ff3b30;
+  --accent: #ff3b30;
+  --head-bg: radial-gradient(#ffffff55 1.5px, transparent 1.5px) 0 0/10px 10px, #ff3b30;
+  --head-ink: #fff;
+  --head-rule: 4px solid #1a1a1a;
+  --line: #1a1a1a;
+  --border: #1a1a1a;
+  --font-display: 'Russo One', sans-serif;
+  --font-body: 'PT Sans', sans-serif;
+  --name-transform: uppercase;
+  --name-stroke: 1.5px #1a1a1a;
+  --section-transform: uppercase;
+  --card-border-width: 4px;
+  --radius-cell: 8px;
+}
+.theme-comic .sb-vitals > div,
+.theme-comic .sb-abilities > div {
+  border: 2px solid #1a1a1a;
+}
+.theme-comic .sb-vitals > div {
+  background: #ffe066;
+}
+.theme-comic .sb-abilities > div {
+  background: #4dd6ff;
+}
+/* ---- Баровия (Curse of Strahd) ---- */
+.sb-scope.theme-barovia {
+  --sb-accent: #8a2a1f;
+  --paper: #d9d2be;
+  --ink: #3a3126;
+  --muted: #847a68;
+  --label: #8a2a1f;
+  --accent: #8a2a1f;
+  --head-bg: linear-gradient(160deg, #1b1410, #2e1a14 70%);
+  --head-ink: #d9b877;
+  --head-rule: 3px solid #8a2a1f;
+  --line: #bdb495;
+  --border: #3c2a1a;
+  --font-display: 'Greengoth', 'Fondamento', cursive;
+  --font-body: 'EB Garamond', serif;
+  --name-tracking: 0.5px;
+  --card-border-width: 2px;
+  --radius-card: 3px;
+}
+.theme-barovia .sb-card {
+  position: relative;
+}
+.theme-barovia .sb-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 60% 40% at 15% 10%, rgba(90, 50, 20, 0.12), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 90% 88%, rgba(90, 50, 20, 0.14), transparent 60%),
+    radial-gradient(ellipse 70% 45% at 50% 0%, rgba(255, 255, 255, 0.5), transparent 65%),
+    radial-gradient(ellipse 60% 50% at 20% 100%, rgba(255, 255, 255, 0.35), transparent 65%),
+    radial-gradient(ellipse 55% 45% at 100% 40%, rgba(255, 255, 255, 0.3), transparent 60%);
+  mix-blend-mode: multiply;
+  opacity: 0.9;
+}
+.theme-barovia .sb-body {
+  position: relative;
+}
+.theme-barovia .sb-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse 50% 30% at 10% 0%, rgba(255, 255, 255, 0.55), transparent 70%),
+    radial-gradient(ellipse 45% 30% at 95% 100%, rgba(255, 255, 255, 0.5), transparent 70%);
+  filter: blur(6px);
+}
+.theme-barovia .sb-body > * {
+  position: relative;
+  z-index: 2;
+}
+.theme-barovia .sb-head {
+  position: relative;
+}
+.theme-barovia .sb-head::after {
+  content: '☾';
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  font-size: 15px;
+  color: #d9b877;
+  opacity: 0.55;
+}
+.theme-barovia .sb-vitals > div,
+.theme-barovia .sb-abilities > div {
+  background: rgba(60, 42, 26, 0.06);
+}
+/* ---- Древнеславянский ---- */
+.sb-scope.theme-slavic {
+  --sb-accent: #a1332a;
+  --paper: #f1e7d2;
+  --ink: #332619;
+  --muted: #7d6a4d;
+  --label: #a1332a;
+  --accent: #a1332a;
+  --head-bg: #a1332a;
+  --head-ink: #f6ecd6;
+  --head-rule: 0 solid transparent;
+  --line: #c9a875;
+  --border: #8a6a42;
+  --font-display: 'Bulgariamodernav3', serif;
+  --font-body: 'PT Serif', serif;
+  --card-border-width: 2px;
+  --radius-card: 2px;
+  --name-tracking: 1px;
+}
+.theme-slavic .sb-card {
+  position: relative;
+}
+.theme-slavic .sb-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: repeating-linear-gradient(45deg, #f6ecd6 0 6px, #a1332a 6px 12px);
+}
+.theme-slavic .sb-head {
+  padding-top: calc(var(--pad-head) + 8px);
+}
+.theme-slavic .sb-vitals > div,
+.theme-slavic .sb-abilities > div {
+  background: rgba(161, 51, 42, 0.05);
+}
+.theme-slavic .sb-section {
+  border-bottom-style: double;
+  border-bottom-width: 3px;
+}
+
+.sb-scope.density-compact {
+  --fs: 13.5px;
+  --fs-sm2: 13px;
+  --fs-big: 17px;
+  --fs-title: 20px;
+  --fs-label: 10.5px;
+  --fs-label2: 11.5px;
+  --pad-x: 16px;
+  --pad-y: 13px;
+  --pad-head: 11px;
+  --sec-gap: 10px;
+}
+@media print {
+  .sb-scope {
+    --paper: #fff;
+    --ink: #1a1a1a;
+    --muted: #555;
+    --label: #444;
+    --accent: #1a1a1a;
+    --head-bg: #fff;
+    --head-ink: #1a1a1a;
+    --head-rule: 2px solid #1a1a1a;
+    --line: #1a1a1a;
+    --border: #1a1a1a;
+    --font-display: 'Alegreya SC', serif;
+    --font-body: 'EB Garamond', serif;
+    --name-transform: none;
+    --name-stroke: none;
+    --name-shadow: none;
+    --section-transform: none;
+    --label-transform: none;
+    --radius-card: 6px;
+    --radius-cell: 0px;
+    --card-border-width: 1px;
+    --body-style: normal;
+  }
+  .theme-cyberpunk .sb-head::after,
+  .theme-noir .sb-card::before,
+  .theme-barovia .sb-card::before,
+  .theme-barovia .sb-body::before,
+  .theme-barovia .sb-head::after,
+  .theme-slavic .sb-card::before {
+    display: none;
+  }
+}
+
+/* ---- card frame ---- */
+.sb-card {
+  background: var(--paper);
+  border: var(--card-border-width) solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  color: var(--ink);
+}
+.sb-head {
+  background: var(--head-bg);
+  color: var(--head-ink);
+  border-bottom: var(--head-rule);
+  padding: var(--pad-head) var(--pad-x) 14px;
+}
+.sb-head-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+}
+.sb-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-title);
+  line-height: 1.1;
+  letter-spacing: var(--name-tracking);
+  text-transform: var(--name-transform);
+  text-shadow: var(--name-shadow);
+  -webkit-text-stroke: var(--name-stroke);
+}
+.sb-meta {
+  font-style: italic;
+  font-size: var(--fs-sm2);
+  opacity: 0.85;
+  margin-top: 2px;
+}
+.sb-body {
+  padding: var(--pad-y) var(--pad-x) calc(var(--pad-y) + 4px);
+  font-size: var(--fs);
+}
+
+/* ---- blocks ---- */
+.sb-vitals {
+  display: flex;
+  flex-wrap: wrap;
+  text-align: center;
+  border: 1px solid var(--line);
+  margin-bottom: var(--sec-gap);
+}
+.sb-vitals > div {
+  flex: 1;
+  min-width: 70px;
+  padding: 8px 4px;
+  border-radius: var(--radius-cell);
+}
+.sb-vitals > div + div {
+  border-left: 1px solid var(--line);
+}
+/* On narrow viewports (mobile GM/player apps, narrow windows) a full-width
+   character sheet can carry 8-9 vitals boxes — force them onto multiple rows
+   instead of squeezing to unreadable widths, and drop the running border
+   between boxes since it no longer aligns once they wrap. */
+@media (max-width: 640px) {
+  .sb-vitals > div {
+    flex: 1 1 30%;
+    border-left: none !important;
+    border-top: 1px solid var(--line);
+  }
+  .sb-vitals > div:nth-child(-n + 3) {
+    border-top: none;
+  }
+}
+.sb-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-label);
+  letter-spacing: 1px;
+  color: var(--label);
+  text-transform: var(--label-transform);
+}
+.sb-value {
+  font-size: var(--fs-big);
+  font-weight: 600;
+}
+
+.sb-abilities {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  text-align: center;
+  margin-bottom: var(--sec-gap);
+}
+.sb-abilities > div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cell);
+  padding: 6px 2px;
+}
+.sb-score {
+  font-size: 16px;
+  font-weight: 600;
+}
+.sb-mod {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sb-props {
+  font-size: var(--fs);
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--sec-gap);
+}
+.sb-prop-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-label2);
+  letter-spacing: 1px;
+  color: var(--label);
+  text-transform: var(--label-transform);
+}
+.sb-prop-label::after {
+  content: ":";
+}
+.mini-vitals b::after,
+.mini-abilities b::after {
+  content: ":";
+}
+
+.sb-section {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 3px;
+  margin: var(--sec-gap) 0 8px;
+  text-transform: var(--section-transform);
+}
+.sb-section:first-child {
+  margin-top: 0;
+}
+summary.sb-section {
+  cursor: pointer;
+}
+/* Spell-level headers ("Заговоры" / "N круг") — same text+underline look
+   as .sb-section instead of the boxed <details class="card"> style, so the
+   spell list reads as a section header like Снаряжение rather than a
+   separate panel. */
+.dnd-spell-level-card {
+  margin: 0;
+}
+.dnd-spell-level-summary {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 3px;
+  margin-bottom: 8px;
+  text-transform: var(--section-transform);
+  font-weight: 400;
+  cursor: pointer;
+}
+.sb-entry {
+  margin: 0 0 8px;
+  font-size: var(--fs);
+  line-height: 1.5;
+}
+.sb-entry:last-child {
+  margin-bottom: 0;
+}
+
+/* ---- character sheet ---- */
+.cs-columns {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: var(--sec-gap) 24px;
+  margin-top: 10px;
+}
+.cs-skill {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs);
+}
+.cs-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cs-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.cs-spellpanel {
+  display: flex;
+  gap: 6px 16px;
+  align-items: baseline;
+  font-size: var(--fs);
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  flex-wrap: wrap;
+}
+.cs-spellpanel > span {
+  white-space: nowrap;
+}
+.cs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs);
+  line-height: 1.45;
+}
+.cs-mt {
+  margin-top: var(--sec-gap);
+}
+
+/* ---- theme/density picker toolbar (app-specific, not from reference) ---- */
+.sb-theme-picker {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.sb-theme-picker select {
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+/* ---- Legend in the Mist: theme-driven card frame + tag colors ----
+   Layout/markup is untouched (app-specific, not from the reference file) —
+   only the frame (paper/border/radius/font) and the power/weakness tag
+   chips pick up the active statblock theme's tokens, keeping today's
+   "outlined + tinted" chip look. The power/adventure/greatness header
+   colors (litm-power-*) are a mechanic-linked cue, not decoration, and are
+   deliberately left alone here. */
+.sb-scope .litm-theme-card {
+  background: var(--paper);
+  border-color: var(--border);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+}
+.sb-scope .litm-theme-title {
+  font-family: var(--font-display);
+}
+.sb-scope .litm-tag {
+  border-color: var(--line);
+}
+.sb-scope .litm-tag-power {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+}
+.sb-scope .litm-tag-weak {
+  color: var(--muted);
+  background: color-mix(in oklab, var(--muted) 12%, transparent);
+  border-color: var(--line);
+}
+.sb-scope .litm-tag-add {
+  border-color: var(--line);
+}

@@ -1,0 +1,39 @@
+{
+  "appId": "com.rpgmanager.app.empty",
+  "productName": "RPG Manager",
+  "asar": false,
+  "directories": {
+    "output": "release/empty"
+  },
+  "files": [
+    "electron/**/*",
+    "server/dist/**/*",
+    "server/package.json",
+    "client/dist/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "server/node_modules",
+      "to": "app/server/node_modules"
+    }
+  ],
+  "win": {
+    "target": ["portable", "nsis"]
+  },
+  "portable": {
+    "artifactName": "RPG-Manager-Empty-${version}.exe"
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowToChangeInstallation": false,
+    "artifactName": "RPG-Manager-Empty-Setup-${version}.exe"
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "YOUR_GITHUB_USERNAME",
+      "repo": "YOUR_REPO_NAME"
+    }
+  ]
+}

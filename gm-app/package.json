@@ -1,0 +1,43 @@
+{
+  "name": "rpg-manager-gm-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RPG Manager — GM companion (session-prep browser + show-image push, talking to a hosted server)",
+  "main": "electron/main.js",
+  "scripts": {
+    "build:client": "cd client && npm install && npm run build",
+    "build": "npm run build:client",
+    "dist": "npm run build && electron-builder",
+    "electron": "electron .",
+    "dev:client": "cd client && npm run dev",
+    "cap:sync": "npm run build:client && npx cap sync android",
+    "cap:open:android": "npx cap open android"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.rpgmanager.gm.mobile",
+    "productName": "RPG Manager — Мастер (мобильный)",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "client/dist/**/*"
+    ],
+    "win": {
+      "target": "portable"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2"
+  }
+}

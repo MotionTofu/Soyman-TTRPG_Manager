@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+seed-full/
+*.tsbuildinfo
+
+# Local runtime data — real campaign DBs, secrets, per-machine config.
+# Never commit these; they contain the user's actual game data / auth keys.
+server/data/
+server/config/
+server/data.sqlite
+server/RPG-Vaultapp.db
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# Backups
+_backups/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Env files
+.env
+.env.*
+
+# Claude Code local state (not project source)
+.claude/
+.mcp.json

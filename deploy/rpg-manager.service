@@ -1,0 +1,24 @@
+[Unit]
+Description=RPG Manager server (hosted/remote deployment)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rpg-manager/server
+EnvironmentFile=/opt/rpg-manager/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+User=rpgmanager
+Group=rpgmanager
+
+# Basic hardening — the service only needs to read its own code and write to
+# DB_DIR/VAULT_ROOT (both live outside WorkingDirectory, so ProtectSystem
+# doesn't need an exception for them).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/rpg-manager/data /opt/rpg-manager/vault
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
