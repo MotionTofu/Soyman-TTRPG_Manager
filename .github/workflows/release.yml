@@ -1,0 +1,53 @@
+name: Release
+
+# Builds the "empty" flavor (portable + NSIS installer, no bundled
+# Системы/Сеттинги) and publishes it as a GitHub Release whenever a tag like
+# v1.2.0 is pushed. electron-updater on users' machines points at this feed.
+#
+# The "full" flavor (bundled seed data) needs a local dev DB to build from
+# (scripts/build-seed.js reads server/config/storages.json + server/data/app.db,
+# both gitignored — they're the maintainer's real campaign data) and can't run
+# in CI. Build and publish it locally instead:
+#   npm run dist:full
+#   gh release upload vX.Y.Z release/full/RPG-Manager-Full-*.exe
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install & build server
+        run: |
+          cd server
+          npm ci
+          npm run build
+
+      - name: Install & build client
+        run: |
+          cd client
+          npm ci
+          npm run build
+
+      - name: Rebuild native modules for Electron
+        run: npm run rebuild:native
+
+      - name: Build and publish (empty flavor)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --config electron-builder.empty.json --publish always
