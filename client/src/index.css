@@ -489,6 +489,12 @@ h1, h2, h3 {
   grid-template-columns: 200px 1fr 320px;
   height: 100vh;
 }
+/* The preview dock needs more room than the plain nav links it replaces —
+   compact statblock cards (ability grid, vitals row) don't fit in 200px
+   without wrapping/scrolling. */
+.app-shell-live {
+  grid-template-columns: 320px 1fr 320px;
+}
 
 .app-nav {
   position: relative;
@@ -522,8 +528,17 @@ h1, h2, h3 {
 }
 .preview-dock-card {
   padding: 10px;
-  max-height: 340px;
+  max-height: 480px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+/* Compact statblocks (ability grid, vitals row) are laid out assuming more
+   horizontal room than a 320px dock column gives them once padding is
+   subtracted. zoom scales the whole card down (Chromium/Electron-only
+   property, fine here) so it reflows narrower instead of overflowing and
+   forcing a horizontal scrollbar. */
+.preview-dock-card .sb-scope {
+  zoom: 0.8;
 }
 
 /* Decorative drift-particle field, reused behind the nav logo, section

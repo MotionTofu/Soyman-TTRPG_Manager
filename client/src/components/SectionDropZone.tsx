@@ -186,7 +186,11 @@ export const SectionDropZone = memo(function SectionDropZone({
               )}
               {entry.linkId === null && <span className="muted">из задумки</span>}
             </div>
-            {entry.linkId !== null && <button onClick={() => remove(entry.linkId!)}>✕</button>}
+            {entry.linkId !== null && (
+              <button className="comp-mini" onClick={() => remove(entry.linkId!)}>
+                ✕
+              </button>
+            )}
           </div>
         ))}
       </div>

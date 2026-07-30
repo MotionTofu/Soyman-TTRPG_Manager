@@ -52,7 +52,7 @@ export function EntityPreviewContent({
     fetchEntityDetail(type, id).then((d) => {
       if (!cancelled) setDetail(d);
     });
-    if (type === "character" || type === "being") {
+    if (type === "character" || type === "being" || type === "compendium_entry") {
       api
         .get<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`)
         .then((rows) => {
@@ -78,7 +78,7 @@ export function EntityPreviewContent({
           <strong>{name}</strong>
         </div>
         {onClose && (
-          <button type="button" onClick={onClose}>
+          <button type="button" className="comp-mini" onClick={onClose}>
             ✕
           </button>
         )}
@@ -127,6 +127,21 @@ export function EntityPreviewContent({
               <>
                 <MentionText text={String(detail.current_situation ?? "")} />
                 <MentionText text={String(detail.backstory ?? "")} />
+              </>
+            ))}
+
+          {type === "compendium_entry" &&
+            (statblock ? (
+              <DndCreatureView
+                value={parseDndStatblock(statblock) as DndCreatureData}
+                compact
+                theme={statblock.theme}
+                density={statblock.density}
+              />
+            ) : (
+              <>
+                {!!detail.kind && <span className="muted">{String(detail.kind)}</span>}
+                <MentionText text={String(detail.description ?? "")} />
               </>
             ))}
 

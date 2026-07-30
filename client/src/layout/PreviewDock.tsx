@@ -5,7 +5,7 @@ import type { SearchResult } from "../types";
 
 // Same types EntityPreviewContent knows how to render — anything else
 // dropped here is silently ignored, same as the other search-drop targets.
-const ACCEPT_TYPES = ["being", "character", "location", "artifact", "resource"];
+const ACCEPT_TYPES = ["being", "character", "location", "artifact", "resource", "compendium_entry"];
 
 // Replaces the main nav sidebar while on /sessions/:id/live (see AppShell) —
 // a GM running a session can drag creatures/locations/etc. out of search and

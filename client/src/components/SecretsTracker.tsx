@@ -117,26 +117,17 @@ function SecretCard({
   return (
     <div className="card stack" style={revealed ? { opacity: 0.7 } : undefined}>
       <div
-        className="row collapsible-header"
+        className="row"
         style={{ justifyContent: "space-between", cursor: editMode ? "default" : "pointer" }}
         onClick={() => !editMode && setExpanded((v) => !v)}
       >
-        <span className="row" style={{ alignItems: "center" }}>
-          {!editMode && (
-            <span className="comp-toggle" aria-hidden="true">
-              {expanded ? "▾" : "▸"}
-            </span>
-          )}
-          <span className="row" style={{ alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
-            <input type="checkbox" checked={revealed} onChange={toggleRevealed} />
-            {editMode ? (
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название тайны" />
-            ) : (
-              <strong style={revealed ? { textDecoration: "line-through" } : undefined}>{secret.title}</strong>
-            )}
-          </span>
-        </span>
+        {editMode ? (
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название тайны" />
+        ) : (
+          <strong style={revealed ? { textDecoration: "line-through" } : undefined}>{secret.title}</strong>
+        )}
         <button
+          className="comp-mini"
           onClick={(e) => {
             e.stopPropagation();
             onRemove(secret.id);
@@ -169,9 +160,13 @@ function SecretCard({
                 <MentionText text={secret.content} />
               </div>
             )}
-            <button onClick={() => setEditMode(true)} style={{ alignSelf: "flex-start" }}>
-              Редактировать
-            </button>
+            <div className="row" style={{ alignItems: "center", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setEditMode(true)}>Редактировать</button>
+              <label className="row" style={{ alignItems: "center", gap: 4 }}>
+                <input type="checkbox" checked={revealed} onChange={toggleRevealed} />
+                Раскрыта
+              </label>
+            </div>
           </>
         ))}
     </div>

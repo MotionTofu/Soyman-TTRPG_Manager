@@ -30,7 +30,6 @@ interface Entry {
   type: string;
   id: number;
   label: string;
-  statblockShort?: string;
   origin: string;
 }
 
@@ -63,7 +62,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
         try {
           if (other.type === "being") {
             const being = await api.get<SettingBeing>(`/setting-beings/${other.id}`);
-            return { linkId: l.id, type: other.type, id: other.id, label: being.name, statblockShort: being.statblock_short, origin: l.origin };
+            return { linkId: l.id, type: other.type, id: other.id, label: being.name, origin: l.origin };
           }
           const label = await resolveEntityLabel(other.type, other.id);
           return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin };
@@ -123,13 +122,19 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
         {entries.map((entry) => (
           <div
             key={entry.linkId}
-            className="resource-row stack"
+            className="resource-row row"
             style={{
+              justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
             }}
             title={entry.origin === "live" ? "Добавлено на ходу во время сессии" : undefined}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(SEARCH_DRAG_MIME, JSON.stringify({ type: entry.type, id: entry.id, title: entry.label }));
+              e.dataTransfer.effectAllowed = "link";
+            }}
           >
-            <div className="row" style={{ justifyContent: "space-between" }}>
+            <div className="row" style={{ minWidth: 0, flex: 1 }}>
               {DETAIL_ROUTES[entry.type] ? (
                 <button
                   type="button"
@@ -149,13 +154,10 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
               ) : (
                 <span style={{ fontWeight: 600 }}>{entry.label}</span>
               )}
-              <button onClick={() => remove(entry.linkId)}>✕</button>
             </div>
-            {entry.statblockShort && (
-              <p style={{ whiteSpace: "pre-wrap", margin: 0 }} className="muted">
-                {entry.statblockShort}
-              </p>
-            )}
+            <button className="comp-mini" onClick={() => remove(entry.linkId)}>
+              ✕
+            </button>
           </div>
         ))}
       </div>

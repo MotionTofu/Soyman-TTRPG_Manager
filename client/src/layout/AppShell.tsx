@@ -119,7 +119,7 @@ export function AppShell() {
   const [playerOpen, setPlayerOpen] = useState(false);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isLivePult ? " app-shell-live" : ""}`}>
       <div className="mobile-topbar">
         <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню">
           ☰
