@@ -38,6 +38,7 @@ export function TaskTracker({ campaignId, defaultSettingId }: Props) {
   }
 
   async function removeTask(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/campaign-entries/${id}`);
     refresh();
   }

@@ -75,6 +75,7 @@ export function LoreSection({ entityType, entityId, title, section, acceptTypes,
   }
 
   async function remove(linkId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/links/${linkId}`);
     load();
   }

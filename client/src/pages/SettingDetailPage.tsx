@@ -1010,9 +1010,10 @@ function SettingExportModal({
 }) {
   const [includeCalendar, setIncludeCalendar] = useState(false);
   const [includeResources, setIncludeResources] = useState(false);
+  const [includeImages, setIncludeImages] = useState(false);
 
   async function doExport() {
-    const include = [includeCalendar && "calendar", includeResources && "resources"]
+    const include = [includeCalendar && "calendar", includeResources && "resources", includeImages && "images"]
       .filter(Boolean)
       .join(",");
     const data = await api.get(`/settings/${settingId}/export?include=${include}`);
@@ -1042,6 +1043,14 @@ function SettingExportModal({
             onChange={(e) => setIncludeResources(e.target.checked)}
           />
           Артефакты и ресурсы
+        </label>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={includeImages}
+            onChange={(e) => setIncludeImages(e.target.checked)}
+          />
+          Изображения, карты локаций (с пинами) и звуковые файлы (значительно увеличит размер файла)
         </label>
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <button onClick={onClose}>Отмена</button>

@@ -5,7 +5,7 @@ import path from "path";
 import { db } from "../db/db";
 import { communityFolder, locationFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
-import { withAvatarUrl } from "./settingBeings";
+import { withAvatarUrl, getCreatureMetaByOwner, getLocations } from "./settingBeings";
 
 export const settingCommunitiesRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -96,21 +96,41 @@ settingCommunitiesRouter.get("/:id", (req, res) => {
   // Members of this community AND all its descendants — membership in a
   // sub-community (e.g. "Салионцы") implies membership in the parent
   // ("Сандарцы"), so the parent's roster shows everyone underneath it too.
-  const members = (
-    db
+  const memberRows = db
+    .prepare(
+      `WITH RECURSIVE descendants(id) AS (
+         SELECT id FROM setting_communities WHERE id = ?
+         UNION ALL
+         SELECT sc.id FROM setting_communities sc JOIN descendants d ON sc.parent_id = d.id
+       )
+       SELECT DISTINCT b.* FROM being_communities bc
+       JOIN setting_beings b ON b.id = bc.being_id
+       WHERE bc.community_id IN (SELECT id FROM descendants) AND b.archived_at IS NULL
+       ORDER BY b.name`
+    )
+    .all(req.params.id) as { id: number; avatar_image_path: string | null; thumbnail_image_path: string | null; tags: string }[];
+  const memberIds = memberRows.map((r) => r.id);
+  const creatureMeta = getCreatureMetaByOwner("being", memberIds);
+  // Every faction each member belongs to (not just this one) — the "belongs
+  // to several factions" badge in the UI compares this count, not just
+  // membership in the community being viewed.
+  const communityCountByBeing = new Map<number, number>();
+  if (memberIds.length > 0) {
+    const placeholders = memberIds.map(() => "?").join(",");
+    const rows2 = db
       .prepare(
-        `WITH RECURSIVE descendants(id) AS (
-           SELECT id FROM setting_communities WHERE id = ?
-           UNION ALL
-           SELECT sc.id FROM setting_communities sc JOIN descendants d ON sc.parent_id = d.id
-         )
-         SELECT DISTINCT b.* FROM being_communities bc
-         JOIN setting_beings b ON b.id = bc.being_id
-         WHERE bc.community_id IN (SELECT id FROM descendants) AND b.archived_at IS NULL
-         ORDER BY b.name`
+        `SELECT being_id, COUNT(DISTINCT community_id) as cnt FROM being_communities
+         WHERE being_id IN (${placeholders}) GROUP BY being_id`
       )
-      .all(req.params.id) as { avatar_image_path: string | null; thumbnail_image_path: string | null; tags: string }[]
-  ).map(withAvatarUrl);
+      .all(...memberIds) as { being_id: number; cnt: number }[];
+    for (const r of rows2) communityCountByBeing.set(r.being_id, r.cnt);
+  }
+  const members = memberRows.map(withAvatarUrl).map((b) => ({
+    ...b,
+    creature_meta: creatureMeta.get(b.id) ?? null,
+    community_count: communityCountByBeing.get(b.id) ?? 1,
+    locations: getLocations(b.id),
+  }));
 
   const chapters = db
     .prepare("SELECT * FROM community_chapters WHERE community_id = ? ORDER BY created_at")

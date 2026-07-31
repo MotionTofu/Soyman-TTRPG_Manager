@@ -81,6 +81,7 @@ export function ChapterList<T extends ChapterLike>({
   }
 
   async function removeChapter(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`${apiBase}/chapters/${id}`);
     onChange();
   }
@@ -192,7 +193,7 @@ function ChapterCard<T extends ChapterLike>({
         {chapter.campaign_name && <span className="badge tag">{chapter.campaign_name}</span>}
         {visibilityToggle && (
           <button
-            className="muted"
+            className={`visibility-toggle${chapter.visible_to_players ? " is-visible" : ""}`}
             title={chapter.visible_to_players ? "Видно игрокам — нажмите, чтобы скрыть" : "Скрыто от игроков — нажмите, чтобы открыть"}
             onClick={toggleVisibleToPlayers}
           >

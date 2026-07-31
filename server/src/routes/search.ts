@@ -34,11 +34,15 @@ function snippet(text: string, q: string): string {
 
 searchRouter.get("/", (req, res) => {
   const q = ((req.query.q as string) || "").trim();
+  const qLower = q.toLowerCase();
   const typesParam = (req.query.types as string) || "";
   const requested = typesParam ? typesParam.split(",") : null;
   const systemIdParam = req.query.system_id as string | undefined;
   const systemId = systemIdParam ? Number(systemIdParam) : null;
-  const like = `%${q}%`;
+  // Bound against lower_u(column) — a custom Unicode-aware lower() (see
+  // db.ts) — since SQLite's own LIKE/LOWER only case-fold ASCII and would
+  // otherwise silently miss "Москва" when the user types "москва".
+  const like = `%${qLower}%`;
   const results: SearchResult[] = [];
   const seen = new Set<string>();
 
@@ -53,7 +57,7 @@ searchRouter.get("/", (req, res) => {
 
   if (wantsType("campaign")) {
     const rows = db
-      .prepare("SELECT id, name FROM campaigns WHERE name LIKE ? AND archived_at IS NULL")
+      .prepare("SELECT id, name FROM campaigns WHERE lower_u(name) LIKE ? AND archived_at IS NULL")
       .all(like) as { id: number; name: string }[];
     rows.forEach((r) => push({ type: "campaign", id: r.id, title: r.name }));
 
@@ -64,7 +68,7 @@ searchRouter.get("/", (req, res) => {
                 (p.adventure_challenge || ' ' || p.gameplay_styles || ' ' || p.background || ' ' ||
                  p.adventure_stakes_hooks || ' ' || p.threads_clues_lore) as blob
          FROM preproduction p JOIN campaigns c ON c.id = p.campaign_id
-         WHERE blob LIKE ? AND c.archived_at IS NULL`
+         WHERE lower_u(blob) LIKE ? AND c.archived_at IS NULL`
       )
       .all(like) as { id: number; name: string; blob: string }[];
     pre.forEach((r) =>
@@ -76,7 +80,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT e.campaign_id as id, c.name, (e.title || ' ' || e.content) as blob
          FROM campaign_entries e JOIN campaigns c ON c.id = e.campaign_id
-         WHERE blob LIKE ? AND c.archived_at IS NULL`
+         WHERE lower_u(blob) LIKE ? AND c.archived_at IS NULL`
       )
       .all(like) as { id: number; name: string; blob: string }[];
     entries.forEach((r) =>
@@ -87,7 +91,7 @@ searchRouter.get("/", (req, res) => {
   if (wantsType("setting")) {
     const rows = db
       .prepare(
-        "SELECT id, name, description FROM settings WHERE (name LIKE ? OR description LIKE ?) AND archived_at IS NULL"
+        "SELECT id, name, description FROM settings WHERE (lower_u(name) LIKE ? OR lower_u(description) LIKE ?) AND archived_at IS NULL"
       )
       .all(like, like) as { id: number; name: string; description: string }[];
     rows.forEach((r) =>
@@ -96,7 +100,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.name,
         subtitle:
-          r.description && r.description.toLowerCase().includes(q.toLowerCase())
+          r.description && r.description.toLowerCase().includes(qLower)
             ? snippet(r.description, q)
             : undefined,
       })
@@ -107,7 +111,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT e.setting_id as id, s.name, (e.title || ' ' || e.content) as blob
          FROM setting_entries e JOIN settings s ON s.id = e.setting_id
-         WHERE blob LIKE ? AND s.archived_at IS NULL`
+         WHERE lower_u(blob) LIKE ? AND s.archived_at IS NULL`
       )
       .all(like) as { id: number; name: string; blob: string }[];
     settingEntries.forEach((r) =>
@@ -118,7 +122,7 @@ searchRouter.get("/", (req, res) => {
   if (wantsType("player")) {
     const rows = db
       .prepare(
-        "SELECT id, name, notes FROM players WHERE (name LIKE ? OR notes LIKE ?) AND archived_at IS NULL"
+        "SELECT id, name, notes FROM players WHERE (lower_u(name) LIKE ? OR lower_u(notes) LIKE ?) AND archived_at IS NULL"
       )
       .all(like, like) as { id: number; name: string; notes: string }[];
     rows.forEach((r) =>
@@ -127,7 +131,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.name,
         subtitle:
-          r.notes && r.notes.toLowerCase().includes(q.toLowerCase())
+          r.notes && r.notes.toLowerCase().includes(qLower)
             ? snippet(r.notes, q)
             : undefined,
       })
@@ -139,7 +143,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT ch.id, ch.character_name, c.name as campaign_name
          FROM characters ch LEFT JOIN campaigns c ON c.id = ch.campaign_id
-         WHERE ch.character_name LIKE ? AND ch.archived_at IS NULL`
+         WHERE lower_u(ch.character_name) LIKE ? AND ch.archived_at IS NULL`
       )
       .all(like) as { id: number; character_name: string; campaign_name: string | null }[];
     rows.forEach((r) =>
@@ -156,7 +160,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT ch.character_id as id, c.character_name, (ch.title || ' ' || ch.content) as blob
          FROM character_chapters ch JOIN characters c ON c.id = ch.character_id
-         WHERE blob LIKE ? AND c.archived_at IS NULL`
+         WHERE lower_u(blob) LIKE ? AND c.archived_at IS NULL`
       )
       .all(like) as { id: number; character_name: string; blob: string }[];
     chapters.forEach((r) =>
@@ -166,7 +170,7 @@ searchRouter.get("/", (req, res) => {
     const conn = db
       .prepare(
         `SELECT id, character_name, connections_notes FROM characters
-         WHERE connections_notes LIKE ? AND archived_at IS NULL`
+         WHERE lower_u(connections_notes) LIKE ? AND archived_at IS NULL`
       )
       .all(like) as { id: number; character_name: string; connections_notes: string }[];
     conn.forEach((r) =>
@@ -182,7 +186,7 @@ searchRouter.get("/", (req, res) => {
   if (wantsType("resource")) {
     const rows = db
       .prepare(
-        "SELECT id, name, scope, notes, tags FROM resources WHERE (name LIKE ? OR notes LIKE ? OR tags LIKE ?) AND archived_at IS NULL"
+        "SELECT id, name, scope, notes, tags FROM resources WHERE (lower_u(name) LIKE ? OR lower_u(notes) LIKE ? OR lower_u(tags) LIKE ?) AND archived_at IS NULL"
       )
       .all(like, like, like) as {
       id: number;
@@ -197,7 +201,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.name,
         subtitle:
-          r.notes && r.notes.toLowerCase().includes(q.toLowerCase())
+          r.notes && r.notes.toLowerCase().includes(qLower)
             ? snippet(r.notes, q)
             : r.scope,
       })
@@ -207,7 +211,7 @@ searchRouter.get("/", (req, res) => {
   if (wantsType("mastering")) {
     const rows = db
       .prepare(
-        "SELECT id, title, category, content FROM mastering_notes WHERE (title LIKE ? OR content LIKE ?) AND archived_at IS NULL"
+        "SELECT id, title, category, content FROM mastering_notes WHERE (lower_u(title) LIKE ? OR lower_u(content) LIKE ?) AND archived_at IS NULL"
       )
       .all(like, like) as { id: number; title: string; category: string; content: string }[];
     rows.forEach((r) =>
@@ -216,7 +220,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.title,
         subtitle:
-          r.content && r.content.toLowerCase().includes(q.toLowerCase())
+          r.content && r.content.toLowerCase().includes(qLower)
             ? snippet(r.content, q)
             : r.category,
       })
@@ -228,7 +232,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT sl.id, sl.name, sl.kind, sl.description, s.name as setting_name
          FROM setting_locations sl JOIN settings s ON s.id = sl.setting_id
-         WHERE (sl.name LIKE ? OR sl.description LIKE ?) AND sl.archived_at IS NULL`
+         WHERE (lower_u(sl.name) LIKE ? OR lower_u(sl.description) LIKE ?) AND sl.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; kind: string; description: string; setting_name: string }[];
     rows.forEach((r) =>
@@ -237,7 +241,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.name,
         subtitle:
-          r.description && r.description.toLowerCase().includes(q.toLowerCase())
+          r.description && r.description.toLowerCase().includes(qLower)
             ? snippet(r.description, q)
             : r.kind || "location",
         context: `Сеттинг: ${r.setting_name}`,
@@ -248,7 +252,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT sl.id, sl.name, (lc.title || ' ' || lc.content) as blob
          FROM location_chapters lc JOIN setting_locations sl ON sl.id = lc.location_id
-         WHERE blob LIKE ? AND sl.archived_at IS NULL`
+         WHERE lower_u(blob) LIKE ? AND sl.archived_at IS NULL`
       )
       .all(like) as { id: number; name: string; blob: string }[];
     locationChapters.forEach((r) =>
@@ -262,7 +266,7 @@ searchRouter.get("/", (req, res) => {
         `SELECT sb.id, sb.name, sb.category, s.name as setting_name,
                 (sb.history || ' ' || sb.behavior || ' ' || sb.statblock_short || ' ' || sb.statblock_full) as blob
          FROM setting_beings sb JOIN settings s ON s.id = sb.setting_id
-         WHERE (sb.name LIKE ? OR blob LIKE ?) AND sb.archived_at IS NULL`
+         WHERE (lower_u(sb.name) LIKE ? OR lower_u(blob) LIKE ?) AND sb.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; category: string; setting_name: string; blob: string }[];
     rows.forEach((r) =>
@@ -271,7 +275,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.name,
         subtitle:
-          r.blob && r.blob.toLowerCase().includes(q.toLowerCase())
+          r.blob && r.blob.toLowerCase().includes(qLower)
             ? snippet(r.blob, q)
             : r.category,
         context: `Сеттинг: ${r.setting_name}`,
@@ -284,7 +288,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT a.id, a.name, s.name as setting_name, (a.owner || ' ' || a.power || ' ' || a.history || ' ' || a.notes) as blob
          FROM artifacts a JOIN settings s ON s.id = a.setting_id
-         WHERE (a.name LIKE ? OR blob LIKE ?) AND a.archived_at IS NULL`
+         WHERE (lower_u(a.name) LIKE ? OR lower_u(blob) LIKE ?) AND a.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; setting_name: string; blob: string }[];
     rows.forEach((r) =>
@@ -293,7 +297,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.name,
         subtitle:
-          r.blob && r.blob.toLowerCase().includes(q.toLowerCase())
+          r.blob && r.blob.toLowerCase().includes(qLower)
             ? snippet(r.blob, q)
             : undefined,
         context: `Сеттинг: ${r.setting_name}`,
@@ -307,7 +311,7 @@ searchRouter.get("/", (req, res) => {
         `SELECT sc.id, sc.name, s.name as setting_name,
                 (sc.description || ' ' || sc.history || ' ' || sc.current_situation || ' ' || sc.features || ' ' || sc.goals) as blob
          FROM setting_communities sc JOIN settings s ON s.id = sc.setting_id
-         WHERE (sc.name LIKE ? OR blob LIKE ?) AND sc.archived_at IS NULL`
+         WHERE (lower_u(sc.name) LIKE ? OR lower_u(blob) LIKE ?) AND sc.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; setting_name: string; blob: string }[];
     rows.forEach((r) =>
@@ -316,7 +320,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: r.name,
         subtitle:
-          r.blob && r.blob.toLowerCase().includes(q.toLowerCase())
+          r.blob && r.blob.toLowerCase().includes(qLower)
             ? snippet(r.blob, q)
             : undefined,
         context: `Сеттинг: ${r.setting_name}`,
@@ -327,7 +331,7 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT sc.id, sc.name, (cc.title || ' ' || cc.content) as blob
          FROM community_chapters cc JOIN setting_communities sc ON sc.id = cc.community_id
-         WHERE blob LIKE ? AND sc.archived_at IS NULL`
+         WHERE lower_u(blob) LIKE ? AND sc.archived_at IS NULL`
       )
       .all(like) as { id: number; name: string; blob: string }[];
     communityChapters.forEach((r) =>
@@ -342,7 +346,7 @@ searchRouter.get("/", (req, res) => {
                 (COALESCE(s.title,'') || ' ' || s.idea_notes || ' ' || s.main_events) as blob
          FROM sessions s
          JOIN campaigns c ON c.id = s.campaign_id
-         WHERE (c.name LIKE ? OR s.date LIKE ? OR blob LIKE ?) AND s.archived_at IS NULL`
+         WHERE (lower_u(c.name) LIKE ? OR lower_u(s.date) LIKE ? OR lower_u(blob) LIKE ?) AND s.archived_at IS NULL`
       )
       .all(like, like, like) as {
       id: number;
@@ -356,7 +360,7 @@ searchRouter.get("/", (req, res) => {
         id: r.id,
         title: `${r.campaign_name} — ${r.date}`,
         subtitle:
-          r.blob && r.blob.trim() && r.blob.toLowerCase().includes(q.toLowerCase())
+          r.blob && r.blob.trim() && r.blob.toLowerCase().includes(qLower)
             ? snippet(r.blob, q)
             : "session",
       })
@@ -365,7 +369,7 @@ searchRouter.get("/", (req, res) => {
 
   if (wantsType("compendium_entry")) {
     const kindParam = req.query.kind as string | undefined;
-    const clauses = ["e.name LIKE ?"];
+    const clauses = ["lower_u(e.name) LIKE ?"];
     const args: (string | number)[] = [like];
     if (systemId != null) {
       clauses.push("e.system_id = ?");
@@ -418,6 +422,19 @@ searchRouter.get("/", (req, res) => {
       });
     });
   }
+
+  // Rank results so exact/prefix name matches surface above matches that
+  // only hit deep in a description/notes blob — previously results were in
+  // whatever order each type's query happened to run, so a long note
+  // mentioning the query could outrank the entity actually named for it.
+  const rank = (r: SearchResult): number => {
+    const title = r.title.toLowerCase();
+    if (title === qLower) return 0;
+    if (title.startsWith(qLower)) return 1;
+    if (title.includes(qLower)) return 2;
+    return 3; // matched only in subtitle/blob
+  };
+  results.sort((a, b) => rank(a) - rank(b));
 
   res.json(results);
 });

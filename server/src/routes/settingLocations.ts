@@ -11,7 +11,7 @@ import {
 } from "../services/filesystem";
 import { renameEntityFolder, moveEntityFolder } from "../services/vaultPaths";
 import { removeOrArchive, storeDeduped } from "../services/vaultDedup";
-import { withAvatarUrl } from "./settingBeings";
+import { withAvatarUrl, getCreatureMetaByOwner, getLocations } from "./settingBeings";
 
 export const settingLocationsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -111,15 +111,90 @@ settingLocationsRouter.get("/:id", (req, res) => {
     .prepare("SELECT * FROM location_chapters WHERE location_id = ? ORDER BY created_at")
     .all(req.params.id);
 
-  const inhabitantBeings = (
+  // Attaches each being's faction membership (for the Обитатели tab's
+  // group-by-faction view) and dnd_creature meta (type/size/alignment line).
+  function withBeingExtras<
+    T extends { id: number; avatar_image_path: string | null; thumbnail_image_path: string | null; tags: string }
+  >(rows: T[]) {
+    const ids = rows.map((r) => r.id);
+    const creatureMeta = getCreatureMetaByOwner("being", ids);
+    const communitiesByBeing = new Map<number, { id: number; name: string }[]>();
+    if (ids.length > 0) {
+      const placeholders = ids.map(() => "?").join(",");
+      const rows2 = db
+        .prepare(
+          `SELECT bc.being_id, sc.id, sc.name FROM being_communities bc
+           JOIN setting_communities sc ON sc.id = bc.community_id
+           WHERE bc.being_id IN (${placeholders}) AND sc.archived_at IS NULL ORDER BY sc.name`
+        )
+        .all(...ids) as { being_id: number; id: number; name: string }[];
+      for (const r of rows2) {
+        const list = communitiesByBeing.get(r.being_id) ?? [];
+        list.push({ id: r.id, name: r.name });
+        communitiesByBeing.set(r.being_id, list);
+      }
+    }
+    return rows.map(withAvatarUrl).map((b) => ({
+      ...b,
+      communities: communitiesByBeing.get(b.id) ?? [],
+      creature_meta: creatureMeta.get(b.id) ?? null,
+      locations: getLocations(b.id),
+    }));
+  }
+
+  const inhabitantBeings = withBeingExtras(
     db
       .prepare(
         `SELECT b.* FROM being_locations bl
          JOIN setting_beings b ON b.id = bl.being_id
          WHERE bl.location_id = ? AND b.archived_at IS NULL ORDER BY b.name`
       )
-      .all(req.params.id) as { avatar_image_path: string | null; thumbnail_image_path: string | null; tags: string }[]
-  ).map(withAvatarUrl);
+      .all(req.params.id) as { id: number; avatar_image_path: string | null; thumbnail_image_path: string | null; tags: string }[]
+  );
+
+  // Beings from nested (descendant) locations, opt-in via ?nested=1 — each
+  // tagged with the names of the specific descendant locations they
+  // actually inhabit, shown as "(location)" suffixes in the UI. Excludes
+  // beings already listed directly above.
+  let nestedInhabitantBeings: ReturnType<typeof withBeingExtras> = [];
+  if (req.query.nested === "1") {
+    const directIds = new Set(inhabitantBeings.map((b) => b.id));
+    const descendantRows = db
+      .prepare(
+        `WITH RECURSIVE descendants(id) AS (
+           SELECT id FROM setting_locations WHERE parent_id = ?
+           UNION ALL
+           SELECT sl.id FROM setting_locations sl JOIN descendants d ON sl.parent_id = d.id
+         )
+         SELECT b.*, l.name as loc_name FROM being_locations bl
+         JOIN setting_beings b ON b.id = bl.being_id
+         JOIN setting_locations l ON l.id = bl.location_id
+         WHERE bl.location_id IN (SELECT id FROM descendants) AND b.archived_at IS NULL
+         ORDER BY b.name`
+      )
+      .all(req.params.id) as ({
+      id: number;
+      avatar_image_path: string | null;
+      thumbnail_image_path: string | null;
+      tags: string;
+      loc_name: string;
+    })[];
+    const locationNamesByBeing = new Map<number, string[]>();
+    for (const r of descendantRows) {
+      if (directIds.has(r.id)) continue;
+      const list = locationNamesByBeing.get(r.id) ?? [];
+      if (!list.includes(r.loc_name)) list.push(r.loc_name);
+      locationNamesByBeing.set(r.id, list);
+    }
+    const dedupedRows = descendantRows.filter(
+      (r, i) => !directIds.has(r.id) && descendantRows.findIndex((r2) => r2.id === r.id) === i
+    );
+    nestedInhabitantBeings = withBeingExtras(dedupedRows).map((b) => ({
+      ...b,
+      location_names: locationNamesByBeing.get(b.id) ?? [],
+    }));
+  }
+
   const inhabitantCommunities = db
     .prepare(
       `SELECT c.id, c.name FROM community_locations cl
@@ -139,6 +214,7 @@ settingLocationsRouter.get("/:id", (req, res) => {
     pins,
     chapters,
     inhabitant_beings: inhabitantBeings,
+    nested_inhabitant_beings: nestedInhabitantBeings,
     inhabitant_communities: inhabitantCommunities,
     important_dates: importantDates,
   });

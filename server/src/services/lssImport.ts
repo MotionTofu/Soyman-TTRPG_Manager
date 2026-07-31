@@ -4,6 +4,56 @@
 // rather than plain strings — most of this file is about flattening those
 // into readable text for a statblock card.
 
+import { db } from "../db/db";
+
+interface CompendiumEntryRow {
+  id: number;
+  parent_id: number | null;
+  kind: string;
+  name: string;
+  data: string;
+}
+
+// Best-effort name match against the D&D 5.5 compendium, so imported
+// race/class/subclass/background become real links (clickable/expandable
+// like a manually-picked character) instead of free text with null ids.
+// Mirrors the manual pickers in dndCompendium.ts, but done directly against
+// the DB (this parser runs server-side and has no HTTP round-trip to make).
+function findDndSystemIdSync(): number | null {
+  const row = db.prepare("SELECT id FROM systems WHERE name = ?").get("D&D 5.5") as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+function normalizeForMatch(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function findEntryByName(
+  systemId: number,
+  sectionKind: string,
+  entryKind: string,
+  name: string,
+  parentId: number | null = null
+): CompendiumEntryRow | null {
+  if (!name.trim()) return null;
+  const target = normalizeForMatch(name);
+  const sections = db
+    .prepare("SELECT id FROM system_sections WHERE system_id = ? AND kind = ?")
+    .all(systemId, sectionKind) as { id: number }[];
+  for (const section of sections) {
+    const entries = db
+      .prepare(
+        parentId === null
+          ? "SELECT id, parent_id, kind, name, data FROM compendium_entries WHERE section_id = ? AND kind = ? AND parent_id IS NULL"
+          : "SELECT id, parent_id, kind, name, data FROM compendium_entries WHERE section_id = ? AND kind = ? AND parent_id = ?"
+      )
+      .all(...(parentId === null ? [section.id, entryKind] : [section.id, entryKind, parentId])) as CompendiumEntryRow[];
+    const match = entries.find((e) => normalizeForMatch(e.name) === target);
+    if (match) return match;
+  }
+  return null;
+}
+
 interface ProseNode {
   type?: string;
   text?: string;
@@ -236,28 +286,65 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     })
     .filter(Boolean);
 
+  // Best-effort link-up against the compendium, so the imported class/
+  // species/background aren't just inert free text — see findEntryByName.
+  const dndSystemId = findDndSystemIdSync();
+  let raceId: number | null = null;
+  let raceTypeName = "";
+  let classId: number | null = null;
+  let subclassId: number | null = null;
+  let skillChoiceOptions: string[] = [];
+  let skillChoiceCount = 0;
+  let spellcastingAbility = "";
+  let backgroundId: number | null = null;
+  let backgroundSkillNames: string[] = [];
+  if (dndSystemId != null) {
+    const raceEntry = findEntryByName(dndSystemId, "species", "species", info.race?.value ?? "");
+    if (raceEntry) {
+      raceId = raceEntry.id;
+      const data = JSON.parse(raceEntry.data || "{}");
+      raceTypeName = data.creature_type?.name ?? "";
+    }
+    const classEntry = findEntryByName(dndSystemId, "class", "class", info.charClass?.value ?? "");
+    if (classEntry) {
+      classId = classEntry.id;
+      const data = JSON.parse(classEntry.data || "{}");
+      skillChoiceOptions = Array.isArray(data.skill_choice_options) ? data.skill_choice_options : [];
+      skillChoiceCount = typeof data.skill_choice_count === "number" ? data.skill_choice_count : 0;
+      spellcastingAbility = typeof data.spellcasting_ability === "string" ? data.spellcasting_ability : "";
+      const subclassEntry = findEntryByName(dndSystemId, "class", "subclass", info.charSubclass?.value ?? "", classId);
+      if (subclassEntry) subclassId = subclassEntry.id;
+    }
+    const backgroundEntry = findEntryByName(dndSystemId, "background", "background", info.background?.value ?? "");
+    if (backgroundEntry) {
+      backgroundId = backgroundEntry.id;
+      const data = JSON.parse(backgroundEntry.data || "{}");
+      backgroundSkillNames = Array.isArray(data.skills) ? data.skills : [];
+    }
+  }
+
   const characterData = {
-    systemId: null,
+    systemId: dndSystemId,
     characterName: name,
     playerName: "",
     classes: [
       {
-        classId: null,
+        classId,
         className: info.charClass?.value ?? "",
-        subclassId: null,
+        subclassId,
         subclassName: info.charSubclass?.value ?? "",
         level,
-        skillChoiceOptions: [],
-        skillChoiceCount: 0,
-        spellcastingAbility: "",
+        skillChoiceOptions,
+        skillChoiceCount,
+        spellcastingAbility,
       },
     ],
-    raceId: null,
+    raceId,
     raceName: info.race?.value ?? "",
-    raceTypeName: "",
-    backgroundId: null,
+    raceTypeName,
+    backgroundId,
     backgroundName: info.background?.value ?? "",
-    backgroundSkillNames: [],
+    backgroundSkillNames,
     alignment: info.alignment?.value ?? "",
     experiencePoints: "",
     abilities,

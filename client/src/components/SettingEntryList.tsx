@@ -33,6 +33,7 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
   }
 
   async function removeEntry(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/setting-entries/${id}`);
     refresh();
   }

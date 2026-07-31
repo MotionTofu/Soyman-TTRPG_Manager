@@ -16,6 +16,8 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { TagChips } from "../components/TagChips";
 import { LocationCascadePicker } from "../components/LocationCascadePicker";
+import { EditableTextCard } from "../components/EditableTextCard";
+import { loadThumbnailStyles } from "../thumbnailStyles";
 import type {
   Campaign,
   DateRecurrence,
@@ -78,6 +80,7 @@ export function BeingDetailPage() {
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   const calendar = useSettingCalendar(being?.setting_id);
+  const thumbnailStyles = loadThumbnailStyles();
   const avatarCrop = useImageCrop("square", handleAvatarChange);
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
 
@@ -110,6 +113,11 @@ export function BeingDetailPage() {
 
   async function saveTags(tags: string[]) {
     await api.put(`/setting-beings/${beingId}`, { tags });
+    refresh();
+  }
+
+  async function saveDescription(value: string) {
+    await api.put(`/setting-beings/${beingId}`, { description: value });
     refresh();
   }
 
@@ -187,6 +195,7 @@ export function BeingDetailPage() {
   }
 
   async function removeImportantDate(dateId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/setting-beings/important-dates/${dateId}`);
     refresh();
   }
@@ -307,6 +316,13 @@ export function BeingDetailPage() {
               <h1>{being.name}</h1>
               <EntityTypeChip type="being" />
             </div>
+            {being.creature_meta && (
+              <div className="muted" style={{ fontSize: 12 }}>
+                {[being.creature_meta.size, being.creature_meta.creatureType, being.creature_meta.alignment]
+                  .filter((p) => p && p.trim())
+                  .join(", ")}
+              </div>
+            )}
             <div className="row">
               <span className="badge tag">{CATEGORY_LABELS[being.category]}</span>
               {being.locations.map((l) => (
@@ -356,6 +372,18 @@ export function BeingDetailPage() {
 
       {tab === "Досье" && (
         <div className="stack">
+          <EditableTextCard
+            title="Описание"
+            help="Короткая сводка — тоже используется как краткое описание в раскрываемых карточках (Обитатели, Представители)."
+            value={being.description}
+            onSave={saveDescription}
+            rows={4}
+            entityType="being"
+            entityId={beingId}
+            defaultSettingId={being.setting_id}
+            collapsible
+            defaultOpen
+          />
           <details className="card">
             <summary className="sb-section" style={{ margin: 0 }}>
               История
@@ -452,19 +480,38 @@ export function BeingDetailPage() {
               + Добавить
             </button>
           </div>
-          <div className="grid-cards">
-            {being.locations.map((l) => (
-              <div key={l.id} className="card">
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <Link to={`/locations/${l.id}`}>
-                    <h3>{l.name}</h3>
-                  </Link>
-                  <button className="danger" onClick={() => removeLocation(l.id)}>
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="entity-row-list">
+            {being.locations.map((l) => {
+              const full = settingLocations.find((loc) => loc.id === l.id);
+              const url = full?.thumbnail_image_url || full?.avatar_image_url;
+              const isBg = thumbnailStyles.locations === "background" && !!url;
+              return (
+                <Link
+                  key={l.id}
+                  to={`/locations/${l.id}`}
+                  className={`entity-row${isBg ? " entity-row-bg" : ""}`}
+                  style={isBg ? { backgroundImage: `url("${url}")` } : undefined}
+                >
+                  {thumbnailStyles.locations === "banner" && url && (
+                    <img src={url} alt="" className="entity-row-thumb" />
+                  )}
+                  <span className="entity-row-name">{l.name}</span>
+                  <span className="muted">{full?.kind}</span>
+                  <span className="entity-row-actions">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        removeLocation(l.id);
+                      }}
+                    >
+                      Убрать отсюда
+                    </button>
+                  </span>
+                </Link>
+              );
+            })}
             {being.locations.length === 0 && <p className="muted">Мест обитания пока нет.</p>}
           </div>
         </div>

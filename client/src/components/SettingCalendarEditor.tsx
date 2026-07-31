@@ -127,7 +127,13 @@ export function SettingCalendarEditor({
                 )
               }
             />
-            <button className="danger" onClick={() => setMonths((prev) => prev.filter((_, j) => j !== i))}>
+            <button
+              className="danger"
+              onClick={() => {
+                if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+                setMonths((prev) => prev.filter((_, j) => j !== i));
+              }}
+            >
               ✕
             </button>
           </div>
@@ -149,7 +155,13 @@ export function SettingCalendarEditor({
                 setWeekdays((prev) => prev.map((x, j) => (j === i ? { name: e.target.value } : x)))
               }
             />
-            <button className="danger" onClick={() => setWeekdays((prev) => prev.filter((_, j) => j !== i))}>
+            <button
+              className="danger"
+              onClick={() => {
+                if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+                setWeekdays((prev) => prev.filter((_, j) => j !== i));
+              }}
+            >
               ✕
             </button>
           </div>

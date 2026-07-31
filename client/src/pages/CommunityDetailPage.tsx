@@ -166,6 +166,7 @@ export function CommunityDetailPage() {
   }
 
   async function removeImportantDate(dateId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/setting-communities/important-dates/${dateId}`);
     refresh();
   }
@@ -405,6 +406,7 @@ export function CommunityDetailPage() {
             onDelete={removeMember}
             deleteLabel="Убрать отсюда"
             emptyLabel="Участников пока нет."
+            getFactionCount={(b) => b.community_count}
           />
         </div>
       )}

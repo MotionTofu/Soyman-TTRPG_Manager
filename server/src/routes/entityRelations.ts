@@ -3,13 +3,15 @@ import { db } from "../db/db";
 
 export const entityRelationsRouter = Router();
 
-// Only these three participate in typed relations today (beings, player
-// characters, factions/communities) — see the user's original ask: "личности
-// и фракции". Extending this set later just means adding a row here.
+// Only these participate in typed relations today (beings, player
+// characters, factions/communities, and compendium monster templates) — see
+// the user's original ask: "личности и фракции". Extending this set later
+// just means adding a row here.
 const ENTITY_TABLES: Record<string, { table: string; nameCol: string }> = {
   being: { table: "setting_beings", nameCol: "name" },
   character: { table: "characters", nameCol: "character_name" },
   community: { table: "setting_communities", nameCol: "name" },
+  compendium_entry: { table: "compendium_entries", nameCol: "name" },
 };
 
 function resolveName(type: string, id: number): string | null {

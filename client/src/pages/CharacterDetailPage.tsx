@@ -140,6 +140,7 @@ export function CharacterDetailPage() {
   }
 
   async function removeImportantDate(dateId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/characters/important-dates/${dateId}`);
     refresh();
   }

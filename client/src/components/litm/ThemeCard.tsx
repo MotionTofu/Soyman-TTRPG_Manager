@@ -47,6 +47,7 @@ function ImprovementsEdit({
     onChange([...items, { text: "", active: true }]);
   }
   function remove(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange(items.filter((_, idx) => idx !== i));
   }
   return (

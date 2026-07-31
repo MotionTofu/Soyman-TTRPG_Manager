@@ -169,7 +169,13 @@ export const KIND_DEFS: Record<string, KindDef> = {
     label: "Заклинание",
     hasLevel: true,
     fields: [
-      { key: "casting_time", label: "Время накладывания", type: "text" },
+      {
+        key: "casting_timing",
+        label: "Время накладывания",
+        type: "select",
+        options: ["Действие", "Бонусное действие", "Реакция", "Иное"],
+      },
+      { key: "casting_timing_other", label: "Если «Иное» — сколько (напр. «10 минут»)", type: "text" },
       { key: "range", label: "Дистанция", type: "text" },
       { key: "duration", label: "Длительность", type: "text" },
       { key: "category", label: "Категория", type: "select", options: [...SPELL_CATEGORIES] },

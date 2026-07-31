@@ -31,7 +31,7 @@ function parseTags(raw: string | string[] | undefined): string[] {
   }
 }
 
-function getLocations(beingId: string | number) {
+export function getLocations(beingId: string | number) {
   return db
     .prepare(
       `SELECT l.id, l.name FROM being_locations bl
@@ -39,6 +39,43 @@ function getLocations(beingId: string | number) {
        WHERE bl.being_id = ? AND l.archived_at IS NULL ORDER BY l.name`
     )
     .all(beingId);
+}
+
+export interface CreatureMeta {
+  size: string;
+  creatureType: string;
+  alignment: string;
+}
+
+// Small gray "Тип существа, размер, мировоззрение" line shown under a
+// being's name — pulled from its dnd_creature statblock (if any) rather than
+// stored redundantly on setting_beings, so it stays in sync with whatever
+// the statblock actually says. Batched (one query for a whole list) so list
+// endpoints (Население, Обитатели, Представители) don't do it per-row.
+export function getCreatureMetaByOwner(ownerType: string, ownerIds: (number | string)[]): Map<number, CreatureMeta> {
+  const map = new Map<number, CreatureMeta>();
+  if (ownerIds.length === 0) return map;
+  const placeholders = ownerIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT owner_id, content FROM statblocks
+       WHERE owner_type = ? AND format = 'dnd_creature' AND owner_id IN (${placeholders})`
+    )
+    .all(ownerType, ...ownerIds) as { owner_id: number; content: string }[];
+  for (const r of rows) {
+    try {
+      const parsed = JSON.parse(r.content) as Partial<CreatureMeta>;
+      const meta: CreatureMeta = {
+        size: typeof parsed.size === "string" ? parsed.size : "",
+        creatureType: typeof parsed.creatureType === "string" ? parsed.creatureType : "",
+        alignment: typeof parsed.alignment === "string" ? parsed.alignment : "",
+      };
+      if (meta.size || meta.creatureType || meta.alignment) map.set(r.owner_id, meta);
+    } catch {
+      /* malformed statblock content — skip */
+    }
+  }
+  return map;
 }
 
 settingBeingsRouter.get("/", (req, res) => {
@@ -105,10 +142,15 @@ settingBeingsRouter.get("/", (req, res) => {
        WHERE ${clauses.join(" AND ")} ORDER BY b.name`
     )
     .all(params) as { id: number }[];
+  const creatureMeta = getCreatureMetaByOwner(
+    "being",
+    rows.map((r) => r.id)
+  );
   res.json(
     rows.map((r) => ({
       ...withAvatarUrl(r as { avatar_image_path?: string | null }),
       locations: getLocations(r.id),
+      creature_meta: creatureMeta.get(r.id) ?? null,
     }))
   );
 });
@@ -168,6 +210,7 @@ settingBeingsRouter.get("/:id", (req, res) => {
     relations,
     communities,
     locations: getLocations(req.params.id),
+    creature_meta: getCreatureMetaByOwner("being", [Number(req.params.id)]).get(Number(req.params.id)) ?? null,
     important_dates: importantDates,
     chapters,
   });
@@ -304,18 +347,29 @@ settingBeingsRouter.put("/:id", (req, res) => {
     .get(req.params.id) as { folder_path: string; name: string; location_id: number | null } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
-  const { name, category, statblock_short, statblock_full, history, behavior, tags, base_monster_id, short_name } =
-    req.body as {
-      name?: string;
-      category?: string;
-      statblock_short?: string;
-      statblock_full?: string;
-      history?: string;
-      behavior?: string;
-      tags?: string[];
-      base_monster_id?: number | null;
-      short_name?: string;
-    };
+  const {
+    name,
+    category,
+    statblock_short,
+    statblock_full,
+    history,
+    behavior,
+    description,
+    tags,
+    base_monster_id,
+    short_name,
+  } = req.body as {
+    name?: string;
+    category?: string;
+    statblock_short?: string;
+    statblock_full?: string;
+    history?: string;
+    behavior?: string;
+    description?: string;
+    tags?: string[];
+    base_monster_id?: number | null;
+    short_name?: string;
+  };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
@@ -326,6 +380,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
        statblock_short = COALESCE(?, statblock_short),
        statblock_full = COALESCE(?, statblock_full),
        history = COALESCE(?, history), behavior = COALESCE(?, behavior),
+       description = COALESCE(?, description),
        tags = COALESCE(?, tags),
        base_monster_id = CASE WHEN ? THEN ? ELSE base_monster_id END,
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
@@ -338,6 +393,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
     statblock_full ?? null,
     history ?? null,
     behavior ?? null,
+    description ?? null,
     tags ? JSON.stringify(tags) : null,
     base_monster_id !== undefined ? 1 : 0,
     base_monster_id ?? null,

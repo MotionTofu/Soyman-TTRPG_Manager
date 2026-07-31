@@ -99,6 +99,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
   }
 
   async function remove(linkId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/links/${linkId}`);
     load();
   }

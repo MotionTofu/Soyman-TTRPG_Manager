@@ -261,6 +261,7 @@ export function LitMCharacterEdit({
     onChangeRef.current({ ...valueRef.current, themes });
   }, []);
   const removeTheme = useCallback((i: number) => {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChangeRef.current({
       ...valueRef.current,
       themes: valueRef.current.themes.filter((_, idx) => idx !== i),
@@ -288,6 +289,7 @@ export function LitMCharacterEdit({
     onChangeRef.current({ ...valueRef.current, storyThemes });
   }, []);
   const removeStoryTheme = useCallback((i: number) => {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChangeRef.current({
       ...valueRef.current,
       storyThemes: valueRef.current.storyThemes.filter((_, idx) => idx !== i),

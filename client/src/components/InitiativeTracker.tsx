@@ -163,6 +163,7 @@ export function InitiativeTracker({ sessionId }: Props) {
   }
 
   async function remove(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/initiative-entries/${id}`);
     load();
   }

@@ -179,6 +179,7 @@ export function StatblockList({
   }
 
   async function removeStatblock(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/statblocks/${id}`);
     refresh();
   }
@@ -414,6 +415,17 @@ function StatblockCard({
     onChange();
   }
 
+  // Same idea, for D&D creature view-mode per-tab quick edits (Основное/
+  // Действия/Заклинания/Снаряжение/Особенности each edit in place).
+  async function quickSaveDndCreature(patch: Partial<DndCreatureData>) {
+    const next = { ...(dndValue as DndCreatureData), ...patch };
+    const json = JSON.stringify(next);
+    setDndValue(next);
+    setContent(json);
+    await api.put(`/statblocks/${statblock.id}`, { content: json });
+    onChange();
+  }
+
   const summaryTitle =
     statblock.format === "litm_challenge"
       ? (litmValue as LitMChallengeData)?.title || "Без названия"
@@ -433,14 +445,29 @@ function StatblockCard({
           {summaryTitle && <span className="muted"> {summaryTitle}</span>}
           {!isLitm && !isDnd && statblock.note && <span className="muted"> {statblock.note}</span>}
         </span>
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            onRemove(statblock.id);
-          }}
-        >
-          ✕
-        </button>
+        <span className="row" style={{ gap: 4 }}>
+          <button
+            type="button"
+            className="comp-mini"
+            title="Редактировать"
+            onClick={(e) => {
+              e.preventDefault();
+              setEditMode((v) => !v);
+            }}
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            className="comp-mini"
+            onClick={(e) => {
+              e.preventDefault();
+              onRemove(statblock.id);
+            }}
+          >
+            ✕
+          </button>
+        </span>
       </summary>
       <div className="stack" style={{ marginTop: 10 }}>
         {editMode ? (
@@ -540,6 +567,7 @@ function StatblockCard({
                 theme={theme}
                 density={density}
                 compact={kind === "short"}
+                onQuickUpdate={quickSaveDndCreature}
               />
             )}
             {!isLitm && !isDnd && (

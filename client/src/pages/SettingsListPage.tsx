@@ -68,6 +68,7 @@ export function SettingsListPage() {
               )
             )}
             <h3>{s.name}</h3>
+            {s.imported_at && <span className="badge tag">импортировано</span>}
             {s.description && (
               <div className="muted">
                 <MentionText text={s.description} />

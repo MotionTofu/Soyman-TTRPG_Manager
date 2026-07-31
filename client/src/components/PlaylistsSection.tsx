@@ -167,6 +167,7 @@ export function PlaylistsSection({
   }
 
   async function removeTrack(playlistId: number, itemId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/playlists/${playlistId}/items/${itemId}`);
     loadDetail(playlistId);
     loadOwned();

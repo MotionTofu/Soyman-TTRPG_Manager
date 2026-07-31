@@ -8,7 +8,7 @@ import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../r
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import type { EntityRelation, EntityRelationsResponse, RelationEntityType, RelationTone, SearchResult } from "../types";
 
-const PICK_TYPES = ["being", "character", "community"];
+const PICK_TYPES = ["being", "character", "community", "compendium_entry"];
 
 type SortMode = "tone" | "alpha" | "label";
 const SORT_OPTIONS: { key: SortMode; label: string }[] = [
@@ -144,6 +144,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   }
 
   async function removeRelation(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/entity-relations/${id}`);
     load();
   }

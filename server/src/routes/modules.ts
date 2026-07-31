@@ -1,9 +1,51 @@
 import { Router } from "express";
 import { db } from "../db/db";
-import { importSystemExport, type SystemExportData } from "./systems";
-import { importSettingExport, type SettingExportData } from "./settings";
+import { createSystemBackup, importSystemExport, updateSystemFromExport, type SystemExportData } from "./systems";
+import { createSettingBackup, importSettingExport, updateSettingFromExport, type SettingExportData } from "./settings";
 
 export const modulesRouter = Router();
+
+// A single public GitHub repo the user curates by hand: manifest.json at the
+// root lists catalog entries (each with its own id/version), modules/*.json
+// holds the actual export payloads (same format as GET /systems/:id/export
+// and GET /settings/:id/export). Pull-only — the app never writes back to
+// this repo. Public + raw.githubusercontent.com means no auth/token and no
+// GitHub REST API rate limit to worry about.
+const CATALOG_REPO = "MotionTofu/soyman-modules";
+const CATALOG_BRANCH = "main";
+
+function rawUrl(path: string) {
+  return `https://raw.githubusercontent.com/${CATALOG_REPO}/${CATALOG_BRANCH}/${path}`;
+}
+
+interface CatalogManifestEntry {
+  id: string;
+  type: "system" | "setting";
+  name: string;
+  description: string;
+  file: string;
+  version: string;
+}
+
+async function fetchManifest(): Promise<CatalogManifestEntry[]> {
+  const res = await fetch(rawUrl("manifest.json"));
+  if (!res.ok) throw new Error(`манифест недоступен (HTTP ${res.status})`);
+  const data = (await res.json()) as { modules?: CatalogManifestEntry[] };
+  if (!Array.isArray(data.modules)) throw new Error("манифест повреждён: нет поля modules");
+  return data.modules;
+}
+
+async function fetchManifestEntry(remoteId: string): Promise<CatalogManifestEntry> {
+  const entry = (await fetchManifest()).find((m) => m.id === remoteId);
+  if (!entry) throw new Error("запись не найдена в каталоге");
+  return entry;
+}
+
+async function fetchModuleFile(entry: CatalogManifestEntry): Promise<unknown> {
+  const res = await fetch(rawUrl(entry.file));
+  if (!res.ok) throw new Error(`файл модуля недоступен (HTTP ${res.status})`);
+  return res.json();
+}
 
 interface ModuleRow {
   id: number;
@@ -95,7 +137,7 @@ modulesRouter.put("/:id/enable", async (req, res) => {
       const newId = await importSystemExport(data as SystemExportData);
       db.prepare("UPDATE modules SET system_id = ? WHERE id = ?").run(newId, mod.id);
     } else {
-      const newId = importSettingExport(data as SettingExportData);
+      const newId = await importSettingExport(data as SettingExportData);
       db.prepare("UPDATE modules SET setting_id = ? WHERE id = ?").run(newId, mod.id);
     }
   } else {
@@ -140,4 +182,110 @@ modulesRouter.delete("/:id", (req, res) => {
     db.prepare("DELETE FROM modules WHERE id = ?").run(mod.id);
   }
   res.json({ ok: true });
+});
+
+// Lists the curated GitHub catalog cross-referenced against what's already
+// installed locally (matched by remote_id), so the client can render
+// Установить / Доступно обновление / Установлено per entry.
+modulesRouter.get("/catalog", async (_req, res) => {
+  let manifest: CatalogManifestEntry[];
+  try {
+    manifest = await fetchManifest();
+  } catch (e) {
+    return res.status(502).json({ error: e instanceof Error ? e.message : "каталог недоступен" });
+  }
+
+  const installed = db.prepare("SELECT id, remote_id, remote_version FROM modules WHERE remote_id IS NOT NULL").all() as {
+    id: number;
+    remote_id: string;
+    remote_version: string | null;
+  }[];
+  const byRemoteId = new Map(installed.map((r) => [r.remote_id, r]));
+
+  res.json(
+    manifest.map((entry) => {
+      const local = byRemoteId.get(entry.id);
+      return {
+        remoteId: entry.id,
+        type: entry.type,
+        name: entry.name,
+        description: entry.description,
+        version: entry.version,
+        installedModuleId: local?.id ?? null,
+        installedVersion: local?.remote_version ?? null,
+        updateAvailable: local != null && local.remote_version !== entry.version,
+      };
+    })
+  );
+});
+
+// Installs a not-yet-installed catalog entry: fetches the module file and
+// materializes it right away (unlike "+ Добавить модуль из файла", which
+// registers a disabled pending import first) — "Установить" already implies
+// the module should be active immediately.
+modulesRouter.post("/catalog/:remoteId/install", async (req, res) => {
+  let entry: CatalogManifestEntry;
+  let data: unknown;
+  try {
+    entry = await fetchManifestEntry(req.params.remoteId);
+    data = await fetchModuleFile(entry);
+  } catch (e) {
+    return res.status(502).json({ error: e instanceof Error ? e.message : "не удалось скачать модуль" });
+  }
+
+  try {
+    if (entry.type === "system") {
+      const systemId = await importSystemExport(data as SystemExportData);
+      db.prepare(
+        "INSERT INTO modules (type, name, source, enabled, system_id, setting_id, remote_id, remote_version) VALUES ('system', ?, 'imported', 1, ?, NULL, ?, ?)"
+      ).run(entry.name, systemId, entry.id, entry.version);
+    } else {
+      const settingId = await importSettingExport(data as SettingExportData);
+      db.prepare(
+        "INSERT INTO modules (type, name, source, enabled, system_id, setting_id, remote_id, remote_version) VALUES ('setting', ?, 'imported', 1, NULL, ?, ?, ?)"
+      ).run(entry.name, settingId, entry.id, entry.version);
+    }
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : "не удалось установить модуль" });
+  }
+
+  res.status(201).json({ ok: true });
+});
+
+// Updates an already-installed catalog module in place — same
+// backup-then-merge flow as the file-upload "⟳ Обновить", reusing
+// createSystemBackup/updateSystemFromExport (and the setting equivalents)
+// so both update paths behave identically.
+modulesRouter.post("/catalog/:remoteId/update", async (req, res) => {
+  const mod = db.prepare("SELECT * FROM modules WHERE remote_id = ?").get(req.params.remoteId) as ModuleRow | undefined;
+  if (!mod) return res.status(404).json({ error: "модуль не установлен — сначала нажми «Установить»" });
+
+  let entry: CatalogManifestEntry;
+  let data: unknown;
+  try {
+    entry = await fetchManifestEntry(req.params.remoteId);
+    data = await fetchModuleFile(entry);
+  } catch (e) {
+    return res.status(502).json({ error: e instanceof Error ? e.message : "не удалось скачать модуль" });
+  }
+
+  try {
+    if (entry.type === "system" && mod.system_id != null) {
+      const target = db.prepare("SELECT name FROM systems WHERE id = ?").get(mod.system_id) as { name: string };
+      const backup = await createSystemBackup(mod.system_id, target.name);
+      const summary = await updateSystemFromExport(mod.system_id, data as SystemExportData);
+      db.prepare("UPDATE modules SET remote_version = ? WHERE id = ?").run(entry.version, mod.id);
+      return res.json({ backup, summary });
+    }
+    if (entry.type === "setting" && mod.setting_id != null) {
+      const target = db.prepare("SELECT name FROM settings WHERE id = ?").get(mod.setting_id) as { name: string };
+      const backup = await createSettingBackup(mod.setting_id, target.name);
+      const summary = await updateSettingFromExport(mod.setting_id, data as SettingExportData);
+      db.prepare("UPDATE modules SET remote_version = ? WHERE id = ?").run(entry.version, mod.id);
+      return res.json({ backup, summary });
+    }
+    return res.status(400).json({ error: "модуль не материализован" });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : "не удалось обновить модуль" });
+  }
 });

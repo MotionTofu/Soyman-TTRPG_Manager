@@ -142,6 +142,48 @@ export function ensureSubfolder(basePath: string, sub: string): string {
   return ensureDir(path.join(basePath, sub));
 }
 
+// Extensions an export JSON might need to embed as base64 (images for
+// avatars/thumbnails, audio/pdf for resources) — used by both systems.ts's
+// export (thumbnail only) and settings.ts's export (avatars/background/
+// thumbnail/resources), so it lives here instead of being duplicated.
+const EXT_TO_MIME: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+  ".m4a": "audio/mp4",
+  ".flac": "audio/flac",
+  ".pdf": "application/pdf",
+};
+
+// Reads a vault file into a base64 payload for embedding in a JSON export.
+// Returns null if the path is empty or the file is missing (best-effort —
+// a stale image path shouldn't fail the whole export). Falls back to
+// application/octet-stream for unrecognized extensions rather than dropping
+// the file entirely — a resource can be any file type, unlike a thumbnail.
+export function readFileAsBase64(
+  absolutePath: string | null | undefined
+): { filename: string; mime: string; base64: string } | null {
+  if (!absolutePath || !fs.existsSync(absolutePath)) return null;
+  const ext = path.extname(absolutePath).toLowerCase();
+  const mime = EXT_TO_MIME[ext] || "application/octet-stream";
+  return { filename: path.basename(absolutePath), mime, base64: fs.readFileSync(absolutePath).toString("base64") };
+}
+
+// Decodes a base64 export payload and writes it into `folder` under
+// `filename`, deduped the same way as a regular upload — used when
+// importing a setting export that embedded avatar/background/resource
+// files. Returns the resulting absolute path.
+export async function writeBase64File(folder: string, filename: string, base64: string): Promise<string> {
+  const target = path.join(folder, sanitizeName(filename));
+  await storeDeduped(Buffer.from(base64, "base64"), target);
+  return target;
+}
+
 // Writes a replacement upload (thumbnail/avatar/background/etc.) and removes
 // the previous file if the new one landed at a different path — happens
 // whenever the uploaded extension differs from the old one (e.g. png -> jpg),

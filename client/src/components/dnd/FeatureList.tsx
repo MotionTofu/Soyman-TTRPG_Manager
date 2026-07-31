@@ -72,6 +72,7 @@ export const FeatureListEdit = memo(function FeatureListEdit({
     onChangeRef.current(next);
   }, []);
   const remove = useCallback((i: number) => {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChangeRef.current(valuesRef.current.filter((_, idx) => idx !== i));
   }, []);
   function add() {
@@ -147,6 +148,7 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const remove = useCallback((i: number) => {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChangeRef.current(valuesRef.current.filter((_, idx) => idx !== i));
   }, []);
 

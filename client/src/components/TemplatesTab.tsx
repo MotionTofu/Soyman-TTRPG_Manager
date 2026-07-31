@@ -108,6 +108,7 @@ export function TemplatesTab({ systemId }: Props) {
   }
 
   async function archiveResource(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/resources/${id}`);
     if (editingId === id) resetForm();
     refresh();

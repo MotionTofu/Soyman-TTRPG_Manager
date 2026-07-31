@@ -34,6 +34,7 @@ export function SecretsTracker({ campaignId, defaultSettingId }: Props) {
   }
 
   async function removeSecret(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/campaign-entries/${id}`);
     refresh();
   }

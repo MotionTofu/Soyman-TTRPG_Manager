@@ -104,7 +104,11 @@ app.use(
     },
   })
 );
-app.use(express.json({ limit: "5mb" }));
+// 5mb was fine while every JSON body was plain text/metadata. Setting exports
+// with ?include=images now embed avatar/background/resource files as base64
+// (opt-in, explicitly warned about in the export modal), so imports of those
+// files can legitimately be much larger.
+app.use(express.json({ limit: "500mb" }));
 app.use(attachUser);
 
 app.use("/api/auth", authRouter);

@@ -70,6 +70,7 @@ export function LocationDetailPage() {
   const [childName, setChildName] = useState("");
   const [childKind, setChildKind] = useState("");
   const [inhabitantsDragOver, setInhabitantsDragOver] = useState(false);
+  const [showNestedInhabitants, setShowNestedInhabitants] = useState(false);
   const [dateTitle, setDateTitle] = useState("");
   const [dateRecurrence, setDateRecurrence] = useState<DateRecurrence>("once");
   const [dateYear, setDateYear] = useState("");
@@ -102,7 +103,8 @@ export function LocationDetailPage() {
   }
 
   function refresh() {
-    api.get<SettingLocationDetail>(`/setting-locations/${locationId}`).then((l) => {
+    const query = showNestedInhabitants ? "?nested=1" : "";
+    api.get<SettingLocationDetail>(`/setting-locations/${locationId}${query}`).then((l) => {
       setLocation(l);
       setNameDraft(l.name);
       setShortNameDraft(l.short_name ?? "");
@@ -111,7 +113,7 @@ export function LocationDetailPage() {
       api.get<SettingLocation[]>(`/setting-locations?setting_id=${l.setting_id}`).then(setAllLocations);
     });
   }
-  useEffect(refresh, [locationId]);
+  useEffect(refresh, [locationId, showNestedInhabitants]);
 
   if (!location) return <p className="muted">Загрузка…</p>;
 
@@ -130,6 +132,39 @@ export function LocationDetailPage() {
   for (const list of childByParent.values()) {
     list.sort((a, b) => a.name.localeCompare(b.name, "ru", { numeric: true }));
   }
+
+  // "Обитатели" grouped by faction instead of a flat list — a faction is a
+  // section, its members are the entries inside. A being with no faction
+  // goes to "Без фракций" (deliberately last), so missing-faction beings are
+  // easy to spot. A being in several factions appears once per faction
+  // (each occurrence flagged with the multi-faction icon via getFactions).
+  const allInhabitants = showNestedInhabitants
+    ? [...location.inhabitant_beings, ...location.nested_inhabitant_beings]
+    : location.inhabitant_beings;
+  const directIds = new Set(location.inhabitant_beings.map((b) => b.id));
+  const factionGroups = new Map<number, { id: number; name: string; beings: typeof allInhabitants }>();
+  const noFactionBeings: typeof allInhabitants = [];
+  for (const b of allInhabitants) {
+    if (b.communities.length === 0) {
+      noFactionBeings.push(b);
+      continue;
+    }
+    for (const c of b.communities) {
+      const group = factionGroups.get(c.id) ?? { id: c.id, name: c.name, beings: [] };
+      group.beings.push(b);
+      factionGroups.set(c.id, group);
+    }
+  }
+  // Communities marked as habitats of this location but with no beings
+  // living here still get a (empty) section — same reasoning as "Без
+  // фракций": the habitat association should stay visible/removable without
+  // a second, separate list duplicating what's already shown here.
+  for (const c of location.inhabitant_communities) {
+    if (!factionGroups.has(c.id)) factionGroups.set(c.id, { id: c.id, name: c.name, beings: [] });
+  }
+  const sortedFactionGroups = Array.from(factionGroups.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "ru")
+  );
 
   async function saveNameKind() {
     if (!nameDraft.trim()) return;
@@ -204,6 +239,7 @@ export function LocationDetailPage() {
   }
 
   async function removeImportantDate(dateId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/setting-locations/important-dates/${dateId}`);
     refresh();
   }
@@ -401,30 +437,52 @@ export function LocationDetailPage() {
               Перетащите сюда существо или сообщество/народ/культуру из поиска.
             </span>
           </div>
-          <BeingEntityRowList
-            beings={location.inhabitant_beings}
-            onDelete={(id) => removeInhabitant("being", id)}
-            deleteLabel="Убрать отсюда"
-            emptyLabel="Обитателей-существ пока нет."
-          />
-          <div className="grid-cards">
-            {location.inhabitant_communities.map((c) => (
-              <div key={`community-${c.id}`} className="card">
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <Link to={`/communities/${c.id}`}>
-                    <h3>{c.name}</h3>
-                    <span className="muted">Сообщество</span>
-                  </Link>
-                  <button className="danger" onClick={() => removeInhabitant("community", c.id)}>
-                    ✕
+          <label className="row" style={{ gap: 6, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={showNestedInhabitants}
+              onChange={(e) => setShowNestedInhabitants(e.target.checked)}
+            />
+            Показывать обитателей вложенных локаций
+          </label>
+          {sortedFactionGroups.map((group) => (
+            <details key={group.id} className="entity-group" open>
+              <summary className="entity-group-header entity-group-header-toggle">
+                <span>
+                  {group.name} ({group.beings.length})
+                </span>
+                <span className="entity-group-actions" onClick={(e) => e.preventDefault()}>
+                  <Link to={`/communities/${group.id}`}>Перейти</Link>
+                  <button type="button" onClick={() => removeInhabitant("community", group.id)}>
+                    Убрать
                   </button>
-                </div>
-              </div>
-            ))}
-            {location.inhabitant_communities.length === 0 && (
-              <p className="muted">Сообществ-обитателей пока нет.</p>
-            )}
-          </div>
+                </span>
+              </summary>
+              <BeingEntityRowList
+                beings={group.beings}
+                onDelete={(id) => removeInhabitant("being", id)}
+                deleteLabel="Убрать отсюда"
+                emptyLabel="Никого из этой фракции здесь пока нет."
+                getFactions={(b) => b.communities}
+                getLocationSuffix={(b) => b.location_names?.join(", ")}
+                hideDelete={(b) => !directIds.has(b.id)}
+              />
+            </details>
+          ))}
+          <details className="entity-group" open>
+            <summary className="entity-group-header entity-group-header-toggle">
+              Без фракций ({noFactionBeings.length})
+            </summary>
+            <BeingEntityRowList
+              beings={noFactionBeings}
+              onDelete={(id) => removeInhabitant("being", id)}
+              deleteLabel="Убрать отсюда"
+              emptyLabel="Обитателей-существ пока нет."
+              getFactions={(b) => b.communities}
+              getLocationSuffix={(b) => b.location_names?.join(", ")}
+              hideDelete={(b) => !directIds.has(b.id)}
+            />
+          </details>
         </div>
       )}
 

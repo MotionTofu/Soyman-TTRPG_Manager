@@ -69,6 +69,7 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
   }
 
   async function removeLink(linkId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/links/${linkId}`);
     load();
   }

@@ -666,6 +666,34 @@
   font-size: 12.5px;
   color: var(--muted);
 }
+/* Creature statblock's ability row — six small bordered tiles (modifier
+   big on top, "Сил 16" small underneath), sized to their own content and
+   left-aligned so the row never stretches to the card's full width, unlike
+   the old .sb-abilities 6-column grid (still used by the character sheet,
+   left untouched — this is a separate class on purpose). */
+.sb-abilities-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--sec-gap);
+}
+.sb-ability-tile {
+  flex: 0 0 auto;
+  width: 58px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cell);
+  padding: 5px 2px 4px;
+}
+.sb-ability-tile-mod {
+  font-size: 18px;
+  font-weight: 700;
+}
+.sb-ability-tile-score {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
 
 .sb-props {
   font-size: var(--fs);

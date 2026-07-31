@@ -36,6 +36,7 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
   }
 
   async function removeEntry(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/campaign-entries/${id}`);
     refresh();
   }

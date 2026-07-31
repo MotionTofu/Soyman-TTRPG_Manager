@@ -26,6 +26,7 @@ export function LinkNoteList({ linkId, entityType, entityId }: Props) {
   }
 
   async function removeNote(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/link-notes/${id}`);
     refresh();
   }

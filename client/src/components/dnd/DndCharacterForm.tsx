@@ -4,11 +4,13 @@ import { api } from "../../api/client";
 import type {
   CompendiumEntry,
   DndAbilityKey,
+  DndActionTiming,
   DndCharacterData,
   DndClassEntry,
   DndEquipmentItem,
   DndEquipmentSection,
   DndFeature,
+  DndManualAttack,
   DndProficiencyEntry,
   DndSkillProfLevel,
   DndSpellEntry,
@@ -149,6 +151,17 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
     spellcastingAbility: c.spellcastingAbility ?? "",
   }));
   merged.backgroundSkillNames = Array.isArray(merged.backgroundSkillNames) ? merged.backgroundSkillNames : [];
+  // Pre-existing attacks predate the timing field (Действие/Бонусное/Реакция/
+  // Иное) — default them to "Действие" so they still show up in the "Бой"
+  // tab's new sectioned layout instead of silently dropping out.
+  merged.attacks = Array.isArray(merged.attacks)
+    ? merged.attacks.map((a) => ({
+        name: a.name,
+        description: a.description,
+        timing: (a as DndManualAttack).timing ?? "action",
+        timingOther: (a as DndManualAttack).timingOther,
+      }))
+    : [];
   if (!merged.raceName && typeof r.race === "string") merged.raceName = r.race;
   if (!merged.backgroundName && typeof r.background === "string") merged.backgroundName = r.background;
   merged.abilities = { ...emptyAbilities(), ...(r.abilities as object | undefined) };
@@ -382,6 +395,7 @@ const DndProficienciesEdit = memo(function DndProficienciesEdit({
     onChange(next);
   }
   function remove(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange(value.filter((_, idx) => idx !== i));
   }
   function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -501,7 +515,8 @@ function SpellMetaLine({ s }: { s: DndSpellEntry }) {
   const letters = spellComponentLetters(s);
   const parts: ReactNode[] = [];
   if (s.school) parts.push(s.school);
-  if (s.castingTime) parts.push(s.castingTime);
+  const timingLabel = spellTimingLabel(s);
+  if (timingLabel) parts.push(timingLabel);
   if (letters) parts.push(letters);
   if (s.ritual) parts.push("Ритуал");
   if (s.concentration) parts.push("Концентрация");
@@ -539,6 +554,8 @@ type DndSpellSnapshot = Pick<
   | "ritual"
   | "school"
   | "castingTime"
+  | "castingTiming"
+  | "castingTimingOther"
   | "range"
   | "duration"
   | "componentV"
@@ -560,12 +577,131 @@ function spellSchoolName(raw: unknown): string | undefined {
   return typeof raw === "string" ? raw : undefined;
 }
 
+const TIMING_LABEL_TO_KEY: Record<string, DndActionTiming> = {
+  "Действие": "action",
+  "Бонусное действие": "bonus",
+  "Реакция": "reaction",
+  "Иное": "other",
+};
+export const TIMING_KEY_TO_LABEL: Record<DndActionTiming, string> = {
+  action: "Действие",
+  bonus: "Бонусное действие",
+  reaction: "Реакция",
+  other: "Иное",
+};
+
+// Best-effort classification for spells that predate casting_timing (only
+// the free-text casting_time field exists) — matched by keyword so old
+// compendium content still buckets sensibly into the new Бой tab sections
+// instead of silently disappearing.
+function inferTimingFromLegacyText(text: string): { timing: DndActionTiming; other?: string } {
+  const t = text.toLowerCase();
+  if (t.includes("бонус")) return { timing: "bonus" };
+  if (t.includes("реакц")) return { timing: "reaction" };
+  if (t.includes("действ")) return { timing: "action" };
+  return { timing: "other", other: text };
+}
+
+function spellTimingFromData(data: Record<string, unknown>): { castingTiming?: DndActionTiming; castingTimingOther?: string } {
+  const label = typeof data.casting_timing === "string" ? data.casting_timing : "";
+  if (label && TIMING_LABEL_TO_KEY[label]) {
+    return {
+      castingTiming: TIMING_LABEL_TO_KEY[label],
+      castingTimingOther: typeof data.casting_timing_other === "string" ? data.casting_timing_other : undefined,
+    };
+  }
+  const legacy = typeof data.casting_time === "string" ? data.casting_time : "";
+  if (legacy) {
+    const inferred = inferTimingFromLegacyText(legacy);
+    return { castingTiming: inferred.timing, castingTimingOther: inferred.other };
+  }
+  return {};
+}
+
+// Display label for a spell's casting timing — prefers the new structured
+// field, falls back to the legacy free-text castingTime for rows added
+// before this existed and never re-fetched.
+function spellTimingLabel(s: Pick<DndSpellEntry, "castingTiming" | "castingTimingOther" | "castingTime">): string | undefined {
+  if (s.castingTiming) {
+    return s.castingTiming === "other" ? s.castingTimingOther || "Иное" : TIMING_KEY_TO_LABEL[s.castingTiming];
+  }
+  return s.castingTime;
+}
+
+const TIMING_OPTIONS: DndActionTiming[] = ["action", "bonus", "reaction", "other"];
+
+// Hand-typed "Атаки" rows (requirement: split "Бой" into Действия/Бонусные/
+// Реакции/Особое) — a small dedicated editor rather than reusing
+// FeatureListEdit, since the timing select only makes sense here and
+// FeatureListEdit's DndFeature shape is shared by five other, unrelated lists.
+const AttackListEdit = memo(function AttackListEdit({
+  values,
+  onChange,
+}: {
+  values: DndManualAttack[];
+  onChange: (v: DndManualAttack[]) => void;
+}) {
+  function update(i: number, patch: Partial<DndManualAttack>) {
+    const next = values.slice();
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  }
+  function remove(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    onChange(values.filter((_, idx) => idx !== i));
+  }
+  function add() {
+    onChange([...values, { name: "", description: "", timing: "action" }]);
+  }
+  return (
+    <div className="dnd-feature-section">
+      <div className="dnd-feature-header dnd-header-actions">Атаки</div>
+      <div className="stack">
+        {values.map((a, i) => (
+          <div key={i} className="dnd-feature-row">
+            <div className="row">
+              <input
+                placeholder="Название"
+                value={a.name}
+                onChange={(e) => update(i, { name: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <select value={a.timing} onChange={(e) => update(i, { timing: e.target.value as DndActionTiming })}>
+                {TIMING_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {TIMING_KEY_TO_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="comp-mini" onClick={() => remove(i)}>
+                ✕
+              </button>
+            </div>
+            {a.timing === "other" && (
+              <input
+                placeholder="Сколько занимает (напр. «10 минут», «Не требует действия»)"
+                value={a.timingOther ?? ""}
+                onChange={(e) => update(i, { timingOther: e.target.value })}
+              />
+            )}
+            <MentionTextarea value={a.description} onChange={(v) => update(i, { description: v })} rows={2} />
+          </div>
+        ))}
+        <button type="button" onClick={add} style={{ alignSelf: "flex-start" }}>
+          + Добавить
+        </button>
+      </div>
+    </div>
+  );
+});
+
 function spellSnapshotFromEntry(entry: CompendiumEntry): DndSpellSnapshot {
   return {
     concentration: !!entry.data.concentration,
     ritual: !!entry.data.ritual,
     school: spellSchoolName(entry.data.school),
     castingTime: typeof entry.data.casting_time === "string" ? entry.data.casting_time : undefined,
+    ...spellTimingFromData(entry.data),
     range: typeof entry.data.range === "string" ? entry.data.range : undefined,
     duration: typeof entry.data.duration === "string" ? entry.data.duration : undefined,
     componentV: !!entry.data.component_v,
@@ -782,9 +918,17 @@ function buildSpellDetail(entry: CompendiumEntry): SpellDetail {
       {entry.data.component_m && materialComponent && ` (${materialComponent})`}
     </>
   );
+  const timing = spellTimingFromData(entry.data);
   return {
     school: spellSchoolName(entry.data.school),
-    castingTime: typeof entry.data.casting_time === "string" ? entry.data.casting_time : undefined,
+    castingTime:
+      timing.castingTiming === "other"
+        ? timing.castingTimingOther || "Иное"
+        : timing.castingTiming
+        ? TIMING_KEY_TO_LABEL[timing.castingTiming]
+        : typeof entry.data.casting_time === "string"
+        ? entry.data.casting_time
+        : undefined,
     range: typeof entry.data.range === "string" ? entry.data.range : undefined,
     duration: typeof entry.data.duration === "string" ? entry.data.duration : undefined,
     componentsText,
@@ -862,6 +1006,7 @@ function DndSpellLevelSection({
     onSpellsChange(next);
   }
   function remove(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onSpellsChange(spells.filter((_, idx) => idx !== i));
   }
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -1390,6 +1535,7 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
     onItemsChangeRef.current(next);
   }, []);
   const removeItem = useCallback((ii: number) => {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onItemsChangeRef.current(itemsRef.current.filter((_, idx) => idx !== ii));
   }, []);
   function addItem() {
@@ -1493,6 +1639,7 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
     onChangeRef.current(next);
   }, []);
   const removeSection = useCallback((si: number) => {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChangeRef.current(sectionsRef.current.filter((_, idx) => idx !== si));
   }, []);
   const setSectionItems = useCallback((si: number, items: DndEquipmentItem[]) => {
@@ -1760,6 +1907,7 @@ function DndEquipmentQuickView({
     }
   }
   function removeItem(si: number, ii: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     const next = sections.map((s, sIdx) =>
       sIdx !== si ? s : { ...s, items: s.items.filter((_, iIdx) => iIdx !== ii) }
     );
@@ -2148,6 +2296,7 @@ export function DndCharacterEdit({
     }
 
     async function removeClass(i: number) {
+      if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
       const value = valueRef.current;
       const removed = value.classes[i];
       const notes = removed?.className ? removeClassNotesBlock(value.notes, removed.className) : value.notes;
@@ -2166,7 +2315,7 @@ export function DndCharacterEdit({
     }
 
     return {
-      setAttacks: (v: DndFeature[]) => set("attacks", v),
+      setAttacks: (v: DndManualAttack[]) => set("attacks", v),
       setEquipmentSections: (v: DndEquipmentSection[]) => set("equipmentSections", v),
       setSpeciesFeatures: (v: DndFeature[]) => set("speciesFeatures", v),
       setClassFeatures: (v: DndFeature[]) => set("classFeatures", v),
@@ -2464,12 +2613,7 @@ export function DndCharacterEdit({
         </label>
       </div>
 
-      <FeatureListEdit
-        title="Атаки"
-        values={value.attacks}
-        onChange={setAttacks}
-        headerColorClass="dnd-header-actions"
-      />
+      <AttackListEdit values={value.attacks} onChange={setAttacks} />
 
       <DndEquipmentEdit sections={value.equipmentSections} onChange={setEquipmentSections} />
       <label className="row">
@@ -2566,6 +2710,7 @@ interface AttackRow {
   damage: string;
   range: string;
   description?: string;
+  timing: DndActionTiming;
 }
 
 // Equipped weapons show up as attack rows automatically — no need to
@@ -2590,7 +2735,7 @@ function weaponAttackRows(
       const damage = [i.weaponDamage, i.weaponProperties, i.weaponMastery && `Мастерство: ${i.weaponMastery}`]
         .filter(Boolean)
         .join(" · ");
-      return { name: i.name, bonus: formatModifier(mod + profBonus), damage, range };
+      return { name: i.name, bonus: formatModifier(mod + profBonus), damage, range, timing: "action" as const };
     });
 }
 
@@ -2624,16 +2769,27 @@ function combatSpellRows(
   const prepared = spellsByLevel.flat().filter((s) => s.prepared > 0);
   return [...cantrips, ...prepared]
     .filter((s) => s.category === "Боевое" || s.category === "Лечащее")
-    .map((s) => ({
-      name: s.name,
-      bonus: formatSpellAttackSave(s.attackSave, spellAttackBonus, spellDc),
-      damage: s.damage || s.healing || "—",
-      range: [s.castingTime, s.range].filter(Boolean).join(", ") || "—",
-    }));
+    .map((s) => {
+      const timing = s.castingTiming ?? (s.castingTime ? inferTimingFromLegacyText(s.castingTime).timing : "action");
+      return {
+        name: s.name,
+        bonus: formatSpellAttackSave(s.attackSave, spellAttackBonus, spellDc),
+        damage: s.damage || s.healing || "—",
+        range: [spellTimingLabel(s), s.range].filter(Boolean).join(", ") || "—",
+        timing,
+      };
+    });
 }
 
-function manualAttackRows(attacks: DndFeature[]): AttackRow[] {
-  return attacks.map((f) => ({ name: f.name || "Без названия", bonus: "", damage: "", range: "", description: f.description }));
+function manualAttackRows(attacks: DndManualAttack[]): AttackRow[] {
+  return attacks.map((a) => ({
+    name: a.name || "Без названия",
+    bonus: "",
+    damage: "",
+    range: "",
+    description: a.description,
+    timing: a.timing,
+  }));
 }
 
 // Same equipped-weapon source as weaponAttackRows, but as a single-line
@@ -2650,11 +2806,11 @@ function equippedWeaponSummaries(sections: DndEquipmentSection[]): DndFeature[] 
     });
 }
 
-function AttacksTable({ rows }: { rows: AttackRow[] }) {
+function AttacksTable({ title, rows }: { title: string; rows: AttackRow[] }) {
   if (rows.length === 0) return null;
   return (
     <div className="cs-list">
-      <div className="sb-section">Атаки</div>
+      <div className="sb-section">{title}</div>
       <div className="dnd-attacks-table-wrap">
       <table className="dnd-attacks-table">
         <thead>
@@ -3401,14 +3557,23 @@ export function DndCharacterView({
           </div>
 
           {tab === "Бой" && (
-            <div>
-              <AttacksTable
-                rows={[
+            <div className="stack">
+              {(() => {
+                const allRows = [
                   ...weaponAttackRows(value.equipmentSections, value.abilities, parseBonus(value.proficiencyBonus)),
                   ...combatSpellRows(value.cantrips, value.spellsByLevel, spellAttackBonus, spellDc),
                   ...manualAttackRows(value.attacks),
-                ]}
-              />
+                ];
+                const byTiming = (t: DndActionTiming) => allRows.filter((r) => r.timing === t);
+                return (
+                  <>
+                    <AttacksTable title="Действия" rows={byTiming("action")} />
+                    <AttacksTable title="Бонусные действия" rows={byTiming("bonus")} />
+                    <AttacksTable title="Реакции" rows={byTiming("reaction")} />
+                    <AttacksTable title="Особое" rows={byTiming("other")} />
+                  </>
+                );
+              })()}
             </div>
           )}
 

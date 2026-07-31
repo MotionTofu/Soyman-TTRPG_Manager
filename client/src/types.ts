@@ -7,6 +7,7 @@ export interface System {
   thumbnail_image_url: string | null;
   created_at: string;
   archived_at: string | null;
+  imported_at: string | null;
 }
 
 export interface SystemSection {
@@ -60,6 +61,21 @@ export interface Module {
   system_id: number | null;
   setting_id: number | null;
   created_at: string;
+  remote_id?: string | null;
+  remote_version?: string | null;
+}
+
+// One entry from the GitHub module catalog (GET /modules/catalog),
+// cross-referenced server-side against what's already installed.
+export interface ModuleCatalogEntry {
+  remoteId: string;
+  type: "system" | "setting";
+  name: string;
+  description: string;
+  version: string;
+  installedModuleId: number | null;
+  installedVersion: string | null;
+  updateAvailable: boolean;
 }
 
 export type PaymentType = "free" | "paid" | "negotiable";
@@ -81,6 +97,7 @@ export interface Setting {
   pinned_calendar_month: number | null;
   created_at: string;
   archived_at: string | null;
+  imported_at: string | null;
 }
 
 export interface CalendarMonth {
@@ -326,6 +343,23 @@ export interface DndAbilityScores {
   cha: number;
 }
 
+// Действие / Бонусное действие / Реакция / Иное (needs a free-text note on
+// how long it actually takes) — shared by manual attacks and spells so both
+// can be bucketed into the same four "Бой" tab sections.
+export type DndActionTiming = "action" | "bonus" | "reaction" | "other";
+
+// A hand-typed row in the "Атаки" list — distinct from DndFeature (used by
+// species/class/feats/special-ability lists, none of which have an
+// action-economy timing) so adding `timing` here doesn't leak into those.
+export interface DndManualAttack {
+  name: string;
+  description: string;
+  timing: DndActionTiming;
+  // Free-text note, only shown/used when timing === "other" (e.g. "10 минут",
+  // or a passive note like "Не требует действия" for things like Sneak Attack).
+  timingOther?: string;
+}
+
 export interface DndFeature {
   name: string;
   description: string;
@@ -415,7 +449,7 @@ export interface DndCharacterData {
   deathSaveSuccesses: number;
   deathSaveFailures: number;
 
-  attacks: DndFeature[];
+  attacks: DndManualAttack[];
   equipmentSections: DndEquipmentSection[];
   attunementCount: number;
 
@@ -516,7 +550,11 @@ export interface DndSpellEntry {
   concentration?: boolean;
   ritual?: boolean;
   school?: string;
+  // Legacy free-text casting time, kept only as a display fallback for
+  // spells added before castingTiming existed (see DndActionTiming).
   castingTime?: string;
+  castingTiming?: DndActionTiming;
+  castingTimingOther?: string;
   range?: string;
   duration?: string;
   componentV?: boolean;
@@ -880,12 +918,26 @@ export interface LocationChapter {
   created_at: string;
 }
 
+export interface CreatureMeta {
+  size: string;
+  creatureType: string;
+  alignment: string;
+}
+
+export interface LocationInhabitantBeing extends SettingBeing {
+  communities: { id: number; name: string }[];
+  // Only populated on nested_inhabitant_beings — names of the descendant
+  // locations this being actually inhabits, shown as "(location)" suffixes.
+  location_names?: string[];
+}
+
 export interface SettingLocationDetail extends SettingLocation {
   children: SettingLocation[];
   ancestors: { id: number; name: string }[];
   pins: LocationPin[];
   chapters: LocationChapter[];
-  inhabitant_beings: SettingBeing[];
+  inhabitant_beings: LocationInhabitantBeing[];
+  nested_inhabitant_beings: LocationInhabitantBeing[];
   inhabitant_communities: { id: number; name: string }[];
   important_dates: ImportantDate[];
 }
@@ -906,6 +958,8 @@ export interface SettingBeing {
   statblock_full: string;
   history: string;
   behavior: string;
+  description: string;
+  creature_meta: CreatureMeta | null;
   tags: string[];
   avatar_image_path: string | null;
   avatar_image_url: string | null;
@@ -945,8 +999,14 @@ export interface CommunityChapter {
   created_at: string;
 }
 
+export interface CommunityMemberBeing extends SettingBeing {
+  // Total number of factions this being belongs to (not just this one) —
+  // drives the "belongs to several factions" icon in the members list.
+  community_count: number;
+}
+
 export interface SettingCommunityDetail extends SettingCommunity {
-  members: SettingBeing[];
+  members: CommunityMemberBeing[];
   children: SettingCommunity[];
   ancestors: { id: number; name: string }[];
   chapters: CommunityChapter[];
@@ -977,7 +1037,7 @@ export interface BeingRelation {
 }
 
 export type RelationTone = "positive" | "negative" | "neutral" | "mixed";
-export type RelationEntityType = "being" | "character" | "community";
+export type RelationEntityType = "being" | "character" | "community" | "compendium_entry";
 
 // Directional: from_* feels `tone` about to_* — not assumed mutual. The API
 // always returns each row alongside `other_type`/`other_id`/`other_name`,

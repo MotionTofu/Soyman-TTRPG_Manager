@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import type { Module } from "../types";
+import type { Module, ModuleCatalogEntry } from "../types";
 
 // "Модули" — toggleable Systems/Settings. Existing (non-imported) rows are
 // auto-wrapped server-side so everything shows in one list; enabling an
@@ -10,12 +10,64 @@ import type { Module } from "../types";
 export function ModulesTab() {
   const [modules, setModules] = useState<Module[]>([]);
   const [importing, setImporting] = useState(false);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [error, setError] = useState("");
+
+  const [catalog, setCatalog] = useState<ModuleCatalogEntry[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogBusyId, setCatalogBusyId] = useState<string | null>(null);
 
   function refresh() {
     api.get<Module[]>("/modules").then(setModules);
   }
   useEffect(refresh, []);
+
+  async function refreshCatalog() {
+    setCatalogLoading(true);
+    setCatalogError("");
+    try {
+      setCatalog(await api.get<ModuleCatalogEntry[]>("/modules/catalog"));
+    } catch (e) {
+      setCatalogError(String(e));
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  async function installFromCatalog(entry: ModuleCatalogEntry) {
+    setCatalogBusyId(entry.remoteId);
+    setCatalogError("");
+    try {
+      await api.post(`/modules/catalog/${entry.remoteId}/install`);
+      refresh();
+      await refreshCatalog();
+    } catch (e) {
+      setCatalogError(String(e));
+    } finally {
+      setCatalogBusyId(null);
+    }
+  }
+
+  async function updateFromCatalog(entry: ModuleCatalogEntry) {
+    setCatalogBusyId(entry.remoteId);
+    setCatalogError("");
+    try {
+      const result = await api.post<{ backup: { name: unknown }; summary: Record<string, number> }>(
+        `/modules/catalog/${entry.remoteId}/update`
+      );
+      const parts = Object.entries(result.summary)
+        .filter(([, v]) => v > 0)
+        .map(([k, v]) => `${k}: ${v}`);
+      alert(`Готово, «${entry.name}» обновлён.` + (parts.length ? `\n\n${parts.join("\n")}` : ""));
+      refresh();
+      await refreshCatalog();
+    } catch (e) {
+      setCatalogError(String(e));
+    } finally {
+      setCatalogBusyId(null);
+    }
+  }
 
   async function toggle(mod: Module) {
     setError("");
@@ -55,21 +107,73 @@ export function ModulesTab() {
     }
   }
 
+  // "Обновить" merges a newer export INTO the already-materialized system/
+  // setting in place (matched by name/name-path, so existing ids — and
+  // anything that links to them — survive), instead of creating a duplicate
+  // like "+ Добавить модуль из файла" does. The server always snapshots an
+  // archived backup of the current state first, so a bad merge is one
+  // restore away on the Archive page.
+  async function handleUpdateFile(mod: Module, file: File | null) {
+    if (!file) return;
+    setUpdatingId(mod.id);
+    setError("");
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const endpoint = mod.type === "system" ? `/systems/${mod.system_id}/update` : `/settings/${mod.setting_id}/update`;
+      const result = await api.post<{
+        backup: { name: string };
+        summary: Record<string, number>;
+      }>(endpoint, data);
+      const parts = Object.entries(result.summary)
+        .filter(([, v]) => v > 0)
+        .map(([k, v]) => `${k}: ${v}`);
+      alert(
+        `Готово. Резервная копия сохранена в Архиве как «${result.backup.name}».` +
+          (parts.length ? `\n\n${parts.join("\n")}` : "")
+      );
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   const systemModules = modules.filter((m) => m.type === "system");
   const settingModules = modules.filter((m) => m.type === "setting");
 
   function renderRow(mod: Module) {
     const link = mod.system_id ? `/systems/${mod.system_id}` : mod.setting_id ? `/settings/${mod.setting_id}` : null;
+    const materialized = mod.system_id != null || mod.setting_id != null;
     return (
       <div key={mod.id} className="row" style={{ justifyContent: "space-between" }}>
         <label className="row" style={{ gap: 8 }}>
           <input type="checkbox" checked={!!mod.enabled} onChange={() => toggle(mod)} />
           {link ? <Link to={link}>{mod.name}</Link> : <span>{mod.name}</span>}
-          {mod.source === "imported" && <span className="badge tag">импортирован</span>}
+          {mod.source === "imported" && <span className="badge tag">импортировано</span>}
         </label>
-        <button onClick={() => remove(mod)} title="В архив">
-          ✕
-        </button>
+        <span className="row" style={{ gap: 4 }}>
+          {materialized && (
+            <label className="row" style={{ cursor: "pointer", gap: 4 }} title="Обновить из нового файла экспорта">
+              {updatingId === mod.id ? "Обновление…" : "⟳ Обновить"}
+              <input
+                type="file"
+                accept="application/json"
+                style={{ display: "none" }}
+                disabled={updatingId !== null}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  e.target.value = "";
+                  handleUpdateFile(mod, file);
+                }}
+              />
+            </label>
+          )}
+          <button onClick={() => remove(mod)} title="В архив">
+            ✕
+          </button>
+        </span>
       </div>
     );
   }
@@ -79,7 +183,10 @@ export function ModulesTab() {
       <p className="muted">
         Подключаемые Системы и Сеттинги — включи галочкой, чтобы данные появились в приложении;
         выключи, чтобы убрать их из активных разделов, не удаляя. Экспортированный файл (кнопка
-        «Экспорт» на странице системы/сеттинга) можно добавить сюда как новый модуль.
+        «Экспорт» на странице системы/сеттинга) можно добавить сюда как новый модуль, а можно
+        нажать «⟳ Обновить» у уже подключённого модуля — новые данные из файла подмешаются в
+        существующий (по имени), а всё, что есть только у тебя локально, останется нетронутым.
+        Перед обновлением автоматически создаётся резервная копия — её можно найти в Архиве.
       </p>
       {error && <div className="backup-info error">{error}</div>}
 
@@ -93,6 +200,44 @@ export function ModulesTab() {
             onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
           />
         </label>
+      </div>
+
+      <div className="stack">
+        <p className="muted">
+          Каталог модулей на GitHub — курируется вручную, приложение только скачивает. Установленные
+          отсюда модули можно обновлять по отдельности, когда в каталоге появится новая версия.
+        </p>
+        <div className="row">
+          <button onClick={refreshCatalog} disabled={catalogLoading}>
+            {catalogLoading ? "Загрузка…" : "🌐 Обновить каталог из GitHub"}
+          </button>
+        </div>
+        {catalogError && <div className="backup-info error">{catalogError}</div>}
+        {catalog && catalog.length === 0 && <p className="muted">Каталог пуст.</p>}
+        {catalog && catalog.length > 0 && (
+          <div className="stack">
+            {catalog.map((entry) => (
+              <div key={entry.remoteId} className="row" style={{ justifyContent: "space-between" }}>
+                <span className="row" style={{ gap: 8 }}>
+                  <span>{entry.name}</span>
+                  <span className="badge tag">v{entry.version}</span>
+                  <span className="badge tag">{entry.type === "system" ? "система" : "сеттинг"}</span>
+                </span>
+                {entry.installedModuleId == null ? (
+                  <button onClick={() => installFromCatalog(entry)} disabled={catalogBusyId !== null}>
+                    {catalogBusyId === entry.remoteId ? "Установка…" : "⬇ Установить"}
+                  </button>
+                ) : entry.updateAvailable ? (
+                  <button onClick={() => updateFromCatalog(entry)} disabled={catalogBusyId !== null}>
+                    {catalogBusyId === entry.remoteId ? "Обновление…" : "⟳ Доступно обновление"}
+                  </button>
+                ) : (
+                  <span className="muted">✓ Установлено</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div>

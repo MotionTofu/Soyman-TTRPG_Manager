@@ -60,6 +60,7 @@ export function SystemsListPage() {
               )
             )}
             <h3>{s.name}</h3>
+            {s.imported_at && <span className="badge tag">импортировано</span>}
             {s.description && <p className="muted">{s.description}</p>}
           </Link>
           );

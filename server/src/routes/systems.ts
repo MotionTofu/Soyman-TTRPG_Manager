@@ -1,9 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
-import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
-import { systemFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
+import { readFileAsBase64, systemFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 
 export const systemsRouter = Router();
@@ -290,55 +289,42 @@ systemsRouter.put("/:id/restore", (req, res) => {
   res.json(db.prepare("SELECT * FROM systems WHERE id = ?").get(req.params.id));
 });
 
-const EXT_TO_MIME: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-};
-
-// Reads a vault file into a base64 payload for embedding in a JSON export.
-// Returns null if the path is empty or the file is missing (best-effort —
-// a stale thumbnail_image_path shouldn't fail the whole export).
-function readImageData(absolutePath: string | null | undefined): { filename: string; mime: string; base64: string } | null {
-  if (!absolutePath || !fs.existsSync(absolutePath)) return null;
-  const ext = path.extname(absolutePath).toLowerCase();
-  const mime = EXT_TO_MIME[ext];
-  if (!mime) return null;
-  return { filename: path.basename(absolutePath), mime, base64: fs.readFileSync(absolutePath).toString("base64") };
-}
-
 // --- Export/import: compendium (sections + entries) + this system's statblock
 // templates, as one JSON file. Metadata only by default — pass ?images=1 to
 // additionally embed the system thumbnail as base64 (the only image type a
 // system row owns; compendium entries and templates carry no images).
-systemsRouter.get("/:id/export", (req, res) => {
-  const system = db.prepare("SELECT * FROM systems WHERE id = ?").get(req.params.id) as
-    | { thumbnail_image_path: string | null }
+function buildSystemExportData(systemId: number | string, includeImages: boolean): SystemExportData | null {
+  const system = db.prepare("SELECT * FROM systems WHERE id = ?").get(systemId) as
+    | { name: string; description: string; thumbnail_image_path: string | null }
     | undefined;
-  if (!system) return res.status(404).json({ error: "not found" });
+  if (!system) return null;
   const sections = db
     .prepare("SELECT * FROM system_sections WHERE system_id = ? ORDER BY position")
-    .all(req.params.id);
+    .all(systemId) as SystemExportData["sections"];
   const entries = (
     db
       .prepare("SELECT * FROM compendium_entries WHERE system_id = ? ORDER BY position, id")
-      .all(req.params.id) as EntryRow[]
-  ).map(parseEntry);
+      .all(systemId) as EntryRow[]
+  ).map(parseEntry) as unknown as SystemExportData["entries"];
   const templates = db
     .prepare(
       "SELECT * FROM resources WHERE system_id = ? AND type = 'statblock_template' AND archived_at IS NULL"
     )
-    .all(req.params.id);
+    .all(systemId) as SystemExportData["templates"];
 
   const systemOut: Record<string, unknown> = { ...system };
-  if (req.query.images === "1") {
-    systemOut.thumbnail_data = readImageData(system.thumbnail_image_path);
+  if (includeImages) {
+    systemOut.thumbnail_data = readFileAsBase64(system.thumbnail_image_path);
   }
   delete systemOut.thumbnail_image_path;
 
-  res.json({ system: systemOut, sections, entries, templates });
+  return { system: systemOut as SystemExportData["system"], sections, entries, templates };
+}
+
+systemsRouter.get("/:id/export", (req, res) => {
+  const data = buildSystemExportData(req.params.id, req.query.images === "1");
+  if (!data) return res.status(404).json({ error: "not found" });
+  res.json(data);
 });
 
 export interface SystemExportData {
@@ -378,18 +364,18 @@ export async function importSystemExport({ system, sections, entries, templates 
   // Only disambiguate the name if it actually collides — a fresh install
   // importing "D&D 5.5" should end up with a system named exactly
   // "D&D 5.5" (matters because findDndSystemId() on the client resolves
-  // the D&D wizard's system by exact name match against "D&D 5.5").
+  // the D&D wizard's system by exact name match against "D&D 5.5"). The
+  // "imported" origin itself is surfaced via imported_at (badge in
+  // SystemsListPage), not baked into the name — only a bare numeric
+  // suffix is added here, purely to satisfy the UNIQUE constraint.
   let importedName = system.name;
   const nameTaken = db.prepare("SELECT 1 FROM systems WHERE name = ?");
-  if (nameTaken.get(importedName)) {
-    importedName = `${system.name} (импорт)`;
-    for (let n = 2; nameTaken.get(importedName); n++) {
-      importedName = `${system.name} (импорт ${n})`;
-    }
+  for (let n = 2; nameTaken.get(importedName); n++) {
+    importedName = `${system.name} (${n})`;
   }
   const folder = systemFolder(importedName);
   const sysInfo = db
-    .prepare("INSERT INTO systems (name, description, folder_path) VALUES (?, ?, ?)")
+    .prepare("INSERT INTO systems (name, description, folder_path, imported_at) VALUES (?, ?, ?, datetime('now'))")
     .run(importedName, system.description || "", folder);
   const newSystemId = sysInfo.lastInsertRowid as number;
 
@@ -472,6 +458,247 @@ export async function importSystemExport({ system, sections, entries, templates 
 
   return newSystemId;
 }
+
+// Merges a newer export into an already-materialized system IN PLACE,
+// instead of creating a duplicate — the point of "update this module" over
+// "import as a new module". Matches sections by (kind, name) and entries by
+// (section key, kind, name-path via parent_id) so anything that still exists
+// in the new file keeps its database id (existing links from statblocks/
+// relations into that entry survive). Anything only in the new file gets
+// inserted; anything only in the *old* copy (e.g. a hand-added spell) is
+// left completely untouched — this never deletes local content. Call sites
+// are expected to snapshot a backup first (see POST /:id/update).
+function buildEntryPathKey(
+  entry: { id: number; parent_id: number | null; kind: string; name: string; section_id: number },
+  byId: Map<number, { parent_id: number | null; kind: string; name: string; section_id: number }>
+): string {
+  const parts: string[] = [];
+  let cur: { parent_id: number | null; kind: string; name: string; section_id: number } | undefined = entry;
+  const seen = new Set<number>();
+  let curId: number | null = entry.id;
+  while (cur) {
+    parts.unshift(`${cur.kind}:${cur.name}`);
+    if (cur.parent_id == null || seen.has(cur.parent_id)) break;
+    seen.add(cur.parent_id);
+    curId = cur.parent_id;
+    cur = byId.get(curId);
+  }
+  return `${entry.section_id}|${parts.join("/")}`;
+}
+
+export interface SystemUpdateSummary {
+  sectionsAdded: number;
+  entriesAdded: number;
+  entriesUpdated: number;
+  entriesKeptLocal: number;
+  templatesAdded: number;
+  templatesUpdated: number;
+}
+
+export async function updateSystemFromExport(
+  targetSystemId: number,
+  { system, sections, entries, templates }: SystemExportData
+): Promise<SystemUpdateSummary> {
+  const summary: SystemUpdateSummary = {
+    sectionsAdded: 0,
+    entriesAdded: 0,
+    entriesUpdated: 0,
+    entriesKeptLocal: 0,
+    templatesAdded: 0,
+    templatesUpdated: 0,
+  };
+
+  // --- Sections: match by (kind, name) ---
+  const existingSections = db
+    .prepare("SELECT id, position, name, kind FROM system_sections WHERE system_id = ?")
+    .all(targetSystemId) as { id: number; position: number; name: string; kind: string }[];
+  const existingSectionByKey = new Map(existingSections.map((s) => [`${s.kind}:${s.name}`, s.id]));
+  const maxSectionPosition = existingSections.reduce((m, s) => Math.max(m, s.position), -1);
+  const sectionIdMap = new Map<number, number>();
+  const insertSection = db.prepare(
+    "INSERT INTO system_sections (system_id, position, name, kind) VALUES (?, ?, ?, ?)"
+  );
+  let nextSectionPosition = maxSectionPosition + 1;
+  for (const s of sections ?? []) {
+    const key = `${s.kind}:${s.name}`;
+    const existingId = existingSectionByKey.get(key);
+    if (existingId) {
+      sectionIdMap.set(s.id, existingId);
+    } else {
+      const info = insertSection.run(targetSystemId, nextSectionPosition++, s.name, s.kind);
+      sectionIdMap.set(s.id, info.lastInsertRowid as number);
+      summary.sectionsAdded++;
+    }
+  }
+
+  // --- Entries: match by (section, kind, name-path) ---
+  const existingEntries = (
+    db.prepare("SELECT * FROM compendium_entries WHERE system_id = ?").all(targetSystemId) as EntryRow[]
+  ).map(parseEntry) as unknown as {
+    id: number;
+    parent_id: number | null;
+    kind: string;
+    name: string;
+    section_id: number;
+  }[];
+  const existingById = new Map(existingEntries.map((e) => [e.id, e]));
+  const existingByKey = new Map(existingEntries.map((e) => [buildEntryPathKey(e, existingById), e.id]));
+  const touchedIds = new Set<number>();
+
+  // Same lookup shape as existingById, but for the *new* file's entries —
+  // section ids remapped up front so buildEntryPathKey produces keys
+  // directly comparable to existingByKey's.
+  const newByIdMappedSection = new Map(
+    (entries ?? []).map((e) => [e.id, { ...e, section_id: sectionIdMap.get(e.section_id) ?? e.section_id }])
+  );
+  const entryIdMap = new Map<number, number>();
+  const insertEntry = db.prepare(
+    `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, level, data, description, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const updateEntry = db.prepare(
+    "UPDATE compendium_entries SET name = ?, level = ?, data = ?, description = ?, position = ? WHERE id = ?"
+  );
+  for (const e of entries ?? []) {
+    const newSectionId = sectionIdMap.get(e.section_id);
+    if (!newSectionId) continue;
+    const key = buildEntryPathKey(newByIdMappedSection.get(e.id)!, newByIdMappedSection);
+    const existingId = existingByKey.get(key);
+    if (existingId) {
+      updateEntry.run(e.name, e.level, JSON.stringify(e.data ?? {}), e.description || "", e.position, existingId);
+      entryIdMap.set(e.id, existingId);
+      touchedIds.add(existingId);
+      summary.entriesUpdated++;
+    } else {
+      const newParentId = e.parent_id == null ? null : entryIdMap.get(e.parent_id) ?? null;
+      const info = insertEntry.run(
+        targetSystemId,
+        newSectionId,
+        newParentId,
+        e.kind,
+        e.name,
+        e.level,
+        JSON.stringify(e.data ?? {}),
+        e.description || "",
+        e.position
+      );
+      const insertedId = info.lastInsertRowid as number;
+      entryIdMap.set(e.id, insertedId);
+      touchedIds.add(insertedId);
+      summary.entriesAdded++;
+    }
+  }
+  summary.entriesKeptLocal = existingEntries.filter((e) => !touchedIds.has(e.id)).length;
+
+  // Same embedded-reference remap as importSystemExport (classes/senses/
+  // speeds/creature_type/origin_feat point at other entries by id).
+  function remapRef(ref: unknown): unknown {
+    if (!ref || typeof ref !== "object" || !("id" in ref)) return ref;
+    const r = ref as { id: number };
+    const mapped = entryIdMap.get(r.id);
+    return mapped ? { ...r, id: mapped } : ref;
+  }
+  const updateData = db.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+  for (const e of entries ?? []) {
+    const newId = entryIdMap.get(e.id);
+    if (!newId || !e.data) continue;
+    const data = e.data as Record<string, unknown>;
+    const remapped: Record<string, unknown> = { ...data };
+    if (Array.isArray(data.classes)) remapped.classes = data.classes.map(remapRef);
+    if (Array.isArray(data.senses)) remapped.senses = data.senses.map(remapRef);
+    if (Array.isArray(data.speeds)) remapped.speeds = data.speeds.map(remapRef);
+    if (data.creature_type) remapped.creature_type = remapRef(data.creature_type);
+    if (data.origin_feat) remapped.origin_feat = remapRef(data.origin_feat);
+    updateData.run(JSON.stringify(remapped), newId);
+  }
+
+  // --- Statblock templates: match by name ---
+  const existingTemplates = db
+    .prepare(
+      "SELECT id, name FROM resources WHERE system_id = ? AND type = 'statblock_template' AND archived_at IS NULL"
+    )
+    .all(targetSystemId) as { id: number; name: string }[];
+  const existingTemplateByName = new Map(existingTemplates.map((t) => [t.name, t.id]));
+  const insertTemplate = db.prepare(
+    `INSERT INTO resources (name, type, scope, system_id, template_kind, template_format, tags, notes)
+     VALUES (?, 'statblock_template', 'system', ?, ?, ?, ?, ?)`
+  );
+  const updateTemplate = db.prepare(
+    "UPDATE resources SET template_kind = ?, template_format = ?, tags = ?, notes = ? WHERE id = ?"
+  );
+  for (const t of templates ?? []) {
+    const existingId = existingTemplateByName.get(t.name);
+    if (existingId) {
+      updateTemplate.run(t.template_kind, t.template_format, t.tags || "", t.notes || "", existingId);
+      summary.templatesUpdated++;
+    } else {
+      insertTemplate.run(t.name, targetSystemId, t.template_kind, t.template_format, t.tags || "", t.notes || "");
+      summary.templatesAdded++;
+    }
+  }
+
+  // Thumbnail is cosmetic — refresh it if the new export carries one.
+  if (system.thumbnail_data) {
+    const target = db.prepare("SELECT folder_path FROM systems WHERE id = ?").get(targetSystemId) as
+      | { folder_path: string }
+      | undefined;
+    if (target) {
+      const { filename, base64 } = system.thumbnail_data;
+      const ext = path.extname(filename) || ".jpg";
+      const file = path.join(target.folder_path, `thumbnail${ext}`);
+      await writeReplacingOldFile(file, Buffer.from(base64, "base64"), null, "thumbnail");
+      db.prepare("UPDATE systems SET thumbnail_image_path = ? WHERE id = ?").run(file, targetSystemId);
+    }
+  }
+
+  return summary;
+}
+
+// Snapshots the current state of a system as an archived backup system,
+// shared by the file-upload update route and the GitHub-catalog update route
+// (modules.ts) — both merge a newer export into an existing system and both
+// need the same "one Archive-page restore away" safety net first.
+export async function createSystemBackup(targetId: number, targetName: string) {
+  const backupData = buildSystemExportData(targetId, true);
+  if (!backupData) throw new Error("not found");
+  const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+  backupData.system = { ...backupData.system, name: `${targetName} (резерв перед обновлением, ${stamp})` };
+  const backupSystemId = await importSystemExport(backupData);
+  db.prepare("UPDATE systems SET archived_at = datetime('now') WHERE id = ?").run(backupSystemId);
+  return { id: backupSystemId, name: db.prepare("SELECT name FROM systems WHERE id = ?").get(backupSystemId) };
+}
+
+// Updates an already-materialized system in place from a newer export file.
+// Always snapshots the current state as an archived backup system first (so
+// "оказалось, что-то отвязалось" is always one Archive-page restore away)
+// before merging — see updateSystemFromExport for the merge rules.
+systemsRouter.post("/:id/update", async (req, res) => {
+  const targetId = Number(req.params.id);
+  const target = db.prepare("SELECT id, name FROM systems WHERE id = ?").get(targetId) as
+    | { id: number; name: string }
+    | undefined;
+  if (!target) return res.status(404).json({ error: "not found" });
+
+  let backup: { id: number; name: unknown };
+  try {
+    backup = await createSystemBackup(targetId, target.name);
+  } catch (e) {
+    return res.status(500).json({ error: "не удалось создать резервную копию: " + String(e) });
+  }
+
+  let summary: SystemUpdateSummary;
+  try {
+    summary = await updateSystemFromExport(targetId, req.body as SystemExportData);
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
+  }
+
+  res.json({
+    system: db.prepare("SELECT * FROM systems WHERE id = ?").get(targetId),
+    backup,
+    summary,
+  });
+});
 
 systemsRouter.post("/import", async (req, res) => {
   let newSystemId: number;

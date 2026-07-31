@@ -190,7 +190,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
           );
         })}
       </div>
-      {liveMatch ? <InitiativeTracker sessionId={Number(liveMatch[1])} /> : <BagWidget />}
+      {liveMatch ? <InitiativeTracker sessionId={Number(liveMatch[1])} /> : horizontal ? null : <BagWidget />}
       <div className="search-pins">
         <strong>Закреплённые страницы</strong>
         {pins.map((p) => (

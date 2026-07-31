@@ -7,6 +7,8 @@ import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
 import { copySessionPrep } from "../sessionCopy";
 import { SectionHeading } from "../components/SectionHeading";
+import { UpdateChecker } from "../components/UpdateChecker";
+import { hasElectronAPI } from "../electronApi";
 import { loadHideFinance } from "../financePrivacy";
 import type { AppSettings, Campaign, SessionSummary } from "../types";
 
@@ -153,6 +155,13 @@ export function HomeCalendarPage() {
         />
       )}
       <SectionHeading>Главная</SectionHeading>
+
+      {hasElectronAPI() && (
+        <div className="card stack">
+          <strong className="entry-title">Обновления</strong>
+          <UpdateChecker />
+        </div>
+      )}
 
       {finance && (
         <div className="card finance-summary-card">

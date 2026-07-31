@@ -171,6 +171,7 @@ function ArticlesList({
   }
 
   async function removeArticle(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/campaign-player-sections/articles/${id}`);
     refresh();
   }

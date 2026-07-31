@@ -28,6 +28,7 @@ export function RemindersWidget({ targetType, targetId }: Props) {
   }
 
   async function remove(reminderId: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`${basePath}/${reminderId}`);
     refresh();
   }

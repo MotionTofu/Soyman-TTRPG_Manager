@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -1385,7 +1386,16 @@ function EntryNode(props: NodeProps) {
           <button className="comp-mini" title="Скопировать ссылку на запись" onClick={copyLink}>
             {linkCopied ? "✓" : "🔗"}
           </button>
-          <button className="comp-mini" onClick={() => props.onEdit(entry)}>
+          {isMonster && (
+            <Link className="comp-mini" to={`/compendium/${entry.id}`} title="Открыть страницу существа">
+              →
+            </Link>
+          )}
+          <button
+            className={`comp-mini${isEditing ? " is-active" : ""}`}
+            title={isEditing ? "Отменить редактирование" : "Редактировать"}
+            onClick={() => (isEditing ? props.onCancel() : props.onEdit(entry))}
+          >
             ✎
           </button>
           <button className="comp-mini danger" onClick={() => props.onDelete(entry)}>
@@ -2350,6 +2360,7 @@ function GrantedSpellsPicker({
   }
 
   function remove(id: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange(spells.filter((s) => s.id !== id));
   }
 
@@ -2492,31 +2503,31 @@ function ClassSubclassMultiPicker({
             const pick = picks.find((p) => p.id === g.id);
             return (
               <div key={g.id}>
-                <label className="row" style={{ gap: 6 }}>
+                <div className="row" style={{ gap: 6, alignItems: "center" }}>
                   <input
                     type="checkbox"
                     checked={!!pick}
                     onChange={(e) => onToggle({ id: g.id, name: g.name }, e.target.checked)}
                   />
-                  {g.name}
+                  <span>{g.name}</span>
                   {g.subclasses.length > 0 && (
                     <button type="button" className="comp-mini" onClick={() => toggleExpand(g.id)}>
-                      {expanded.has(g.id) ? "Свернуть ▲" : "Развернуть ▼"}
+                      {expanded.has(g.id) ? "Свернуть ▾" : "Развернуть ▸"}
                     </button>
                   )}
-                </label>
+                </div>
                 {expanded.has(g.id) &&
                   g.subclasses.map((s) => {
                     const spick = picks.find((p) => p.id === s.id);
                     return (
-                      <label key={s.id} className="row" style={{ gap: 6, marginLeft: 22 }}>
+                      <div key={s.id} className="row" style={{ gap: 6, alignItems: "center", marginLeft: 22 }}>
                         <input
                           type="checkbox"
                           checked={!!spick}
                           onChange={(e) => onToggle({ id: s.id, name: s.storedName }, e.target.checked)}
                         />
-                        {s.displayName}
-                      </label>
+                        <span>{s.displayName}</span>
+                      </div>
                     );
                   })}
               </div>

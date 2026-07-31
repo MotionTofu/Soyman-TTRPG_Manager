@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS systems (
   folder_path TEXT,
   thumbnail_image_path TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  archived_at TEXT
+  archived_at TEXT,
+  imported_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -34,7 +35,8 @@ CREATE TABLE IF NOT EXISTS settings (
   pinned_calendar_year INTEGER,
   pinned_calendar_month INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  archived_at TEXT
+  archived_at TEXT,
+  imported_at TEXT
 );
 
 -- In-world calendar definition for a setting: an ordered list of months
@@ -531,7 +533,9 @@ CREATE TABLE IF NOT EXISTS modules (
   enabled INTEGER NOT NULL DEFAULT 1,
   system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL,
   setting_id INTEGER REFERENCES settings(id) ON DELETE SET NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  remote_id TEXT, -- GitHub catalog manifest.json entry id, if installed from there
+  remote_version TEXT -- last installed catalog version, for update-available checks
 );
 
 -- Per-system compendium: each system owns an ordered list of sections (tabs),

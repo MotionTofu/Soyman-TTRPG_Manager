@@ -415,7 +415,14 @@ export function SensesEditor({
               onChange={(e) => onChange(value.map((v) => (v.name === s.name ? { ...v, distance: e.target.value } : v)))}
             />
             фт.
-            <button type="button" className="comp-mini" onClick={() => onChange(value.filter((v) => v.name !== s.name))}>
+            <button
+              type="button"
+              className="comp-mini"
+              onClick={() => {
+                if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+                onChange(value.filter((v) => v.name !== s.name));
+              }}
+            >
               ✕
             </button>
           </span>
@@ -558,6 +565,7 @@ function CreatureSpellLevelSection({
     onChange({ ...value, spells: value.spells.map((s, i) => (i === idx ? { ...s, ...patch } : s)) });
   }
   function removeSpell(entry: DndCreatureSpell) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange({ ...value, spells: value.spells.filter((s) => s !== entry) });
   }
 
@@ -823,6 +831,7 @@ export function ActionListEdit<T extends DndCreatureAction>({
     onChange(values.map((a, idx) => (idx === i ? ({ ...a, ...patch } as T) : a)));
   }
   function remove(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange(values.filter((_, idx) => idx !== i));
   }
   function add() {
@@ -1099,6 +1108,7 @@ export function EquipmentEditor({
     onChange(value.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function remove(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange(value.filter((_, idx) => idx !== i));
   }
   function append(item: DndCreatureEquipmentItem) {
@@ -1202,6 +1212,7 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
     onChange({ ...value, items: value.items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)) });
   }
   function removeItem(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange({ ...value, items: value.items.filter((_, idx) => idx !== i) });
   }
   function addCurrency() {
@@ -1211,6 +1222,7 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
     onChange({ ...value, currency: value.currency.map((c, idx) => (idx === i ? { ...c, ...patch } : c)) });
   }
   function removeCurrency(i: number) {
+    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     onChange({ ...value, currency: value.currency.filter((_, idx) => idx !== i) });
   }
   function roll(i: number) {
@@ -1671,6 +1683,30 @@ export function DndCreatureEdit({
   );
 }
 
+// One "Название графы | значение" row for the compact two-column edit
+// layout — label to the left at a fixed width, control to the right,
+// mirroring the source spreadsheet's table shape instead of the wide
+// label-above-input rows used by the whole-card DndCreatureEdit form.
+function FieldRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="sb-field-row">
+      <span className="sb-field-row-label">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+// Pencil-as-edit-toggle for a single view tab — same convention as the
+// character sheet's TabEditToggle (DndCharacterForm.tsx): click to edit,
+// click again to save, without leaving the compact view for other tabs.
+function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="comp-mini dnd-tab-edit-toggle" title={editing ? "Сохранить" : "Редактировать"} onClick={onToggle}>
+      {editing ? "✓" : "✎"}
+    </button>
+  );
+}
+
 // One collapsible statblock line — like the character sheet's spell rows: a
 // clickable summary (name + optional mechanical line) that expands to show
 // the full description, instead of always dumping the whole text inline.
@@ -1839,7 +1875,7 @@ function DndCreatureViewMini({ value, theme, density }: { value: DndCreatureData
   );
 }
 
-const DND_CREATURE_VIEW_TABS = ["Обзор", "Действия", "Особенности"] as const;
+const DND_CREATURE_VIEW_TABS = ["Действия", "Заклинания", "Снаряжение", "Особенности"] as const;
 type DndCreatureViewTab = (typeof DND_CREATURE_VIEW_TABS)[number];
 
 export function DndCreatureView({
@@ -1847,16 +1883,62 @@ export function DndCreatureView({
   theme,
   density,
   compact,
+  onQuickUpdate,
 }: {
   value: DndCreatureData;
   theme?: string | null;
   density?: string | null;
   compact?: boolean;
+  onQuickUpdate?: (patch: Partial<DndCreatureData>) => void;
 }) {
   // Not URL-synced / not lifted to props — same reasoning as the character
   // sheet's view tab state: several statblocks can render on one page (e.g.
   // a bestiary list), each needs its own independent tab.
-  const [tab, setTab] = useState<DndCreatureViewTab>("Обзор");
+  const [tab, setTab] = useState<DndCreatureViewTab>("Действия");
+
+  // Each of the 5 tabs edits independently in place (TabEditToggle pattern,
+  // same as the character sheet's Заклинания/Инвентарь tabs) — no whole-card
+  // edit mode required for day-to-day tweaks.
+  const [editingMain, setEditingMain] = useState(false);
+  const [editingActions, setEditingActions] = useState(false);
+  const [editingSpells, setEditingSpells] = useState(false);
+  const [editingEquipment, setEditingEquipment] = useState(false);
+  const [editingTraits, setEditingTraits] = useState(false);
+
+  const [damageTypes, setDamageTypes] = useState<DndMechanicsOption[]>([]);
+  const [conditions, setConditions] = useState<DndMechanicsOption[]>([]);
+  const [senseOptions, setSenseOptions] = useState<DndMechanicsOption[]>([]);
+  const [creatureTypeOptions, setCreatureTypeOptions] = useState<DndMechanicsOption[]>([]);
+  const [alignmentOptions, setAlignmentOptions] = useState<DndMechanicsOption[]>([]);
+  const [systemId, setSystemId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!onQuickUpdate) return;
+    findDndSystemId().then((sid) => {
+      setSystemId(sid);
+      if (!sid) return;
+      loadDndMechanicsGroup(sid, "Типы урона").then(setDamageTypes);
+      loadDndMechanicsGroup(sid, "Состояния").then(setConditions);
+      loadDndMechanicsGroup(sid, "Особое восприятие").then(setSenseOptions);
+      loadDndMechanicsGroup(sid, MECHANICS_CREATURE_TYPE_GROUP).then(setCreatureTypeOptions);
+      loadDndMechanicsGroup(sid, MECHANICS_ALIGNMENT_GROUP).then(setAlignmentOptions);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!onQuickUpdate]);
+
+  function toggleSkill(skill: string) {
+    onQuickUpdate?.({ skillProfs: { ...value.skillProfs, [skill]: !value.skillProfs[skill] } });
+  }
+  function toggleSave(key: DndAbilityKey) {
+    onQuickUpdate?.({ savingThrowProfs: { ...value.savingThrowProfs, [key]: !value.savingThrowProfs[key] } });
+  }
+  function toggleSaveAdvantageCondition(name: string) {
+    const list = value.saveAdvantageConditions.includes(name)
+      ? value.saveAdvantageConditions.filter((c) => c !== name)
+      : [...value.saveAdvantageConditions, name];
+    onQuickUpdate?.({ saveAdvantageConditions: list });
+  }
+  const patch = (p: Partial<DndCreatureData>) => onQuickUpdate?.(p);
 
   if (compact) return <DndCreatureViewMini value={value} theme={theme} density={density} />;
 
@@ -1890,8 +1972,7 @@ export function DndCreatureView({
     value.reactions.length > 0 ||
     value.legendary.resistanceEnabled ||
     value.legendary.actionsEnabled ||
-    value.legendary.lairEnabled ||
-    value.spellcasting.enabled;
+    value.legendary.lairEnabled;
 
   return (
     <div className={statblockScopeClass(theme, density)}>
@@ -1901,34 +1982,291 @@ export function DndCreatureView({
           {metaParts.length > 0 && <div className="sb-meta">{metaParts.join(" · ")}</div>}
         </div>
         <div className="sb-body">
-          <div className="sb-vitals">
+          <div className="sb-props">
             <div>
-              <div className="sb-label">Класс доспеха</div>
-              <div className="sb-value">{formatArmorClass(value.armorClass)}</div>
+              <span className="sb-prop-label">Класс Защиты</span> {formatArmorClass(value.armorClass)}
             </div>
             <div>
-              <div className="sb-label">Хиты</div>
-              <div className="sb-value">{formatHitPoints(value.hitPoints) || "—"}</div>
+              <span className="sb-prop-label">Хиты</span> {formatHitPoints(value.hitPoints) || "—"}
             </div>
             <div>
-              <div className="sb-label">Скорость</div>
-              <div className="sb-value">{formatSpeed(value.speed) || "—"}</div>
+              <span className="sb-prop-label">Скорость</span> {formatSpeed(value.speed) || "—"}
             </div>
             <div>
-              <div className="sb-label">Инициатива</div>
-              <div className="sb-value">{value.initiativeBonus !== null ? formatModifier(value.initiativeBonus) : "—"}</div>
+              <span className="sb-prop-label">Инициатива</span> {value.initiativeBonus !== null ? formatModifier(value.initiativeBonus) : "—"}
             </div>
           </div>
 
-          <div className="sb-abilities">
+          <div className="sb-abilities-inline">
             {ABILITY_LABELS.map(({ key, label }) => (
-              <div key={key}>
-                <div className="sb-label">{label}</div>
-                <div className="sb-score">{value.abilities[key]}</div>
-                <div className="sb-mod">{formatModifier(abilityModifier(value.abilities[key]))}</div>
+              <div key={key} className="sb-ability-tile">
+                <div className="sb-ability-tile-mod">{formatModifier(abilityModifier(value.abilities[key]))}</div>
+                <div className="sb-ability-tile-score">
+                  {label} {value.abilities[key]}
+                </div>
               </div>
             ))}
           </div>
+
+          {/* Always visible — matches the source table's intent that base/
+              characteristics/defense data sits right alongside HP/AC, not
+              behind a click, same as the printed dnd.su statblock layout. */}
+          <div className="sb-props">
+            {onQuickUpdate && <TabEditToggle editing={editingMain} onToggle={() => setEditingMain((v) => !v)} />}
+              {editingMain ? (
+                <div className="sb-edit-compact">
+                  <div className="sb-edit-col">
+                    <FieldRow label="Имя">
+                      <input value={value.name} onChange={(e) => patch({ name: e.target.value })} />
+                    </FieldRow>
+                    <FieldRow label="Тип">
+                      <select value={value.creatureType} onChange={(e) => patch({ creatureType: e.target.value })}>
+                        <option value="">— тип существа —</option>
+                        {value.creatureType && !creatureTypeOptions.some((o) => o.name === value.creatureType) && (
+                          <option value={value.creatureType}>{value.creatureType}</option>
+                        )}
+                        {creatureTypeOptions.map((o) => (
+                          <option key={o.id} value={o.name}>
+                            {o.name}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldRow>
+                    <FieldRow label="Размер">
+                      <select value={value.size} onChange={(e) => patch({ size: e.target.value })}>
+                        {CREATURE_SIZES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldRow>
+                    <FieldRow label="Мировоззрение">
+                      <select value={value.alignment} onChange={(e) => patch({ alignment: e.target.value })}>
+                        <option value="">— мировоззрение —</option>
+                        {value.alignment && !alignmentOptions.some((o) => o.name === value.alignment) && (
+                          <option value={value.alignment}>{value.alignment}</option>
+                        )}
+                        {alignmentOptions.map((o) => (
+                          <option key={o.id} value={o.name}>
+                            {o.name}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldRow>
+                    <FieldRow label="Класс опасности">
+                      <div className="row" style={{ gap: 6 }}>
+                        <select value={value.challenge.rating} onChange={(e) => patch({ challenge: { rating: e.target.value, proficiencyBonus: computeProficiencyBonusForCR(e.target.value) } })}>
+                          <option value="">—</option>
+                          {CR_VALUES.map((cr) => (
+                            <option key={cr} value={cr}>
+                              {cr}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="muted">Б.М.</span>
+                        <input
+                          type="number"
+                          style={{ width: 44 }}
+                          value={value.challenge.proficiencyBonus ?? ""}
+                          onChange={(e) => patch({ challenge: { ...value.challenge, proficiencyBonus: e.target.value === "" ? null : Number(e.target.value) } })}
+                        />
+                      </div>
+                    </FieldRow>
+                    <FieldRow label="Класс защиты">
+                      <input
+                        type="number"
+                        value={value.armorClass.value ?? ""}
+                        onChange={(e) => patch({ armorClass: { ...value.armorClass, value: e.target.value === "" ? null : Number(e.target.value) } })}
+                      />
+                    </FieldRow>
+                    <FieldRow label="Тип защиты">
+                      <input
+                        placeholder="напр. натуральная броня"
+                        value={value.armorClass.note}
+                        onChange={(e) => patch({ armorClass: { ...value.armorClass, note: e.target.value } })}
+                      />
+                    </FieldRow>
+                    <FieldRow label="Кость здоровья">
+                      <select
+                        value={value.hitPoints.dieSize ?? ""}
+                        onChange={(e) => patch({ hitPoints: { ...value.hitPoints, dieSize: e.target.value === "" ? null : Number(e.target.value) } })}
+                      >
+                        <option value="">—</option>
+                        {DIE_SIZES.map((d) => (
+                          <option key={d} value={d}>
+                            к{d}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldRow>
+                    <FieldRow label="Количество костей">
+                      <input
+                        type="number"
+                        value={value.hitPoints.diceCount ?? ""}
+                        onChange={(e) => patch({ hitPoints: { ...value.hitPoints, diceCount: e.target.value === "" ? null : Number(e.target.value) } })}
+                      />
+                    </FieldRow>
+                    <FieldRow label="Пост. бонус к здоровью">
+                      <input
+                        type="number"
+                        value={value.hitPoints.bonus ?? ""}
+                        onChange={(e) => patch({ hitPoints: { ...value.hitPoints, bonus: e.target.value === "" ? null : Number(e.target.value) } })}
+                      />
+                      {(value.hitPoints.diceCount || value.hitPoints.formula) && <span className="muted"> ≈ {formatHitPoints(value.hitPoints)}</span>}
+                    </FieldRow>
+                    <FieldRow label="Бонус к инициативе">
+                      <input
+                        type="number"
+                        value={value.initiativeBonus ?? ""}
+                        onChange={(e) => patch({ initiativeBonus: e.target.value === "" ? null : Number(e.target.value) })}
+                      />
+                    </FieldRow>
+                  </div>
+
+                  <div className="sb-edit-col">
+                    <FieldRow label="Скорости">
+                      <SpeedEditor value={value.speed} onChange={(v) => patch({ speed: v })} />
+                    </FieldRow>
+                    <FieldRow label="Особые чувства">
+                      <SensesEditor value={value.sensesList} onChange={(v) => patch({ sensesList: v })} options={senseOptions} />
+                    </FieldRow>
+                    <FieldRow label="Особенности восприятия">
+                      <input
+                        placeholder="напр. преимущество на Внимание/восприятие, полагающееся на слух"
+                        value={value.perceptionNote}
+                        onChange={(e) => patch({ perceptionNote: e.target.value })}
+                      />
+                    </FieldRow>
+                    <FieldRow label="Пассивное восприятие">
+                      <div className="row" style={{ gap: 6 }}>
+                        <input
+                          type="number"
+                          style={{ width: 50 }}
+                          value={value.passivePerception ?? ""}
+                          onChange={(e) => patch({ passivePerception: e.target.value === "" ? null : Number(e.target.value) })}
+                        />
+                        <button type="button" onClick={() => patch({ passivePerception: computePassivePerception(value) })}>
+                          Авто
+                        </button>
+                      </div>
+                    </FieldRow>
+                    <FieldRow label="Языки">
+                      <input value={value.languages} onChange={(e) => patch({ languages: e.target.value })} />
+                    </FieldRow>
+                  </div>
+
+                  <div className="sb-edit-col">
+                    <AbilityScoresEdit value={value.abilities} onChange={(v) => patch({ abilities: v })} />
+                    <div className="stack" style={{ gap: 4 }}>
+                      <span className="sb-prop-label">Спасброски</span>
+                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                        {ABILITY_LABELS.map(({ key, label }) => (
+                          <label key={key} className="row" style={{ gap: 4 }}>
+                            <input type="checkbox" checked={value.savingThrowProfs[key]} onChange={() => toggleSave(key)} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="stack" style={{ gap: 4 }}>
+                      <span className="sb-prop-label">Навыки</span>
+                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                        {ALL_SKILLS.map((skill) => (
+                          <label key={skill} className="row" style={{ gap: 4 }}>
+                            <input type="checkbox" checked={!!value.skillProfs[skill]} onChange={() => toggleSkill(skill)} />
+                            {skill}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sb-edit-col">
+                    <ChecklistEditor label="Уязвимости к урону" value={value.damageVulnerabilities} onChange={(v) => patch({ damageVulnerabilities: v })} options={damageTypes} />
+                    <ChecklistEditor label="Сопротивления урону" value={value.damageResistances} onChange={(v) => patch({ damageResistances: v })} options={damageTypes} />
+                    <ChecklistEditor label="Иммунитет к урону" value={value.damageImmunities} onChange={(v) => patch({ damageImmunities: v })} options={damageTypes} />
+                    <ChecklistEditor label="Иммунитет к состояниям" value={value.conditionImmunities} onChange={(v) => patch({ conditionImmunities: v })} options={conditions} />
+                    <div className="stack" style={{ gap: 4 }}>
+                      <span className="sb-prop-label">Преимущество на спасброски от</span>
+                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                        {conditions.map((c) => (
+                          <label key={c.id} className="row" style={{ gap: 4 }}>
+                            <input type="checkbox" checked={value.saveAdvantageConditions.includes(c.name)} onChange={() => toggleSaveAdvantageCondition(c.name)} />
+                            {c.name}
+                          </label>
+                        ))}
+                        <label className="row" style={{ gap: 4 }}>
+                          <input type="checkbox" checked={value.saveAdvantageMagic} onChange={(e) => patch({ saveAdvantageMagic: e.target.checked })} />
+                          Магии
+                        </label>
+                      </div>
+                    </div>
+                    <FieldRow label="Дополнительно (защита)">
+                      <MentionTextarea value={value.defenseNotes} onChange={(v) => patch({ defenseNotes: v })} rows={2} />
+                    </FieldRow>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {saveList.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Спасброски</span> {saveList.join(", ")}
+                    </div>
+                  )}
+                  {skillList.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Навыки</span> {skillList.join(", ")}
+                    </div>
+                  )}
+                  {value.damageVulnerabilities.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Уязвимости</span> {value.damageVulnerabilities.join(", ")}
+                    </div>
+                  )}
+                  {value.damageResistances.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Сопротивления</span> {value.damageResistances.join(", ")}
+                    </div>
+                  )}
+                  {value.damageImmunities.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Иммунитет к урону</span> {value.damageImmunities.join(", ")}
+                    </div>
+                  )}
+                  {value.conditionImmunities.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Иммунитет к состояниям</span> {value.conditionImmunities.join(", ")}
+                    </div>
+                  )}
+                  {advantageParts.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Преимущество на спасброски от</span> {advantageParts.join(", ")}
+                    </div>
+                  )}
+                  {value.defenseNotes && (
+                    <div>
+                      <MentionText text={value.defenseNotes} />
+                    </div>
+                  )}
+                  {sensesText && (
+                    <div>
+                      <span className="sb-prop-label">Чувства</span> {sensesText}
+                    </div>
+                  )}
+                  {value.perceptionNote && (
+                    <div>
+                      <MentionText text={value.perceptionNote} />
+                    </div>
+                  )}
+                  {value.languages && (
+                    <div>
+                      <span className="sb-prop-label">Языки</span> {value.languages}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
 
           <div className="tabs">
             {DND_CREATURE_VIEW_TABS.map((t) => (
@@ -1938,112 +2276,91 @@ export function DndCreatureView({
             ))}
           </div>
 
-          {tab === "Обзор" && (
-            <div className="sb-props">
-              {saveList.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Спасброски</span> {saveList.join(", ")}
-                </div>
-              )}
-              {skillList.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Навыки</span> {skillList.join(", ")}
-                </div>
-              )}
-              {value.damageVulnerabilities.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Уязвимости</span> {value.damageVulnerabilities.join(", ")}
-                </div>
-              )}
-              {value.damageResistances.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Сопротивления</span> {value.damageResistances.join(", ")}
-                </div>
-              )}
-              {value.damageImmunities.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Иммунитет к урону</span> {value.damageImmunities.join(", ")}
-                </div>
-              )}
-              {value.conditionImmunities.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Иммунитет к состояниям</span> {value.conditionImmunities.join(", ")}
-                </div>
-              )}
-              {advantageParts.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Преимущество на спасброски от</span> {advantageParts.join(", ")}
-                </div>
-              )}
-              {value.defenseNotes && (
-                <div>
-                  <MentionText text={value.defenseNotes} />
-                </div>
-              )}
-              {sensesText && (
-                <div>
-                  <span className="sb-prop-label">Чувства</span> {sensesText}
-                </div>
-              )}
-              {value.perceptionNote && (
-                <div>
-                  <MentionText text={value.perceptionNote} />
-                </div>
-              )}
-              {value.languages && (
-                <div>
-                  <span className="sb-prop-label">Языки</span> {value.languages}
-                </div>
-              )}
-              {(value.habitat || value.treasure) && (
-                <div>
-                  {value.habitat && (
-                    <>
-                      <span className="sb-prop-label">Среда обитания</span> {value.habitat}{" "}
-                    </>
-                  )}
-                  {value.treasure && (
-                    <>
-                      <span className="sb-prop-label">Сокровища</span> {value.treasure}
-                    </>
-                  )}
-                </div>
-              )}
-              {value.equipment.length > 0 && (
-                <div>
-                  <span className="sb-prop-label">Снаряжение</span>{" "}
-                  {value.equipment.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
-                </div>
-              )}
-              {(value.loot.items.length > 0 || value.loot.currency.length > 0) && (
-                <div>
-                  <span className="sb-prop-label">Лут</span>{" "}
-                  {value.loot.items.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
-                  {value.loot.items.length > 0 && value.loot.currency.length > 0 && "; "}
-                  {value.loot.currency
-                    .map((c) => {
-                      const avg = averageDiceFormula(c.formula);
-                      return `${c.label}: ${c.formula}${avg !== null ? ` (≈ ${avg})` : ""}`;
-                    })
-                    .join(", ")}
-                </div>
-              )}
-              {value.notes && (
-                <>
-                  <div className="sb-section">Заметки</div>
-                  <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={value.notes} />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
           {tab === "Действия" && (
             <>
-              {value.spellcasting.enabled && (
+              {onQuickUpdate && <TabEditToggle editing={editingActions} onToggle={() => setEditingActions((v) => !v)} />}
+              {editingActions ? (
+                <div className="stack">
+                  <ActionListEdit
+                    title="Действия (Actions)"
+                    values={value.actions}
+                    onChange={(v) => patch({ actions: v })}
+                    headerColorClass="dnd-header-actions"
+                    abilities={value.abilities}
+                    proficiencyBonus={value.challenge.proficiencyBonus}
+                  />
+                  <ActionListEdit
+                    title="Бонусные действия"
+                    values={value.bonusActions}
+                    onChange={(v) => patch({ bonusActions: v })}
+                    headerColorClass="dnd-header-bonus"
+                    abilities={value.abilities}
+                    proficiencyBonus={value.challenge.proficiencyBonus}
+                  />
+                  <ActionListEdit
+                    title="Реакции"
+                    values={value.reactions}
+                    onChange={(v) => patch({ reactions: v })}
+                    headerColorClass="dnd-header-reactions"
+                    abilities={value.abilities}
+                    proficiencyBonus={value.challenge.proficiencyBonus}
+                  />
+                  <LegendaryEditor
+                    value={value.legendary}
+                    onChange={(v) => patch({ legendary: v })}
+                    abilities={value.abilities}
+                    proficiencyBonus={value.challenge.proficiencyBonus}
+                  />
+                </div>
+              ) : (
                 <>
-                  <div className="sb-section">Заклинательная способность</div>
+                  <SbActionGroup title="Действия" values={value.actions} />
+                  <SbActionGroup title="Бонусные действия" values={value.bonusActions} />
+                  <SbActionGroup title="Реакции" values={value.reactions} />
+
+                  {value.legendary.resistanceEnabled && (
+                    <div className="sb-entry">
+                      <span className="sb-prop-label">Легендарные сопротивления</span> {value.legendary.resistanceCount ?? "—"}/день
+                    </div>
+                  )}
+                  {value.legendary.actionsEnabled && (
+                    <>
+                      <div className="sb-section">
+                        Легендарные действия
+                        {value.legendary.actionPoints !== null ? ` (Очков: ${value.legendary.actionPoints} за раунд)` : ""}
+                      </div>
+                      {value.legendary.actions.map((a, i) => (
+                        <SbEntryRow
+                          key={i}
+                          name={a.name || undefined}
+                          extra={<span className="muted"> (Стоимость: {a.cost})</span>}
+                          mech={formatAction(a)}
+                          description={a.description}
+                        />
+                      ))}
+                    </>
+                  )}
+                  {value.legendary.lairEnabled && <SbActionGroup title="Действия логова" values={value.legendary.lairActions} />}
+
+                  {!hasActions && <p className="muted">Действий пока нет.</p>}
+                </>
+              )}
+            </>
+          )}
+
+          {tab === "Заклинания" && (
+            <>
+              {onQuickUpdate && <TabEditToggle editing={editingSpells} onToggle={() => setEditingSpells((v) => !v)} />}
+              {editingSpells ? (
+                <SpellcastingEditor
+                  value={value.spellcasting}
+                  onChange={(v) => patch({ spellcasting: v })}
+                  systemId={systemId}
+                  abilities={value.abilities}
+                  proficiencyBonus={value.challenge.proficiencyBonus ?? 0}
+                />
+              ) : value.spellcasting.enabled ? (
+                <>
                   <div className="sb-entry">
                     {value.spellcasting.ability && (
                       <>
@@ -2067,45 +2384,100 @@ export function DndCreatureView({
                       description={s.description}
                     />
                   ))}
+                  {value.spellcasting.spells.length === 0 && <p className="muted">Заклинаний пока нет.</p>}
                 </>
+              ) : (
+                <p className="muted">Заклинательной способности нет.</p>
               )}
+            </>
+          )}
 
-              <SbActionGroup title="Действия" values={value.actions} />
-              <SbActionGroup title="Бонусные действия" values={value.bonusActions} />
-              <SbActionGroup title="Реакции" values={value.reactions} />
-
-              {value.legendary.resistanceEnabled && (
-                <div className="sb-entry">
-                  <span className="sb-prop-label">Легендарные сопротивления</span> {value.legendary.resistanceCount ?? "—"}/день
+          {tab === "Снаряжение" && (
+            <>
+              {onQuickUpdate && <TabEditToggle editing={editingEquipment} onToggle={() => setEditingEquipment((v) => !v)} />}
+              {editingEquipment ? (
+                <div className="stack">
+                  <div className="row">
+                    <label style={{ flex: 1 }}>
+                      Среда обитания
+                      <input value={value.habitat} onChange={(e) => patch({ habitat: e.target.value })} />
+                    </label>
+                    <label style={{ flex: 1 }}>
+                      Сокровища
+                      <input value={value.treasure} onChange={(e) => patch({ treasure: e.target.value })} />
+                    </label>
+                  </div>
+                  <EquipmentEditor value={value.equipment} onChange={(v) => patch({ equipment: v })} systemId={systemId} />
+                  <LootEditor value={value.loot} onChange={(v) => patch({ loot: v })} />
+                </div>
+              ) : (
+                <div className="sb-props">
+                  {(value.habitat || value.treasure) && (
+                    <div>
+                      {value.habitat && (
+                        <>
+                          <span className="sb-prop-label">Среда обитания</span> {value.habitat}{" "}
+                        </>
+                      )}
+                      {value.treasure && (
+                        <>
+                          <span className="sb-prop-label">Сокровища</span> {value.treasure}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {value.equipment.length > 0 && (
+                    <div>
+                      <span className="sb-prop-label">Снаряжение</span>{" "}
+                      {value.equipment.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
+                    </div>
+                  )}
+                  {(value.loot.items.length > 0 || value.loot.currency.length > 0) && (
+                    <div>
+                      <span className="sb-prop-label">Лут</span>{" "}
+                      {value.loot.items.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
+                      {value.loot.items.length > 0 && value.loot.currency.length > 0 && "; "}
+                      {value.loot.currency
+                        .map((c) => {
+                          const avg = averageDiceFormula(c.formula);
+                          return `${c.label}: ${c.formula}${avg !== null ? ` (≈ ${avg})` : ""}`;
+                        })
+                        .join(", ")}
+                    </div>
+                  )}
+                  {!value.habitat && !value.treasure && value.equipment.length === 0 && value.loot.items.length === 0 && value.loot.currency.length === 0 && (
+                    <p className="muted">Снаряжения пока нет.</p>
+                  )}
                 </div>
               )}
-              {value.legendary.actionsEnabled && (
-                <>
-                  <div className="sb-section">
-                    Легендарные действия
-                    {value.legendary.actionPoints !== null ? ` (Очков: ${value.legendary.actionPoints} за раунд)` : ""}
-                  </div>
-                  {value.legendary.actions.map((a, i) => (
-                    <SbEntryRow
-                      key={i}
-                      name={a.name || undefined}
-                      extra={<span className="muted"> (Стоимость: {a.cost})</span>}
-                      mech={formatAction(a)}
-                      description={a.description}
-                    />
-                  ))}
-                </>
-              )}
-              {value.legendary.lairEnabled && <SbActionGroup title="Действия логова" values={value.legendary.lairActions} />}
-
-              {!hasActions && <p className="muted">Действий пока нет.</p>}
             </>
           )}
 
           {tab === "Особенности" && (
             <>
-              <SbFeatureGroup title="Особенности" values={value.traits} />
-              {value.traits.length === 0 && <p className="muted">Особенностей пока нет.</p>}
+              {onQuickUpdate && <TabEditToggle editing={editingTraits} onToggle={() => setEditingTraits((v) => !v)} />}
+              {editingTraits ? (
+                <div className="stack">
+                  <FeatureListEdit title="Особенности (Traits)" values={value.traits} onChange={(v) => patch({ traits: v })} />
+                  <label>
+                    Заметки
+                    <MentionTextarea value={value.notes} onChange={(v) => patch({ notes: v })} rows={3} />
+                  </label>
+                </div>
+              ) : (
+                <>
+                  <SbFeatureGroup title="Особенности" values={value.traits} />
+                  {value.traits.length === 0 && <p className="muted">Особенностей пока нет.</p>}
+                  {value.notes && (
+                    <>
+                      <div className="sb-section">Заметки</div>
+                      <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
+                        <MentionText text={value.notes} />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>

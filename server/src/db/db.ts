@@ -1080,6 +1080,43 @@ export function openDatabase(dbDir: string): Database.Database {
     }
   }
 
+  // Short standalone summary shown under Досье → Описание and reused as the
+  // blurb in the new expandable entity-row preview cards — separate from the
+  // multi-entry История/Поведение/Текущая ситуация chapters below it.
+  if (!columnExists(database, "setting_beings", "description")) {
+    database.exec("ALTER TABLE setting_beings ADD COLUMN description TEXT NOT NULL DEFAULT ''");
+  }
+
+  // SQLite's built-in LIKE/LOWER only case-fold ASCII a-z — a search for
+  // "москва" silently misses "Москва". Register a JS-backed lower() that IS
+  // Unicode-aware (String.prototype.toLowerCase already handles Cyrillic
+  // correctly) so search.ts can match case-insensitively on any script.
+  database.function("lower_u", { deterministic: true }, (text: unknown) =>
+    typeof text === "string" ? text.toLowerCase() : text
+  );
+
+  // Ties a materialized module to the GitHub catalog entry it was installed
+  // from (manifest.json's "id" + "version"), so the catalog view can tell
+  // "not installed" apart from "installed but a newer version is available"
+  // without re-fetching/re-diffing the actual module content.
+  if (!columnExists(database, "modules", "remote_id")) {
+    database.exec("ALTER TABLE modules ADD COLUMN remote_id TEXT");
+  }
+  if (!columnExists(database, "modules", "remote_version")) {
+    database.exec("ALTER TABLE modules ADD COLUMN remote_version TEXT");
+  }
+
+  // Marks a system/setting as having originated from an import (manual file
+  // or GitHub catalog install) instead of local creation — drives the
+  // "импортировано" badge in SystemsListPage/SettingsListPage, replacing the
+  // old approach of baking "(импорт)" into the name itself.
+  if (!columnExists(database, "systems", "imported_at")) {
+    database.exec("ALTER TABLE systems ADD COLUMN imported_at TEXT");
+  }
+  if (!columnExists(database, "settings", "imported_at")) {
+    database.exec("ALTER TABLE settings ADD COLUMN imported_at TEXT");
+  }
+
   return database;
 }
 
