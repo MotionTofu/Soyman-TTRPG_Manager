@@ -4,9 +4,12 @@ import { api } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
 import type { SearchResult } from "../types";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
+import { ACCEPT_TYPES as DOCK_ACCEPT_TYPES } from "./PreviewDock";
+import { addPreviewDockCard } from "../previewDockStore";
 import { ENTITY_TYPES as TYPES, ENTITY_TYPE_SINGULAR, DETAIL_ROUTES } from "../entityTypes";
 import { usePinnedPages, buildPageLabel, MAX_PINS } from "../pinnedPages";
 import { ParticleField } from "../components/ParticleField";
+import { NavIcon } from "../components/NavIcons";
 import { BagWidget } from "../components/BagWidget";
 import { InitiativeTracker } from "../components/InitiativeTracker";
 
@@ -114,7 +117,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
               title="Очистить"
               onClick={() => setQuery("")}
             >
-              ✕
+              <NavIcon name="close" />
             </button>
           )}
         </div>
@@ -166,6 +169,11 @@ export function SearchPanel({ horizontal }: Props = {}) {
         )}
         {results.map((r) => {
           const link = resultLink(r);
+          // The pult's PreviewDock only accepts drag-and-drop, which doesn't
+          // fire from a touch gesture — this button is the tap equivalent,
+          // shown only where the dock is actually the drop target (the live
+          // session page) and only for types it accepts.
+          const canDock = !!liveMatch && DOCK_ACCEPT_TYPES.includes(r.type);
           return (
             <div
               key={`${r.type}-${r.id}`}
@@ -178,11 +186,23 @@ export function SearchPanel({ horizontal }: Props = {}) {
                   <div className={`entity-type-chip ${r.type}`}>{ENTITY_TYPE_SINGULAR[r.type] ?? r.type}</div>
                   {r.context && <span className="muted" style={{ fontSize: 12 }}>{r.context}</span>}
                 </div>
-                {link && (
-                  <Link to={link} title="Перейти" className="search-result-goto">
-                    →
-                  </Link>
-                )}
+                <div className="row" style={{ gap: 4, alignItems: "center" }}>
+                  {canDock && (
+                    <button
+                      type="button"
+                      className="search-result-dock-add"
+                      title="Добавить в докстанцию превью"
+                      onClick={() => addPreviewDockCard({ type: r.type, id: r.id })}
+                    >
+                      <NavIcon name="plus" />
+                    </button>
+                  )}
+                  {link && (
+                    <Link to={link} title="Перейти" className="search-result-goto">
+                      <NavIcon name="arrowRight" />
+                    </Link>
+                  )}
+                </div>
               </div>
               <div>{r.title}</div>
               {r.subtitle && <div className="muted">{r.subtitle}</div>}
@@ -204,7 +224,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
               title="Открепить"
               onClick={() => unpin(p.path)}
             >
-              ✕
+              <NavIcon name="close" />
             </button>
           </div>
         ))}

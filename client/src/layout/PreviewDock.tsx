@@ -1,19 +1,26 @@
 import { useState, type DragEvent } from "react";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { EntityPreviewContent } from "../components/EntityPreviewModal";
+import { addPreviewDockCard, removePreviewDockCard, usePreviewDockCards } from "../previewDockStore";
 import type { SearchResult } from "../types";
 
 // Same types EntityPreviewContent knows how to render — anything else
 // dropped here is silently ignored, same as the other search-drop targets.
-const ACCEPT_TYPES = ["being", "character", "location", "artifact", "resource", "compendium_entry"];
+// Exported so SearchPanel's touch "add" button can apply the same filter.
+export const ACCEPT_TYPES = ["being", "character", "location", "artifact", "resource", "compendium_entry"];
 
 // Replaces the main nav sidebar while on /sessions/:id/live (see AppShell) —
 // a GM running a session can drag creatures/locations/etc. out of search and
 // keep their statblock/description visible in a column instead of popping a
 // modal every time. State is local/ephemeral: it resets when you navigate
 // away from the pult, same as the rest of the live-session UI.
-export function PreviewDock() {
-  const [cards, setCards] = useState<{ type: string; id: number }[]>([]);
+//
+// `open` mirrors AppShell's navOpen state and toggles the same mobile
+// off-canvas ".open" class the regular <nav class="app-nav"> gets — without
+// it, this nav's own hamburger button on mobile is a dead button (the drawer
+// stays translated off-screen since nothing ever adds "open" to it).
+export function PreviewDock({ open }: { open?: boolean }) {
+  const cards = usePreviewDockCards();
   const [dragOver, setDragOver] = useState(false);
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -23,20 +30,12 @@ export function PreviewDock() {
     if (!raw) return;
     const result: SearchResult = JSON.parse(raw);
     if (!ACCEPT_TYPES.includes(result.type)) return;
-    setCards((prev) =>
-      prev.some((c) => c.type === result.type && c.id === result.id)
-        ? prev
-        : [...prev, { type: result.type, id: result.id }]
-    );
-  }
-
-  function remove(type: string, id: number) {
-    setCards((prev) => prev.filter((c) => !(c.type === type && c.id === id)));
+    addPreviewDockCard({ type: result.type, id: result.id });
   }
 
   return (
     <nav
-      className={`app-nav preview-dock${dragOver ? " drag-over" : ""}`}
+      className={`app-nav preview-dock${open ? " open" : ""}${dragOver ? " drag-over" : ""}`}
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -47,13 +46,18 @@ export function PreviewDock() {
       <div className="preview-dock-header">Докстанция превью</div>
       {cards.length === 0 && (
         <span className="muted preview-dock-placeholder">
-          Перетащите сюда существо, персонажа или локацию из поиска
+          Перетащите сюда существо, персонажа или локацию из поиска — либо нажмите «+» на
+          результате поиска.
         </span>
       )}
       <div className="stack preview-dock-list">
         {cards.map((c) => (
           <div key={`${c.type}-${c.id}`} className="card preview-dock-card">
-            <EntityPreviewContent type={c.type} id={c.id} onClose={() => remove(c.type, c.id)} />
+            <EntityPreviewContent
+              type={c.type}
+              id={c.id}
+              onClose={() => removePreviewDockCard(c.type, c.id)}
+            />
           </div>
         ))}
       </div>
