@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { NavIcon } from "./NavIcons";
 
 interface Props {
   ownerType: "resource" | "playlist";
@@ -40,7 +41,7 @@ export function SettingLinksPopover({ ownerType, ownerId, homeSettingId, linkedS
         onClick={() => setOpen((o) => !o)}
         title="Присутствие в сеттингах"
       >
-        🔗{linkedSettingIds.length > 0 ? ` ${linkedSettingIds.length}` : ""}
+        <NavIcon name="link" />{linkedSettingIds.length > 0 ? ` ${linkedSettingIds.length}` : ""}
       </button>
       {open && (
         <div className="setting-links-popover">

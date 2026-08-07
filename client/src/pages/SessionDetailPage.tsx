@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { NavIcon } from "../components/NavIcons";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { ResourcesSection } from "../components/ResourcesSection";
 import { CheatSheetsSection } from "../components/CheatSheetsSection";
@@ -324,7 +325,9 @@ export function SessionDetailPage() {
           )}
           <div className="entity-header-actions">
             {!isPlayer && (
-              <button onClick={() => navigate(`/sessions/${sessionId}/live`)}>🎲 Пульт сессии</button>
+              <button onClick={() => navigate(`/sessions/${sessionId}/live`)}>
+                <NavIcon name="die" /> Пульт сессии
+              </button>
             )}
             <button onClick={() => setEditingTitle(true)}>Название</button>
             <button className="danger" onClick={archiveSession}>
@@ -714,7 +717,13 @@ export function SessionDetailPage() {
                 checked={!!session.main_events_visible}
                 onChange={toggleMainEventsVisible}
               />
-              {session.main_events_visible ? "👁 Видно игрокам" : "Видно игрокам"}
+              {session.main_events_visible ? (
+                <>
+                  <NavIcon name="eye" /> Видно игрокам
+                </>
+              ) : (
+                "Видно игрокам"
+              )}
             </label>
           </EditableTextCard>
 

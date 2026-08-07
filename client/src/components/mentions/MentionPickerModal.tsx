@@ -240,7 +240,7 @@ export function MentionPickerModal({
               + Создать новую сущность
             </button>
             {selected && (
-              <div className="stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+              <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
                 <label>
                   Как отображается
                   <input value={label} onChange={(e) => setLabel(e.target.value)} />

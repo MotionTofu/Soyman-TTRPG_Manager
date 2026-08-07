@@ -14,14 +14,12 @@
   --on-surface: #16141c;
   --line: #35313f;
   --glow: none;
-  /* legacy aliases */
-  --bg: #16141c;
-  --bg-panel: #1e1c26;
+  /* --bg-elevated and --text-bright have no exact design-doc equivalent
+     (elevated-surface and dark-mode-brightened-ink derivations that don't
+     map 1:1 onto any single §3.1 token — see themes.ts buildTheme()), so
+     they stay as their own tokens rather than aliases. */
   --bg-elevated: #262330;
-  --border: #35313f;
-  --text: #cac5d6;
   --text-bright: #e9e6f0;
-  --text-dim: #9d97ad;
   --accent: #b08968;
   --accent-text: #201a14;
   --accent-soft: #b089682a;
@@ -40,7 +38,7 @@
   --card-radius: 6px;
   --card-border-width: 1px;
   --card-clip: none;
-  --card-band-bg: var(--bg-panel);
+  --card-band-bg: var(--paper-2);
   --card-band-image: none;
   --page-texture: none;
   --card-body-texture: none;
@@ -102,7 +100,7 @@
      selected explicitly — same resolved values as before. */
   --sb-paper: var(--bg-elevated);
   --sb-ink: var(--text-bright);
-  --sb-muted: var(--text-dim);
+  --sb-muted: var(--muted);
 
   color-scheme: dark;
 }
@@ -138,9 +136,9 @@ html, body, #root {
 }
 
 body {
-  background: var(--bg);
+  background: var(--paper);
   background-image: var(--page-texture);
-  color: var(--text);
+  color: var(--ink);
   font-family: var(--font-body);
   font-size: 14px;
 }
@@ -161,7 +159,7 @@ button, input, select, textarea {
 
 button {
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   color: var(--text-bright);
   border-radius: var(--card-radius);
   padding: 6px 12px;
@@ -180,8 +178,8 @@ button.primary {
 }
 
 input, select, textarea {
-  background: var(--bg);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 6px 8px;
 }
@@ -213,9 +211,9 @@ h3 { font-size: var(--fs-h3); }
 h4 { font-size: var(--fs-body); }
 
 .card {
-  background: var(--bg-panel);
+  background: var(--paper-2);
   background-image: var(--card-body-texture);
-  border: var(--card-border-width) solid var(--border);
+  border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
   clip-path: var(--card-clip);
   padding: 14px;
@@ -231,7 +229,37 @@ h4 { font-size: var(--fs-body); }
 }
 
 .muted {
-  color: var(--text-dim);
+  color: var(--muted);
+}
+
+/* Empty-state block (ticket 16 / EmptyState.tsx): mascot + Display-voice
+   slogan + one action, replacing bare "Пока нет ..." captions on the main
+   list pages. See design-system-punk-zine.md §8. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-3, 12px);
+  padding: var(--sp-7, 48px) var(--sp-5, 24px);
+  color: var(--ink);
+}
+.empty-state-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.empty-state-title {
+  margin: 0;
+  text-transform: uppercase;
+}
+.empty-state-hint {
+  margin: 0;
+  max-width: 32em;
+}
+.empty-state-action {
+  margin-top: var(--sp-2, 8px);
 }
 
 .badge {
@@ -253,7 +281,7 @@ h4 { font-size: var(--fs-body); }
 
 /* Neutral tag badge for non-status labels (type/category/tag) — never reuse
    the session-status colors above for these. */
-.badge.tag { background: var(--bg-elevated); color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--border); }
+.badge.tag { background: var(--bg-elevated); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
 
 /* Borderless "видно игрокам / скрыто" toggle — visible state is blue,
    hidden state stays the neutral muted grey. */
@@ -262,7 +290,7 @@ h4 { font-size: var(--fs-body); }
   background: transparent;
   padding: 4px 6px;
   font-size: 85%;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .visibility-toggle:hover {
   border-color: transparent;
@@ -289,7 +317,7 @@ h4 { font-size: var(--fs-body); }
   cursor: pointer;
 }
 .tag-chip-add {
-  box-shadow: inset 0 0 0 1px dashed var(--border);
+  box-shadow: inset 0 0 0 1px dashed var(--line);
   padding: 1px 6px;
 }
 .tag-chip-add input {
@@ -298,7 +326,7 @@ h4 { font-size: var(--fs-body); }
   padding: 0;
   font-size: 12px;
   width: 70px;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .tag-chip-add input:focus {
   outline: none;
@@ -335,7 +363,7 @@ h4 { font-size: var(--fs-body); }
   height: 40px;
   border-radius: var(--card-radius);
   object-fit: cover;
-  background: var(--bg-inset, var(--bg));
+  background: var(--bg-inset, var(--paper));
 }
 .entity-row-bg {
   background-size: cover;
@@ -386,7 +414,7 @@ h4 { font-size: var(--fs-body); }
 }
 .entity-row-actions a {
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   color: inherit;
   text-decoration: none;
@@ -421,7 +449,7 @@ h4 { font-size: var(--fs-body); }
 .entity-group-header-toggle::before {
   content: "▾";
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .entity-group:not([open]) > .entity-group-header-toggle::before {
   content: "▸";
@@ -505,8 +533,8 @@ h4 { font-size: var(--fs-body); }
   font-size: 12px;
   font-weight: 600;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  color: var(--text);
+  border: 1px solid var(--line);
+  color: var(--ink);
 }
 
 .row {
@@ -541,7 +569,7 @@ h4 { font-size: var(--fs-body); }
 }
 .grid-cards.mode-table {
   gap: 0;
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   overflow: hidden;
 }
@@ -599,7 +627,7 @@ h4 { font-size: var(--fs-body); }
   justify-content: center;
   border-radius: 50%;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
@@ -702,7 +730,7 @@ h4 { font-size: var(--fs-body); }
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, var(--bg) 0%, transparent 30%, var(--bg) 100%);
+  background: linear-gradient(180deg, var(--paper) 0%, transparent 30%, var(--paper) 100%);
 }
 
 /* Плитка-обложка (design doc §6.3.1 / ticket 14) — shared by
@@ -772,7 +800,7 @@ h4 { font-size: var(--fs-body); }
 
 .app-nav {
   position: relative;
-  background: var(--bg-panel);
+  background: var(--paper-2);
   border-right: var(--card-border-width, 1px) solid var(--line);
   padding: 16px 10px;
   display: flex;
@@ -855,54 +883,6 @@ h4 { font-size: var(--fs-body); }
   100% { transform: translate(0, 0); opacity: 0.2; }
 }
 
-/* Per-theme particle "shape" — everything above gives every theme a plain
-   colored dot for free (via --accent); these overrides swap in a themed
-   glyph/shape for a few themes where a plain dot doesn't read as thematic.
-   Purely CSS (content + :nth-child for variety), no JS involved, so this
-   stays free even when the theme is switched without a page reload. */
-
-/* Киберпанк — falling-code digits instead of dots. */
-:root[data-theme-id="cyberpunk"] .particle-field-dot {
-  width: auto !important;
-  height: auto !important;
-  background: none;
-  box-shadow: none;
-  border-radius: 0;
-  font-family: var(--font-body), monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-  text-shadow: 0 0 4px var(--accent);
-}
-:root[data-theme-id="cyberpunk"] .particle-field-dot::before { content: "0"; }
-:root[data-theme-id="cyberpunk"] .particle-field-dot:nth-child(3n+1)::before { content: "1"; }
-
-/* Андедовский — drifting little spirits/bones. */
-:root[data-theme-id="undead"] .particle-field-dot {
-  width: auto !important;
-  height: auto !important;
-  background: none;
-  box-shadow: none;
-  border-radius: 0;
-  font-size: 12px;
-  filter: grayscale(1) brightness(1.3);
-}
-:root[data-theme-id="undead"] .particle-field-dot::before { content: "👻"; }
-:root[data-theme-id="undead"] .particle-field-dot:nth-child(2n)::before { content: "🦴"; }
-
-/* Баблгам — soap-bubble look (radial highlight + rim) instead of a flat dot. */
-:root[data-theme-id="anime"] .particle-field-dot {
-  background: radial-gradient(circle at 32% 30%, #ffffffcc 0%, var(--accent) 55%, transparent 100%);
-  box-shadow: 0 0 4px 1px var(--accent), inset 0 0 3px 0 #ffffff99;
-  border: 1px solid #ffffff66;
-}
-
-/* Фейский — small sparkles instead of round dots. */
-:root[data-theme-id="fey"] .particle-field-dot {
-  border-radius: 0;
-  clip-path: polygon(50% 0%, 61% 35%, 100% 50%, 61% 65%, 50% 100%, 39% 65%, 0% 50%, 39% 35%);
-}
-
 /* Wraps a page's <h1> so a particle-field can float around/behind it
    without affecting layout (inline-block sizes to the heading itself). */
 .section-heading {
@@ -939,7 +919,7 @@ h4 { font-size: var(--fs-body); }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-bright, var(--text));
+  color: var(--text-bright, var(--ink));
 }
 .section-heading-sub-icon {
   width: 18px;
@@ -990,7 +970,7 @@ h4 { font-size: var(--fs-body); }
   gap: 10px;
   padding: 8px 10px;
   border-radius: var(--card-radius);
-  color: var(--text);
+  color: var(--ink);
 }
 .app-nav a:hover {
   background: var(--bg-elevated);
@@ -1067,7 +1047,7 @@ h4 { font-size: var(--fs-body); }
 }
 
 .search-panel {
-  background: var(--bg-panel);
+  background: var(--paper-2);
   border-left: var(--card-border-width, 1px) solid var(--line);
   padding: 16px;
   display: flex;
@@ -1117,7 +1097,7 @@ h4 { font-size: var(--fs-body); }
   padding: 2px 4px;
   font-size: 12px;
   line-height: 1;
-  color: var(--text-dim);
+  color: var(--muted);
   cursor: pointer;
 }
 .search-input-clear:hover {
@@ -1151,9 +1131,9 @@ h4 { font-size: var(--fs-body); }
 
 .search-panel .filters label {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--muted);
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 999px;
   padding: 3px 8px;
   cursor: pointer;
@@ -1178,7 +1158,7 @@ h4 { font-size: var(--fs-body); }
 .bag-cell {
   aspect-ratio: 1;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1188,7 +1168,7 @@ h4 { font-size: var(--fs-body); }
 }
 .bag-cell-empty {
   background: transparent;
-  color: var(--text-dim);
+  color: var(--muted);
   font-size: 16px;
   cursor: pointer;
 }
@@ -1245,7 +1225,7 @@ h4 { font-size: var(--fs-body); }
 
 .search-result {
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 8px 10px;
   cursor: grab;
@@ -1254,7 +1234,7 @@ h4 { font-size: var(--fs-body); }
   cursor: grabbing;
 }
 .search-result-goto {
-  color: var(--text-dim);
+  color: var(--muted);
   text-decoration: none;
   font-size: 39px;
   line-height: 1;
@@ -1284,8 +1264,8 @@ h4 { font-size: var(--fs-body); }
   z-index: 40;
   display: flex;
   gap: 4px;
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 6px;
 }
@@ -1332,7 +1312,7 @@ h4 { font-size: var(--fs-body); }
   gap: 2px;
   background: none;
   border: none;
-  color: var(--text);
+  color: var(--ink);
   padding: 8px 10px;
   border-radius: var(--card-radius);
   cursor: pointer;
@@ -1356,12 +1336,12 @@ h4 { font-size: var(--fs-body); }
 }
 .search-result .type {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--muted);
   text-transform: uppercase;
 }
 
 .drop-zone {
-  border: var(--card-border-width, 1px) dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--line);
   border-radius: var(--card-radius);
   padding: 10px;
   min-height: 40px;
@@ -1411,7 +1391,7 @@ th, td {
 }
 .month-calendar .weekday {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--muted);
   text-align: center;
   padding: 4px 4px 8px;
   background-image: var(--calendar-mark-image, none);
@@ -1422,10 +1402,10 @@ th, td {
 .month-calendar .day {
   min-height: 64px;
   min-width: 0; /* lets the cell actually shrink to its minmax(0,1fr) track */
-  border: var(--card-border-width) solid var(--border);
+  border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
   padding: 4px;
-  background: var(--bg-panel);
+  background: var(--paper-2);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -1441,7 +1421,7 @@ th, td {
 }
 .month-calendar .day .num {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--muted);
   display: inline-block;
   padding-bottom: 5px;
 }
@@ -1450,7 +1430,7 @@ th, td {
   background-repeat: no-repeat;
   background-position: left bottom;
   background-size: 20px 5px;
-  color: var(--text);
+  color: var(--ink);
   font-weight: 600;
 }
 .month-calendar .dot {
@@ -1477,7 +1457,7 @@ th, td {
 .month-calendar .dot.kind-session { background: var(--status-held); color: var(--status-held-fg); }
 .month-calendar .dot.kind-event { background: var(--accent); color: var(--accent-text); }
 .month-calendar .dot.kind-event.important { background: var(--accent); color: var(--paper); font-weight: 600; }
-.month-calendar .dot.kind-date { background: var(--bg-elevated); color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--border); }
+.month-calendar .dot.kind-date { background: var(--bg-elevated); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
 .month-calendar .day.today {
   background: color-mix(in srgb, var(--accent-2) 10%, transparent);
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-2) 35%, transparent);
@@ -1494,8 +1474,8 @@ th, td {
   z-index: 50;
 }
 .modal {
-  background: var(--bg-panel);
-  border: var(--card-border-width) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
   padding: 20px;
   width: 420px;
@@ -1520,7 +1500,7 @@ th, td {
   margin-top: 6px;
 }
 .mention-picker-community-table td {
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   padding: 4px 8px;
   width: 50%;
 }
@@ -1580,7 +1560,7 @@ th, td {
   border-bottom: 2px solid transparent;
   border-radius: 0;
   padding: 8px 12px;
-  color: var(--text-dim);
+  color: var(--muted);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   font-weight: 600;
@@ -1630,8 +1610,8 @@ th, td {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 14px 16px;
-  background: var(--bg-panel);
-  border: var(--card-border-width) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
 }
 .player-section-header.open {
@@ -1667,7 +1647,7 @@ th, td {
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: var(--bg-panel);
+  background: var(--paper-2);
   display: flex;
   flex-direction: column;
 }
@@ -1712,7 +1692,7 @@ th, td {
   background: transparent;
   border: none;
   font-size: 28px;
-  color: var(--text-dim);
+  color: var(--muted);
   opacity: 0.5;
 }
 .player-reader-tapzone:hover {
@@ -1783,7 +1763,7 @@ details.card[open] summary {
     justify-content: space-between;
     gap: 8px;
     padding: 8px 12px;
-    background: var(--bg-panel);
+    background: var(--paper-2);
     border-bottom: var(--card-border-width, 1px) solid var(--line);
   }
   .mobile-topbar-button {
@@ -1792,7 +1772,7 @@ details.card[open] summary {
     font-size: 22px;
     line-height: 1;
     padding: 4px 8px;
-    color: var(--text);
+    color: var(--ink);
   }
   .mobile-topbar-logo {
     height: 32px;
@@ -1920,10 +1900,10 @@ details.card[open] summary {
     display: flex;
     gap: 2px;
     padding: 4px;
-    background: color-mix(in oklab, var(--bg-panel) 92%, transparent);
+    background: color-mix(in oklab, var(--paper-2) 92%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: var(--card-border-width, 1px) solid var(--border);
+    border: var(--card-border-width, 1px) solid var(--line);
     border-radius: var(--card-radius);
   }
   .mobile-bottom-nav a,
@@ -1937,7 +1917,7 @@ details.card[open] summary {
     background: transparent;
     border: none;
     border-radius: var(--card-radius);
-    color: var(--text-dim);
+    color: var(--muted);
     font-size: 11px;
     line-height: 1.1;
   }
@@ -2043,8 +2023,8 @@ details.card[open] summary {
     max-height: 60vh;
     overflow-y: auto;
     padding: 14px;
-    background: var(--bg-panel);
-    border: var(--card-border-width, 1px) solid var(--border);
+    background: var(--paper-2);
+    border: var(--card-border-width, 1px) solid var(--line);
     border-radius: var(--card-radius);
   }
   .mobile-quick-access-row {
@@ -2058,7 +2038,7 @@ details.card[open] summary {
     text-align: left;
     background: transparent;
     border: none;
-    color: var(--text);
+    color: var(--ink);
     padding: 6px 0;
   }
 
@@ -2078,10 +2058,10 @@ details.card[open] summary {
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    background: color-mix(in oklab, var(--bg-panel) 94%, transparent);
+    background: color-mix(in oklab, var(--paper-2) 94%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: var(--card-border-width, 1px) solid var(--border);
+    border: var(--card-border-width, 1px) solid var(--line);
     border-radius: var(--card-radius);
     color: inherit;
     text-decoration: none;
@@ -2140,7 +2120,7 @@ details.card[open] summary {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
 }
 .now-playing-cover img {
   width: 100%;
@@ -2235,21 +2215,21 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
 }
 .character-avatar-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-dim);
+  color: var(--muted);
   font-size: 13px;
   text-align: center;
 }
 .character-avatar-upload {
   cursor: pointer;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 6px 12px;
   font-size: 13px;
@@ -2337,7 +2317,7 @@ details.card[open] summary {
     z-index: 45;
     margin: 0;
     overflow-y: auto;
-    background: var(--bg-panel);
+    background: var(--paper-2);
     padding: 12px;
     /* This <details> is normally a boxed .card floating on a page — its own
        border/rounded-corner/background-texture chrome is exactly the outer
@@ -2356,7 +2336,7 @@ details.card[open] summary {
     margin: -12px -12px 10px;
     padding: 12px;
     min-height: 20px;
-    background: var(--bg-panel);
+    background: var(--paper-2);
     border-bottom: var(--card-border-width, 1px) solid var(--line);
     z-index: 3;
   }
@@ -2443,8 +2423,8 @@ details.card[open] summary {
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
   flex: 0 0 auto;
 }
 .player-list-avatar-placeholder {
@@ -2463,8 +2443,8 @@ details.card[open] summary {
   height: 100px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
   display: block;
 }
 .roster-avatar-placeholder {
@@ -2475,8 +2455,8 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
   display: block;
 }
 .player-avatar {
@@ -2484,8 +2464,8 @@ details.card[open] summary {
   height: 228px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
   display: block;
 }
 .location-avatar {
@@ -2493,8 +2473,8 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
   display: block;
 }
 .community-avatar {
@@ -2502,8 +2482,8 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
   display: block;
 }
 
@@ -2512,14 +2492,14 @@ details.card[open] summary {
   height: 150px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
 }
 .chapter-image-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-dim);
+  color: var(--muted);
   font-size: 13px;
   text-align: center;
 }
@@ -2532,8 +2512,8 @@ details.card[open] summary {
   height: 39px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
 }
 
 .gallery-grid {
@@ -2553,8 +2533,8 @@ details.card[open] summary {
   height: 100%;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
-  background: var(--bg-panel);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
   cursor: pointer;
   display: block;
 }
@@ -2567,9 +2547,9 @@ details.card[open] summary {
   align-items: center;
   justify-content: center;
   text-align: center;
-  border: var(--card-border-width, 1px) dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--line);
   border-radius: var(--card-radius);
-  color: var(--text-dim);
+  color: var(--muted);
   cursor: pointer;
   font-size: 13px;
   padding: 8px;
@@ -2591,8 +2571,8 @@ details.card[open] summary {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--bg-panel);
-  border: var(--card-border-width) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
   padding: 16px;
 }
@@ -2637,7 +2617,7 @@ details.card[open] summary {
   flex-wrap: wrap;
   gap: 8px;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 5px 10px;
   font-size: 13px;
@@ -2780,7 +2760,7 @@ details.card[open] summary {
 
 .context-menu {
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 4px;
   display: flex;
@@ -2796,7 +2776,7 @@ details.card[open] summary {
   padding: 6px 10px;
 }
 .context-menu button:hover {
-  background: var(--bg-panel);
+  background: var(--paper-2);
   border-color: transparent;
 }
 .context-menu button.danger {
@@ -2839,12 +2819,12 @@ details.card[open] summary {
   gap: 2px;
 }
 .nav-bottom a {
-  color: var(--text-dim);
+  color: var(--muted);
   font-size: 12px;
   padding: 6px 10px;
 }
 .nav-bottom a.active {
-  color: var(--text-dim);
+  color: var(--muted);
   background: var(--bg-elevated);
 }
 .nav-bottom .nav-icon {
@@ -2858,7 +2838,7 @@ details.card[open] summary {
   width: 100%;
   background: none;
   border: none;
-  color: var(--text-dim);
+  color: var(--muted);
   font-size: 12px;
   padding: 6px 10px;
   border-radius: var(--card-radius);
@@ -2956,7 +2936,7 @@ input.litm-theme-title {
 }
 .litm-theme-subtitle {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 
 .litm-tracks {
@@ -2972,7 +2952,7 @@ input.litm-theme-title {
 }
 .litm-track-label {
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 
 .litm-tag-row {
@@ -2989,14 +2969,14 @@ input.litm-theme-title {
   padding: 3px 8px;
   border-radius: var(--card-radius);
   font-size: 12px;
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
 }
 .litm-tag-power {
   color: #cf9a5c;
   background: rgba(207, 154, 92, 0.12);
 }
 .litm-tag-weak {
-  color: var(--text-dim);
+  color: var(--muted);
   background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 .litm-tag button {
@@ -3008,7 +2988,7 @@ input.litm-theme-title {
 }
 .litm-tag-add {
   background: transparent;
-  border: var(--card-border-width, 1px) dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--line);
   justify-content: flex-start;
 }
 .litm-tag-add input {
@@ -3121,7 +3101,7 @@ input.litm-theme-title {
   gap: 2px;
   padding: 8px 4px;
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
 }
 /* Character/creature wizards and the character-sheet accordion all wrap
@@ -3161,7 +3141,7 @@ input.litm-theme-title {
   font-weight: 600;
 }
 .dnd-ability-save {
-  color: var(--text-dim);
+  color: var(--muted);
   font-weight: 400;
 }
 .dnd-ability-save.is-proficient {
@@ -3175,7 +3155,7 @@ input.litm-theme-title {
   margin: 0;
   font: inherit;
   font-weight: 400;
-  color: var(--text-dim);
+  color: var(--muted);
   cursor: pointer;
 }
 .dnd-ability-save-toggle.is-proficient {
@@ -3282,7 +3262,7 @@ input.litm-theme-title {
 }
 .dice-sub {
   font-family: var(--font-mono);
-  color: var(--text-dim);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   margin-top: 1px;
@@ -3295,7 +3275,7 @@ input.litm-theme-title {
 }
 .dice-label {
   font-size: var(--fs-micro);
-  color: var(--text-dim);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -3360,7 +3340,7 @@ input.litm-theme-title {
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
 }
 .dnd-ability-col {
@@ -3374,7 +3354,7 @@ input.litm-theme-title {
   gap: 2px;
   padding: 6px 4px;
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
 }
 .dnd-save-row {
@@ -3559,7 +3539,7 @@ input.litm-theme-title {
 .dnd-attacks-table th {
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--muted);
   padding: 4px 8px;
 }
 .dnd-attacks-table td {
@@ -3615,7 +3595,7 @@ input.litm-theme-title {
     content: attr(data-label) ": ";
     font-size: 11px;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--muted);
   }
 }
 
@@ -3662,7 +3642,7 @@ input.litm-theme-title {
     content: attr(data-label) ": ";
     font-size: 11px;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--muted);
   }
 }
 
@@ -3696,7 +3676,7 @@ input.litm-theme-title {
 }
 
 .dnd-proficiency-dropzone {
-  border: var(--card-border-width, 1px) dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--line);
   border-radius: var(--card-radius);
   padding: 8px;
   min-height: 36px;
@@ -3730,7 +3710,7 @@ input.litm-theme-title {
   align-items: center;
   gap: 4px;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 999px;
   padding: 2px 4px 2px 10px;
   font-size: calc(var(--fs, 15px) * 0.87);
@@ -3836,7 +3816,7 @@ input.litm-theme-title {
 .dnd-equipment-tags {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text, inherit);
+  color: var(--ink, inherit);
   padding: 4px 8px 0;
 }
 .sb-compendium-link {
@@ -3927,8 +3907,8 @@ input.litm-theme-title {
   right: 0;
   top: 100%;
   margin-top: 4px;
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   max-height: 220px;
   overflow-y: auto;
@@ -3986,7 +3966,7 @@ input.litm-theme-title {
   font-size: 12px;
   font-weight: 600;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   cursor: pointer;
 }
@@ -3999,8 +3979,8 @@ input.litm-theme-title {
   top: 100%;
   margin-top: 4px;
   z-index: 25;
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 6px;
   width: min(360px, calc(100vw - 40px));
@@ -4011,7 +3991,7 @@ input.litm-theme-title {
   font-size: 12px;
   line-height: 1.6;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   cursor: pointer;
 }
@@ -4037,7 +4017,7 @@ input.litm-theme-title {
   padding: 2px 4px;
   font-size: 12px;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   cursor: pointer;
   max-width: 110px;
@@ -4062,7 +4042,7 @@ input.litm-theme-title {
 }
 .rt-table th,
 .rt-table td {
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   padding: 4px 8px;
   text-align: left;
 }
@@ -4086,7 +4066,7 @@ input.litm-theme-title {
 .rt-sep {
   width: 1px;
   align-self: stretch;
-  background: var(--border);
+  background: var(--line);
   margin: 0 2px;
 }
 .rt-link-wrap {
@@ -4097,8 +4077,8 @@ input.litm-theme-title {
   left: 0;
   top: 100%;
   margin-top: 4px;
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 6px;
   z-index: 20;
@@ -4122,7 +4102,7 @@ input.litm-theme-title {
 }
 
 .mention-dropdown-type {
-  color: var(--text-dim);
+  color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
 }
@@ -4138,7 +4118,7 @@ input.litm-theme-title {
   width: 100%;
   flex: 1;
   min-height: 300px;
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   overflow: hidden;
   line-height: 0;
@@ -4214,7 +4194,7 @@ input.litm-theme-title {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: var(--bg);
+  background: var(--paper);
   display: flex;
   flex-direction: column;
 }
@@ -4250,8 +4230,8 @@ input.litm-theme-title {
   bottom: calc(100% + 4px);
   left: 0;
   right: 90px;
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   max-height: 220px;
   overflow-y: auto;
@@ -4282,8 +4262,8 @@ input.litm-theme-title {
   height: 14px;
   border-radius: 50%;
   background: var(--accent);
-  border: 2px solid var(--bg);
-  box-shadow: 0 0 0 1px var(--border);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--line);
   cursor: pointer;
 }
 .location-map-pin-label {
@@ -4292,8 +4272,8 @@ input.litm-theme-title {
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 14px 18px;
   font-size: 12px;
@@ -4340,15 +4320,15 @@ input.litm-theme-title {
   color: #f3e6b8;
 }
 .location-map-pin.selected .location-map-pin-dot {
-  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px var(--bg);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px var(--paper);
 }
 .location-map-pin-toolbar {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 12px;
   font-size: 14px;
@@ -4379,9 +4359,9 @@ input.litm-theme-title {
 .relation-graph-wrap {
   position: relative;
   width: 100%;
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  background: var(--bg-panel);
+  background: var(--paper-2);
   overflow: hidden;
   touch-action: none;
   user-select: none;
@@ -4402,8 +4382,8 @@ input.litm-theme-title {
   top: 100%;
   left: 0;
   min-width: 260px;
-  background: var(--bg-panel);
-  border: var(--card-border-width, 1px) solid var(--border);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   max-height: 220px;
   overflow-y: auto;
@@ -4424,22 +4404,22 @@ input.litm-theme-title {
   align-items: center;
   gap: 10px;
   padding: 4px 10px;
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  background: var(--bg-panel);
+  background: var(--paper-2);
 }
 .relation-graph-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .relation-graph-fullscreen {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: var(--bg);
+  background: var(--paper);
   display: flex;
   flex-direction: column;
   padding: 12px;
@@ -4458,7 +4438,7 @@ input.litm-theme-title {
 .litm-companion-drop {
   flex: 1;
   min-height: 32px;
-  border: var(--card-border-width, 1px) dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--line);
   border-radius: var(--card-radius);
   padding: 6px 8px;
   display: flex;
@@ -4496,7 +4476,7 @@ input.litm-theme-title {
   max-height: 140px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
 }
 .resource-link-button {
   align-self: flex-start;
@@ -4583,7 +4563,7 @@ input.litm-theme-title {
   position: relative;
   height: 6px;
   border-radius: 0;
-  background: color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--line) 60%, transparent);
   overflow: hidden;
 }
 .initiative-hp-bar-fill {
@@ -4662,7 +4642,7 @@ input.litm-theme-title {
   background: var(--card-band-bg, var(--bg-elevated));
   background-image: var(--card-band-image, none);
   color: var(--primary-text, var(--text-bright));
-  border-top: var(--card-border-width) solid var(--border);
+  border-top: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius) var(--card-radius) 0 0;
 }
 .audio-player-bar button {
@@ -4707,7 +4687,7 @@ input.litm-theme-title {
   color: var(--accent-text);
   border-radius: 999px;
 }
-/* .muted's hardcoded --text-dim assumes a light card surface; the bar's own
+/* .muted's hardcoded --muted assumes a light card surface; the bar's own
    dark band needs the band's own (already-contrast-checked) text color. */
 .audio-player-bar .muted {
   color: var(--primary-text, inherit);
@@ -4742,7 +4722,7 @@ input.litm-theme-title {
   transform: translateX(-50%);
   margin-bottom: 6px;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 10px 8px;
   z-index: 50;
@@ -4763,7 +4743,7 @@ input.litm-theme-title {
   right: 0;
   margin-bottom: 6px;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 8px;
   min-width: 260px;
@@ -4777,7 +4757,7 @@ input.litm-theme-title {
   right: 0;
   margin-top: 4px;
   background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 8px;
   display: flex;
@@ -4796,7 +4776,7 @@ input.litm-theme-title {
 .playlist-nav-subgroup > summary {
   cursor: pointer;
   padding: 2px 0 2px 10px;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .playlist-nav-item {
   display: flex;
@@ -4816,7 +4796,7 @@ input.litm-theme-title {
   opacity: 0.7;
 }
 .playlist-nav-item:hover {
-  background: var(--bg-panel);
+  background: var(--paper-2);
 }
 .audio-player-stop {
   margin-left: auto;
@@ -4835,7 +4815,7 @@ input.litm-theme-title {
 }
 .backup-info {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--muted);
   word-break: break-all;
   padding: 0 10px;
 }
@@ -4850,7 +4830,7 @@ input.litm-theme-title {
   align-items: center;
   padding: 6px 0;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
-  color: var(--text-dim);
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -4899,7 +4879,7 @@ input.litm-theme-title {
 .comp-toggle {
   background: none;
   border: none;
-  color: var(--text-dim);
+  color: var(--muted);
   cursor: pointer;
   padding: 0;
   width: 1em;
@@ -4953,7 +4933,7 @@ details[open] > summary.chevron-summary .chevron-icon,
 }
 .comp-drag-handle {
   cursor: grab;
-  color: var(--text-dim);
+  color: var(--muted);
   flex: 0 0 auto;
   font-size: 0.85em;
   user-select: none;
@@ -4966,7 +4946,7 @@ details[open] > summary.chevron-summary .chevron-icon,
 }
 .comp-level {
   font-size: 0.55em;
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .comp-class-short-desc {
   font-style: italic;
@@ -4998,7 +4978,7 @@ details[open] > summary.chevron-summary .chevron-icon,
 }
 .comp-mini.is-active {
   background: var(--accent);
-  color: var(--bg, #fff);
+  color: var(--paper, #fff);
   border-color: var(--accent);
 }
 .sort-toggle button {
@@ -5009,7 +4989,7 @@ details[open] > summary.chevron-summary .chevron-icon,
 .sort-toggle button.active-sort {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--text);
+  color: var(--ink);
 }
 .comp-body {
   margin-left: 1em;
@@ -5029,7 +5009,7 @@ details[open] > summary.chevron-summary .chevron-icon,
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--text-dim);
+  color: var(--muted);
   margin-top: 6px;
 }
 .setting-player-row {

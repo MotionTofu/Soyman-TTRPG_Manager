@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { ModulesTab } from "../components/ModulesTab";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { hasElectronAPI } from "../electronApi";
+import { NavIcon } from "../components/NavIcons";
 import type { AppSettings, StorageProfile } from "../types";
 
 export function StoragesSettingsPage() {
@@ -194,7 +195,7 @@ export function StoragesSettingsPage() {
             />
             {hasElectronAPI() && (
               <button onClick={pickNewFolder} title="Выбрать папку через проводник">
-                📁 Обзор
+                <NavIcon name="folder" /> Обзор
               </button>
             )}
             <button className="primary" onClick={createStorage}>

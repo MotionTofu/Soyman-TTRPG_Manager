@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { loadThumbnailStyles } from "../thumbnailStyles";
+import { NavIcon } from "./NavIcons";
 import type { SettingLocation } from "../types";
 
 interface Props {
@@ -172,7 +173,7 @@ export function LocationNode({
               archive();
             }}
           >
-            🗑
+            <NavIcon name="delete" />
           </button>
         </span>
       </summary>

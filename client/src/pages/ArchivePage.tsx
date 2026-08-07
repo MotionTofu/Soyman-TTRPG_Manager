@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { NavIcon } from "../components/NavIcons";
 import type { ArchiveItem, ArchivedFile } from "../types";
 
 const RESTORE_ENDPOINTS: Record<string, string> = {
@@ -104,7 +105,9 @@ export function ArchivePage() {
       {tab === "Файлы" && (
         <div className="stack">
           <div className="row">
-            <button onClick={openArchiveFolder}>📂 Открыть папку архива</button>
+            <button onClick={openArchiveFolder}>
+              <NavIcon name="folder" /> Открыть папку архива
+            </button>
           </div>
           <p className="muted">
             Отдельные файлы, удалённые из последнего места использования с выбором «отправить в

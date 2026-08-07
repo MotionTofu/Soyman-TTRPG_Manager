@@ -6,6 +6,8 @@ import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SectionHeading } from "../components/SectionHeading";
+import { EmptyState } from "../components/EmptyState";
+import { formatNearestDate } from "../nearestDate";
 import type { Player } from "../types";
 
 // Groups players by the first letter of their name (locale-aware, so
@@ -33,6 +35,10 @@ export function PlayersListPage() {
   }
   useEffect(refresh, []);
 
+  // Server already sorts by next_planned_date (see players.ts), so the
+  // upcoming ones are a simple prefix filter here.
+  const upcoming = players.filter((p) => p.next_planned_date);
+
   async function create() {
     if (!name.trim()) return;
     const created = await api.post<Player>("/players", { name, notes });
@@ -51,6 +57,30 @@ export function PlayersListPage() {
           + Новый игрок
         </button>
       </div>
+      {upcoming.length > 0 && (
+        <div className="stack" style={{ gap: 4 }}>
+          <div className="player-list-letter">Ближайшая сессия</div>
+          <div className="card stack" style={{ gap: 0 }}>
+            {upcoming.map((p) => (
+              <Link key={p.id} to={`/players/${p.id}`} className="row player-list-row player-list-row-upcoming">
+                {p.thumbnail_image_url || p.avatar_image_url ? (
+                  <img
+                    src={p.thumbnail_image_url ?? p.avatar_image_url ?? undefined}
+                    alt=""
+                    className="player-list-avatar"
+                  />
+                ) : (
+                  <div className="player-list-avatar player-list-avatar-placeholder" />
+                )}
+                <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                  <strong>{p.name}</strong>
+                  <div className="muted player-list-notes-preview">{formatNearestDate(p.next_planned_date!)}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="stack">
         {groupPlayersByLetter(players).map(([letter, group]) => (
           <div key={letter} className="stack" style={{ gap: 4 }}>
@@ -80,8 +110,19 @@ export function PlayersListPage() {
             </div>
           </div>
         ))}
-        {players.length === 0 && <p className="muted">Пока нет игроков.</p>}
       </div>
+      {players.length === 0 && (
+        <EmptyState
+          icon="splatter"
+          title="Стол пустует"
+          hint="Ни одного игрока ещё не заведено — добавьте первого."
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              + Новый игрок
+            </button>
+          }
+        />
+      )}
 
       {creating && (
         <Modal onClose={() => setCreating(false)}>

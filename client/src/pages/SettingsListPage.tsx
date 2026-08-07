@@ -7,6 +7,7 @@ import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { cardThumbnailProps, loadThumbnailStyles } from "../thumbnailStyles";
 import { SectionHeading } from "../components/SectionHeading";
+import { EmptyState } from "../components/EmptyState";
 import { loadListViewMode, saveListViewMode, type ListViewMode } from "../listViewMode";
 import { ViewModeToggle } from "../components/ViewModeToggle";
 import type { Setting } from "../types";
@@ -77,8 +78,19 @@ export function SettingsListPage() {
           </Link>
           );
         })}
-        {settings.length === 0 && <p className="muted">Пока нет сеттингов.</p>}
       </div>
+      {settings.length === 0 && (
+        <EmptyState
+          icon="anarchyStar"
+          title="Мир не начерчен"
+          hint="Ни одного сеттинга ещё нет — создайте первый."
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              + Новый сеттинг
+            </button>
+          }
+        />
+      )}
 
       {creating && (
         <Modal onClose={() => setCreating(false)}>

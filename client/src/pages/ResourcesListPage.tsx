@@ -4,6 +4,7 @@ import { ResourceCard } from "../components/ResourceCard";
 import { SettingLinksPopover } from "../components/SettingLinksPopover";
 import { TemplatesTab } from "../components/TemplatesTab";
 import { SectionHeading } from "../components/SectionHeading";
+import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
 import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } from "../resourceCategories";
 import type { Campaign, Playlist, Resource, Setting } from "../types";
@@ -213,7 +214,28 @@ export function ResourcesListPage() {
           </div>
 
           {groups.length === 0 && sortedPlaylists.length === 0 && (
-            <p className="muted">Ничего не найдено.</p>
+            <EmptyState
+              icon="barcode"
+              title="Полки пусты"
+              hint={
+                query || campaignFilter || settingFilter
+                  ? "Ничего не найдено — попробуйте другой запрос или снимите фильтры."
+                  : "Ни одного ресурса ещё не добавлено — загрузите первый выше."
+              }
+              action={
+                (query || campaignFilter || settingFilter) ? (
+                  <button
+                    onClick={() => {
+                      setQuery("");
+                      setCampaignFilter(null);
+                      setSettingFilter(null);
+                    }}
+                  >
+                    Сбросить фильтры
+                  </button>
+                ) : undefined
+              }
+            />
           )}
 
           {groups.map((g) => (

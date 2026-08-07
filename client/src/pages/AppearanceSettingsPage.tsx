@@ -243,10 +243,10 @@ export function AppearanceSettingsPage() {
               style={{ cursor: "pointer", borderColor: t.id === prefs.themeId ? t.vars["--accent"] : undefined, borderWidth: t.id === prefs.themeId ? 2 : undefined }}
             >
               <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--bg"], border: "1px solid " + t.vars["--border"] }} />
-                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--bg-panel"], border: "1px solid " + t.vars["--border"] }} />
+                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--paper"], border: "1px solid " + t.vars["--line"] }} />
+                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--paper-2"], border: "1px solid " + t.vars["--line"] }} />
                 <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--accent"] }} />
-                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--text"] }} />
+                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--ink"] }} />
               </div>
               <div style={{ fontFamily: t.vars["--font-display"], fontWeight: 600 }}>{t.name}</div>
               {t.id === prefs.themeId && <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.1em", color: t.vars["--accent"], fontWeight: 600, marginTop: 4 }}>Выбрана</div>}

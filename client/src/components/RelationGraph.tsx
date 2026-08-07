@@ -362,7 +362,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
               if (!a || !b) return null;
               const dim = neighborKeys && !neighborKeys.has(e.from) && !neighborKeys.has(e.to);
               const tone = e.tone as RelationTone | null;
-              const color = tone ? RELATION_TONE_COLORS[tone] : "var(--border)";
+              const color = tone ? RELATION_TONE_COLORS[tone] : "var(--line)";
               const fromTitle = nodesByKey.get(e.from)?.title ?? "?";
               const toTitle = nodesByKey.get(e.to)?.title ?? "?";
               const relationLabel = e.section || (tone ? RELATION_TONE_LABELS[tone] : null);
@@ -431,8 +431,8 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
                         y={-4}
                         fontSize={EDGE_LABEL_FONT_SIZE}
                         textAnchor="middle"
-                        fill="var(--text)"
-                        stroke="var(--bg)"
+                        fill="var(--ink)"
+                        stroke="var(--paper)"
                         strokeWidth={3}
                         paintOrder="stroke"
                       >
@@ -462,10 +462,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
                   <circle
                     r={focusedKey === n.key ? 12 : 9}
                     fill={TYPE_COLORS[n.type] ?? "#888"}
-                    stroke={focusedKey === n.key ? "var(--text)" : "none"}
+                    stroke={focusedKey === n.key ? "var(--ink)" : "none"}
                     strokeWidth={2}
                   />
-                  <text x={14} y={4} fontSize={11} fill="var(--text)">
+                  <text x={14} y={4} fontSize={11} fill="var(--ink)">
                     {n.title}
                   </text>
                   <title>{`${TYPE_LABELS[n.type] ?? n.type}: ${n.title}`}</title>

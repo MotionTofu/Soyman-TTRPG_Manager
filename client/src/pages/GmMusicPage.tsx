@@ -11,7 +11,7 @@ const TABS = ["Треки", "Плейлисты", "Импорт", "Настро�
 type Tab = (typeof TABS)[number];
 
 // GM-only full-screen music management window, reached from AudioPlayerBar's
-// "🎛 Открыть плеер" button — everything here operates on the whole storage
+// "Открыть плеер" button — everything here operates on the whole storage
 // (not scoped to one session/setting), unlike ResourcesSection/PlaylistsSection
 // which are entity-scoped. Reuses existing endpoints as-is: GET /resources
 // and GET /playlists already return an unscoped "everything" list when called

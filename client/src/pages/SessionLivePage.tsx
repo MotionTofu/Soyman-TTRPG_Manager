@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { NavIcon } from "../components/NavIcons";
 import {
   LocationsPanel,
   PlotCharactersPanel,
@@ -118,7 +119,13 @@ export function SessionLivePage() {
       >
         <label className="row muted" style={{ gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={!!session.main_events_visible} onChange={toggleMainEventsVisible} />
-          {session.main_events_visible ? "👁 Видно игрокам" : "Видно игрокам"}
+          {session.main_events_visible ? (
+            <>
+              <NavIcon name="eye" /> Видно игрокам
+            </>
+          ) : (
+            "Видно игрокам"
+          )}
         </label>
       </EditableTextCard>
 

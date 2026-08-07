@@ -157,14 +157,12 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--on-surface": onSurface,
     "--line": line,
     "--glow": cfg.glow || "none",
-    // legacy aliases — same source values, do not diverge
-    "--bg": paper,
-    "--bg-panel": paper2,
+    // --bg-elevated and --text-bright have no exact §3.1 equivalent (an
+    // elevated-surface mix and a dark-mode-brightened ink respectively —
+    // see the comments on `paperElevated`/`inkBright` above), so they stay
+    // as their own tokens instead of being folded into --paper-2/--ink-2.
     "--bg-elevated": paperElevated,
-    "--border": line,
-    "--text": ink,
     "--text-bright": inkBright,
-    "--text-dim": muted,
     "--accent": cfg.accent,
     "--accent-text": pickTextOn(cfg.accent),
     "--accent-soft": cfg.accent + "2a",
@@ -176,7 +174,7 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--card-radius": `${cfg.cardRadius ?? 6}px`,
     "--card-border-width": `${borderWidth}px`,
     "--card-clip": cfg.cardClip || "none",
-    "--card-band-bg": cfg.bandBg || "var(--bg-panel)",
+    "--card-band-bg": cfg.bandBg || "var(--paper-2)",
     "--card-band-image": cfg.bandImage || "none",
     "--page-texture": cfg.pageTexture || "none",
     "--card-body-texture": cfg.cardBodyTexture || "none",
@@ -242,13 +240,10 @@ function skinTheme(
       "--on-surface": d.onSurface,
       "--line": d.line,
       "--glow": d.glow,
-      "--bg": d.paper,
-      "--bg-panel": d.paper2,
+      // See buildTheme()'s comment: --bg-elevated/--text-bright have no
+      // exact §3.1 equivalent, so skins keep emitting them directly.
       "--bg-elevated": d.elevated,
-      "--border": d.line,
-      "--text": d.ink,
       "--text-bright": d.ink,
-      "--text-dim": d.muted,
       "--accent": d.accent,
       "--accent-text": pickTextOn(d.accent),
       "--accent-soft": d.accent + "2a",

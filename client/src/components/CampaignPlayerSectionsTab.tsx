@@ -40,7 +40,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
     <div className="stack">
       <p className="muted">
         Подразделы этого раздела не видны игрокам, пока вы явно не откроете их (или отдельные
-        статьи внутри) конкретным игрокам кнопкой 👁.
+        статьи внутри) конкретным игрокам кнопкой-глазом.
       </p>
       <div className="row">
         <input placeholder="Название подраздела" value={newName} onChange={(e) => setNewName(e.target.value)} />

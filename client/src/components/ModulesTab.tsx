@@ -209,7 +209,7 @@ export function ModulesTab() {
         </p>
         <div className="row">
           <button onClick={refreshCatalog} disabled={catalogLoading}>
-            {catalogLoading ? "Загрузка…" : "🌐 Обновить каталог из GitHub"}
+            {catalogLoading ? "Загрузка…" : "Обновить каталог из GitHub"}
           </button>
         </div>
         {catalogError && <div className="backup-info error">{catalogError}</div>}

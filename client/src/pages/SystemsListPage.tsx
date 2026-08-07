@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import { cardThumbnailProps, loadThumbnailStyles } from "../thumbnailStyles";
 import { SectionHeading } from "../components/SectionHeading";
+import { EmptyState } from "../components/EmptyState";
 import { loadListViewMode, saveListViewMode, type ListViewMode } from "../listViewMode";
 import { ViewModeToggle } from "../components/ViewModeToggle";
 import type { System } from "../types";
@@ -65,8 +66,19 @@ export function SystemsListPage() {
           </Link>
           );
         })}
-        {systems.length === 0 && <p className="muted">Пока нет систем.</p>}
       </div>
+      {systems.length === 0 && (
+        <EmptyState
+          icon="issueStamp"
+          title="Правил ещё нет"
+          hint="Ни одной системы не заведено — добавьте первую."
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              + Новая система
+            </button>
+          }
+        />
+      )}
 
       {creating && (
         <Modal onClose={() => setCreating(false)}>

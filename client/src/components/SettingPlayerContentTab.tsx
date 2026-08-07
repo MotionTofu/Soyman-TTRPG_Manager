@@ -53,7 +53,7 @@ export function SettingPlayerContentTab({ settingId, campaigns }: Props) {
     <div className="stack">
       <p className="muted">
         Добавление сюда ничего не показывает игрокам само по себе — выберите кампанию, а затем
-        отметьте 👁 для нужных игроков.
+        отметьте кнопкой-глазом нужных игроков.
       </p>
       <label className="row">
         Кампания

@@ -128,7 +128,7 @@ function RosterContent({ campaign, characters }: PanelProps) {
             {avatar ? (
               <img src={avatar} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
             ) : (
-              <span style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--bg-panel)" }} />
+              <span style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--paper-2)" }} />
             )}
             <span>{p.name}</span>
             {playerCharacters.length === 0 ? (

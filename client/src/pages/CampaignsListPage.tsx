@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
+import { EmptyState } from "../components/EmptyState";
 import {
   PAYMENT_TYPE_OPTIONS,
   PAYMENT_TYPE_LABELS,
@@ -159,8 +160,19 @@ export function CampaignsListPage() {
             }
             return <CampaignCoverTile key={c.id} campaign={c} />;
           })}
-        {campaigns.length === 0 && <p className="muted">Пока нет кампаний.</p>}
       </div>
+      {campaigns.length === 0 && (
+        <EmptyState
+          icon="skullDie"
+          title="Пока тихо"
+          hint="Ни одной кампании ещё нет — начните первую."
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              + Новая кампания
+            </button>
+          }
+        />
+      )}
 
       {creating && (
         <Modal onClose={() => setCreating(false)}>

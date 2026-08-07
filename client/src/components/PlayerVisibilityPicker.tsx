@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { NavIcon } from "./NavIcons";
 import type { PlayerVisibilityGrant, RosterPlayer, VisibilityTargetType } from "../types";
 
-// Small "👁 Кому видно" toggle used by both the campaign and setting "Для
+// Small "глаз / Кому видно" toggle used by both the campaign and setting "Для
 // игроков" tabs — per (campaign, target) grant list, one checkbox per
 // roster player. Adding/removing content never reveals it; this is the only
 // UI that grants visibility (see player_visibility_grants).
@@ -45,7 +46,7 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
   return (
     <div className="visibility-picker">
       <button className="btn-capsule" onClick={() => setOpen((v) => !v)} title="Кому видно">
-        👁 {grantedCount > 0 ? grantedCount : ""}
+        <NavIcon name="eye" /> {grantedCount > 0 ? grantedCount : ""}
       </button>
       {open && (
         <div className="visibility-picker-panel card stack">

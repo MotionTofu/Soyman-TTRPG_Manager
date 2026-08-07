@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void;
 }
 
-// Popover opened from the player's "📂 Открыть плейлист" button — browses
+// Popover opened from the player's "Открыть плейлист" button — browses
 // every playlist in the vault, grouped Сеттинги > <сеттинг> > плейлисты and
 // Сессии > <кампания, дата> > плейлисты, and starts playback on click.
 export function PlaylistNavMenu({ onClose }: Props) {

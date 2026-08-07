@@ -13,6 +13,7 @@ import { TaskTracker } from "../components/TaskTracker";
 import { SecretsTracker } from "../components/SecretsTracker";
 import { ResourceCard } from "../components/ResourceCard";
 import { RemindersWidget } from "../components/RemindersWidget";
+import { NavIcon } from "../components/NavIcons";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import {
   PAYMENT_TYPE_LABELS,
@@ -1387,7 +1388,7 @@ function RosterCard({
   return (
     <div className={`card stack roster-card ${thumb.className}`} style={thumb.style}>
       <label className="roster-card-thumb-btn" title="Изменить тамбнейл">
-        🖼
+        <NavIcon name="image" />
         <input
           type="file"
           accept={IMAGE_ACCEPT}

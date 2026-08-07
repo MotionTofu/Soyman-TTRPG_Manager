@@ -22,7 +22,7 @@ export function PipTrack({ value, max, onChange, size = 16 }: Props) {
             display: "inline-block",
             cursor: onChange ? "pointer" : "default",
             background: n <= value ? "var(--accent)" : "var(--bg-elevated)",
-            border: "1px solid var(--border)",
+            border: "1px solid var(--line)",
           }}
         />
       ))}

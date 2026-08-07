@@ -4,6 +4,7 @@ import { FONT_OPTIONS, ensureFontLoaded } from "../../fonts";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { Modal } from "../Modal";
 import { MentionPickerModal } from "./MentionPickerModal";
+import { NavIcon } from "../NavIcons";
 import type { SearchResult } from "../../types";
 import { scheduleAutoResize, cancelAutoResize } from "./textareaAutoResize";
 
@@ -400,7 +401,7 @@ export const MentionTextarea = memo(function MentionTextarea({
         </button>
         <span className="rt-sep" />
         <label className="rt-btn rt-color-btn" title="Цвет текста">
-          🎨
+          <NavIcon name="palette" />
           <input
             type="color"
             defaultValue="#e3d9c6"
@@ -461,7 +462,7 @@ export const MentionTextarea = memo(function MentionTextarea({
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setLinkMenuOpen((v) => !v)}
           >
-            🔗
+            <NavIcon name="link" />
           </button>
           {linkMenuOpen && (
             <div className="rt-link-menu">
