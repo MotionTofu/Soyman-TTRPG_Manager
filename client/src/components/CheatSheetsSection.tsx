@@ -1,10 +1,15 @@
 import { memo, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api/client";
 import { resolveEntityLabel } from "../api/resolveEntity";
-import type { SettingBeing } from "../types";
+import { abilityModifier, parseBonus, SKILLS_BY_ABILITY } from "./dnd/AbilityScores";
+import { computeArmorClass } from "./dnd/armorClass";
+import { MentionTextarea } from "./mentions/MentionTextarea";
+import { MentionText } from "./mentions/MentionText";
+import type { Character, CampaignEntry, DndCharacterData, SettingBeing, Statblock } from "../types";
 
 type SheetFormat = "a4" | "a5";
-type SheetKind = "overview" | "combat" | "combo";
+type SheetKind = "session" | "combat" | "characters";
 
 interface GenericLink {
   id: number;
@@ -20,9 +25,26 @@ interface LinkedEntry {
   label: string;
 }
 
+interface CheatsheetLine {
+  id: string; // `${type}-${id}`
+  label: string;
+  note: string;
+}
+
+interface SessionCheatsheetData {
+  locations: CheatsheetLine[];
+  npcs: CheatsheetLine[];
+  loot: CheatsheetLine[];
+  notes: string;
+  clues: string;
+}
+
 interface Props {
   sessionId: number;
+  campaignId: number;
   ideaNotes: string;
+  cheatsheetData: string | null;
+  unrevealedSecrets: CampaignEntry[];
 }
 
 async function loadLinkedLabels(sessionId: number, section: string): Promise<LinkedEntry[]> {
@@ -63,24 +85,110 @@ async function loadEnemies(sessionId: number): Promise<SettingBeing[]> {
   return resolved.filter((b): b is SettingBeing => b !== null);
 }
 
-const PAGE_SIZE: Record<SheetFormat, string> = {
-  a4: "A4 landscape",
-  a5: "A5 portrait",
+function mergeLines(existing: CheatsheetLine[], fresh: LinkedEntry[]): CheatsheetLine[] {
+  const byId = new Map(existing.map((l) => [l.id, l]));
+  return fresh.map((e) => {
+    const key = `${e.type}-${e.id}`;
+    const prev = byId.get(key);
+    return { id: key, label: e.label, note: prev?.note ?? "" };
+  });
+}
+
+function classAndSubclassSummary(classes: DndCharacterData["classes"]): {
+  className: string;
+  subclassName: string;
+} {
+  const parts = classes.filter((c) => c.className);
+  return {
+    className: parts.map((c) => `${c.className} ${c.level}`).join(" / "),
+    subclassName: parts.map((c) => c.subclassName).filter(Boolean).join(" / "),
+  };
+}
+
+interface CharacterCardData {
+  id: number;
+  name: string;
+  note: string;
+  ac: number;
+  passivePerception: number;
+  race: string;
+  className: string;
+  subclassName: string;
+  skills: string[];
+}
+
+async function loadCharacterCards(campaignId: number): Promise<CharacterCardData[]> {
+  const characters = await api.get<Character[]>(`/characters?campaign_id=${campaignId}`);
+  const cards = await Promise.all(
+    characters.map(async (c) => {
+      const statblocks = await api.get<Statblock[]>(
+        `/statblocks?owner_type=character&owner_id=${c.id}`
+      );
+      const row = statblocks.find((s) => s.format === "dnd_character");
+      if (!row) return null;
+      let data: DndCharacterData;
+      try {
+        data = JSON.parse(row.content);
+      } catch {
+        return null;
+      }
+      const dexMod = abilityModifier(data.abilities.dex);
+      const ac = computeArmorClass(dexMod, data.equipmentSections, parseBonus(data.manualAcBonus));
+      const profBonus = parseBonus(data.proficiencyBonus);
+      const wisMod = abilityModifier(data.abilities.wis);
+      const perceptionLevel = data.skillProfs["Внимание/восприятие"] ?? 0;
+      const passivePerception = 10 + wisMod + profBonus * perceptionLevel;
+      const { className, subclassName } = classAndSubclassSummary(data.classes);
+      const allSkills = Object.values(SKILLS_BY_ABILITY).flat();
+      const skills = allSkills.filter((s) => (data.skillProfs[s] ?? 0) > 0);
+      return {
+        id: c.id,
+        name: data.characterName || c.character_name,
+        note: row.note || "",
+        ac,
+        passivePerception,
+        race: data.raceName,
+        className,
+        subclassName,
+        skills,
+      };
+    })
+  );
+  return cards.filter((c): c is CharacterCardData => c !== null);
+}
+
+const PAGE_SIZE: Record<SheetKind, string> = {
+  session: "A4 landscape",
+  combat: "A4 landscape",
+  characters: "A4 landscape",
 };
 
 // Memoized — see ObstacleDropZone's comment; props here are plain
 // primitives so no caller-side changes are needed for this to take effect.
-export const CheatSheetsSection = memo(function CheatSheetsSection({ sessionId, ideaNotes }: Props) {
-  const [characters, setCharacters] = useState<LinkedEntry[]>([]);
+export const CheatSheetsSection = memo(function CheatSheetsSection({
+  sessionId,
+  campaignId,
+  ideaNotes,
+  cheatsheetData,
+  unrevealedSecrets,
+}: Props) {
   const [locations, setLocations] = useState<LinkedEntry[]>([]);
+  const [npcs, setNpcs] = useState<LinkedEntry[]>([]);
+  const [loot, setLoot] = useState<LinkedEntry[]>([]);
   const [enemies, setEnemies] = useState<SettingBeing[]>([]);
-  const [overviewFormat, setOverviewFormat] = useState<SheetFormat>("a4");
   const [combatFormat, setCombatFormat] = useState<SheetFormat>("a4");
   const [printJob, setPrintJob] = useState<{ kind: SheetKind; pageSize: string } | null>(null);
 
+  const [sheet, setSheet] = useState<SessionCheatsheetData | null>(() =>
+    cheatsheetData ? JSON.parse(cheatsheetData) : null
+  );
+  const [characterCards, setCharacterCards] = useState<CharacterCardData[] | null>(null);
+  const [loadingCards, setLoadingCards] = useState(false);
+
   useEffect(() => {
-    loadLinkedLabels(sessionId, "plot_characters").then(setCharacters);
+    loadLinkedLabels(sessionId, "plot_characters").then(setNpcs);
     loadLinkedLabels(sessionId, "locations").then(setLocations);
+    loadLinkedLabels(sessionId, "loot").then(setLoot);
     loadEnemies(sessionId).then(setEnemies);
   }, [sessionId]);
 
@@ -88,11 +196,16 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({ sessionId, 
   // for the duration of the browser print dialog — the CSS in index.css
   // (`.printing-cheatsheet`) does the actual hide/show, this effect just
   // drives the @page size (which differs per format/combo) and cleans up
-  // once the dialog closes, whether the user printed or cancelled.
+  // once the dialog closes, whether the user printed or cancelled. Margin is
+  // 0 — each .cheatsheet-sheet is already sized to exactly fill its physical
+  // page (width/min-height match the A4/A5 dimensions) with its own 10mm
+  // internal padding, so an additional @page margin on top just pushed the
+  // sheet past the printable area and forced Chrome's print preview to
+  // scroll/clip it.
   useEffect(() => {
     if (!printJob) return;
     const style = document.createElement("style");
-    style.textContent = `@page { size: ${printJob.pageSize}; margin: 10mm; }`;
+    style.textContent = `@page { size: ${printJob.pageSize}; margin: 0; }`;
     document.head.appendChild(style);
     document.body.classList.add("printing-cheatsheet");
     function cleanup() {
@@ -107,36 +220,110 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({ sessionId, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printJob]);
 
-  const bothA5 = overviewFormat === "a5" && combatFormat === "a5";
+  async function persistSheet(data: SessionCheatsheetData) {
+    await api.put(`/sessions/${sessionId}`, { cheatsheet_data: JSON.stringify(data) });
+  }
+
+  async function generateSheet() {
+    const next: SessionCheatsheetData = {
+      locations: mergeLines(sheet?.locations ?? [], locations),
+      npcs: mergeLines(sheet?.npcs ?? [], npcs),
+      loot: mergeLines(sheet?.loot ?? [], loot),
+      notes: sheet?.notes ?? ideaNotes,
+      clues: sheet?.clues ?? "",
+    };
+    setSheet(next);
+    await persistSheet(next);
+  }
+
+  function updateLineNote(section: "locations" | "npcs" | "loot", id: string, note: string) {
+    setSheet((prev) => (prev ? { ...prev, [section]: prev[section].map((l) => (l.id === id ? { ...l, note } : l)) } : prev));
+  }
+
+  function updateText(field: "notes" | "clues", value: string) {
+    setSheet((prev) => (prev ? { ...prev, [field]: value } : prev));
+  }
+
+  function blurSave() {
+    if (sheet) persistSheet(sheet);
+  }
+
+  async function loadCharacters() {
+    setLoadingCards(true);
+    try {
+      setCharacterCards(await loadCharacterCards(campaignId));
+    } finally {
+      setLoadingCards(false);
+    }
+  }
 
   return (
     <div className="stack">
       <p className="muted">
-        Заполняемые шаблоны для печати перед офлайн-сессией. A4 печатается альбомно на одном
-        листе, A5 — книжно; если оба шаблона в формате A5, их можно напечатать вдвоём на одном
-        листе A4, чтобы не переводить бумагу.
+        Заполняемые шпаргалки для печати перед офлайн-сессией. Данные подтягиваются из заготовки
+        на сессию — все строчки можно отредактировать после генерации.
       </p>
 
       <div className="card stack">
-        <strong>Обзор сессии</strong>
+        <strong>Шпаргалка сессии</strong>
         <p className="muted" style={{ margin: 0 }}>
-          Задумка, сюжетные персонажи, локации и противники одним взглядом.
+          Локации, неписи и квесты (нераскрытые секреты) на первой странице; заметки, улики и
+          потенциальный лут — на второй. Строчки редактируются прямо на листе.
         </p>
         <div className="row">
-          <select
-            value={overviewFormat}
-            onChange={(e) => setOverviewFormat(e.target.value as SheetFormat)}
-          >
-            <option value="a4">A4 (альбомная)</option>
-            <option value="a5">A5 (книжная)</option>
-          </select>
-          <button
-            type="button"
-            onClick={() => setPrintJob({ kind: "overview", pageSize: PAGE_SIZE[overviewFormat] })}
-          >
-            Сохранить под печать
+          <button type="button" onClick={generateSheet}>
+            {sheet ? "Обновить из заготовки" : "Сгенерировать"}
           </button>
+          {sheet && (
+            <button
+              type="button"
+              onClick={() => setPrintJob({ kind: "session", pageSize: PAGE_SIZE.session })}
+            >
+              Печать / Сохранить PDF
+            </button>
+          )}
         </div>
+
+        {sheet && (
+          <SessionSheetTable
+            sheet={sheet}
+            unrevealedSecrets={unrevealedSecrets}
+            onUpdateLine={updateLineNote}
+            onUpdateText={updateText}
+            onBlurSave={blurSave}
+          />
+        )}
+      </div>
+
+      <div className="card stack">
+        <strong>Шпаргалка по персонажам ДнД</strong>
+        <p className="muted" style={{ margin: 0 }}>
+          Имя, КЗ, пассивное восприятие, вид, класс/подкласс и владения навыками — из статблоков
+          персонажей кампании. Предметы, цели и заметки пока генерируются пустыми.
+        </p>
+        <div className="row">
+          <button type="button" onClick={loadCharacters} disabled={loadingCards}>
+            {loadingCards ? "Загрузка…" : characterCards ? "Обновить" : "Показать"}
+          </button>
+          {characterCards && characterCards.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setPrintJob({ kind: "characters", pageSize: PAGE_SIZE.characters })}
+            >
+              Сохранить под печать
+            </button>
+          )}
+        </div>
+        {characterCards && (
+          <div className="dnd-cheatsheet-preview">
+            {characterCards.map((c) => (
+              <CharacterCardPreview key={c.id} c={c} />
+            ))}
+            {characterCards.length === 0 && (
+              <p className="muted">В кампании нет персонажей со статблоком ДнД.</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="card stack">
@@ -154,112 +341,297 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({ sessionId, 
           </select>
           <button
             type="button"
-            onClick={() => setPrintJob({ kind: "combat", pageSize: PAGE_SIZE[combatFormat] })}
+            onClick={() =>
+              setPrintJob({ kind: "combat", pageSize: combatFormat === "a4" ? "A4 landscape" : "A5 portrait" })
+            }
           >
             Сохранить под печать
           </button>
         </div>
       </div>
 
-      {bothA5 && (
-        <button
-          type="button"
-          onClick={() => setPrintJob({ kind: "combo", pageSize: PAGE_SIZE.a4 })}
-        >
-          Напечатать оба A5 на одном A4
-        </button>
-      )}
-
-      <div className={`cheatsheet-print-root${printJob ? " active" : ""}`}>
-        {printJob?.kind === "overview" && (
-          <OverviewSheet
-            format={overviewFormat}
-            ideaNotes={ideaNotes}
-            characters={characters}
-            locations={locations}
-            enemies={enemies}
-          />
+      {printJob &&
+        createPortal(
+          <div className="cheatsheet-print-portal">
+            {printJob.kind === "session" && sheet && (
+              <SessionPrintView sheet={sheet} unrevealedSecrets={unrevealedSecrets} />
+            )}
+            {printJob.kind === "combat" && <CombatSheet format={combatFormat} enemies={enemies} />}
+            {printJob.kind === "characters" && characterCards && (
+              <CharacterPrintSheet cards={characterCards} />
+            )}
+          </div>,
+          document.body
         )}
-        {printJob?.kind === "combat" && <CombatSheet format={combatFormat} enemies={enemies} />}
-        {printJob?.kind === "combo" && (
-          <div className="cheatsheet-combo">
-            <OverviewSheet
-              format="a5"
-              ideaNotes={ideaNotes}
-              characters={characters}
-              locations={locations}
-              enemies={enemies}
-            />
-            <CombatSheet format="a5" enemies={enemies} />
-          </div>
-        )}
-      </div>
     </div>
   );
 });
 
-function OverviewSheet({
-  format,
-  ideaNotes,
-  characters,
-  locations,
-  enemies,
-}: {
-  format: SheetFormat;
-  ideaNotes: string;
-  characters: LinkedEntry[];
-  locations: LinkedEntry[];
-  enemies: SettingBeing[];
-}) {
+function CharacterCardPreview({ c }: { c: CharacterCardData }) {
   return (
-    <div className="cheatsheet-sheet" data-format={format}>
-      <h2>Обзор сессии</h2>
-      <section>
-        <h3>Задумка</h3>
-        <p style={{ whiteSpace: "pre-wrap" }}>{ideaNotes || "—"}</p>
-      </section>
-      <div className="cheatsheet-columns">
-        <section>
-          <h3>Сюжетные персонажи</h3>
-          <ul>
-            {characters.map((c) => (
-              <li key={`${c.type}-${c.id}`}>{c.label}</li>
-            ))}
-            {characters.length === 0 && <li className="muted">—</li>}
-          </ul>
-        </section>
+    <div className="card dnd-cheatsheet-card-preview">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+        <strong>{c.name}</strong>
+        <span className="muted">
+          КЗ {c.ac} · ПП {c.passivePerception}
+        </span>
+      </div>
+      {c.note && <div className="muted">{c.note}</div>}
+      <div className="muted">
+        {c.race}
+        {c.className && ` · ${c.className}`}
+        {c.subclassName && ` (${c.subclassName})`}
+      </div>
+      {c.skills.length > 0 && (
+        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          {c.skills.join(", ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The always-visible, on-screen editable sheet — "Печать / Сохранить PDF"
+// renders a separate, static snapshot (SessionPrintView below) into a
+// document.body portal instead of reusing this one, since this component's
+// borderless/transparent line inputs and click-to-edit text fields exist
+// only to be edited, not printed. Квесты checkboxes here are plain drawn
+// squares, not real <input type="checkbox">s — resolving a secret happens
+// in Хроника, not here; this sheet is meant to be printed and ticked off
+// by hand.
+function SessionSheetTable({
+  sheet,
+  unrevealedSecrets,
+  onUpdateLine,
+  onUpdateText,
+  onBlurSave,
+}: {
+  sheet: SessionCheatsheetData;
+  unrevealedSecrets: CampaignEntry[];
+  onUpdateLine: (section: "locations" | "npcs" | "loot", id: string, note: string) => void;
+  onUpdateText: (field: "notes" | "clues", value: string) => void;
+  onBlurSave: () => void;
+}) {
+  const [editingField, setEditingField] = useState<"notes" | "clues" | null>(null);
+
+  function fillList(
+    section: "locations" | "npcs" | "loot",
+    lines: CheatsheetLine[],
+    emptyLabel: string
+  ) {
+    return (
+      <ol className="cheatsheet-fill-list">
+        {lines.map((l) => (
+          <li key={l.id}>
+            <span className="cheatsheet-fill-label">{l.label}</span>
+            <input
+              className="cheatsheet-fill-input"
+              placeholder="примечание"
+              value={l.note}
+              onChange={(e) => onUpdateLine(section, l.id, e.target.value)}
+              onBlur={onBlurSave}
+            />
+          </li>
+        ))}
+        {lines.length === 0 && <li className="muted">{emptyLabel}</li>}
+      </ol>
+    );
+  }
+
+  function textField(field: "notes" | "clues", value: string, placeholder: string) {
+    if (editingField === field) {
+      return (
+        <div className="cheatsheet-fill-mentionarea">
+          <MentionTextarea
+            value={value}
+            onChange={(v) => onUpdateText(field, v)}
+            rows={field === "notes" ? 6 : 5}
+          />
+          <button type="button" className="comp-mini" onClick={() => { onBlurSave(); setEditingField(null); }}>
+            Готово
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div
+        className="cheatsheet-fill-textview"
+        onClick={() => setEditingField(field)}
+        title="Нажмите, чтобы отредактировать"
+      >
+        {value ? <MentionText text={value} mentionsAsBold /> : <span className="muted">{placeholder}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="cheatsheet-live-wrap">
+      <div className="cheatsheet-sheet cheatsheet-session-page" data-format="a5">
+        <h2>Локации, неписи, квесты</h2>
         <section>
           <h3>Локации</h3>
-          <ul>
-            {locations.map((l) => (
-              <li key={`${l.type}-${l.id}`}>{l.label}</li>
-            ))}
-            {locations.length === 0 && <li className="muted">—</li>}
-          </ul>
+          {fillList("locations", sheet.locations, "Пусто — добавьте локации в заготовку и обновите шпаргалку.")}
         </section>
         <section>
-          <h3>Противники</h3>
-          <ul>
-            {enemies.map((e) => (
-              <li key={e.id}>
-                {e.name}
-                {e.statblock_short && (
-                  <span className="muted"> — {e.statblock_short.split("\n")[0]}</span>
-                )}
+          <h3>Неписи</h3>
+          {fillList("npcs", sheet.npcs, "Пусто — добавьте сюжетных персонажей в заготовку и обновите шпаргалку.")}
+        </section>
+        <section>
+          <h3>Квесты</h3>
+          <ul className="cheatsheet-quest-list">
+            {unrevealedSecrets.map((s) => (
+              <li key={s.id}>
+                <span className="cheatsheet-quest-box" />
+                {s.title || "Без названия"}
               </li>
             ))}
-            {enemies.length === 0 && <li className="muted">—</li>}
+            {unrevealedSecrets.length === 0 && <li className="muted">Нет нераскрытых секретов.</li>}
           </ul>
         </section>
       </div>
-      <section>
-        <h3>Заметки мастера</h3>
-        <div className="cheatsheet-lines">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="cheatsheet-line" />
-          ))}
-        </div>
-      </section>
+
+      <div className="cheatsheet-sheet cheatsheet-session-page" data-format="a5">
+        <h2>Заметки, улики, лут</h2>
+        <section>
+          <h3>Заметки</h3>
+          {textField("notes", sheet.notes, "Нажмите, чтобы добавить заметки")}
+        </section>
+        <section>
+          <h3>Улики</h3>
+          {textField("clues", sheet.clues, "Нажмите, чтобы добавить улики")}
+        </section>
+        <section>
+          <h3>Лут</h3>
+          {fillList("loot", sheet.loot, "Пусто — добавьте потенциальный лут в заготовку и обновите шпаргалку.")}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// Static print snapshot of the session sheet — rendered into the
+// document.body portal, not the on-screen SessionSheetTable, so nothing
+// interactive (inputs, click-to-edit, format toolbar) ever ends up in the
+// PDF. Same two A5-proportioned halves, laid out side by side on a single
+// A4 landscape sheet (two A5 portrait widths ≈ one A4 landscape width),
+// same section order, plain read-only markup.
+function SessionPrintView({
+  sheet,
+  unrevealedSecrets,
+}: {
+  sheet: SessionCheatsheetData;
+  unrevealedSecrets: CampaignEntry[];
+}) {
+  function printList(lines: CheatsheetLine[]) {
+    return (
+      <ol className="cheatsheet-fill-list">
+        {lines.map((l) => (
+          <li key={l.id}>
+            <span className="cheatsheet-fill-label">{l.label}</span>
+            {l.note && <span>{l.note}</span>}
+          </li>
+        ))}
+        {lines.length === 0 && <li className="muted">—</li>}
+      </ol>
+    );
+  }
+
+  return (
+    <div className="cheatsheet-combo cheatsheet-session-page">
+      <div className="cheatsheet-sheet" data-format="a5">
+        <h2>Локации, неписи, квесты</h2>
+        <section>
+          <h3>Локации</h3>
+          {printList(sheet.locations)}
+        </section>
+        <section>
+          <h3>Неписи</h3>
+          {printList(sheet.npcs)}
+        </section>
+        <section>
+          <h3>Квесты</h3>
+          <ul className="cheatsheet-quest-list">
+            {unrevealedSecrets.map((s) => (
+              <li key={s.id}>
+                <span className="cheatsheet-quest-box" />
+                {s.title || "Без названия"}
+              </li>
+            ))}
+            {unrevealedSecrets.length === 0 && <li className="muted">Нет нераскрытых секретов.</li>}
+          </ul>
+        </section>
+      </div>
+
+      <div className="cheatsheet-sheet" data-format="a5">
+        <h2>Заметки, улики, лут</h2>
+        <section>
+          <h3>Заметки</h3>
+          <div className="cheatsheet-fill-textview">
+            {sheet.notes ? <MentionText text={sheet.notes} mentionsAsBold /> : "—"}
+          </div>
+        </section>
+        <section>
+          <h3>Улики</h3>
+          <div className="cheatsheet-fill-textview">
+            {sheet.clues ? <MentionText text={sheet.clues} mentionsAsBold /> : "—"}
+          </div>
+        </section>
+        <section>
+          <h3>Лут</h3>
+          {printList(sheet.loot)}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function CharacterPrintSheet({ cards }: { cards: CharacterCardData[] }) {
+  return (
+    <div className="cheatsheet-sheet" data-format="a4">
+      <h2>Шпаргалка по персонажам ДнД</h2>
+      <div className="dnd-cheatsheet-grid">
+        {cards.map((c) => (
+          <div key={c.id} className="dnd-cheatsheet-card">
+            <div className="dnd-cheatsheet-card-head">
+              <div>
+                <strong>{c.name}</strong>
+                {c.note && <div className="dnd-cheatsheet-card-note">{c.note}</div>}
+              </div>
+              <div className="dnd-cheatsheet-card-vitals">
+                <div>
+                  <span>КЗ</span>
+                  <strong>{c.ac}</strong>
+                </div>
+                <div>
+                  <span>ПП</span>
+                  <strong>{c.passivePerception}</strong>
+                </div>
+              </div>
+              <div className="dnd-cheatsheet-card-classline">
+                <div>{c.race}</div>
+                <div>{c.className}</div>
+                <div>{c.subclassName}</div>
+              </div>
+            </div>
+            <div className="dnd-cheatsheet-card-body">
+              <div className="dnd-cheatsheet-card-skills">
+                {c.skills.map((s) => (
+                  <div key={s}>{s}</div>
+                ))}
+              </div>
+              <div className="dnd-cheatsheet-card-notes" />
+            </div>
+            <div className="dnd-cheatsheet-card-footer">
+              <div>
+                <div className="dnd-cheatsheet-card-footer-label">Цели</div>
+              </div>
+              <div className="dnd-cheatsheet-card-footer-items">
+                <div className="dnd-cheatsheet-card-footer-label">Предметы</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

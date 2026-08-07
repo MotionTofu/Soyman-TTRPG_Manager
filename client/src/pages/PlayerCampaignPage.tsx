@@ -507,7 +507,7 @@ function WorldEntryCard({
           )
         ))}
       {entry.player_name && (
-        <span className="muted" style={{ fontSize: 11 }}>
+        <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
           Добавил(а): {entry.player_name}
         </span>
       )}

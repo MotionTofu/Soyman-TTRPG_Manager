@@ -64,7 +64,7 @@ export function ArchivePage() {
 
   return (
     <div className="stack">
-      <h1 className="muted" style={{ fontSize: 18 }}>
+      <h1 className="muted" style={{ fontSize: "var(--fs-h2)" }}>
         Архив
       </h1>
       <p className="muted">

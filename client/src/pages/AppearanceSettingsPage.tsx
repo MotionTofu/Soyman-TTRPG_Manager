@@ -249,7 +249,7 @@ export function AppearanceSettingsPage() {
                 <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--text"] }} />
               </div>
               <div style={{ fontFamily: t.vars["--font-display"], fontWeight: 600 }}>{t.name}</div>
-              {t.id === prefs.themeId && <div style={{ fontSize: 11, color: t.vars["--accent"], fontWeight: 600, marginTop: 4 }}>Выбрана</div>}
+              {t.id === prefs.themeId && <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.1em", color: t.vars["--accent"], fontWeight: 600, marginTop: 4 }}>Выбрана</div>}
             </div>
           ))}
         </div>

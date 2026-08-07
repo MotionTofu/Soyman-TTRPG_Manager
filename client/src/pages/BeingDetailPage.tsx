@@ -28,12 +28,12 @@ import type {
 } from "../types";
 
 const TABS = [
-  "Статблок",
   "Досье",
   "Связи",
   "Места обитания",
   "Важные даты",
   "Галерея",
+  "Карточка существа",
   "Упоминания",
 ] as const;
 
@@ -57,7 +57,7 @@ export function BeingDetailPage() {
   const navigate = useNavigate();
 
   const [being, setBeing] = useState<SettingBeingDetail | null>(null);
-  const [tab, selectTab] = useTabState(TABS, "Статблок");
+  const [tab, selectTab] = useTabState(TABS, "Досье");
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [shortNameDraft, setShortNameDraft] = useState("");
@@ -317,7 +317,7 @@ export function BeingDetailPage() {
               <EntityTypeChip type="being" />
             </div>
             {being.creature_meta && (
-              <div className="muted" style={{ fontSize: 12 }}>
+              <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
                 {[being.creature_meta.size, being.creature_meta.creatureType, being.creature_meta.alignment]
                   .filter((p) => p && p.trim())
                   .join(", ")}
@@ -366,12 +366,9 @@ export function BeingDetailPage() {
         ))}
       </div>
 
-      {tab === "Статблок" && (
-        <StatblockList ownerType="being" ownerId={beingId} ownerName={being.name} settingId={being.setting_id} />
-      )}
-
       {tab === "Досье" && (
         <div className="stack">
+          <StatblockList ownerType="being" ownerId={beingId} ownerName={being.name} settingId={being.setting_id} />
           <EditableTextCard
             title="Описание"
             help="Короткая сводка — тоже используется как краткое описание в раскрываемых карточках (Обитатели, Представители)."
@@ -444,6 +441,15 @@ export function BeingDetailPage() {
             modal: thumbnailCrop.modal,
           }}
         />
+      )}
+
+      {tab === "Карточка существа" && (
+        <div className="card stack">
+          <p className="muted">
+            Карточка существа — скоро здесь появится компактная витрина для показа игрокам (пульт
+            управления сессией и другие места).
+          </p>
+        </div>
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="being" entityId={beingId} />}

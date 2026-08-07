@@ -376,7 +376,7 @@ export const ResourcesSection = memo(function ResourcesSection({
                     Добавить папку
                   </button>
                   {!hasElectronAPI() && (
-                    <span className="muted" style={{ fontSize: 11 }}>
+                    <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
                       Выбор папки доступен только в приложении RPG Manager, не в браузере.
                     </span>
                   )}

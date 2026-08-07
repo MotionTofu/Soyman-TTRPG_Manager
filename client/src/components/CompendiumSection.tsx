@@ -1069,7 +1069,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
               <details key={label} className="comp-category">
                 <summary className="comp-level-label chevron-summary">
                   <NavIcon name="chevron" className="chevron-icon" />
-                  {label} <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· {list.length}</span>
+                  {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
                 </summary>
                 {level !== undefined && (
                   <button

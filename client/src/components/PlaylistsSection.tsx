@@ -426,7 +426,7 @@ export function PlaylistsSection({
                             }}
                             style={{ flex: 1 }}
                           />
-                          <label className="row muted" style={{ gap: 4, fontSize: 12, whiteSpace: "nowrap" }}>
+                          <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}>
                             <input
                               type="checkbox"
                               checked={trackRenameEverywhere}

@@ -229,7 +229,7 @@ export function MentionPickerModal({
                 >
                   <div className="row" style={{ gap: 6, alignItems: "center" }}>
                     <div className={`entity-type-chip ${r.type}`}>{ENTITY_TYPE_SINGULAR[r.type] ?? r.type}</div>
-                    {r.context && <span className="muted" style={{ fontSize: 12 }}>{r.context}</span>}
+                    {r.context && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{r.context}</span>}
                   </div>
                   <div>{r.title}</div>
                   {r.subtitle && <div className="muted">{r.subtitle}</div>}

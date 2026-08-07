@@ -1108,7 +1108,7 @@ function DndSpellLevelSection({
           >
             <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={edit ? onSlotsChange : undefined} />
             {!edit && onUsedChange && slots > 0 && (
-              <span className="row muted" style={{ gap: 4, fontSize: 12 }}>
+              <span className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
                 исп.
                 <PipTrack value={used ?? 0} max={slots} onChange={onUsedChange} size={13} />
               </span>
@@ -3692,7 +3692,7 @@ export function DndCharacterView({
             </div>
             <span className="row" style={{ gap: 8, flexShrink: 0 }}>
               {(value.playerName || value.experiencePoints) && (
-                <div style={{ fontFamily: "var(--font-display)", fontSize: 13, letterSpacing: "1.5px", opacity: 0.8, whiteSpace: "nowrap" }}>
+                <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", letterSpacing: "0.04em", opacity: 0.8, whiteSpace: "nowrap" }}>
                   {[value.playerName, value.experiencePoints && `Опыт ${value.experiencePoints}`].filter(Boolean).join(" · ")}
                 </div>
               )}

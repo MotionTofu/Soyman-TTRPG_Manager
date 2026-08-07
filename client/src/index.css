@@ -30,6 +30,13 @@
   --primary-text: #201a14;
   --font-display: 'Segoe UI', system-ui, sans-serif;
   --font-body: 'Segoe UI', system-ui, sans-serif;
+  /* Typography voices (design doc §4.1). Display/Body vary per theme (see
+     themes.ts); UI and Mono are the same everywhere — the doc doesn't call
+     for them to shift per skin, only Display (headline face) does. Both
+     fonts are already loaded via the Google Fonts link in index.html, so no
+     new <link> is needed. */
+  --font-ui: 'Oswald', var(--font-body);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'PT Mono', monospace;
   --card-radius: 6px;
   --card-border-width: 1px;
   --card-clip: none;
@@ -179,11 +186,31 @@ input, select, textarea {
   padding: 6px 8px;
 }
 
-h1, h2, h3 {
+/* Type voices (design doc §4.1) — Display for h1/h2, narrow UI grotesk for
+   h3/h4. Deliberately NOT auto-uppercased here: h1-h4 in this app render
+   both entity names (character/location/campaign/creature names) and
+   service section headers interchangeably depending on the page, and the
+   user-approved deviation from §4.1 keeps entity names in normal case even
+   in the Display face. Caps for genuine service headers/labels is applied
+   locally, per selector, further down this file (see --name-transform on
+   button.primary, and the explicit text-transform:uppercase rules on
+   label-only classes like .badge/.tabs/.player-section-header). */
+h1, h2 {
   margin: 0 0 8px 0;
   font-family: var(--font-display);
-  text-transform: var(--name-transform);
+  letter-spacing: -0.01em;
+  line-height: .92;
 }
+h1 { font-size: var(--fs-h1); }
+h2 { font-size: var(--fs-h2); }
+h3, h4 {
+  margin: 0 0 8px 0;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  line-height: 1.15;
+}
+h3 { font-size: var(--fs-h3); }
+h4 { font-size: var(--fs-body); }
 
 .card {
   background: var(--bg-panel);
@@ -211,7 +238,12 @@ h1, h2, h3 {
   display: inline-block;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 12.5px;
+  /* NOT force-capped: badges here often carry entity names (campaign name,
+     compendium item name, system name) alongside genuine status/type
+     labels, so text-transform is left to the caller rather than assumed —
+     see deviation #2 in issue 04. */
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 .badge.planned { background: var(--status-planned); color: var(--status-planned-fg); }
@@ -586,7 +618,10 @@ h1, h2, h3 {
 }
 
 .roster-card-name {
-  font-size: 21px;
+  /* Entity name — Display voice per §4.1, but deliberately not capsed
+     (deviation #2 in issue 04): this renders an actual character name. */
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
   font-weight: 700;
   color: var(--text-bright);
 }
@@ -617,11 +652,19 @@ h1, h2, h3 {
   max-height: 240px;
   overflow-y: auto;
 }
+/* Card grid titles are entity names (campaign/system/setting/player names),
+   not section labels, so they get the Display voice explicitly — the base
+   h3 rule further up is UI voice for genuine sub-headings/labels, which
+   would be wrong here. Left in normal case per deviation #2. */
 .grid-cards h3 {
-  font-size: var(--text-name);
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 400;
 }
 .entry-title {
-  font-size: var(--text-name);
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 400;
 }
 
 .campaign-thumb {
@@ -693,7 +736,11 @@ h1, h2, h3 {
   outline-offset: -4px;
 }
 .preview-dock-header {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   padding: 4px 6px 8px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
@@ -1439,6 +1486,11 @@ th, td {
   border-radius: 0;
   padding: 8px 12px;
   color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .tabs button.active {
   color: var(--accent);
@@ -1477,8 +1529,11 @@ th, td {
   display: block;
   width: 100%;
   text-align: left;
-  font-size: 17px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   padding: 14px 16px;
   background: var(--bg-panel);
   border: var(--card-border-width) solid var(--border);
@@ -1542,7 +1597,7 @@ th, td {
   width: 100%;
 }
 .player-reader-title {
-  font-size: 26px;
+  font-size: var(--fs-h1);
   margin: 0 0 16px 0;
 }
 .player-reader-tapzone {
@@ -1888,7 +1943,9 @@ details.card[open] summary {
   opacity: 0.5;
 }
 .now-playing-info strong {
-  font-size: 20px;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 400;
 }
 .now-playing-seek input[type="range"] {
   width: 100%;
@@ -2390,7 +2447,9 @@ details.card[open] summary {
   flex-direction: column;
 }
 .finance-summary-card .stat .value {
-  font-size: 22px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-h2);
   font-weight: 700;
   color: var(--accent);
 }
@@ -2507,6 +2566,7 @@ details.card[open] summary {
   display: flex;
   gap: 10px;
   align-items: center;
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
@@ -2559,7 +2619,7 @@ details.card[open] summary {
   gap: 6px;
 }
 .litm-theme-title {
-  font-size: 16px;
+  font-size: var(--fs-h3);
   font-weight: 600;
 }
 input.litm-theme-title {
@@ -2744,6 +2804,8 @@ input.litm-theme-title {
   letter-spacing: 0.5px;
 }
 .dnd-ability-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 15px;
   font-weight: 600;
 }
@@ -2754,6 +2816,8 @@ input.litm-theme-title {
   font-weight: 600;
 }
 .dnd-ability-mod {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 13px;
   color: var(--accent);
   font-weight: 600;
@@ -2801,6 +2865,8 @@ input.litm-theme-title {
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
 .dnd-die-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 14px;
   line-height: 1;
@@ -2936,6 +3002,8 @@ input.litm-theme-title {
 }
 .dnd-save-value {
   flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--accent);
 }
@@ -3133,6 +3201,8 @@ input.litm-theme-title {
   min-width: 0;
 }
 .dnd-proficiency-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--accent);
   flex-shrink: 0;
@@ -3303,10 +3373,11 @@ input.litm-theme-title {
   border-radius: var(--card-radius);
 }
 .dnd-feature-header {
+  font-family: var(--font-ui);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
   margin: -2px -2px 8px -2px;
   padding: 4px 8px;
   border-radius: var(--card-radius);
@@ -4460,7 +4531,8 @@ details[open] > summary.chevron-summary .chevron-icon,
 .comp-category summary.comp-level-label {
   cursor: pointer;
   margin-top: 10px;
-  font-size: 17px;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
   font-weight: 700;
   text-transform: none;
   letter-spacing: normal;
