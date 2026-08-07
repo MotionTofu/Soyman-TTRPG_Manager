@@ -1,0 +1,214 @@
+/* Ticket 07 — zine texture layer (design doc §5).
+ *
+ * Reusable, additive utility classes: opt-in via class name, nothing here
+ * changes an existing selector's rules. Nothing in this file is wired into
+ * a page automatically — a caller applies a class the same way it applies
+ * `.badge` or `.card`.
+ *
+ * Hard constraints from the design doc / ticket 07, enforced structurally
+ * below rather than by convention:
+ *   - grain/halftone must never sit under text: both are painted on a
+ *     `::before`/`::after` pseudo-element that is `position: absolute`,
+ *     `pointer-events: none`, and given a NEGATIVE z-index inside a
+ *     stacking context the host element establishes via `isolation:
+ *     isolate`. That keeps the texture layer between the host's own
+ *     background and its normal-flow children — real content (text,
+ *     icons, nested elements) always paints on top, and the negative
+ *     z-index can't escape past sibling elements outside the host because
+ *     `isolation: isolate` boxes the stacking context.
+ *   - torn edges clip exactly one edge (top OR bottom), never left/right,
+ *     never all four — each variant's polygon only perturbs the top or
+ *     bottom y-coordinates and runs straight (0%/100%) on every other side.
+ *   - rotation is a single fixed value per class (±1.5deg), not a random
+ *     range — pick `.zine-rotate` / `.zine-rotate-r` per instance, don't
+ *     generate an angle at runtime.
+ *   - no box-shadow anywhere in this file (design doc §10.4: depth comes
+ *     from inversion/outline, not soft shadows).
+ */
+
+/* ---------------------------------------------------------------------- */
+/* 5.1 — paper/film grain                                                  */
+/* ---------------------------------------------------------------------- */
+
+/* Reuses the same feTurbulence data-URI language already shipped per-theme
+ * as `--page-texture` / `--card-body-texture` (see client/src/themes.ts),
+ * just packaged as an opt-in class instead of a hardcoded page/card
+ * background. Opacity + blend mode match the design doc's §5.1 numbers
+ * (.18 multiply in light modes, .08 screen in dark modes). */
+.zine-grain {
+  position: relative;
+  isolation: isolate;
+}
+.zine-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.18;
+  mix-blend-mode: multiply;
+  background-repeat: repeat;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-theme-mode="dark"] .zine-grain::before {
+  opacity: 0.08;
+  mix-blend-mode: screen;
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5.2 — halftone dot pattern (decorative blocks only, e.g. a corner or a  */
+/* band — never a paragraph container)                                    */
+/* ---------------------------------------------------------------------- */
+.zine-halftone {
+  position: relative;
+  isolation: isolate;
+}
+.zine-halftone::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.22;
+  mix-blend-mode: multiply;
+  background-image: radial-gradient(currentColor 1.2px, transparent 1.3px);
+  background-size: 6px 6px;
+}
+[data-theme-mode="dark"] .zine-halftone::after {
+  opacity: 0.14;
+  mix-blend-mode: screen;
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5.3 — marker underline + highlighter sweep                              */
+/* ---------------------------------------------------------------------- */
+
+/* A generalized version of the hand-drawn underline already built for the
+ * calendar (`--calendar-mark-image`, client/src/themes.ts): that one bakes
+ * the stroke color directly into a per-theme SVG data-URI because it needed
+ * a fixed color chosen by each theme author. This utility is meant to be
+ * dropped onto *any* heading/label without a per-theme asset, so instead of
+ * baking a color into the SVG, the squiggle shape is used as a `mask` and
+ * painted with `background: var(--accent)` — one shape, follows whichever
+ * theme is active automatically. The calendar's own CSS is untouched; this
+ * is a separate, more general utility living alongside it. */
+.zine-marker-underline {
+  position: relative;
+}
+.zine-marker-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.06em;
+  height: 0.34em;
+  pointer-events: none;
+  background: var(--accent);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.5c2-3 4-3 6 0s4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.5c2-3 4-3 6 0s4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+/* Marker-highlighter sweep behind inline text — a translucent accent tint,
+ * not a solid plate, so the caller's existing text color keeps its
+ * contrast against the paper underneath (verified below, not eyeballed):
+ * zine light mode, ink #12100E text over paper #EDE7D9 tinted 25% with
+ * accent #D6321E, computes to ~10.8:1 — comfortably clear of the 4.5:1
+ * floor even before accounting for the dark-mode opacity being cut further
+ * below. Text color is left alone; only the background gets tinted. */
+.zine-marker-highlight {
+  background-image: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 25%, transparent) 10%,
+    color-mix(in srgb, var(--accent) 25%, transparent) 90%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 0.6em;
+  background-position: 0 68%;
+  padding: 0 0.15em;
+}
+[data-theme-mode="dark"] .zine-marker-highlight {
+  background-image: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 10%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 90%,
+    transparent 100%
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5.4 — torn paper edge (top or bottom only, 3 alternating variants)      */
+/* ---------------------------------------------------------------------- */
+
+.zine-torn-top {
+  clip-path: polygon(
+    0% 7px, 5% 0%, 11% 6px, 17% 1px, 23% 7px, 29% 0%, 35% 5px, 41% 1px,
+    47% 7px, 53% 0%, 59% 6px, 65% 1px, 71% 7px, 77% 0%, 83% 5px, 89% 1px,
+    95% 7px, 100% 0%, 100% 100%, 0% 100%
+  );
+}
+.zine-torn-top-b {
+  clip-path: polygon(
+    0% 4px, 6% 0%, 13% 7px, 19% 2px, 26% 6px, 33% 0%, 40% 8px, 47% 2px,
+    54% 5px, 61% 0%, 68% 7px, 75% 1px, 82% 6px, 89% 0%, 96% 4px, 100% 1px,
+    100% 100%, 0% 100%
+  );
+}
+.zine-torn-top-c {
+  clip-path: polygon(
+    0% 2px, 9% 6px, 18% 0%, 27% 5px, 36% 1px, 45% 8px, 54% 0%, 63% 6px,
+    72% 1px, 81% 7px, 90% 0%, 100% 5px, 100% 100%, 0% 100%
+  );
+}
+
+.zine-torn-bottom {
+  clip-path: polygon(
+    0% 0%, 100% 0%, 100% calc(100% - 0px),
+    95% 100%, 89% calc(100% - 7px), 83% calc(100% - 1px), 77% calc(100% - 7px),
+    71% 100%, 65% calc(100% - 6px), 59% calc(100% - 1px), 53% calc(100% - 7px),
+    47% 100%, 41% calc(100% - 5px), 35% calc(100% - 1px), 29% calc(100% - 7px),
+    23% 100%, 17% calc(100% - 6px), 11% calc(100% - 1px), 5% calc(100% - 7px),
+    0% 100%
+  );
+}
+.zine-torn-bottom-b {
+  clip-path: polygon(
+    0% 0%, 100% 0%, 100% calc(100% - 1px),
+    96% 100%, 89% calc(100% - 4px), 82% 100%, 75% calc(100% - 6px),
+    68% calc(100% - 1px), 61% calc(100% - 7px), 54% 100%, 47% calc(100% - 2px),
+    40% calc(100% - 8px), 33% 100%, 26% calc(100% - 6px), 19% calc(100% - 2px),
+    13% calc(100% - 7px), 6% 100%, 0% calc(100% - 4px)
+  );
+}
+.zine-torn-bottom-c {
+  clip-path: polygon(
+    0% 0%, 100% 0%, 100% calc(100% - 5px),
+    90% 100%, 81% calc(100% - 7px), 72% calc(100% - 1px), 63% calc(100% - 6px),
+    54% 100%, 45% calc(100% - 8px), 36% calc(100% - 1px), 27% calc(100% - 5px),
+    18% 100%, 9% calc(100% - 6px), 0% calc(100% - 2px)
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5.5 — rotation (badges/stickers/slogans only — never grids or lists,   */
+/* never more than one card per row; see the design doc §5.5 and §10.2)   */
+/* ---------------------------------------------------------------------- */
+
+/* Deliberately fixed, non-random values — pick the direction per instance
+ * rather than generating an angle. Display is left untouched: `transform`
+ * needs a box-generating display (the two current call sites, `.badge` and
+ * a single hero card, already are block/inline-block), so forcing
+ * `display` here would risk breaking an unrelated caller's layout instead
+ * of helping it. */
+.zine-rotate {
+  transform: rotate(-1.5deg);
+}
+.zine-rotate-r {
+  transform: rotate(1.5deg);
+}

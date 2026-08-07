@@ -121,7 +121,7 @@ export function CampaignsListPage() {
               thumb.bannerUrl ? (
                 <img src={thumb.bannerUrl} alt="" className="campaign-thumb" />
               ) : (
-                <div className="campaign-card-band" />
+                <div className="campaign-card-band zine-grain zine-torn-bottom" />
               )
             )}
             <h3>{c.name}</h3>

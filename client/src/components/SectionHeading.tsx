@@ -8,7 +8,7 @@ export function SectionHeading({ children }: { children: ReactNode }) {
   return (
     <div className="section-heading">
       <ParticleField count={6} />
-      <h1>{children}</h1>
+      <h1 className="zine-marker-underline">{children}</h1>
     </div>
   );
 }
