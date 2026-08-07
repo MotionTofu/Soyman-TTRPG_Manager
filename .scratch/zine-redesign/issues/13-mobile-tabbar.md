@@ -2,7 +2,7 @@
 
 **Blocked by:** 08, 12
 
-**Status:** ready-for-agent
+**Status:** done
 
 **What to build:**
 
