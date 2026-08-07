@@ -705,6 +705,58 @@ h4 { font-size: var(--fs-body); }
   background: linear-gradient(180deg, var(--bg) 0%, transparent 30%, var(--bg) 100%);
 }
 
+/* Плитка-обложка (design doc §6.3.1 / ticket 14) — shared by
+   CampaignCoverTile (CampaignsListPage grid view + the home page's tiles
+   row). Bleeds the cover image to the card's own edges (padding:0 on the
+   card itself), then a separate compact meta panel below at normal card
+   padding. */
+.campaign-tile {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.campaign-tile-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  isolation: isolate;
+}
+/* The zine-grain/torn-bottom fallback band (no uploaded image) fills the
+   whole cover instead of its usual 90px header strip — the torn bottom
+   edge then reads as the seam between the cover and the meta panel below
+   it, rather than a stray decoration, which is why it's kept here instead
+   of being dropped for the new layout (see ticket 14 notes). */
+.campaign-tile-cover.campaign-card-band {
+  height: auto;
+  margin-bottom: 0;
+  border-radius: 0;
+}
+.campaign-tile-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--ink) 85%, transparent) 100%);
+}
+.campaign-tile-name {
+  position: absolute;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: var(--sp-2);
+  z-index: 1;
+  margin: 0;
+  color: var(--paper);
+}
+.campaign-tile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--sp-3) var(--sp-4);
+}
+
 /* App shell layout */
 .app-shell {
   display: grid;
@@ -864,6 +916,50 @@ h4 { font-size: var(--fs-body); }
 .section-heading h1 {
   position: relative;
   z-index: 1;
+}
+
+/* Sub-section header pattern (SectionHeading level="section", ticket 14):
+   icon + caps UI-voice title, optional "все →" link right-aligned. Used for
+   tile rows / dense lists / rail widgets within a page — distinct from the
+   page-level h1 treatment above. */
+.section-heading-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+}
+.section-heading-sub-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-bright, var(--text));
+}
+.section-heading-sub-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.section-heading-sub-action {
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.section-heading-sub-action:hover {
+  text-decoration: underline;
 }
 
 /* Same treatment, sized for the "Поиск" label in the search panel. */
@@ -2427,6 +2523,7 @@ details.card[open] summary {
 .upcoming-notice {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--border);
@@ -2456,6 +2553,118 @@ details.card[open] summary {
   font-size: var(--fs-h2);
   font-weight: 700;
   color: var(--accent);
+}
+
+/* Главная — "герой → плитки → плотный список" rhythm (design doc §6.1/
+   §11.6, ticket 14): main column + a 320px rail of stacked widgets. Large
+   gap between the hero/tiles/list sections (var(--sp-6)); each section's
+   own inner padding stays compact (cards keep their normal 12/16). */
+.home-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  align-items: start;
+  gap: var(--sp-6);
+}
+.home-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  min-width: 0;
+}
+.home-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.home-hero {
+  padding: 0;
+  overflow: hidden;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.home-hero-cover {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+  background-size: cover;
+  background-position: center;
+  isolation: isolate;
+}
+.home-hero-cover.campaign-card-band {
+  height: auto;
+  margin-bottom: 0;
+  border-radius: 0;
+}
+.home-hero-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 35%, color-mix(in srgb, var(--ink) 85%, transparent) 100%);
+}
+.home-hero-content {
+  position: absolute;
+  left: var(--sp-5);
+  right: var(--sp-5);
+  bottom: var(--sp-4);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-hero-eyebrow {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--paper) 80%, transparent);
+}
+.home-hero-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: 400;
+  color: var(--paper);
+}
+.home-hero-date {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: color-mix(in srgb, var(--paper) 85%, transparent);
+}
+
+.home-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-4);
+}
+
+@media (max-width: 1280px) {
+  .home-layout {
+    grid-template-columns: 1fr;
+  }
+  .home-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .home-rail > * {
+    flex: 1 1 260px;
+  }
+}
+@media (max-width: 860px) {
+  .home-hero-cover {
+    min-height: 160px;
+  }
+  .home-rail {
+    flex-direction: column;
+  }
 }
 
 .context-menu {
@@ -2866,48 +3075,163 @@ input.litm-theme-title {
 .dnd-ability-dice {
   position: relative;
   width: 100%;
-  height: 44px;
+  height: 64px;
   margin-top: 2px;
   cursor: pointer;
 }
+/* Positioning for the two overlapping <Dice> instances in AbilityDiceBox —
+   the shape/value/label rendering itself lives in the generic .dice rules
+   below; this just handles the front/back flip choreography. Fixed width
+   (rather than 100%) so the die stays a sane, constant size regardless of
+   how wide the ability column happens to stretch. */
 .dnd-die {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 48px;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+.dnd-die.is-front {
+  transform: translate(calc(-50% - 4px), -3px) scale(1);
+  z-index: 2;
+  opacity: 1;
+}
+.dnd-die.is-back {
+  transform: translate(calc(-50% + 4px), 3px) scale(0.8);
+  z-index: 1;
+  opacity: 0.55;
+}
+.dnd-die-save.is-proficient .dice-value,
+.dnd-die-save.is-proficient .dice-sub {
+  color: var(--accent);
+}
+
+/* ---- Dice — reusable "number on a die silhouette" component (design doc
+   §6.5, ticket 12): client/src/components/Dice.tsx. Silhouette is inline
+   SVG so it scales and themes via currentColor/tokens; the number sits in
+   the Display face centered over the shape, the caption sits in micro-caps
+   BELOW the shape (never inside it). ---- */
+.dice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+.dice-shape-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 36px;
+}
+.dice-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.dice-shape-outline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+.dice-shape-facet {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.35;
+  vector-effect: non-scaling-stroke;
+}
+.dice-dot {
+  fill: currentColor;
+  opacity: 0.6;
+}
+.dice-content {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: color-mix(in oklab, var(--accent) 16%, var(--bg-elevated));
-  border: 1px solid var(--accent);
-  transition: transform 0.22s ease, opacity 0.22s ease;
+  pointer-events: none;
+  color: var(--ink);
 }
-.dnd-die-value {
-  font-family: var(--font-mono);
+.dice-value {
+  font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  font-size: 14px;
   line-height: 1;
 }
-.dnd-die-sub {
-  font-size: 8px;
+.dice-md .dice-value {
+  font-size: var(--fs-stat);
+}
+.dice-sm .dice-value {
+  font-size: clamp(14px, 4vw, 18px);
+}
+.dice-sub {
+  font-family: var(--font-mono);
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   margin-top: 1px;
 }
-.dnd-die.is-front {
-  transform: translate(-4px, -3px) scale(1);
-  z-index: 2;
-  opacity: 1;
+.dice-md .dice-sub {
+  font-size: 11px;
 }
-.dnd-die.is-back {
-  transform: translate(4px, 3px) scale(0.8);
-  z-index: 1;
-  opacity: 0.55;
+.dice-sm .dice-sub {
+  font-size: 8px;
 }
-.dnd-die-save.is-proficient {
-  background: color-mix(in oklab, var(--accent) 34%, var(--bg-elevated));
+.dice-label {
+  font-size: var(--fs-micro);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* State: outline = normal (default look above), filled = active/used,
+   muted = unavailable. Never mix filled and outline dice within one row —
+   pick a state per row of callers. */
+.dice-outline .dice-shape-outline {
+  color: var(--ink);
+}
+.dice-filled .dice-shape-outline {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.dice-filled .dice-content {
+  color: var(--accent-text);
+}
+.dice-filled .dice-dot {
+  fill: var(--accent-text);
+}
+.dice-muted {
+  color: var(--muted);
+}
+.dice-muted .dice-shape-outline {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.dice-muted .dice-content {
+  color: var(--muted);
+}
+.dice-muted .dice-label {
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .dice-shape-box {
+    min-width: 30px;
+  }
+  .dice-sm .dice-value {
+    font-size: clamp(12px, 5vw, 16px);
+  }
+  .dnd-die {
+    width: 40px;
+  }
+  .dnd-ability-dice {
+    height: 56px;
+  }
 }
 
 .dnd-abilities-block {

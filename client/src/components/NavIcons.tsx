@@ -64,7 +64,8 @@ export type NavIconName =
   | "swap"
   | "fullscreen"
   | "center"
-  | "moon";
+  | "moon"
+  | "calendar";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -445,6 +446,15 @@ const PATHS: Record<NavIconName, ReactNode> = {
   // "Отдых" (rest) — crescent moon.
   moon: (
     <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
+  ),
+  // Calendar/month grid — Главная's session calendar section.
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15" rx="1.5" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3.5v3M16 3.5v3" />
+      <path d="M7.5 13.2h.01M12 13.2h.01M16.5 13.2h.01M7.5 16.8h.01M12 16.8h.01M16.5 16.8h.01" />
+    </>
   ),
 };
 

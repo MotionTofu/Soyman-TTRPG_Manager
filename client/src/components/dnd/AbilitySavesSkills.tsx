@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import type { DndAbilityKey, DndAbilityScores, DndSkillProfLevel } from "../../types";
 import { ABILITY_LABELS, abilityModifier, formatModifier, parseBonus } from "./AbilityScores";
+import { Dice } from "../Dice";
 
 interface CommonProps {
   abilities: DndAbilityScores;
@@ -140,22 +141,29 @@ function AbilityDiceBox({
   return (
     <div className="dnd-ability-col">
       <div className="dnd-ability-box">
-        <span className="dnd-ability-label">{label}</span>
         <div
           className="dnd-ability-dice"
           onClick={() => setFlipped((f) => !f)}
           title="Клик — переключить характеристику/спасбросок"
         >
-          <div className={`dnd-die dnd-die-score${flipped ? " is-back" : " is-front"}`}>
-            <span className="dnd-die-value">{score}</span>
-            <span className="dnd-die-sub">{formatModifier(mod)}</span>
-          </div>
-          <div
+          <Dice
+            kind="d20"
+            size="sm"
+            state="outline"
+            value={score}
+            sub={formatModifier(mod)}
+            label={label}
+            className={`dnd-die dnd-die-score${flipped ? " is-back" : " is-front"}`}
+          />
+          <Dice
+            kind="d20"
+            size="sm"
+            state="outline"
+            value={save}
+            sub="спас"
+            label={label}
             className={`dnd-die dnd-die-save${flipped ? " is-front" : " is-back"}${isSaveProficient ? " is-proficient" : ""}`}
-          >
-            <span className="dnd-die-value">{save}</span>
-            <span className="dnd-die-sub">спас</span>
-          </div>
+          />
         </div>
       </div>
     </div>

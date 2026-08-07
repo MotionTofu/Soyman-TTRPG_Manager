@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
 import { UpcomingSessionsNotice } from "../components/UpcomingSessionsNotice";
@@ -7,9 +7,11 @@ import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
 import { copySessionPrep } from "../sessionCopy";
 import { SectionHeading } from "../components/SectionHeading";
+import { CampaignCoverTile } from "../components/CampaignCoverTile";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { hasElectronAPI } from "../electronApi";
 import { loadHideFinance } from "../financePrivacy";
+import { formatNearestDate } from "../nearestDate";
 import type { AppSettings, Campaign, SessionSummary } from "../types";
 
 interface FinanceSummary {
@@ -57,6 +59,11 @@ export function HomeCalendarPage() {
     }
     api.get<Campaign>(`/campaigns/${nearest.campaign_id}`).then((c) => setBgUrl(c.background_image_url ?? null));
   }, [sessions]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const nearestSession = sessions
+    .filter((s) => s.status === "planned" && s.date >= today)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
 
   const events: CalendarEvent[] = sessions.map((s) => ({
     id: s.id,
@@ -156,51 +163,116 @@ export function HomeCalendarPage() {
       )}
       <SectionHeading>Главная</SectionHeading>
 
-      {hasElectronAPI() && (
-        <div className="card stack">
-          <strong className="entry-title">Обновления</strong>
-          <UpdateChecker />
-        </div>
-      )}
+      <div className="home-layout">
+        <div className="home-main">
+          {/* Hero — nearest upcoming session's campaign, full-bleed cover. */}
+          <Link
+            to={nearestSession ? `/sessions/${nearestSession.id}` : "/campaigns"}
+            className="card home-hero"
+          >
+            <div
+              className={`home-hero-cover${bgUrl ? "" : " campaign-card-band zine-grain zine-torn-bottom"}`}
+              style={bgUrl ? { backgroundImage: `url("${bgUrl}")` } : undefined}
+            >
+              <div className="home-hero-scrim" />
+              <div className="home-hero-content">
+                <span className="home-hero-eyebrow">Ближайшая сессия</span>
+                <h2 className="home-hero-title">
+                  {nearestSession ? nearestSession.campaign_name : "Сессий пока не запланировано"}
+                </h2>
+                {nearestSession && (
+                  <span className="home-hero-date">
+                    {formatNearestDate(nearestSession.date)}
+                    {nearestSession.start_time ? ` · ${nearestSession.start_time}` : ""}
+                  </span>
+                )}
+              </div>
+            </div>
+          </Link>
 
-      {finance && (
-        <div className="card finance-summary-card">
-          {!loadHideFinance() && (
-            <div className="stat">
-              <span className="muted">Заработано всего</span>
-              <span className="value">{finance.earned} ₽</span>
+          {/* Tiles — quick campaign row. */}
+          <div className="home-section">
+            <SectionHeading level="section" icon="campaigns" action={{ label: "все кампании", to: "/campaigns" }}>
+              Кампании
+            </SectionHeading>
+            <div className="home-tiles">
+              {campaigns.slice(0, 4).map((c) => (
+                <CampaignCoverTile key={c.id} campaign={c} />
+              ))}
+              {campaigns.length === 0 && <p className="muted">Пока нет кампаний.</p>}
+            </div>
+          </div>
+
+          {/* Dense list — the session calendar itself, pencil-marker treatment intact. */}
+          <div className="home-section">
+            <SectionHeading level="section" icon="calendar">
+              Календарь
+            </SectionHeading>
+            <p className="muted page-subtitle">
+              Сессии всех кампаний. Кликните по отметке, чтобы открыть сессию. Правый клик — меню
+              (в том числе добавление новой сессии).
+            </p>
+            <MonthCalendar
+              events={events}
+              onDayClick={() => {}}
+              onEventClick={(e) => navigate(`/sessions/${e.id}`)}
+              onEventContextMenu={(event, x, y) => setMenu({ x, y, items: eventMenuItems(event) })}
+              onDayContextMenu={(date, x, y) =>
+                setMenu({ x, y, items: [{ label: "+ Добавить сессию", onClick: () => openCreateModal(date) }] })
+              }
+            />
+          </div>
+        </div>
+
+        {/* Rail — stack of narrow widgets. */}
+        <div className="home-rail">
+          {hasElectronAPI() && (
+            <div className="card stack">
+              <SectionHeading level="section" icon="download">
+                Обновления
+              </SectionHeading>
+              <UpdateChecker />
             </div>
           )}
-          <div className="stat">
-            <span className="muted">Сессий проведено</span>
-            <span className="value">{finance.heldSessions}</span>
-          </div>
-          <div className="stat">
-            <span className="muted">Сессий сыграно</span>
-            <span className="value">{finance.playedSessions}</span>
-          </div>
-          <div className="stat">
-            <span className="muted">Активных кампаний</span>
-            <span className="value">{finance.campaigns}</span>
-          </div>
+
+          {finance && (
+            <div className="card stack">
+              <SectionHeading level="section" icon="graph">
+                Статистика
+              </SectionHeading>
+              <div className="finance-summary-card">
+                {!loadHideFinance() && (
+                  <div className="stat">
+                    <span className="muted">Заработано всего</span>
+                    <span className="value">{finance.earned} ₽</span>
+                  </div>
+                )}
+                <div className="stat">
+                  <span className="muted">Сессий проведено</span>
+                  <span className="value">{finance.heldSessions}</span>
+                </div>
+                <div className="stat">
+                  <span className="muted">Сессий сыграно</span>
+                  <span className="value">{finance.playedSessions}</span>
+                </div>
+                <div className="stat">
+                  <span className="muted">Активных кампаний</span>
+                  <span className="value">{finance.campaigns}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {sessions.some((s) => s.status === "planned" && s.date >= today) && (
+            <div className="stack">
+              <SectionHeading level="section" icon="star">
+                Ближайшие сессии
+              </SectionHeading>
+              <UpcomingSessionsNotice sessions={sessions} />
+            </div>
+          )}
         </div>
-      )}
-
-      <p className="muted page-subtitle">
-        Сессии всех кампаний. Кликните по отметке, чтобы открыть сессию. Правый клик — меню
-        (в том числе добавление новой сессии).
-      </p>
-      <MonthCalendar
-        events={events}
-        onDayClick={() => {}}
-        onEventClick={(e) => navigate(`/sessions/${e.id}`)}
-        onEventContextMenu={(event, x, y) => setMenu({ x, y, items: eventMenuItems(event) })}
-        onDayContextMenu={(date, x, y) =>
-          setMenu({ x, y, items: [{ label: "+ Добавить сессию", onClick: () => openCreateModal(date) }] })
-        }
-      />
-
-      <UpcomingSessionsNotice sessions={sessions} />
+      </div>
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />

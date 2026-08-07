@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import { SectionHeading } from "../components/SectionHeading";
+import { CampaignCoverTile } from "../components/CampaignCoverTile";
 import {
   PAYMENT_TYPE_OPTIONS,
   PAYMENT_TYPE_LABELS,
@@ -114,41 +115,49 @@ export function CampaignsListPage() {
         {campaigns
           .filter((c) => roleFilter === "all" || c.role === roleFilter)
           .map((c) => {
-            const thumb = cardThumbnailProps(thumbnailStyles.campaigns, c.thumbnail_image_url ?? c.background_image_url);
-            return (
-          <Link key={c.id} to={`/campaigns/${c.id}`} className={`card ${thumb.className}`} style={thumb.style}>
-            {thumb.showBanner && (
-              thumb.bannerUrl ? (
-                <img src={thumb.bannerUrl} alt="" className="campaign-thumb" />
-              ) : (
-                <div className="campaign-card-band zine-grain zine-torn-bottom" />
-              )
-            )}
-            <h3>{c.name}</h3>
-            <div className="muted">{c.system_name ?? "система не выбрана"}</div>
-            <div className="muted">{c.setting_name ?? "без сеттинга"}</div>
-            <div className="row">
-              <span className="badge tag">{c.status}</span>
-              {c.role === "player" ? (
-                <span className="badge role-player-badge">Я игрок</span>
-              ) : (
-                !loadHideFinance() && (
-                  <span
-                    className={`badge ${c.payment_type === "paid" ? "held" : c.payment_type === "negotiable" ? "rescheduled" : "planned"}`}
-                  >
-                    {PAYMENT_TYPE_LABELS[c.payment_type]}
-                  </span>
-                )
-              )}
-            </div>
-            <div className="muted">
-              Игроков: {c.player_count ?? 0} · Сессий состоялось: {c.held_sessions_count ?? 0}
-            </div>
-            {c.next_planned_date && (
-              <div className="muted">Ближайшая сессия: {c.next_planned_date}</div>
-            )}
-          </Link>
-            );
+            // "Список"/"Таблица" modes are the design doc's dense
+            // "строка-список" card (§6.3.2) — a different card role than the
+            // grid's cover tile, not the same card shrunk down — so they keep
+            // the flat row markup (still respecting the Тамбнейлы preference)
+            // instead of rendering CampaignCoverTile.
+            if (viewMode !== "grid") {
+              const thumb = cardThumbnailProps(thumbnailStyles.campaigns, c.thumbnail_image_url ?? c.background_image_url);
+              return (
+                <Link key={c.id} to={`/campaigns/${c.id}`} className={`card ${thumb.className}`} style={thumb.style}>
+                  {thumb.showBanner && (
+                    thumb.bannerUrl ? (
+                      <img src={thumb.bannerUrl} alt="" className="campaign-thumb" />
+                    ) : (
+                      <div className="campaign-card-band zine-grain zine-torn-bottom" />
+                    )
+                  )}
+                  <h3>{c.name}</h3>
+                  <div className="muted">{c.system_name ?? "система не выбрана"}</div>
+                  <div className="muted">{c.setting_name ?? "без сеттинга"}</div>
+                  <div className="row">
+                    <span className="badge tag">{c.status}</span>
+                    {c.role === "player" ? (
+                      <span className="badge role-player-badge">Я игрок</span>
+                    ) : (
+                      !loadHideFinance() && (
+                        <span
+                          className={`badge ${c.payment_type === "paid" ? "held" : c.payment_type === "negotiable" ? "rescheduled" : "planned"}`}
+                        >
+                          {PAYMENT_TYPE_LABELS[c.payment_type]}
+                        </span>
+                      )
+                    )}
+                  </div>
+                  <div className="muted">
+                    Игроков: {c.player_count ?? 0} · Сессий состоялось: {c.held_sessions_count ?? 0}
+                  </div>
+                  {c.next_planned_date && (
+                    <div className="muted">Ближайшая сессия: {c.next_planned_date}</div>
+                  )}
+                </Link>
+              );
+            }
+            return <CampaignCoverTile key={c.id} campaign={c} />;
           })}
         {campaigns.length === 0 && <p className="muted">Пока нет кампаний.</p>}
       </div>
