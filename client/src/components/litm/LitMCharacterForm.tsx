@@ -8,6 +8,7 @@ import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { api } from "../../api/client";
 import { statblockScopeClass } from "../../statblockThemes";
+import { NavIcon } from "../NavIcons";
 
 async function applyGroupTheme(campaignId: number | undefined, theme: LitMThemeCard) {
   if (!campaignId) return;
@@ -173,7 +174,7 @@ const CompanionField = memo(function CompanionField({
             <span className="litm-tag litm-tag-companion">
               {companionCharacterName}
               <button type="button" onClick={onClearCompanion}>
-                ✕
+                <NavIcon name="close" />
               </button>
             </span>
           ) : (

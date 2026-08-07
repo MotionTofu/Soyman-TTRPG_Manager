@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { NavIcon } from "./NavIcons";
 import type {
   Campaign,
   DndCharacterData,
@@ -492,10 +493,10 @@ function StatblockCard({
           title="Редактировать"
           onClick={() => setEditMode((v) => !v)}
         >
-          ✎
+          <NavIcon name="edit" />
         </button>
         <button type="button" className="comp-mini" onClick={() => onRemove(statblock.id)}>
-          ✕
+          <NavIcon name="delete" />
         </button>
       </>
     );
@@ -512,7 +513,7 @@ function StatblockCard({
                 title="Закрыть редактирование"
                 onClick={() => setEditMode(false)}
               >
-                ✕
+                <NavIcon name="close" />
               </button>
             </span>
           </div>
@@ -585,7 +586,7 @@ function StatblockCard({
               setExpanded(true);
             }}
           >
-            ✎
+            <NavIcon name="edit" />
           </button>
           <button
             type="button"
@@ -595,7 +596,7 @@ function StatblockCard({
               onRemove(statblock.id);
             }}
           >
-            ✕
+            <NavIcon name="delete" />
           </button>
         </span>
       </summary>

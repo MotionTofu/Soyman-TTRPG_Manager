@@ -68,6 +68,9 @@ import { computeArmorClass } from "./armorClass";
 import { applicableResources } from "./dndResources";
 import { Modal } from "../Modal";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
+import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
+import { NavIcon } from "../NavIcons";
 
 const SPELL_LEVELS = 9;
 const MAX_SPELL_SLOTS = 6;
@@ -94,6 +97,13 @@ export function emptyDndCharacter(): DndCharacterData {
     armorClass: "",
     initiative: "",
     speed: "",
+    speeds: emptySpeed(),
+    sensesList: [],
+    damageResistances: [],
+    damageImmunities: [],
+    damageVulnerabilities: [],
+    conditionImmunities: [],
+    conditions: [],
     hitPointMax: "",
     hitPointsCurrent: "",
     hitPointsTemp: "",
@@ -220,6 +230,13 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   merged.hitPointMaxTemp = typeof merged.hitPointMaxTemp === "string" ? merged.hitPointMaxTemp : "";
   merged.resourceUsed = merged.resourceUsed && typeof merged.resourceUsed === "object" ? merged.resourceUsed : {};
   merged.resourceBonus = merged.resourceBonus && typeof merged.resourceBonus === "object" ? merged.resourceBonus : {};
+  merged.speeds = merged.speeds && typeof merged.speeds === "object" ? { ...emptySpeed(), ...merged.speeds } : emptySpeed();
+  merged.sensesList = Array.isArray(merged.sensesList) ? merged.sensesList : [];
+  merged.damageResistances = Array.isArray(merged.damageResistances) ? merged.damageResistances : [];
+  merged.damageImmunities = Array.isArray(merged.damageImmunities) ? merged.damageImmunities : [];
+  merged.damageVulnerabilities = Array.isArray(merged.damageVulnerabilities) ? merged.damageVulnerabilities : [];
+  merged.conditionImmunities = Array.isArray(merged.conditionImmunities) ? merged.conditionImmunities : [];
+  merged.conditions = Array.isArray(merged.conditions) ? merged.conditions : [];
   return merged;
 }
 
@@ -453,7 +470,7 @@ const DndProficienciesEdit = memo(function DndProficienciesEdit({
                 </span>
               )}
               <button type="button" className="comp-mini" onClick={() => remove(i)}>
-                ✕
+                <NavIcon name="close" />
               </button>
             </div>
           ))}
@@ -474,17 +491,65 @@ const DndProficienciesEdit = memo(function DndProficienciesEdit({
   );
 });
 
-function DndProficienciesView({ value }: { value: DndProficiencyEntry[] }) {
-  if (value.length === 0) return null;
+// onChange is optional: passed by DndSkillsView (which already has
+// onQuickUpdate) so a proficiency/language can be added or removed right
+// here, without opening the full DndCharacterEdit form just for that — the
+// same "Manage" button used to require. Ability-linked proficiencies (tools
+// with a governing stat) still need the full edit form; this quick-add only
+// covers plain name entries, matching DndProficienciesEdit's own manual-add.
+function DndProficienciesView({
+  value,
+  onChange,
+}: {
+  value: DndProficiencyEntry[];
+  onChange?: (v: DndProficiencyEntry[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  function commitAdd() {
+    if (draft.trim()) onChange?.([...value, { entryId: null, name: draft.trim(), abilityKey: null }]);
+    setDraft("");
+    setAdding(false);
+  }
+  function remove(i: number) {
+    onChange?.(value.filter((_, idx) => idx !== i));
+  }
+  if (value.length === 0 && !onChange) return null;
   return (
     <div className="sb-entry">
-      <span className="sb-prop-label">Владения и языки</span>{" "}
-      {value.map((p, i) => (
-        <span key={i} className="dnd-proficiency-view-item">
-          {p.name}
-          {i < value.length - 1 ? ", " : ""}
-        </span>
-      ))}
+      <span className="sb-prop-label">Владения и языки</span>
+      <div className="dnd-proficiency-chips">
+        {value.map((p, i) => (
+          <span key={i} className="dnd-proficiency-chip">
+            {p.name}
+            {onChange && (
+              <button type="button" className="comp-mini" onClick={() => remove(i)} title="Убрать">
+                <NavIcon name="close" />
+              </button>
+            )}
+          </span>
+        ))}
+        {onChange &&
+          (adding ? (
+            <span className="row dnd-proficiency-chip-add">
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitAdd();
+                  if (e.key === "Escape") setAdding(false);
+                }}
+                onBlur={commitAdd}
+                placeholder="Название…"
+              />
+            </span>
+          ) : (
+            <button type="button" className="comp-mini" onClick={() => setAdding(true)}>
+              + добавить владение
+            </button>
+          ))}
+      </div>
     </div>
   );
 }
@@ -674,7 +739,7 @@ const AttackListEdit = memo(function AttackListEdit({
                 ))}
               </select>
               <button type="button" className="comp-mini" onClick={() => remove(i)}>
-                ✕
+                <NavIcon name="close" />
               </button>
             </div>
             {a.timing === "other" && (
@@ -1029,9 +1094,18 @@ function DndSpellLevelSection({
       <summary className="row dnd-spell-level-summary" style={{ justifyContent: "space-between" }}>
         <span>{label}</span>
         {showSlots && (
-          // Clicking a pip must not also toggle the <details> open/closed
-          // (native <summary> behavior for any click landing inside it).
-          <span onClick={(e) => e.stopPropagation()} className="row" style={{ gap: 10 }}>
+          // Clicking a pip must not also toggle the <details> open/closed.
+          // stopPropagation alone doesn't suppress that — <summary>'s toggle
+          // is the click event's default action, not a bubbled listener, so
+          // preventDefault is required too.
+          <span
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="row"
+            style={{ gap: 10 }}
+          >
             <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={edit ? onSlotsChange : undefined} />
             {!edit && onUsedChange && slots > 0 && (
               <span className="row muted" style={{ gap: 4, fontSize: 12 }}>
@@ -1072,52 +1146,61 @@ function DndSpellLevelSection({
                       title={SPELL_PREPARED_TITLES[s.prepared]}
                       onClick={() => togglePrepared(realIndex)}
                     >
-                      {s.prepared === 0 ? "☆" : "★"}
+                      <NavIcon name="star" filled={s.prepared !== 0} />
                     </button>
                     <button type="button" className="comp-mini danger" onClick={() => remove(realIndex)}>
-                      ✕
+                      <NavIcon name="close" />
                     </button>
                   </span>
                 ) : (
                   s.prepared > 0 && (
                     <span className="dnd-prepared-badge" title={SPELL_PREPARED_TITLES[s.prepared]}>
-                      ★
+                      <NavIcon name="star" filled />
                     </span>
                   )
                 )}
               </div>
-              {expandedIndex === realIndex && s.entryId && (
-                <div className="dnd-spell-description">
-                  {(() => {
-                    const d = details[s.entryId];
-                    if (!d) return "Загрузка…";
-                    const fields: [string, ReactNode][] = [
-                      ["Школа", d.school],
-                      ["Время накладывания", d.castingTime],
-                      ["Дистанция", d.range],
-                      ["Компоненты", d.componentsText],
-                      ["Длительность", d.duration],
-                    ].filter(([, v]) => !!v) as [string, ReactNode][];
-                    return (
-                      <>
-                        {fields.length > 0 && (
-                          <div className="comp-fields">
-                            {fields.map(([label, value]) => (
-                              <div key={label} className="muted">
-                                <strong>{label}:</strong> {value}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <MentionText text={d.description} />
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
             </div>
           );
         })}
+        {expandedIndex !== null && spells[expandedIndex]?.entryId && (
+          <Modal onClose={() => setExpandedIndex(null)}>
+            <div className="stack dnd-spell-modal">
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <h3 style={{ margin: 0 }}>{spells[expandedIndex].name}</h3>
+                <button type="button" className="comp-mini" onClick={() => setExpandedIndex(null)}>
+                  <NavIcon name="close" />
+                </button>
+              </div>
+              {(() => {
+                const entryId = spells[expandedIndex].entryId as number;
+                const d = details[entryId];
+                if (!d) return <span className="muted">Загрузка…</span>;
+                const fields: [string, ReactNode][] = [
+                  ["Школа", d.school],
+                  ["Время накладывания", d.castingTime],
+                  ["Дистанция", d.range],
+                  ["Компоненты", d.componentsText],
+                  ["Длительность", d.duration],
+                ].filter(([, v]) => !!v) as [string, ReactNode][];
+                return (
+                  <>
+                    {fields.length > 0 && (
+                      <div className="comp-fields">
+                        {fields.map(([label, value]) => (
+                          <div key={label} className="muted">
+                            <strong>{label}:</strong> {value}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <MentionText text={d.description} />
+                  </>
+                );
+              })()}
+            </div>
+          </Modal>
+        )}
         {edit && (
           <div>
             {adding ? (
@@ -1407,7 +1490,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 disabled={c.level <= 1}
                 onClick={() => stepLevel(i, -1)}
               >
-                ▾
+                <NavIcon name="navDown" />
               </button>
               <input
                 type="number"
@@ -1430,11 +1513,11 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 disabled={c.level >= 20}
                 onClick={() => stepLevel(i, 1)}
               >
-                ▴
+                <NavIcon name="navUp" />
               </button>
             </span>
             <button type="button" className="comp-mini" onClick={() => onRemoveClass(i)}>
-              ✕
+              <NavIcon name="close" />
             </button>
           </div>
         );
@@ -1492,7 +1575,7 @@ const EquipmentItemRow = memo(function EquipmentItemRow({
       <input placeholder="Вес" value={item.weight} onChange={(e) => onChangeWeight(e.target.value)} style={{ flex: 1 }} />
       <input placeholder="Заметка" value={item.notes} onChange={(e) => onChangeNotes(e.target.value)} style={{ flex: 2 }} />
       <button type="button" className="comp-mini" onClick={onRemove}>
-        ✕
+        <NavIcon name="close" />
       </button>
     </div>
   );
@@ -1587,7 +1670,7 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
           onChange={(e) => onNameChange(e.target.value)}
         />
         <button type="button" className="comp-mini" onClick={onRemoveSection}>
-          ✕ Раздел
+          <NavIcon name="delete" /> Раздел
         </button>
       </div>
       <div className="stack" style={{ gap: 4 }}>
@@ -1997,7 +2080,7 @@ function DndEquipmentQuickView({
                       {item.notes && ` — ${item.notes}`}
                     </span>
                     <button type="button" className="comp-mini" title="Редактировать" onClick={() => startEdit(si, ii)}>
-                      ✎
+                      <NavIcon name="edit" />
                     </button>
                   </div>
                   {descOpen && descOpen.si === si && descOpen.ii === ii && item.entryId && (
@@ -2090,6 +2173,9 @@ export function DndCharacterEdit({
   const [hierarchy, setHierarchy] = useState<DndClassHierarchy>({ classes: [], subclassesByClass: {} });
   const [species, setSpecies] = useState<DndSpeciesOption[]>([]);
   const [backgrounds, setBackgrounds] = useState<DndBackgroundOption[]>([]);
+  const [damageTypes, setDamageTypes] = useState<DndMechanicsOption[]>([]);
+  const [conditionOptions, setConditionOptions] = useState<DndMechanicsOption[]>([]);
+  const [senseOptions, setSenseOptions] = useState<DndMechanicsOption[]>([]);
 
   // Kept in sync every render (cheap) so the field-setter callbacks below
   // can have a permanently stable identity (empty deps) while still always
@@ -2344,6 +2430,15 @@ export function DndCharacterEdit({
   }, []);
 
   useEffect(() => {
+    findDndSystemId().then((sid) => {
+      if (!sid) return;
+      loadDndMechanicsGroup(sid, "Типы урона").then(setDamageTypes);
+      loadDndMechanicsGroup(sid, "Состояния").then(setConditionOptions);
+      loadDndMechanicsGroup(sid, "Особое восприятие").then(setSenseOptions);
+    });
+  }, []);
+
+  useEffect(() => {
     if (!value.systemId) {
       setHierarchy({ classes: [], subclassesByClass: {} });
       setSpecies([]);
@@ -2581,6 +2676,40 @@ export function DndCharacterEdit({
           Вдохновение
         </label>
       </div>
+
+      <SpeedEditor value={value.speeds} onChange={(v) => onChange({ ...value, speeds: v })} />
+      <SensesEditor
+        value={value.sensesList}
+        onChange={(v) => onChange({ ...value, sensesList: v })}
+        options={senseOptions}
+      />
+      <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
+        <ChecklistEditor
+          label="Уязвимости к урону"
+          value={value.damageVulnerabilities}
+          onChange={(v) => onChange({ ...value, damageVulnerabilities: v })}
+          options={damageTypes}
+        />
+        <ChecklistEditor
+          label="Сопротивления урону"
+          value={value.damageResistances}
+          onChange={(v) => onChange({ ...value, damageResistances: v })}
+          options={damageTypes}
+        />
+        <ChecklistEditor
+          label="Иммунитет к урону"
+          value={value.damageImmunities}
+          onChange={(v) => onChange({ ...value, damageImmunities: v })}
+          options={damageTypes}
+        />
+        <ChecklistEditor
+          label="Иммунитет к состояниям"
+          value={value.conditionImmunities}
+          onChange={(v) => onChange({ ...value, conditionImmunities: v })}
+          options={conditionOptions}
+        />
+      </div>
+
       <div className="row">
         <label>
           ХП максимум
@@ -2756,18 +2885,20 @@ function formatSpellAttackSave(attackSave: string | undefined, spellAttackBonus:
   return attackSave;
 }
 
-// Заговоры не требуют подготовки (всегда доступны), поэтому их не фильтруем
-// по prepared — а вот заклинания по уровням показываем только если игрок
-// действительно их подготовил, иначе таблица Атак раздувается всем, что
-// вообще есть в книге заклинаний.
+// Показываем в Бою только то, что реально подготовлено (звёздочка), иначе
+// таблица Атак раздувается всем, что вообще есть в книге заклинаний —
+// заговоры получают тот же звёздочный переключатель, что и заклинания по
+// уровням (см. togglePrepared в DndSpellLevelSection), так что фильтр по
+// prepared применяется к обоим одинаково.
 function combatSpellRows(
   cantrips: DndSpellEntry[],
   spellsByLevel: DndSpellEntry[][],
   spellAttackBonus: number,
   spellDc: number
 ): AttackRow[] {
+  const preparedCantrips = cantrips.filter((s) => s.prepared > 0);
   const prepared = spellsByLevel.flat().filter((s) => s.prepared > 0);
-  return [...cantrips, ...prepared]
+  return [...preparedCantrips, ...prepared]
     .filter((s) => s.category === "Боевое" || s.category === "Лечащее")
     .map((s) => {
       const timing = s.castingTiming ?? (s.castingTime ? inferTimingFromLegacyText(s.castingTime).timing : "action");
@@ -2824,16 +2955,16 @@ function AttacksTable({ title, rows }: { title: string; rows: AttackRow[] }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i}>
-              <td>{r.name}</td>
+              <td data-label="Название">{r.name}</td>
               {r.description !== undefined ? (
                 <td colSpan={3} className="muted">
                   <MentionText text={r.description} />
                 </td>
               ) : (
                 <>
-                  <td>{r.bonus}</td>
-                  <td>{r.damage}</td>
-                  <td>{r.range}</td>
+                  <td data-label="Бонус/СЛ">{r.bonus}</td>
+                  <td data-label="Урон/лечение/эффект">{r.damage}</td>
+                  <td data-label="Время/Дальность">{r.range}</td>
                 </>
               )}
             </tr>
@@ -2913,25 +3044,46 @@ function DndSkillsView({
           );
         })}
       </div>
-      <DndProficienciesView value={proficiencies} />
+      <DndProficienciesView
+        value={proficiencies}
+        onChange={onQuickUpdate ? (v) => onQuickUpdate({ proficiencies: v }) : undefined}
+      />
     </div>
   );
 }
 
 function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[] }) {
+  // Same popup-on-click treatment as spells (DndSpellLevelSection) — a
+  // feature's full text opens in a modal instead of expanding inline, so a
+  // long description doesn't push everything else on the tab down/off-screen
+  // on a phone.
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   if (values.length === 0) return null;
   return (
     <details className="cs-list" open>
       <summary className="sb-section">{title}</summary>
       {values.map((f, i) => (
-        <details key={i} className="dnd-feature-article">
-          <summary>
-            {f.name || "Без названия"}
-            {f.level ? <span className="muted"> (ур. {f.level})</span> : null}
-          </summary>
-          <MentionText text={f.description} />
-        </details>
+        <div key={i} className="dnd-feature-row" onClick={() => setOpenIndex(i)}>
+          {f.name || "Без названия"}
+          {f.level ? <span className="muted"> (ур. {f.level})</span> : null}
+        </div>
       ))}
+      {openIndex !== null && (
+        <Modal onClose={() => setOpenIndex(null)}>
+          <div className="stack dnd-spell-modal">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <h3 style={{ margin: 0 }}>
+                {values[openIndex].name || "Без названия"}
+                {values[openIndex].level ? <span className="muted"> (ур. {values[openIndex].level})</span> : null}
+              </h3>
+              <button type="button" className="comp-mini" onClick={() => setOpenIndex(null)}>
+                <NavIcon name="close" />
+              </button>
+            </div>
+            <MentionText text={values[openIndex].description} />
+          </div>
+        </Modal>
+      )}
     </details>
   );
 }
@@ -3296,7 +3448,7 @@ function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () =
       title={editing ? "Сохранить" : "Редактировать"}
       onClick={onToggle}
     >
-      {editing ? "✓" : "✎"}
+      <NavIcon name={editing ? "check" : "edit"} />
     </button>
   );
 }
@@ -3357,6 +3509,76 @@ function DndResourcesView({
   );
 }
 
+// Rest flow: short rest is purely informational (a reminder of the hit-dice
+// pool — actually spending them to heal isn't tracked as a resource
+// anywhere on this sheet, matching how the app leaves that up to the table).
+// Long rest is the one with a mechanical effect: bulk-resets everything the
+// rest of the sheet marks as "spent this rest" — spell slots used and every
+// class-resource pool (Ресурсы tab) — plus the standard 5e full heal and
+// clearing accumulated death saves, so the button does what a player
+// actually expects "long rest" to do rather than just the two fields whose
+// own comments mention resetting on one.
+function DndRestModal({
+  value,
+  onQuickUpdate,
+  onClose,
+}: {
+  value: DndCharacterData;
+  onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
+  onClose: () => void;
+}) {
+  const resources = useMemo(() => applicableResources(value.classes), [value.classes]);
+  function longRest() {
+    if (!confirm("Провести длинный отдых? Слоты заклинаний, очки ресурсов и хиты будут восстановлены.")) return;
+    const resetResourceUsed: Record<string, number> = {};
+    for (const key of Object.keys(value.resourceUsed)) resetResourceUsed[key] = 0;
+    onQuickUpdate({
+      spellSlotsUsed: value.spellSlotsUsed.map(() => 0),
+      resourceUsed: resetResourceUsed,
+      hitPointsCurrent: value.hitPointMax,
+      hitPointsTemp: "0",
+      deathSaveSuccesses: 0,
+      deathSaveFailures: 0,
+    });
+    onClose();
+  }
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-spell-modal">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>Отдых</h3>
+          <button type="button" className="comp-mini" onClick={onClose}>
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <div className="stack" style={{ gap: 4 }}>
+          <strong>Короткий отдых</strong>
+          {value.hitDice ? (
+            <p className="muted" style={{ margin: 0 }}>
+              Доступные кости хитов: {value.hitDice}. Потратьте их, чтобы восстановить хиты — трекер расхода костей
+              хитов на этом листе не ведётся, отмечайте расход самостоятельно.
+            </p>
+          ) : (
+            <p className="muted" style={{ margin: 0 }}>
+              Кость хитов не указана в чарнике.
+            </p>
+          )}
+        </div>
+        <div className="stack" style={{ gap: 4 }}>
+          <strong>Длинный отдых</strong>
+          <p className="muted" style={{ margin: 0 }}>
+            Восстановит хиты до максимума, сбросит спасброски от смерти, все слоты заклинаний
+            {resources.length > 0 && " и ресурсы класса (" + resources.map((r) => r.label).join(", ") + ")"}.
+          </p>
+          <button type="button" className="primary" onClick={longRest} style={{ alignSelf: "flex-start" }}>
+            Провести длинный отдых
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function DndCharacterView({
   value,
   theme,
@@ -3397,6 +3619,8 @@ export function DndCharacterView({
   // whole-card editMode.
   const [editingInventory, setEditingInventory] = useState(false);
   const [editingSpells, setEditingSpells] = useState(false);
+  const [restOpen, setRestOpen] = useState(false);
+  const isMobile = useIsMobile();
   if (compact) return <DndCharacterViewMini value={value} theme={theme} density={density} />;
   const metaChunks: ReactNode[] = [];
   const namedClasses = value.classes.filter((c) => c.className);
@@ -3466,13 +3690,27 @@ export function DndCharacterView({
                 </div>
               )}
             </div>
-            {(value.playerName || value.experiencePoints) && (
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 13, letterSpacing: "1.5px", opacity: 0.8, whiteSpace: "nowrap" }}>
-                {[value.playerName, value.experiencePoints && `Опыт ${value.experiencePoints}`].filter(Boolean).join(" · ")}
-              </div>
-            )}
+            <span className="row" style={{ gap: 8, flexShrink: 0 }}>
+              {(value.playerName || value.experiencePoints) && (
+                <div style={{ fontFamily: "var(--font-display)", fontSize: 13, letterSpacing: "1.5px", opacity: 0.8, whiteSpace: "nowrap" }}>
+                  {[value.playerName, value.experiencePoints && `Опыт ${value.experiencePoints}`].filter(Boolean).join(" · ")}
+                </div>
+              )}
+              {onQuickUpdate && (
+                <button type="button" className="comp-mini" title="Отдых" onClick={() => setRestOpen(true)}>
+                  <NavIcon name="moon" /> Отдых
+                </button>
+              )}
+            </span>
           </div>
         </div>
+        {restOpen && (
+          <DndRestModal
+            value={value}
+            onQuickUpdate={onQuickUpdate!}
+            onClose={() => setRestOpen(false)}
+          />
+        )}
         <div className="sb-body">
           <div className="sb-vitals">
             <AcQuickBox computed={computedAc} manualBonus={value.manualAcBonus} onQuickUpdate={onQuickUpdate} />
@@ -3481,6 +3719,12 @@ export function DndCharacterView({
               <div>
                 <div className="sb-label">Скорость</div>
                 <div className="sb-value">{value.speed}</div>
+              </div>
+            )}
+            {!value.speed && formatSpeed(value.speeds) && (
+              <div>
+                <div className="sb-label">Скорость</div>
+                <div className="sb-value">{formatSpeed(value.speeds)}</div>
               </div>
             )}
             <div>
@@ -3508,7 +3752,7 @@ export function DndCharacterView({
                   style={onQuickUpdate ? { cursor: "pointer" } : undefined}
                   onClick={onQuickUpdate ? () => onQuickUpdate({ inspiration: !value.inspiration }) : undefined}
                 >
-                  {value.inspiration ? "✦" : "—"}
+                  {value.inspiration ? <NavIcon name="star" filled /> : "—"}
                 </div>
               </div>
             )}
@@ -3548,13 +3792,31 @@ export function DndCharacterView({
             backgroundSkillNames={value.backgroundSkillNames}
           />
 
-          <div className="tabs">
-            {DND_VIEW_TABS.map((t) => (
-              <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-                {t}
-              </button>
-            ))}
-          </div>
+          {isMobile ? (
+            // Same 6+1 sections as the desktop tab row, but a 7-button strip
+            // wraps onto 2-3 cramped rows on a phone — a dropdown picker
+            // keeps the current section's name always visible and gets the
+            // rest of the list out of the way until tapped.
+            <select
+              className="dnd-section-picker"
+              value={tab}
+              onChange={(e) => setTab(e.target.value as DndViewTab)}
+            >
+              {DND_VIEW_TABS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="tabs">
+              {DND_VIEW_TABS.map((t) => (
+                <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
 
           {tab === "Бой" && (
             <div className="stack">

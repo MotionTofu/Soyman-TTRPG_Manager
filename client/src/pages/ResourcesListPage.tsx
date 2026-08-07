@@ -221,7 +221,7 @@ export function ResourcesListPage() {
               <summary className="chevron-summary">
                 <NavIcon name="chevron" className="chevron-icon" />
                 <strong className="entry-title">
-                  {g.icon} {g.label}
+                  <NavIcon name={g.icon} /> {g.label}
                 </strong>{" "}
                 <span className="muted">({g.items.length})</span>
               </summary>

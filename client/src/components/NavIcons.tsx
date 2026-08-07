@@ -63,7 +63,8 @@ export type NavIconName =
   | "bag"
   | "swap"
   | "fullscreen"
-  | "center";
+  | "center"
+  | "moon";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -441,11 +442,29 @@ const PATHS: Record<NavIconName, ReactNode> = {
       <path d="M12 2.5v3.3M12 18.2v3.3M2.5 12h3.3M18.2 12h3.3" />
     </>
   ),
+  // "Отдых" (rest) — crescent moon.
+  moon: (
+    <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
+  ),
 };
 
-export function NavIcon({ name, className }: { name: NavIconName; className?: string }) {
+export function NavIcon({
+  name,
+  className,
+  filled,
+}: {
+  name: NavIconName;
+  className?: string;
+  /** Fills the icon with currentColor (used for toggle states like a starred/prepared spell). */
+  filled?: boolean;
+}) {
   return (
-    <svg {...SHARED_PROPS} className={className ?? "nav-icon"} aria-hidden="true">
+    <svg
+      {...SHARED_PROPS}
+      fill={filled ? "currentColor" : SHARED_PROPS.fill}
+      className={className ?? "nav-icon"}
+      aria-hidden="true"
+    >
       {PATHS[name]}
     </svg>
   );

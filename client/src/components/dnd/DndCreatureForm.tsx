@@ -50,6 +50,7 @@ import { useBag } from "../../bag";
 import { averageDiceFormula, rollDiceFormula } from "./diceRoll";
 import { PipTrack } from "../litm/PipTrack";
 import { api } from "../../api/client";
+import { NavIcon } from "../NavIcons";
 
 export const CREATURE_SIZES = ["Крошечный", "Маленький", "Средний", "Большой", "Огромный", "Громадный"] as const;
 export const DIE_SIZES = [4, 6, 8, 10, 12] as const;
@@ -423,7 +424,7 @@ export function SensesEditor({
                 onChange(value.filter((v) => v.name !== s.name));
               }}
             >
-              ✕
+              <NavIcon name="close" />
             </button>
           </span>
         ))}
@@ -647,7 +648,7 @@ function CreatureSpellLevelSection({
               style={{ flex: 1, minWidth: 140 }}
             />
             <button type="button" className="comp-mini danger" onClick={() => removeSpell(s)}>
-              ✕
+              <NavIcon name="close" />
             </button>
           </div>
         ))}
@@ -875,7 +876,7 @@ export function ActionListEdit<T extends DndCreatureAction>({
               </label>
             )}
             <button type="button" className="comp-mini" onClick={() => remove(i)}>
-              ✕
+              <NavIcon name="close" />
             </button>
           </div>
           {a.category === "attack" && (
@@ -1146,7 +1147,7 @@ export function EquipmentEditor({
           <input placeholder="Кол-во" value={item.qty} onChange={(e) => update(i, { qty: e.target.value })} style={{ width: 70 }} />
           <input placeholder="Заметки" value={item.notes} onChange={(e) => update(i, { notes: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
           <button type="button" className="comp-mini" onClick={() => remove(i)}>
-            ✕
+            <NavIcon name="close" />
           </button>
         </div>
       ))}
@@ -1240,7 +1241,7 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
             <input placeholder="Название" value={it.name} onChange={(e) => updateItem(i, { name: e.target.value })} style={{ flex: 1 }} />
             <input placeholder="Кол-во" value={it.qty} onChange={(e) => updateItem(i, { qty: e.target.value })} style={{ width: 70 }} />
             <button type="button" className="comp-mini" onClick={() => removeItem(i)}>
-              ✕
+              <NavIcon name="close" />
             </button>
           </div>
         ))}
@@ -1263,11 +1264,11 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
               />
               {avg !== null && <span className="muted">≈ {avg}</span>}
               <button type="button" onClick={() => roll(i)} disabled={avg === null}>
-                🎲 Бросить
+                <NavIcon name="die" /> Бросить
               </button>
               {rolled[i] !== undefined && <span className="muted">→ {rolled[i]}</span>}
               <button type="button" className="comp-mini" onClick={() => removeCurrency(i)}>
-                ✕
+                <NavIcon name="close" />
               </button>
             </div>
           );
@@ -1694,7 +1695,7 @@ function FieldRow({ label, children }: { label: string; children: ReactNode }) {
 function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () => void }) {
   return (
     <button type="button" className="comp-mini dnd-tab-edit-toggle" title={editing ? "Сохранить" : "Редактировать"} onClick={onToggle}>
-      {editing ? "✓" : "✎"}
+      <NavIcon name={editing ? "check" : "edit"} />
     </button>
   );
 }
@@ -1725,7 +1726,9 @@ function SbEntryRow({
         {name && <strong>{name}</strong>}
         {extra}
         {mech && <span className="muted"> {mech}</span>}
-        {hasDetail && <span className="sb-entry-caret">{open ? "▾" : "▸"}</span>}
+        {hasDetail && (
+          <NavIcon name="chevron" className={`sb-entry-caret chevron-icon${open ? " is-open" : ""}`} />
+        )}
       </div>
       {open && hasDetail && (
         <div className="sb-entry-detail">

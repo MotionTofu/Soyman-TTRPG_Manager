@@ -303,7 +303,7 @@ export const ResourcesSection = memo(function ResourcesSection({
             <summary className="row chevron-summary" style={{ gap: 10 }}>
               <NavIcon name="chevron" className="chevron-icon" />
               <strong>
-                {g.icon} {g.label}
+                <NavIcon name={g.icon} /> {g.label}
               </strong>
             </summary>
             {g.key === "audio" ? (
@@ -356,7 +356,7 @@ export const ResourcesSection = memo(function ResourcesSection({
               >
                 {RESOURCE_CATEGORIES.map((c) => (
                   <option key={c.key} value={c.key}>
-                    {c.icon} {c.label}
+                    {c.label}
                   </option>
                 ))}
               </select>

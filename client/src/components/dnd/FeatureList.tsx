@@ -4,6 +4,7 @@ import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { api } from "../../api/client";
+import { NavIcon } from "../NavIcons";
 
 function readSearchDrop(e: DragEvent): SearchResult | null {
   const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
@@ -37,7 +38,7 @@ const FeatureRow = memo(function FeatureRow({
       <div className="row">
         <input placeholder="Название" value={value.name} onChange={(e) => onChangeName(e.target.value)} />
         <button type="button" className="comp-mini" onClick={onRemove}>
-          ✕
+          <NavIcon name="close" />
         </button>
       </div>
       <MentionTextarea value={value.description} onChange={onChangeDescription} rows={2} />
@@ -202,7 +203,7 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
                 {f.name || "Без названия"}
               </span>
               <button type="button" className="comp-mini danger" onClick={removeCallbacks[i]}>
-                ✕
+                <NavIcon name="close" />
               </button>
             </div>
             {expandedIndex === i && (
