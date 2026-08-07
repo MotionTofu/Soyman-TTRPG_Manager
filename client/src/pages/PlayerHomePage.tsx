@@ -91,7 +91,7 @@ export function PlayerHomePage() {
         <div className="stack">
           <strong>Не оплачено</strong>
           {unpaidSessions.map((s) => (
-            <div key={s.session_id} className="card stack" style={{ gap: 4, borderLeft: "3px solid #e07a5f" }}>
+            <div key={s.session_id} className="card stack" style={{ gap: 4, borderLeft: "3px solid var(--accent)" }}>
               <Link to={`/campaigns/${s.campaign_id}`}>
                 {s.date} — {s.campaign_name}
                 {s.title && ` (${s.title})`}

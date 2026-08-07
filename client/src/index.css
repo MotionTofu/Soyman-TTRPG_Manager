@@ -345,14 +345,17 @@ h4 { font-size: var(--fs-body); }
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.2) 100%);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--ink) 72%, transparent) 0%,
+    color-mix(in srgb, var(--ink) 45%, transparent) 60%,
+    color-mix(in srgb, var(--ink) 20%, transparent) 100%);
 }
 .entity-row-bg > * {
   position: relative;
 }
 .entity-row-bg .entity-row-name,
 .entity-row-bg .muted {
-  color: #fff;
+  color: var(--paper);
 }
 .entity-row-name {
   font-weight: 600;
@@ -491,8 +494,10 @@ h4 { font-size: var(--fs-body); }
   align-items: center;
 }
 
-/* One color per entity type, reused consistently in breadcrumbs, the entity
-   header chip, search results, and link cards. */
+/* Monochrome "print label" per design-system-punk-zine.md §3.2 (accent stays
+   under 15% of the screen, so an eleven-hue rainbow is out) — entity type is
+   already spelled out in the label text/icon, so ink-on-surface is enough to
+   tell chips apart at a glance; color no longer carries the distinction. */
 .entity-type-chip {
   display: inline-block;
   padding: 2px 8px;
@@ -500,19 +505,9 @@ h4 { font-size: var(--fs-body); }
   font-size: 12px;
   font-weight: 600;
   background: var(--bg-elevated);
-  border: 1px solid currentColor;
+  border: 1px solid var(--border);
+  color: var(--text);
 }
-.entity-type-chip.campaign { color: #d4a373; }
-.entity-type-chip.setting { color: #93c5a0; }
-.entity-type-chip.player { color: #7ea8d8; }
-.entity-type-chip.character { color: #c48fd6; }
-.entity-type-chip.location { color: #5fc2b3; }
-.entity-type-chip.being { color: #e08a4f; }
-.entity-type-chip.community { color: #a98fe0; }
-.entity-type-chip.artifact { color: #e0c15f; }
-.entity-type-chip.resource { color: #8fa8e0; }
-.entity-type-chip.mastering { color: #d67ea3; }
-.entity-type-chip.session { color: #a3a35f; }
 
 .row {
   display: flex;
@@ -1197,7 +1192,6 @@ h4 { font-size: var(--fs-body); }
   border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 .nav-widget-left {
   left: 0;
@@ -1386,18 +1380,18 @@ th, td {
 .month-calendar .dot.role-player.rescheduled { background: var(--status-rescheduled-fg); color: var(--status-rescheduled); }
 .month-calendar .dot.kind-session { background: var(--status-held); color: var(--status-held-fg); }
 .month-calendar .dot.kind-event { background: var(--accent); color: var(--accent-text); }
-.month-calendar .dot.kind-event.important { background: #d9534f; color: #fff; font-weight: 600; }
+.month-calendar .dot.kind-event.important { background: var(--accent); color: var(--paper); font-weight: 600; }
 .month-calendar .dot.kind-date { background: var(--bg-elevated); color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--border); }
 .month-calendar .day.today {
-  background: rgba(72, 160, 150, 0.10);
-  box-shadow: inset 0 0 0 2px rgba(72, 160, 150, 0.35);
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-2) 35%, transparent);
 }
 .badge.role-player-badge { background: var(--role-player); color: var(--text-bright); }
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: color-mix(in srgb, var(--ink) 50%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1461,7 +1455,7 @@ th, td {
 .crop-viewport {
   position: relative;
   overflow: hidden;
-  background: #000;
+  background: var(--ink);
   cursor: grab;
   touch-action: none;
   border-radius: var(--card-radius);
@@ -1712,7 +1706,7 @@ details.card[open] summary {
   .mobile-drawer-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: color-mix(in srgb, var(--ink) 45%, transparent);
     z-index: 45;
   }
   .app-nav {
@@ -1835,7 +1829,6 @@ details.card[open] summary {
     -webkit-backdrop-filter: blur(10px);
     border: var(--card-border-width, 1px) solid var(--border);
     border-radius: var(--card-radius);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   }
   .mobile-bottom-nav a,
   .mobile-bottom-nav button {
@@ -1883,7 +1876,6 @@ details.card[open] summary {
     -webkit-backdrop-filter: blur(10px);
     border: var(--card-border-width, 1px) solid var(--border);
     border-radius: var(--card-radius);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
     color: inherit;
     text-decoration: none;
   }
@@ -1941,7 +1933,7 @@ details.card[open] summary {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  border: var(--card-border-width, 1px) solid var(--border);
 }
 .now-playing-cover img {
   width: 100%;
@@ -2074,8 +2066,8 @@ details.card[open] summary {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  color: var(--paper);
   font-size: 13px;
   text-align: center;
   padding: 8px;
@@ -2416,8 +2408,8 @@ details.card[open] summary {
   font-size: 28px;
   line-height: 1;
   padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
+  background: color-mix(in srgb, var(--ink) 40%, transparent);
+  color: var(--paper);
   border: none;
 }
 .lightbox-nav-prev {
@@ -2586,13 +2578,15 @@ details.card[open] summary {
   background-size: cover;
   background-position: center;
   position: relative;
-  color: #fff;
+  color: var(--paper);
 }
 .setting-card-bg::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(22, 20, 28, 0.25) 0%, rgba(22, 20, 28, 0.92) 100%);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--ink) 25%, transparent) 0%,
+    color-mix(in srgb, var(--ink) 92%, transparent) 100%);
   border-radius: var(--card-radius);
 }
 .setting-card-bg > * {
@@ -2683,7 +2677,7 @@ input.litm-theme-title {
 }
 .litm-tag-weak {
   color: var(--text-dim);
-  background: rgba(157, 151, 173, 0.1);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 .litm-tag button {
   background: transparent;
@@ -3456,8 +3450,6 @@ input.litm-theme-title {
   border-radius: var(--card-radius);
   max-height: 220px;
   overflow-y: auto;
-  z-index: 60;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   z-index: 20;
 }
 .mention-dropdown-item {
@@ -3529,7 +3521,6 @@ input.litm-theme-title {
   border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   width: min(360px, calc(100vw - 40px));
   flex-wrap: wrap;
 }
@@ -4115,7 +4106,7 @@ input.litm-theme-title {
 }
 .initiative-hp-bar-fill {
   height: 100%;
-  background: #c0392b;
+  background: var(--accent);
   transition: width 0.2s ease;
 }
 .initiative-hp-bar-temp {
@@ -4123,7 +4114,7 @@ input.litm-theme-title {
   top: 0;
   left: 0;
   height: 100%;
-  background: #4a90d9;
+  background: var(--accent-2);
   transition: width 0.2s ease;
 }
 .initiative-hp-editor {
