@@ -161,7 +161,7 @@ button, input, select, textarea {
 
 button {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   color: var(--text-bright);
   border-radius: var(--card-radius);
   padding: 6px 12px;
@@ -181,7 +181,7 @@ button.primary {
 
 input, select, textarea {
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 6px 8px;
 }
@@ -310,21 +310,24 @@ h4 { font-size: var(--fs-body); }
   flex-direction: column;
   gap: 4px;
 }
+/* Always rendered inside an already-framed `.card` (Население/Обитатели/
+   Представители/etc. sections all wrap this list in `.card stack`) — its
+   own border+background used to draw a second frame nested inside the
+   card's. One frame per region: the row is a plain divider-separated line,
+   not its own boxed card. */
 .entity-row {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-radius: var(--card-radius);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   color: inherit;
   text-decoration: none;
   position: relative;
   overflow: hidden;
 }
 .entity-row:hover {
-  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .entity-row-thumb {
   flex-shrink: 0;
@@ -380,7 +383,7 @@ h4 { font-size: var(--fs-body); }
 }
 .entity-row-actions a {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   color: inherit;
   text-decoration: none;
@@ -402,7 +405,7 @@ h4 { font-size: var(--fs-body); }
   gap: 6px;
   padding: 6px 2px;
   font-weight: 600;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 /* Only headers that actually toggle a <details> get the pointer + caret —
    a community habitat header with nothing to expand shouldn't imply it does. */
@@ -458,13 +461,15 @@ h4 { font-size: var(--fs-body); }
   align-items: center;
   color: var(--accent);
 }
+/* Inline expansion of an .entity-row above it — same "already inside .card"
+   nesting, so no border/background of its own; a bottom divider (matching
+   .entity-row's) plus the accent-tinted rail keeps it visually tied to the
+   row it expands without boxing it. */
 .entity-row-expanded {
-  padding: 8px 12px 10px 12px;
-  margin-top: -2px;
-  border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 var(--card-radius) var(--card-radius);
-  background: var(--bg-elevated);
+  padding: 8px 12px 10px 16px;
+  margin-top: -1px;
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+  border-left: 2px solid var(--accent);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -541,7 +546,7 @@ h4 { font-size: var(--fs-body); }
 }
 .grid-cards.mode-table {
   gap: 0;
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   overflow: hidden;
 }
@@ -556,7 +561,7 @@ h4 { font-size: var(--fs-body); }
 .grid-cards.mode-table .card {
   border-radius: 0;
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   padding: 6px 12px;
 }
 .grid-cards.mode-table .card:last-child {
@@ -599,7 +604,7 @@ h4 { font-size: var(--fs-body); }
   justify-content: center;
   border-radius: 50%;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
@@ -721,7 +726,7 @@ h4 { font-size: var(--fs-body); }
 .app-nav {
   position: relative;
   background: var(--bg-panel);
-  border-right: 1px solid var(--border);
+  border-right: var(--card-border-width, 1px) solid var(--line);
   padding: 16px 10px;
   display: flex;
   flex-direction: column;
@@ -742,7 +747,7 @@ h4 { font-size: var(--fs-body); }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 4px 6px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   margin-bottom: 8px;
 }
 .preview-dock-placeholder {
@@ -972,7 +977,7 @@ h4 { font-size: var(--fs-body); }
 
 .search-panel {
   background: var(--bg-panel);
-  border-left: 1px solid var(--border);
+  border-left: var(--card-border-width, 1px) solid var(--line);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -985,7 +990,7 @@ h4 { font-size: var(--fs-body); }
   flex-wrap: wrap;
   align-items: center;
   border-left: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   padding: 10px 16px;
   gap: 12px;
   flex-shrink: 0;
@@ -1057,7 +1062,7 @@ h4 { font-size: var(--fs-body); }
   font-size: 12px;
   color: var(--text-dim);
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: 999px;
   padding: 3px 8px;
   cursor: pointer;
@@ -1071,7 +1076,7 @@ h4 { font-size: var(--fs-body); }
   flex-direction: column;
   gap: 6px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: var(--card-border-width, 1px) solid var(--line);
   flex-shrink: 0;
 }
 .bag-grid {
@@ -1082,7 +1087,7 @@ h4 { font-size: var(--fs-body); }
 .bag-cell {
   aspect-ratio: 1;
   border-radius: var(--card-radius);
-  border: 1px dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1138,7 +1143,7 @@ h4 { font-size: var(--fs-body); }
   gap: 4px;
   padding-top: 10px;
   margin-top: auto;
-  border-top: 1px solid var(--border);
+  border-top: var(--card-border-width, 1px) solid var(--line);
   flex-shrink: 0;
 }
 .search-pin-row a {
@@ -1149,7 +1154,7 @@ h4 { font-size: var(--fs-body); }
 
 .search-result {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 8px 10px;
   cursor: grab;
@@ -1189,7 +1194,7 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   gap: 4px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
@@ -1266,7 +1271,7 @@ h4 { font-size: var(--fs-body); }
 }
 
 .drop-zone {
-  border: 1px dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--border);
   border-radius: var(--card-radius);
   padding: 10px;
   min-height: 40px;
@@ -1283,7 +1288,7 @@ table {
 th, td {
   text-align: left;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 
 .thumbnail-style-table {
@@ -1425,7 +1430,7 @@ th, td {
   margin-top: 6px;
 }
 .mention-picker-community-table td {
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   padding: 4px 8px;
   width: 50%;
 }
@@ -1476,7 +1481,7 @@ th, td {
 .tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   margin-bottom: 16px;
 }
 .tabs button {
@@ -1545,17 +1550,24 @@ th, td {
 .player-section-items {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 4px 4px 4px;
+  gap: 0;
+  padding: 4px 0 0 0;
 }
+/* Always rendered inside the accordion opened by `.player-section-header`
+   (see PlayerCampaignPage.tsx) — the header already draws the region's one
+   frame, so items are plain divider-separated rows, not boxed cards of
+   their own. */
 .player-section-item {
   display: block;
   width: 100%;
   text-align: left;
   padding: 10px 12px;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--card-radius);
+  border: none;
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+}
+.player-section-item:last-child {
+  border-bottom: none;
 }
 .player-section-item:hover {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
@@ -1574,7 +1586,7 @@ th, td {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .player-reader-section {
   font-size: 13px;
@@ -1682,7 +1694,7 @@ details.card[open] summary {
     gap: 8px;
     padding: 8px 12px;
     background: var(--bg-panel);
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--card-border-width, 1px) solid var(--line);
   }
   .mobile-topbar-button {
     background: transparent;
@@ -1695,7 +1707,7 @@ details.card[open] summary {
   .mobile-topbar-logo {
     height: 32px;
     width: auto;
-    border-radius: 4px;
+    border-radius: var(--card-radius);
   }
   .mobile-drawer-backdrop {
     position: fixed;
@@ -1821,8 +1833,8 @@ details.card[open] summary {
     background: color-mix(in oklab, var(--bg-panel) 92%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid var(--border);
-    border-radius: 18px;
+    border: var(--card-border-width, 1px) solid var(--border);
+    border-radius: var(--card-radius);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   }
   .mobile-bottom-nav a,
@@ -1835,7 +1847,7 @@ details.card[open] summary {
     padding: 7px 4px 6px;
     background: transparent;
     border: none;
-    border-radius: 14px;
+    border-radius: var(--card-radius);
     color: var(--text-dim);
     font-size: 11px;
     line-height: 1.1;
@@ -1869,8 +1881,8 @@ details.card[open] summary {
     background: color-mix(in oklab, var(--bg-panel) 94%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid var(--border);
-    border-radius: 14px;
+    border: var(--card-border-width, 1px) solid var(--border);
+    border-radius: var(--card-radius);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
     color: inherit;
     text-decoration: none;
@@ -2024,7 +2036,7 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
 }
 .character-avatar-placeholder {
@@ -2038,7 +2050,7 @@ details.card[open] summary {
 .character-avatar-upload {
   cursor: pointer;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 6px 12px;
   font-size: 13px;
@@ -2146,7 +2158,7 @@ details.card[open] summary {
     padding: 12px;
     min-height: 20px;
     background: var(--bg-panel);
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--card-border-width, 1px) solid var(--line);
     z-index: 3;
   }
   /* The vitals row (AC/Initiative/HP/avatar/inspiration/...) stays visible
@@ -2202,7 +2214,7 @@ details.card[open] summary {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .player-list-row + .player-list-row {
-  border-top: 1px solid var(--border);
+  border-top: var(--card-border-width, 1px) solid var(--line);
 }
 /* Track/playlist rows (GmMusicPage) — names are often long filenames with no
    spaces to break on, which used to just push the row wider than the screen
@@ -2232,7 +2244,7 @@ details.card[open] summary {
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
   flex: 0 0 auto;
 }
@@ -2252,7 +2264,7 @@ details.card[open] summary {
   height: 100px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
   display: block;
 }
@@ -2264,7 +2276,7 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
   display: block;
 }
@@ -2273,7 +2285,7 @@ details.card[open] summary {
   height: 228px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
   display: block;
 }
@@ -2282,7 +2294,7 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
   display: block;
 }
@@ -2291,7 +2303,7 @@ details.card[open] summary {
   height: 176px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
   display: block;
 }
@@ -2301,7 +2313,7 @@ details.card[open] summary {
   height: 150px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
 }
 .chapter-image-placeholder {
@@ -2321,7 +2333,7 @@ details.card[open] summary {
   height: 39px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
 }
 
@@ -2342,7 +2354,7 @@ details.card[open] summary {
   height: 100%;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   background: var(--bg-panel);
   cursor: pointer;
   display: block;
@@ -2356,7 +2368,7 @@ details.card[open] summary {
   align-items: center;
   justify-content: center;
   text-align: center;
-  border: 1px dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--border);
   border-radius: var(--card-radius);
   color: var(--text-dim);
   cursor: pointer;
@@ -2425,7 +2437,7 @@ details.card[open] summary {
   align-items: center;
   gap: 8px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 5px 10px;
   font-size: 13px;
@@ -2456,7 +2468,7 @@ details.card[open] summary {
 
 .context-menu {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 4px;
   display: flex;
@@ -2509,7 +2521,7 @@ details.card[open] summary {
   position: relative;
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: var(--card-border-width, 1px) solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2663,7 +2675,7 @@ input.litm-theme-title {
   padding: 3px 8px;
   border-radius: var(--card-radius);
   font-size: 12px;
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
 }
 .litm-tag-power {
   color: #cf9a5c;
@@ -2682,7 +2694,7 @@ input.litm-theme-title {
 }
 .litm-tag-add {
   background: transparent;
-  border: 1px dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--border);
   justify-content: flex-start;
 }
 .litm-tag-add input {
@@ -2693,7 +2705,7 @@ input.litm-theme-title {
   font-size: 12px;
 }
 .litm-tag-add button {
-  border-left: 1px solid var(--border);
+  border-left: var(--card-border-width, 1px) solid var(--line);
 }
 
 .litm-character-form > label,
@@ -2795,8 +2807,20 @@ input.litm-theme-title {
   gap: 2px;
   padding: 8px 4px;
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
+}
+/* Character/creature wizards and the character-sheet accordion all wrap
+   this tile in `.card` — flatten there so the tile doesn't draw a second
+   frame inside the card's. The bare `.dnd-ability-box` rule above still
+   applies to the D&D creature statblock's "edit" view (StatblockList.tsx),
+   which renders the tile in a plain, unframed `.stack` and needs its own
+   border. */
+.card .dnd-ability-box {
+  border: none;
+  background: none;
+  border-radius: 0;
+  padding: 4px;
 }
 .dnd-ability-label {
   font-size: 10px;
@@ -2907,7 +2931,7 @@ input.litm-theme-title {
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
 }
 .dnd-ability-col {
@@ -2921,7 +2945,7 @@ input.litm-theme-title {
   gap: 2px;
   padding: 6px 4px;
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
 }
 .dnd-save-row {
@@ -2974,7 +2998,7 @@ input.litm-theme-title {
   color: var(--sb-ink);
 }
 .dnd-save-row-throw {
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   padding-bottom: 3px;
   margin-bottom: 2px;
   font-weight: 600;
@@ -2984,15 +3008,15 @@ input.litm-theme-title {
    step with light/dark/steampunk-etc. themes. */
 .dnd-save-row.skill-source-class {
   background: color-mix(in oklab, dodgerblue 24%, var(--sb-paper));
-  border-radius: 4px;
+  border-radius: var(--card-radius);
 }
 .dnd-save-row.skill-source-background {
   background: color-mix(in oklab, seagreen 24%, var(--sb-paper));
-  border-radius: 4px;
+  border-radius: var(--card-radius);
 }
 .dnd-save-row.skill-source-both {
   background: color-mix(in oklab, crimson 22%, var(--sb-paper));
-  border-radius: 4px;
+  border-radius: var(--card-radius);
 }
 .dnd-skill-remaining {
   align-self: center;
@@ -3029,17 +3053,29 @@ input.litm-theme-title {
   font-size: 14.5px;
 }
 
+/* Always rendered inside an already-framed parent — the character-sheet
+   accordion's `.card` in edit mode, the statblock's own `.sb-card` in the
+   inventory tab's edit toggle. Named equipment sections are a divided list
+   within that frame, not boxed cards of their own; the drag-over state
+   still draws a temporary dashed frame since that's a functional
+   drop-target cue, not decorative chrome. */
 .dnd-equipment-section {
-  border: 1px solid var(--border);
-  border-radius: var(--card-radius);
-  padding: 8px;
+  border: none;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  padding: 8px 0 0 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+.dnd-equipment-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
 .dnd-equipment-section.drag-over {
-  border-color: var(--accent);
+  border: var(--card-border-width, 1px) dashed var(--accent);
+  border-radius: var(--card-radius);
   background: var(--bg-elevated);
+  padding: 8px;
 }
 .sb-entry.drag-over {
   border-color: var(--accent);
@@ -3058,7 +3094,7 @@ input.litm-theme-title {
   padding-left: 18px;
 }
 .dnd-equipment-quick-row {
-  border-radius: 4px;
+  border-radius: var(--card-radius);
   padding: 1px 4px;
   margin-left: -4px;
 }
@@ -3134,7 +3170,7 @@ input.litm-theme-title {
   .dnd-attacks-table tr {
     display: block;
     padding: 6px 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--card-border-width, 1px) solid var(--line);
   }
   .dnd-attacks-table tr:last-child {
     border-bottom: none;
@@ -3184,7 +3220,7 @@ input.litm-theme-title {
 }
 
 .dnd-proficiency-dropzone {
-  border: 1px dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--border);
   border-radius: var(--card-radius);
   padding: 8px;
   min-height: 36px;
@@ -3218,7 +3254,7 @@ input.litm-theme-title {
   align-items: center;
   gap: 4px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: 999px;
   padding: 2px 4px 2px 10px;
   font-size: calc(var(--fs, 15px) * 0.87);
@@ -3363,7 +3399,7 @@ input.litm-theme-title {
 }
 
 .dnd-feature-section {
-  border-top: 1px solid var(--border);
+  border-top: var(--card-border-width, 1px) solid var(--line);
   padding-top: 8px;
   margin-top: 2px;
 }
@@ -3416,7 +3452,7 @@ input.litm-theme-title {
   top: 100%;
   margin-top: 4px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   max-height: 220px;
   overflow-y: auto;
@@ -3476,7 +3512,7 @@ input.litm-theme-title {
   font-size: 12px;
   font-weight: 600;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   cursor: pointer;
 }
@@ -3490,7 +3526,7 @@ input.litm-theme-title {
   margin-top: 4px;
   z-index: 25;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
@@ -3502,7 +3538,7 @@ input.litm-theme-title {
   font-size: 12px;
   line-height: 1.6;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   cursor: pointer;
 }
@@ -3528,7 +3564,7 @@ input.litm-theme-title {
   padding: 2px 4px;
   font-size: 12px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   cursor: pointer;
   max-width: 110px;
@@ -3553,7 +3589,7 @@ input.litm-theme-title {
 }
 .rt-table th,
 .rt-table td {
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   padding: 4px 8px;
   text-align: left;
 }
@@ -3589,7 +3625,7 @@ input.litm-theme-title {
   top: 100%;
   margin-top: 4px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 6px;
   z-index: 20;
@@ -3605,7 +3641,7 @@ input.litm-theme-title {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-top: 1px solid var(--border);
+  border-top: var(--card-border-width, 1px) solid var(--line);
   padding-top: 6px;
 }
 .rt-link-external input {
@@ -3629,7 +3665,7 @@ input.litm-theme-title {
   width: 100%;
   flex: 1;
   min-height: 300px;
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   overflow: hidden;
   line-height: 0;
@@ -3669,6 +3705,10 @@ input.litm-theme-title {
   padding: 0;
   font-size: 13px;
 }
+/* Always an overlay inside the already-framed `.location-map-wrap` — no
+   border of its own (that would be a frame nested in the map's frame). The
+   background stays: unlike a card-in-card, this sits over the uploaded map
+   image itself and needs a legibility scrim, not a decorative box. */
 .location-map-legend {
   position: absolute;
   left: 8px;
@@ -3679,7 +3719,6 @@ input.litm-theme-title {
   gap: 4px;
   padding: 6px 10px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
   border-radius: var(--card-radius);
   font-size: 12px;
   line-height: normal;
@@ -3739,7 +3778,7 @@ input.litm-theme-title {
   left: 0;
   right: 90px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   max-height: 220px;
   overflow-y: auto;
@@ -3781,7 +3820,7 @@ input.litm-theme-title {
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 14px 18px;
   font-size: 12px;
@@ -3836,7 +3875,7 @@ input.litm-theme-title {
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 12px;
   font-size: 14px;
@@ -3867,7 +3906,7 @@ input.litm-theme-title {
 .relation-graph-wrap {
   position: relative;
   width: 100%;
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   background: var(--bg-panel);
   overflow: hidden;
@@ -3891,7 +3930,7 @@ input.litm-theme-title {
   left: 0;
   min-width: 260px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   max-height: 220px;
   overflow-y: auto;
@@ -3912,7 +3951,7 @@ input.litm-theme-title {
   align-items: center;
   gap: 10px;
   padding: 4px 10px;
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   background: var(--bg-panel);
 }
@@ -3946,7 +3985,7 @@ input.litm-theme-title {
 .litm-companion-drop {
   flex: 1;
   min-height: 32px;
-  border: 1px dashed var(--border);
+  border: var(--card-border-width, 1px) dashed var(--border);
   border-radius: var(--card-radius);
   padding: 6px 8px;
   display: flex;
@@ -3984,7 +4023,7 @@ input.litm-theme-title {
   max-height: 140px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
 }
 .resource-link-button {
   align-self: flex-start;
@@ -4019,7 +4058,7 @@ input.litm-theme-title {
 .resource-row {
   gap: 8px;
   padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .resource-row:last-child {
   border-bottom: none;
@@ -4035,7 +4074,7 @@ input.litm-theme-title {
   flex-direction: column;
   gap: 4px;
   padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   overflow: hidden;
 }
 .initiative-tile:last-child {
@@ -4064,13 +4103,13 @@ input.litm-theme-title {
 .initiative-condition-picker {
   gap: 2px;
   padding: 6px 4px 2px;
-  border-top: 1px dashed var(--border);
+  border-top: var(--card-border-width, 1px) dashed var(--line);
   font-size: 0.9em;
 }
 .initiative-hp-bar-track {
   position: relative;
   height: 6px;
-  border-radius: 2px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--border) 60%, transparent);
   overflow: hidden;
 }
@@ -4089,13 +4128,13 @@ input.litm-theme-title {
 }
 .initiative-hp-editor {
   padding: 4px 2px 2px;
-  border-top: 1px dashed var(--border);
+  border-top: var(--card-border-width, 1px) dashed var(--line);
 }
 .resource-row-thumb {
   width: 24px;
   height: 24px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--card-radius);
   flex-shrink: 0;
 }
 .resource-row-audio {
@@ -4116,7 +4155,7 @@ input.litm-theme-title {
 }
 .playlist-track-row {
   padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .playlist-track-row:last-child {
   border-bottom: none;
@@ -4151,7 +4190,7 @@ input.litm-theme-title {
   background-image: var(--card-band-image, none);
   color: var(--primary-text, var(--text-bright));
   border-top: var(--card-border-width) solid var(--border);
-  border-radius: 14px 14px 0 0;
+  border-radius: var(--card-radius) var(--card-radius) 0 0;
 }
 .audio-player-bar button {
   padding: 2px 8px;
@@ -4230,7 +4269,7 @@ input.litm-theme-title {
   transform: translateX(-50%);
   margin-bottom: 6px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 10px 8px;
   z-index: 50;
@@ -4251,7 +4290,7 @@ input.litm-theme-title {
   right: 0;
   margin-bottom: 6px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 8px;
   min-width: 260px;
@@ -4265,7 +4304,7 @@ input.litm-theme-title {
   right: 0;
   margin-top: 4px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--card-radius);
   padding: 8px;
   display: flex;
@@ -4337,7 +4376,7 @@ input.litm-theme-title {
   gap: 10px;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
   color: var(--text-dim);
   font-size: 13px;
 }
@@ -4348,7 +4387,7 @@ input.litm-theme-title {
   flex-direction: column;
 }
 .comp-node {
-  border-bottom: 1px solid rgba(53, 49, 63, 0.4);
+  border-bottom: var(--card-border-width, 1px) solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 .comp-row {
   display: flex;
