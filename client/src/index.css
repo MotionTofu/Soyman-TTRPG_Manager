@@ -1882,7 +1882,8 @@ details.card[open] summary {
   object-fit: cover;
 }
 .now-playing-cover-placeholder {
-  font-size: 64px;
+  width: 64px;
+  height: 64px;
   color: var(--accent);
   opacity: 0.5;
 }
@@ -1901,10 +1902,13 @@ details.card[open] summary {
 .now-playing-controls button {
   background: transparent;
   border: none;
-  font-size: 22px;
   line-height: 1;
   padding: 6px;
   color: inherit;
+}
+.now-playing-controls .nav-icon {
+  width: 22px;
+  height: 22px;
 }
 .now-playing-controls button.active {
   color: var(--accent);
@@ -1913,8 +1917,11 @@ details.card[open] summary {
   opacity: 0.35;
 }
 .now-playing-play {
-  font-size: 40px !important;
   color: var(--accent);
+}
+.now-playing-play .nav-icon {
+  width: 36px;
+  height: 36px;
 }
 
 /* Split into three named grid areas (avatar/name/tabs) instead of two plain
@@ -4048,8 +4055,11 @@ input.litm-theme-title {
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 12px;
   line-height: 1;
+}
+.playlist-track-play-btn .nav-icon {
+  width: 14px;
+  height: 14px;
 }
 .playlist-track-play-btn:hover {
   opacity: 0.7;
@@ -4078,6 +4088,12 @@ input.litm-theme-title {
   border: none;
   color: inherit;
 }
+/* Keep the transport compact so secondary controls (shuffle/repeat/volume)
+   don't crowd the track name on narrower windows. */
+.audio-player-bar .nav-icon {
+  width: 16px;
+  height: 16px;
+}
 .audio-player-bar button:hover {
   color: var(--accent);
 }
@@ -4085,12 +4101,20 @@ input.litm-theme-title {
   justify-content: space-between;
 }
 .audio-player-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: none;
   border: none;
   color: var(--accent);
   cursor: pointer;
   padding: 2px 0;
   font-size: 13px;
+}
+.audio-player-suggestion .nav-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 .audio-player-suggestion:hover {
   text-decoration: underline;
@@ -4192,13 +4216,21 @@ input.litm-theme-title {
   color: var(--text-dim);
 }
 .playlist-nav-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   text-align: left;
   padding: 4px 10px 4px 20px;
   background: none;
   border: none;
   cursor: pointer;
+}
+.playlist-nav-item .nav-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 .playlist-nav-item:hover {
   background: var(--bg-panel);
@@ -4288,9 +4320,47 @@ input.litm-theme-title {
   cursor: pointer;
   padding: 0;
   width: 1em;
-  font-size: 0.7em;
   line-height: 1;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Shared disclosure chevron (ticket 10 — resources/compendium/chapters/
+   relations/initiative/map/graph). One drawn NavIcon("chevron") used
+   everywhere a section expands/collapses, instead of ad-hoc ▾/▸ glyphs.
+   Two drivers, same visual result:
+   - native <details>: rotates via the `details[open] > summary` attribute
+     selector, no JS needed — pair the chevron with `.chevron-summary` on
+     the <summary> (also suppresses the native marker).
+   - manually-controlled toggles (not <details>): apply `.is-open` to the
+     icon directly from React state. */
+.chevron-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  transition: transform 140ms var(--ease);
+}
+summary.chevron-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+summary.chevron-summary::-webkit-details-marker {
+  display: none;
+}
+details[open] > summary.chevron-summary .chevron-icon,
+.chevron-icon.is-open {
+  transform: rotate(90deg);
+}
+.comp-mini .nav-icon,
+.comp-toggle .nav-icon {
+  width: 14px;
+  height: 14px;
+}
+.icon-flip-x {
+  transform: scaleX(-1);
 }
 .comp-row:hover .comp-toggle {
   color: var(--accent);
@@ -4334,6 +4404,11 @@ input.litm-theme-title {
   padding: 1px 6px;
   font-size: 12px;
   line-height: 1.4;
+}
+.comp-mini .nav-icon {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
 }
 .comp-mini.danger {
   color: var(--status-cancelled);

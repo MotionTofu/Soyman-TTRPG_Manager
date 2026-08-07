@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
+import { NavIcon } from "./NavIcons";
 import {
   GRAPH_HEIGHT,
   GRAPH_WIDTH,
@@ -275,10 +276,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
         )}
       </div>
       <button type="button" onClick={() => zoomBy(1.3)} title="Приблизить">
-        +
+        <NavIcon name="plus" />
       </button>
       <button type="button" onClick={() => zoomBy(1 / 1.3)} title="Отдалить">
-        −
+        <NavIcon name="minus" />
       </button>
       <button type="button" onClick={resetView}>
         Сбросить вид ({Math.round(view.zoom * 100)}%)
@@ -288,7 +289,13 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
         onClick={() => setFullscreen((v) => !v)}
         title={fullscreen ? "Закрыть (Esc)" : "На весь экран"}
       >
-        {fullscreen ? "Свернуть" : "⛶ На весь экран"}
+        {fullscreen ? (
+          "Свернуть"
+        ) : (
+          <>
+            <NavIcon name="fullscreen" /> На весь экран
+          </>
+        )}
       </button>
       {focusedNode && (
         <div className="row relation-graph-focus-panel">

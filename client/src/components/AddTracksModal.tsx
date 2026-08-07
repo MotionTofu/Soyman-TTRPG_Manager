@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { api } from "../api/client";
 import { Modal } from "./Modal";
+import { NavIcon } from "./NavIcons";
 import type { Resource } from "../types";
 
 type Scope = "session" | "setting";
@@ -97,7 +98,7 @@ export function AddTracksModal({ playlistId, scope, entityId, onClose, onAdded }
 
   return (
     <Modal onClose={onClose} closeOnBackdropClick={false}>
-      <div className="stack" style={{ minWidth: 380 }}>
+      <div className="stack" style={{ width: "min(380px, 100%)" }}>
         <h3 style={{ margin: 0 }}>Добавить треки</h3>
         <div className="row">
           <button
@@ -138,7 +139,7 @@ export function AddTracksModal({ playlistId, scope, entityId, onClose, onAdded }
                 style={{ justifyContent: "flex-start", gap: 8, padding: "6px 4px", background: "none", border: "none", cursor: "pointer" }}
                 onClick={() => openFolder(s)}
               >
-                📁 {s.name}
+                <NavIcon name="folder" /> {s.name}
               </button>
             ))}
             {settings.length === 0 && <span className="muted">Сеттингов пока нет.</span>}
@@ -149,7 +150,9 @@ export function AddTracksModal({ playlistId, scope, entityId, onClose, onAdded }
               <button type="button" onClick={closeFolder}>
                 ← Назад
               </button>
-              <strong>📁 {openSetting.name}</strong>
+              <strong className="row" style={{ gap: 4, display: "inline-flex", alignItems: "center" }}>
+                <NavIcon name="folder" /> {openSetting.name}
+              </strong>
             </div>
             <input
               placeholder="Фильтр по названию…"

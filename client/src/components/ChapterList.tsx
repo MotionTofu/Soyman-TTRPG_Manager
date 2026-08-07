@@ -5,6 +5,7 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
+import { NavIcon } from "./NavIcons";
 
 interface ChapterLike {
   id: number;
@@ -187,8 +188,13 @@ function ChapterCard<T extends ChapterLike>({
 
   return (
     <details className="card" open={editMode}>
-      <summary>
-        {!!chapter.important && <span title="Важно">⭐ </span>}
+      <summary className="chevron-summary">
+        <NavIcon name="chevron" className="chevron-icon" />
+        {!!chapter.important && (
+          <span title="Важно">
+            <NavIcon name="star" />{" "}
+          </span>
+        )}
         <strong className="entry-title">{chapter.title || "Без названия"}</strong>
         {chapter.campaign_name && <span className="badge tag">{chapter.campaign_name}</span>}
         {visibilityToggle && (
@@ -197,18 +203,19 @@ function ChapterCard<T extends ChapterLike>({
             title={chapter.visible_to_players ? "Видно игрокам — нажмите, чтобы скрыть" : "Скрыто от игроков — нажмите, чтобы открыть"}
             onClick={toggleVisibleToPlayers}
           >
-            {chapter.visible_to_players ? "👁 Видно игрокам" : "👁 Скрыто"}
+            <NavIcon name="eye" /> {chapter.visible_to_players ? "Видно игрокам" : "Скрыто"}
           </button>
         )}
         <button
           className="danger"
           style={{ float: "right" }}
+          title="Удалить"
           onClick={(e) => {
             e.preventDefault();
             onRemove(chapter.id);
           }}
         >
-          ✕
+          <NavIcon name="delete" />
         </button>
       </summary>
       <div className="row" style={{ alignItems: "flex-start" }}>

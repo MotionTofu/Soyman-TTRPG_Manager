@@ -11,6 +11,7 @@ import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { SendMapToSessionModal } from "./SendMapToSessionModal";
 import { addToBag } from "../bag";
+import { NavIcon } from "./NavIcons";
 import type { LocationPin, SearchResult, SettingLocation } from "../types";
 
 interface Props {
@@ -714,16 +715,16 @@ export function LocationMap({
       </div>
       <div className="location-map-zoom-controls">
         <button type="button" onClick={() => zoomBy(1.3)} title="Приблизить">
-          +
+          <NavIcon name="plus" />
         </button>
         <button type="button" onClick={resetView} title="Сбросить масштаб">
           {Math.round(view.zoom * 100)}%
         </button>
         <button type="button" onClick={() => zoomBy(1 / 1.3)} title="Отдалить">
-          −
+          <NavIcon name="minus" />
         </button>
         <button type="button" onClick={centerMap} title="Центрировать карту">
-          ⌖
+          <NavIcon name="center" />
         </button>
       </div>
       <div className="location-map-legend">
@@ -748,7 +749,7 @@ export function LocationMap({
           {mapImageUrl && (
             <div className="row">
               <button type="button" onClick={openSettings}>
-                ⚙ Настройки карты
+                <NavIcon name="gear" /> Настройки карты
               </button>
               <label className="character-avatar-upload">
                 {uploading ? "Загрузка…" : "Заменить карту"}
@@ -764,17 +765,17 @@ export function LocationMap({
               </button>
               {otherLocations && otherLocations.length > 0 && (
                 <button type="button" onClick={() => setTransferOpen(true)}>
-                  ⇄ Перенести карту
+                  <NavIcon name="swap" /> Перенести карту
                 </button>
               )}
               <button type="button" onClick={addMapToBag}>
-                🎒 В мешок
+                <NavIcon name="bag" /> В мешок
               </button>
               <button type="button" onClick={() => setSendOpen(true)}>
-                → В сессию
+                <NavIcon name="arrowRight" /> В сессию
               </button>
               <button type="button" onClick={() => setFullscreen(true)} title="Развернуть на весь экран">
-                ⛶ На весь экран
+                <NavIcon name="fullscreen" /> На весь экран
               </button>
             </div>
           )}
@@ -846,7 +847,7 @@ export function LocationMap({
                 onClick={() => setFullscreen(false)}
                 title="Закрыть (Esc)"
               >
-                ✕
+                <NavIcon name="close" />
               </button>
             </div>
             <div className="location-map-card">{mapBody}</div>

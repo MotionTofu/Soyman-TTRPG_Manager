@@ -7,7 +7,9 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
+import { Link } from "react-router-dom";
 import { api } from "./api/client";
+import { NavIcon } from "./components/NavIcons";
 import { PlaylistNavMenu } from "./components/PlaylistNavMenu";
 import type { Campaign, Playlist, PlaylistDetail, SessionSummary } from "./types";
 
@@ -101,12 +103,44 @@ function loadStoredShuffleMode(): boolean {
 // outgoing track off outright. `activeSlot` tracks which element is "live"
 // for seek/volume/progress purposes; a crossfade ramps both in lockstep and
 // then flips which one is active.
+// A ~50ms silent WAV, used only to "arm" an <audio> element from within a
+// real user gesture before it has ever had a track loaded. Mobile browsers
+// (iOS Safari in particular) block .play() on a given element unless that
+// exact element was already played at least once inside a user-gesture call
+// stack — a natural track-end crossfade (triggered by the 'ended' event, not
+// a click) plays the *inactive* element for the first time, which silently
+// failed on mobile until this unlock ran once, from a real tap.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+
 export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const audioARef = useRef<HTMLAudioElement>(null);
   const audioBRef = useRef<HTMLAudioElement>(null);
   const [activeSlot, setActiveSlot] = useState<"a" | "b">("a");
   const activeSlotRef = useRef(activeSlot);
   activeSlotRef.current = activeSlot;
+  const unlockedRef = useRef(false);
+
+  // Called synchronously at the top of every function that's only ever
+  // reachable from a click handler (toggle/playPlaylist/playTrackAt/next/
+  // prev) — primes BOTH elements while still inside that gesture's call
+  // stack, so a later programmatic play() (e.g. the inactive element's fade-
+  // in during a natural track-end crossfade) is allowed instead of silently
+  // rejected. Runs once per page load.
+  function unlockAudioElements() {
+    if (unlockedRef.current) return;
+    unlockedRef.current = true;
+    for (const el of [audioARef.current, audioBRef.current]) {
+      if (!el) continue;
+      if (!el.src) el.src = SILENT_WAV;
+      const p = el.play();
+      if (p && typeof p.catch === "function") {
+        p.then(() => el.pause()).catch(() => {});
+      } else {
+        el.pause();
+      }
+    }
+  }
 
   const [state, setState] = useState<PlayerState>({
     tracks: [],
@@ -204,6 +238,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // play immediately. Used for the first track of a freshly chosen
   // playlist/track pick, and whenever no fade duration is configured.
   function hardSwitch(newIndex: number) {
+    unlockAudioElements();
     clearFadeTimer();
     const active = getActive();
     const track = stateRef.current.tracks[newIndex];
@@ -219,8 +254,12 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
 
   // Crossfade: the incoming track starts on the inactive element at volume
   // 0 and ramps up, while the outgoing (active) track ramps down — both at
-  // once — then the roles swap.
+  // once. Which element is "active" (and the displayed index/name/progress)
+  // flips immediately, not when the ramp finishes — the fade is a background
+  // audio transition, the UI shouldn't lag behind the user's click waiting
+  // for it.
   function crossfadeSwitch(newIndex: number) {
+    unlockAudioElements();
     const outgoing = getActive();
     const incoming = getInactive();
     const track = stateRef.current.tracks[newIndex];
@@ -234,11 +273,13 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     isFadingRef.current = true;
     const startVolume = outgoing.volume;
     const targetVolume = volume;
-    const startSlot = activeSlotRef.current;
     incoming.src = track.src;
     incoming.currentTime = 0;
     incoming.volume = 0;
     incoming.play().catch(() => {});
+    setActiveSlot((prev) => (prev === "a" ? "b" : "a"));
+    setProgress({ currentTime: 0, duration: 0 });
+    setState((s) => ({ ...s, index: newIndex, isPlaying: true }));
     const steps = Math.max(1, Math.round(fadeMs / 50));
     let i = 0;
     fadeTimerRef.current = window.setInterval(() => {
@@ -249,9 +290,6 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       if (t >= 1) {
         clearFadeTimer();
         outgoing.pause();
-        setActiveSlot(startSlot === "a" ? "b" : "a");
-        setProgress({ currentTime: 0, duration: 0 });
-        setState((s) => ({ ...s, index: newIndex, isPlaying: true }));
       }
     }, fadeMs / steps);
   }
@@ -268,14 +306,15 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }
 
   // Jumps to one track within the *current* queue (e.g. clicking ▶ on a
-  // single row of an already-open playlist) — always an instant cut, not a
-  // crossfade, since it's a deliberate pick rather than a transition.
+  // single row of an already-open playlist) — crossfades like next/prev,
+  // same as any other track transition.
   function playTrackAt(index: number) {
     if (index < 0 || index >= stateRef.current.tracks.length) return;
-    hardSwitch(index);
+    crossfadeSwitch(index);
   }
 
   function toggle() {
+    unlockAudioElements();
     const active = getActive();
     setState((s) => {
       if (s.index < 0) return s;
@@ -475,7 +514,7 @@ export function AudioPlayerBar() {
       <div className="audio-player-bar audio-player-bar-empty">
         {suggestion ? (
           <button type="button" className="audio-player-suggestion" onClick={playSuggested}>
-            ▶ Играть {suggestion.label}
+            <NavIcon name="play" /> Играть {suggestion.label}
           </button>
         ) : (
           <span className="muted">Ничего не играет</span>
@@ -487,20 +526,23 @@ export function AudioPlayerBar() {
             title="Открыть плейлист"
             className={playlistMenuOpen ? "active" : ""}
           >
-            📂
+            <NavIcon name="folder" />
           </button>
           {playlistMenuOpen && <PlaylistNavMenu onClose={() => setPlaylistMenuOpen(false)} />}
         </span>
+        <Link to="/player" title="Открыть плеер">
+          <NavIcon name="player" />
+        </Link>
       </div>
     );
   }
   return (
     <div className="audio-player-bar">
       <button type="button" onClick={prev} disabled={!shuffleMode && index <= 0} title="Предыдущий трек">
-        ⏮
+        <NavIcon name="prev" />
       </button>
       <button type="button" onClick={toggle} title={isPlaying ? "Пауза" : "Играть"}>
-        {isPlaying ? "⏸" : "▶"}
+        <NavIcon name={isPlaying ? "pause" : "play"} />
       </button>
       <button
         type="button"
@@ -508,7 +550,7 @@ export function AudioPlayerBar() {
         disabled={!shuffleMode && index >= count - 1 && repeatMode !== "playlist"}
         title="Следующий трек"
       >
-        ⏭
+        <NavIcon name="next" />
       </button>
       <button
         type="button"
@@ -516,7 +558,7 @@ export function AudioPlayerBar() {
         onClick={() => setRepeatMode(repeatMode === "track" ? "off" : "track")}
         title="Повторять трек"
       >
-        🔂
+        <NavIcon name="repeatTrack" />
       </button>
       <button
         type="button"
@@ -524,7 +566,7 @@ export function AudioPlayerBar() {
         onClick={() => setRepeatMode(repeatMode === "playlist" ? "off" : "playlist")}
         title="Повторять плейлист"
       >
-        🔁
+        <NavIcon name="repeatPlaylist" />
       </button>
       <button
         type="button"
@@ -532,7 +574,7 @@ export function AudioPlayerBar() {
         onClick={() => setShuffleMode(!shuffleMode)}
         title="Случайный порядок"
       >
-        🔀
+        <NavIcon name="shuffle" />
       </button>
       <span className="audio-player-track">{current.name}</span>
       <span className="muted">
@@ -556,7 +598,7 @@ export function AudioPlayerBar() {
           title="Громкость"
           className={volumeOpen ? "active" : ""}
         >
-          🔊
+          <NavIcon name="volume" />
         </button>
         {volumeOpen && (
           <div className="volume-popover">
@@ -579,13 +621,52 @@ export function AudioPlayerBar() {
           title="Открыть плейлист"
           className={playlistMenuOpen ? "active" : ""}
         >
-          📂
+          <NavIcon name="folder" />
         </button>
         {playlistMenuOpen && <PlaylistNavMenu onClose={() => setPlaylistMenuOpen(false)} />}
       </span>
+      <Link to="/player" title="Открыть плеер">
+        <NavIcon name="player" />
+      </Link>
       <button type="button" onClick={stop} title="Остановить плейлист" className="audio-player-stop">
-        ✕
+        <NavIcon name="stop" />
       </button>
     </div>
+  );
+}
+
+// Mobile-only "now playing" capsule — floats above .mobile-bottom-nav (see
+// index.css) and only exists while a track is actually playing, replacing
+// the old always-present mobile drawer entirely per the user's request.
+// Tapping it (anywhere but the transport buttons) opens NowPlayingPage for
+// the scrubber/shuffle/repeat controls that don't fit here.
+export function MiniPlayerBar() {
+  const { current, isPlaying, toggle, next } = useAudioPlayer();
+  if (!current) return null;
+
+  return (
+    <Link to="/now-playing" className="mini-player-bar">
+      <span className="mini-player-track">{current.name}</span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          toggle();
+        }}
+        title={isPlaying ? "Пауза" : "Играть"}
+      >
+        <NavIcon name={isPlaying ? "pause" : "play"} />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          next();
+        }}
+        title="Следующий трек"
+      >
+        <NavIcon name="next" />
+      </button>
+    </Link>
   );
 }

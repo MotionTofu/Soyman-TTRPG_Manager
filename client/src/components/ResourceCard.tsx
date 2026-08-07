@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
+import { NavIcon } from "./NavIcons";
 import type { Resource } from "../types";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
@@ -16,8 +17,8 @@ interface Props {
   resource: Resource;
   onChange: () => void;
   onArchive: (id: number) => void;
-  // Extra buttons rendered next to ✎/🗑 — used by the global Ресурсы
-  // library for its "🔗 сеттинги" multi-setting-membership popover.
+  // Extra buttons rendered next to the edit/delete icons — used by the
+  // global Ресурсы library for its multi-setting-membership popover.
   extraActions?: ReactNode;
 }
 
@@ -59,8 +60,12 @@ export function ResourceCard({ resource, onChange, onArchive, extraActions }: Pr
         )}
         <div className="row">
           {extraActions}
-          <button onClick={() => setEditMode((v) => !v)}>{editMode ? "✕" : "✎"}</button>
-          <button onClick={() => onArchive(resource.id)}>🗑</button>
+          <button onClick={() => setEditMode((v) => !v)} title={editMode ? "Отмена" : "Редактировать"}>
+            <NavIcon name={editMode ? "close" : "edit"} />
+          </button>
+          <button onClick={() => onArchive(resource.id)} title="Удалить">
+            <NavIcon name="delete" />
+          </button>
         </div>
       </div>
 
@@ -95,7 +100,7 @@ export function ResourceCard({ resource, onChange, onArchive, extraActions }: Pr
               rel="noopener noreferrer"
               className="badge planned resource-link-button"
             >
-              🔗 Открыть
+              <NavIcon name="link" /> Открыть
             </a>
           )}
           {!resource.link_url && resource.file_url && isImage && (
@@ -105,7 +110,7 @@ export function ResourceCard({ resource, onChange, onArchive, extraActions }: Pr
           )}
           {!resource.link_url && resource.file_url && !isImage && !audioSrc && (
             <a href={resource.file_url} target="_blank" rel="noopener noreferrer">
-              📄 Открыть файл
+              <NavIcon name="document" /> Открыть файл
             </a>
           )}
           {audioSrc && (

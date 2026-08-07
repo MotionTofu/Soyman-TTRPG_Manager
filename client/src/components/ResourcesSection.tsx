@@ -8,6 +8,7 @@ import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } fro
 import { hasElectronAPI } from "../electronApi";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { PlaylistsSection } from "./PlaylistsSection";
+import { NavIcon } from "./NavIcons";
 import type { Playlist, Resource, SearchResult } from "../types";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
@@ -35,7 +36,7 @@ interface Props {
   onChange: () => void;
   // Only meaningful for scope==="session" — the campaign's setting, if any.
   // Enables "attach an existing setting resource" (drag from search) and
-  // "📤 В сеттинг" (promote an owned resource up to that setting) so the
+  // "В сеттинг" (promote an owned resource up to that setting) so the
   // same file doesn't get re-uploaded into every session that needs it.
   settingId?: number | null;
   // Only meaningful for scope==="session" — see PlaylistsSection's identical
@@ -269,17 +270,18 @@ export const ResourcesSection = memo(function ResourcesSection({
           <input type="file" multiple style={{ display: "none" }} onChange={handleBulkFilePick} />
         </label>
         <button type="button" onClick={() => setLibraryOpen(true)}>
-          📚 Библиотека ресурсов
+          <NavIcon name="library" /> Библиотека ресурсов
         </button>
         <button type="button" onClick={revealStorage}>
-          📂 Общее хранилище {noun}
+          <NavIcon name="folder" /> Общее хранилище {noun}
         </button>
         {busy && <span className="muted">Добавляю файлы…</span>}
       </div>
 
       <details className="stack" style={{ gap: 4 }}>
-        <summary className="row" style={{ gap: 10 }}>
-          <strong>🎵 Плейлисты</strong>
+        <summary className="row chevron-summary" style={{ gap: 10 }}>
+          <NavIcon name="chevron" className="chevron-icon" />
+          <strong>Плейлисты</strong>
         </summary>
         <PlaylistsSection
           key={playlistsRefreshKey}
@@ -298,7 +300,8 @@ export const ResourcesSection = memo(function ResourcesSection({
         .filter((g) => g.items.length > 0)
         .map((g) => (
           <details key={g.key} className="stack" style={{ gap: 4 }}>
-            <summary className="row" style={{ gap: 10 }}>
+            <summary className="row chevron-summary" style={{ gap: 10 }}>
+              <NavIcon name="chevron" className="chevron-icon" />
               <strong>
                 {g.icon} {g.label}
               </strong>
@@ -487,7 +490,13 @@ function LibraryPickerModal({
                   {owner && <span className="muted"> — {owner}</span>}
                 </div>
                 <button type="button" onClick={() => attach(r.id)} disabled={done}>
-                  {done ? "✅ Прикреплено" : "Прикрепить"}
+                  {done ? (
+                    <>
+                      <NavIcon name="check" /> Прикреплено
+                    </>
+                  ) : (
+                    "Прикрепить"
+                  )}
                 </button>
               </div>
             );
@@ -911,7 +920,11 @@ function ResourceRow({
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>
           {resource.name}
         </span>
-        {isAttached && <span className="muted">🔗 из сеттинга</span>}
+        {isAttached && (
+          <span className="muted row" style={{ gap: 4, display: "inline-flex", alignItems: "center" }}>
+            <NavIcon name="link" /> из сеттинга
+          </span>
+        )}
         {openUrl && (
           <a href={openUrl} target="_blank" rel="noopener noreferrer">
             Открыть →
@@ -919,7 +932,7 @@ function ResourceRow({
         )}
         {canReveal && (
           <button type="button" onClick={reveal}>
-            📂 Папка
+            <NavIcon name="folder" /> Папка
           </button>
         )}
         {resource.notes && (
@@ -940,7 +953,17 @@ function ResourceRow({
             disabled={promoted || promoting}
             title={promoted ? "Уже в ресурсах сеттинга" : "Отправить в ресурсы сеттинга"}
           >
-            {promoted ? "✅ Добавлено" : promoting ? "Отправляю…" : "📤 В сеттинг"}
+            {promoted ? (
+              <>
+                <NavIcon name="check" /> Добавлено
+              </>
+            ) : promoting ? (
+              "Отправляю…"
+            ) : (
+              <>
+                <NavIcon name="upload" /> В сеттинг
+              </>
+            )}
           </button>
         )}
         {isAttached ? (
@@ -949,8 +972,12 @@ function ResourceRow({
           </button>
         ) : (
           <>
-            <button onClick={() => setEditMode(true)}>✎</button>
-            <button onClick={() => onArchive(resource.id)}>🗑</button>
+            <button onClick={() => setEditMode(true)} title="Редактировать">
+              <NavIcon name="edit" />
+            </button>
+            <button onClick={() => onArchive(resource.id)} title="Удалить">
+              <NavIcon name="delete" />
+            </button>
           </>
         )}
       </div>

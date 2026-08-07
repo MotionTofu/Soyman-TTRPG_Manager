@@ -58,7 +58,12 @@ export type NavIconName =
   | "repeatPlaylist"
   | "volume"
   | "stop"
-  | "sliders";
+  | "sliders"
+  | "sword"
+  | "bag"
+  | "swap"
+  | "fullscreen"
+  | "center";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -393,6 +398,47 @@ const PATHS: Record<NavIconName, ReactNode> = {
       <circle cx="5" cy="15" r="1.6" />
       <circle cx="12" cy="9" r="1.6" />
       <circle cx="19" cy="12.5" r="1.6" />
+    </>
+  ),
+  sword: (
+    <>
+      <path d="M14.3 17.6 3.5 6.8V3.8h3l11 10.8" />
+      <path d="M12.8 19.1 18.6 13.3" />
+      <path d="M15.8 16.1 19.6 19.9" />
+      <path d="M18.8 21 20.7 19.1" />
+    </>
+  ),
+  // "В мешок" (scratch tray) — compendium entries and location maps.
+  bag: (
+    <>
+      <path d="M8.5 8V6.3a3.5 3.5 0 0 1 7 0V8" />
+      <path d="M5.5 8h13l1 11a1.8 1.8 0 0 1-1.8 2H6.3a1.8 1.8 0 0 1-1.8-2L5.5 8Z" />
+      <path d="M5.9 12h12.2" />
+    </>
+  ),
+  // "Перенести карту" — move a location's map to another location.
+  swap: (
+    <>
+      <path d="M4 8h13.5" />
+      <path d="M14.3 4.5 17.8 8l-3.5 3.5" />
+      <path d="M20 16H6.5" />
+      <path d="M9.7 19.5 6.2 16l3.5-3.5" />
+    </>
+  ),
+  // "На весь экран" — expand-to-fullscreen corner brackets.
+  fullscreen: (
+    <>
+      <path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9" />
+      <path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9" />
+      <path d="M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15" />
+      <path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" />
+    </>
+  ),
+  // "Центрировать карту" — crosshair.
+  center: (
+    <>
+      <circle cx="12" cy="12" r="6.5" />
+      <path d="M12 2.5v3.3M12 18.2v3.3M2.5 12h3.3M18.2 12h3.3" />
     </>
   ),
 };

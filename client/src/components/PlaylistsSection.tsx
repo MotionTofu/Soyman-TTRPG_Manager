@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { useAudioPlayer, type AudioTrack } from "../audioPlayer";
 import { AddTracksModal } from "./AddTracksModal";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
+import { NavIcon } from "./NavIcons";
 import type { Playlist, PlaylistDetail, SearchResult } from "../types";
 
 type Scope = "session" | "setting";
@@ -340,23 +341,28 @@ export function PlaylistsSection({
                 )}
                 {p.id === activePlaylistId && (
                   <span className="muted" title={isPlaying ? "Сейчас играет" : "Открыт в плеере"}>
-                    {isPlaying ? "🔊" : "⏸"}
+                    <NavIcon name={isPlaying ? "volume" : "pause"} />
                   </span>
                 )}
-                {isAttached && <span className="muted">🔗 из сеттинга</span>}
+                {isAttached && (
+                  <span className="muted row" style={{ gap: 4 }}>
+                    <NavIcon name="link" /> из сеттинга
+                  </span>
+                )}
                 <span className="muted">{p.item_count} треков</span>
               </div>
               <div className="row" onClick={(e) => e.stopPropagation()}>
                 <button type="button" onClick={() => playNow(p.id)} disabled={p.item_count === 0}>
-                  ▶ Играть
+                  <NavIcon name="play" /> Играть
                 </button>
                 {onSetBattlePlaylist && (
                   <button
                     type="button"
+                    className={p.id === battlePlaylistId ? "active" : ""}
                     onClick={() => onSetBattlePlaylist(p.id === battlePlaylistId ? null : p.id)}
                     title={p.id === battlePlaylistId ? "Убрать пометку «тема боя»" : "Сделать темой боя"}
                   >
-                    {p.id === battlePlaylistId ? "⚔️" : "🗡"}
+                    <NavIcon name="sword" />
                   </button>
                 )}
                 {!isAttached && (
@@ -368,7 +374,7 @@ export function PlaylistsSection({
                     }}
                     title="Переименовать"
                   >
-                    ✎
+                    <NavIcon name="edit" />
                   </button>
                 )}
                 {isAttached ? (
@@ -383,8 +389,8 @@ export function PlaylistsSection({
                     Открепить
                   </button>
                 ) : (
-                  <button type="button" onClick={() => deletePlaylist(p.id)}>
-                    🗑
+                  <button type="button" onClick={() => deletePlaylist(p.id)} title="Удалить плейлист">
+                    <NavIcon name="delete" />
                   </button>
                 )}
               </div>
@@ -432,7 +438,7 @@ export function PlaylistsSection({
                             type="button"
                             onClick={() => saveTrackName(p.id, item.id, item.resource_id, trackRenameEverywhere)}
                           >
-                            ✓
+                            <NavIcon name="check" />
                           </button>
                         </span>
                       ) : (
@@ -455,7 +461,7 @@ export function PlaylistsSection({
                             title="Играть этот трек"
                             onClick={() => playNow(p.id, itemIndex)}
                           >
-                            {isActiveTrack && isPlaying ? "🔊" : "▶"}
+                            <NavIcon name={isActiveTrack && isPlaying ? "volume" : "play"} />
                           </button>
                           {item.name}
                         </span>
@@ -471,11 +477,11 @@ export function PlaylistsSection({
                               setTrackRenameEverywhere(false);
                             }}
                           >
-                            ✎
+                            <NavIcon name="edit" />
                           </button>
                         )}
-                        <button type="button" onClick={() => removeTrack(p.id, item.id)}>
-                          ✕
+                        <button type="button" onClick={() => removeTrack(p.id, item.id)} title="Убрать из плейлиста">
+                          <NavIcon name="close" />
                         </button>
                       </span>
                     </div>

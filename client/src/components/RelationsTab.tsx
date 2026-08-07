@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
+import { NavIcon } from "./NavIcons";
 import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import type { EntityRelation, EntityRelationsResponse, RelationEntityType, RelationTone, SearchResult } from "../types";
@@ -158,18 +159,20 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     const toLabel = direction === "out" ? r.other_name ?? "?" : entityName;
     return (
       <details key={r.id} className="card">
-        <summary>
+        <summary className="chevron-summary">
+          <NavIcon name="chevron" className="chevron-icon" />
           <ToneDot tone={r.tone} />
           {fromLabel} ⟶ {toLabel} {r.label && <span className="muted">— {r.label}</span>}
           <button
             className="danger"
             style={{ float: "right" }}
+            title="Удалить"
             onClick={(e) => {
               e.preventDefault();
               removeRelation(r.id);
             }}
           >
-            ✕
+            <NavIcon name="delete" />
           </button>
         </summary>
         <div className="stack">

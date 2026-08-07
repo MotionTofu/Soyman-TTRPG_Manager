@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { api } from "../api/client";
 import { useAudioPlayer, type AudioTrack } from "../audioPlayer";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
+import { NavIcon } from "./NavIcons";
 import { parseDndStatblock } from "./EntityPreviewModal";
 import { abilityModifier, formatModifier } from "./dnd/AbilityScores";
 import { rollDiceFormula } from "./dnd/diceRoll";
@@ -319,7 +320,7 @@ export function InitiativeTracker({ sessionId }: Props) {
           disabled={!session?.combat_active || aliveSorted.length === 0}
           title="Предыдущий"
         >
-          ←
+          <NavIcon name="arrowRight" className="nav-icon icon-flip-x" />
         </button>
         {session?.combat_active ? (
           <button type="button" onClick={stopCombat}>
@@ -337,7 +338,7 @@ export function InitiativeTracker({ sessionId }: Props) {
           disabled={!session?.combat_active || aliveSorted.length === 0}
           title="Следующий"
         >
-          →
+          <NavIcon name="arrowRight" />
         </button>
       </div>
       {entries.length === 0 && (
@@ -404,6 +405,13 @@ export function InitiativeTracker({ sessionId }: Props) {
                   </span>
                 )}
                 <div className="row initiative-actions" style={{ gap: 2 }}>
+                  {/* Ticket 10 (icons: shared components): 💀/😐/♥/⚠ below are
+                      kept as emoji on purpose — they're compact semantic
+                      pictograms (dead/conditions/roll-HP/HP-error) for a dense
+                      action row, not generic close/edit/delete chrome, and the
+                      drawn icon set has no skull/heart/face equivalents. Only
+                      the plain ✕ remove/close buttons in this row were
+                      converted to the shared NavIcon delete/close icons. */}
                   <button type="button" className="comp-mini" title="Отметить мёртвым" onClick={() => toggleDead(entry)}>
                     💀
                   </button>
@@ -462,7 +470,7 @@ export function InitiativeTracker({ sessionId }: Props) {
                     </span>
                   )}
                   <button type="button" className="comp-mini" title="Убрать" onClick={() => remove(entry.id)}>
-                    ✕
+                    <NavIcon name="delete" />
                   </button>
                 </div>
               </div>
@@ -526,7 +534,7 @@ export function InitiativeTracker({ sessionId }: Props) {
                     +Врем. ХП
                   </button>
                   <button type="button" className="comp-mini" title="Закрыть" onClick={closeHpEditor}>
-                    ✕
+                    <NavIcon name="close" />
                   </button>
                 </div>
               )}

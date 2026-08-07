@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useAudioPlayer, type AudioTrack } from "../audioPlayer";
+import { NavIcon } from "./NavIcons";
 import type { Playlist, PlaylistDetail } from "../types";
 
 interface Props {
@@ -57,7 +58,7 @@ export function PlaylistNavMenu({ onClose }: Props) {
               <summary>{name}</summary>
               {items.map((p) => (
                 <button key={p.id} type="button" className="playlist-nav-item" onClick={() => select(p.id)}>
-                  🎵 {p.name} ({p.item_count})
+                  <NavIcon name="player" /> {p.name} ({p.item_count})
                 </button>
               ))}
             </details>
@@ -72,7 +73,7 @@ export function PlaylistNavMenu({ onClose }: Props) {
               <summary>{name}</summary>
               {items.map((p) => (
                 <button key={p.id} type="button" className="playlist-nav-item" onClick={() => select(p.id)}>
-                  🎵 {p.name} ({p.item_count})
+                  <NavIcon name="player" /> {p.name} ({p.item_count})
                 </button>
               ))}
             </details>

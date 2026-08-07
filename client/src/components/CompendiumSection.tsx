@@ -7,6 +7,7 @@ import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { addToBag } from "../bag";
 import { StatblockList } from "./StatblockList";
+import { NavIcon } from "./NavIcons";
 import {
   ABILITY_SCORES,
   ARMOR_TYPES,
@@ -940,8 +941,8 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           style={{ maxWidth: 260 }}
         />
         {searchQuery !== "" && (
-          <button type="button" className="comp-mini" onClick={() => setSearchQuery("")}>
-            ✕
+          <button type="button" className="comp-mini" title="Очистить поиск" onClick={() => setSearchQuery("")}>
+            <NavIcon name="close" />
           </button>
         )}
       </div>
@@ -1066,7 +1067,8 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                 )
             ).map(([label, list, level]) => (
               <details key={label} className="comp-category">
-                <summary className="comp-level-label">
+                <summary className="comp-level-label chevron-summary">
+                  <NavIcon name="chevron" className="chevron-icon" />
                   {label} <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· {list.length}</span>
                 </summary>
                 {level !== undefined && (
@@ -1090,7 +1092,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           : categoryGroups
           ? groupByCategory(sortForDisplay(topLevel), "category", categoryGroups).map(([cat, list]) => (
               <details key={cat} className="comp-category">
-                <summary className="comp-level-label">{cat}</summary>
+                <summary className="comp-level-label chevron-summary">
+                  <NavIcon name="chevron" className="chevron-icon" />
+                  {cat}
+                </summary>
                 {list.map((e) => (
                   <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
                     <EntryNode entry={e} depth={0} {...nodeProps} />
@@ -1101,7 +1106,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           : isMagicItemSection && magicItemGroups
           ? magicItemGroups.map(([cat, list]) => (
               <details key={cat} className="comp-category" open>
-                <summary className="comp-level-label">{cat}</summary>
+                <summary className="comp-level-label chevron-summary">
+                  <NavIcon name="chevron" className="chevron-icon" />
+                  {cat}
+                </summary>
                 {list.map((e) => (
                   <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
                     <EntryNode entry={e} depth={0} {...nodeProps} />
@@ -1334,7 +1342,7 @@ function EntryNode(props: NodeProps) {
         style={{ cursor: canToggle ? "pointer" : "default" }}
       >
         <span className={`comp-toggle${canToggle ? "" : " comp-toggle-disabled"}`} aria-hidden="true">
-          {isOpen || isEditing ? "▾" : "▸"}
+          <NavIcon name="chevron" className={`chevron-icon${isOpen || isEditing ? " is-open" : ""}`} />
         </span>
         {props.sortMode === "manual" && (
           <span
@@ -1381,14 +1389,14 @@ function EntryNode(props: NodeProps) {
               })
             }
           >
-            🎒
+            <NavIcon name="bag" />
           </button>
           <button className="comp-mini" title="Скопировать ссылку на запись" onClick={copyLink}>
-            {linkCopied ? "✓" : "🔗"}
+            <NavIcon name={linkCopied ? "check" : "link"} />
           </button>
           {isMonster && (
             <Link className="comp-mini" to={`/compendium/${entry.id}`} title="Открыть страницу существа">
-              →
+              <NavIcon name="arrowRight" />
             </Link>
           )}
           <button
@@ -1396,10 +1404,10 @@ function EntryNode(props: NodeProps) {
             title={isEditing ? "Отменить редактирование" : "Редактировать"}
             onClick={() => (isEditing ? props.onCancel() : props.onEdit(entry))}
           >
-            ✎
+            <NavIcon name={isEditing ? "close" : "edit"} />
           </button>
-          <button className="comp-mini danger" onClick={() => props.onDelete(entry)}>
-            ✕
+          <button className="comp-mini danger" title="Удалить" onClick={() => props.onDelete(entry)}>
+            <NavIcon name="delete" />
           </button>
         </span>
       </div>
@@ -1958,7 +1966,10 @@ function EntryNode(props: NodeProps) {
             )}
             {isClass && (
               <details className="card">
-                <summary className="muted">Таблица развития</summary>
+                <summary className="muted chevron-summary">
+                  <NavIcon name="chevron" className="chevron-icon" />
+                  Таблица развития
+                </summary>
                 <MentionTextarea
                   value={editing.progressionTable}
                   onChange={(v) => props.onDraftChange({ ...editing, progressionTable: v })}
@@ -2215,7 +2226,10 @@ function EntryNode(props: NodeProps) {
           )}
           {classProgressionTable && (
             <details className="card">
-              <summary className="muted">Таблица развития</summary>
+              <summary className="muted chevron-summary">
+                <NavIcon name="chevron" className="chevron-icon" />
+                Таблица развития
+              </summary>
               <MentionText text={classProgressionTable} />
             </details>
           )}
@@ -2400,8 +2414,8 @@ function GrantedSpellsPicker({
                     style={{ width: 48 }}
                   />
                 </label>
-                <button type="button" className="comp-mini danger" onClick={() => remove(s.id)}>
-                  ✕
+                <button type="button" className="comp-mini danger" title="Убрать" onClick={() => remove(s.id)}>
+                  <NavIcon name="delete" />
                 </button>
               </div>
             ))}
@@ -2512,7 +2526,8 @@ function ClassSubclassMultiPicker({
                   <span>{g.name}</span>
                   {g.subclasses.length > 0 && (
                     <button type="button" className="comp-mini" onClick={() => toggleExpand(g.id)}>
-                      {expanded.has(g.id) ? "Свернуть ▾" : "Развернуть ▸"}
+                      {expanded.has(g.id) ? "Свернуть" : "Развернуть"}{" "}
+                      <NavIcon name="chevron" className={`chevron-icon${expanded.has(g.id) ? " is-open" : ""}`} />
                     </button>
                   )}
                 </div>
@@ -2618,8 +2633,11 @@ function ChildGroups(props: NodeProps) {
     return (
       <div className="comp-children">
         <details className="card" open={editingIsFeature || undefined}>
-          <summary className="comp-level-label row" style={{ justifyContent: "space-between" }}>
-            <span>Умения класса</span>
+          <summary className="comp-level-label row chevron-summary" style={{ justifyContent: "space-between" }}>
+            <span className="row" style={{ gap: 6, alignItems: "center" }}>
+              <NavIcon name="chevron" className="chevron-icon" />
+              Умения класса
+            </span>
             <button
               className="comp-mini"
               onClick={(e) => {
@@ -2633,8 +2651,11 @@ function ChildGroups(props: NodeProps) {
           {featuresBlock}
         </details>
         <details className="card" open={editingIsOther || undefined}>
-          <summary className="comp-level-label row" style={{ justifyContent: "space-between" }}>
-            <span>Подклассы</span>
+          <summary className="comp-level-label row chevron-summary" style={{ justifyContent: "space-between" }}>
+            <span className="row" style={{ gap: 6, alignItems: "center" }}>
+              <NavIcon name="chevron" className="chevron-icon" />
+              Подклассы
+            </span>
             <button
               className="comp-mini"
               onClick={(e) => {
@@ -2649,8 +2670,11 @@ function ChildGroups(props: NodeProps) {
         </details>
         {showOptions && (
           <details className="card" open={editingIsOption || undefined}>
-            <summary className="comp-level-label row" style={{ justifyContent: "space-between" }}>
-              <span>{optionSectionTitle || "Опции класса"}</span>
+            <summary className="comp-level-label row chevron-summary" style={{ justifyContent: "space-between" }}>
+              <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                <NavIcon name="chevron" className="chevron-icon" />
+                {optionSectionTitle || "Опции класса"}
+              </span>
               <button
                 className="comp-mini"
                 onClick={(e) => {

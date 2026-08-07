@@ -4,6 +4,7 @@ import { ResourceCard } from "../components/ResourceCard";
 import { SettingLinksPopover } from "../components/SettingLinksPopover";
 import { TemplatesTab } from "../components/TemplatesTab";
 import { SectionHeading } from "../components/SectionHeading";
+import { NavIcon } from "../components/NavIcons";
 import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } from "../resourceCategories";
 import type { Campaign, Playlist, Resource, Setting } from "../types";
 
@@ -217,7 +218,8 @@ export function ResourcesListPage() {
 
           {groups.map((g) => (
             <details key={g.key} className="card stack">
-              <summary>
+              <summary className="chevron-summary">
+                <NavIcon name="chevron" className="chevron-icon" />
                 <strong className="entry-title">
                   {g.icon} {g.label}
                 </strong>{" "}
@@ -248,8 +250,9 @@ export function ResourcesListPage() {
 
           {sortedPlaylists.length > 0 && (
             <details className="card stack">
-              <summary>
-                <strong className="entry-title">🎵 Плейлисты</strong>{" "}
+              <summary className="chevron-summary">
+                <NavIcon name="chevron" className="chevron-icon" />
+                <strong className="entry-title">Плейлисты</strong>{" "}
                 <span className="muted">({sortedPlaylists.length})</span>
               </summary>
               <div className="stack" style={{ gap: 0 }}>
