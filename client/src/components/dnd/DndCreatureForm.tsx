@@ -447,7 +447,7 @@ export function SensesEditor({
   );
 }
 
-function ChecklistEditor({
+export function ChecklistEditor({
   value,
   onChange,
   options,
@@ -1283,11 +1283,9 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
 export function DndCreatureEdit({
   value,
   onChange,
-  theme,
 }: {
   value: DndCreatureData;
   onChange: (v: DndCreatureData) => void;
-  theme?: string | null;
 }) {
   // Same fix as DndCharacterEdit/LitMCharacterEdit: a keystroke in any one
   // field used to replace the whole DndCreatureData object and hand every
@@ -1349,14 +1347,8 @@ export function DndCreatureEdit({
     onChange({ ...value, saveAdvantageConditions: list });
   }
 
-  // Edit mode intentionally does NOT wrap in the full statblockScopeClass()
-  // (sb-scope) — that pulls in the theme's --paper/--ink/background vars
-  // meant for the parchment-style view mode and would reskin the plain
-  // form inputs. Only the Гравюра header-emphasis rule needs to reach edit
-  // mode, so it's gated on this narrow class instead.
-  const isGravura = !theme || theme === "color" || theme === "print";
   return (
-    <div className={`stack dnd-card${isGravura ? " sb-edit-gravura" : ""}`}>
+    <div className="stack dnd-card">
       <details className="card stack" open>
         <summary>
           <strong className="entry-title">База</strong>
@@ -1884,12 +1876,32 @@ export function DndCreatureView({
   density,
   compact,
   onQuickUpdate,
+  collapsed,
+  headerExtra,
+  onHeaderClick,
+  avatarUrl,
+  onAvatarUpload,
+  avatarUploading,
 }: {
   value: DndCreatureData;
   theme?: string | null;
   density?: string | null;
   compact?: boolean;
   onQuickUpdate?: (patch: Partial<DndCreatureData>) => void;
+  // Lets the owning card (StatblockCard) fold its edit/delete/theme controls
+  // and expand/collapse toggle into this component's own title bar instead
+  // of wrapping it in a second, redundant <details> frame.
+  collapsed?: boolean;
+  headerExtra?: ReactNode;
+  onHeaderClick?: () => void;
+  // Portrait shown next to the vitals/abilities block (sb-top-avatar) — the
+  // statblock's own art, separate from whatever avatar the owning being/
+  // character has on its profile. Column only renders when there's an
+  // image or a way to add one, so read-only previews without either prop
+  // stay exactly as before.
+  avatarUrl?: string | null;
+  onAvatarUpload?: (file: File) => void;
+  avatarUploading?: boolean;
 }) {
   // Not URL-synced / not lifted to props — same reasoning as the character
   // sheet's view tab state: several statblocks can render on one page (e.g.
@@ -1977,11 +1989,25 @@ export function DndCreatureView({
   return (
     <div className={statblockScopeClass(theme, density)}>
       <div className="sb-card">
-        <div className="sb-head">
-          <div className="sb-name">{value.name || "Без названия"}</div>
-          {metaParts.length > 0 && <div className="sb-meta">{metaParts.join(" · ")}</div>}
+        <div
+          className={`sb-head${onHeaderClick ? " sb-head-clickable" : ""}`}
+          onClick={onHeaderClick}
+        >
+          <div className="sb-head-row">
+            <div>
+              <div className="sb-name">{value.name || "Без названия"}</div>
+              {metaParts.length > 0 && <div className="sb-meta">{metaParts.join(" · ")}</div>}
+            </div>
+            {headerExtra && (
+              <div className="sb-head-controls" onClick={(e) => e.stopPropagation()}>
+                {headerExtra}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="sb-body">
+        {!collapsed && <div className="sb-body">
+        <div className="sb-top-section">
+        <div className="sb-top-main">
           <div className="sb-props">
             <div>
               <span className="sb-prop-label">Класс Защиты</span> {formatArmorClass(value.armorClass)}
@@ -2267,6 +2293,31 @@ export function DndCreatureView({
                 </>
               )}
             </div>
+        </div>
+        {(avatarUrl || onAvatarUpload) && (
+          <label className="sb-top-avatar" title="Изображение существа">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="sb-top-avatar-img" />
+            ) : (
+              <div className="sb-top-avatar-placeholder">+</div>
+            )}
+            {onAvatarUpload && (
+              <>
+                <span className="sb-top-avatar-hint">{avatarUploading ? "Загрузка…" : avatarUrl ? "Изменить" : "Добавить"}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) onAvatarUpload(file);
+                  }}
+                />
+              </>
+            )}
+          </label>
+        )}
+        </div>
 
           <div className="tabs">
             {DND_CREATURE_VIEW_TABS.map((t) => (
@@ -2480,7 +2531,7 @@ export function DndCreatureView({
               )}
             </>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

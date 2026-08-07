@@ -28,6 +28,19 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { STATBLOCK_THEMES } from "../statblockThemes";
 
+// Shared <option> rendering for the theme <select>.
+function ThemeOptions() {
+  return (
+    <>
+      {STATBLOCK_THEMES.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.label}
+        </option>
+      ))}
+    </>
+  );
+}
+
 const TEMPLATE_TYPE = "statblock_template";
 const KIND_LABELS: Record<string, string> = { short: "Краткий", full: "Полный" };
 const FORMAT_LABELS: Record<StatblockFormat, string> = {
@@ -270,7 +283,7 @@ export function StatblockList({
         </div>
       ) : (
         <button onClick={() => setAdding(true)} style={{ alignSelf: "flex-start" }}>
-          + Добавить статблок
+          + Добавить {ownerType === "character" ? "чарник" : "статблок"}
         </button>
       )}
 
@@ -377,7 +390,34 @@ function StatblockCard({
   const [note, setNote] = useState(statblock.note);
   const [theme, setTheme] = useState(statblock.theme);
   const [density] = useState(statblock.density);
+  // Mirrors the <details> element's own open/closed state — native <summary>
+  // clicks toggle the DOM directly (uncontrolled), so this needs an onToggle
+  // handler to stay in sync rather than being driven only by editMode. Used
+  // to gate the mobile full-screen overlay treatment (sb-fullscreen-mobile).
+  const [expanded, setExpanded] = useState(editMode);
+  // dnd_creature only: whether the statblock's own header/body is expanded.
+  // Replaces the generic <details> accordion for this format — see below.
+  const [collapsed, setCollapsed] = useState(!editMode);
   const [kind] = useState(statblock.kind);
+  // dnd_creature only: portrait shown in the statblock's own sb-top-avatar
+  // slot (separate from whatever avatar the owning being/character has).
+  const [avatarUrl, setAvatarUrl] = useState(statblock.avatar_image_url);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  async function uploadAvatar(file: File) {
+    setAvatarUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const updated = await api.post<{ avatar_image_url: string | null }>(
+        `/statblocks/${statblock.id}/avatar`,
+        form
+      );
+      setAvatarUrl(updated.avatar_image_url);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   async function save() {
     await api.put(`/statblocks/${statblock.id}`, { content, note });
@@ -435,8 +475,97 @@ function StatblockCard({
       ? (dndValue as DndCharacterData)?.characterName || "Без имени"
       : null;
 
+  // D&D creature statblocks render their own themed title bar (sb-head), so
+  // wrapping them in the generic <details className="card"> accordion below
+  // would duplicate that header in a second, plainer frame. Fold the theme
+  // picker + edit/delete controls into sb-head instead, and let sb-head
+  // itself be the expand/collapse toggle.
+  if (statblock.format === "dnd_creature") {
+    const headerExtra = (
+      <>
+        <select value={theme ?? "zine"} onChange={(e) => changeTheme(e.target.value)}>
+          <ThemeOptions />
+        </select>
+        <button
+          type="button"
+          className="comp-mini"
+          title="Редактировать"
+          onClick={() => setEditMode((v) => !v)}
+        >
+          ✎
+        </button>
+        <button type="button" className="comp-mini" onClick={() => onRemove(statblock.id)}>
+          ✕
+        </button>
+      </>
+    );
+
+    if (editMode) {
+      return (
+        <div className="stack">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <strong>{(dndValue as DndCreatureData)?.name || "Без названия"}</strong>
+            <span className="row" style={{ gap: 4 }}>
+              <button
+                type="button"
+                className="comp-mini"
+                title="Закрыть редактирование"
+                onClick={() => setEditMode(false)}
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+          {dndValue && (
+            <DndCreatureEdit
+              value={dndValue as DndCreatureData}
+              onChange={(v) => {
+                setDndValue(v);
+                setContent(JSON.stringify(v));
+              }}
+            />
+          )}
+          <div className="row">
+            <button className="primary" onClick={save}>
+              Сохранить
+            </button>
+            <button onClick={() => setEditMode(false)}>Отмена</button>
+          </div>
+        </div>
+      );
+    }
+
+    return dndValue ? (
+      // On a phone, an expanded creature statblock is squeezed into the same
+      // narrow inline column as everything else on the owning page — the
+      // wrapper below (CSS-gated to mobile widths, see .sb-fullscreen-mobile
+      // in index.css) promotes it to a full-screen overlay instead, without
+      // touching DndCreatureView's own collapse/edit logic at all. Tapping
+      // the header again (onHeaderClick) collapses it back, same as before.
+      <div className={!collapsed ? "sb-fullscreen-mobile" : undefined}>
+        <DndCreatureView
+          value={dndValue as DndCreatureData}
+          theme={theme}
+          density={density}
+          compact={kind === "short"}
+          onQuickUpdate={quickSaveDndCreature}
+          collapsed={collapsed}
+          headerExtra={headerExtra}
+          onHeaderClick={() => setCollapsed((v) => !v)}
+          avatarUrl={avatarUrl}
+          onAvatarUpload={uploadAvatar}
+          avatarUploading={avatarUploading}
+        />
+      </div>
+    ) : null;
+  }
+
   return (
-    <details className="card" open={editMode}>
+    <details
+      className={`card${expanded ? " sb-fullscreen-mobile" : ""}`}
+      open={expanded}
+      onToggle={(e) => setExpanded((e.target as HTMLDetailsElement).open)}
+    >
       <summary className="row" style={{ justifyContent: "space-between" }}>
         <span>
           <span className="badge planned">
@@ -453,6 +582,7 @@ function StatblockCard({
             onClick={(e) => {
               e.preventDefault();
               setEditMode((v) => !v);
+              setExpanded(true);
             }}
           >
             ✎
@@ -500,25 +630,21 @@ function StatblockCard({
                 }}
               />
             )}
-            {statblock.format === "dnd_creature" && dndValue && (
-              <DndCreatureEdit
-                value={dndValue as DndCreatureData}
-                onChange={(v) => {
-                  setDndValue(v);
-                  setContent(JSON.stringify(v));
-                }}
-                theme={theme}
-              />
-            )}
             {!isLitm && !isDnd && (
               <MentionTextarea value={content} onChange={setContent} rows={8} defaultSettingId={settingId} />
             )}
-            {statblock.format !== "dnd_character" && (
-              <label>
-                Примечание
-                <input value={note} onChange={(e) => setNote(e.target.value)} />
-              </label>
-            )}
+            <label>
+              Примечание
+              <input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                title={
+                  statblock.format === "dnd_character"
+                    ? "Короткая подпись под именем — используется в шпаргалке по персонажам"
+                    : undefined
+                }
+              />
+            </label>
             <div className="row">
               <button className="primary" onClick={save}>
                 Сохранить
@@ -531,12 +657,8 @@ function StatblockCard({
             {(isDnd || isLitm) && (dndValue || litmValue) && (
               <div className="sb-theme-picker">
                 <span className="muted">Тема:</span>
-                <select value={theme ?? "color"} onChange={(e) => changeTheme(e.target.value)}>
-                  {STATBLOCK_THEMES.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
+                <select value={theme ?? "zine"} onChange={(e) => changeTheme(e.target.value)}>
+                  <ThemeOptions />
                 </select>
               </div>
             )}
@@ -561,22 +683,19 @@ function StatblockCard({
                 onQuickUpdate={quickSaveDnd}
               />
             )}
-            {statblock.format === "dnd_creature" && dndValue && (
-              <DndCreatureView
-                value={dndValue as DndCreatureData}
-                theme={theme}
-                density={density}
-                compact={kind === "short"}
-                onQuickUpdate={quickSaveDndCreature}
-              />
-            )}
             {!isLitm && !isDnd && (
               <div style={{ whiteSpace: "pre-wrap" }}>
                 {statblock.content ? <MentionText text={statblock.content} /> : <span className="muted">Пусто</span>}
               </div>
             )}
             {!isLitm && !isDnd && statblock.note && <div className="muted">Примечание: {statblock.note}</div>}
-            <button onClick={() => setEditMode(true)} style={{ alignSelf: "flex-start" }}>
+            <button
+              onClick={() => {
+                setEditMode(true);
+                setExpanded(true);
+              }}
+              style={{ alignSelf: "flex-start" }}
+            >
               Редактировать
             </button>
           </>

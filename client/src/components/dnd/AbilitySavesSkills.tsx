@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import type { DndAbilityKey, DndAbilityScores, DndSkillProfLevel } from "../../types";
 import { ABILITY_LABELS, abilityModifier, formatModifier, parseBonus } from "./AbilityScores";
 
@@ -43,7 +43,7 @@ export const SKILL_DOTS = ["○", "●", "◎"];
 export const SKILL_TITLES = ["Не владеет", "Владение", "Экспертиза (бонус ×2)"];
 
 // The ability row collapses to just score+modifier tiles by default (compact,
-// avoids the theme-steampunk giant-circle layout eating the page) and expands
+// avoids a giant-circle layout eating the page) and expands
 // — via the button next to the section title — into a per-ability column
 // showing just its saving throw (skills live in their own "Навыки" tab, see
 // DndCharacterForm.tsx's DndSkillsView/Edit — pulled out so a skill list
@@ -117,6 +117,51 @@ export const AbilitySavesSkillsEdit = memo(function AbilitySavesSkillsEdit({
   );
 });
 
+// Ability box shown as two overlapping d20 "dice": the front die shows the
+// score + modifier, the back die peeks out behind it showing the saving
+// throw. Clicking swaps which one is in front — a physical-feeling way to
+// check a save without a separate row/column eating space. Flip state is
+// per-ability and local to this view (not persisted — it's just "which face
+// am I looking at right now", not character data).
+function AbilityDiceBox({
+  label,
+  score,
+  mod,
+  save,
+  isSaveProficient,
+}: {
+  label: string;
+  score: number;
+  mod: number;
+  save: string;
+  isSaveProficient: boolean;
+}) {
+  const [flipped, setFlipped] = useState(false);
+  return (
+    <div className="dnd-ability-col">
+      <div className="dnd-ability-box">
+        <span className="dnd-ability-label">{label}</span>
+        <div
+          className="dnd-ability-dice"
+          onClick={() => setFlipped((f) => !f)}
+          title="Клик — переключить характеристику/спасбросок"
+        >
+          <div className={`dnd-die dnd-die-score${flipped ? " is-back" : " is-front"}`}>
+            <span className="dnd-die-value">{score}</span>
+            <span className="dnd-die-sub">{formatModifier(mod)}</span>
+          </div>
+          <div
+            className={`dnd-die dnd-die-save${flipped ? " is-front" : " is-back"}${isSaveProficient ? " is-proficient" : ""}`}
+          >
+            <span className="dnd-die-value">{save}</span>
+            <span className="dnd-die-sub">спас</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AbilitySavesSkillsView({
   abilities,
   proficiencyBonus,
@@ -133,21 +178,14 @@ export function AbilitySavesSkillsView({
         {ABILITY_LABELS.map(({ key, label }) => {
           const mod = abilityModifier(abilities[key]);
           return (
-            <div key={key} className="dnd-ability-col">
-              <div className="dnd-ability-box">
-                <span className="dnd-ability-label">{label}</span>
-                <span className="dnd-ability-score">{abilities[key]}</span>
-                <span className="dnd-ability-mod">
-                  {formatModifier(mod)}
-                  <span
-                    className={`dnd-ability-save${savingThrowProfs[key] ? " is-proficient" : ""}`}
-                    title="Спасбросок"
-                  >
-                    /{computed(mod, savingThrowProfs[key] ? 1 : 0, profBonus)}
-                  </span>
-                </span>
-              </div>
-            </div>
+            <AbilityDiceBox
+              key={key}
+              label={label}
+              score={abilities[key]}
+              mod={mod}
+              save={computed(mod, savingThrowProfs[key] ? 1 : 0, profBonus)}
+              isSaveProficient={savingThrowProfs[key]}
+            />
           );
         })}
       </div>

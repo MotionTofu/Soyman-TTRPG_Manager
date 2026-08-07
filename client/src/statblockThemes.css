@@ -1,66 +1,38 @@
 /* Statblock theme system — ported from design_handoff_statblocks/statblocks.html.
    Scoped entirely under .sb-scope so it never leaks into the app's own
    theme (--bg/--accent/etc from themes.ts) and vice versa: independent
-   token namespace, independent per-statblock selection. */
-@font-face {
-  font-family: 'CyberpunkRus';
-  src: url('/fonts/Cyberpunk_RUS_BY_LYAJKA.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-}
-@font-face {
-  font-family: 'Steamy';
-  src: url('/fonts/Steamy.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-}
-@font-face {
-  font-family: 'BubbleGum';
-  src: url('/fonts/BubbleGum.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-}
-@font-face {
-  font-family: 'DOSFont';
-  src: url('/fonts/DOSFont.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-}
-@font-face {
-  font-family: 'Greengoth';
-  src: url('/fonts/GOTHIC_Greengoth.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-}
-@font-face {
-  font-family: 'Bulgariamodernav3';
-  src: url('/fonts/Bulgariamodernav3-00R9.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-}
+   token namespace, independent per-statblock selection.
+   Base/default theme is Зин (zine) — its palette follows the design doc
+   §3.1 zine skin and §6.3 card treatment (0-2px radius, 1-2px ink/line
+   border, no shadows). Its values live directly on the unscoped .sb-scope
+   below, so a statblock whose stored theme id no longer matches any
+   .theme-* block (a deleted theme) still renders as zine rather than
+   falling through to nothing. */
 .sb-scope {
-  --sb-accent: #2e4636;
-  --paper: #faf7ef;
-  --ink: #26251f;
-  --muted: #6d6a5d;
-  --label: color-mix(in oklab, var(--sb-accent) 72%, #99937f);
-  --accent: var(--sb-accent);
-  --head-bg: var(--sb-accent);
-  --head-ink: #f2ead6;
+  --sb-accent: #d6321e;
+  --paper: #ede7d9;
+  --paper-2: #e2dac8;
+  --ink: #12100e;
+  --ink-2: #3a352e;
+  --muted: #6e675c;
+  --label: var(--ink-2);
+  --accent: #d6321e;
+  --head-bg: var(--ink);
+  --head-ink: #ede7d9;
   --head-rule: 0 solid transparent;
-  --line: #b9b19c;
-  --border: #d8d2c2;
-  --font-display: 'Alegreya SC', serif;
-  --font-body: 'EB Garamond', serif;
+  --line: rgba(18, 16, 14, 0.28);
+  --border: var(--ink);
+  --font-display: 'Anton', sans-serif;
+  --font-body: 'Archivo', sans-serif;
   --name-transform: none;
-  --name-tracking: 0.5px;
+  --name-tracking: -0.01em;
   --name-stroke: none;
   --name-shadow: none;
-  --section-transform: none;
-  --label-transform: none;
-  --radius-card: 6px;
+  --section-transform: uppercase;
+  --label-transform: uppercase;
+  --radius-card: 0px;
   --radius-cell: 0px;
-  --card-border-width: 1px;
+  --card-border-width: 2px;
   --body-style: normal;
   --fs: 15px;
   --fs-sm2: 14.5px;
@@ -76,113 +48,11 @@
   font-style: var(--body-style);
   color: var(--ink);
 }
-.sb-scope.theme-print {
-  --paper: #fff;
-  --ink: #1a1a1a;
-  --muted: #555;
-  --label: #444;
-  --accent: #1a1a1a;
-  --head-bg: #fff;
-  --head-ink: #1a1a1a;
-  --head-rule: 2px solid #1a1a1a;
-  --line: #1a1a1a;
-  --border: #1a1a1a;
-}
-/* Гравюра (both цвет and ч/б печать) — section headers larger, brighter,
-   bold in both view mode (.sb-section) and edit mode (.entry-title in the
-   grouped <details> cards, .sb-prop-label inline field labels, and the
-   dnd-header-* action-list titles), per user request that this apply
-   "как в режиме редактирования, так и в режиме просмотра". */
-.theme-color .sb-section,
-.theme-print .sb-section,
-.theme-color .dnd-spell-level-summary,
-.theme-print .dnd-spell-level-summary {
-  font-size: 18px;
-  font-weight: 700;
-  filter: brightness(1.25);
-}
-/* Same emphasis for edit-mode section headers — scoped to .sb-edit-gravura
-   rather than .sb-scope.theme-*, since edit mode deliberately skips the
-   full sb-scope wrapper (that also carries the parchment paper/ink vars,
-   which would reskin plain form inputs). */
-.sb-edit-gravura .entry-title {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  filter: brightness(1.25);
-}
-.sb-edit-gravura .dnd-header-actions,
-.sb-edit-gravura .dnd-header-bonus,
-.sb-edit-gravura .dnd-header-reactions,
-.sb-edit-gravura .dnd-header-legendary {
-  font-weight: 700;
-  filter: brightness(1.15);
-}
-.sb-scope.theme-cyberpunk {
-  --sb-accent: #ff2bd6;
-  --paper: #0c0f12;
-  --ink: #cfe9ec;
-  --muted: #8a7a95;
-  --label: #c23fa8;
-  --accent: #ff2bd6;
-  --head-bg: #0f1a1c;
-  --head-ink: #ff2bd6;
-  --head-rule: 1px solid #7a2a68;
-  --line: #7a2a68;
-  --border: #7a2a68;
-  --font-display: 'JetBrains Mono', monospace;
-  --font-body: 'Oswald', sans-serif;
-  --name-transform: uppercase;
-  --section-transform: uppercase;
-  --name-shadow: 1px 1px 0 #f2e600;
-}
-.theme-cyberpunk .sb-name {
-  font-family: 'CyberpunkRus', monospace;
-  letter-spacing: 1px;
-}
-.theme-cyberpunk .sb-section::before {
-  content: '// ';
-}
-.theme-cyberpunk .sb-head {
-  position: relative;
-  overflow: hidden;
-}
-.theme-cyberpunk .sb-head::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 20px 20px 0;
-  border-color: transparent #4ef0ff transparent transparent;
-  opacity: 0.85;
-}
-.sb-scope.theme-steampunk {
-  --sb-accent: #e8c979;
-  --paper: #2a2119;
-  --ink: #e8d9b8;
-  --muted: #b8a67e;
-  --label: #b8863f;
-  --accent: #e8c979;
-  --head-bg: #3a2e18;
-  --head-ink: #e8c979;
-  --head-rule: 3px double #b8863f;
-  --line: #8a6a34;
-  --border: #8a6a34;
-  --font-display: 'Bitter', serif;
-  --font-body: 'Bitter', serif;
-}
-.theme-steampunk .sb-name {
-  font-family: 'Steamy', 'Bitter', serif;
-  letter-spacing: 0.5px;
-}
-.theme-steampunk .sb-abilities > div {
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+/* .theme-zine has nothing to override — the values above already are the
+   zine palette — but it's kept as a valid, targetable selector for parity
+   with the other theme classes (statblockThemeClass() always emits a
+   theme-<id> class, including for zine). */
+.sb-scope.theme-zine {
 }
 .sb-scope.theme-noir {
   --sb-accent: #1c1c1c;
@@ -209,54 +79,6 @@
   inset: 0;
   background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0 3px, transparent 3px 22px);
   pointer-events: none;
-}
-.sb-scope.theme-anime {
-  --sb-accent: #ff6b9d;
-  --paper: #fff8f2;
-  --ink: #3a2c33;
-  --muted: #8a6f7a;
-  --label: #ff6b9d;
-  --accent: #ff6b9d;
-  --head-bg: linear-gradient(115deg, #ff6b9d 0%, #ff6b9d 40%, #ffb86b 100%);
-  --head-ink: #fff;
-  --head-rule: 0 solid transparent;
-  --line: #ffd1e2;
-  --border: #ff6b9d;
-  --font-display: 'Baloo 2', sans-serif;
-  --font-body: 'Nunito', sans-serif;
-  --radius-card: 20px;
-  --radius-cell: 14px;
-}
-.theme-anime .sb-name {
-  font-family: 'BubbleGum', 'Baloo 2', sans-serif;
-}
-.theme-anime .sb-vitals,
-.theme-anime .sb-abilities {
-  gap: 6px;
-  border: none;
-}
-.theme-anime .sb-vitals > div,
-.theme-anime .sb-abilities > div {
-  background: #ffe3ee;
-  border: none;
-}
-.sb-scope.theme-fey {
-  --sb-accent: #4a5e3a;
-  --paper: #f3f7ec;
-  --ink: #3c4a2f;
-  --muted: #5c6b4c;
-  --label: #7a9463;
-  --accent: #4a5e3a;
-  --head-bg: linear-gradient(135deg, #cfe3b3, #e6d6f0);
-  --head-ink: #4a5e3a;
-  --head-rule: 0 solid transparent;
-  --line: #b9d1a0;
-  --border: #b9d1a0;
-  --font-display: 'Comfortaa', sans-serif;
-  --font-body: 'Cormorant', serif;
-  --radius-card: 22px;
-  --radius-cell: 14px;
-  --body-style: italic;
 }
 .sb-scope.theme-aberrant {
   --sb-accent: #b366e8;
@@ -290,232 +112,6 @@
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 1px;
 }
-.sb-scope.theme-undead {
-  --sb-accent: #d8d2c4;
-  --paper: #0a0a0b;
-  --ink: #a9a49c;
-  --muted: #6b6459;
-  --label: #8a8478;
-  --accent: #d8d2c4;
-  --head-bg: #111113;
-  --head-ink: #d8d2c4;
-  --head-rule: 1px solid #47433c;
-  --line: #2c2c30;
-  --border: #2c2c30;
-  --font-display: 'Yeseva One', serif;
-  --font-body: 'PT Serif', serif;
-}
-.sb-scope.theme-rustic {
-  --sb-accent: #7a5c38;
-  --paper: #efe6d3;
-  --ink: #4a3a26;
-  --muted: #7a5c38;
-  --label: #7a5c38;
-  --accent: #7a5c38;
-  --head-bg: #7a5c38;
-  --head-ink: #f3e8cf;
-  --head-rule: 4px solid #5c4526;
-  --line: #b89b68;
-  --border: #9c7b4f;
-  --font-display: 'Amatic SC', sans-serif;
-  --font-body: 'Merriweather', serif;
-  --card-border-width: 2px;
-}
-.theme-rustic .sb-label,
-.theme-rustic .sb-prop-label {
-  font-size: 14px;
-}
-.theme-rustic .sb-name {
-  font-size: calc(var(--fs-title) * 1.4);
-}
-/* Amatic SC (the theme's display font) is very thin at the section-header
-   scale and reads poorly there, even though it works fine for the big
-   .sb-name title above. Section headers fall back to the readable body
-   serif instead, with extra weight/size to still stand out. */
-.theme-rustic .sb-section,
-.theme-rustic .dnd-spell-level-summary {
-  font-family: var(--font-body);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-.sb-scope.theme-disney {
-  --sb-accent: #8a6fd6;
-  --paper: #fbf6ff;
-  --ink: #4a3a63;
-  --muted: #8a6fd6;
-  --label: #8a6fd6;
-  --accent: #8a6fd6;
-  --head-bg: linear-gradient(160deg, #a9c9ff, #d9b8ff 55%, #ffd9ec);
-  --head-ink: #fff;
-  --head-rule: 0 solid transparent;
-  --line: #e6d9ff;
-  --border: #cbb8f0;
-  --font-display: 'Comfortaa', sans-serif;
-  --font-body: 'Nunito', sans-serif;
-  --radius-card: 26px;
-  --radius-cell: 16px;
-}
-.theme-disney .sb-name {
-  font-family: 'DOSFont', 'Comfortaa', sans-serif;
-}
-.theme-disney .sb-vitals,
-.theme-disney .sb-abilities {
-  border: none;
-}
-.theme-disney .sb-vitals > div {
-  background: #f2ecff;
-}
-.theme-disney .sb-abilities > div {
-  background: #fff0f8;
-  border: none;
-}
-.sb-scope.theme-comic {
-  --sb-accent: #ff3b30;
-  --paper: #fff6de;
-  --ink: #1a1a1a;
-  --muted: #1a1a1a;
-  --label: #ff3b30;
-  --accent: #ff3b30;
-  --head-bg: radial-gradient(#ffffff55 1.5px, transparent 1.5px) 0 0/10px 10px, #ff3b30;
-  --head-ink: #fff;
-  --head-rule: 4px solid #1a1a1a;
-  --line: #1a1a1a;
-  --border: #1a1a1a;
-  --font-display: 'Russo One', sans-serif;
-  --font-body: 'PT Sans', sans-serif;
-  --name-transform: uppercase;
-  --name-stroke: 1.5px #1a1a1a;
-  --section-transform: uppercase;
-  --card-border-width: 4px;
-  --radius-cell: 8px;
-}
-.theme-comic .sb-vitals > div,
-.theme-comic .sb-abilities > div {
-  border: 2px solid #1a1a1a;
-}
-.theme-comic .sb-vitals > div {
-  background: #ffe066;
-}
-.theme-comic .sb-abilities > div {
-  background: #4dd6ff;
-}
-/* ---- Баровия (Curse of Strahd) ---- */
-.sb-scope.theme-barovia {
-  --sb-accent: #8a2a1f;
-  --paper: #d9d2be;
-  --ink: #3a3126;
-  --muted: #847a68;
-  --label: #8a2a1f;
-  --accent: #8a2a1f;
-  --head-bg: linear-gradient(160deg, #1b1410, #2e1a14 70%);
-  --head-ink: #d9b877;
-  --head-rule: 3px solid #8a2a1f;
-  --line: #bdb495;
-  --border: #3c2a1a;
-  --font-display: 'Greengoth', 'Fondamento', cursive;
-  --font-body: 'EB Garamond', serif;
-  --name-tracking: 0.5px;
-  --card-border-width: 2px;
-  --radius-card: 3px;
-}
-.theme-barovia .sb-card {
-  position: relative;
-}
-.theme-barovia .sb-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(ellipse 60% 40% at 15% 10%, rgba(90, 50, 20, 0.12), transparent 60%),
-    radial-gradient(ellipse 50% 35% at 90% 88%, rgba(90, 50, 20, 0.14), transparent 60%),
-    radial-gradient(ellipse 70% 45% at 50% 0%, rgba(255, 255, 255, 0.5), transparent 65%),
-    radial-gradient(ellipse 60% 50% at 20% 100%, rgba(255, 255, 255, 0.35), transparent 65%),
-    radial-gradient(ellipse 55% 45% at 100% 40%, rgba(255, 255, 255, 0.3), transparent 60%);
-  mix-blend-mode: multiply;
-  opacity: 0.9;
-}
-.theme-barovia .sb-body {
-  position: relative;
-}
-.theme-barovia .sb-body::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background: radial-gradient(ellipse 50% 30% at 10% 0%, rgba(255, 255, 255, 0.55), transparent 70%),
-    radial-gradient(ellipse 45% 30% at 95% 100%, rgba(255, 255, 255, 0.5), transparent 70%);
-  filter: blur(6px);
-}
-.theme-barovia .sb-body > * {
-  position: relative;
-  z-index: 2;
-}
-.theme-barovia .sb-head {
-  position: relative;
-}
-.theme-barovia .sb-head::after {
-  content: '☾';
-  position: absolute;
-  top: 12px;
-  right: 20px;
-  font-size: 15px;
-  color: #d9b877;
-  opacity: 0.55;
-}
-.theme-barovia .sb-vitals > div,
-.theme-barovia .sb-abilities > div {
-  background: rgba(60, 42, 26, 0.06);
-}
-.theme-barovia .sb-section,
-.theme-barovia .dnd-spell-level-summary {
-  font-size: 19px;
-  letter-spacing: 1.5px;
-}
-/* ---- Древнеславянский ---- */
-.sb-scope.theme-slavic {
-  --sb-accent: #a1332a;
-  --paper: #f1e7d2;
-  --ink: #332619;
-  --muted: #7d6a4d;
-  --label: #a1332a;
-  --accent: #a1332a;
-  --head-bg: #a1332a;
-  --head-ink: #f6ecd6;
-  --head-rule: 0 solid transparent;
-  --line: #c9a875;
-  --border: #8a6a42;
-  --font-display: 'Bulgariamodernav3', serif;
-  --font-body: 'PT Serif', serif;
-  --card-border-width: 2px;
-  --radius-card: 2px;
-  --name-tracking: 1px;
-}
-.theme-slavic .sb-card {
-  position: relative;
-}
-.theme-slavic .sb-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 8px;
-  background: repeating-linear-gradient(45deg, #f6ecd6 0 6px, #a1332a 6px 12px);
-}
-.theme-slavic .sb-head {
-  padding-top: calc(var(--pad-head) + 8px);
-}
-.theme-slavic .sb-vitals > div,
-.theme-slavic .sb-abilities > div {
-  background: rgba(161, 51, 42, 0.05);
-}
-.theme-slavic .sb-section {
-  border-bottom-style: double;
-  border-bottom-width: 3px;
-}
-
 .sb-scope.density-compact {
   --fs: 13.5px;
   --fs-sm2: 13px;
@@ -552,12 +148,7 @@
     --card-border-width: 1px;
     --body-style: normal;
   }
-  .theme-cyberpunk .sb-head::after,
-  .theme-noir .sb-card::before,
-  .theme-barovia .sb-card::before,
-  .theme-barovia .sb-body::before,
-  .theme-barovia .sb-head::after,
-  .theme-slavic .sb-card::before {
+  .theme-noir .sb-card::before {
     display: none;
   }
 }
@@ -581,6 +172,31 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 14px;
+}
+.sb-head-clickable {
+  cursor: pointer;
+}
+.sb-head-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sb-head-controls select {
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+.sb-head-controls .comp-mini {
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.sb-head-controls .comp-mini:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 .sb-name {
   font-family: var(--font-display);
@@ -712,6 +328,72 @@
 }
 .sb-prop-label::after {
   content: ":";
+}
+
+/* Optional portrait next to the vitals/abilities/defenses block — scoped to
+   just that block (not the whole card) so it never pushes into the tabs/
+   actions area below, which can run much longer than the art. */
+.sb-top-section {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+.sb-top-main {
+  flex: 1;
+  min-width: 0;
+}
+.sb-top-avatar {
+  flex: 0 0 220px;
+  width: 220px;
+  min-height: 140px;
+  display: flex;
+  cursor: pointer;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-cell);
+  overflow: hidden;
+  background: var(--paper);
+}
+.sb-top-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sb-top-avatar-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  opacity: 0.4;
+}
+.sb-top-avatar-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sb-top-avatar:hover .sb-top-avatar-hint {
+  opacity: 1;
+}
+@media (max-width: 560px) {
+  .sb-top-section {
+    flex-direction: column;
+  }
+  .sb-top-avatar {
+    width: 100%;
+    flex: 0 0 auto;
+    min-height: 160px;
+  }
 }
 .mini-vitals b::after,
 .mini-abilities b::after {
