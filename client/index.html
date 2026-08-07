@@ -9,9 +9,23 @@
          targets, drag-and-drop, swipeable panels), not a document meant to
          be pinch-zoomed. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Without these, iOS "Add to Home Screen" launches a plain Safari
+         bookmark: every navigation (even client-side react-router ones that
+         change history state) can pop up Safari's own chrome — address bar,
+         tab-stack icon, an "X" that closes back to wherever you were — as a
+         sheet layered on top of the app instead of staying in one standalone
+         window. apple-mobile-web-app-capable + the manifest's
+         display:"standalone"/scope together are what keep it in one shell. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="SoyMan" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#2b2320" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
     <title>client</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&family=Metamorphous&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Big+Shoulders+Stencil:wght@600;800&family=Cormorant+SC:wght@500;600;700&family=PT+Mono&family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;1,400&family=Comfortaa:wght@500;700&family=Cormorant:ital,wght@0,500;0,600;1,500&family=Amatic+SC:wght@400;700&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Russo+One&family=PT+Sans:ital,wght@0,400;0,700;1,400&family=Yeseva+One&family=Fondamento&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Bitter:ital,wght@0,400;0,600;0,700;1,400&family=Metamorphous&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Big+Shoulders+Stencil:wght@600;800&family=Cormorant+SC:wght@500;600;700&family=PT+Mono&family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;1,400&family=Comfortaa:wght@500;700&family=Cormorant:ital,wght@0,500;0,600;1,500&family=Amatic+SC:wght@400;700&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Russo+One&family=PT+Sans:ital,wght@0,400;0,700;1,400&family=Yeseva+One&family=Fondamento&family=Anton&family=Archivo:ital,wght@0,400;0,600;0,700;1,400&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Vollkorn:ital,wght@0,400;0,600;1,400&family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>

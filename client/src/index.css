@@ -2,6 +2,19 @@
    themes.ts byte-for-byte (see applyTheme()), so this :root block is only
    the pre-JS fallback / FOUC guard, not a second source of truth. */
 :root {
+  /* Design-doc vocabulary (design-system-punk-zine.md §3.1). themes.ts emits
+     these alongside the legacy names below; both come from the same source
+     value, so the old names are exact aliases. */
+  --paper: #16141c;
+  --paper-2: #1e1c26;
+  --ink: #cac5d6;
+  --ink-2: #b4aec2;
+  --muted: #9d97ad;
+  --surface: #cac5d6;
+  --on-surface: #16141c;
+  --line: #35313f;
+  --glow: none;
+  /* legacy aliases */
   --bg: #16141c;
   --bg-panel: #1e1c26;
   --bg-elevated: #262330;
@@ -46,7 +59,51 @@
      color/shape, so it lives here rather than in themes.ts. */
   --text-name: 18px;
   --text-name-sub: 14px;
+
+  /* Type scale (design doc §4.2) — identical on every theme, so it lives
+     here and is never duplicated into a theme object. */
+  --fs-hero: clamp(40px, 6vw, 76px);
+  --fs-h1: clamp(28px, 3.4vw, 40px);
+  --fs-h2: 22px;
+  --fs-h3: 16px;
+  --fs-body: 14px;
+  --fs-meta: 12px;
+  --fs-micro: 10px;
+  --fs-stat: clamp(24px, 3vw, 34px);
+
+  /* Spacing scale (§6.2) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* Motion (§9) — everything short and hard-edged */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --dur-1: 90ms;
+  --dur-2: 140ms;
+  --dur-3: 200ms;
+
+  /* Statblock bridge. Rules shared by statblock *view* (inside .sb-scope,
+     which brings its own --paper/--ink/--muted from statblockThemes.css) and
+     the plain *edit* forms outside it used to be written as
+     var(--paper, var(--bg-elevated)). That fallback stopped working the
+     moment --paper became a global app token, so the two contexts are now
+     selected explicitly — same resolved values as before. */
+  --sb-paper: var(--bg-elevated);
+  --sb-ink: var(--text-bright);
+  --sb-muted: var(--text-dim);
+
   color-scheme: dark;
+}
+
+.sb-scope {
+  --sb-paper: var(--paper);
+  --sb-ink: var(--ink);
+  --sb-muted: var(--muted);
 }
 
 * {
@@ -135,6 +192,15 @@ h1, h2, h3 {
   border-radius: var(--card-radius);
   clip-path: var(--card-clip);
   padding: 14px;
+}
+/* A card nested inside another card inherits the parent's frame instead of
+   drawing a second border/background/padding box — one frame per region,
+   never "frame in frame". Applies at every nesting depth. */
+.card .card {
+  border: none;
+  background: none;
+  padding: 0;
+  clip-path: none;
 }
 
 .muted {
@@ -833,6 +899,12 @@ h1, h2, h3 {
   display: none;
 }
 
+/* Same pattern as .mobile-topbar above: AppShell always mounts the bottom
+   nav, this hides it outside the mobile breakpoint's override. */
+.mobile-bottom-nav {
+  display: none;
+}
+
 .search-panel-slot {
   display: contents;
 }
@@ -1050,6 +1122,18 @@ h1, h2, h3 {
   color: var(--accent);
   background: var(--accent-soft);
 }
+.search-result-dock-add {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--card-radius);
+}
 
 /* Floating nav widget — theme-aware via the same CSS vars as .card. */
 .nav-widget {
@@ -1187,7 +1271,11 @@ th, td {
   font-size: 12px;
   color: var(--text-dim);
   text-align: center;
-  padding: 4px;
+  padding: 4px 4px 8px;
+  background-image: var(--calendar-mark-image, none);
+  background-repeat: no-repeat;
+  background-position: center bottom 1px;
+  background-size: 70% 6px;
 }
 .month-calendar .day {
   min-height: 64px;
@@ -1212,6 +1300,16 @@ th, td {
 .month-calendar .day .num {
   font-size: 12px;
   color: var(--text-dim);
+  display: inline-block;
+  padding-bottom: 5px;
+}
+.month-calendar .day.today .num {
+  background-image: var(--calendar-mark-image, none);
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 20px 5px;
+  color: var(--text);
+  font-weight: 600;
 }
 .month-calendar .dot {
   font-size: 11.5px;
@@ -1346,6 +1444,31 @@ th, td {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+/* Mobile-only stand-in for DndCharacterView's .tabs row (7 sections don't
+   fit one line on a phone) — a single-line dropdown showing the current
+   section instead of a multi-row button strip. */
+.dnd-section-picker {
+  width: 100%;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+/* CharacterDetailPage's tab row: equal-width buttons instead of the default
+   content-hugging flex row, so the (up to 6) tabs fill the row evenly. */
+.character-tabs-row .tabs button {
+  flex: 1 1 0;
+  text-align: center;
+}
+.editable-title {
+  cursor: pointer;
+  border-radius: var(--card-radius);
+  padding: 2px 6px;
+  margin: -2px -6px;
+}
+.editable-title:hover {
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+}
 
 /* Для игроков: bigger tap-friendly section headers (accordion, one open at
    a time) whose items open the full-screen PlayerContentReader instead of
@@ -1380,7 +1503,7 @@ th, td {
   border-radius: var(--card-radius);
 }
 .player-section-item:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 
 .player-reader-overlay {
@@ -1474,7 +1597,7 @@ details.card summary {
   padding: 4px 6px;
 }
 details.card summary:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 details.card[open] summary {
   margin-bottom: 10px;
@@ -1555,6 +1678,12 @@ details.card[open] summary {
   }
   .app-content {
     padding: 16px;
+    /* Leave room for BOTH floating bars below — the bottom nav pill and,
+       whenever a track is playing, MiniPlayerBar stacked above it — so the
+       last bit of page content is never hidden behind either. Reserved
+       unconditionally (not just while something plays) since content
+       height shouldn't jump around as playback starts/stops. */
+    padding-bottom: calc(16px + 132px);
   }
   /* Descriptive blurb under the page heading on Главная/Системы — useful
      context on desktop, but on a phone it's just extra scrolling before the
@@ -1607,45 +1736,215 @@ details.card[open] summary {
     content: "✕";
   }
 
-  /* The audio bar's left:200px/right:320px insets assume the desktop
-     3-column grid — on a phone that leaves negative width and is exactly
-     what pushed the whole page sideways. Below this breakpoint it's a
-     GM-only bottom drawer (players never see it at all — see AppShell.tsx)
-     toggled from the mobile top bar instead of a permanently docked bar,
-     since a phone screen has no room to spare for a bar that's always on. */
+  /* The full desktop audio bar assumes the 3-column grid (left:200px/
+     right:320px insets) and has no room on a phone screen — below this
+     breakpoint it's not shown at all. Mobile gets MiniPlayerBar instead
+     (see below), a small "now playing" capsule that only exists while a
+     track is actually playing, replacing the old always-present drawer. */
   .audio-player-slot {
-    display: contents;
-  }
-  .audio-player-slot .audio-player-bar {
-    left: 0;
-    right: 0;
-    max-width: 100vw;
-    overflow-x: auto;
-    z-index: 50;
-    transform: translateY(100%);
-    transition: transform 0.2s ease;
-  }
-  .audio-player-slot.open .audio-player-bar {
-    transform: translateY(0);
+    display: none;
   }
   .app-content.has-player {
-    /* No longer permanently docked on mobile — don't reserve space for it. */
-    padding-bottom: 16px;
+    /* No permanent audio bar to dodge on mobile — just the same reserved
+       space as .app-content above (bottom nav + MiniPlayerBar). */
+    padding-bottom: calc(16px + 132px);
   }
+
+  /* Persistent bottom nav bar (D&D Beyond-style): a floating rounded pill
+     that hovers over content with a gap from the screen edges — not a
+     full-bleed bar in the document flow — so it reads as an overlay control,
+     not another chrome strip competing with .mobile-topbar. */
+  .mobile-bottom-nav {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0));
+    z-index: 40;
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    background: color-mix(in oklab, var(--bg-panel) 92%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+  .mobile-bottom-nav a,
+  .mobile-bottom-nav button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 4px 6px;
+    background: transparent;
+    border: none;
+    border-radius: 14px;
+    color: var(--text-dim);
+    font-size: 11px;
+    line-height: 1.1;
+  }
+  .mobile-bottom-nav .nav-icon {
+    width: 21px;
+    height: 21px;
+  }
+  .mobile-bottom-nav a.active,
+  .mobile-bottom-nav button.active {
+    color: var(--accent);
+    background: color-mix(in oklab, var(--accent) 14%, transparent);
+  }
+
+  /* "Now playing" capsule — only rendered at all while a track is playing
+     (see MiniPlayerBar in audioPlayer.tsx, which returns null otherwise),
+     floating just above the bottom nav pill rather than overlapping it.
+     Relies on DOM order in AppShell.tsx (MiniPlayerBar renders right before
+     MobileBottomNav) for both this positioning and the sibling selector
+     below that lifts the nav out of the way. */
+  .mini-player-bar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(74px + env(safe-area-inset-bottom, 0));
+    z-index: 39;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: color-mix(in oklab, var(--bg-panel) 94%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    color: inherit;
+    text-decoration: none;
+  }
+  .mini-player-track {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .mini-player-bar button {
+    flex: 0 0 auto;
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    line-height: 1;
+    color: inherit;
+    padding: 2px 4px;
+  }
+
 }
 
+/* Full-screen "now playing" view (NowPlayingPage.tsx), opened by tapping the
+   mini player capsule — phone-music-app layout: square cover, title, seek
+   bar, transport row. Meaningful at any width, but only reachable on mobile
+   today since MiniPlayerBar (its only entry point) is mobile-only. */
+.now-playing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 8px 0 32px;
+}
+.now-playing-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.now-playing-topbar button {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 10px;
+}
+.now-playing-cover {
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: var(--card-radius, 12px);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+.now-playing-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.now-playing-cover-placeholder {
+  font-size: 64px;
+  color: var(--accent);
+  opacity: 0.5;
+}
+.now-playing-info strong {
+  font-size: 20px;
+}
+.now-playing-seek input[type="range"] {
+  width: 100%;
+}
+.now-playing-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.now-playing-controls button {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  padding: 6px;
+  color: inherit;
+}
+.now-playing-controls button.active {
+  color: var(--accent);
+}
+.now-playing-controls button:disabled {
+  opacity: 0.35;
+}
+.now-playing-play {
+  font-size: 40px !important;
+  color: var(--accent);
+}
+
+/* Split into three named grid areas (avatar/name/tabs) instead of two plain
+   columns so the mobile override below can re-flow name beside the avatar
+   without touching the JSX — desktop keeps the avatar spanning both rows
+   (tall sticky column beside name+tabs), mobile puts avatar+name on one
+   compact row with tabs spanning full width underneath. */
 .character-layout {
   display: grid;
   grid-template-columns: 200px 1fr;
-  gap: 20px;
+  grid-template-areas: "avatar name" "avatar tabs";
+  column-gap: 20px;
+  row-gap: 8px;
   align-items: start;
 }
-.character-layout > .stack {
+.character-avatar-col {
+  grid-area: avatar;
+}
+.character-name-block {
+  grid-area: name;
+  min-width: 0;
+}
+.character-tabs-row {
+  grid-area: tabs;
   min-width: 0;
 }
 @media (max-width: 700px) {
   .character-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "avatar name" "tabs tabs";
   }
 }
 .character-avatar-col {
@@ -1744,6 +2043,81 @@ details.card[open] summary {
   .avatar-upload-hint {
     font-size: 12px;
   }
+
+  /* An expanded statblock (Чарник tap) — plain-text/LitM/D&D character via
+     StatblockCard's <details>, or a D&D creature's own view — gets promoted
+     to a full-screen overlay instead of squeezing its edit form/character
+     sheet into the same narrow inline column as the rest of the page. Purely
+     a mobile presentation change: the class is applied unconditionally by
+     StatblockList.tsx whenever expanded, and does nothing above this
+     breakpoint. Tapping the header again collapses it back (native <summary>
+     toggle / the dnd_creature header's own onHeaderClick), which drops the
+     class and returns the card to its normal inline spot. */
+  .sb-fullscreen-mobile {
+    position: fixed;
+    inset: 0;
+    /* Below .modal-backdrop (z-index 50, index.css) — a spell/feature detail
+       popup opened from inside this overlay needs to render on top of it,
+       not behind it. Still above the bottom nav/mini-player (39-40). */
+    z-index: 45;
+    margin: 0;
+    overflow-y: auto;
+    background: var(--bg-panel);
+    padding: 12px;
+    /* This <details> is normally a boxed .card floating on a page — its own
+       border/rounded-corner/background-texture chrome is exactly the outer
+       layer of the "рамка в рамке" the full-screen view doesn't need: it now
+       IS the page, not a card sitting on one. .sb-card just inside it (the
+       statblock's own themed frame) still has its own border, so leaving
+       this one in place doubled up as a visible ring-within-a-ring. */
+    border: none;
+    border-radius: 0;
+    clip-path: none;
+    background-image: none;
+  }
+  .sb-fullscreen-mobile > summary {
+    position: sticky;
+    top: -12px;
+    margin: -12px -12px 10px;
+    padding: 12px;
+    min-height: 20px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    z-index: 3;
+  }
+  /* The vitals row (AC/Initiative/HP/avatar/inspiration/...) stays visible
+     while scrolling through a section's content below it — pinned right
+     under the sticky summary above (32px ≈ that summary's own rendered
+     height: 20px min-height + 12px top/bottom padding). Only takes effect
+     inside the full-screen overlay; a normal inline card scrolls as one
+     block like before. */
+  .sb-fullscreen-mobile .sb-vitals {
+    position: sticky;
+    top: 32px;
+    z-index: 2;
+    background: var(--paper);
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  /* Second layer of the same nesting problem: the statblock's own themed
+     frame (.sb-card — border + rounded corners) drawn a few pixels inside
+     the overlay's edge, on top of a background that's already the same
+     page-level color. On a phone that reads as a border for no reason and
+     eats width on every line of text. Flatten it here — .sb-head/.sb-body's
+     own padding still separates the header band from the body, that's the
+     only structure actually worth keeping at this width. overflow:visible
+     also fixes the sticky .sb-vitals above, which .sb-card's normal
+     overflow:hidden (clips theme background art everywhere else) would
+     otherwise break. */
+  .sb-fullscreen-mobile .sb-card {
+    overflow: visible;
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+  .sb-fullscreen-mobile .sb-body {
+    --pad-x: 12px;
+  }
 }
 
 .player-list-letter {
@@ -1761,10 +2135,33 @@ details.card[open] summary {
   text-decoration: none;
 }
 .player-list-row:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .player-list-row + .player-list-row {
   border-top: 1px solid var(--border);
+}
+/* Track/playlist rows (GmMusicPage) — names are often long filenames with no
+   spaces to break on, which used to just push the row wider than the screen
+   instead of wrapping. min-width:0 + overflow-wrap let the name itself break
+   onto multiple lines. flex-wrap is explicitly forced back to nowrap here to
+   override the mobile .row{flex-wrap:wrap} rule above — with that wrap in
+   effect, the trailing action buttons (rename/delete) drop onto their own
+   line whenever a row has several of them, which looks broken. */
+.track-row {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.track-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.player-list-row-upcoming {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.player-list-row-upcoming:hover {
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
 }
 .player-list-avatar {
   width: 40px;
@@ -2330,13 +2727,13 @@ input.litm-theme-title {
   align-items: center;
   gap: 2px;
   padding: 8px 4px;
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: 1px solid var(--border);
   border-radius: var(--card-radius);
 }
 .dnd-ability-label {
   font-size: 10px;
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
   letter-spacing: 0.5px;
 }
 .dnd-ability-score {
@@ -2377,6 +2774,51 @@ input.litm-theme-title {
   font-weight: 600;
 }
 
+.dnd-ability-dice {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  margin-top: 2px;
+  cursor: pointer;
+}
+.dnd-die {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: color-mix(in oklab, var(--accent) 16%, var(--bg-elevated));
+  border: 1px solid var(--accent);
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+.dnd-die-value {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+}
+.dnd-die-sub {
+  font-size: 8px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 1px;
+}
+.dnd-die.is-front {
+  transform: translate(-4px, -3px) scale(1);
+  z-index: 2;
+  opacity: 1;
+}
+.dnd-die.is-back {
+  transform: translate(4px, 3px) scale(0.8);
+  z-index: 1;
+  opacity: 0.55;
+}
+.dnd-die-save.is-proficient {
+  background: color-mix(in oklab, var(--accent) 34%, var(--bg-elevated));
+}
+
 .dnd-abilities-block {
   display: flex;
   flex-direction: column;
@@ -2391,7 +2833,7 @@ input.litm-theme-title {
   padding: 2px 8px;
   font-weight: 600;
   color: var(--accent);
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: 1px solid var(--border);
   border-radius: var(--card-radius);
 }
@@ -2405,7 +2847,7 @@ input.litm-theme-title {
   flex-direction: column;
   gap: 2px;
   padding: 6px 4px;
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: 1px solid var(--border);
   border-radius: var(--card-radius);
 }
@@ -2424,7 +2866,7 @@ input.litm-theme-title {
 .dnd-save-dot {
   flex-shrink: 0;
   font-size: 9px;
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
 }
 .dnd-save-row.is-proficient .dnd-save-dot,
 .dnd-save-row.is-proficient .dnd-save-dot-btn {
@@ -2442,7 +2884,7 @@ input.litm-theme-title {
   background: transparent;
   font-size: 11px;
   line-height: 1;
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
   cursor: pointer;
 }
 .dnd-save-dot-btn:hover {
@@ -2453,10 +2895,10 @@ input.litm-theme-title {
   white-space: normal;
   word-break: break-word;
   font-size: 12px;
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
 }
 .dnd-save-row.is-proficient .dnd-save-name {
-  color: var(--ink, var(--text-bright));
+  color: var(--sb-ink);
 }
 .dnd-save-row-throw {
   border-bottom: 1px solid var(--border);
@@ -2468,22 +2910,22 @@ input.litm-theme-title {
    fixed, but mixing against the theme's own paper color keeps the tone in
    step with light/dark/steampunk-etc. themes. */
 .dnd-save-row.skill-source-class {
-  background: color-mix(in oklab, dodgerblue 24%, var(--paper, var(--bg-elevated)));
+  background: color-mix(in oklab, dodgerblue 24%, var(--sb-paper));
   border-radius: 4px;
 }
 .dnd-save-row.skill-source-background {
-  background: color-mix(in oklab, seagreen 24%, var(--paper, var(--bg-elevated)));
+  background: color-mix(in oklab, seagreen 24%, var(--sb-paper));
   border-radius: 4px;
 }
 .dnd-save-row.skill-source-both {
-  background: color-mix(in oklab, crimson 22%, var(--paper, var(--bg-elevated)));
+  background: color-mix(in oklab, crimson 22%, var(--sb-paper));
   border-radius: 4px;
 }
 .dnd-skill-remaining {
   align-self: center;
   font-size: 12px;
   font-weight: 700;
-  color: color-mix(in oklab, crimson 70%, var(--ink, var(--text-bright)));
+  color: color-mix(in oklab, crimson 70%, var(--sb-ink));
 }
 .dnd-save-value {
   flex-shrink: 0;
@@ -2546,7 +2988,7 @@ input.litm-theme-title {
   margin-left: -4px;
 }
 .dnd-equipment-quick-row:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 90%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 90%, var(--sb-ink));
 }
 .dnd-equipment-name-link {
   cursor: pointer;
@@ -2592,6 +3034,48 @@ input.litm-theme-title {
 @media (max-width: 700px) {
   .dnd-equipment-view-list .dnd-equipment-quick-row {
     font-size: calc(1em * 0.85);
+  }
+  /* The desktop table is 480px min-width — wider than a phone screen, so it
+     used to fall back to an internal horizontal scrollbar (easy to miss,
+     reads as "text runs off the edge"). Below this width, un-table it into
+     stacked cards instead: each row becomes a block, each cell's own label
+     (the th text, carried via data-label) prefixes its value. */
+  .dnd-attacks-table-wrap {
+    overflow-x: visible;
+    margin: 4px 0 0;
+    padding: 0;
+  }
+  .dnd-attacks-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .dnd-attacks-table thead {
+    display: none;
+  }
+  .dnd-attacks-table tbody {
+    display: block;
+  }
+  .dnd-attacks-table tr {
+    display: block;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .dnd-attacks-table tr:last-child {
+    border-bottom: none;
+  }
+  .dnd-attacks-table td {
+    display: block;
+    padding: 1px 0;
+  }
+  .dnd-attacks-table td:first-child {
+    font-weight: 600;
+  }
+  .dnd-attacks-table td[data-label]:not(:first-child)::before {
+    content: attr(data-label) ": ";
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-dim);
   }
 }
 
@@ -2646,8 +3130,32 @@ input.litm-theme-title {
   color: var(--accent);
   flex-shrink: 0;
 }
-.dnd-proficiency-view-item {
-  white-space: nowrap;
+.dnd-proficiency-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.dnd-proficiency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 4px 2px 10px;
+  font-size: calc(var(--fs, 15px) * 0.87);
+}
+.dnd-proficiency-chip button {
+  border-radius: 50%;
+  line-height: 1;
+  padding: 2px 5px;
+}
+.dnd-proficiency-chip-add input {
+  height: 24px;
+  padding: 2px 8px;
+  font-size: calc(var(--fs, 15px) * 0.87);
+  width: 130px;
 }
 
 .dnd-spell-list {
@@ -2677,33 +3185,21 @@ input.litm-theme-title {
 .dnd-spell-name {
   font-size: 12px;
 }
-.dnd-feature-article summary {
+/* SbFeatureGroup: each feature is a click-to-open row (opens its
+   description in a popup, see .dnd-spell-modal) instead of an inline
+   <details> — same spirit as .dnd-spell-name-link for spells. */
+.dnd-feature-row {
   cursor: pointer;
   font-weight: 600;
   padding: 3px 6px;
   margin: 0 -6px;
   border-radius: var(--card-radius);
 }
-.dnd-feature-article summary:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
-}
-.dnd-feature-article[open] summary {
-  margin-bottom: 4px;
-}
-/* MentionText renders paragraph breaks as literal "\n" text nodes (see
-   components/mentions/MentionText.tsx) — without pre-wrap those collapse to
-   nothing and every line runs together. .dnd-spell-description already has
-   this; this class was missed when features got the same collapsible
-   treatment. */
-.dnd-feature-article {
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-}
-.dnd-feature-article summary {
-  white-space: normal;
+.dnd-feature-row:hover {
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .dnd-spell-meta {
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
   font-size: calc(var(--fs, 15px) * 0.87);
   font-weight: 400;
 }
@@ -2714,7 +3210,7 @@ input.litm-theme-title {
 }
 .dnd-spell-description {
   font-size: calc(var(--fs, 15px) * 0.87);
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
   padding: 4px 8px 8px;
   white-space: pre-wrap;
 }
@@ -2735,16 +3231,16 @@ input.litm-theme-title {
   padding: 2px 6px;
 }
 .sb-entry-row.sb-entry-toggle:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .sb-entry-caret {
   margin-left: auto;
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
   font-size: 11px;
 }
 .sb-entry-detail {
   font-size: calc(var(--fs, 15px) * 0.87);
-  color: var(--muted, var(--text-dim));
+  color: var(--sb-muted);
   padding: 4px 8px 8px;
   white-space: pre-wrap;
 }
@@ -3433,7 +3929,7 @@ input.litm-theme-title {
   transition: background 0.1s;
 }
 .resource-drop-zone > details > summary:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .playlist-header {
   border-radius: var(--card-radius);
@@ -3558,6 +4054,8 @@ input.litm-theme-title {
 .playlist-track-play-btn:hover {
   opacity: 0.7;
 }
+/* Quiet capsule, not a control-dense strip: dark masthead band + one accent
+   color, matching the reference's minimal floating player. */
 .audio-player-bar {
   position: fixed;
   left: 200px;
@@ -3568,11 +4066,20 @@ input.litm-theme-title {
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  background: var(--bg-elevated);
-  border-top: 1px solid var(--border);
+  background: var(--card-band-bg, var(--bg-elevated));
+  background-image: var(--card-band-image, none);
+  color: var(--primary-text, var(--text-bright));
+  border-top: var(--card-border-width) solid var(--border);
+  border-radius: 14px 14px 0 0;
 }
 .audio-player-bar button {
   padding: 2px 8px;
+  background: none;
+  border: none;
+  color: inherit;
+}
+.audio-player-bar button:hover {
+  color: var(--accent);
 }
 .audio-player-bar-empty {
   justify-content: space-between;
@@ -3591,7 +4098,13 @@ input.litm-theme-title {
 .audio-player-bar button.active {
   background: var(--accent);
   color: var(--accent-text);
-  border-color: var(--accent);
+  border-radius: 999px;
+}
+/* .muted's hardcoded --text-dim assumes a light card surface; the bar's own
+   dark band needs the band's own (already-contrast-checked) text color. */
+.audio-player-bar .muted {
+  color: var(--primary-text, inherit);
+  opacity: 0.75;
 }
 .audio-player-track {
   font-weight: 600;
@@ -3744,7 +4257,7 @@ input.litm-theme-title {
   font-size: var(--text-name);
 }
 .comp-row:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 
 /* Shared "click almost anywhere to expand" header row, used by card-based
@@ -3759,7 +4272,7 @@ input.litm-theme-title {
   padding: 4px 6px;
 }
 .collapsible-header:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .comp-children .comp-row {
   font-size: var(--text-name-sub);
@@ -3867,7 +4380,7 @@ input.litm-theme-title {
   border-radius: var(--card-radius);
 }
 .setting-player-row:hover {
-  background: color-mix(in oklab, var(--paper, var(--bg-elevated)) 92%, var(--ink, var(--text-bright)));
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .comp-category summary.comp-level-label {
   cursor: pointer;
@@ -3897,30 +4410,129 @@ input.litm-theme-title {
   line-height: 1.3;
 }
 
-/* CheatSheets print templates — hidden on screen, and while printing,
-   everything else on the page is hidden too (visibility, not display, so
-   layout/DOM position doesn't matter for the print-target itself). */
-.cheatsheet-print-root {
+/* CheatSheets printing: earlier this hid everything via `visibility` and
+   pinned the print target with `position: fixed`. That's fragile for
+   anything taller than one screen — a fixed box gets clamped to viewport
+   height, and two A5 pages (each taller than the window) wrapped into two
+   side-by-side columns instead of stacking, so the second page landed
+   outside the printable A5 width and the exported PDF came out blank.
+   Now the print target (built fresh in CheatSheetsSection, not reused from
+   the on-screen editable sheet) is portaled straight into <body> — a plain
+   sibling of #root, in normal document flow, no fixed positioning — and
+   printing just swaps which of the two is shown. Normal flow means
+   multi-page content paginates correctly via `break-after: page`. */
+body.printing-cheatsheet #root {
   display: none;
 }
-body.printing-cheatsheet * {
-  visibility: hidden;
-}
-body.printing-cheatsheet .cheatsheet-print-root {
-  display: block;
-  visibility: visible;
-  position: fixed;
-  inset: 0;
+.cheatsheet-print-portal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   background: #fff;
   color: #111;
 }
-body.printing-cheatsheet .cheatsheet-print-root * {
-  visibility: visible;
+.cheatsheet-live-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
 }
 .cheatsheet-sheet {
   box-sizing: border-box;
   font-family: Georgia, serif;
   padding: 10mm;
+  background: #fdf9ef;
+  color: #1a1a1a;
+  border: 1.5px solid #141414;
+}
+.cheatsheet-sheet h2 {
+  font-style: italic;
+  text-transform: uppercase;
+}
+.cheatsheet-sheet h3 {
+  color: #6b5a2e;
+}
+.cheatsheet-fill-list {
+  margin: 0;
+  padding-left: 22px;
+}
+.cheatsheet-fill-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+}
+.cheatsheet-fill-label {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.cheatsheet-fill-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-bottom: 1px dotted #999;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  padding: 0 2px;
+}
+.cheatsheet-fill-input:focus {
+  outline: none;
+  border-bottom-style: solid;
+}
+/* Заметки/Улики: a click-to-edit block. View mode (.cheatsheet-fill-textview)
+   renders formatted text with mentions as bold (MentionText mentionsAsBold);
+   clicking it swaps in .cheatsheet-fill-mentionarea, which reskins the
+   normally-dark-app MentionTextarea to sit flush on the cream paper — no
+   fixed row-count textarea to overflow and scroll (that was the concrete
+   cause of the scrollbar this replaces: a plain <textarea rows=N> clips and
+   scrolls once content exceeds N rows; MentionTextarea auto-grows instead). */
+.cheatsheet-fill-textview {
+  min-height: 48px;
+  border-top: 1px solid #d8cfb8;
+  padding: 6px 0;
+  line-height: 24px;
+  cursor: text;
+  white-space: pre-wrap;
+}
+.cheatsheet-fill-mentionarea {
+  border-top: 1px solid #d8cfb8;
+  padding: 6px 0;
+}
+.cheatsheet-fill-mentionarea .mention-textarea-wrap textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  line-height: 24px;
+  padding: 0;
+  resize: none;
+}
+.cheatsheet-fill-mentionarea .mention-textarea-wrap textarea:focus {
+  outline: none;
+}
+.cheatsheet-fill-mentionarea > button {
+  margin-top: 6px;
+}
+.cheatsheet-quest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cheatsheet-quest-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.cheatsheet-quest-box {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  border: 1.5px solid #141414;
 }
 .cheatsheet-sheet[data-format="a4"] {
   width: 297mm;
@@ -4006,4 +4618,89 @@ body.printing-cheatsheet .cheatsheet-print-root * {
   width: 12px;
   height: 12px;
   border: 1px solid #333;
+}
+
+.cheatsheet-session-page {
+  break-after: page;
+}
+.cheatsheet-session-page:last-child {
+  break-after: auto;
+}
+
+.dnd-cheatsheet-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.dnd-cheatsheet-card-preview {
+  padding: 8px 10px;
+}
+
+.dnd-cheatsheet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+.dnd-cheatsheet-card {
+  border: 1.5px solid #141414;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.dnd-cheatsheet-card-head {
+  border-bottom: 1.5px solid #141414;
+  padding: 6px 8px;
+}
+.dnd-cheatsheet-card-note {
+  font-size: 10px;
+  font-style: italic;
+  color: #555;
+}
+.dnd-cheatsheet-card-vitals {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+.dnd-cheatsheet-card-vitals strong {
+  margin-left: 4px;
+}
+.dnd-cheatsheet-card-classline {
+  display: flex;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.dnd-cheatsheet-card-body {
+  display: flex;
+  flex: 1;
+  min-height: 60px;
+  border-bottom: 1.5px solid #141414;
+}
+.dnd-cheatsheet-card-skills {
+  width: 50%;
+  padding: 6px 8px;
+  border-right: 1.5px solid #141414;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.dnd-cheatsheet-card-notes {
+  flex: 1;
+}
+.dnd-cheatsheet-card-footer {
+  display: flex;
+  min-height: 40px;
+}
+.dnd-cheatsheet-card-footer-items {
+  flex: 1;
+  border-left: 1.5px solid #141414;
+  background: #f2f2f0;
+}
+.dnd-cheatsheet-card-footer-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 4px 8px 0;
 }

@@ -107,6 +107,13 @@ interface ThemeCfg {
   cardBodyTexture?: string; // subtle texture on card bodies (not just the band)
   nameTransform?: string; // text-transform for titles
   nameStroke?: string; // -webkit-text-stroke for titles
+  // Design-doc §3.1 `--glow`: an opt-in box-shadow-ish glow value. "none"
+  // everywhere except themes that deliberately want the neon treatment.
+  glow?: string;
+  // Hand-marked accent under a calendar weekday header / the selected day —
+  // an SVG squiggle background-image, e.g. a "pencil underline". Absent by
+  // default; only themes that want that annotated-page feel set it.
+  calendarMarkImage?: string;
   semanticOverrides?: Partial<SemanticSet>;
   // Per-status capsule (calendar dot / badge) bg+text overrides, bypassing
   // the default pastelBg/pastelFg derivation — used by themes that want a
@@ -123,14 +130,41 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
   const primaryBg = cfg.bandBg || cfg.accent;
   const primaryText = pickTextOn(primaryBg.startsWith("#") ? primaryBg : cfg.accent);
 
+  // ---- design-doc vocabulary (§3.1) ----------------------------------
+  // Computed once here and emitted under BOTH the new names and the legacy
+  // ones, so the old vars are exact aliases and nothing shifts visually.
+  const paper = cfg.bg;
+  const paper2 = mixHex(cfg.bg, towards, surfaceMix);
+  const paperElevated = mixHex(cfg.bg, towards, surfaceAltMix);
+  const ink = cfg.text;
+  const inkBright = mode === "dark" ? mixHex(cfg.text, "#ffffff", 0.15) : cfg.text;
+  const muted = cfg.textMutedOverride || mixHex(cfg.text, cfg.bg, 0.45);
+  // §3.1's `--ink-2` sits between the main ink and the muted ink.
+  const ink2 = mixHex(ink, muted, 0.5);
+  const line = cfg.border;
+  // The inverted card pair: a dark card on a light page and vice versa.
+  // In every reference palette that resolves to ink-on-paper flipped.
+  const surface = ink;
+  const onSurface = paper;
+
   const vars: Record<string, string> = {
-    "--bg": cfg.bg,
-    "--bg-panel": mixHex(cfg.bg, towards, surfaceMix),
-    "--bg-elevated": mixHex(cfg.bg, towards, surfaceAltMix),
-    "--border": cfg.border,
-    "--text": cfg.text,
-    "--text-bright": mode === "dark" ? mixHex(cfg.text, "#ffffff", 0.15) : cfg.text,
-    "--text-dim": cfg.textMutedOverride || mixHex(cfg.text, cfg.bg, 0.45),
+    "--paper": paper,
+    "--paper-2": paper2,
+    "--ink": ink,
+    "--ink-2": ink2,
+    "--muted": muted,
+    "--surface": surface,
+    "--on-surface": onSurface,
+    "--line": line,
+    "--glow": cfg.glow || "none",
+    // legacy aliases — same source values, do not diverge
+    "--bg": paper,
+    "--bg-panel": paper2,
+    "--bg-elevated": paperElevated,
+    "--border": line,
+    "--text": ink,
+    "--text-bright": inkBright,
+    "--text-dim": muted,
     "--accent": cfg.accent,
     "--accent-text": pickTextOn(cfg.accent),
     "--accent-soft": cfg.accent + "2a",
@@ -148,6 +182,7 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--card-body-texture": cfg.cardBodyTexture || "none",
     "--name-transform": cfg.nameTransform || "none",
     "--name-stroke": cfg.nameStroke || "none",
+    "--calendar-mark-image": cfg.calendarMarkImage || "none",
     "--status-planned": cfg.statusCapsuleOverrides?.planned?.bg ?? pastelBg(sem.hold),
     "--status-planned-fg": cfg.statusCapsuleOverrides?.planned?.fg ?? pastelFg(sem.hold),
     "--status-held": cfg.statusCapsuleOverrides?.held?.bg ?? pastelBg(sem.active),
@@ -177,6 +212,17 @@ const CLASSIC_THEME: Theme = {
   name: "Классическая",
   mode: "dark",
   vars: {
+    // design-doc vocabulary, literal like the rest of this theme
+    "--paper": "#16141c",
+    "--paper-2": "#1e1c26",
+    "--ink": "#cac5d6",
+    "--ink-2": "#b4aec2",
+    "--muted": "#9d97ad",
+    "--surface": "#cac5d6",
+    "--on-surface": "#16141c",
+    "--line": "#35313f",
+    "--glow": "none",
+    // legacy aliases
     "--bg": "#16141c",
     "--bg-panel": "#1e1c26",
     "--bg-elevated": "#262330",
@@ -307,6 +353,47 @@ const OTHER_THEMES: Theme[] = [
     cardBorderWidth: 2, cardRadius: 2,
     bandBg: "#a1332a",
   }),
+  // Punk-zine collage: aged newsprint, xerox grain, a single blood-red
+  // accent against black-on-cream, hard square corners — reference: a
+  // "SOLARPUNK RPG MANAGER" zine-cover concept the user supplied.
+  buildTheme("zine", "Зин", "light", {
+    bg: "#e7dfc9", text: "#181818", accent: "#c31f1f", border: "#181818",
+    fontDisplay: "'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+    cardBorderWidth: 2, cardRadius: 0,
+    bandBg: "#181818",
+    bandImage: "radial-gradient(#ffffff33 1.5px, transparent 1.5px) 0 0/8px 8px",
+    pageTexture: "radial-gradient(rgba(0,0,0,.06) 1px, transparent 1px) 0 0/3px 3px",
+    cardBodyTexture: "radial-gradient(rgba(0,0,0,.04) 1px, transparent 1px) 0 0/3px 3px",
+    nameTransform: "uppercase",
+    // A single hand-drawn squiggle stroke in the accent red — the "pencil
+    // underline" the reference calendar marks today/selected with, instead
+    // of a filled highlight box.
+    calendarMarkImage:
+      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.5c2-3 4-3 6 0s4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0' fill='none' stroke='%23c31f1f' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E\")",
+    semanticOverrides: { gm: "#181818", player: "#c31f1f", paid: "#c31f1f", free: "#3a6b3a", active: "#3a6b3a", hold: "#7a7568", danger: "#c31f1f" },
+  }),
+  // Storybook woodcut: warm parchment + rust-terracotta accent, meant to
+  // read as an old fable's engraved illustration plates — reference: "Tales
+  // & Dice" / "FableMaster" concepts the user supplied.
+  buildTheme("fable", "Сказание", "light", {
+    bg: "#ecdfc0", text: "#2e2317", accent: "#a1481f", border: "#8a6a42",
+    fontDisplay: "'Old Standard TT', serif", fontBody: "'Vollkorn', serif",
+    cardBorderWidth: 1, cardRadius: 5,
+    bandBg: "linear-gradient(160deg, #efe4c9, #ddc99a)",
+    pageTexture: "radial-gradient(rgba(60,40,20,.045) 1px, transparent 1px) 0 0/3px 3px",
+    semanticOverrides: { gm: "#5c3a1f", player: "#3a5c4f", paid: "#a1481f", free: "#4f7a4a" },
+  }),
+  // Bright arcade cartoon — deliberately a curated "Full palette" (blue base
+  // + 3 named accent roles), not the busy Drenched maximalism of the source
+  // concepts ("RPG ROOM" / "Dungeon Dash"); chunky rounded shapes and bold
+  // type carry the identity instead of decoration density.
+  buildTheme("arcade", "Аркада", "dark", {
+    bg: "#1c2a6b", text: "#f2f3ff", accent: "#ff4fa3", border: "#3a4fc0",
+    fontDisplay: "'Fredoka', sans-serif", fontBody: "'Nunito', sans-serif",
+    cardBorderWidth: 3, cardRadius: 18,
+    bandBg: "linear-gradient(120deg, #ff4fa3 0%, #ffce4f 100%)",
+    semanticOverrides: { gm: "#ff4fa3", player: "#4fd1ff", paid: "#ffce4f", free: "#4fe6a0", active: "#4fe6a0", hold: "#8894e8", danger: "#ff5c5c" },
+  }),
 ];
 
 // "Соевый Нуар" first — it's the default theme new users land on.
@@ -325,12 +412,12 @@ export function loadThemePrefs(): StoredThemePrefs {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { themeId: parsed.themeId || "noir", customThemes: parsed.customThemes || [] };
+      return { themeId: parsed.themeId || "zine", customThemes: parsed.customThemes || [] };
     }
   } catch {
     /* ignore */
   }
-  return { themeId: "noir", customThemes: [] };
+  return { themeId: "zine", customThemes: [] };
 }
 
 export function saveThemePrefs(prefs: StoredThemePrefs) {
