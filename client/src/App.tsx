@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./layout/AppShell";
 import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
@@ -13,6 +13,12 @@ import { useCurrentUser } from "./api/currentUser";
 const HomeCalendarPage = lazy(() => import("./pages/HomeCalendarPage").then((m) => ({ default: m.HomeCalendarPage })));
 const PlayerHomePage = lazy(() => import("./pages/PlayerHomePage").then((m) => ({ default: m.PlayerHomePage })));
 const CampaignsListPage = lazy(() => import("./pages/CampaignsListPage").then((m) => ({ default: m.CampaignsListPage })));
+const LibraryPage = lazy(() => import("./pages/LibraryPage").then((m) => ({ default: m.LibraryPage })));
+const PlayerLibraryPage = lazy(() =>
+  import("./pages/PlayerLibraryPage").then((m) => ({ default: m.PlayerLibraryPage }))
+);
+const GmMusicPage = lazy(() => import("./pages/GmMusicPage").then((m) => ({ default: m.GmMusicPage })));
+const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage").then((m) => ({ default: m.NowPlayingPage })));
 const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage").then((m) => ({ default: m.CampaignDetailPage })));
 const SessionDetailPage = lazy(() => import("./pages/SessionDetailPage").then((m) => ({ default: m.SessionDetailPage })));
 const SessionLivePage = lazy(() => import("./pages/SessionLivePage").then((m) => ({ default: m.SessionLivePage })));
@@ -43,7 +49,6 @@ const AppearanceSettingsPage = lazy(() =>
 );
 const AboutPage = lazy(() => import("./pages/AboutPage").then((m) => ({ default: m.AboutPage })));
 const InvitationsPage = lazy(() => import("./pages/InvitationsPage").then((m) => ({ default: m.InvitationsPage })));
-const MyCharactersPage = lazy(() => import("./pages/MyCharactersPage").then((m) => ({ default: m.MyCharactersPage })));
 const PlayerCabinetPage = lazy(() =>
   import("./pages/PlayerCabinetPage").then((m) => ({ default: m.PlayerCabinetPage }))
 );
@@ -86,6 +91,11 @@ function SettingDetailRoute() {
   if (loading) return null;
   return user?.role === "player" ? <PlayerSettingPage /> : <SettingDetailPage />;
 }
+function LibraryRoute() {
+  const { user, loading } = useCurrentUser();
+  if (loading) return null;
+  return user?.role === "player" ? <PlayerLibraryPage /> : <LibraryPage />;
+}
 
 function App() {
   return (
@@ -100,12 +110,17 @@ function App() {
             <Route path="/sessions/:id/live/panel/:panelKey" element={<SessionPanelPopoutPage />} />
             <Route element={<AppShell />}>
               <Route path="/" element={<HomeRoute />} />
+              <Route path="/library" element={<LibraryRoute />} />
+              <Route path="/player" element={<GmMusicPage />} />
+              <Route path="/now-playing" element={<NowPlayingPage />} />
               <Route path="/campaigns" element={<CampaignsRoute />} />
               <Route path="/campaigns/:id" element={<CampaignDetailRoute />} />
               <Route path="/sessions/:id" element={<SessionDetailPage />} />
               <Route path="/sessions/:id/live" element={<SessionLivePage />} />
               <Route path="/players" element={<PlayersListPage />} />
-              <Route path="/my-characters" element={<MyCharactersPage />} />
+              {/* Ticket 13: player character list moved into Кабинет — redirect the
+                  old standalone route for any stale links/bookmarks. */}
+              <Route path="/my-characters" element={<Navigate to="/cabinet" replace />} />
               <Route path="/cabinet" element={<PlayerCabinetPage />} />
               <Route path="/players/:id" element={<PlayerDetailPage />} />
               <Route path="/settings" element={<SettingsRoute />} />

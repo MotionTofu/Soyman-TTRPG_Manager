@@ -27,7 +27,8 @@ import type {
 // render, defeating the memo on every unrelated keystroke on this page.
 const PLOT_CHARACTER_TYPES = ["being", "character"];
 const LOCATION_TYPES = ["location"];
-const LOOT_TYPES = ["resource", "artifact"];
+const LOOT_TYPES = ["resource", "artifact", "compendium_entry"];
+const LOOT_COMPENDIUM_KINDS = ["equipment", "magic_item"];
 
 const SESSION_TABS = ["Обзор", "Подготовка", "Хроника", "Ресурсы"] as const;
 type SessionTab = (typeof SESSION_TABS)[number];
@@ -537,7 +538,8 @@ export function SessionDetailPage() {
             <summary>
               <strong className="entry-title">Игроки</strong>
             </summary>
-            <table>
+            <div className="session-attendance-table-wrap">
+            <table className="session-attendance-table">
               <thead>
                 <tr>
                   <th>Игрок</th>
@@ -563,8 +565,8 @@ export function SessionDetailPage() {
               <tbody>
                 {session.attendance.map((a) => (
                   <tr key={a.player_id}>
-                    <td>{a.name}</td>
-                    <td>
+                    <td data-label="Игрок">{a.name}</td>
+                    <td data-label="Пришёл">
                       <input
                         type="checkbox"
                         checked={!!a.attended}
@@ -574,7 +576,7 @@ export function SessionDetailPage() {
                       />
                     </td>
                     {!isPlayer && !hideFinance && (
-                      <td>
+                      <td data-label="Оплачено">
                         <input
                           type="number"
                           style={{ width: 90 }}
@@ -605,6 +607,7 @@ export function SessionDetailPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </details>
         </div>
       )}
@@ -673,7 +676,8 @@ export function SessionDetailPage() {
                   entityId={sessionId}
                   section="loot"
                   acceptTypes={LOOT_TYPES}
-                  placeholder="Перетащите сюда ресурс или артефакт из поиска"
+                  acceptCompendiumKinds={LOOT_COMPENDIUM_KINDS}
+                  placeholder="Перетащите сюда ресурс, артефакт или предмет из компендиума"
                 />
               </LazyDetails>
             </div>
@@ -681,7 +685,13 @@ export function SessionDetailPage() {
 
           {!isPlayer && (
             <LazyDetails title="Шпаргалки" className="card stack">
-              <CheatSheetsSection sessionId={sessionId} ideaNotes={session.idea_notes} />
+              <CheatSheetsSection
+                sessionId={sessionId}
+                campaignId={session.campaign_id}
+                ideaNotes={session.idea_notes}
+                cheatsheetData={session.cheatsheet_data}
+                unrevealedSecrets={unrevealedSecrets}
+              />
             </LazyDetails>
           )}
         </div>

@@ -5,6 +5,7 @@ import { useCurrentUser } from "../api/currentUser";
 import { SearchPanel } from "./SearchPanel";
 import { NavWidget } from "./NavWidget";
 import { PreviewDock } from "./PreviewDock";
+import { MobileQuickAccess, type QuickAccessContextualAction } from "./MobileQuickAccess";
 import { NavIcon, type NavIconName } from "../components/NavIcons";
 import { ParticleField } from "../components/ParticleField";
 import { AudioPlayerBar, MiniPlayerBar } from "../audioPlayer";
@@ -28,14 +29,13 @@ const GM_NAV_ITEMS: NavItem[] = [
   { to: "/graph", label: "Граф связей", icon: "graph" },
 ];
 
-// Player role: no GM tooling (Мастерение/Ресурсы/Граф связей), and "Игроки"
-// becomes "Персонажи" — the player's own characters instead of the roster.
+// Player role: no GM tooling (Мастерение/Ресурсы/Граф связей). The player's
+// own characters live inside "Кабинет" (ticket 13), not a standalone item.
 const PLAYER_NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Главная", icon: "home", end: true },
   { to: "/campaigns", label: "Кампании", icon: "campaigns" },
   { to: "/settings", label: "Сеттинги", icon: "settings" },
   { to: "/systems", label: "Системы", icon: "systems" },
-  { to: "/my-characters", label: "Персонажи", icon: "players" },
   { to: "/cabinet", label: "Кабинет", icon: "storages" },
 ];
 
@@ -73,32 +73,59 @@ interface BottomNavItem {
   onClick?: () => void;
 }
 
-function MobileBottomNav({ items }: { items: BottomNavItem[] }) {
+// Symmetric layout per §7.1/ticket 13: GM gets two flanking slots on each
+// side of the raised center button (2 + center + 2 = 5), the player gets one
+// on each side (1 + center + 1 = 3). The center button itself is not a nav
+// link — it opens the MobileQuickAccess sheet (pins + pin-current +
+// contextual action) instead of being a sixth nav destination.
+function MobileBottomNav({
+  leftItems,
+  rightItems,
+  onCenterClick,
+}: {
+  leftItems: BottomNavItem[];
+  rightItems: BottomNavItem[];
+  onCenterClick: () => void;
+}) {
+  function renderItem(item: BottomNavItem) {
+    return item.to ? (
+      <NavLink
+        key={item.key}
+        to={item.to}
+        end={item.to === "/"}
+        className={({ isActive }) => (isActive ? "active" : "")}
+      >
+        <NavIcon name={item.icon} />
+        <span>{item.label}</span>
+      </NavLink>
+    ) : (
+      <button
+        key={item.key}
+        type="button"
+        className={item.active ? "active" : ""}
+        onClick={item.onClick}
+      >
+        <NavIcon name={item.icon} />
+        <span>{item.label}</span>
+      </button>
+    );
+  }
+
   return (
     <nav className="mobile-bottom-nav">
-      {items.map((item) =>
-        item.to ? (
-          <NavLink
-            key={item.key}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) => (isActive ? "active" : "")}
-          >
-            <NavIcon name={item.icon} />
-            <span>{item.label}</span>
-          </NavLink>
-        ) : (
-          <button
-            key={item.key}
-            type="button"
-            className={item.active ? "active" : ""}
-            onClick={item.onClick}
-          >
-            <NavIcon name={item.icon} />
-            <span>{item.label}</span>
-          </button>
-        )
-      )}
+      {leftItems.map(renderItem)}
+      <div className="mobile-bottom-nav-center-wrap">
+        <span className="mobile-bottom-nav-halo" aria-hidden="true" />
+        <button
+          type="button"
+          className="mobile-bottom-nav-center"
+          onClick={onCenterClick}
+          aria-label="Быстрый доступ"
+        >
+          <NavIcon name="star" />
+        </button>
+      </div>
+      {rightItems.map(renderItem)}
     </nav>
   );
 }
@@ -168,15 +195,17 @@ export function AppShell() {
   // toggle button renders there, and .open has no effect on a static column).
   const [navOpen, setNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
 
   const navigate = useNavigate();
   const cockpitId = useNearestSessionCockpitId();
-  const bottomNavItems: BottomNavItem[] = isPlayer
-    ? [
-        { key: "library", label: "Библиотека", icon: "library", to: "/library" },
-        { key: "characters", label: "Персонажи", icon: "players", to: "/my-characters" },
-        { key: "cabinet", label: "Кабинет", icon: "storages", to: "/cabinet" },
-      ]
+
+  // Flanking slots around the raised center button — see MobileBottomNav's
+  // comment for the symmetric 2+center+2 / 1+center+1 split. Player's old
+  // third slot ("Персонажи") is gone — that list now lives inside "Кабинет"
+  // (see PlayerCabinetPage.tsx).
+  const bottomNavLeft: BottomNavItem[] = isPlayer
+    ? [{ key: "library", label: "Библиотека", icon: "library", to: "/library" }]
     : [
         {
           key: "session",
@@ -186,9 +215,27 @@ export function AppShell() {
           onClick: () => navigate(cockpitId ? `/sessions/${cockpitId}/live` : "/campaigns"),
         },
         { key: "library", label: "Библиотека", icon: "library", to: "/library" },
+      ];
+  const bottomNavRight: BottomNavItem[] = isPlayer
+    ? [{ key: "cabinet", label: "Кабинет", icon: "storages", to: "/cabinet" }]
+    : [
         { key: "players", label: "Игроки", icon: "players", to: "/players" },
         { key: "player", label: "Плеер", icon: "player", to: "/player" },
       ];
+
+  // Contextual action offered in the quick-access sheet: for the GM, jump to
+  // (or start) the nearest upcoming session's live cockpit — a real one-tap
+  // shortcut, not a token action. No equally clear candidate exists for the
+  // player role across arbitrary screens, so the sheet just omits this slot
+  // there rather than inventing a weak one (per ticket 13's guidance).
+  const contextualAction: QuickAccessContextualAction | null =
+    !isPlayer && cockpitId
+      ? {
+          label: "Начать сессию",
+          icon: "navCockpit",
+          onClick: () => navigate(`/sessions/${cockpitId}/live`),
+        }
+      : null;
 
   return (
     <div className={`app-shell${isLivePult ? " app-shell-live" : ""}`}>
@@ -266,7 +313,16 @@ export function AppShell() {
         </div>
       )}
       {!isPlayer && pathname !== "/now-playing" && <MiniPlayerBar />}
-      <MobileBottomNav items={bottomNavItems} />
+      <MobileBottomNav
+        leftItems={bottomNavLeft}
+        rightItems={bottomNavRight}
+        onCenterClick={() => setQuickOpen((open) => !open)}
+      />
+      <MobileQuickAccess
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        contextualAction={contextualAction}
+      />
     </div>
   );
 }

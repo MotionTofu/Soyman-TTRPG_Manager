@@ -1950,6 +1950,117 @@ details.card[open] summary {
     color: var(--accent);
     background: color-mix(in oklab, var(--accent) 14%, transparent);
   }
+  /* Tap feedback (§7.1/§9): a short scale-down on press, no bounce/jiggle. */
+  .mobile-bottom-nav a,
+  .mobile-bottom-nav button {
+    transition: transform 90ms var(--ease, ease);
+  }
+  .mobile-bottom-nav a:active,
+  .mobile-bottom-nav button:active {
+    transform: scale(0.94);
+  }
+
+  /* Raised circular center button (ticket 13, §7.1): ø56-60, filled with
+     --accent, sitting above the bar line with a radial halo behind it. Its
+     wrapper takes the 5th equal flex slot (like the a/button siblings)
+     since it's a plain div, not a nav link itself — the button/halo inside
+     are position:absolute so they can float above the bar without affecting
+     the row's height. */
+  .mobile-bottom-nav-center-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+  }
+  .mobile-bottom-nav-halo {
+    position: absolute;
+    top: -36px;
+    left: 50%;
+    width: 88px;
+    height: 88px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 50%, transparent) 0%, transparent 72%);
+    pointer-events: none;
+    z-index: 0;
+    /* var(--glow) resolves to the literal string "none" on every theme
+       except neon (see themes.ts §3.1) — box-shadow's sole value can
+       legally be "none", so this is a safe, automatically neon-only extra
+       glow layer with no per-theme branching needed. (Note: this can't live
+       on the center button's own box-shadow below, since combining a real
+       shadow with a comma-separated "none" layer is invalid CSS and drops
+       the whole declaration.) */
+    box-shadow: var(--glow);
+  }
+  /* Compound selector (two classes) is needed to out-specificity the
+     generic ".mobile-bottom-nav button" rule above (class+element beats a
+     single class) — otherwise its border-radius/background/border reset
+     this button back to a plain transparent nav item. */
+  .mobile-bottom-nav .mobile-bottom-nav-center {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 58px;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: var(--accent-text, var(--paper));
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    z-index: 1;
+    padding: 0;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+    transition: transform 90ms var(--ease, ease);
+  }
+  .mobile-bottom-nav .mobile-bottom-nav-center .nav-icon {
+    width: 26px;
+    height: 26px;
+  }
+  .mobile-bottom-nav .mobile-bottom-nav-center:active {
+    transform: translateX(-50%) scale(0.94);
+  }
+
+  /* Quick-access sheet the center button opens — pinned pages, "pin current
+     page", and an optional contextual action (see MobileQuickAccess.tsx). */
+  .mobile-quick-access-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  .mobile-quick-access-sheet {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0));
+    z-index: 46;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 14px;
+    background: var(--bg-panel);
+    border: var(--card-border-width, 1px) solid var(--border);
+    border-radius: var(--card-radius);
+  }
+  .mobile-quick-access-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .mobile-quick-access-link {
+    flex: 1;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 6px 0;
+  }
 
   /* "Now playing" capsule — only rendered at all while a track is playing
      (see MiniPlayerBar in audioPlayer.tsx, which returns null otherwise),
@@ -3501,6 +3612,53 @@ input.litm-theme-title {
     font-weight: 600;
   }
   .dnd-attacks-table td[data-label]:not(:first-child)::before {
+    content: attr(data-label) ": ";
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+}
+
+/* SessionDetailPage's "Игроки" attendance table — same overflow problem and
+   fix as .dnd-attacks-table above: the "Оплачено" input + "Ставка (N)" button
+   columns together are wider than a phone screen, and .app-content's
+   overflow-x:hidden was silently clipping the overflow instead of scrolling
+   it. Below 700px, un-table it into stacked rows the same way. */
+.session-attendance-table-wrap {
+  overflow-x: auto;
+}
+.session-attendance-table {
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .session-attendance-table-wrap {
+    overflow-x: visible;
+  }
+  .session-attendance-table thead {
+    display: none;
+  }
+  .session-attendance-table tbody {
+    display: block;
+  }
+  .session-attendance-table tr {
+    display: block;
+    padding: var(--sp-2) 0;
+    border-bottom: var(--card-border-width, 1px) solid var(--line);
+  }
+  .session-attendance-table tr:last-child {
+    border-bottom: none;
+  }
+  .session-attendance-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding: 2px 0;
+  }
+  .session-attendance-table td:first-child {
+    font-weight: 600;
+  }
+  .session-attendance-table td[data-label]:not(:first-child)::before {
     content: attr(data-label) ": ";
     font-size: 11px;
     text-transform: uppercase;

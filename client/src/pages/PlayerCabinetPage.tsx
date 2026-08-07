@@ -1,20 +1,46 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import type { Player } from "../types";
 
+interface MyCharacter {
+  id: number;
+  character_name: string;
+  campaign_id: number | null;
+  campaign_name: string | null;
+}
+
+interface PlayerMe {
+  player: { id: number; name: string } | null;
+  characters: MyCharacter[];
+}
+
 // The player's self-service "Кабинет" — editing their own account (display
 // name, avatar, login password), as opposed to /players/:id which is the
 // GM-only roster page. Scoped server-side to the caller's own playerId (see
 // playerAccess.ts) and own user row (PUT /auth/me), never another player's.
+//
+// Also hosts the player's character list (formerly the standalone
+// /my-characters page, folded in here by ticket 13 to free up a mobile
+// bottom-nav slot) — sourced from the same player-scoped /player/me endpoint.
 export function PlayerCabinetPage() {
   const { user } = useCurrentUser();
   const [player, setPlayer] = useState<Player | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [me, setMe] = useState<PlayerMe | null>(null);
+  const [charactersError, setCharactersError] = useState("");
+
+  useEffect(() => {
+    api
+      .get<PlayerMe>("/player/me")
+      .then(setMe)
+      .catch((e) => setCharactersError(String(e)));
+  }, []);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -153,6 +179,23 @@ export function PlayerCabinetPage() {
         <button className="primary" onClick={changePassword} disabled={passwordSaving}>
           {passwordSaving ? "Сохранение…" : "Сменить пароль"}
         </button>
+      </div>
+
+      <div className="card stack">
+        <strong>Персонажи</strong>
+        {charactersError && <p className="error">Не удалось загрузить персонажей: {charactersError}</p>}
+        {!charactersError && !me && <p className="muted">Загрузка…</p>}
+        {me && me.characters.length === 0 && <p className="muted">У вас пока нет персонажей.</p>}
+        {me && me.characters.length > 0 && (
+          <div className="stack" style={{ gap: 8 }}>
+            {me.characters.map((c) => (
+              <Link key={c.id} to={`/characters/${c.id}`} className="card row" style={{ textDecoration: "none", gap: 12 }}>
+                <strong>{c.character_name}</strong>
+                <span className="muted">{c.campaign_name ?? "без кампании"}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
