@@ -7,7 +7,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { LinkDropZone } from "../components/LinkDropZone";
 import { useTabState } from "../hooks/useTabState";
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
-import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
+import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
 
 const TABS = [
@@ -248,7 +248,28 @@ function ChaptersAndScenes({
   const [chapterName, setChapterName] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [dragId, setDragId] = useState<number | null>(null);
+  // Collapsed chapters, remembered per adventure so a long book doesn't
+  // re-expand every time the tab is reopened.
+  const storageKey = `adventure-collapsed-${arc.id}`;
+  const [collapsed, setCollapsed] = useState<number[]>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      return raw ? (JSON.parse(raw) as number[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const suffix = campaignId ? `?campaign=${campaignId}` : "";
+
+  function toggleCollapsed(groupArcId: number) {
+    setCollapsed((prev) => {
+      const next = prev.includes(groupArcId)
+        ? prev.filter((id) => id !== groupArcId)
+        : [...prev, groupArcId];
+      localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }
 
   async function createChapter() {
     if (!chapterName.trim()) return;
@@ -305,55 +326,96 @@ function ChaptersAndScenes({
     onChange();
   }
 
+  // Renaming a scene from inside a campaign goes through the same
+  // copy-on-write path as any other edit, so the setting's title is safe.
+  async function renameScene(scene: StoryScene) {
+    const name = prompt("Название сцены", scene.name);
+    if (!name?.trim() || name.trim() === scene.name) return;
+    await api.put(`/story/scenes/${scene.id}`, { name: name.trim(), campaign_id: campaignId });
+    onChange();
+  }
+
+  async function archiveScene(scene: StoryScene) {
+    if (!confirm(`Отправить сцену «${scene.name}» в архив?`)) return;
+    await api.del(`/story/scenes/${scene.id}`);
+    onChange();
+  }
+
   function renderGroup(title: string, groupArcId: number, scenes: StoryScene[], controls?: JSX.Element) {
+    const isCollapsed = collapsed.includes(groupArcId);
     return (
       <div className="card stack" key={groupArcId}>
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <strong className="entry-title">{title}</strong>
+          <button
+            type="button"
+            onClick={() => toggleCollapsed(groupArcId)}
+            title={isCollapsed ? "Развернуть" : "Свернуть"}
+          >
+            {isCollapsed ? "▶" : "▼"}
+          </button>
+          <strong className="entry-title" style={{ flex: 1 }}>
+            {title}
+            {isCollapsed && (
+              <span className="muted"> · {scenes.length} {sceneWord(scenes.length)}</span>
+            )}
+          </strong>
           {controls}
         </div>
-        <div className="entity-row-list">
-          {scenes.map((s) => (
-            <div
-              key={s.id}
-              className="entity-row"
-              draggable
-              onDragStart={() => setDragId(s.id)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => dragId != null && reorderScenes(scenes, dragId, s.id)}
-            >
-              <Link to={`/scenes/${s.id}${suffix}`} className="entity-row-name">
-                {s.name}
-              </Link>
-              <span className="muted">{SCENE_KINDS.find((k) => k.key === s.kind)?.label}</span>
-              {s.is_override && <span className="badge tag">изменено в кампании</span>}
-              {s.campaign_only && <span className="badge tag">только в кампании</span>}
-              {campaignId && (
-                <span className="entity-row-actions">
-                  <select
-                    value={s.state?.status ?? "pending"}
-                    onChange={(e) => setStatus(s, e.target.value)}
-                  >
-                    {SCENE_STATUSES.map((st) => (
-                      <option key={st.key} value={st.key}>
-                        {st.label}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-              )}
+        {!isCollapsed && (
+          <>
+            <div className="entity-row-list">
+              {scenes.map((s) => (
+                <div
+                  key={s.id}
+                  className="entity-row"
+                  draggable
+                  onDragStart={() => setDragId(s.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => dragId != null && reorderScenes(scenes, dragId, s.id)}
+                >
+                  <Link to={`/scenes/${s.id}${suffix}`} className="entity-row-name">
+                    {s.name}
+                  </Link>
+                  <span className="muted">{SCENE_KINDS.find((k) => k.key === s.kind)?.label}</span>
+                  {s.is_override && <span className="badge tag">изменено в кампании</span>}
+                  {s.campaign_only && <span className="badge tag">только в кампании</span>}
+                  <span className="entity-row-actions">
+                    {campaignId && (
+                      <select
+                        value={s.state?.status ?? "pending"}
+                        onChange={(e) => setStatus(s, e.target.value)}
+                      >
+                        {SCENE_STATUSES.map((st) => (
+                          <option key={st.key} value={st.key}>
+                            {st.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button onClick={() => renameScene(s)}>Переименовать</button>
+                    {/* Archiving a setting scene from inside a campaign would
+                        remove it for every other campaign too — only scenes
+                        that belong to this campaign can be archived here. */}
+                    {(!campaignId || s.campaign_only) && (
+                      <button className="danger" onClick={() => archiveScene(s)}>
+                        Архивировать
+                      </button>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {scenes.length === 0 && <p className="muted">Сцен пока нет.</p>}
             </div>
-          ))}
-          {scenes.length === 0 && <p className="muted">Сцен пока нет.</p>}
-        </div>
-        <div className="row">
-          <input
-            placeholder="Название сцены"
-            value={drafts[String(groupArcId)] ?? ""}
-            onChange={(e) => setDrafts((d) => ({ ...d, [String(groupArcId)]: e.target.value }))}
-          />
-          <button onClick={() => createScene(groupArcId)}>+ Сцена</button>
-        </div>
+            <div className="row">
+              <input
+                placeholder="Название сцены"
+                value={drafts[String(groupArcId)] ?? ""}
+                onChange={(e) => setDrafts((d) => ({ ...d, [String(groupArcId)]: e.target.value }))}
+              />
+              <button onClick={() => createScene(groupArcId)}>+ Сцена</button>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -362,7 +424,9 @@ function ChaptersAndScenes({
 
   return (
     <div className="stack">
-      <span className="muted">Сцены перетаскиваются внутри главы, главы двигаются стрелками.</span>
+      <span className="muted">
+        Сцены перетаскиваются внутри главы, главы двигаются стрелками и сворачиваются.
+      </span>
       {renderGroup(arc.chapters.length > 0 ? "Без главы" : "Сцены", arc.id, direct)}
       {arc.chapters.map((c) =>
         renderGroup(

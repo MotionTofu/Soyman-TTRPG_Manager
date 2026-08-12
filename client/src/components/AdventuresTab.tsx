@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { sceneWord } from "../sceneKinds";
 import type { StoryArc } from "../types";
 
 // "Приключения" — the index of a setting's prepared story blocks. Everything
@@ -110,12 +111,4 @@ export function AdventuresTab({
       </div>
     </div>
   );
-}
-
-function sceneWord(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "сцена";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "сцены";
-  return "сцен";
 }
