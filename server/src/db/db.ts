@@ -1186,7 +1186,16 @@ export function openDatabase(dbDir: string): Database.Database {
       setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
       parent_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'adventure',
       description TEXT NOT NULL DEFAULT '',
+      hook TEXT NOT NULL DEFAULT '',
+      recommended_level TEXT NOT NULL DEFAULT '',
+      player_count TEXT NOT NULL DEFAULT '',
+      duration TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      tags TEXT NOT NULL DEFAULT '',
+      thumbnail_image_path TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       archived_at TEXT
@@ -1235,7 +1244,8 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!tableExists(database, "story_scene_rewards")) {
     database.exec(`CREATE TABLE story_scene_rewards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+      scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+      arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
       what TEXT NOT NULL DEFAULT '',
       where_found TEXT NOT NULL DEFAULT '',
       notes TEXT NOT NULL DEFAULT '',
@@ -1243,6 +1253,7 @@ export function openDatabase(dbDir: string): Database.Database {
       position INTEGER NOT NULL DEFAULT 0
     )`);
     database.exec("CREATE INDEX idx_story_scene_rewards_scene ON story_scene_rewards(scene_id)");
+    database.exec("CREATE INDEX idx_story_scene_rewards_arc ON story_scene_rewards(arc_id)");
   }
 
   if (!tableExists(database, "story_scene_transitions")) {
@@ -1255,6 +1266,102 @@ export function openDatabase(dbDir: string): Database.Database {
       UNIQUE(from_scene_id, to_scene_id, label)
     )`);
     database.exec("CREATE INDEX idx_story_scene_transitions_from ON story_scene_transitions(from_scene_id)");
+  }
+
+  // Arcs gained a profile page of their own: an explicit adventure/chapter
+  // distinction, the Обзор fields, and the flag marking each setting's
+  // auto-created "Сцены вне приключений" bucket.
+  for (const [col, ddl] of [
+    ["kind", "ALTER TABLE story_arcs ADD COLUMN kind TEXT NOT NULL DEFAULT 'adventure'"],
+    ["hook", "ALTER TABLE story_arcs ADD COLUMN hook TEXT NOT NULL DEFAULT ''"],
+    ["recommended_level", "ALTER TABLE story_arcs ADD COLUMN recommended_level TEXT NOT NULL DEFAULT ''"],
+    ["player_count", "ALTER TABLE story_arcs ADD COLUMN player_count TEXT NOT NULL DEFAULT ''"],
+    ["duration", "ALTER TABLE story_arcs ADD COLUMN duration TEXT NOT NULL DEFAULT ''"],
+    ["source", "ALTER TABLE story_arcs ADD COLUMN source TEXT NOT NULL DEFAULT ''"],
+    ["tags", "ALTER TABLE story_arcs ADD COLUMN tags TEXT NOT NULL DEFAULT ''"],
+    ["thumbnail_image_path", "ALTER TABLE story_arcs ADD COLUMN thumbnail_image_path TEXT"],
+    ["is_default", "ALTER TABLE story_arcs ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0"],
+  ] as const) {
+    if (tableExists(database, "story_arcs") && !columnExists(database, "story_arcs", col)) {
+      database.exec(ddl);
+    }
+  }
+
+  // Rewards can also hang off the adventure itself, not just a scene, so the
+  // profile's Награды tab has somewhere to put "выдаётся за всё приключение".
+  // scene_id therefore has to become nullable, which SQLite only allows via a
+  // table rebuild — cheap here, and guarded so it runs at most once.
+  if (
+    tableExists(database, "story_scene_rewards") &&
+    columnIsNotNull(database, "story_scene_rewards", "scene_id")
+  ) {
+    database.exec("ALTER TABLE story_scene_rewards RENAME TO story_scene_rewards_old");
+    database.exec(`CREATE TABLE story_scene_rewards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+      arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+      what TEXT NOT NULL DEFAULT '',
+      where_found TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      artifact_id INTEGER REFERENCES artifacts(id) ON DELETE SET NULL,
+      position INTEGER NOT NULL DEFAULT 0
+    )`);
+    // The older shape may or may not already carry arc_id (an interim
+    // migration added it as a plain column), so copy only the columns both
+    // shapes are guaranteed to have.
+    database.exec(
+      `INSERT INTO story_scene_rewards (id, scene_id, what, where_found, notes, artifact_id, position)
+       SELECT id, scene_id, what, where_found, notes, artifact_id, position FROM story_scene_rewards_old`
+    );
+    database.exec("DROP TABLE story_scene_rewards_old");
+    database.exec("CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_scene ON story_scene_rewards(scene_id)");
+    database.exec("CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_arc ON story_scene_rewards(arc_id)");
+  }
+
+  if (!tableExists(database, "story_milestones")) {
+    database.exec(`CREATE TABLE story_milestones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+      scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0
+    )`);
+    database.exec("CREATE INDEX idx_story_milestones_arc ON story_milestones(arc_id)");
+  }
+
+  if (!tableExists(database, "campaign_milestone_state")) {
+    database.exec(`CREATE TABLE campaign_milestone_state (
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      milestone_id INTEGER NOT NULL REFERENCES story_milestones(id) ON DELETE CASCADE,
+      achieved INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (campaign_id, milestone_id)
+    )`);
+  }
+
+  if (!tableExists(database, "story_secrets")) {
+    database.exec(`CREATE TABLE story_secrets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'secret',
+      title TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0
+    )`);
+    database.exec("CREATE INDEX idx_story_secrets_arc ON story_secrets(arc_id)");
+  }
+
+  if (!tableExists(database, "campaign_secret_state")) {
+    database.exec(`CREATE TABLE campaign_secret_state (
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      secret_id INTEGER NOT NULL REFERENCES story_secrets(id) ON DELETE CASCADE,
+      revealed INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (campaign_id, secret_id)
+    )`);
   }
 
   if (!tableExists(database, "campaign_scene_state")) {

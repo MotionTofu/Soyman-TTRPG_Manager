@@ -433,7 +433,19 @@ CREATE TABLE IF NOT EXISTS story_arcs (
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   parent_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'adventure', -- adventure | chapter
+  description TEXT NOT NULL DEFAULT '',   -- синопсис
+  hook TEXT NOT NULL DEFAULT '',          -- завязка: как партия сюда попадает
+  recommended_level TEXT NOT NULL DEFAULT '',
+  player_count TEXT NOT NULL DEFAULT '',
+  duration TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT '',        -- книга/автор/страницы, заполняет импортёр
+  tags TEXT NOT NULL DEFAULT '',
+  thumbnail_image_path TEXT,
+  -- Each setting gets exactly one auto-created "Сцены вне приключений"
+  -- bucket, so a scene never has to live outside an adventure. It can't be
+  -- renamed or archived.
+  is_default INTEGER NOT NULL DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
@@ -489,9 +501,12 @@ CREATE INDEX IF NOT EXISTS idx_story_scene_checks_scene ON story_scene_checks(sc
 
 -- Loot/rewards available in a scene. artifact_id optionally ties a line to a
 -- real entry in the setting's Сокровищница; plain text works without one.
+-- Exactly one of scene_id / arc_id is set: loot found in a scene, or a
+-- reward granted for the adventure as a whole.
 CREATE TABLE IF NOT EXISTS story_scene_rewards (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+  arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
   what TEXT NOT NULL DEFAULT '',
   where_found TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
@@ -499,6 +514,51 @@ CREATE TABLE IF NOT EXISTS story_scene_rewards (
   position INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_scene ON story_scene_rewards(scene_id);
+CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_arc ON story_scene_rewards(arc_id);
+
+-- "Вехи" — ordered story checkpoints of an adventure, optionally tied to the
+-- scene that delivers them. Defined once in the setting; whether a campaign
+-- has reached one lives in campaign_milestone_state, same split as scenes and
+-- their progress.
+CREATE TABLE IF NOT EXISTS story_milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_story_milestones_arc ON story_milestones(arc_id);
+
+CREATE TABLE IF NOT EXISTS campaign_milestone_state (
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  milestone_id INTEGER NOT NULL REFERENCES story_milestones(id) ON DELETE CASCADE,
+  achieved INTEGER NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (campaign_id, milestone_id)
+);
+
+-- "Тайны и зацепки" of an adventure — the threads/clues/secrets block books
+-- usually carry. Reveal state is per campaign, like milestones above.
+CREATE TABLE IF NOT EXISTS story_secrets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'secret', -- secret | clue | thread
+  title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_story_secrets_arc ON story_secrets(arc_id);
+
+CREATE TABLE IF NOT EXISTS campaign_secret_state (
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  secret_id INTEGER NOT NULL REFERENCES story_secrets(id) ON DELETE CASCADE,
+  revealed INTEGER NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (campaign_id, secret_id)
+);
 
 -- Directed "what can follow what" edges, with the condition as the label
 -- ("если убедили стражника"). Drawn as arrows by the future node editor and

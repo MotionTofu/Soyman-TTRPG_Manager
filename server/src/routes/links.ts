@@ -15,6 +15,7 @@ const NODE_TABLES: Record<string, { table: string; nameCol: string }> = {
   resource: { table: "resources", nameCol: "name" },
   mastering: { table: "mastering_notes", nameCol: "title" },
   scene: { table: "story_scenes", nameCol: "name" },
+  adventure: { table: "story_arcs", nameCol: "name" },
 };
 
 interface GraphNode {
@@ -45,6 +46,7 @@ const SETTING_SCOPE_QUERIES: Record<string, string> = {
   // Only the setting's own scenes — a campaign's copy-on-write overrides
   // belong to that campaign's view, not to the setting-wide graph.
   scene: "SELECT id FROM story_scenes WHERE setting_id = ? AND campaign_id IS NULL",
+  adventure: "SELECT id FROM story_arcs WHERE setting_id = ?",
 };
 
 // Node types a `campaign_id` graph filter can resolve down to.

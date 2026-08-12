@@ -1124,11 +1124,60 @@ export interface StoryArc {
   setting_id: number;
   parent_id: number | null;
   name: string;
+  kind: "adventure" | "chapter";
   description: string;
+  hook: string;
+  recommended_level: string;
+  player_count: string;
+  duration: string;
+  source: string;
+  tags: string;
+  thumbnail_image_path: string | null;
+  // The setting's single auto-created "Сцены вне приключений" bucket: can't
+  // be renamed or archived.
+  is_default: number;
   position: number;
   scene_count: number;
   created_at: string;
   archived_at: string | null;
+}
+
+export interface StoryMilestone {
+  id: number;
+  arc_id: number;
+  scene_id: number | null;
+  scene_name: string | null;
+  title: string;
+  description: string;
+  position: number;
+  state?: { achieved: number; note: string } | null;
+}
+
+export interface StorySecret {
+  id: number;
+  arc_id: number;
+  kind: "secret" | "clue" | "thread";
+  title: string;
+  content: string;
+  position: number;
+  state?: { revealed: number; note: string } | null;
+}
+
+export interface CastMember {
+  type: string;
+  id: number;
+  name: string;
+  sections: string[];
+  scenes: string[];
+}
+
+export interface StoryArcDetail extends StoryArc {
+  chapters: StoryArc[];
+  scenes: StoryScene[];
+  milestones: StoryMilestone[];
+  secrets: StorySecret[];
+  rewards: (SceneReward & { scene_name: string | null; arc_id: number | null })[];
+  cast: CastMember[];
 }
 
 export interface StoryScene {

@@ -137,15 +137,56 @@ function sceneExtras(sceneId: number) {
 
 // ---------------------------------------------------------------- arcs
 
+const ARC_FIELDS = [
+  "name",
+  "kind",
+  "description",
+  "hook",
+  "recommended_level",
+  "player_count",
+  "duration",
+  "source",
+  "tags",
+  "position",
+  "parent_id",
+] as const;
+
+// Every setting owns exactly one "Сцены вне приключений" adventure so a scene
+// always has a home; created on demand, and any scene left without an arc by
+// an older version gets swept into it.
+function ensureDefaultArc(settingId: number): number {
+  const existing = db
+    .prepare("SELECT id FROM story_arcs WHERE setting_id = ? AND is_default = 1")
+    .get(settingId) as { id: number } | undefined;
+  const id =
+    existing?.id ??
+    Number(
+      db
+        .prepare(
+          `INSERT INTO story_arcs (setting_id, name, kind, is_default, position)
+           VALUES (?, 'Сцены вне приключений', 'adventure', 1, -1)`
+        )
+        .run(settingId).lastInsertRowid
+    );
+  db.prepare("UPDATE story_scenes SET arc_id = ? WHERE setting_id = ? AND arc_id IS NULL").run(
+    id,
+    settingId
+  );
+  return id;
+}
+
+function sceneCountSql(alias: string) {
+  return `(SELECT COUNT(*) FROM story_scenes s
+           WHERE s.arc_id = ${alias}.id AND s.campaign_id IS NULL AND s.archived_at IS NULL)`;
+}
+
 storyRouter.get("/arcs", (req, res) => {
   const { setting_id } = req.query as { setting_id?: string };
   if (!setting_id) return res.status(400).json({ error: "setting_id is required" });
+  ensureDefaultArc(Number(setting_id));
   const arcs = db
     .prepare(
-      `SELECT a.*, (
-         SELECT COUNT(*) FROM story_scenes s
-         WHERE s.arc_id = a.id AND s.campaign_id IS NULL AND s.archived_at IS NULL
-       ) as scene_count
+      `SELECT a.*, ${sceneCountSql("a")} as scene_count
        FROM story_arcs a
        WHERE a.setting_id = ? AND a.archived_at IS NULL
        ORDER BY a.position, a.id`
@@ -153,6 +194,179 @@ storyRouter.get("/arcs", (req, res) => {
     .all(setting_id);
   res.json(arcs);
 });
+
+// Full adventure profile: its chapters, the scenes under each, milestones,
+// secrets, rewards (own + rolled up from scenes) and the cast rolled up from
+// every scene's links. ?campaign_id= swaps in that campaign's scene overrides
+// and adds its milestone/secret/scene progress.
+storyRouter.get("/arcs/:id", (req, res) => {
+  const arc = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(req.params.id) as
+    | { id: number; setting_id: number }
+    | undefined;
+  if (!arc) return res.status(404).json({ error: "not found" });
+  const campaignId = req.query.campaign_id ? Number(req.query.campaign_id) : null;
+
+  const chapters = db
+    .prepare(
+      `SELECT a.*, ${sceneCountSql("a")} as scene_count FROM story_arcs a
+       WHERE a.parent_id = ? AND a.archived_at IS NULL ORDER BY a.position, a.id`
+    )
+    .all(arc.id) as { id: number }[];
+  const arcIds = [arc.id, ...chapters.map((c) => c.id)];
+  const placeholders = arcIds.map(() => "?").join(",");
+
+  const originals = db
+    .prepare(
+      `SELECT * FROM story_scenes
+       WHERE arc_id IN (${placeholders}) AND campaign_id IS NULL AND archived_at IS NULL
+       ORDER BY position, id`
+    )
+    .all(...arcIds) as SceneRow[];
+
+  let scenes: Record<string, unknown>[] = originals.map((s) => ({
+    ...s,
+    is_override: false,
+    campaign_only: false,
+    state: null,
+  }));
+  if (campaignId != null) {
+    const overrides = overrideMap(campaignId, arc.setting_id);
+    const own = db
+      .prepare(
+        `SELECT * FROM story_scenes
+         WHERE campaign_id = ? AND arc_id IN (${placeholders})
+           AND source_scene_id IS NULL AND archived_at IS NULL
+         ORDER BY position, id`
+      )
+      .all(campaignId, ...arcIds) as SceneRow[];
+    const getState = db.prepare(
+      "SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?"
+    );
+    scenes = [...originals.map((s) => overrides.get(s.id) ?? s), ...own]
+      .map((s) => ({
+        ...s,
+        is_override: s.campaign_id === campaignId && s.source_scene_id != null,
+        campaign_only: s.campaign_id === campaignId && s.source_scene_id == null,
+        state: getState.get(campaignId, s.id) ?? null,
+      }))
+      .sort((a, b) => a.position - b.position || a.id - b.id);
+  }
+
+  const milestones = db
+    .prepare(
+      `SELECT m.*, s.name as scene_name FROM story_milestones m
+       LEFT JOIN story_scenes s ON s.id = m.scene_id
+       WHERE m.arc_id = ? ORDER BY m.position, m.id`
+    )
+    .all(arc.id) as { id: number }[];
+  const secrets = db
+    .prepare("SELECT * FROM story_secrets WHERE arc_id = ? ORDER BY position, id")
+    .all(arc.id) as { id: number }[];
+  if (campaignId != null) {
+    const ms = db.prepare(
+      "SELECT achieved, note FROM campaign_milestone_state WHERE campaign_id = ? AND milestone_id = ?"
+    );
+    const ss = db.prepare(
+      "SELECT revealed, note FROM campaign_secret_state WHERE campaign_id = ? AND secret_id = ?"
+    );
+    milestones.forEach((m) => Object.assign(m, { state: ms.get(campaignId, m.id) ?? null }));
+    secrets.forEach((s) => Object.assign(s, { state: ss.get(campaignId, s.id) ?? null }));
+  }
+
+  // Rewards: the adventure's own plus every scene's, tagged with where they
+  // come from so the profile can show one list.
+  const sceneIds = (scenes as { id: number }[]).map((s) => s.id);
+  const rewards = [
+    ...(db
+      .prepare(
+        `SELECT r.*, a.name as artifact_name, NULL as scene_name
+         FROM story_scene_rewards r LEFT JOIN artifacts a ON a.id = r.artifact_id
+         WHERE r.arc_id = ? ORDER BY r.position, r.id`
+      )
+      .all(arc.id) as unknown[]),
+    ...(sceneIds.length
+      ? (db
+          .prepare(
+            `SELECT r.*, a.name as artifact_name, sc.name as scene_name
+             FROM story_scene_rewards r
+             LEFT JOIN artifacts a ON a.id = r.artifact_id
+             JOIN story_scenes sc ON sc.id = r.scene_id
+             WHERE r.scene_id IN (${sceneIds.map(() => "?").join(",")})
+             ORDER BY r.position, r.id`
+          )
+          .all(...sceneIds) as unknown[])
+      : []),
+  ];
+
+  res.json({
+    ...arc,
+    chapters,
+    scenes,
+    milestones,
+    secrets,
+    rewards,
+    cast: collectCast(arc.id, sceneIds),
+  });
+});
+
+// "Действующие лица": every entity linked from any scene of this adventure,
+// deduplicated, with the scenes it appears in — plus links attached to the
+// adventure itself (from_type='adventure').
+function collectCast(arcId: number, sceneIds: number[]) {
+  const rows: { to_type: string; to_id: number; section: string | null; scene_name: string | null }[] =
+    [];
+  rows.push(
+    ...(db
+      .prepare(
+        "SELECT to_type, to_id, section, NULL as scene_name FROM generic_links WHERE from_type = 'adventure' AND from_id = ?"
+      )
+      .all(arcId) as typeof rows)
+  );
+  if (sceneIds.length) {
+    rows.push(
+      ...(db
+        .prepare(
+          `SELECT l.to_type, l.to_id, l.section, s.name as scene_name
+           FROM generic_links l JOIN story_scenes s ON s.id = l.from_id
+           WHERE l.from_type = 'scene' AND l.from_id IN (${sceneIds.map(() => "?").join(",")})`
+        )
+        .all(...sceneIds) as typeof rows)
+    );
+  }
+  const byKey = new Map<
+    string,
+    { type: string; id: number; name: string; sections: string[]; scenes: string[] }
+  >();
+  for (const r of rows) {
+    const table = NODE_NAME_TABLES[r.to_type];
+    if (!table) continue;
+    const key = `${r.to_type}:${r.to_id}`;
+    let entry = byKey.get(key);
+    if (!entry) {
+      const row = db
+        .prepare(`SELECT ${table.nameCol} as name FROM ${table.table} WHERE id = ?`)
+        .get(r.to_id) as { name: string } | undefined;
+      entry = { type: r.to_type, id: r.to_id, name: row?.name ?? `#${r.to_id}`, sections: [], scenes: [] };
+      byKey.set(key, entry);
+    }
+    if (r.section && !entry.sections.includes(r.section)) entry.sections.push(r.section);
+    if (r.scene_name && !entry.scenes.includes(r.scene_name)) entry.scenes.push(r.scene_name);
+  }
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Name lookup for cast rows. Deliberately a local copy of links.ts's
+// NODE_TABLES rather than an import: this one only needs the types a scene
+// can actually link to, and must not grow a dependency on the graph module.
+const NODE_NAME_TABLES: Record<string, { table: string; nameCol: string }> = {
+  location: { table: "setting_locations", nameCol: "name" },
+  being: { table: "setting_beings", nameCol: "name" },
+  community: { table: "setting_communities", nameCol: "name" },
+  character: { table: "characters", nameCol: "character_name" },
+  artifact: { table: "artifacts", nameCol: "name" },
+  resource: { table: "resources", nameCol: "name" },
+  compendium_entry: { table: "compendium_entries", nameCol: "name" },
+};
 
 storyRouter.post("/arcs", (req, res) => {
   const { setting_id, parent_id, name, description } = req.body as {
@@ -178,37 +392,179 @@ storyRouter.post("/arcs", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(info.lastInsertRowid));
 });
 
+// Registered before PUT /arcs/:id, or Express matches "reorder" as :id (the
+// same trap resources.ts documents).
+storyRouter.put("/arcs/reorder", (req, res) => {
+  const { order } = req.body as { order: number[] };
+  const setPos = db.prepare("UPDATE story_arcs SET position = ? WHERE id = ?");
+  db.transaction((ids: number[]) => ids.forEach((id, i) => setPos.run(i, id)))(order ?? []);
+  res.json({ ok: true });
+});
+
+storyRouter.put("/scenes/reorder", (req, res) => {
+  const { order } = req.body as { order: number[] };
+  const setPos = db.prepare("UPDATE story_scenes SET position = ? WHERE id = ?");
+  db.transaction((ids: number[]) => ids.forEach((id, i) => setPos.run(i, id)))(order ?? []);
+  res.json({ ok: true });
+});
+
 storyRouter.put("/arcs/:id", (req, res) => {
-  const { name, description, position, parent_id } = req.body as {
-    name?: string;
-    description?: string;
-    position?: number;
-    parent_id?: number | null;
-  };
-  db.prepare(
-    `UPDATE story_arcs SET
-       name = CASE WHEN ? THEN ? ELSE name END,
-       description = CASE WHEN ? THEN ? ELSE description END,
-       position = CASE WHEN ? THEN ? ELSE position END,
-       parent_id = CASE WHEN ? THEN ? ELSE parent_id END
-     WHERE id = ?`
-  ).run(
-    name !== undefined ? 1 : 0,
-    name ?? null,
-    description !== undefined ? 1 : 0,
-    description ?? null,
-    position !== undefined ? 1 : 0,
-    position ?? null,
-    parent_id !== undefined ? 1 : 0,
-    parent_id ?? null,
-    req.params.id
-  );
+  const arc = db.prepare("SELECT is_default FROM story_arcs WHERE id = ?").get(req.params.id) as
+    | { is_default: number }
+    | undefined;
+  if (!arc) return res.status(404).json({ error: "not found" });
+  // The auto-created bucket keeps its name so it stays recognizable.
+  if (arc.is_default === 1 && req.body.name !== undefined) {
+    return res.status(400).json({ error: "Стандартное приключение нельзя переименовать" });
+  }
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  for (const field of ARC_FIELDS) {
+    if (req.body[field] === undefined) continue;
+    sets.push(`${field} = ?`);
+    values.push(req.body[field]);
+  }
+  if (sets.length > 0) {
+    db.prepare(`UPDATE story_arcs SET ${sets.join(", ")} WHERE id = ?`).run(...values, req.params.id);
+  }
   res.json(db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(req.params.id));
 });
 
 storyRouter.delete("/arcs/:id", (req, res) => {
+  const arc = db.prepare("SELECT is_default FROM story_arcs WHERE id = ?").get(req.params.id) as
+    | { is_default: number }
+    | undefined;
+  if (arc?.is_default === 1) {
+    return res.status(400).json({ error: "Стандартное приключение нельзя архивировать" });
+  }
   db.prepare("UPDATE story_arcs SET archived_at = datetime('now') WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// ------------------------------------------------------ milestones / secrets
+
+storyRouter.post("/arcs/:id/milestones", (req, res) => {
+  const { title, description, scene_id } = req.body as {
+    title?: string;
+    description?: string;
+    scene_id?: number | null;
+  };
+  if (!title?.trim()) return res.status(400).json({ error: "title is required" });
+  const position =
+    (db.prepare("SELECT MAX(position) as m FROM story_milestones WHERE arc_id = ?").get(req.params.id) as {
+      m: number | null;
+    }).m ?? -1;
+  db.prepare(
+    "INSERT INTO story_milestones (arc_id, scene_id, title, description, position) VALUES (?, ?, ?, ?, ?)"
+  ).run(req.params.id, scene_id ?? null, title.trim(), description ?? "", position + 1);
+  res.status(201).json({ ok: true });
+});
+
+storyRouter.put("/milestones/reorder", (req, res) => {
+  const { order } = req.body as { order: number[] };
+  const setPos = db.prepare("UPDATE story_milestones SET position = ? WHERE id = ?");
+  db.transaction((ids: number[]) => ids.forEach((id, i) => setPos.run(i, id)))(order ?? []);
+  res.json({ ok: true });
+});
+
+storyRouter.put("/milestones/:milestoneId", (req, res) => {
+  const { title, description, scene_id } = req.body as Record<string, unknown>;
+  db.prepare(
+    `UPDATE story_milestones SET
+       title = COALESCE(?, title), description = COALESCE(?, description),
+       scene_id = CASE WHEN ? THEN ? ELSE scene_id END
+     WHERE id = ?`
+  ).run(
+    (title as string) ?? null,
+    (description as string) ?? null,
+    scene_id !== undefined ? 1 : 0,
+    (scene_id as number) ?? null,
+    req.params.milestoneId
+  );
+  res.json(db.prepare("SELECT * FROM story_milestones WHERE id = ?").get(req.params.milestoneId));
+});
+
+storyRouter.delete("/milestones/:milestoneId", (req, res) => {
+  db.prepare("DELETE FROM story_milestones WHERE id = ?").run(req.params.milestoneId);
+  res.json({ ok: true });
+});
+
+storyRouter.put("/milestones/:milestoneId/state", (req, res) => {
+  const { campaign_id, achieved, note } = req.body as {
+    campaign_id: number;
+    achieved?: boolean;
+    note?: string;
+  };
+  if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  db.prepare(
+    `INSERT INTO campaign_milestone_state (campaign_id, milestone_id, achieved, note, updated_at)
+     VALUES (?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(campaign_id, milestone_id) DO UPDATE SET
+       achieved = excluded.achieved, note = excluded.note, updated_at = datetime('now')`
+  ).run(campaign_id, req.params.milestoneId, achieved ? 1 : 0, note ?? "");
+  res.json({ ok: true });
+});
+
+storyRouter.post("/arcs/:id/secrets", (req, res) => {
+  const { title, content, kind } = req.body as { title?: string; content?: string; kind?: string };
+  if (!title?.trim()) return res.status(400).json({ error: "title is required" });
+  const position =
+    (db.prepare("SELECT MAX(position) as m FROM story_secrets WHERE arc_id = ?").get(req.params.id) as {
+      m: number | null;
+    }).m ?? -1;
+  db.prepare(
+    "INSERT INTO story_secrets (arc_id, kind, title, content, position) VALUES (?, ?, ?, ?, ?)"
+  ).run(req.params.id, kind ?? "secret", title.trim(), content ?? "", position + 1);
+  res.status(201).json({ ok: true });
+});
+
+storyRouter.put("/secrets/:secretId", (req, res) => {
+  const { title, content, kind } = req.body as Record<string, string | undefined>;
+  db.prepare(
+    `UPDATE story_secrets SET title = COALESCE(?, title), content = COALESCE(?, content),
+       kind = COALESCE(?, kind) WHERE id = ?`
+  ).run(title ?? null, content ?? null, kind ?? null, req.params.secretId);
+  res.json(db.prepare("SELECT * FROM story_secrets WHERE id = ?").get(req.params.secretId));
+});
+
+storyRouter.delete("/secrets/:secretId", (req, res) => {
+  db.prepare("DELETE FROM story_secrets WHERE id = ?").run(req.params.secretId);
+  res.json({ ok: true });
+});
+
+storyRouter.put("/secrets/:secretId/state", (req, res) => {
+  const { campaign_id, revealed, note } = req.body as {
+    campaign_id: number;
+    revealed?: boolean;
+    note?: string;
+  };
+  if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  db.prepare(
+    `INSERT INTO campaign_secret_state (campaign_id, secret_id, revealed, note, updated_at)
+     VALUES (?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(campaign_id, secret_id) DO UPDATE SET
+       revealed = excluded.revealed, note = excluded.note, updated_at = datetime('now')`
+  ).run(campaign_id, req.params.secretId, revealed ? 1 : 0, note ?? "");
+  res.json({ ok: true });
+});
+
+// Reward granted for the adventure as a whole rather than found in a scene.
+storyRouter.post("/arcs/:id/rewards", (req, res) => {
+  const position =
+    (db.prepare("SELECT MAX(position) as m FROM story_scene_rewards WHERE arc_id = ?").get(req.params.id) as {
+      m: number | null;
+    }).m ?? -1;
+  db.prepare(
+    "INSERT INTO story_scene_rewards (arc_id, what, where_found, notes, artifact_id, position) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(
+    req.params.id,
+    req.body.what ?? "",
+    req.body.where_found ?? "",
+    req.body.notes ?? "",
+    req.body.artifact_id ?? null,
+    position + 1
+  );
+  res.status(201).json({ ok: true });
 });
 
 // -------------------------------------------------------------- scenes

@@ -37,6 +37,7 @@ const CharacterDetailPage = lazy(() => import("./pages/CharacterDetailPage").the
 const ArchivePage = lazy(() => import("./pages/ArchivePage").then((m) => ({ default: m.ArchivePage })));
 const LocationDetailPage = lazy(() => import("./pages/LocationDetailPage").then((m) => ({ default: m.LocationDetailPage })));
 const BeingDetailPage = lazy(() => import("./pages/BeingDetailPage").then((m) => ({ default: m.BeingDetailPage })));
+const AdventureDetailPage = lazy(() => import("./pages/AdventureDetailPage").then((m) => ({ default: m.AdventureDetailPage })));
 const SceneDetailPage = lazy(() => import("./pages/SceneDetailPage").then((m) => ({ default: m.SceneDetailPage })));
 const ArtifactDetailPage = lazy(() => import("./pages/ArtifactDetailPage").then((m) => ({ default: m.ArtifactDetailPage })));
 const CommunityDetailPage = lazy(() => import("./pages/CommunityDetailPage").then((m) => ({ default: m.CommunityDetailPage })));
@@ -134,6 +135,7 @@ function App() {
               <Route path="/locations/:id" element={<LocationDetailPage />} />
               <Route path="/beings/:id" element={<BeingDetailPage />} />
               <Route path="/scenes/:id" element={<SceneDetailPage />} />
+              <Route path="/adventures/:id" element={<AdventureDetailPage />} />
               <Route path="/artifacts/:id" element={<ArtifactDetailPage />} />
               <Route path="/communities/:id" element={<CommunityDetailPage />} />
               <Route path="/compendium/:id" element={<CompendiumEntryRedirectPage />} />

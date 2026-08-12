@@ -1,0 +1,667 @@
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { api } from "../api/client";
+import { Breadcrumbs } from "../components/Breadcrumbs";
+import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EditableTextCard } from "../components/EditableTextCard";
+import { LinkDropZone } from "../components/LinkDropZone";
+import { useTabState } from "../hooks/useTabState";
+import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
+import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
+import type { Setting, StoryArcDetail, StoryScene } from "../types";
+
+const TABS = [
+  "Обзор",
+  "Главы и сцены",
+  "Вехи",
+  "Действующие лица",
+  "Награды",
+  "Тайны и зацепки",
+] as const;
+
+const SECRET_KINDS = [
+  { key: "secret", label: "Тайна" },
+  { key: "clue", label: "Улика" },
+  { key: "thread", label: "Нить" },
+];
+
+// Profile of one adventure. Opened from a setting (originals) or from a
+// campaign (?campaign=<id>), where scene edits go through the copy-on-write
+// layer and milestones/secrets/scenes additionally carry that campaign's
+// progress.
+export function AdventureDetailPage() {
+  const { id } = useParams();
+  const arcId = Number(id);
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const campaignId = params.get("campaign") ? Number(params.get("campaign")) : null;
+
+  const [arc, setArc] = useState<StoryArcDetail | null>(null);
+  const [setting, setSetting] = useState<Setting | null>(null);
+  const [tab, selectTab] = useTabState(TABS, "Обзор");
+
+  function refresh() {
+    const q = campaignId ? `?campaign_id=${campaignId}` : "";
+    api.get<StoryArcDetail>(`/story/arcs/${arcId}${q}`).then(setArc);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refresh, [arcId, campaignId]);
+
+  useEffect(() => {
+    if (arc) api.get<Setting>(`/settings/${arc.setting_id}`).then(setSetting);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arc?.setting_id]);
+
+  if (!arc) return <p className="muted">Загрузка…</p>;
+
+  async function save(patch: Record<string, unknown>) {
+    await api.put(`/story/arcs/${arcId}`, patch);
+    refresh();
+  }
+
+  async function archive() {
+    if (!confirm("Отправить приключение в архив вместе с главами и сценами?")) return;
+    await api.del(`/story/arcs/${arcId}`);
+    navigate(`/settings/${arc?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
+  }
+
+  const sceneSuffix = campaignId ? `?campaign=${campaignId}` : "";
+
+  return (
+    <div className="stack">
+      <Breadcrumbs
+        items={[
+          { label: setting?.name ?? "Сеттинг", to: `/settings/${arc.setting_id}` },
+          {
+            label: "Приключения",
+            to: `/settings/${arc.setting_id}?tab=${encodeURIComponent("Приключения")}`,
+          },
+          { label: arc.name },
+        ]}
+      />
+
+      <div className="entity-header">
+        <div className="stack">
+          <h2>{arc.name}</h2>
+          <div className="row">
+            <EntityTypeChip type="adventure" />
+            {arc.is_default === 1 && <span className="badge tag">стандартное</span>}
+            {arc.recommended_level && <span className="muted">{arc.recommended_level}</span>}
+            {arc.duration && <span className="muted">{arc.duration}</span>}
+          </div>
+        </div>
+        <div className="entity-header-actions">
+          {arc.is_default !== 1 && (
+            <>
+              <button
+                onClick={() => {
+                  const name = prompt("Название приключения", arc.name);
+                  if (name?.trim()) save({ name: name.trim() });
+                }}
+              >
+                Переименовать
+              </button>
+              <button className="danger" onClick={archive}>
+                Архивировать
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="tabs">
+        {TABS.map((t) => (
+          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "Обзор" && (
+        <div className="stack">
+          <div className="card stack">
+            <FieldRow label="Уровень персонажей" value={arc.recommended_level} onSave={(v) => save({ recommended_level: v })} />
+            <FieldRow label="Число игроков" value={arc.player_count} onSave={(v) => save({ player_count: v })} />
+            <FieldRow label="Длительность" value={arc.duration} onSave={(v) => save({ duration: v })} />
+            <FieldRow label="Источник" value={arc.source} onSave={(v) => save({ source: v })} />
+            <FieldRow label="Теги" value={arc.tags} onSave={(v) => save({ tags: v })} />
+          </div>
+          <EditableTextCard
+            title="Синопсис"
+            value={arc.description}
+            onSave={(v) => save({ description: v })}
+            rows={5}
+            entityType="adventure"
+            entityId={arcId}
+            defaultSettingId={arc.setting_id}
+            collapsible
+            defaultOpen
+          />
+          <EditableTextCard
+            title="Завязка"
+            help="Как партия вообще попадает в это приключение."
+            value={arc.hook}
+            onSave={(v) => save({ hook: v })}
+            rows={4}
+            entityType="adventure"
+            entityId={arcId}
+            defaultSettingId={arc.setting_id}
+            collapsible
+          />
+          <div className="card">
+            <LinkDropZone entityType="adventure" entityId={arcId} title="Связанные сущности" />
+          </div>
+        </div>
+      )}
+
+      {tab === "Главы и сцены" && (
+        <ChaptersAndScenes arc={arc} campaignId={campaignId} onChange={refresh} />
+      )}
+
+      {tab === "Вехи" && <Milestones arc={arc} campaignId={campaignId} onChange={refresh} />}
+
+      {tab === "Действующие лица" && (
+        <div className="card stack">
+          <span className="muted">
+            Собрано со всех сцен приключения: кто и что в них задействовано.
+          </span>
+          {arc.cast.map((c) => (
+            <div key={`${c.type}:${c.id}`} className="row" style={{ justifyContent: "space-between" }}>
+              <span>
+                {DETAIL_ROUTES[c.type] ? (
+                  <Link to={`${DETAIL_ROUTES[c.type]}/${c.id}`}>{c.name}</Link>
+                ) : (
+                  c.name
+                )}
+                <span className="muted"> · {ENTITY_TYPE_SINGULAR[c.type] ?? c.type}</span>
+              </span>
+              <span className="muted">{c.scenes.join(", ") || "приключение целиком"}</span>
+            </div>
+          ))}
+          {arc.cast.length === 0 && (
+            <p className="muted">
+              Пока пусто. Действующие лица появятся здесь, когда их перетащат в сцены.
+            </p>
+          )}
+        </div>
+      )}
+
+      {tab === "Награды" && (
+        <Rewards arc={arc} sceneSuffix={sceneSuffix} campaignId={campaignId} onChange={refresh} />
+      )}
+
+      {tab === "Тайны и зацепки" && (
+        <Secrets arc={arc} campaignId={campaignId} onChange={refresh} />
+      )}
+    </div>
+  );
+}
+
+// One short single-line field of the Обзор card, edited in place.
+function FieldRow({
+  label,
+  value,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <div className="row" style={{ justifyContent: "space-between" }}>
+      <span className="muted">{label}</span>
+      {editing ? (
+        <span className="row">
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <button
+            className="primary"
+            onClick={() => {
+              onSave(draft);
+              setEditing(false);
+            }}
+          >
+            OK
+          </button>
+        </span>
+      ) : (
+        <span className="row">
+          <span>{value || "—"}</span>
+          <button onClick={() => setEditing(true)}>Изменить</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ChaptersAndScenes({
+  arc,
+  campaignId,
+  onChange,
+}: {
+  arc: StoryArcDetail;
+  campaignId: number | null;
+  onChange: () => void;
+}) {
+  const [chapterName, setChapterName] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [dragId, setDragId] = useState<number | null>(null);
+  const suffix = campaignId ? `?campaign=${campaignId}` : "";
+
+  async function createChapter() {
+    if (!chapterName.trim()) return;
+    await api.post("/story/arcs", {
+      setting_id: arc.setting_id,
+      parent_id: arc.id,
+      kind: "chapter",
+      name: chapterName,
+    });
+    setChapterName("");
+    onChange();
+  }
+
+  async function createScene(targetArcId: number) {
+    const key = String(targetArcId);
+    const name = drafts[key];
+    if (!name?.trim()) return;
+    await api.post("/story/scenes", {
+      setting_id: arc.setting_id,
+      arc_id: targetArcId,
+      campaign_id: campaignId,
+      name: name.trim(),
+    });
+    setDrafts((d) => ({ ...d, [key]: "" }));
+    onChange();
+  }
+
+  // Reorder is scoped to one group: the ids sent are exactly the scenes of
+  // that chapter, in their new order.
+  async function reorderScenes(group: StoryScene[], draggedId: number, targetId: number) {
+    if (draggedId === targetId) return;
+    const ids = group.map((s) => s.id);
+    const from = ids.indexOf(draggedId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    await api.put("/story/scenes/reorder", { order: ids });
+    onChange();
+  }
+
+  async function moveChapter(chapterId: number, delta: number) {
+    const ids = arc.chapters.map((c) => c.id);
+    const i = ids.indexOf(chapterId);
+    const j = i + delta;
+    if (i === -1 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    await api.put("/story/arcs/reorder", { order: ids });
+    onChange();
+  }
+
+  async function setStatus(scene: StoryScene, status: string) {
+    if (!campaignId) return;
+    await api.put(`/story/scenes/${scene.id}/state`, { campaign_id: campaignId, status });
+    onChange();
+  }
+
+  function renderGroup(title: string, groupArcId: number, scenes: StoryScene[], controls?: JSX.Element) {
+    return (
+      <div className="card stack" key={groupArcId}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <strong className="entry-title">{title}</strong>
+          {controls}
+        </div>
+        <div className="entity-row-list">
+          {scenes.map((s) => (
+            <div
+              key={s.id}
+              className="entity-row"
+              draggable
+              onDragStart={() => setDragId(s.id)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => dragId != null && reorderScenes(scenes, dragId, s.id)}
+            >
+              <Link to={`/scenes/${s.id}${suffix}`} className="entity-row-name">
+                {s.name}
+              </Link>
+              <span className="muted">{SCENE_KINDS.find((k) => k.key === s.kind)?.label}</span>
+              {s.is_override && <span className="badge tag">изменено в кампании</span>}
+              {s.campaign_only && <span className="badge tag">только в кампании</span>}
+              {campaignId && (
+                <span className="entity-row-actions">
+                  <select
+                    value={s.state?.status ?? "pending"}
+                    onChange={(e) => setStatus(s, e.target.value)}
+                  >
+                    {SCENE_STATUSES.map((st) => (
+                      <option key={st.key} value={st.key}>
+                        {st.label}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              )}
+            </div>
+          ))}
+          {scenes.length === 0 && <p className="muted">Сцен пока нет.</p>}
+        </div>
+        <div className="row">
+          <input
+            placeholder="Название сцены"
+            value={drafts[String(groupArcId)] ?? ""}
+            onChange={(e) => setDrafts((d) => ({ ...d, [String(groupArcId)]: e.target.value }))}
+          />
+          <button onClick={() => createScene(groupArcId)}>+ Сцена</button>
+        </div>
+      </div>
+    );
+  }
+
+  const direct = arc.scenes.filter((s) => s.arc_id === arc.id);
+
+  return (
+    <div className="stack">
+      <span className="muted">Сцены перетаскиваются внутри главы, главы двигаются стрелками.</span>
+      {renderGroup(arc.chapters.length > 0 ? "Без главы" : "Сцены", arc.id, direct)}
+      {arc.chapters.map((c) =>
+        renderGroup(
+          c.name,
+          c.id,
+          arc.scenes.filter((s) => s.arc_id === c.id),
+          <span className="row">
+            <button onClick={() => moveChapter(c.id, -1)}>↑</button>
+            <button onClick={() => moveChapter(c.id, 1)}>↓</button>
+            {!campaignId && (
+              <>
+                <button
+                  onClick={async () => {
+                    const name = prompt("Название главы", c.name);
+                    if (name?.trim()) {
+                      await api.put(`/story/arcs/${c.id}`, { name: name.trim() });
+                      onChange();
+                    }
+                  }}
+                >
+                  Переименовать
+                </button>
+                <button
+                  className="danger"
+                  onClick={async () => {
+                    if (!confirm(`Отправить главу «${c.name}» в архив вместе со сценами?`)) return;
+                    await api.del(`/story/arcs/${c.id}`);
+                    onChange();
+                  }}
+                >
+                  Архивировать
+                </button>
+              </>
+            )}
+          </span>
+        )
+      )}
+      {!campaignId && (
+        <div className="row">
+          <input
+            placeholder="Название главы"
+            value={chapterName}
+            onChange={(e) => setChapterName(e.target.value)}
+          />
+          <button className="primary" onClick={createChapter}>
+            + Глава
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Milestones({
+  arc,
+  campaignId,
+  onChange,
+}: {
+  arc: StoryArcDetail;
+  campaignId: number | null;
+  onChange: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [sceneId, setSceneId] = useState("");
+
+  async function add() {
+    if (!title.trim()) return;
+    await api.post(`/story/arcs/${arc.id}/milestones`, {
+      title,
+      description,
+      scene_id: sceneId ? Number(sceneId) : null,
+    });
+    setTitle("");
+    setDescription("");
+    setSceneId("");
+    onChange();
+  }
+
+  async function toggle(milestoneId: number, achieved: boolean) {
+    if (!campaignId) return;
+    await api.put(`/story/milestones/${milestoneId}/state`, {
+      campaign_id: campaignId,
+      achieved,
+    });
+    onChange();
+  }
+
+  async function move(milestoneId: number, delta: number) {
+    const ids = arc.milestones.map((m) => m.id);
+    const i = ids.indexOf(milestoneId);
+    const j = i + delta;
+    if (i === -1 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    await api.put("/story/milestones/reorder", { order: ids });
+    onChange();
+  }
+
+  return (
+    <div className="card stack">
+      <span className="muted">
+        Ключевые точки сюжета в порядке следования.{" "}
+        {campaignId
+          ? "Отметки достижения относятся только к этой кампании."
+          : "В кампании у каждой вехи появится отметка «достигнута»."}
+      </span>
+      {arc.milestones.map((m) => (
+        <div key={m.id} className="row" style={{ justifyContent: "space-between" }}>
+          <span>
+            {campaignId && (
+              <input
+                type="checkbox"
+                checked={m.state?.achieved === 1}
+                onChange={(e) => toggle(m.id, e.target.checked)}
+              />
+            )}{" "}
+            <strong>{m.title}</strong>
+            {m.scene_name && <span className="muted"> · сцена «{m.scene_name}»</span>}
+            {m.description && <div className="muted">{m.description}</div>}
+          </span>
+          <span className="row">
+            <button onClick={() => move(m.id, -1)}>↑</button>
+            <button onClick={() => move(m.id, 1)}>↓</button>
+            {!campaignId && (
+              <button
+                className="danger"
+                onClick={async () => {
+                  await api.del(`/story/milestones/${m.id}`);
+                  onChange();
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </span>
+        </div>
+      ))}
+      {arc.milestones.length === 0 && <p className="muted">Вех пока нет.</p>}
+      {!campaignId && (
+        <div className="row">
+          <input placeholder="Название вехи" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input
+            placeholder="Описание"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <select value={sceneId} onChange={(e) => setSceneId(e.target.value)}>
+            <option value="">Без привязки к сцене</option>
+            {arc.scenes.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <button className="primary" onClick={add}>
+            Добавить
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Rewards({
+  arc,
+  sceneSuffix,
+  campaignId,
+  onChange,
+}: {
+  arc: StoryArcDetail;
+  sceneSuffix: string;
+  campaignId: number | null;
+  onChange: () => void;
+}) {
+  const [what, setWhat] = useState("");
+  const [where, setWhere] = useState("");
+
+  async function add() {
+    if (!what.trim()) return;
+    await api.post(`/story/arcs/${arc.id}/rewards`, { what, where_found: where });
+    setWhat("");
+    setWhere("");
+    onChange();
+  }
+
+  return (
+    <div className="card stack">
+      <span className="muted">
+        Награды уровня приключения и весь лут, разложенный по его сценам.
+      </span>
+      {arc.rewards.map((r) => (
+        <div key={r.id} className="row" style={{ justifyContent: "space-between" }}>
+          <span>
+            <strong>{r.what}</strong>
+            {r.where_found && <span className="muted"> · {r.where_found}</span>}
+            {r.notes && <div className="muted">{r.notes}</div>}
+          </span>
+          <span className="muted">
+            {r.scene_name ? (
+              <Link to={`/scenes/${r.scene_id}${sceneSuffix}`}>{r.scene_name}</Link>
+            ) : (
+              "за приключение"
+            )}
+          </span>
+        </div>
+      ))}
+      {arc.rewards.length === 0 && <p className="muted">Наград пока нет.</p>}
+      {/* Adventure-level rewards belong to the setting and have no campaign
+          override layer, so they're only editable outside a campaign. */}
+      {!campaignId && (
+        <div className="row">
+          <input placeholder="Что" value={what} onChange={(e) => setWhat(e.target.value)} />
+          <input placeholder="За что / где" value={where} onChange={(e) => setWhere(e.target.value)} />
+          <button className="primary" onClick={add}>
+            Добавить за приключение
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Secrets({
+  arc,
+  campaignId,
+  onChange,
+}: {
+  arc: StoryArcDetail;
+  campaignId: number | null;
+  onChange: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [kind, setKind] = useState("secret");
+
+  async function add() {
+    if (!title.trim()) return;
+    await api.post(`/story/arcs/${arc.id}/secrets`, { title, content, kind });
+    setTitle("");
+    setContent("");
+    onChange();
+  }
+
+  async function toggle(secretId: number, revealed: boolean) {
+    if (!campaignId) return;
+    await api.put(`/story/secrets/${secretId}/state`, { campaign_id: campaignId, revealed });
+    onChange();
+  }
+
+  return (
+    <div className="card stack">
+      <span className="muted">
+        Тайны, улики и сюжетные нити приключения.{" "}
+        {campaignId && "Отметка «раскрыто» относится только к этой кампании."}
+      </span>
+      {arc.secrets.map((s) => (
+        <div key={s.id} className="row" style={{ justifyContent: "space-between" }}>
+          <span>
+            {campaignId && (
+              <input
+                type="checkbox"
+                checked={s.state?.revealed === 1}
+                onChange={(e) => toggle(s.id, e.target.checked)}
+              />
+            )}{" "}
+            <strong>{s.title}</strong>
+            <span className="muted"> · {SECRET_KINDS.find((k) => k.key === s.kind)?.label}</span>
+            {s.content && <div className="muted">{s.content}</div>}
+          </span>
+          {!campaignId && (
+            <button
+              className="danger"
+              onClick={async () => {
+                await api.del(`/story/secrets/${s.id}`);
+                onChange();
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      ))}
+      {arc.secrets.length === 0 && <p className="muted">Пока пусто.</p>}
+      {!campaignId && (
+        <div className="row">
+          <select value={kind} onChange={(e) => setKind(e.target.value)}>
+            {SECRET_KINDS.map((k) => (
+              <option key={k.key} value={k.key}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+          <input placeholder="Название" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input placeholder="Содержание" value={content} onChange={(e) => setContent(e.target.value)} />
+          <button className="primary" onClick={add}>
+            Добавить
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

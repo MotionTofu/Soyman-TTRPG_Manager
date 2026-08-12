@@ -14,6 +14,7 @@ const ENDPOINTS: Record<string, string> = {
   community: "/setting-communities",
   compendium_entry: "/systems/entries",
   scene: "/story/scenes",
+  adventure: "/story/arcs",
 };
 
 // Same endpoint resolveEntityLabel below already hits for the full detail
