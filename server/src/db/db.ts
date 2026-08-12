@@ -1177,6 +1177,97 @@ export function openDatabase(dbDir: string): Database.Database {
     )`);
   }
 
+  // "Приключения" — prepared story content owned by a setting: arcs (an
+  // adventure, an arc, a chapter of an imported book; nested via parent_id)
+  // holding scenes. See schema.sql for the copy-on-write campaign layer.
+  if (!tableExists(database, "story_arcs")) {
+    database.exec(`CREATE TABLE story_arcs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+      parent_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      archived_at TEXT
+    )`);
+    database.exec("CREATE INDEX idx_story_arcs_setting ON story_arcs(setting_id)");
+  }
+
+  if (!tableExists(database, "story_scenes")) {
+    database.exec(`CREATE TABLE story_scenes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+      arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+      campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+      source_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'scene',
+      summary TEXT NOT NULL DEFAULT '',
+      read_aloud TEXT NOT NULL DEFAULT '',
+      whats_happening TEXT NOT NULL DEFAULT '',
+      entry_condition TEXT NOT NULL DEFAULT '',
+      outcomes TEXT NOT NULL DEFAULT '',
+      hidden_from_players INTEGER NOT NULL DEFAULT 1,
+      position INTEGER NOT NULL DEFAULT 0,
+      canvas_x REAL,
+      canvas_y REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      archived_at TEXT
+    )`);
+    database.exec("CREATE INDEX idx_story_scenes_arc ON story_scenes(arc_id)");
+    database.exec("CREATE INDEX idx_story_scenes_campaign ON story_scenes(campaign_id, source_scene_id)");
+  }
+
+  if (!tableExists(database, "story_scene_checks")) {
+    database.exec(`CREATE TABLE story_scene_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+      what TEXT NOT NULL DEFAULT '',
+      difficulty TEXT NOT NULL DEFAULT '',
+      on_success TEXT NOT NULL DEFAULT '',
+      on_failure TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0
+    )`);
+    database.exec("CREATE INDEX idx_story_scene_checks_scene ON story_scene_checks(scene_id)");
+  }
+
+  if (!tableExists(database, "story_scene_rewards")) {
+    database.exec(`CREATE TABLE story_scene_rewards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+      what TEXT NOT NULL DEFAULT '',
+      where_found TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      artifact_id INTEGER REFERENCES artifacts(id) ON DELETE SET NULL,
+      position INTEGER NOT NULL DEFAULT 0
+    )`);
+    database.exec("CREATE INDEX idx_story_scene_rewards_scene ON story_scene_rewards(scene_id)");
+  }
+
+  if (!tableExists(database, "story_scene_transitions")) {
+    database.exec(`CREATE TABLE story_scene_transitions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+      to_scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+      label TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(from_scene_id, to_scene_id, label)
+    )`);
+    database.exec("CREATE INDEX idx_story_scene_transitions_from ON story_scene_transitions(from_scene_id)");
+  }
+
+  if (!tableExists(database, "campaign_scene_state")) {
+    database.exec(`CREATE TABLE campaign_scene_state (
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      note TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (campaign_id, scene_id)
+    )`);
+  }
+
   return database;
 }
 

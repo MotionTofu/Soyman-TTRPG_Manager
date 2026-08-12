@@ -305,6 +305,38 @@ searchRouter.get("/", (req, res) => {
     );
   }
 
+  // Only the setting's own scenes are searchable — a campaign's copy-on-write
+  // overrides would otherwise show up as near-duplicate hits of their originals.
+  if (wantsType("scene")) {
+    const rows = db
+      .prepare(
+        `SELECT sc.id, sc.name, st.name as setting_name, a.name as arc_name,
+                (sc.summary || ' ' || sc.read_aloud || ' ' || sc.whats_happening || ' ' ||
+                 sc.entry_condition || ' ' || sc.outcomes) as blob
+         FROM story_scenes sc
+         JOIN settings st ON st.id = sc.setting_id
+         LEFT JOIN story_arcs a ON a.id = sc.arc_id
+         WHERE (lower_u(sc.name) LIKE ? OR lower_u(blob) LIKE ?)
+           AND sc.campaign_id IS NULL AND sc.archived_at IS NULL`
+      )
+      .all(like, like) as {
+      id: number;
+      name: string;
+      setting_name: string;
+      arc_name: string | null;
+      blob: string;
+    }[];
+    rows.forEach((r) =>
+      push({
+        type: "scene",
+        id: r.id,
+        title: r.name,
+        subtitle: r.blob && r.blob.toLowerCase().includes(qLower) ? snippet(r.blob, q) : undefined,
+        context: r.arc_name ? `Приключение: ${r.arc_name}` : `Сеттинг: ${r.setting_name}`,
+      })
+    );
+  }
+
   if (wantsType("community")) {
     const rows = db
       .prepare(

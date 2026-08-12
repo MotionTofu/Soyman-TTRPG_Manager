@@ -25,6 +25,7 @@ import { LocationCascadePicker } from "../components/LocationCascadePicker";
 import { SettingEntryList } from "../components/SettingEntryList";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
+import { AdventuresTab } from "../components/AdventuresTab";
 import { RelationGraph } from "../components/RelationGraph";
 import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
 import type { GraphData } from "../graphTypes";
@@ -47,6 +48,7 @@ const TABS = [
   "Обзор",
   "География",
   "Население",
+  "Приключения",
   "Сокровищница",
   "Граф связей",
   "Хроника мира",
@@ -518,6 +520,11 @@ export function SettingDetailPage() {
 
       {tab === "География" && <GeographyTab settingId={settingId} />}
       {tab === "Население" && <PopulationTab settingId={settingId} />}
+      {tab === "Приключения" && (
+        <div className="card stack">
+          <AdventuresTab settingId={settingId} />
+        </div>
+      )}
       {tab === "Сокровищница" && (
         <div className="card stack">
           <ArtifactsTab settingId={settingId} />

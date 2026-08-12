@@ -37,6 +37,7 @@ import { EntityTypeChip } from "../components/EntityTypeChip";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { cardThumbnailProps, loadThumbnailStyles, type ThumbnailStyle } from "../thumbnailStyles";
 import { loadHideFinance } from "../financePrivacy";
+import { AdventuresTab } from "../components/AdventuresTab";
 import type {
   CampaignCalendarEvent,
   CampaignDetail,
@@ -61,6 +62,7 @@ import type {
 const GM_TABS = [
   "Обзор",
   "Игроки и персонажи",
+  "Приключения",
   "Тайны и зацепки",
   "Заметки по ведению",
   "Хроника игр",
@@ -530,6 +532,17 @@ export function CampaignDetailPage() {
       {tab === "Трекер задач" && (
         <TaskTracker campaignId={campaignId} defaultSettingId={campaign.setting_id ?? undefined} />
       )}
+
+      {tab === "Приключения" &&
+        (campaign.setting_id ? (
+          <div className="card stack">
+            <AdventuresTab settingId={campaign.setting_id} campaignId={campaignId} />
+          </div>
+        ) : (
+          <p className="muted">
+            Приключения живут в сеттинге — выберите сеттинг кампании во вкладке «Обзор».
+          </p>
+        ))}
 
       {tab === "Тайны и зацепки" && (
         <SecretsTracker campaignId={campaignId} defaultSettingId={campaign.setting_id ?? undefined} />

@@ -425,6 +425,106 @@ CREATE TABLE IF NOT EXISTS artifacts (
   archived_at TEXT
 );
 
+-- "Приключения": prepared story content owned by a setting. An arc is one
+-- adventure / storyline / chapter of an imported book (nested via parent_id,
+-- so "Синий Переулок → Глава 2" works), holding an ordered list of scenes.
+CREATE TABLE IF NOT EXISTS story_arcs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  parent_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_story_arcs_setting ON story_arcs(setting_id);
+
+-- A scene is the unit the GM actually runs. Two rows can describe the same
+-- scene: the setting's original (campaign_id IS NULL, source_scene_id IS
+-- NULL) and a campaign's copy-on-write override (campaign_id set,
+-- source_scene_id pointing at the original). A campaign's list is built by
+-- taking the setting's scenes and swapping in any override that exists; the
+-- copy is only created on the first edit made inside that campaign, and
+-- deleting it restores the original. A row with campaign_id set and
+-- source_scene_id NULL is a scene invented inside that campaign, which never
+-- appears in the setting. canvas_x/canvas_y are unused by the current list
+-- UI and reserved for the future node editor.
+CREATE TABLE IF NOT EXISTS story_scenes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+  source_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'scene', -- scene | encounter | branch | ending
+  summary TEXT NOT NULL DEFAULT '',        -- краткое описание для мастера
+  read_aloud TEXT NOT NULL DEFAULT '',     -- текст для зачитывания игрокам
+  whats_happening TEXT NOT NULL DEFAULT '',
+  entry_condition TEXT NOT NULL DEFAULT '',
+  outcomes TEXT NOT NULL DEFAULT '',
+  hidden_from_players INTEGER NOT NULL DEFAULT 1,
+  position INTEGER NOT NULL DEFAULT 0,
+  canvas_x REAL,
+  canvas_y REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_story_scenes_arc ON story_scenes(arc_id);
+CREATE INDEX IF NOT EXISTS idx_story_scenes_campaign ON story_scenes(campaign_id, source_scene_id);
+
+-- Ability/skill checks a scene calls for. `difficulty` is deliberately free
+-- text ("DC 14", "Сложность 2", a PbtA move name) so non-d20 systems fit
+-- without a schema change.
+CREATE TABLE IF NOT EXISTS story_scene_checks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  what TEXT NOT NULL DEFAULT '',
+  difficulty TEXT NOT NULL DEFAULT '',
+  on_success TEXT NOT NULL DEFAULT '',
+  on_failure TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_story_scene_checks_scene ON story_scene_checks(scene_id);
+
+-- Loot/rewards available in a scene. artifact_id optionally ties a line to a
+-- real entry in the setting's Сокровищница; plain text works without one.
+CREATE TABLE IF NOT EXISTS story_scene_rewards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  what TEXT NOT NULL DEFAULT '',
+  where_found TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  artifact_id INTEGER REFERENCES artifacts(id) ON DELETE SET NULL,
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_scene ON story_scene_rewards(scene_id);
+
+-- Directed "what can follow what" edges, with the condition as the label
+-- ("если убедили стражника"). Drawn as arrows by the future node editor and
+-- listed as "Дальше:" in the current UI.
+CREATE TABLE IF NOT EXISTS story_scene_transitions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  to_scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  label TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(from_scene_id, to_scene_id, label)
+);
+CREATE INDEX IF NOT EXISTS idx_story_scene_transitions_from ON story_scene_transitions(from_scene_id);
+
+-- Per-campaign playthrough progress. Kept out of story_scenes on purpose:
+-- marking a scene "пройдена" must not spawn a copy-on-write override, which
+-- is what writing to the scene row itself would mean.
+CREATE TABLE IF NOT EXISTS campaign_scene_state (
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | done | skipped
+  note TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (campaign_id, scene_id)
+);
+
 -- A бестиарий entry (setting_beings with category='bestiary') can reference
 -- monster templates in the compendiums of several systems at once — the same
 -- creature kind run under D&D and under another system. Distinct from

@@ -1114,6 +1114,85 @@ export interface SettingBeingDetail extends SettingBeing {
   chapters: BeingChapter[];
 }
 
+// "Приключения" — see schema.sql's story_arcs / story_scenes for the
+// copy-on-write campaign layer these types mirror.
+export type SceneKind = "scene" | "encounter" | "branch" | "ending";
+export type SceneStatus = "pending" | "done" | "skipped";
+
+export interface StoryArc {
+  id: number;
+  setting_id: number;
+  parent_id: number | null;
+  name: string;
+  description: string;
+  position: number;
+  scene_count: number;
+  created_at: string;
+  archived_at: string | null;
+}
+
+export interface StoryScene {
+  id: number;
+  setting_id: number;
+  arc_id: number | null;
+  campaign_id: number | null;
+  source_scene_id: number | null;
+  name: string;
+  kind: SceneKind;
+  summary: string;
+  read_aloud: string;
+  whats_happening: string;
+  entry_condition: string;
+  outcomes: string;
+  hidden_from_players: number;
+  position: number;
+  canvas_x: number | null;
+  canvas_y: number | null;
+  created_at: string;
+  archived_at: string | null;
+  // Present on campaign-scoped reads: this row is the campaign's edited copy
+  // of a setting scene, or a scene that exists only inside this campaign.
+  is_override?: boolean;
+  campaign_only?: boolean;
+  state: { status: SceneStatus; note: string } | null;
+}
+
+export interface SceneCheck {
+  id: number;
+  scene_id: number;
+  what: string;
+  difficulty: string;
+  on_success: string;
+  on_failure: string;
+  position: number;
+}
+
+export interface SceneReward {
+  id: number;
+  scene_id: number;
+  what: string;
+  where_found: string;
+  notes: string;
+  artifact_id: number | null;
+  artifact_name: string | null;
+  position: number;
+}
+
+export interface SceneTransition {
+  id: number;
+  from_scene_id: number;
+  to_scene_id: number;
+  to_scene_name: string;
+  label: string;
+  position: number;
+}
+
+export interface StorySceneDetail extends StoryScene {
+  checks: SceneCheck[];
+  rewards: SceneReward[];
+  transitions: SceneTransition[];
+}
+
 export interface Artifact {
   id: number;
   setting_id: number;

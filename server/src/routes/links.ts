@@ -14,6 +14,7 @@ const NODE_TABLES: Record<string, { table: string; nameCol: string }> = {
   community: { table: "setting_communities", nameCol: "name" },
   resource: { table: "resources", nameCol: "name" },
   mastering: { table: "mastering_notes", nameCol: "title" },
+  scene: { table: "story_scenes", nameCol: "name" },
 };
 
 interface GraphNode {
@@ -41,6 +42,9 @@ const SETTING_SCOPE_QUERIES: Record<string, string> = {
   campaign: "SELECT id FROM campaigns WHERE setting_id = ?",
   character: "SELECT c.id FROM characters c JOIN campaigns ca ON ca.id = c.campaign_id WHERE ca.setting_id = ?",
   setting: "SELECT id FROM settings WHERE id = ?",
+  // Only the setting's own scenes — a campaign's copy-on-write overrides
+  // belong to that campaign's view, not to the setting-wide graph.
+  scene: "SELECT id FROM story_scenes WHERE setting_id = ? AND campaign_id IS NULL",
 };
 
 // Node types a `campaign_id` graph filter can resolve down to.
@@ -49,6 +53,7 @@ const CAMPAIGN_SCOPE_QUERIES: Record<string, string> = {
   campaign: "SELECT id FROM campaigns WHERE id = ?",
   player: "SELECT player_id as id FROM campaign_roster WHERE campaign_id = ?",
   session: "SELECT id FROM sessions WHERE campaign_id = ?",
+  scene: "SELECT id FROM story_scenes WHERE campaign_id = ?",
 };
 
 linksRouter.get("/graph", (req, res) => {

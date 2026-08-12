@@ -9,6 +9,7 @@ export const ENTITY_TYPES: { key: string; label: string }[] = [
   { key: "artifact", label: "Артефакты" },
   { key: "resource", label: "Ресурсы" },
   { key: "mastering", label: "Мастерение" },
+  { key: "scene", label: "Сцены" },
   { key: "session", label: "Сессии" },
   { key: "compendium_entry", label: "Компендиум" },
 ];
@@ -30,6 +31,7 @@ export const ENTITY_TYPE_SINGULAR: Record<string, string> = {
   artifact: "Артефакт",
   resource: "Ресурс",
   mastering: "Мастерение",
+  scene: "Сцена",
   session: "Сессия",
   compendium_entry: "Запись компендиума",
 };
@@ -41,6 +43,7 @@ export const DETAIL_ROUTES: Record<string, string> = {
   being: "/beings",
   character: "/characters",
   artifact: "/artifacts",
+  scene: "/scenes",
   session: "/sessions",
   setting: "/settings",
   campaign: "/campaigns",

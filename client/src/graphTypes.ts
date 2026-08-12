@@ -26,6 +26,7 @@ export const TYPE_LABELS: Record<string, string> = {
   artifact: "Артефакты",
   resource: "Ресурсы",
   mastering: "Мастерение",
+  scene: "Сцены",
 };
 
 export const TYPE_COLORS: Record<string, string> = {
@@ -39,6 +40,7 @@ export const TYPE_COLORS: Record<string, string> = {
   artifact: "#8968b0",
   resource: "#4a90a4",
   mastering: "#9d97ad",
+  scene: "#c2683f",
 };
 
 export const TYPE_ROUTES: Record<string, string> = {
@@ -50,6 +52,7 @@ export const TYPE_ROUTES: Record<string, string> = {
   being: "/beings",
   community: "/communities",
   artifact: "/artifacts",
+  scene: "/scenes",
 };
 
 export const GRAPH_WIDTH = 900;

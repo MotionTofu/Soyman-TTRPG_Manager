@@ -13,6 +13,7 @@ const ENDPOINTS: Record<string, string> = {
   artifact: "/artifacts",
   community: "/setting-communities",
   compendium_entry: "/systems/entries",
+  scene: "/story/scenes",
 };
 
 // Same endpoint resolveEntityLabel below already hits for the full detail
