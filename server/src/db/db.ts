@@ -1375,6 +1375,36 @@ export function openDatabase(dbDir: string): Database.Database {
     )`);
   }
 
+  // История импортов книг приключений. key_map_json нужен не только для
+  // истории: по нему второй файл той же книги видит ключи первого, а откат
+  // знает, какие строки создал именно этот батч.
+  if (!tableExists(database, "import_batches")) {
+    database.exec(`CREATE TABLE import_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+      format TEXT NOT NULL,
+      language TEXT NOT NULL DEFAULT 'ru',
+      setting_key TEXT NOT NULL DEFAULT '',
+      source_title TEXT NOT NULL DEFAULT '',
+      source_part TEXT NOT NULL DEFAULT '',
+      file_name TEXT NOT NULL DEFAULT '',
+      counts_json TEXT NOT NULL DEFAULT '{}',
+      key_map_json TEXT NOT NULL DEFAULT '{}',
+      warnings_json TEXT NOT NULL DEFAULT '[]',
+      created_setting INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+  if (!tableExists(database, "import_records")) {
+    database.exec(`CREATE TABLE import_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL
+    )`);
+    database.exec("CREATE INDEX idx_import_records_batch ON import_records(batch_id)");
+  }
+
   return database;
 }
 

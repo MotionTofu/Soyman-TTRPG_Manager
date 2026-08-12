@@ -46,6 +46,7 @@ import { playerRouter } from "./routes/player";
 import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
 import { visibilityGrantsRouter } from "./routes/visibilityGrants";
 import { storyRouter } from "./routes/story";
+import { adventureImportRouter } from "./routes/adventureImport";
 import { sweepOrphans } from "./services/orphans";
 import { attachUser, requireAuth, bootstrapGmAccount, bootstrapAdminAccount, verifyToken, type AuthedRequest } from "./services/auth";
 import { apiRoleGate } from "./services/playerAccess";
@@ -187,6 +188,7 @@ app.use("/api/playlists", playlistsRouter);
 app.use("/api/campaign-player-sections", campaignPlayerSectionsRouter);
 app.use("/api/visibility-grants", visibilityGrantsRouter);
 app.use("/api/story", storyRouter);
+app.use("/api/import", adventureImportRouter);
 
 // In the packaged app (and when a built client exists next to the server),
 // serve the compiled React app and fall back to it for any non-API route

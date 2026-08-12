@@ -911,3 +911,33 @@ CREATE TABLE IF NOT EXISTS archived_files (
   size INTEGER NOT NULL,
   archived_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Импорт книги приключений (docs/adventure-import/format.md). Батч — один
+-- залитый файл; key_map_json хранит соответствие «ключ модели → тип:id», чтобы
+-- второй файл той же книги видел ключи первого, а откат знал, что удалять.
+CREATE TABLE IF NOT EXISTS import_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  format TEXT NOT NULL,
+  language TEXT NOT NULL DEFAULT 'ru',
+  setting_key TEXT NOT NULL DEFAULT '',
+  source_title TEXT NOT NULL DEFAULT '',
+  source_part TEXT NOT NULL DEFAULT '',
+  file_name TEXT NOT NULL DEFAULT '',
+  counts_json TEXT NOT NULL DEFAULT '{}',
+  key_map_json TEXT NOT NULL DEFAULT '{}',
+  warnings_json TEXT NOT NULL DEFAULT '[]',
+  created_setting INTEGER NOT NULL DEFAULT 0, -- сеттинг создан этим импортом: откат удалит и его
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Поимённый список созданных строк. Дочерние строки уходят каскадом по FK, но
+-- полиморфные generic_links / entity_relations / important_dates каскада не
+-- имеют — без этого списка откат был бы гаданием.
+CREATE TABLE IF NOT EXISTS import_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_import_records_batch ON import_records(batch_id);
