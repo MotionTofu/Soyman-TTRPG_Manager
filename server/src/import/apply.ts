@@ -28,6 +28,16 @@ export interface ApplyOptions {
   fileName: string;
   /** Ключи прошлых батчей этого сеттинга: key → "тип:id". Многофайловость. */
   knownKeys?: Record<string, string>;
+  /** Ключи, снятые галочкой на экране сверки: не создавать вовсе. */
+  skip?: string[];
+  /**
+   * Совпавшие с существующим: key → "тип:id". Сущность не создаётся, ссылки и
+   * упоминания ведут на неё, но саму её импорт не трогает — кроме приключения,
+   * в которое дозаливаются главы и сцены.
+   */
+  reuse?: Record<string, string>;
+  /** Правка категории личности человеком: key → key_figure | influential | notable. */
+  categories?: Record<string, string>;
 }
 
 export interface ApplyResult {
@@ -57,17 +67,41 @@ export const ROLLBACK_TABLES: Record<string, string> = {
   relation: "entity_relations",
   link: "generic_links",
   important_date: "important_dates",
+  // Вехи, тайны и награды приключения каскадом уходят только за своей дугой.
+  // Если дуга существовала до импорта (дозалив в существующее приключение),
+  // удалять их должен откат — поэтому они тоже поимённо в import_records.
+  milestone: "story_milestones",
+  secret: "story_secrets",
+  reward: "story_scene_rewards",
 };
 
 const mentionRe = () => /\[\[([^\]|]+)\|([^\]]*)\]\]/g;
 
+/**
+ * Вехи и тайны попадают в карту ключей — иначе повторный залив того же файла
+ * создал бы их заново, — но своей страницы в приложении у них нет: ни меншена,
+ * ни generic_link на них не собрать.
+ */
+const UNLINKABLE_TYPES = ["milestone", "secret"];
+const linkable = (ref: Ref | undefined | null): ref is Ref =>
+  !!ref && !!ref.type && !UNLINKABLE_TYPES.includes(ref.type);
+
 export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
   const warnings: Problem[] = [];
   const keys = new Map<string, Ref>();
-  for (const [key, value] of Object.entries(opts.knownKeys ?? {})) {
+  for (const [key, value] of Object.entries({ ...opts.knownKeys, ...opts.reuse })) {
     const [type, id] = value.split(":");
     if (type && id) keys.set(key, { type, id: Number(id) });
   }
+  const skipped = new Set(opts.skip ?? []);
+  const categories = opts.categories ?? {};
+  // Создаём только то, что не снято галочкой и чего ещё нет: ключ, уже
+  // известный по прошлому батчу или отданный существующей сущности на экране
+  // сверки, второй раз в базу не приезжает.
+  const shouldCreate = (key: string) => !skipped.has(key) && !keys.has(key);
+  // Дочерние строки и привязки дописываются только к тому, что создали мы:
+  // чужую, уже существующую сущность импорт молча не переписывает.
+  const created = new Set<string>();
 
   // Текстовые поля, в которых встретились меншены: подменим их вторым проходом,
   // когда карта ключей будет полной.
@@ -119,7 +153,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     // вложены. Локации, чей родитель недостижим (ссылка в никуда или цикл),
     // ложатся в корень географии.
     const geographyRoot = data.locations.length ? settingGeographyRoot(settingFolderPath) : "";
-    const remaining = [...data.locations];
+    const remaining = data.locations.filter((l) => shouldCreate(l.key));
     const folderOf = new Map<string, string>();
     let progress = true;
     while (remaining.length && progress) {
@@ -152,6 +186,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           );
         const id = record("location", Number(info.lastInsertRowid));
         keys.set(loc.key, { type: "location", id });
+        created.add(loc.key);
         folderOf.set(loc.key, folder);
         remember("setting_locations", "description", id, loc.description);
         for (const ch of loc.chapters) {
@@ -183,6 +218,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         .run(settingId, loc.name, loc.short_name ?? null, loc.kind, loc.description, folder);
       const id = record("location", Number(info.lastInsertRowid));
       keys.set(loc.key, { type: "location", id });
+      created.add(loc.key);
       bump("локации");
     }
 
@@ -190,6 +226,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     // Два прохода: сначала строки, потом parent_id — иерархия может ссылаться
     // вперёд, а вложенных папок у сообществ нет, так что порядок не важен.
     for (const com of data.communities) {
+      if (!shouldCreate(com.key)) continue;
       const folder = communityFolder(settingFolderPath, com.name);
       const info = db
         .prepare(
@@ -209,6 +246,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         );
       const id = record("community", Number(info.lastInsertRowid));
       keys.set(com.key, { type: "community", id });
+      created.add(com.key);
       for (const [column, value] of [
         ["description", com.description],
         ["history", com.history],
@@ -221,7 +259,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       bump("сообщества");
     }
     for (const com of data.communities) {
-      const self = keys.get(com.key)!;
+      const self = keys.get(com.key);
+      if (!self || !created.has(com.key)) continue;
       const parent = resolve(com.parent, "community");
       if (parent && parent.id !== self.id) {
         db.prepare("UPDATE setting_communities SET parent_id = ? WHERE id = ?").run(
@@ -271,12 +310,21 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         );
       const id = record("being", Number(info.lastInsertRowid));
       keys.set(key, { type: "being", id });
+      created.add(key);
       remember("setting_beings", "description", id, fields.description);
       return id;
     };
 
     for (const being of data.beings) {
-      const id = insertBeing(being.key, being.name, being.category, being);
+      if (!shouldCreate(being.key)) continue;
+      // Категория — то, что модель угадывает хуже всего; человек мог поправить
+      // её на экране сверки, и его выбор важнее.
+      const id = insertBeing(
+        being.key,
+        being.name,
+        categories[being.key] ?? being.category,
+        being
+      );
       for (const [section, list] of [
         ["history", being.history],
         ["behavior", being.behavior],
@@ -295,6 +343,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       bump("личности");
     }
     for (const beast of data.bestiary) {
+      if (!shouldCreate(beast.key)) continue;
       insertBeing(beast.key, beast.name, "bestiary", {
         description: beast.description,
         statblock_short: beast.statblock_short,
@@ -304,7 +353,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     }
     // Привязки — после того, как созданы и локации, и сообщества.
     for (const being of data.beings) {
-      const self = keys.get(being.key)!;
+      const self = keys.get(being.key);
+      if (!self || !created.has(being.key)) continue;
       let first: number | null = null;
       for (const locKey of being.locations) {
         const loc = resolve(locKey, "location");
@@ -347,7 +397,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       }
     }
     for (const beast of data.bestiary) {
-      const self = keys.get(beast.key)!;
+      const self = keys.get(beast.key);
+      if (!self || !created.has(beast.key)) continue;
       let first: number | null = null;
       for (const locKey of beast.locations) {
         const loc = resolve(locKey, "location");
@@ -362,6 +413,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
 
     // --- сокровищница ------------------------------------------------------
     for (const item of data.treasury) {
+      if (!shouldCreate(item.key)) continue;
       const folder = artifactFolder(settingFolderPath, item.name);
       const info = db
         .prepare(
@@ -385,6 +437,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         );
       const id = record("artifact", Number(info.lastInsertRowid));
       keys.set(item.key, { type: "artifact", id });
+      created.add(item.key);
       for (const [column, value] of [
         ["power", item.power],
         ["history", item.history],
@@ -415,32 +468,51 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     let arcPosition = lastArcPosition.p + 1;
 
     for (const adv of data.adventures) {
-      const info = db
-        .prepare(
-          `INSERT INTO story_arcs
-             (setting_id, name, kind, description, hook, recommended_level, player_count, duration,
-              source, tags, position)
-           VALUES (?, ?, 'adventure', ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          settingId,
-          adv.name,
-          adv.description,
-          adv.hook,
-          adv.recommended_level,
-          adv.player_count,
-          adv.duration,
-          source,
-          adv.tags,
-          arcPosition++
-        );
-      const advId = record("adventure", Number(info.lastInsertRowid));
-      keys.set(adv.key, { type: "adventure", id: advId });
-      remember("story_arcs", "description", advId, adv.description);
-      remember("story_arcs", "hook", advId, adv.hook);
-      bump("приключения");
+      if (skipped.has(adv.key)) continue;
+      // Приключение может быть отдано существующему — тогда главы и сцены
+      // дозаливаются в него, а сама дуга не создаётся заново.
+      let advId: number;
+      const reused = keys.get(adv.key);
+      if (reused && reused.type === "adventure") {
+        advId = reused.id;
+      } else {
+        const info = db
+          .prepare(
+            `INSERT INTO story_arcs
+               (setting_id, name, kind, description, hook, recommended_level, player_count, duration,
+                source, tags, position)
+             VALUES (?, ?, 'adventure', ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            settingId,
+            adv.name,
+            adv.description,
+            adv.hook,
+            adv.recommended_level,
+            adv.player_count,
+            adv.duration,
+            source,
+            adv.tags,
+            arcPosition++
+          );
+        advId = record("adventure", Number(info.lastInsertRowid));
+        keys.set(adv.key, { type: "adventure", id: advId });
+        created.add(adv.key);
+        remember("story_arcs", "description", advId, adv.description);
+        remember("story_arcs", "hook", advId, adv.hook);
+        bump("приключения");
+      }
 
-      adv.chapters.forEach((chapter, index) => {
+      // Дозалив в существующее приключение продолжает его нумерацию, а не
+      // начинает с нуля поверх уже лежащих там глав.
+      const lastChapter = db
+        .prepare("SELECT COALESCE(MAX(position), -1) as p FROM story_arcs WHERE parent_id = ?")
+        .get(advId) as { p: number };
+      let chapterPosition = lastChapter.p + 1;
+
+      adv.chapters.forEach((chapter) => {
+        if (!shouldCreate(chapter.key)) return;
+        const index = chapterPosition++;
         const chInfo = db
           .prepare(
             `INSERT INTO story_arcs (setting_id, parent_id, name, kind, description, position)
@@ -449,6 +521,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           .run(settingId, advId, chapter.name, chapter.description, index);
         const chId = record("adventure", Number(chInfo.lastInsertRowid));
         keys.set(chapter.key, { type: "adventure", id: chId });
+        created.add(chapter.key);
         remember("story_arcs", "description", chId, chapter.description);
         bump("главы");
       });
@@ -456,10 +529,20 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       // Сцены нумеруются подряд внутри своей главы, а бесхозные — внутри
       // приключения: в профиле приключения это и есть порядок показа.
       const positions = new Map<number, number>();
+      const nextPosition = (arcId: number) => {
+        if (!positions.has(arcId)) {
+          const last = db
+            .prepare("SELECT COALESCE(MAX(position), -1) as p FROM story_scenes WHERE arc_id = ?")
+            .get(arcId) as { p: number };
+          positions.set(arcId, last.p + 1);
+        }
+        return positions.get(arcId)!;
+      };
       adv.scenes.forEach((scene) => {
+        if (!shouldCreate(scene.key)) return;
         const chapter = resolve(scene.chapter, "adventure");
         const arcId = chapter && chapter.id !== advId ? chapter.id : advId;
-        const position = positions.get(arcId) ?? 0;
+        const position = nextPosition(arcId);
         positions.set(arcId, position + 1);
         const sInfo = db
           .prepare(
@@ -482,6 +565,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           );
         const sceneId = record("scene", Number(sInfo.lastInsertRowid));
         keys.set(scene.key, { type: "scene", id: sceneId });
+        created.add(scene.key);
         for (const [column, value] of [
           ["summary", scene.summary],
           ["read_aloud", scene.read_aloud],
@@ -511,14 +595,16 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
 
     // --- всё, что ссылается на сцены: только когда созданы все сцены --------
     for (const adv of data.adventures) {
-      const advRef = keys.get(adv.key)!;
+      const advRef = keys.get(adv.key);
+      if (!advRef || skipped.has(adv.key)) continue;
       for (const scene of adv.scenes) {
-        const self = keys.get(scene.key)!;
+        const self = keys.get(scene.key);
+        if (!self || !created.has(scene.key)) continue;
         // generic_links полиморфны и каскадом за удалённой сценой не уходят —
         // поэтому каждая строка попадает в import_records поимённо.
         const link = (key: string, section: string) => {
           const ref = keys.get(key);
-          if (!ref || !ref.type) return;
+          if (!linkable(ref)) return;
           const info = db
             .prepare(
               `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section)
@@ -561,6 +647,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       }
 
       adv.milestones.forEach((milestone, index) => {
+        if (!shouldCreate(milestone.key)) return;
         const scene = resolve(milestone.scene, "scene");
         const id = Number(
           db
@@ -571,12 +658,14 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             .run(advRef.id, scene?.id ?? null, milestone.title, milestone.description, index)
             .lastInsertRowid
         );
-        keys.set(milestone.key, { type: "", id });
+        record("milestone", id);
+        keys.set(milestone.key, { type: "milestone", id });
         remember("story_milestones", "description", id, milestone.description);
         bump("вехи");
       });
 
       adv.secrets.forEach((secret, index) => {
+        if (!shouldCreate(secret.key)) return;
         const id = Number(
           db
             .prepare(
@@ -584,7 +673,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             )
             .run(advRef.id, secret.kind, secret.title, secret.content, index).lastInsertRowid
         );
-        keys.set(secret.key, { type: "", id });
+        record("secret", id);
+        keys.set(secret.key, { type: "secret", id });
         remember("story_secrets", "content", id, secret.content);
         bump("тайны");
       });
@@ -600,14 +690,24 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             .run(advRef.id, reward.what, reward.where_found, reward.notes, artifact?.id ?? null, index)
             .lastInsertRowid
         );
+        record("reward", id);
         remember("story_scene_rewards", "notes", id, reward.notes);
         bump("награды");
       });
     }
 
     // --- календарь ---------------------------------------------------------
+    // У событий и отношений нет ключей, так что от повторного залива того же
+    // файла их спасает только сравнение по содержимому.
     for (const event of data.calendar_events) {
       if (event.month < 1 || event.day < 1) continue;
+      const duplicate = db
+        .prepare(
+          `SELECT 1 FROM setting_calendar_events
+           WHERE setting_id = ? AND title = ? AND inworld_year = ? AND inworld_month = ? AND inworld_day = ?`
+        )
+        .get(settingId, event.title, event.year, event.month, event.day);
+      if (duplicate) continue;
       const info = db
         .prepare(
           `INSERT INTO setting_calendar_events
@@ -635,6 +735,13 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       if (!from || !to) continue;
       if (!["being", "community"].includes(from.type) || !["being", "community"].includes(to.type))
         continue;
+      const duplicate = db
+        .prepare(
+          `SELECT 1 FROM entity_relations
+           WHERE from_type = ? AND from_id = ? AND to_type = ? AND to_id = ? AND label = ?`
+        )
+        .get(from.type, from.id, to.type, to.id, relation.label);
+      if (duplicate) continue;
       const info = db
         .prepare(
           `INSERT INTO entity_relations (from_type, from_id, to_type, to_id, tone, label, description)
@@ -648,7 +755,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     for (const genericLink of data.links) {
       const from = keys.get(genericLink.from);
       const to = keys.get(genericLink.to);
-      if (!from || !to || !from.type || !to.type) continue;
+      if (!linkable(from) || !linkable(to)) continue;
       const info = db
         .prepare(
           `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section)
@@ -669,7 +776,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       let changed = false;
       const next = field.raw.replace(mentionRe(), (whole, key: string, label: string) => {
         const ref = keys.get(key);
-        if (!ref || !ref.type) return whole;
+        if (!linkable(ref)) return whole;
         changed = true;
         substituted++;
         return `[[${ref.type}:${ref.id}|${label}]]`;
@@ -734,7 +841,11 @@ export function rollbackBatch(batchId: number): { deleted: number } {
     // Сначала связи, потом сущности: связь на удалённую строку каскадом не
     // уходит, а вот сущность утащит за собой свои дочерние строки.
     const order = (type: string) =>
-      ["link", "relation", "important_date"].includes(type) ? 0 : type === "setting" ? 2 : 1;
+      ["link", "relation", "important_date", "milestone", "secret", "reward"].includes(type)
+        ? 0
+        : type === "setting"
+          ? 2
+          : 1;
     for (const row of [...rows].sort((a, b) => order(a.entity_type) - order(b.entity_type))) {
       const table = ROLLBACK_TABLES[row.entity_type];
       if (!table) continue;

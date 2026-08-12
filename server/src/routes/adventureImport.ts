@@ -1,7 +1,7 @@
-// API импортёра книг приключений. Экрана сверки здесь ещё нет (Этап 4) —
-// пока это то, чем пользуется он и чем можно проверить разбор вручную:
+// API импортёра книг приключений:
 //
 //   POST   /api/import/validate   разобрать и проверить, ничего не записав
+//   POST   /api/import/plan       то же плюс список сущностей и совпадений
 //   POST   /api/import/apply      записать в базу одной транзакцией
 //   GET    /api/import/batches    история импортов
 //   DELETE /api/import/batches/:id  откат батча
@@ -10,6 +10,7 @@ import { Router } from "express";
 import { db } from "../db/db";
 import { validateImport } from "../import/validate";
 import { applyImport, rollbackBatch, knownKeysFor } from "../import/apply";
+import { buildPlan } from "../import/plan";
 
 export const adventureImportRouter = Router();
 
@@ -48,11 +49,46 @@ adventureImportRouter.post("/validate", (req, res) => {
   });
 });
 
+// Экран сверки: то же, что /validate, плюс поштучный список того, что приедет,
+// и найденные совпадения с уже существующим в целевом сеттинге.
+adventureImportRouter.post("/plan", (req, res) => {
+  const { data, setting_id } = req.body as { data?: unknown; setting_id?: number | null };
+  if (data === undefined) return res.status(400).json({ error: "data is required" });
+
+  const settingId = setting_id ?? null;
+  const known = settingId ? knownKeysFor(settingId) : {};
+  const result = validateImport(data, known);
+  const setting = (data as { setting?: { key?: string; name?: string } })?.setting;
+  if (!result.ok || !result.data) {
+    return res.json({
+      ok: false,
+      errors: result.errors,
+      warnings: result.warnings,
+      counts: result.counts,
+      matches: [],
+      plan: { sections: [], extras: {} },
+    });
+  }
+  res.json({
+    ok: true,
+    errors: result.errors,
+    warnings: result.warnings,
+    counts: result.counts,
+    matches: setting?.name ? matchSettings(setting.key ?? "", setting.name) : [],
+    setting: result.data.setting,
+    source: result.data.source,
+    plan: buildPlan(result.data, settingId, known),
+  });
+});
+
 adventureImportRouter.post("/apply", (req, res) => {
-  const { data, setting_id, file_name } = req.body as {
+  const { data, setting_id, file_name, skip, reuse, categories } = req.body as {
     data?: unknown;
     setting_id?: number | null;
     file_name?: string;
+    skip?: string[];
+    reuse?: Record<string, string>;
+    categories?: Record<string, string>;
   };
   if (data === undefined) return res.status(400).json({ error: "data is required" });
 
@@ -75,6 +111,9 @@ adventureImportRouter.post("/apply", (req, res) => {
       settingId,
       fileName: file_name ?? "",
       knownKeys: known,
+      skip,
+      reuse,
+      categories,
     });
     res.status(201).json({
       ok: true,

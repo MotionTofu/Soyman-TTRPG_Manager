@@ -522,6 +522,11 @@ export function SettingDetailPage() {
       {tab === "Население" && <PopulationTab settingId={settingId} />}
       {tab === "Приключения" && (
         <div className="card stack">
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button onClick={() => navigate(`/import?setting=${settingId}`)}>
+              Импорт приключения
+            </button>
+          </div>
           <AdventuresTab settingId={settingId} />
         </div>
       )}

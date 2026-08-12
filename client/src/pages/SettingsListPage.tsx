@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
@@ -13,6 +13,7 @@ import { ViewModeToggle } from "../components/ViewModeToggle";
 import type { Setting } from "../types";
 
 export function SettingsListPage() {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<Setting[]>([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -46,6 +47,7 @@ export function SettingsListPage() {
         <SectionHeading section="settings">Сеттинги</SectionHeading>
         <div className="row">
           <ViewModeToggle mode={viewMode} onChange={changeViewMode} />
+          <button onClick={() => navigate("/import")}>Импорт приключения</button>
           <button className="primary" onClick={() => setCreating(true)}>
             + Новый сеттинг
           </button>
