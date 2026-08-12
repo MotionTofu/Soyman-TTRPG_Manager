@@ -19,6 +19,12 @@ interface SectionHeadingProps {
   icon?: NavIconName;
   /** Renders a right-aligned "label →" link — "section" level only. */
   action?: SectionHeadingAction;
+  /** Which nav destination this page-level heading belongs to (matches the
+   *  left-nav icon names) — "page" level only. Lets per-theme CSS (e.g. the
+   *  Neon theme) color each section's <h1> without hardcoding routes into
+   *  the theme system. See index.css's `[data-theme-id="neon"]
+   *  .section-heading h1[data-section=...]` rules. */
+  section?: NavIconName;
 }
 
 // Wraps a page's top-level <h1> with a small thematic particle field (see
@@ -26,7 +32,7 @@ interface SectionHeadingProps {
 // Системы, etc.), not on entity detail pages. Also doubles, via `level:
 // "section"`, as the shared "icon, caps-header, все →" pattern for
 // sub-sections within a page.
-export function SectionHeading({ children, level = "page", icon, action }: SectionHeadingProps) {
+export function SectionHeading({ children, level = "page", icon, action, section }: SectionHeadingProps) {
   if (level === "section") {
     return (
       <div className="section-heading section-heading-sub">
@@ -46,7 +52,7 @@ export function SectionHeading({ children, level = "page", icon, action }: Secti
   return (
     <div className="section-heading">
       <ParticleField count={6} />
-      <h1 className="zine-marker-underline">{children}</h1>
+      <h1 className="zine-marker-underline" data-section={section}>{children}</h1>
     </div>
   );
 }

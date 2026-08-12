@@ -1,7 +1,6 @@
 import { memo, useState } from "react";
 import type { DndAbilityKey, DndAbilityScores, DndSkillProfLevel } from "../../types";
 import { ABILITY_LABELS, abilityModifier, formatModifier, parseBonus } from "./AbilityScores";
-import { Dice } from "../Dice";
 
 interface CommonProps {
   abilities: DndAbilityScores;
@@ -118,13 +117,15 @@ export const AbilitySavesSkillsEdit = memo(function AbilitySavesSkillsEdit({
   );
 });
 
-// Ability box shown as two overlapping d20 "dice": the front die shows the
-// score + modifier, the back die peeks out behind it showing the saving
-// throw. Clicking swaps which one is in front — a physical-feeling way to
-// check a save without a separate row/column eating space. Flip state is
-// per-ability and local to this view (not persisted — it's just "which face
-// am I looking at right now", not character data).
-function AbilityDiceBox({
+// Plain rectangular tile (same .dnd-ability-box frame the edit view uses) —
+// an earlier version showed this as two overlapping d20 dice you'd flip
+// between, but at a glance it read as a jumbled pile rather than a score, so
+// it's back to a flat box. The flip behavior itself stayed: click toggles
+// between showing the ability score+modifier and its saving throw, without
+// eating a separate row/column for the save. Toggle state is per-ability and
+// local to this view (not persisted — it's just "which face am I looking at
+// right now", not character data).
+function AbilityBox({
   label,
   score,
   mod,
@@ -137,34 +138,26 @@ function AbilityDiceBox({
   save: string;
   isSaveProficient: boolean;
 }) {
-  const [flipped, setFlipped] = useState(false);
+  const [showSave, setShowSave] = useState(false);
   return (
     <div className="dnd-ability-col">
-      <div className="dnd-ability-box">
-        <div
-          className="dnd-ability-dice"
-          onClick={() => setFlipped((f) => !f)}
-          title="Клик — переключить характеристику/спасбросок"
-        >
-          <Dice
-            kind="d20"
-            size="sm"
-            state="outline"
-            value={score}
-            sub={formatModifier(mod)}
-            label={label}
-            className={`dnd-die dnd-die-score${flipped ? " is-back" : " is-front"}`}
-          />
-          <Dice
-            kind="d20"
-            size="sm"
-            state="outline"
-            value={save}
-            sub="спас"
-            label={label}
-            className={`dnd-die dnd-die-save${flipped ? " is-front" : " is-back"}${isSaveProficient ? " is-proficient" : ""}`}
-          />
-        </div>
+      <div
+        className="dnd-ability-box dnd-ability-box-clickable"
+        onClick={() => setShowSave((v) => !v)}
+        title="Клик — переключить характеристику/спасбросок"
+      >
+        <span className="dnd-ability-label">{label}</span>
+        {showSave ? (
+          <>
+            <span className={`dnd-ability-score${isSaveProficient ? " is-proficient" : ""}`}>{save}</span>
+            <span className="dnd-ability-label">спас</span>
+          </>
+        ) : (
+          <>
+            <span className="dnd-ability-score">{score}</span>
+            <span className="dnd-ability-mod">{formatModifier(mod)}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -186,7 +179,7 @@ export function AbilitySavesSkillsView({
         {ABILITY_LABELS.map(({ key, label }) => {
           const mod = abilityModifier(abilities[key]);
           return (
-            <AbilityDiceBox
+            <AbilityBox
               key={key}
               label={label}
               score={abilities[key]}

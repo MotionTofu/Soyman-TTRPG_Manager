@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { SessionSummary } from "../types";
+import { formatNearestDate } from "../nearestDate";
 
 interface Props {
   sessions: SessionSummary[];
@@ -26,7 +27,7 @@ export function UpcomingSessionsNotice({ sessions }: Props) {
           <Link to={`/sessions/${s.id}`}>
             <strong>{s.campaign_name}</strong>
           </Link>
-          <span className="muted">{s.date}</span>
+          <span className="muted">{formatNearestDate(s.date)}</span>
           <button
             className="upcoming-notice-close"
             onClick={() => setDismissed((prev) => new Set(prev).add(s.id))}

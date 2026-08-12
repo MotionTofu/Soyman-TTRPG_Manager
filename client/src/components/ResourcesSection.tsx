@@ -377,7 +377,7 @@ export const ResourcesSection = memo(function ResourcesSection({
                   </button>
                   {!hasElectronAPI() && (
                     <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
-                      Выбор папки доступен только в приложении RPG Manager, не в браузере.
+                      Выбор папки доступен только в приложении SoyMan_ttrpg, не в браузере.
                     </span>
                   )}
                 </div>

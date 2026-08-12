@@ -17,6 +17,7 @@ const OWNER_TABLES: Record<string, string> = {
   location: "setting_locations",
   community: "setting_communities",
   campaign_player_section: "campaign_player_sections",
+  artifact: "artifacts",
 };
 
 function withUrl<T extends { image_path: string }>(row: T) {

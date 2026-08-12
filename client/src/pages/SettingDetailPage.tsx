@@ -28,7 +28,7 @@ import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { RelationGraph } from "../components/RelationGraph";
 import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
 import type { GraphData } from "../graphTypes";
-import { BEING_CATEGORIES } from "../beingCategories";
+import { NAMED_BEING_CATEGORIES } from "../beingCategories";
 import type {
   Artifact,
   BeingCategory,
@@ -47,6 +47,7 @@ const TABS = [
   "Обзор",
   "География",
   "Население",
+  "Сокровищница",
   "Граф связей",
   "Хроника мира",
   "Заметки",
@@ -517,6 +518,11 @@ export function SettingDetailPage() {
 
       {tab === "География" && <GeographyTab settingId={settingId} />}
       {tab === "Население" && <PopulationTab settingId={settingId} />}
+      {tab === "Сокровищница" && (
+        <div className="card stack">
+          <ArtifactsTab settingId={settingId} />
+        </div>
+      )}
       {tab === "Граф связей" && <SettingGraphTab settingId={settingId} />}
 
       {tab === "Хроника мира" && (
@@ -754,10 +760,13 @@ function GeographyTab({ settingId }: { settingId: number }) {
   );
 }
 
-const POPULATION_SECTIONS = ["Существа", "Сообщества, Народы и Культуры", "Артефакты"] as const;
+// Артефакты moved out to their own top-level "Сокровищница" tab — they're
+// not population. Личности holds *named* personalities only; unnamed
+// creature kinds get their own Бестиарий subsection.
+const POPULATION_SECTIONS = ["Личности", "Бестиарий", "Сообщества"] as const;
 
 function PopulationTab({ settingId }: { settingId: number }) {
-  const [section, setSection] = useState<(typeof POPULATION_SECTIONS)[number]>("Существа");
+  const [section, setSection] = useState<(typeof POPULATION_SECTIONS)[number]>("Личности");
 
   return (
     <div className="card stack">
@@ -768,9 +777,9 @@ function PopulationTab({ settingId }: { settingId: number }) {
           </button>
         ))}
       </div>
-      {section === "Существа" && <BeingsSection settingId={settingId} />}
-      {section === "Сообщества, Народы и Культуры" && <CommunitiesSection settingId={settingId} />}
-      {section === "Артефакты" && <ArtifactsTab settingId={settingId} />}
+      {section === "Личности" && <BeingsSection settingId={settingId} />}
+      {section === "Бестиарий" && <BestiarySection settingId={settingId} />}
+      {section === "Сообщества" && <CommunitiesSection settingId={settingId} />}
     </div>
   );
 }
@@ -786,6 +795,7 @@ function BeingsSection({ settingId }: { settingId: number }) {
   function refresh() {
     const params = new URLSearchParams({ setting_id: String(settingId) });
     if (category !== "all") params.set("category", category);
+    else params.set("exclude_category", "bestiary");
     if (locationFilter) params.set("location_id", locationFilter);
     if (query.trim()) params.set("q", query.trim());
     api.get<SettingBeing[]>(`/setting-beings?${params.toString()}`).then(setBeings);
@@ -821,7 +831,7 @@ function BeingsSection({ settingId }: { settingId: number }) {
   return (
     <div className="stack">
       <div className="tabs">
-        {BEING_CATEGORIES.map((c) => (
+        {NAMED_BEING_CATEGORIES.map((c) => (
           <button
             key={c.key}
             className={category === c.key ? "active" : ""}
@@ -866,7 +876,75 @@ function BeingsSection({ settingId }: { settingId: number }) {
           сообщества/народы/культуры или общую локацию.
         </span>
       )}
-      <BeingEntityRowList beings={beings} onDelete={deleteBeing} onDuplicate={duplicateBeing} />
+      <BeingEntityRowList beings={beings} onDelete={deleteBeing} onDuplicate={duplicateBeing} asLinks />
+    </div>
+  );
+}
+
+// Unnamed creature kinds inhabiting the setting ("гоблины", "речные
+// утопленники") — a separate list from the named personalities above, so
+// the GM gets an at-a-glance answer to "кто вообще населяет мой мир". Each
+// entry may point at one or more system compendium monsters (see
+// BeingCompendiumLinks on the being's own page); the entry itself lives in
+// the setting and works fine with no system attached at all.
+function BestiarySection({ settingId }: { settingId: number }) {
+  const [beings, setBeings] = useState<SettingBeing[]>([]);
+  const [query, setQuery] = useState("");
+  const [name, setName] = useState("");
+
+  function refresh() {
+    const params = new URLSearchParams({ setting_id: String(settingId), category: "bestiary" });
+    if (query.trim()) params.set("q", query.trim());
+    api.get<SettingBeing[]>(`/setting-beings?${params.toString()}`).then(setBeings);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refresh, [settingId, query]);
+
+  async function create() {
+    if (!name.trim()) return;
+    await api.post("/setting-beings", { setting_id: settingId, name, category: "bestiary" });
+    setName("");
+    refresh();
+  }
+
+  async function duplicateBeing(being: SettingBeing) {
+    await api.post("/setting-beings", {
+      setting_id: settingId,
+      name: `${being.name}_`,
+      category: "bestiary",
+      statblock_short: being.statblock_short,
+      statblock_full: being.statblock_full,
+      history: being.history,
+      behavior: being.behavior,
+    });
+    refresh();
+  }
+
+  async function deleteBeing(beingId: number) {
+    if (!confirm("Удалить эту запись бестиария?")) return;
+    await api.del(`/setting-beings/${beingId}`);
+    refresh();
+  }
+
+  return (
+    <div className="stack">
+      <p className="muted">
+        Бестиарий сеттинга — виды и типы существ без имени, населяющие этот мир. Именные
+        персонажи живут в разделе «Личности». Запись бестиария можно связать с монстрами из
+        компендиумов систем на её собственной странице.
+      </p>
+      <div className="row">
+        <input
+          placeholder="Название вида (например, «Гоблины Подгорья»)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button className="primary" onClick={create}>
+          Добавить
+        </button>
+      </div>
+      <input placeholder="Поиск по бестиарию…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <BeingEntityRowList beings={beings} onDelete={deleteBeing} onDuplicate={duplicateBeing} asLinks />
     </div>
   );
 }
@@ -899,14 +977,14 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
   return (
     <div className="stack">
       <p className="muted">
-        Сообщества, народы и культуры — объединения, к которым можно отнести существ и
-        персонажей из раздела «Существа». Здесь показаны верхнеуровневые сообщества — вложенные
+        Сообщества — любые объединения (народы, культуры, фракции, гильдии), к которым можно
+        отнести личностей из раздела «Личности». Здесь показаны верхнеуровневые — вложенные
         (например, отдельный город внутри королевства) создаются на странице родительского
         сообщества, во вкладке «Вложенные сообщества».
       </p>
       <div className="row">
         <input
-          placeholder="Название сообщества/народа/культуры"
+          placeholder="Название сообщества"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
@@ -977,8 +1055,14 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
     refresh();
   }
 
+  async function deleteArtifact(id: number) {
+    if (!confirm("Отправить артефакт в архив?")) return;
+    await api.del(`/artifacts/${id}`);
+    refresh();
+  }
+
   return (
-    <div className="card stack">
+    <div className="stack">
       <div className="row">
         <input placeholder="Название артефакта" value={name} onChange={(e) => setName(e.target.value)} />
         <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
@@ -986,11 +1070,26 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           Добавить
         </button>
       </div>
-      <div className="grid-cards">
+      <div className="entity-row-list">
         {artifacts.map((a) => (
-          <Link key={a.id} to={`/artifacts/${a.id}`} className="card">
-            <h3>{a.name}</h3>
-            {a.owner && <div className="muted">Владелец: {a.owner}</div>}
+          <Link key={a.id} to={`/artifacts/${a.id}`} className="entity-row">
+            <span className="entity-row-name">{a.name}</span>
+            {a.owner && <span className="muted">{a.owner}</span>}
+            <span className="entity-row-actions">
+              <Link to={`/artifacts/${a.id}`} onClick={(e) => e.stopPropagation()}>
+                Изменить
+              </Link>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  deleteArtifact(a.id);
+                }}
+              >
+                Удалить
+              </button>
+            </span>
           </Link>
         ))}
         {artifacts.length === 0 && <p className="muted">Артефактов пока нет.</p>}

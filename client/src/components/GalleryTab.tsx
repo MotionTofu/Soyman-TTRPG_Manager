@@ -16,7 +16,7 @@ interface ThumbnailUploadProps {
 }
 
 interface Props {
-  ownerType: "character" | "being" | "location" | "community" | "campaign_player_section";
+  ownerType: "character" | "being" | "location" | "community" | "campaign_player_section" | "artifact";
   ownerId: number;
   thumbnailUpload?: ThumbnailUploadProps;
   // Same shape as thumbnailUpload — used for entities (locations) whose

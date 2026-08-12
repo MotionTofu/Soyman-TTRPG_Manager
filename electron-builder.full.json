@@ -1,6 +1,6 @@
 {
   "appId": "com.rpgmanager.app.full",
-  "productName": "RPG Manager (с системами)",
+  "productName": "SoyMan_ttrpg (с системами)",
   "asar": false,
   "directories": {
     "output": "release/full"
@@ -25,13 +25,13 @@
     "target": ["portable", "nsis"]
   },
   "portable": {
-    "artifactName": "RPG-Manager-Full-${version}.exe"
+    "artifactName": "SoyMan_ttrpg-Full-${version}.exe"
   },
   "nsis": {
     "oneClick": true,
     "perMachine": false,
     "allowToChangeInstallationDirectory": false,
-    "artifactName": "RPG-Manager-Full-Setup-${version}.exe"
+    "artifactName": "SoyMan_ttrpg-Full-Setup-${version}.exe"
   },
   "publish": [
     {

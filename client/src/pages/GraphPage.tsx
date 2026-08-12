@@ -46,7 +46,7 @@ export function GraphPage() {
 
   return (
     <div className="stack">
-      <SectionHeading>Граф связей</SectionHeading>
+      <SectionHeading section="graph">Граф связей</SectionHeading>
       <p className="muted">
         Визуализация всех связей между сущностями. Тащите фон, чтобы перемещаться, крутите колесо, чтобы
         приближать. Клик по узлу — выделить и приблизить его; поиск — быстро найти и перейти к сущности.

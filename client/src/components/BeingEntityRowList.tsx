@@ -43,6 +43,7 @@ export function BeingEntityRowList<B extends SettingBeing>({
   getFactionCount,
   getLocationSuffix,
   hideDelete,
+  asLinks,
 }: {
   beings: B[];
   onDelete: (id: number) => void;
@@ -65,6 +66,13 @@ export function BeingEntityRowList<B extends SettingBeing>({
   // nested inhabitants shown on a location that isn't their actual home,
   // where "Убрать отсюда" has no relationship to remove.
   hideDelete?: (being: B) => boolean;
+  // Matches Сообщества/Народы/Культуры's row behavior instead of the default
+  // click-to-expand: the whole row is a Link straight to the profile (no
+  // inline preview, no right-click menu), and the trailing action reads
+  // "Изменить" instead of "Перейти" — used by Население's top-level
+  // Существа list so the two subsections of that tab look and act alike.
+  // Обитатели/Представители embeds keep the richer expand-in-place default.
+  asLinks?: boolean;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number; being: B } | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -87,17 +95,23 @@ export function BeingEntityRowList<B extends SettingBeing>({
         const factionCount = factions?.length ?? getFactionCount?.(b) ?? 0;
         const locationSuffix = getLocationSuffix?.(b);
         const meta = formatMeta(b.creature_meta);
-        const isOpen = expandedId === b.id;
-        return (
-          <div key={b.id}>
-            <div
-              className={`entity-row${isBg ? " entity-row-bg" : ""}`}
-              style={{ ...(isBg ? { backgroundImage: `url("${url}")` } : undefined), cursor: "pointer" }}
-              onClick={() => setExpandedId(isOpen ? null : b.id)}
-              onContextMenu={(e) => {
+        const isOpen = !asLinks && expandedId === b.id;
+        const RowTag = (asLinks ? Link : "div") as React.ElementType;
+        const rowProps = asLinks
+          ? { to: `/beings/${b.id}` }
+          : {
+              onClick: () => setExpandedId(isOpen ? null : b.id),
+              onContextMenu: (e: React.MouseEvent) => {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, being: b });
-              }}
+              },
+            };
+        return (
+          <div key={b.id}>
+            <RowTag
+              className={`entity-row${isBg ? " entity-row-bg" : ""}`}
+              style={{ ...(isBg ? { backgroundImage: `url("${url}")` } : undefined), cursor: "pointer" }}
+              {...(rowProps as object)}
             >
               {mode === "banner" && url && <img src={url} alt="" className="entity-row-thumb" />}
               <span className="entity-row-name">
@@ -115,14 +129,14 @@ export function BeingEntityRowList<B extends SettingBeing>({
                 <TagChips tags={b.tags} />
               </span>
               <span className="entity-row-actions" onClick={(e) => e.stopPropagation()}>
-                <Link to={`/beings/${b.id}`}>Перейти</Link>
+                <Link to={`/beings/${b.id}`}>{asLinks ? "Изменить" : "Перейти"}</Link>
                 {!hideDelete?.(b) && (
                   <button type="button" onClick={() => onDelete(b.id)}>
                     {deleteLabel}
                   </button>
                 )}
               </span>
-            </div>
+            </RowTag>
             {isOpen && (
               <div className="entity-row-expanded">
                 {meta && <div className="muted">{meta}</div>}

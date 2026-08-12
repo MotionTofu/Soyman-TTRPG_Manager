@@ -41,6 +41,11 @@ interface Props {
   // running session are tagged distinctly from ones planned ahead of time
   // via the session profile page (same drop zone, different call site).
   origin?: string;
+  // When "compendium_entry" is in acceptTypes, further restricts drops to
+  // entries whose own kind (equipment/magic_item/spell/…) is in this list —
+  // e.g. Потенциальный лут accepts compendium items but not spells/monsters.
+  // Ignored for other accepted types.
+  acceptCompendiumKinds?: string[];
 }
 
 // Memoized — see ObstacleDropZone's comment. acceptTypes/mentionTypes are
@@ -56,6 +61,7 @@ export const SectionDropZone = memo(function SectionDropZone({
   mentionText,
   mentionTypes,
   origin,
+  acceptCompendiumKinds,
 }: Props) {
   const [linkEntries, setLinkEntries] = useState<Entry[]>([]);
   const [mentionEntries, setMentionEntries] = useState<Entry[]>([]);
@@ -118,6 +124,12 @@ export const SectionDropZone = memo(function SectionDropZone({
     if (!raw) return;
     const result: SearchResult = JSON.parse(raw);
     if (!acceptTypes.includes(result.type)) return;
+    if (
+      result.type === "compendium_entry" &&
+      acceptCompendiumKinds &&
+      !acceptCompendiumKinds.includes(result.kind ?? "")
+    )
+      return;
     await api.post("/links", {
       from_type: entityType,
       from_id: entityId,

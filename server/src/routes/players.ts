@@ -19,9 +19,23 @@ function withThumbUrl<T extends { thumbnail_image_path?: string | null; avatar_i
   };
 }
 
+// next_planned_date mirrors campaigns.ts's own computed field — same
+// "soonest upcoming planned session" idea, just rolled up across every
+// active campaign a player is rostered in (via campaign_roster, not
+// characters — a player can be on a roster before their character exists).
 playersRouter.get("/", (_req, res) => {
   const rows = db
-    .prepare("SELECT * FROM players WHERE archived_at IS NULL ORDER BY name")
+    .prepare(
+      `SELECT p.*,
+              (SELECT MIN(s.date) FROM sessions s
+                 JOIN campaign_roster cr ON cr.campaign_id = s.campaign_id
+                 WHERE cr.player_id = p.id AND cr.status = 'active'
+                   AND s.status = 'planned' AND s.archived_at IS NULL
+                   AND s.date >= date('now')) as next_planned_date
+       FROM players p
+       WHERE p.archived_at IS NULL
+       ORDER BY (next_planned_date IS NULL), next_planned_date, p.name`
+    )
     .all() as { thumbnail_image_path: string | null }[];
   res.json(rows.map(withThumbUrl));
 });

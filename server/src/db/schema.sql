@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   combat_active INTEGER NOT NULL DEFAULT 0,
   combat_turn_entry_id INTEGER REFERENCES initiative_entries(id) ON DELETE SET NULL,
   battle_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL,
+  cheatsheet_data TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );
@@ -203,6 +204,7 @@ CREATE TABLE IF NOT EXISTS statblocks (
   note TEXT DEFAULT '',
   theme TEXT, -- statblock visual theme (see statblock themes), NULL = default "Гравюра" (theme-color)
   density TEXT, -- 'comfortable' | 'compact', NULL = comfortable
+  avatar_image_path TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -409,14 +411,38 @@ CREATE TABLE IF NOT EXISTS artifacts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  short_name TEXT,
   owner TEXT DEFAULT '',
   power TEXT DEFAULT '',
   history TEXT DEFAULT '',
   notes TEXT DEFAULT '',
+  item_type TEXT,
+  rarity TEXT,
+  requires_attunement INTEGER NOT NULL DEFAULT 0,
   file_path TEXT,
   folder_path TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
+);
+
+-- A бестиарий entry (setting_beings with category='bestiary') can reference
+-- monster templates in the compendiums of several systems at once — the same
+-- creature kind run under D&D and under another system. Distinct from
+-- setting_beings.base_monster_id, which marks "this named personality was
+-- cloned from that one template".
+CREATE TABLE IF NOT EXISTS being_compendium_links (
+  being_id INTEGER NOT NULL REFERENCES setting_beings(id) ON DELETE CASCADE,
+  compendium_entry_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (being_id, compendium_entry_id)
+);
+
+CREATE TABLE IF NOT EXISTS artifact_chapters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  artifact_id INTEGER NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+  title TEXT DEFAULT '',
+  content TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS generic_links (

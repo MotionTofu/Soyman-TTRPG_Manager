@@ -121,7 +121,7 @@ export function ResourcesListPage() {
 
   return (
     <div className="stack">
-      <SectionHeading>Ресурсы</SectionHeading>
+      <SectionHeading section="resources">Ресурсы</SectionHeading>
       <p className="muted">
         Библиотека всего, что есть в приложении — статблоки, лут, справочные материалы, плейлисты.
       </p>

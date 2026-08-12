@@ -214,12 +214,13 @@ export interface Player {
   thumbnail_image_url: string | null;
   avatar_image_path: string | null;
   avatar_image_url: string | null;
+  next_planned_date?: string | null;
 }
 
 export interface CharacterChapter {
   id: number;
   character_id: number;
-  section: "backstory" | "personal_arc" | "current_situation" | "future_thoughts" | "inventory";
+  section: "personality" | "backstory" | "personal_arc" | "current_situation" | "future_thoughts" | "inventory";
   title: string;
   content: string;
   image_path: string | null;
@@ -282,6 +283,8 @@ export interface Statblock {
   note: string;
   theme: string | null;
   density: string | null;
+  avatar_image_path: string | null;
+  avatar_image_url: string | null;
   created_at: string;
 }
 
@@ -438,6 +441,22 @@ export interface DndCharacterData {
   armorClass: string;
   initiative: string;
   speed: string;
+  // Structured speeds (walk/fly/swim/climb/burrow), same shape as
+  // DndCreatureSpeed — added alongside the legacy free-text `speed` above
+  // rather than replacing it, since existing characters only ever filled
+  // that in and normalizeDndCharacter() can't reliably parse arbitrary
+  // free text back into numbers.
+  speeds: DndCreatureSpeed;
+  sensesList: DndCreatureSense[];
+  damageResistances: string[];
+  damageImmunities: string[];
+  damageVulnerabilities: string[];
+  conditionImmunities: string[];
+  // Conditions currently affecting the character (Poisoned, Prone, etc.,
+  // from the same "Состояния" compendium mechanics group used by
+  // InitiativeTracker's condition picker) — a live tracker, not a defense
+  // list like the four above.
+  conditions: string[];
   hitPointMax: string;
   hitPointsCurrent: string;
   hitPointsTemp: string;
@@ -787,6 +806,7 @@ export interface SessionDetail extends SessionSummary {
   resources: Resource[];
   earned: number;
   archived_at: string | null;
+  cheatsheet_data: string | null;
 }
 
 export interface Resource {
@@ -1075,10 +1095,21 @@ export interface BeingChapter {
   created_at: string;
 }
 
+// Monster templates from any system's compendium linked to this being —
+// used by бестиарий entries, which may carry several systems' versions of
+// the same creature kind.
+export interface BeingCompendiumLink {
+  id: number;
+  name: string;
+  system_id: number | null;
+  system_name: string | null;
+}
+
 export interface SettingBeingDetail extends SettingBeing {
   events: BeingEvent[];
   relations: BeingRelation[];
   communities: { id: number; name: string }[];
+  compendium_links: BeingCompendiumLink[];
   important_dates: ImportantDate[];
   chapters: BeingChapter[];
 }
@@ -1092,10 +1123,22 @@ export interface Artifact {
   power: string;
   history: string;
   notes: string;
+  item_type: string | null;
+  rarity: string | null;
+  requires_attunement: boolean | number;
   file_path: string | null;
   folder_path: string | null;
   created_at: string;
   archived_at: string | null;
+  chapters: ArtifactChapter[];
+}
+
+export interface ArtifactChapter {
+  id: number;
+  artifact_id: number;
+  title: string;
+  content: string;
+  created_at: string;
 }
 
 export interface AppSettings {

@@ -19,6 +19,14 @@ process.env.DB_DIR = path.join(userData, "data");
 process.env.VAULT_ROOT = path.join(userData, "RPG-Vault");
 process.env.PORT = String(PORT);
 
+// The "full" flavor bundles a `seed` resources folder (see seedIfNeeded()
+// below); the "empty" flavor doesn't. Reuse that same signal to tell the
+// server's migration (server/src/db/db.ts) not to seed its four default,
+// content-less systems — the empty build should open on a truly blank app.
+if (isPackaged && !fs.existsSync(path.join(process.resourcesPath, "seed"))) {
+  process.env.SEED_DEFAULT_SYSTEMS = "false";
+}
+
 // In dev (running from the repo) server/dist sits next to this file's
 // parent; in the packaged app everything is laid out the same way inside
 // the resources folder because asar is disabled for this build.
@@ -226,7 +234,7 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: "RPG Manager",
+    title: "SoyMan_ttrpg",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

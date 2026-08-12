@@ -41,6 +41,20 @@ export function getLocations(beingId: string | number) {
     .all(beingId);
 }
 
+// Monster templates this being points at, across every system's compendium
+// (бестиарий entries mostly — see being_compendium_links in schema.sql).
+export function getCompendiumLinks(beingId: string | number) {
+  return db
+    .prepare(
+      `SELECT ce.id, ce.name, ce.system_id, sy.name as system_name
+       FROM being_compendium_links bcl
+       JOIN compendium_entries ce ON ce.id = bcl.compendium_entry_id
+       LEFT JOIN systems sy ON sy.id = ce.system_id
+       WHERE bcl.being_id = ? ORDER BY sy.name, ce.name`
+    )
+    .all(beingId);
+}
+
 export interface CreatureMeta {
   size: string;
   creatureType: string;
@@ -79,9 +93,10 @@ export function getCreatureMetaByOwner(ownerType: string, ownerIds: (number | st
 }
 
 settingBeingsRouter.get("/", (req, res) => {
-  const { setting_id, category, location_id, q } = req.query as {
+  const { setting_id, category, exclude_category, location_id, q } = req.query as {
     setting_id?: string;
     category?: string;
+    exclude_category?: string;
     location_id?: string;
     q?: string;
   };
@@ -91,6 +106,13 @@ settingBeingsRouter.get("/", (req, res) => {
   if (category) {
     clauses.push("b.category = @category");
     params.category = category;
+  }
+  // Население's "Все" tab means "every *named* personality" — the бестиарий
+  // lives in its own subsection, so that list asks to exclude it rather than
+  // naming the three named categories explicitly.
+  if (exclude_category) {
+    clauses.push("b.category != @exclude_category");
+    params.exclude_category = exclude_category;
   }
   if (location_id) {
     // Requirement 1: filtering by a location also surfaces beings assigned to
@@ -209,6 +231,7 @@ settingBeingsRouter.get("/:id", (req, res) => {
     events,
     relations,
     communities,
+    compendium_links: getCompendiumLinks(req.params.id),
     locations: getLocations(req.params.id),
     creature_meta: getCreatureMetaByOwner("being", [Number(req.params.id)]).get(Number(req.params.id)) ?? null,
     important_dates: importantDates,
@@ -594,6 +617,25 @@ settingBeingsRouter.delete("/:id/locations/:locationId", (req, res) => {
     "DELETE FROM being_locations WHERE being_id = ? AND location_id = ?"
   ).run(req.params.id, req.params.locationId);
   res.json({ ok: true });
+});
+
+// Compendium monster templates linked to this being — many-to-many, so one
+// бестиарий entry can carry the D&D statblock and another system's version
+// of the same creature side by side.
+settingBeingsRouter.post("/:id/compendium-links", (req, res) => {
+  const { compendium_entry_id } = req.body as { compendium_entry_id: number };
+  if (!compendium_entry_id) return res.status(400).json({ error: "compendium_entry_id is required" });
+  db.prepare(
+    "INSERT OR IGNORE INTO being_compendium_links (being_id, compendium_entry_id) VALUES (?, ?)"
+  ).run(req.params.id, compendium_entry_id);
+  res.json(getCompendiumLinks(req.params.id));
+});
+
+settingBeingsRouter.delete("/:id/compendium-links/:entryId", (req, res) => {
+  db.prepare(
+    "DELETE FROM being_compendium_links WHERE being_id = ? AND compendium_entry_id = ?"
+  ).run(req.params.id, req.params.entryId);
+  res.json(getCompendiumLinks(req.params.id));
 });
 
 // Important dates ("Важные даты") — recurring or one-off in-world dates

@@ -94,7 +94,7 @@ storagesRouter.post("/import-backup", upload.single("file"), (req, res) => {
     const extractedDb = path.join(tmpDir, "app.db");
     const extractedVault = path.join(tmpDir, "RPG-Vault");
     if (!fs.existsSync(extractedDb)) {
-      return res.status(400).json({ error: "В архиве не найден app.db — это не бэкап RPG Manager" });
+      return res.status(400).json({ error: "В архиве не найден app.db — это не бэкап SoyMan_ttrpg" });
     }
 
     const dbDir = path.join(folderPath, "data");

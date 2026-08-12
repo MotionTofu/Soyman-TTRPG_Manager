@@ -201,23 +201,24 @@ export function AppShell() {
   const cockpitId = useNearestSessionCockpitId();
 
   // Flanking slots around the raised center button — see MobileBottomNav's
-  // comment for the symmetric 2+center+2 / 1+center+1 split. Player's old
-  // third slot ("Персонажи") is gone — that list now lives inside "Кабинет"
-  // (see PlayerCabinetPage.tsx).
+  // comment for the symmetric 2+center+2 / 1+center+1 split. GM's old
+  // leftmost slot ("Сессия") and player's old rightmost slot ("Кабинет") are
+  // both now "Главная": the center button's quick-access sheet already
+  // covers what those used to be one-tap shortcuts for — the GM's session
+  // cockpit lives in the sheet's contextual action, and the player's
+  // character list now renders at the top of the sheet (see
+  // MobileQuickAccess) — so the freed slot goes to the page every session
+  // starts on instead of being wasted on a redundant shortcut. Кабинет
+  // itself is unchanged and still reachable from the hamburger drawer nav
+  // (PLAYER_NAV_ITEMS).
   const bottomNavLeft: BottomNavItem[] = isPlayer
     ? [{ key: "library", label: "Библиотека", icon: "library", to: "/library" }]
     : [
-        {
-          key: "session",
-          label: "Сессия",
-          icon: "navCockpit",
-          active: pathname.startsWith("/sessions/"),
-          onClick: () => navigate(cockpitId ? `/sessions/${cockpitId}/live` : "/campaigns"),
-        },
+        { key: "home", label: "Главная", icon: "home", to: "/" },
         { key: "library", label: "Библиотека", icon: "library", to: "/library" },
       ];
   const bottomNavRight: BottomNavItem[] = isPlayer
-    ? [{ key: "cabinet", label: "Кабинет", icon: "storages", to: "/cabinet" }]
+    ? [{ key: "home", label: "Главная", icon: "home", to: "/" }]
     : [
         { key: "players", label: "Игроки", icon: "players", to: "/players" },
         { key: "player", label: "Плеер", icon: "player", to: "/player" },
@@ -322,6 +323,7 @@ export function AppShell() {
         open={quickOpen}
         onClose={() => setQuickOpen(false)}
         contextualAction={contextualAction}
+        showCharacters={isPlayer}
       />
     </div>
   );

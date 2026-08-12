@@ -1,38 +1,32 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { LinkDropZone } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { StatblockList } from "../components/StatblockList";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
-import { EditableTextCard } from "../components/EditableTextCard";
 import { Breadcrumbs } from "../components/Breadcrumbs";
-import { EntityTypeChip } from "../components/EntityTypeChip";
 import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { formatImportantDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
-import type { Character, CharacterChapter, DateRecurrence } from "../types";
+import type { Character, DateRecurrence } from "../types";
 
-const CHAPTER_SECTIONS: { key: CharacterChapter["section"]; label: string }[] = [
+// Досье bundles these as collapsible sub-sections in one tab; the remaining
+// chapter sections stay standalone tabs.
+const DOSSIER_SECTIONS: { key: "personality" | "backstory" | "personal_arc"; label: string }[] = [
+  { key: "personality", label: "Личность" },
   { key: "backstory", label: "Предыстория" },
-  { key: "current_situation", label: "Текущая ситуация" },
-  { key: "personal_arc", label: "Личная арка" },
-  { key: "future_thoughts", label: "Заметки" },
-  { key: "inventory", label: "Имущество" },
+  { key: "personal_arc", label: "Приключение" },
 ];
 
-// "О персонаже" bundles Предыстория/Личная арка/Текущая ситуация/Связи as
-// collapsible sub-sections in one tab, per the user's request to reduce the
-// player-character tab count; the remaining tabs stay standalone.
 const TABS = [
-  { key: "about" as const, label: "О персонаже" },
-  { key: "statblock" as const, label: "Статблок" },
-  CHAPTER_SECTIONS[3],
-  CHAPTER_SECTIONS[4],
-  { key: "important_dates" as const, label: "Важные даты" },
+  { key: "statblock" as const, label: "Чарник" },
+  { key: "about" as const, label: "Досье" },
+  { key: "relations" as const, label: "Связи" },
+  { key: "future_thoughts" as const, label: "Заметки" },
+  { key: "inventory" as const, label: "Имущество" },
   { key: "gallery" as const, label: "Галерея" },
 ];
 const TAB_KEYS = TABS.map((t) => t.key);
@@ -43,7 +37,7 @@ export function CharacterDetailPage() {
   const navigate = useNavigate();
 
   const [character, setCharacter] = useState<Character | null>(null);
-  const [tab, selectTab] = useTabState(TAB_KEYS, "about");
+  const [tab, selectTab] = useTabState(TAB_KEYS, "statblock");
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [shortNameDraft, setShortNameDraft] = useState("");
@@ -88,11 +82,6 @@ export function CharacterDetailPage() {
       short_name: shortNameDraft.trim(),
     });
     setEditingName(false);
-    refresh();
-  }
-
-  async function saveConnectionsNotes(value: string) {
-    await api.put(`/characters/${characterId}`, { connections_notes: value });
     refresh();
   }
 
@@ -172,43 +161,39 @@ export function CharacterDetailPage() {
         {avatarCrop.modal}
       </div>
 
-      <div className="stack">
+      <div className="character-name-block stack">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <div>
-            {editingName ? (
-              <div className="row">
-                <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-                <input
-                  value={shortNameDraft}
-                  onChange={(e) => setShortNameDraft(e.target.value)}
-                  placeholder="Короткое имя для карты"
-                  title="Показывается вместо полного имени в подписи пина на карте локации"
-                />
-                <button className="primary" onClick={saveName}>
-                  Сохранить
-                </button>
-                <button onClick={() => setEditingName(false)}>Отмена</button>
-              </div>
-            ) : (
-              <div className="row" style={{ alignItems: "center" }}>
-                <h1>{character.character_name}</h1>
-                <EntityTypeChip type="character" />
-              </div>
-            )}
-            <div className="muted">
-              Игрок: <Link to={`/players/${character.player_id}`}>{character.player_name}</Link>
-              {" · "}
-              Кампания: <Link to={`/campaigns/${character.campaign_id}`}>{character.campaign_name}</Link>
+          {editingName ? (
+            <div className="row">
+              <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} autoFocus />
+              <input
+                value={shortNameDraft}
+                onChange={(e) => setShortNameDraft(e.target.value)}
+                placeholder="Короткое имя для карты"
+                title="Показывается вместо полного имени в подписи пина на карте локации"
+              />
+              <button className="primary" onClick={saveName}>
+                Сохранить
+              </button>
+              <button onClick={() => setEditingName(false)}>Отмена</button>
             </div>
-          </div>
-          <div className="entity-header-actions">
-            <button onClick={() => setEditingName(true)}>Редактировать имя</button>
-            <button className="danger" onClick={archiveCharacter}>
-              Архивировать
-            </button>
-          </div>
+          ) : (
+            <h1 className="editable-title" onClick={() => setEditingName(true)} title="Нажмите, чтобы переименовать">
+              {character.character_name}
+            </h1>
+          )}
+          <button className="danger" onClick={archiveCharacter}>
+            Архивировать
+          </button>
         </div>
+        <div className="muted">
+          Игрок: <Link to={`/players/${character.player_id}`}>{character.player_name}</Link>
+          {" · "}
+          Кампания: <Link to={`/campaigns/${character.campaign_id}`}>{character.campaign_name}</Link>
+        </div>
+      </div>
 
+      <div className="character-tabs-row">
         <div className="tabs">
           {TABS.map((s) => (
             <button key={s.key} className={tab === s.key ? "active" : ""} onClick={() => selectTab(s.key)}>
@@ -220,77 +205,6 @@ export function CharacterDetailPage() {
       </div>
 
       <div className="stack">
-        {tab === "about" && (
-          <div className="stack">
-            <details className="card">
-              <summary className="sb-section" style={{ margin: 0 }}>
-                Предыстория
-              </summary>
-              <ChapterList
-                ownerId={characterId}
-                ownerType="character"
-                apiBase="/characters"
-                section="backstory"
-                chapters={(character.chapters ?? []).filter((c) => c.section === "backstory")}
-                onChange={refresh}
-              />
-            </details>
-            <details className="card">
-              <summary className="sb-section" style={{ margin: 0 }}>
-                Личная арка
-              </summary>
-              <ChapterList
-                ownerId={characterId}
-                ownerType="character"
-                apiBase="/characters"
-                section="personal_arc"
-                chapters={(character.chapters ?? []).filter((c) => c.section === "personal_arc")}
-                onChange={refresh}
-              />
-            </details>
-            <details className="card">
-              <summary className="sb-section" style={{ margin: 0 }}>
-                Текущая ситуация
-              </summary>
-              <ChapterList
-                ownerId={characterId}
-                ownerType="character"
-                apiBase="/characters"
-                section="current_situation"
-                chapters={(character.chapters ?? []).filter((c) => c.section === "current_situation")}
-                onChange={refresh}
-              />
-            </details>
-            <details className="card">
-              <summary className="sb-section" style={{ margin: 0 }}>
-                Связи
-              </summary>
-              <div className="stack">
-                <EditableTextCard
-                  key={`connections-${character.id}`}
-                  title="Заметки о связях"
-                  value={character.connections_notes}
-                  onSave={saveConnectionsNotes}
-                  rows={5}
-                  entityType="character"
-                  entityId={characterId}
-                />
-                <LinkDropZone
-                  entityType="character"
-                  entityId={characterId}
-                  title="Связанные сущности и крючки приключений"
-                />
-                <RelationsTab
-                  entityType="character"
-                  entityId={characterId}
-                  entityName={character.character_name}
-                  defaultSettingId={character.campaign_setting_id ?? undefined}
-                />
-              </div>
-            </details>
-          </div>
-        )}
-
         {tab === "statblock" && (
           <StatblockList
             ownerType="character"
@@ -301,16 +215,128 @@ export function CharacterDetailPage() {
           />
         )}
 
-        {(tab === "future_thoughts" || tab === "inventory") && (
+        {tab === "about" && (
+          <div className="stack">
+            {DOSSIER_SECTIONS.map((s) => (
+              <details key={s.key} className="card">
+                <summary className="sb-section" style={{ margin: 0 }}>
+                  {s.label}
+                </summary>
+                <ChapterList
+                  ownerId={characterId}
+                  ownerType="character"
+                  apiBase="/characters"
+                  section={s.key}
+                  chapters={(character.chapters ?? []).filter((c) => c.section === s.key)}
+                  onChange={refresh}
+                />
+              </details>
+            ))}
+          </div>
+        )}
+
+        {tab === "relations" && (
+          <RelationsTab
+            entityType="character"
+            entityId={characterId}
+            entityName={character.character_name}
+            defaultSettingId={character.campaign_setting_id ?? undefined}
+          />
+        )}
+
+        {tab === "inventory" && (
           <ChapterList
             ownerId={characterId}
             ownerType="character"
             apiBase="/characters"
-            section={tab}
-            chapters={(character.chapters ?? []).filter((c) => c.section === tab)}
+            section="inventory"
+            chapters={(character.chapters ?? []).filter((c) => c.section === "inventory")}
             onChange={refresh}
-            allowImage={tab === "inventory"}
+            allowImage
           />
+        )}
+
+        {tab === "future_thoughts" && (
+          <div className="stack">
+            <ChapterList
+              ownerId={characterId}
+              ownerType="character"
+              apiBase="/characters"
+              section="future_thoughts"
+              chapters={(character.chapters ?? []).filter((c) => c.section === "future_thoughts")}
+              onChange={refresh}
+            />
+
+            <details className="card">
+              <summary className="sb-section" style={{ margin: 0 }}>
+                Важные даты
+              </summary>
+              <div className="stack">
+                {!character.campaign_setting_id && (
+                  <span className="muted">
+                    У кампании персонажа не привязан сеттинг — календарь недоступен, но даты всё
+                    равно можно добавлять.
+                  </span>
+                )}
+                <div className="row">
+                  <input
+                    placeholder="Название (напр. День рождения)"
+                    value={dateTitle}
+                    onChange={(e) => setDateTitle(e.target.value)}
+                  />
+                  <select value={dateRecurrence} onChange={(e) => setDateRecurrence(e.target.value as DateRecurrence)}>
+                    <option value="once">Разовое</option>
+                    <option value="annual">Ежегодное</option>
+                    <option value="monthly">Ежемесячное</option>
+                  </select>
+                  {dateRecurrence === "once" && (
+                    <input
+                      type="number"
+                      placeholder="Год"
+                      style={{ width: 80 }}
+                      value={dateYear}
+                      onChange={(e) => setDateYear(e.target.value)}
+                    />
+                  )}
+                  {dateRecurrence !== "monthly" && (
+                    <select value={dateMonth} onChange={(e) => setDateMonth(e.target.value)}>
+                      <option value="">Месяц…</option>
+                      {(calendar?.months ?? []).map((m) => (
+                        <option key={m.id} value={m.position}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="number"
+                    placeholder="День"
+                    style={{ width: 70 }}
+                    value={dateDay}
+                    onChange={(e) => setDateDay(e.target.value)}
+                  />
+                  <button className="primary" onClick={addImportantDate}>
+                    Добавить
+                  </button>
+                </div>
+                <div className="stack">
+                  {(character.important_dates ?? []).map((d) => (
+                    <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
+                      <span>
+                        <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [])}
+                      </span>
+                      <button className="danger" onClick={() => removeImportantDate(d.id)}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {(character.important_dates ?? []).length === 0 && (
+                    <p className="muted">Важных дат пока нет.</p>
+                  )}
+                </div>
+              </div>
+            </details>
+          </div>
         )}
 
         {tab === "gallery" && (
@@ -324,73 +350,6 @@ export function CharacterDetailPage() {
               modal: thumbnailCrop.modal,
             }}
           />
-        )}
-
-        {tab === "important_dates" && (
-          <div className="card stack">
-            {!character.campaign_setting_id && (
-              <span className="muted">
-                У кампании персонажа не привязан сеттинг — календарь недоступен, но даты всё
-                равно можно добавлять.
-              </span>
-            )}
-            <div className="row">
-              <input
-                placeholder="Название (напр. День рождения)"
-                value={dateTitle}
-                onChange={(e) => setDateTitle(e.target.value)}
-              />
-              <select value={dateRecurrence} onChange={(e) => setDateRecurrence(e.target.value as DateRecurrence)}>
-                <option value="once">Разовое</option>
-                <option value="annual">Ежегодное</option>
-                <option value="monthly">Ежемесячное</option>
-              </select>
-              {dateRecurrence === "once" && (
-                <input
-                  type="number"
-                  placeholder="Год"
-                  style={{ width: 80 }}
-                  value={dateYear}
-                  onChange={(e) => setDateYear(e.target.value)}
-                />
-              )}
-              {dateRecurrence !== "monthly" && (
-                <select value={dateMonth} onChange={(e) => setDateMonth(e.target.value)}>
-                  <option value="">Месяц…</option>
-                  {(calendar?.months ?? []).map((m) => (
-                    <option key={m.id} value={m.position}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <input
-                type="number"
-                placeholder="День"
-                style={{ width: 70 }}
-                value={dateDay}
-                onChange={(e) => setDateDay(e.target.value)}
-              />
-              <button className="primary" onClick={addImportantDate}>
-                Добавить
-              </button>
-            </div>
-            <div className="stack">
-              {(character.important_dates ?? []).map((d) => (
-                <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
-                  <span>
-                    <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [])}
-                  </span>
-                  <button className="danger" onClick={() => removeImportantDate(d.id)}>
-                    ✕
-                  </button>
-                </div>
-              ))}
-              {(character.important_dates ?? []).length === 0 && (
-                <p className="muted">Важных дат пока нет.</p>
-              )}
-            </div>
-          </div>
         )}
       </div>
     </div>

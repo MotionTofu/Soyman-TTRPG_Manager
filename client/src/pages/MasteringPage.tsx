@@ -50,7 +50,7 @@ export function MasteringPage() {
 
   return (
     <div className="stack">
-      <SectionHeading>Мастерение</SectionHeading>
+      <SectionHeading section="mastering">Мастерение</SectionHeading>
       <div className="tabs">
         {CATEGORIES.map((c) => (
           <button

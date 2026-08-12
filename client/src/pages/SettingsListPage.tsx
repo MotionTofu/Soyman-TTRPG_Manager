@@ -43,7 +43,7 @@ export function SettingsListPage() {
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <SectionHeading>Сеттинги</SectionHeading>
+        <SectionHeading section="settings">Сеттинги</SectionHeading>
         <div className="row">
           <ViewModeToggle mode={viewMode} onChange={changeViewMode} />
           <button className="primary" onClick={() => setCreating(true)}>

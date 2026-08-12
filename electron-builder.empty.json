@@ -1,6 +1,6 @@
 {
   "appId": "com.rpgmanager.app.empty",
-  "productName": "RPG Manager",
+  "productName": "SoyMan_ttrpg",
   "asar": false,
   "directories": {
     "output": "release/empty"
@@ -21,13 +21,13 @@
     "target": ["portable", "nsis"]
   },
   "portable": {
-    "artifactName": "RPG-Manager-Empty-${version}.exe"
+    "artifactName": "SoyMan_ttrpg-Empty-${version}.exe"
   },
   "nsis": {
     "oneClick": true,
     "perMachine": false,
     "allowToChangeInstallationDirectory": false,
-    "artifactName": "RPG-Manager-Empty-Setup-${version}.exe"
+    "artifactName": "SoyMan_ttrpg-Empty-Setup-${version}.exe"
   },
   "publish": [
     {

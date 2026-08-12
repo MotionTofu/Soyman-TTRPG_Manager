@@ -26,6 +26,7 @@ const TABS = [
   "Вложенные сообщества",
   "Связи",
   "Галерея",
+  "Карточка фракции",
   "Упоминания",
 ] as const;
 
@@ -513,6 +514,15 @@ export function CommunityDetailPage() {
             modal: thumbnailCrop.modal,
           }}
         />
+      )}
+
+      {tab === "Карточка фракции" && (
+        <div className="card stack">
+          <p className="muted">
+            Карточка фракции — скоро здесь появится компактная витрина для показа игрокам (пульт
+            управления сессией и другие места).
+          </p>
+        </div>
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="community" entityId={communityId} />}

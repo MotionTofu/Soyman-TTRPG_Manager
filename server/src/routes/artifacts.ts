@@ -21,20 +21,29 @@ artifactsRouter.get("/", (req, res) => {
 });
 
 artifactsRouter.get("/:id", (req, res) => {
-  const row = db.prepare("SELECT * FROM artifacts WHERE id = ?").get(req.params.id);
+  const row = db.prepare("SELECT * FROM artifacts WHERE id = ?").get(req.params.id) as
+    | Record<string, unknown>
+    | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
-  res.json(row);
+  const chapters = db
+    .prepare("SELECT * FROM artifact_chapters WHERE artifact_id = ? ORDER BY created_at")
+    .all(req.params.id);
+  res.json({ ...row, chapters });
 });
 
 artifactsRouter.post("/", upload.single("file"), async (req, res) => {
-  const { setting_id, name, owner, power, history, notes } = req.body as {
-    setting_id: string;
-    name: string;
-    owner?: string;
-    power?: string;
-    history?: string;
-    notes?: string;
-  };
+  const { setting_id, name, owner, power, history, notes, item_type, rarity, requires_attunement } =
+    req.body as {
+      setting_id: string;
+      name: string;
+      owner?: string;
+      power?: string;
+      history?: string;
+      notes?: string;
+      item_type?: string;
+      rarity?: string;
+      requires_attunement?: string;
+    };
   if (!setting_id || !name)
     return res.status(400).json({ error: "setting_id and name are required" });
   const setting = db
@@ -52,8 +61,8 @@ artifactsRouter.post("/", upload.single("file"), async (req, res) => {
 
   const info = db
     .prepare(
-      `INSERT INTO artifacts (setting_id, name, owner, power, history, notes, file_path, folder_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO artifacts (setting_id, name, owner, power, history, notes, item_type, rarity, requires_attunement, file_path, folder_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       setting_id,
@@ -62,6 +71,9 @@ artifactsRouter.post("/", upload.single("file"), async (req, res) => {
       power ?? "",
       history ?? "",
       notes ?? "",
+      item_type ?? null,
+      rarity ?? null,
+      requires_attunement ? 1 : 0,
       filePath,
       folder
     );
@@ -76,13 +88,11 @@ artifactsRouter.put("/:id", (req, res) => {
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
-  const { name, owner, power, history, notes, short_name } = req.body as Record<
-    string,
-    string | undefined
-  >;
+  const { name, owner, power, history, notes, short_name, item_type, rarity, requires_attunement } =
+    req.body as Record<string, string | boolean | undefined>;
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
-    folderPath = renameEntityFolder(existing.folder_path, name);
+    folderPath = renameEntityFolder(existing.folder_path, name as string);
   }
   db.prepare(
     `UPDATE artifacts SET
@@ -90,6 +100,9 @@ artifactsRouter.put("/:id", (req, res) => {
        power = COALESCE(?, power), history = COALESCE(?, history),
        notes = COALESCE(?, notes),
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
+       item_type = CASE WHEN ? THEN ? ELSE item_type END,
+       rarity = CASE WHEN ? THEN ? ELSE rarity END,
+       requires_attunement = CASE WHEN ? THEN ? ELSE requires_attunement END,
        folder_path = ?
      WHERE id = ?`
   ).run(
@@ -100,10 +113,39 @@ artifactsRouter.put("/:id", (req, res) => {
     notes ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
+    item_type !== undefined ? 1 : 0,
+    item_type ?? null,
+    rarity !== undefined ? 1 : 0,
+    rarity ?? null,
+    requires_attunement !== undefined ? 1 : 0,
+    requires_attunement ? 1 : 0,
     folderPath,
     req.params.id
   );
   res.json(db.prepare("SELECT * FROM artifacts WHERE id = ?").get(req.params.id));
+});
+
+artifactsRouter.post("/:id/chapters", (req, res) => {
+  const { title, content } = req.body as { title?: string; content?: string };
+  const info = db
+    .prepare("INSERT INTO artifact_chapters (artifact_id, title, content) VALUES (?, ?, ?)")
+    .run(req.params.id, title ?? "", content ?? "");
+  res
+    .status(201)
+    .json(db.prepare("SELECT * FROM artifact_chapters WHERE id = ?").get(info.lastInsertRowid));
+});
+
+artifactsRouter.put("/chapters/:chapterId", (req, res) => {
+  const { title, content } = req.body as { title?: string; content?: string };
+  db.prepare(
+    "UPDATE artifact_chapters SET title = COALESCE(?, title), content = COALESCE(?, content) WHERE id = ?"
+  ).run(title ?? null, content ?? null, req.params.chapterId);
+  res.json(db.prepare("SELECT * FROM artifact_chapters WHERE id = ?").get(req.params.chapterId));
+});
+
+artifactsRouter.delete("/chapters/:chapterId", (req, res) => {
+  db.prepare("DELETE FROM artifact_chapters WHERE id = ?").run(req.params.chapterId);
+  res.json({ ok: true });
 });
 
 artifactsRouter.delete("/:id", (req, res) => {

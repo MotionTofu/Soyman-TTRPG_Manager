@@ -52,7 +52,7 @@ export function PlayersListPage() {
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <SectionHeading>Игроки</SectionHeading>
+        <SectionHeading section="players">Игроки</SectionHeading>
         <button className="primary" onClick={() => setCreating(true)}>
           + Новый игрок
         </button>

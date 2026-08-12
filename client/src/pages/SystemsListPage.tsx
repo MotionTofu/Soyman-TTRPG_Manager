@@ -39,7 +39,7 @@ export function SystemsListPage() {
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <SectionHeading>Системы</SectionHeading>
+        <SectionHeading section="systems">Системы</SectionHeading>
         <div className="row">
           <ViewModeToggle mode={viewMode} onChange={changeViewMode} />
           <button className="primary" onClick={() => setCreating(true)}>

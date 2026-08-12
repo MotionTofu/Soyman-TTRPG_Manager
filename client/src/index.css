@@ -1,3 +1,23 @@
+/* Зин theme display font — headings + desktop nav (see themes.ts ZINE_THEME
+   fontDisplay and the .app-nav a rule below). */
+@font-face {
+  font-family: 'RussianPunk';
+  src: url('/fonts/RussianPunk.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Riot/Neon theme display font — see themes.ts RIOT_THEME/NEON_THEME
+   fontDisplay and the .app-nav a rule below. */
+@font-face {
+  font-family: 'RookiePunk';
+  src: url('/fonts/RookiePunk.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Theme tokens — these defaults mirror the "Классическая" built-in theme in
    themes.ts byte-for-byte (see applyTheme()), so this :root block is only
    the pre-JS fallback / FOUC guard, not a second source of truth. */
@@ -971,6 +991,10 @@ h4 { font-size: var(--fs-body); }
   padding: 8px 10px;
   border-radius: var(--card-radius);
   color: var(--ink);
+  /* Desktop-only per the design brief — the <860px off-canvas drawer reuses
+     this same markup but reverts to the body font (see the mobile media
+     query below), since the mobile chrome leans on the bottom nav instead. */
+  font-family: var(--font-display);
 }
 .app-nav a:hover {
   background: var(--bg-elevated);
@@ -981,6 +1005,19 @@ h4 { font-size: var(--fs-body); }
   color: var(--accent);
   font-weight: 600;
 }
+
+/* Neon theme — each section's page-level <h1> (SectionHeading level="page",
+   `section` prop) gets its own acid-neon color instead of the single --ink
+   color every other theme uses. The left nav itself stays the theme's plain
+   ink color (see .app-nav a above) — only the page heading is colored. */
+[data-theme-id="neon"] .section-heading h1[data-section="home"] { color: #FF2E88; }
+[data-theme-id="neon"] .section-heading h1[data-section="campaigns"] { color: #39FF6A; }
+[data-theme-id="neon"] .section-heading h1[data-section="settings"] { color: #00E5FF; }
+[data-theme-id="neon"] .section-heading h1[data-section="systems"] { color: #C400FF; }
+[data-theme-id="neon"] .section-heading h1[data-section="players"] { color: #FFF200; }
+[data-theme-id="neon"] .section-heading h1[data-section="mastering"],
+[data-theme-id="neon"] .section-heading h1[data-section="resources"],
+[data-theme-id="neon"] .section-heading h1[data-section="graph"] { color: #00FFC6; }
 .nav-icon {
   width: 18px;
   height: 18px;
@@ -1208,6 +1245,114 @@ h4 { font-size: var(--fs-body); }
   opacity: 1;
 }
 
+/* Home sidebar's compact calendar (see MiniCalendar.tsx) — square day cells
+   via aspect-ratio, a big date number, and status-colored indicator squares
+   instead of the full MonthCalendar's text labels. Deliberately much lower
+   information density; it only needs to answer "is there a session, how
+   many" at a glance from inside the narrow search-panel column. */
+.mini-calendar-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mini-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mini-calendar-nav button {
+  padding: 1px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.mini-calendar-month {
+  font-size: 12px;
+  color: var(--muted);
+}
+.mini-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.mini-calendar-weekday {
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+}
+.mini-calendar-day {
+  position: relative;
+  aspect-ratio: 1;
+  min-width: 0;
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  background: var(--paper-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+  overflow: hidden;
+}
+.mini-calendar-day.empty {
+  background: transparent;
+  border: none;
+}
+.mini-calendar-day.today {
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+/* Number sits on its own layer above the indicator (z-index below), with a
+   background chip so it stays legible no matter what the icon underneath
+   looks like at that spot. */
+.mini-calendar-num {
+  position: relative;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+  background: var(--paper-2);
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+.mini-calendar-day.today .mini-calendar-num {
+  color: var(--accent-2);
+  background: transparent;
+}
+/* Indicator icon, painted via mask-image so a single flat background-color
+   fills it per status (mask keeps the source SVG's own internal luminance
+   detail, giving a duotone stamp look rather than a flat silhouette). Sits
+   behind the date number, filling the whole cell edge-to-edge. Planned =
+   Aim.svg in red (a session is coming up); held/cancelled/rescheduled all
+   get Shot.svg in black — only planned/held have a distinct visual
+   treatment for now, the other two statuses aren't otherwise called out.
+   Temporary: only the first session of the day renders (see
+   MiniCalendar.tsx) — multi-session-per-day indicators are on hold until
+   this single-icon-per-cell layout is revisited, this isn't a real rule. */
+.mini-calendar-dot {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: pointer;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+.mini-calendar-dot.planned {
+  background: #d6321e;
+  -webkit-mask-image: url("/icons/Aim.svg");
+  mask-image: url("/icons/Aim.svg");
+}
+.mini-calendar-dot.held,
+.mini-calendar-dot.cancelled,
+.mini-calendar-dot.rescheduled {
+  background: #12100e;
+  -webkit-mask-image: url("/icons/Shot.svg");
+  mask-image: url("/icons/Shot.svg");
+}
+
 .search-pins {
   display: flex;
   flex-direction: column;
@@ -1394,10 +1539,6 @@ th, td {
   color: var(--muted);
   text-align: center;
   padding: 4px 4px 8px;
-  background-image: var(--calendar-mark-image, none);
-  background-repeat: no-repeat;
-  background-position: center bottom 1px;
-  background-size: 70% 6px;
 }
 .month-calendar .day {
   min-height: 64px;
@@ -1426,10 +1567,6 @@ th, td {
   padding-bottom: 5px;
 }
 .month-calendar .day.today .num {
-  background-image: var(--calendar-mark-image, none);
-  background-repeat: no-repeat;
-  background-position: left bottom;
-  background-size: 20px 5px;
   color: var(--ink);
   font-weight: 600;
 }
@@ -1795,6 +1932,9 @@ details.card[open] summary {
     transform: translateX(-100%);
     transition: transform 0.2s ease;
   }
+  .app-nav a {
+    font-family: var(--font-body);
+  }
   .app-nav.open {
     transform: translateX(0);
   }
@@ -2040,6 +2180,18 @@ details.card[open] summary {
     border: none;
     color: var(--ink);
     padding: 6px 0;
+  }
+  .mobile-quick-access-characters {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 4px;
+    border-bottom: var(--card-border-width, 1px) solid var(--line);
+  }
+  .mobile-quick-access-characters .mobile-quick-access-link {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   /* "Now playing" capsule — only rendered at all while a track is playing
@@ -2630,20 +2782,10 @@ details.card[open] summary {
 }
 
 .finance-summary-card {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-.finance-summary-card .stat {
-  display: flex;
-  flex-direction: column;
-}
-.finance-summary-card .stat .value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--fs-h2);
-  font-weight: 700;
-  color: var(--accent);
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(48px, 1fr);
+  gap: var(--sp-3);
 }
 
 /* Главная — "герой → плитки → плотный список" rhythm (design doc §6.1/
@@ -2693,6 +2835,15 @@ details.card[open] summary {
   height: auto;
   margin-bottom: 0;
   border-radius: 0;
+}
+.home-hero-empty {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-hero-empty .empty-state {
+  padding: var(--sp-5, 24px);
 }
 .home-hero-scrim {
   position: absolute;
@@ -2781,6 +2932,20 @@ details.card[open] summary {
 }
 .context-menu button.danger {
   color: var(--status-cancelled);
+}
+.context-menu-group {
+  display: flex;
+  flex-direction: column;
+}
+.context-menu-group-toggle {
+  width: 100%;
+}
+.context-menu-submenu {
+  display: flex;
+  flex-direction: column;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  margin: 2px 0 2px 10px;
 }
 
 .entity-header-actions {
@@ -3163,37 +3328,16 @@ input.litm-theme-title {
   font-weight: 600;
 }
 
-.dnd-ability-dice {
-  position: relative;
-  width: 100%;
-  height: 64px;
-  margin-top: 2px;
+/* Read-only sheet's ability tile (AbilitySavesSkillsView) — click toggles
+   between showing the score+modifier and the saving throw in place, so it
+   needs a pointer cursor and a hover tint to read as tappable. */
+.dnd-ability-box-clickable {
   cursor: pointer;
 }
-/* Positioning for the two overlapping <Dice> instances in AbilityDiceBox —
-   the shape/value/label rendering itself lives in the generic .dice rules
-   below; this just handles the front/back flip choreography. Fixed width
-   (rather than 100%) so the die stays a sane, constant size regardless of
-   how wide the ability column happens to stretch. */
-.dnd-die {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 48px;
-  transition: transform 0.22s ease, opacity 0.22s ease;
+.dnd-ability-box-clickable:hover {
+  border-color: var(--accent);
 }
-.dnd-die.is-front {
-  transform: translate(calc(-50% - 4px), -3px) scale(1);
-  z-index: 2;
-  opacity: 1;
-}
-.dnd-die.is-back {
-  transform: translate(calc(-50% + 4px), 3px) scale(0.8);
-  z-index: 1;
-  opacity: 0.55;
-}
-.dnd-die-save.is-proficient .dice-value,
-.dnd-die-save.is-proficient .dice-sub {
+.dnd-ability-score.is-proficient {
   color: var(--accent);
 }
 
@@ -3316,12 +3460,6 @@ input.litm-theme-title {
   }
   .dice-sm .dice-value {
     font-size: clamp(12px, 5vw, 16px);
-  }
-  .dnd-die {
-    width: 40px;
-  }
-  .dnd-ability-dice {
-    height: 56px;
   }
 }
 

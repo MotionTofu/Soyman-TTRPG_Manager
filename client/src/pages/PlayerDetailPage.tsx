@@ -239,8 +239,8 @@ export function PlayerDetailPage() {
           <thead>
             <tr>
               <th>Аватар</th>
-              <th>Кампания</th>
               <th>Персонаж</th>
+              <th>Кампания</th>
               <th></th>
             </tr>
           </thead>
@@ -257,14 +257,14 @@ export function PlayerDetailPage() {
                   )}
                 </td>
                 <td>
+                  <Link to={`/characters/${c.id}`}>{c.character_name}</Link>
+                </td>
+                <td>
                   {c.campaign_id ? (
                     <Link to={`/campaigns/${c.campaign_id}`}>{c.campaign_name}</Link>
                   ) : (
                     <span className="muted">без кампании</span>
                   )}
-                </td>
-                <td>
-                  <Link to={`/characters/${c.id}`}>{c.character_name}</Link>
                 </td>
                 <td>
                   <button onClick={() => removeCharacter(c.id)}>✕</button>

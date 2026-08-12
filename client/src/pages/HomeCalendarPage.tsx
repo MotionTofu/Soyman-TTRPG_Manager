@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
 import { UpcomingSessionsNotice } from "../components/UpcomingSessionsNotice";
+import { MiniCalendar, type MiniEvent } from "../components/MiniCalendar";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
 import { copySessionPrep } from "../sessionCopy";
 import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
+import { Dice } from "../components/Dice";
+import { EmptyState } from "../components/EmptyState";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { hasElectronAPI } from "../electronApi";
 import { loadHideFinance } from "../financePrivacy";
@@ -35,6 +37,7 @@ export function HomeCalendarPage() {
     copyFromSessionId: string;
   } | null>(null);
   const [oneshotSessions, setOneshotSessions] = useState<SessionSummary[]>([]);
+  const [initialLoad, setInitialLoad] = useState(false);
   const navigate = useNavigate();
 
   function refreshSessions() {
@@ -42,10 +45,12 @@ export function HomeCalendarPage() {
   }
 
   useEffect(() => {
-    refreshSessions();
-    api.get<FinanceSummary>("/finance/summary").then(setFinance);
-    api.get<AppSettings>("/app-settings").then((s) => setHomeBgUrl(s.home_background_url));
-    api.get<Campaign[]>("/campaigns").then(setCampaigns);
+    Promise.allSettled([
+      api.get<SessionSummary[]>("/calendar").then(setSessions),
+      api.get<FinanceSummary>("/finance/summary").then(setFinance),
+      api.get<AppSettings>("/app-settings").then((s) => setHomeBgUrl(s.home_background_url)),
+      api.get<Campaign[]>("/campaigns").then(setCampaigns),
+    ]).finally(() => setInitialLoad(true));
   }, []);
 
   useEffect(() => {
@@ -64,16 +69,6 @@ export function HomeCalendarPage() {
   const nearestSession = sessions
     .filter((s) => s.status === "planned" && s.date >= today)
     .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
-
-  const events: CalendarEvent[] = sessions.map((s) => ({
-    id: s.id,
-    date: s.date,
-    status: s.status,
-    paymentType: s.effective_payment_type,
-    campaignRole: s.campaign_role,
-    label: s.campaign_name ?? "Сессия",
-    startTime: s.start_time,
-  }));
 
   function openCreateModal(date: string) {
     setCreateModal({
@@ -97,46 +92,37 @@ export function HomeCalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createModal?.campaignId, selectedCampaign?.type]);
 
-  async function createSessionFromModal() {
-    if (!createModal || !createModal.campaignId) return;
-    const created = await api.post<{ id: number }>("/sessions", {
-      campaign_id: Number(createModal.campaignId),
-      date: createModal.date,
-      start_time: createModal.startTime || null,
-    });
-    if (createModal.copyFromSessionId) {
-      await copySessionPrep(Number(createModal.copyFromSessionId), created.id);
-    }
-    setCreateModal(null);
-    refreshSessions();
-  }
-
-  function eventMenuItems(event: CalendarEvent): ContextMenuItem[] {
+  function eventMenuItems(event: MiniEvent): ContextMenuItem[] {
     return [
       {
         label: "Перейти в пульт управления сессией",
         onClick: () => navigate(`/sessions/${event.id}/live`),
       },
       {
-        label: "Статус: Запланировано",
-        onClick: async () => {
-          await api.put(`/sessions/${event.id}`, { status: "planned" });
-          refreshSessions();
-        },
-      },
-      {
-        label: "Статус: Состоялась",
-        onClick: async () => {
-          await api.put(`/sessions/${event.id}`, { status: "held" });
-          refreshSessions();
-        },
-      },
-      {
-        label: "Статус: Отмена",
-        onClick: async () => {
-          await api.put(`/sessions/${event.id}`, { status: "cancelled" });
-          refreshSessions();
-        },
+        label: "Статус",
+        children: [
+          {
+            label: "Запланировано",
+            onClick: async () => {
+              await api.put(`/sessions/${event.id}`, { status: "planned" });
+              refreshSessions();
+            },
+          },
+          {
+            label: "Состоялась",
+            onClick: async () => {
+              await api.put(`/sessions/${event.id}`, { status: "held" });
+              refreshSessions();
+            },
+          },
+          {
+            label: "Отмена",
+            onClick: async () => {
+              await api.put(`/sessions/${event.id}`, { status: "cancelled" });
+              refreshSessions();
+            },
+          },
+        ],
       },
       {
         label: "Удалить (в архив)",
@@ -153,6 +139,22 @@ export function HomeCalendarPage() {
     ];
   }
 
+  if (!initialLoad) return <p className="muted">Загрузка…</p>;
+
+  async function createSessionFromModal() {
+    if (!createModal || !createModal.campaignId) return;
+    const created = await api.post<{ id: number }>("/sessions", {
+      campaign_id: Number(createModal.campaignId),
+      date: createModal.date,
+      start_time: createModal.startTime || null,
+    });
+    if (createModal.copyFromSessionId) {
+      await copySessionPrep(Number(createModal.copyFromSessionId), created.id);
+    }
+    setCreateModal(null);
+    refreshSessions();
+  }
+
   return (
     <div className="stack" style={{ position: "relative" }}>
       {(homeBgUrl ?? bgUrl) && (
@@ -161,34 +163,42 @@ export function HomeCalendarPage() {
           style={{ backgroundImage: `url("${homeBgUrl ?? bgUrl}")` }}
         />
       )}
-      <SectionHeading>Главная</SectionHeading>
+      <SectionHeading section="home">Главная</SectionHeading>
 
       <div className="home-layout">
         <div className="home-main">
           {/* Hero — nearest upcoming session's campaign, full-bleed cover. */}
-          <Link
-            to={nearestSession ? `/sessions/${nearestSession.id}` : "/campaigns"}
-            className="card home-hero"
-          >
-            <div
-              className={`home-hero-cover${bgUrl ? "" : " campaign-card-band zine-grain zine-torn-bottom"}`}
-              style={bgUrl ? { backgroundImage: `url("${bgUrl}")` } : undefined}
-            >
-              <div className="home-hero-scrim" />
-              <div className="home-hero-content">
-                <span className="home-hero-eyebrow">Ближайшая сессия</span>
-                <h2 className="home-hero-title">
-                  {nearestSession ? nearestSession.campaign_name : "Сессий пока не запланировано"}
-                </h2>
-                {nearestSession && (
+          {nearestSession ? (
+            <Link to={`/sessions/${nearestSession.id}`} className="card home-hero">
+              <div
+                className={`home-hero-cover${bgUrl ? "" : " campaign-card-band zine-grain zine-torn-bottom"}`}
+                style={bgUrl ? { backgroundImage: `url("${bgUrl}")` } : undefined}
+              >
+                <div className="home-hero-scrim" />
+                <div className="home-hero-content">
+                  <span className="home-hero-eyebrow">Ближайшая сессия</span>
+                  <h2 className="home-hero-title">{nearestSession.campaign_name}</h2>
                   <span className="home-hero-date">
                     {formatNearestDate(nearestSession.date)}
                     {nearestSession.start_time ? ` · ${nearestSession.start_time}` : ""}
                   </span>
-                )}
+                </div>
               </div>
+            </Link>
+          ) : (
+            <div className="card home-hero home-hero-empty">
+              <EmptyState
+                icon="issueStamp"
+                title="Сессий пока не запланировано"
+                hint="Ближайшая сессия появится здесь, как только вы её создадите."
+                action={
+                  <button className="primary" onClick={() => openCreateModal(today)}>
+                    + Создать сессию
+                  </button>
+                }
+              />
             </div>
-          </Link>
+          )}
 
           {/* Tiles — quick campaign row. */}
           <div className="home-section">
@@ -199,28 +209,19 @@ export function HomeCalendarPage() {
               {campaigns.slice(0, 4).map((c) => (
                 <CampaignCoverTile key={c.id} campaign={c} />
               ))}
-              {campaigns.length === 0 && <p className="muted">Пока нет кампаний.</p>}
+              {campaigns.length === 0 && (
+                <EmptyState
+                  icon="skullDie"
+                  title="Пока тихо"
+                  hint="Ни одной кампании ещё нет — начните первую."
+                  action={
+                    <button className="primary" onClick={() => navigate("/campaigns")}>
+                      + Кампании
+                    </button>
+                  }
+                />
+              )}
             </div>
-          </div>
-
-          {/* Dense list — the session calendar itself, pencil-marker treatment intact. */}
-          <div className="home-section">
-            <SectionHeading level="section" icon="calendar">
-              Календарь
-            </SectionHeading>
-            <p className="muted page-subtitle">
-              Сессии всех кампаний. Кликните по отметке, чтобы открыть сессию. Правый клик — меню
-              (в том числе добавление новой сессии).
-            </p>
-            <MonthCalendar
-              events={events}
-              onDayClick={() => {}}
-              onEventClick={(e) => navigate(`/sessions/${e.id}`)}
-              onEventContextMenu={(event, x, y) => setMenu({ x, y, items: eventMenuItems(event) })}
-              onDayContextMenu={(date, x, y) =>
-                setMenu({ x, y, items: [{ label: "+ Добавить сессию", onClick: () => openCreateModal(date) }] })
-              }
-            />
           </div>
         </div>
 
@@ -242,23 +243,17 @@ export function HomeCalendarPage() {
               </SectionHeading>
               <div className="finance-summary-card">
                 {!loadHideFinance() && (
-                  <div className="stat">
-                    <span className="muted">Заработано всего</span>
-                    <span className="value">{finance.earned} ₽</span>
-                  </div>
+                  <Dice
+                    kind="d6"
+                    state="outline"
+                    value={finance.earned}
+                    sub="₽"
+                    label="Заработано всего"
+                  />
                 )}
-                <div className="stat">
-                  <span className="muted">Сессий проведено</span>
-                  <span className="value">{finance.heldSessions}</span>
-                </div>
-                <div className="stat">
-                  <span className="muted">Сессий сыграно</span>
-                  <span className="value">{finance.playedSessions}</span>
-                </div>
-                <div className="stat">
-                  <span className="muted">Активных кампаний</span>
-                  <span className="value">{finance.campaigns}</span>
-                </div>
+                <Dice kind="d6" state="outline" value={finance.heldSessions} label="Сессий проведено" />
+                <Dice kind="d6" state="outline" value={finance.playedSessions} label="Сессий сыграно" />
+                <Dice kind="d6" state="outline" value={finance.campaigns} label="Активных кампаний" />
               </div>
             </div>
           )}
@@ -271,6 +266,18 @@ export function HomeCalendarPage() {
               <UpcomingSessionsNotice sessions={sessions} />
             </div>
           )}
+
+          <div className="card stack">
+            <SectionHeading level="section" icon="calendar">
+              Календарь
+            </SectionHeading>
+            <MiniCalendar
+              onEventContextMenu={(event, x, y) => setMenu({ x, y, items: eventMenuItems(event) })}
+              onDayContextMenu={(date, x, y) =>
+                setMenu({ x, y, items: [{ label: "+ Добавить сессию", onClick: () => openCreateModal(date) }] })
+              }
+            />
+          </div>
         </div>
       </div>
 

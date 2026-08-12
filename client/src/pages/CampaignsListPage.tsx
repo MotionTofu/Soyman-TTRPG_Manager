@@ -87,7 +87,7 @@ export function CampaignsListPage() {
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <SectionHeading>Кампании</SectionHeading>
+        <SectionHeading section="campaigns">Кампании</SectionHeading>
         <div className="row">
           <ViewModeToggle mode={viewMode} onChange={changeViewMode} />
           <button className="primary" onClick={() => setCreating(true)}>

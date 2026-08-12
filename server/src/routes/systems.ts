@@ -306,6 +306,39 @@ function buildSystemExportData(systemId: number | string, includeImages: boolean
       .prepare("SELECT * FROM compendium_entries WHERE system_id = ? ORDER BY position, id")
       .all(systemId) as EntryRow[]
   ).map(parseEntry) as unknown as SystemExportData["entries"];
+
+  // Bestiary/statblock entries (dnd_creature etc.) carry their actual
+  // statblock in the separate polymorphic `statblocks` table, not in
+  // compendium_entries.data — attach it here so a system export takes the
+  // full creature card along, not just its catalog metadata.
+  const entryIds = entries.map((e) => e.id);
+  if (entryIds.length) {
+    const statblockRows = db
+      .prepare(
+        `SELECT owner_id, kind, format, content, note, theme, density FROM statblocks
+         WHERE owner_type = 'compendium_entry' AND owner_id IN (${entryIds.map(() => "?").join(",")})`
+      )
+      .all(...entryIds) as {
+      owner_id: number;
+      kind: string;
+      format: string;
+      content: string;
+      note: string;
+      theme: string | null;
+      density: string | null;
+    }[];
+    const statblocksByEntry = new Map<number, SystemExportData["entries"][number]["statblocks"]>();
+    for (const { owner_id, ...sb } of statblockRows) {
+      const list = statblocksByEntry.get(owner_id) ?? [];
+      list!.push(sb);
+      statblocksByEntry.set(owner_id, list);
+    }
+    for (const e of entries) {
+      const list = statblocksByEntry.get(e.id);
+      if (list) e.statblocks = list;
+    }
+  }
+
   const templates = db
     .prepare(
       "SELECT * FROM resources WHERE system_id = ? AND type = 'statblock_template' AND archived_at IS NULL"
@@ -344,6 +377,14 @@ export interface SystemExportData {
     data: unknown;
     description: string;
     position: number;
+    statblocks?: {
+      kind: string;
+      format: string;
+      content: string;
+      note: string;
+      theme: string | null;
+      density: string | null;
+    }[];
   }[];
   templates: {
     name: string;
@@ -424,6 +465,18 @@ export async function importSystemExport({ system, sections, entries, templates 
     if (newId && newParentId) updateParent.run(newParentId, newId);
   }
 
+  const insertEntryStatblock = db.prepare(
+    `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, theme, density)
+     VALUES ('compendium_entry', ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const e of entries ?? []) {
+    const newEntryId = entryIdMap.get(e.id);
+    if (!newEntryId || !e.statblocks) continue;
+    for (const sb of e.statblocks) {
+      insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+    }
+  }
+
   // A spell's `classes`, a species' `creature_type`/`senses`/`speeds`, and a
   // background's `origin_feat` all embed { id, name } references to other
   // compendium_entries in this same export — remap those ids too, or they'd
@@ -491,6 +544,8 @@ export interface SystemUpdateSummary {
   entriesAdded: number;
   entriesUpdated: number;
   entriesKeptLocal: number;
+  statblocksAdded: number;
+  statblocksUpdated: number;
   templatesAdded: number;
   templatesUpdated: number;
 }
@@ -504,6 +559,8 @@ export async function updateSystemFromExport(
     entriesAdded: 0,
     entriesUpdated: 0,
     entriesKeptLocal: 0,
+    statblocksAdded: 0,
+    statblocksUpdated: 0,
     templatesAdded: 0,
     templatesUpdated: 0,
   };
@@ -610,6 +667,44 @@ export async function updateSystemFromExport(
     if (data.creature_type) remapped.creature_type = remapRef(data.creature_type);
     if (data.origin_feat) remapped.origin_feat = remapRef(data.origin_feat);
     updateData.run(JSON.stringify(remapped), newId);
+  }
+
+  // --- Entry statblocks: match by (entry, format) — same "refresh official
+  // content, leave any extra hand-added format alone" philosophy as entries
+  // themselves above. Scoped to touchedIds (entries that came from this
+  // export), matching how templates/entries never touch untouched rows.
+  const touchedEntryIds = [...touchedIds];
+  const existingEntryStatblocks = touchedEntryIds.length
+    ? (db
+        .prepare(
+          `SELECT id, owner_id, format FROM statblocks
+           WHERE owner_type = 'compendium_entry' AND owner_id IN (${touchedEntryIds.map(() => "?").join(",")})`
+        )
+        .all(...touchedEntryIds) as { id: number; owner_id: number; format: string }[])
+    : [];
+  const existingEntryStatblockByKey = new Map(
+    existingEntryStatblocks.map((s) => [`${s.owner_id}:${s.format}`, s.id])
+  );
+  const insertEntryStatblock = db.prepare(
+    `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, theme, density)
+     VALUES ('compendium_entry', ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const updateEntryStatblock = db.prepare(
+    "UPDATE statblocks SET kind = ?, content = ?, note = ?, theme = ?, density = ? WHERE id = ?"
+  );
+  for (const e of entries ?? []) {
+    const newEntryId = entryIdMap.get(e.id);
+    if (!newEntryId || !e.statblocks) continue;
+    for (const sb of e.statblocks) {
+      const existingId = existingEntryStatblockByKey.get(`${newEntryId}:${sb.format}`);
+      if (existingId) {
+        updateEntryStatblock.run(sb.kind, sb.content, sb.note || "", sb.theme, sb.density, existingId);
+        summary.statblocksUpdated++;
+      } else {
+        insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+        summary.statblocksAdded++;
+      }
+    }
   }
 
   // --- Statblock templates: match by name ---

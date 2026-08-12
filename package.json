@@ -1,8 +1,8 @@
 {
   "name": "rpg-manager",
-  "version": "2026.7.31",
+  "version": "2026.8.8",
   "private": true,
-  "description": "RPG Manager — личный менеджер настольных ролевых кампаний",
+  "description": "SoyMan_ttrpg — личный менеджер настольных ролевых кампаний",
   "main": "electron/main.js",
   "scripts": {
     "build:server": "cd server && npm install && npm run build",
@@ -27,7 +27,7 @@
   },
   "build": {
     "appId": "com.rpgmanager.app",
-    "productName": "RPG Manager",
+    "productName": "SoyMan_ttrpg",
     "asar": false,
     "directories": {
       "output": "release"

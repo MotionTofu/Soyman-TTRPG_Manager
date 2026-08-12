@@ -1,4 +1,4 @@
-// Theme registry + application logic for RPG Manager.
+// Theme registry + application logic for SoyMan_ttrpg.
 //
 // Every theme is a flat map of CSS custom properties. Built-in themes are
 // computed once (below) from a small palette description. `applyTheme()`
@@ -286,7 +286,7 @@ function skinTheme(
 // ZINE — the base skin: aged paper, ink, one blood red. Palette from §3.1.
 const ZINE_THEME = buildTheme("zine", "Зин", "light", {
   bg: "#EDE7D9", text: "#12100E", accent: "#D6321E", border: "#12100E",
-  fontDisplay: "'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'RussianPunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   textMutedOverride: "#6E675C",
   cardBorderWidth: 2, cardRadius: 0,
   bandBg: "#12100E",
@@ -307,7 +307,7 @@ const RIOT_THEME = skinTheme("riot", "Riot", "dark", {
   accent: "#C7261B", accent2: "#F2EDE1",
   surface: "#F2EDE1", onSurface: "#0B0B0B",
   line: "rgba(242,237,225,.22)", glow: "none",
-  fontDisplay: "'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'RookiePunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   bandBg: "#F2EDE1",
   pageTexture: "radial-gradient(rgba(242,237,225,.05) 1px, transparent 1px) 0 0/3px 3px",
   semantic: { gm: "#F2EDE1", player: "#C7261B", paid: "#C7261B", free: "#8A8378", active: "#F2EDE1", hold: "#8A8378", danger: "#C7261B" },
@@ -320,7 +320,7 @@ const NEON_THEME = skinTheme("neon", "Neon", "dark", {
   accent: "#FF2E88", accent2: "#B6FF2E",
   surface: "#0F0F14", onSurface: "#F0FFE8",
   line: "rgba(182,255,46,.35)", glow: "0 0 12px rgba(182,255,46,.45)",
-  fontDisplay: "'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'RookiePunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   bandBg: "#0F0F14",
   bandImage: "repeating-linear-gradient(0deg, rgba(182,255,46,.07) 0 2px, transparent 2px 4px)",
   semantic: { gm: "#FF2E88", player: "#B6FF2E", paid: "#B6FF2E", free: "#B6FF2E", active: "#B6FF2E", hold: "#6F7A6A", danger: "#FF2E88" },

@@ -17,8 +17,10 @@ import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { TagChips } from "../components/TagChips";
 import { LocationCascadePicker } from "../components/LocationCascadePicker";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { MonsterTemplatePicker } from "../components/MonsterTemplatePicker";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import type {
+  BeingCompendiumLink,
   Campaign,
   DateRecurrence,
   SearchResult,
@@ -368,6 +370,11 @@ export function BeingDetailPage() {
 
       {tab === "Досье" && (
         <div className="stack">
+          <CompendiumLinksCard
+            beingId={beingId}
+            links={being.compendium_links}
+            onChange={refresh}
+          />
           <StatblockList ownerType="being" ownerId={beingId} ownerName={being.name} settingId={being.setting_id} />
           <EditableTextCard
             title="Описание"
@@ -586,5 +593,60 @@ export function BeingDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// "Записи компендиумов" — monster templates from any number of systems tied
+// to this being. Mostly used by бестиарий entries (the same creature kind
+// statted for D&D and for another system), but available to named
+// personalities too. Distinct from the single "На основе" template shown in
+// the header, which records a one-time clone at creation.
+function CompendiumLinksCard({
+  beingId,
+  links,
+  onChange,
+}: {
+  beingId: number;
+  links: BeingCompendiumLink[];
+  onChange: () => void;
+}) {
+  async function add(entry: SearchResult | null) {
+    if (!entry) return;
+    await api.post(`/setting-beings/${beingId}/compendium-links`, { compendium_entry_id: entry.id });
+    onChange();
+  }
+
+  async function remove(entryId: number) {
+    await api.del(`/setting-beings/${beingId}/compendium-links/${entryId}`);
+    onChange();
+  }
+
+  return (
+    <details className="card">
+      <summary className="sb-section" style={{ margin: 0 }}>
+        Записи компендиумов {links.length > 0 && `(${links.length})`}
+      </summary>
+      <div className="stack" style={{ marginTop: 8 }}>
+        <span className="muted">
+          Монстры из компендиумов систем, соответствующие этому существу. Можно связать записи
+          сразу из нескольких систем.
+        </span>
+        <MonsterTemplatePicker value={null} onChange={add} />
+        <div className="stack">
+          {links.map((l) => (
+            <div key={l.id} className="row" style={{ justifyContent: "space-between" }}>
+              <span>
+                <Link to={`/compendium/${l.id}`}>{l.name}</Link>
+                {l.system_name && <span className="muted"> · {l.system_name}</span>}
+              </span>
+              <button className="danger" onClick={() => remove(l.id)}>
+                ✕
+              </button>
+            </div>
+          ))}
+          {links.length === 0 && <p className="muted">Связанных записей компендиума нет.</p>}
+        </div>
+      </div>
+    </details>
   );
 }

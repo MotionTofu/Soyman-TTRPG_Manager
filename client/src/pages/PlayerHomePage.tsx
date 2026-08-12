@@ -66,7 +66,7 @@ export function PlayerHomePage() {
 
   return (
     <div className="stack">
-      <SectionHeading>Главная</SectionHeading>
+      <SectionHeading section="home">Главная</SectionHeading>
 
       {reminders.length > 0 && (
         <div className="stack">

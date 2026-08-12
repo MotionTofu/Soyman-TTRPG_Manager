@@ -133,6 +133,7 @@ sessionsRouter.put("/:id", (req, res) => {
     inworld_day_end,
     start_time,
     battle_playlist_id,
+    cheatsheet_data,
   } = req.body as {
     status?: string;
     title?: string | null;
@@ -149,6 +150,7 @@ sessionsRouter.put("/:id", (req, res) => {
     inworld_day_end?: number | null;
     start_time?: string | null;
     battle_playlist_id?: number | null;
+    cheatsheet_data?: string | null;
   };
 
   db.prepare(
@@ -167,7 +169,8 @@ sessionsRouter.put("/:id", (req, res) => {
        inworld_month_end = ?,
        inworld_day_end = ?,
        start_time = ?,
-       battle_playlist_id = ?
+       battle_playlist_id = ?,
+       cheatsheet_data = CASE WHEN ? THEN ? ELSE cheatsheet_data END
      WHERE id = ?`
   ).run(
     status ?? null,
@@ -185,6 +188,8 @@ sessionsRouter.put("/:id", (req, res) => {
     inworld_day_end === undefined ? existing.inworld_day_end : inworld_day_end,
     start_time === undefined ? existing.start_time : start_time || null,
     battle_playlist_id === undefined ? existing.battle_playlist_id : battle_playlist_id,
+    cheatsheet_data !== undefined ? 1 : 0,
+    cheatsheet_data ?? null,
     req.params.id
   );
   res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(req.params.id));

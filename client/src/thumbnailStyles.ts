@@ -15,9 +15,9 @@ export const THUMBNAIL_SECTIONS = [
   { key: "campaigns", label: "Кампании" },
   { key: "settings", label: "Сеттинги" },
   { key: "systems", label: "Системы" },
-  { key: "beings", label: "Существа (Население)" },
+  { key: "beings", label: "Личности и бестиарий (Население)" },
   { key: "roster", label: "Персонажи (состав кампании)" },
-  { key: "communities", label: "Сообщества и культуры" },
+  { key: "communities", label: "Сообщества" },
   { key: "locations", label: "Локации (география)" },
 ] as const;
 

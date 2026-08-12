@@ -39,7 +39,7 @@ function findSpanClose(text: string, from: number): number {
   return -1;
 }
 
-function parseInline(text: string, keyPrefix: string): ReactNode[] {
+function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): ReactNode[] {
   const nodes: ReactNode[] = [];
   let pos = 0;
   let key = 0;
@@ -57,7 +57,9 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
     if (mType) {
       const id = Number(mId);
       nodes.push(
-        DETAIL_ROUTES[mType] ? (
+        mentionsAsBold ? (
+          <strong key={`${keyPrefix}-${key++}`}>{mLabel}</strong>
+        ) : DETAIL_ROUTES[mType] ? (
           <Link key={`${keyPrefix}-${key++}`} className="mention-link" to={`${DETAIL_ROUTES[mType]}/${id}`}>
             {mLabel}
           </Link>
@@ -85,7 +87,7 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
         const inner = text.slice(openEnd, closeIdx);
         nodes.push(
           <span key={`${keyPrefix}-${key}`} style={parseSpanAttrs(spanAttrs)}>
-            {parseInline(inner, `${keyPrefix}-${key}`)}
+            {parseInline(inner, `${keyPrefix}-${key}`, mentionsAsBold)}
           </span>
         );
         pos = closeIdx + "{/span}".length;
@@ -101,7 +103,7 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
         const inner = text.slice(openEnd, closeIdx);
         nodes.push(
           <span key={`${keyPrefix}-${key}`} className="rt-quote">
-            {parseInline(inner, `${keyPrefix}-${key}`)}
+            {parseInline(inner, `${keyPrefix}-${key}`, mentionsAsBold)}
           </span>
         );
         pos = closeIdx + "{/quote}".length;
@@ -154,7 +156,7 @@ function unmaskMentions(text: string, tokens: string[]): string {
   return text.replace(/\u0000(\d+)\u0000/g, (_, i) => tokens[Number(i)] ?? "");
 }
 
-export function MentionText({ text }: { text: string }) {
+export function MentionText({ text, mentionsAsBold = false }: { text: string; mentionsAsBold?: boolean }) {
   const lines = text.split("\n");
   const blocks: ReactNode[] = [];
   let key = 0;
@@ -183,7 +185,7 @@ export function MentionText({ text }: { text: string }) {
               <thead>
                 <tr>
                   {header.map((c, ci) => (
-                    <th key={ci}>{parseInline(c, `th${tkey}-${ci}`)}</th>
+                    <th key={ci}>{parseInline(c, `th${tkey}-${ci}`, mentionsAsBold)}</th>
                   ))}
                 </tr>
               </thead>
@@ -192,7 +194,7 @@ export function MentionText({ text }: { text: string }) {
               {body.map((row, ri) => (
                 <tr key={ri}>
                   {row.map((c, ci) => (
-                    <td key={ci}>{parseInline(c, `td${tkey}-${ri}-${ci}`)}</td>
+                    <td key={ci}>{parseInline(c, `td${tkey}-${ri}-${ci}`, mentionsAsBold)}</td>
                   ))}
                 </tr>
               ))}
@@ -215,7 +217,7 @@ export function MentionText({ text }: { text: string }) {
       blocks.push(
         <ul key={`b${key++}`} className="rt-ul">
           {items.map((item, ii) => (
-            <li key={ii}>{parseInline(item, `bi${key}-${ii}`)}</li>
+            <li key={ii}>{parseInline(item, `bi${key}-${ii}`, mentionsAsBold)}</li>
           ))}
         </ul>
       );
@@ -226,14 +228,14 @@ export function MentionText({ text }: { text: string }) {
     if (heading) {
       blocks.push(
         <span key={`b${key++}`} className={`rt-h rt-h${heading[1].length}`}>
-          {parseInline(heading[2], `h${key}`)}
+          {parseInline(heading[2], `h${key}`, mentionsAsBold)}
         </span>
       );
       i++;
       continue;
     }
 
-    blocks.push(<span key={`b${key++}`}>{parseInline(lines[i], `l${key}`)}</span>);
+    blocks.push(<span key={`b${key++}`}>{parseInline(lines[i], `l${key}`, mentionsAsBold)}</span>);
     i++;
     if (i < lines.length && !BULLET_RE.test(lines[i]) && !HEADING_RE.test(lines[i])) {
       blocks.push("\n");

@@ -486,6 +486,39 @@ function buildSettingExportData(settingId: number | string, include: string[]): 
     delete loc.map_image_path;
   }
 
+  // A being's actual combat statblock (D&D/LitM structured card) lives in
+  // the separate polymorphic `statblocks` table, not on setting_beings
+  // itself — statblock_short/statblock_full above are just the older
+  // plain-text fields. Always included (not gated on "images"): it's text/
+  // JSON data, same as statblock_short/statblock_full.
+  const beingIds = beings.map((b) => b.id);
+  if (beingIds.length) {
+    const statblockRows = db
+      .prepare(
+        `SELECT owner_id, kind, format, content, note, theme, density FROM statblocks
+         WHERE owner_type = 'being' AND owner_id IN (${beingIds.map(() => "?").join(",")})`
+      )
+      .all(...beingIds) as {
+      owner_id: number;
+      kind: string;
+      format: string;
+      content: string;
+      note: string;
+      theme: string | null;
+      density: string | null;
+    }[];
+    const statblocksByBeing = new Map<number, SettingExportData["beings"][number]["statblocks"]>();
+    for (const { owner_id, ...sb } of statblockRows) {
+      const list = statblocksByBeing.get(owner_id) ?? [];
+      list!.push(sb);
+      statblocksByBeing.set(owner_id, list);
+    }
+    for (const b of beings) {
+      const list = statblocksByBeing.get(b.id);
+      if (list) b.statblocks = list;
+    }
+  }
+
   const payload: SettingExportData = { setting, locations, beings, communities };
 
   if (include.includes("calendar")) {
@@ -571,6 +604,14 @@ export interface SettingExportData {
     behavior: string;
     avatar_data?: FileData | null;
     thumbnail_data?: FileData | null;
+    statblocks?: {
+      kind: string;
+      format: string;
+      content: string;
+      note: string;
+      theme: string | null;
+      density: string | null;
+    }[];
   }[];
   communities: {
     id: number;
@@ -719,6 +760,10 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
     `INSERT INTO setting_beings (setting_id, name, category, location_id, statblock_short, statblock_full, history, behavior)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
+  const insertBeingStatblock = db.prepare(
+    `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, theme, density)
+     VALUES ('being', ?, ?, ?, ?, ?, ?, ?)`
+  );
   for (const b of body.beings ?? []) {
     const r = insertBeing.run(
       newSettingId,
@@ -738,6 +783,9 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
       db.prepare(
         "UPDATE setting_beings SET folder_path = ?, avatar_image_path = ?, thumbnail_image_path = ? WHERE id = ?"
       ).run(beingFolderPath, avatarPath, thumbnailPath, newBeingId);
+    }
+    for (const sb of b.statblocks ?? []) {
+      insertBeingStatblock.run(newBeingId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
     }
   }
 
@@ -889,6 +937,8 @@ export interface SettingUpdateSummary {
   beingsAdded: number;
   beingsUpdated: number;
   beingsKeptLocal: number;
+  statblocksAdded: number;
+  statblocksUpdated: number;
   communitiesAdded: number;
   communitiesUpdated: number;
   communitiesKeptLocal: number;
@@ -910,6 +960,8 @@ export async function updateSettingFromExport(
     beingsAdded: 0,
     beingsUpdated: 0,
     beingsKeptLocal: 0,
+    statblocksAdded: 0,
+    statblocksUpdated: 0,
     communitiesAdded: 0,
     communitiesUpdated: 0,
     communitiesKeptLocal: 0,
@@ -1077,6 +1129,7 @@ export async function updateSettingFromExport(
     "UPDATE setting_beings SET category = ?, location_id = ?, statblock_short = ?, statblock_full = ?, history = ?, behavior = ? WHERE id = ?"
   );
   const touchedBeingIds = new Set<number>();
+  const beingIdMap = new Map<number, number>();
   for (const b of body.beings ?? []) {
     const newLocationId = b.location_id != null ? locationIdMap.get(b.location_id) ?? null : null;
     const existingId = existingBeingByName.get(b.name);
@@ -1091,6 +1144,7 @@ export async function updateSettingFromExport(
         existingId
       );
       touchedBeingIds.add(existingId);
+      beingIdMap.set(b.id, existingId);
       summary.beingsUpdated++;
     } else {
       const info = insertBeing.run(
@@ -1105,6 +1159,7 @@ export async function updateSettingFromExport(
       );
       const insertedId = info.lastInsertRowid as number;
       touchedBeingIds.add(insertedId);
+      beingIdMap.set(b.id, insertedId);
       summary.beingsAdded++;
       if (b.avatar_data || b.thumbnail_data) {
         const beingFolderPath = beingFolder(targetSetting.folder_path, b.name);
@@ -1116,6 +1171,43 @@ export async function updateSettingFromExport(
     }
   }
   summary.beingsKeptLocal = existingBeings.filter((b) => !touchedBeingIds.has(b.id)).length;
+
+  // --- Being statblocks: match by (being, format) — same "refresh official
+  // content, leave any extra hand-added format alone" philosophy as entry
+  // statblocks in updateSystemFromExport. Scoped to touchedBeingIds.
+  const touchedBeingIdList = [...touchedBeingIds];
+  const existingBeingStatblocks = touchedBeingIdList.length
+    ? (db
+        .prepare(
+          `SELECT id, owner_id, format FROM statblocks
+           WHERE owner_type = 'being' AND owner_id IN (${touchedBeingIdList.map(() => "?").join(",")})`
+        )
+        .all(...touchedBeingIdList) as { id: number; owner_id: number; format: string }[])
+    : [];
+  const existingBeingStatblockByKey = new Map(
+    existingBeingStatblocks.map((s) => [`${s.owner_id}:${s.format}`, s.id])
+  );
+  const insertBeingStatblock = db.prepare(
+    `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, theme, density)
+     VALUES ('being', ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const updateBeingStatblock = db.prepare(
+    "UPDATE statblocks SET kind = ?, content = ?, note = ?, theme = ?, density = ? WHERE id = ?"
+  );
+  for (const b of body.beings ?? []) {
+    const newBeingId = beingIdMap.get(b.id);
+    if (!newBeingId || !b.statblocks) continue;
+    for (const sb of b.statblocks) {
+      const existingId = existingBeingStatblockByKey.get(`${newBeingId}:${sb.format}`);
+      if (existingId) {
+        updateBeingStatblock.run(sb.kind, sb.content, sb.note || "", sb.theme, sb.density, existingId);
+        summary.statblocksUpdated++;
+      } else {
+        insertBeingStatblock.run(newBeingId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+        summary.statblocksAdded++;
+      }
+    }
+  }
 
   // --- Calendar / artifacts / setting-scoped resources: match by name,
   // update or insert, never delete a local-only row. Small, low-conflict

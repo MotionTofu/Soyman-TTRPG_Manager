@@ -49,6 +49,7 @@ const TABS = [
   "Обитатели",
   "Важные даты",
   "Галерея",
+  "Карточка локации",
   "Упоминания",
 ] as const;
 
@@ -383,6 +384,15 @@ export function LocationDetailPage() {
             modal: avatarCrop.modal,
           }}
         />
+      )}
+
+      {tab === "Карточка локации" && (
+        <div className="card stack">
+          <p className="muted">
+            Карточка локации — скоро здесь появится компактная витрина для показа игрокам (пульт
+            управления сессией и другие места).
+          </p>
+        </div>
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="location" entityId={locationId} />}
