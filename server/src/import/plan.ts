@@ -14,6 +14,7 @@
 import { db } from "../db/db";
 import { ImportFile } from "./format";
 import { compendiumCandidates, matchCompendium } from "./compendium";
+import { entityName } from "./apply";
 import { NameMatch, normalizeName as normalize, parseAliases, similarity } from "./names";
 
 export type PlanMatch = NameMatch;
@@ -28,6 +29,8 @@ export interface PlanEntry {
   category?: string;
   /** Ключ уже импортирован раньше — сущность создаваться не будет. */
   known: string | null;
+  /** Как зовут то, на что ведёт занятый ключ: столкновение видно только так. */
+  knownName?: string | null;
   matches: PlanMatch[];
   /** Только для бестиария: монстры компендиума, с которыми можно связать. */
   compendium?: PlanMatch[];
@@ -189,7 +192,8 @@ export function buildPlan(
         matches.push(match);
       }
     }
-    return { key, type, name, note, category, known: knownKeys[key] ?? null, matches };
+    const known = knownKeys[key] ?? null;
+    return { key, type, name, note, category, known, knownName: entityName(known), matches };
   };
 
   const sceneCount = (advKey: string) =>

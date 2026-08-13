@@ -46,6 +46,15 @@ export interface ApplyOptions {
    * записи — это явный выбор человека, а не переписывание чужого.
    */
   compendium?: Record<string, number[]>;
+  /**
+   * Ключи, про которые человек на экране сверки сказал «это другая сущность».
+   *
+   * Ключи выводятся из имён детерминированно, и на типовых названиях книги
+   * сталкиваются: `item.wand_of_secrets` в двух разных приключениях — две
+   * разные палочки. Без этого списка вторая молча не создавалась бы, а ссылки
+   * на неё вели бы на чужой предмет из прошлой книги.
+   */
+  detach?: string[];
 }
 
 export interface ApplyResult {
@@ -105,7 +114,13 @@ const linkable = (ref: Ref | undefined | null): ref is Ref =>
 export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
   const warnings: Problem[] = [];
   const keys = new Map<string, Ref>();
+  // Отцепленный ключ ведёт себя так, будто его в прошлых батчах не было вовсе:
+  // сущность создастся заново, ссылки этого файла пойдут на неё. В key_map
+  // батча она запишется поверх прежней — следующая книга с тем же ключом
+  // увидит на экране сверки уже её и решит про себя сама.
+  const detached = new Set(opts.detach ?? []);
   for (const [key, value] of Object.entries({ ...opts.knownKeys, ...opts.reuse })) {
+    if (detached.has(key)) continue;
     const [type, id] = value.split(":");
     if (type && id) keys.set(key, { type, id: Number(id) });
   }
@@ -1050,6 +1065,24 @@ const KEY_LABELS: Record<string, string> = {
   "mls.": "веха",
   "sec.": "тайна",
 };
+
+/**
+ * Как зовут сущность, на которую ведёт ссылка вида «тип:id».
+ *
+ * Нужно экрану сверки: без имени пометка «уже импортировано» ничего не говорит
+ * человеку, а именно там и прячется столкновение ключей — «Волшебная палочка
+ * секретов» из новой книги, ведущая на «Жезл секретов» из прошлой.
+ */
+export function entityName(ref: string | null | undefined): string | null {
+  if (!ref) return null;
+  const [type, id] = ref.split(":");
+  const meta = KEY_NAMES[type];
+  if (!meta || !id) return null;
+  const row = db
+    .prepare(`SELECT ${meta.column} AS name FROM ${meta.table} WHERE id = ?`)
+    .get(Number(id)) as { name: string } | undefined;
+  return row?.name ?? null;
+}
 
 /**
  * Справочник ключей сеттинга: ключ, имя и тип — то, что вкладывается в промпт

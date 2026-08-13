@@ -32,6 +32,8 @@ interface PlanEntry {
   note: string;
   category?: string;
   known: string | null;
+  /** Имя того, на что ведёт занятый ключ: по нему видно столкновение. */
+  knownName?: string | null;
   matches: PlanMatch[];
   /** Только у бестиария: монстры компендиума систем, в которые играют по сеттингу. */
   compendium?: PlanMatch[];
@@ -107,6 +109,9 @@ export function ImportAdventurePage() {
   // key записи бестиария → id монстра компендиума. Связь необязательная: пусто
   // значит «не связывать», и это нормальный исход.
   const [compendium, setCompendium] = useState<Record<string, number>>({});
+  // Ключи, про которые человек сказал «это другая сущность»: занятый ключ
+  // перестаёт считаться занятым, и сущность создаётся заново.
+  const [detach, setDetach] = useState<Record<string, boolean>>({});
 
   const [result, setResult] = useState<ApplyResponse | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -180,6 +185,7 @@ export function ImportAdventurePage() {
         setReuse({});
         setCategories({});
         setCompendium({});
+        setDetach({});
         setResult(null);
       } finally {
         setBusy(false);
@@ -213,8 +219,10 @@ export function ImportAdventurePage() {
     () => plan?.plan.sections.flatMap((s) => s.entries) ?? [],
     [plan]
   );
-  const willCreate = entries.filter((e) => !skip[e.key] && !e.known && !reuse[e.key]).length;
-  const willReuse = entries.filter((e) => !skip[e.key] && (e.known || reuse[e.key])).length;
+  // Отцепленный ключ перестаёт быть занятым: сущность поедет как новая.
+  const held = (e: PlanEntry) => !!e.known && !detach[e.key];
+  const willCreate = entries.filter((e) => !skip[e.key] && !held(e) && !reuse[e.key]).length;
+  const willReuse = entries.filter((e) => !skip[e.key] && (held(e) || reuse[e.key])).length;
   const willSkip = entries.filter((e) => skip[e.key]).length;
 
   function toggleSection(section: PlanSection, on: boolean) {
@@ -245,6 +253,9 @@ export function ImportAdventurePage() {
             .filter(([key]) => !skip[key])
             .map(([key, id]) => [key, [id]])
         ),
+        detach: Object.entries(detach)
+          .filter(([, on]) => on)
+          .map(([key]) => key),
       });
       setResult(response);
       setSettingId(response.setting_id);
@@ -382,7 +393,7 @@ export function ImportAdventurePage() {
                           <input
                             type="checkbox"
                             checked={!skip[entry.key]}
-                            disabled={!!entry.known}
+                            disabled={!!entry.known && !detach[entry.key]}
                             onChange={(e) =>
                               setSkip((prev) => ({ ...prev, [entry.key]: !e.target.checked }))
                             }
@@ -391,7 +402,23 @@ export function ImportAdventurePage() {
                           {entry.note && <span className="muted">{entry.note}</span>}
                         </label>
 
-                        {entry.known && <span className="badge tag">уже импортировано</span>}
+                        {entry.known && (
+                          <select
+                            value={detach[entry.key] ? "new" : "keep"}
+                            onChange={(e) =>
+                              setDetach((prev) => ({
+                                ...prev,
+                                [entry.key]: e.target.value === "new",
+                              }))
+                            }
+                          >
+                            <option value="keep">
+                              Уже импортировано
+                              {entry.knownName ? `: ${entry.knownName}` : ""}
+                            </option>
+                            <option value="new">Это другая сущность — создать новую</option>
+                          </select>
+                        )}
 
                         {!entry.known && entry.matches.length > 0 && (
                           <select
@@ -420,7 +447,7 @@ export function ImportAdventurePage() {
                           </select>
                         )}
 
-                        {entry.category && !entry.known && !reuse[entry.key] && (
+                        {entry.category && !held(entry) && !reuse[entry.key] && (
                           <select
                             value={categories[entry.key] ?? entry.category}
                             onChange={(e) =>

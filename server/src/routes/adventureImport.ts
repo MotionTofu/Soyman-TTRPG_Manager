@@ -82,15 +82,17 @@ adventureImportRouter.post("/plan", (req, res) => {
 });
 
 adventureImportRouter.post("/apply", (req, res) => {
-  const { data, setting_id, file_name, skip, reuse, categories, compendium } = req.body as {
-    data?: unknown;
-    setting_id?: number | null;
-    file_name?: string;
-    skip?: string[];
-    reuse?: Record<string, string>;
-    categories?: Record<string, string>;
-    compendium?: Record<string, number[]>;
-  };
+  const { data, setting_id, file_name, skip, reuse, categories, compendium, detach } =
+    req.body as {
+      data?: unknown;
+      setting_id?: number | null;
+      file_name?: string;
+      skip?: string[];
+      reuse?: Record<string, string>;
+      categories?: Record<string, string>;
+      compendium?: Record<string, number[]>;
+      detach?: string[];
+    };
   if (data === undefined) return res.status(400).json({ error: "data is required" });
 
   const settingId = setting_id ?? null;
@@ -116,6 +118,7 @@ adventureImportRouter.post("/apply", (req, res) => {
       reuse,
       categories,
       compendium,
+      detach,
     });
     res.status(201).json({
       ok: true,
