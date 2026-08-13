@@ -6,7 +6,7 @@
 // галочкой, а совпавшие по имени — с выбором «создать новую или использовать
 // существующую».
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { SectionHeading } from "../components/SectionHeading";
@@ -112,7 +112,8 @@ export function ImportAdventurePage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [keys, setKeys] = useState<KeyEntry[]>([]);
   const [keysOpen, setKeysOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "done" | "failed">("idle");
+  const keysRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     api.get<Setting[]>("/settings").then(setSettings);
@@ -135,6 +136,32 @@ export function ImportAdventurePage() {
     () => keys.map((k) => `${k.key} — ${k.name} (${k.label})`).join("\n"),
     [keys]
   );
+
+  /**
+   * Доступ к буферу браузер может и запретить (NotAllowedError). Молча показать
+   * «Скопировано» в этом случае — худший исход: человек вставит в промпт пустоту
+   * и узнает об этом, только когда вторая часть книги приедет дублями. Поэтому
+   * при отказе список раскрывается и выделяется целиком — останется Ctrl+C.
+   */
+  async function copyKeys() {
+    setKeysOpen(true);
+    try {
+      await navigator.clipboard.writeText(keysText);
+      setCopyState("done");
+    } catch {
+      setCopyState("failed");
+      requestAnimationFrame(() => {
+        const node = keysRef.current;
+        if (!node) return;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      });
+    }
+    setTimeout(() => setCopyState("idle"), 4000);
+  }
 
   const setting = settings.find((s) => s.id === settingId) ?? null;
 
@@ -232,6 +259,9 @@ export function ImportAdventurePage() {
     await api.del(`/import/batches/${batchId}`);
     if (result?.batch_id === batchId) setResult(null);
     loadBatches();
+    // Откат удаляет сущности, а с ними и их ключи: список для промпта следующей
+    // части обязан похудеть вместе с базой, иначе туда уедут ключи в никуда.
+    loadKeys();
   }
 
   return (
@@ -509,14 +539,12 @@ export function ImportAdventurePage() {
               Ключи сеттинга <span className="muted">({keys.length})</span>
             </h3>
             <div className="row">
-              <button
-                onClick={() => {
-                  void navigator.clipboard.writeText(keysText);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-              >
-                {copied ? "Скопировано" : "Скопировать"}
+              <button onClick={() => void copyKeys()}>
+                {copyState === "done"
+                  ? "Скопировано"
+                  : copyState === "failed"
+                    ? "Выделено — Ctrl+C"
+                    : "Скопировать"}
               </button>
               <button onClick={() => setKeysOpen((v) => !v)}>
                 {keysOpen ? "Свернуть" : "Показать"}
@@ -528,8 +556,15 @@ export function ImportAdventurePage() {
             раздел «Если это продолжение». Тогда модель возьмёт готовый ключ вместо того,
             чтобы выдумать для той же локации второй, и части сойдутся.
           </div>
+          {copyState === "failed" && (
+            <div className="muted">
+              Браузер не дал доступ к буферу обмена. Список ниже выделен целиком — скопируйте
+              его вручную.
+            </div>
+          )}
           {keysOpen && (
             <pre
+              ref={keysRef}
               style={{
                 maxHeight: 320,
                 overflow: "auto",
