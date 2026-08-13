@@ -21,7 +21,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { MonsterTemplatePicker } from "../components/MonsterTemplatePicker";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import type {
-  BeingCompendiumLink,
+  CompendiumLink,
   Campaign,
   DateRecurrence,
   SearchResult,
@@ -617,7 +617,7 @@ function CompendiumLinksCard({
   onChange,
 }: {
   beingId: number;
-  links: BeingCompendiumLink[];
+  links: CompendiumLink[];
   onChange: () => void;
 }) {
   async function add(entry: SearchResult | null) {

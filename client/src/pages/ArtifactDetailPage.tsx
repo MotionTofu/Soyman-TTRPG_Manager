@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AliasesCard } from "../components/AliasesCard";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
@@ -10,7 +10,8 @@ import { GalleryTab } from "../components/GalleryTab";
 import { ChapterList } from "../components/ChapterList";
 import { useTabState } from "../hooks/useTabState";
 import { MAGIC_ITEM_TYPES, MAGIC_ITEM_RARITIES } from "../compendium";
-import type { Artifact } from "../types";
+import { CompendiumEntryPicker } from "../components/MonsterTemplatePicker";
+import type { Artifact, CompendiumLink, SearchResult } from "../types";
 
 const TABS = ["Досье", "Галерея", "Карточка предмета"] as const;
 
@@ -268,6 +269,14 @@ export function ArtifactDetailPage() {
         />
       )}
 
+      {tab === "Досье" && (
+        <CompendiumLinksCard
+          artifactId={artifactId}
+          links={artifact.compendium_links ?? []}
+          onChange={refresh}
+        />
+      )}
+
       {tab === "Галерея" && <GalleryTab ownerType="artifact" ownerId={artifactId} />}
 
       {tab === "Карточка предмета" && (
@@ -279,5 +288,65 @@ export function ArtifactDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// «Записи компендиумов» — маг. предметы систем, описывающие этот же предмет.
+// Предмет приключения и запись справочника — одна вещь с двух сторон: в книге
+// у «Кольца защиты разума» своя история и владелец, в компендиуме — правила.
+// Связей может быть несколько: сеттинг водится сразу под две системы.
+function CompendiumLinksCard({
+  artifactId,
+  links,
+  onChange,
+}: {
+  artifactId: number;
+  links: CompendiumLink[];
+  onChange: () => void;
+}) {
+  async function add(entry: SearchResult | null) {
+    if (!entry) return;
+    await api.post(`/artifacts/${artifactId}/compendium-links`, { compendium_entry_id: entry.id });
+    onChange();
+  }
+
+  async function remove(entryId: number) {
+    await api.del(`/artifacts/${artifactId}/compendium-links/${entryId}`);
+    onChange();
+  }
+
+  return (
+    <details className="card">
+      <summary className="sb-section" style={{ margin: 0 }}>
+        Записи компендиумов {links.length > 0 && `(${links.length})`}
+      </summary>
+      <div className="stack" style={{ marginTop: 8 }}>
+        <span className="muted">
+          Маг. предметы из компендиумов систем, соответствующие этому предмету. Правила живут
+          там, история и владелец — здесь.
+        </span>
+        <CompendiumEntryPicker
+          value={null}
+          onChange={add}
+          kind="magic_item"
+          placeholder="Найти в компендиуме…"
+          selectedLabel="Выбрано"
+        />
+        <div className="stack">
+          {links.map((l) => (
+            <div key={l.id} className="row" style={{ justifyContent: "space-between" }}>
+              <span>
+                <Link to={`/compendium/${l.id}`}>{l.name}</Link>
+                {l.system_name && <span className="muted"> · {l.system_name}</span>}
+              </span>
+              <button className="danger" onClick={() => remove(l.id)}>
+                ✕
+              </button>
+            </div>
+          ))}
+          {links.length === 0 && <p className="muted">Связанных записей компендиума нет.</p>}
+        </div>
+      </div>
+    </details>
   );
 }

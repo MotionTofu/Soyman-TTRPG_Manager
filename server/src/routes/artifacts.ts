@@ -20,6 +20,22 @@ artifactsRouter.get("/", (req, res) => {
   res.json(rows);
 });
 
+// Записи компендиумов, соответствующие этому предмету: «Кольцо защиты разума»
+// приключения и «Кольцо защиты разума [Ring of Mind Shielding]» системы — одна
+// вещь с двух сторон. Как и у существ, связь многие-ко-многим: один город
+// водится сразу под две системы.
+function getCompendiumLinks(artifactId: string | number) {
+  return db
+    .prepare(
+      `SELECT ce.id, ce.name, ce.system_id, sy.name as system_name
+       FROM artifact_compendium_links acl
+       JOIN compendium_entries ce ON ce.id = acl.compendium_entry_id
+       LEFT JOIN systems sy ON sy.id = ce.system_id
+       WHERE acl.artifact_id = ? ORDER BY sy.name, ce.name`
+    )
+    .all(artifactId);
+}
+
 artifactsRouter.get("/:id", (req, res) => {
   const row = db.prepare("SELECT * FROM artifacts WHERE id = ?").get(req.params.id) as
     | Record<string, unknown>
@@ -28,7 +44,23 @@ artifactsRouter.get("/:id", (req, res) => {
   const chapters = db
     .prepare("SELECT * FROM artifact_chapters WHERE artifact_id = ? ORDER BY created_at")
     .all(req.params.id);
-  res.json({ ...row, chapters });
+  res.json({ ...row, chapters, compendium_links: getCompendiumLinks(req.params.id) });
+});
+
+artifactsRouter.post("/:id/compendium-links", (req, res) => {
+  const { compendium_entry_id } = req.body as { compendium_entry_id?: number };
+  if (!compendium_entry_id) return res.status(400).json({ error: "compendium_entry_id is required" });
+  db.prepare(
+    "INSERT OR IGNORE INTO artifact_compendium_links (artifact_id, compendium_entry_id) VALUES (?, ?)"
+  ).run(req.params.id, compendium_entry_id);
+  res.json(getCompendiumLinks(req.params.id));
+});
+
+artifactsRouter.delete("/:id/compendium-links/:entryId", (req, res) => {
+  db.prepare(
+    "DELETE FROM artifact_compendium_links WHERE artifact_id = ? AND compendium_entry_id = ?"
+  ).run(req.params.id, req.params.entryId);
+  res.json(getCompendiumLinks(req.params.id));
 });
 
 artifactsRouter.post("/", upload.single("file"), async (req, res) => {

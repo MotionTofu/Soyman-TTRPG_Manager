@@ -2,16 +2,22 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { SearchResult } from "../types";
 
-// Compact search-and-pick control for choosing a system Бестиарий template
-// ("Гоблин-воин") when creating a setting-level "личность" — the being's
-// statblock gets cloned from the chosen template on creation (see
-// settingBeings.ts POST), this component just needs to resolve an id+label.
-export function MonsterTemplatePicker({
+// Compact search-and-pick control for choosing a compendium entry of one kind.
+// Used for бестиарий templates ("Гоблин-воин") when creating a setting-level
+// "личность", and for маг. предметы when tying an artifact to the system's
+// reference entry — same control, different `kind`.
+export function CompendiumEntryPicker({
   value,
   onChange,
+  kind,
+  placeholder,
+  selectedLabel,
 }: {
   value: SearchResult | null;
   onChange: (entry: SearchResult | null) => void;
+  kind: string;
+  placeholder: string;
+  selectedLabel: string;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -25,17 +31,19 @@ export function MonsterTemplatePicker({
     const timer = setTimeout(() => {
       api
         .get<SearchResult[]>(
-          `/search?q=${encodeURIComponent(query.trim())}&types=compendium_entry&kind=monster`
+          `/search?q=${encodeURIComponent(query.trim())}&types=compendium_entry&kind=${kind}`
         )
         .then(setResults);
     }, 200);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, kind]);
 
   if (value) {
     return (
       <span className="row" style={{ gap: 4 }}>
-        <span className="muted">На основе: {value.title}</span>
+        <span className="muted">
+          {selectedLabel}: {value.title}
+        </span>
         <button type="button" onClick={() => onChange(null)}>
           ✕
         </button>
@@ -46,7 +54,7 @@ export function MonsterTemplatePicker({
   return (
     <span className="row" style={{ position: "relative", gap: 4 }}>
       <input
-        placeholder="На основе (Бестиарий)…"
+        placeholder={placeholder}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -88,5 +96,26 @@ export function MonsterTemplatePicker({
         </div>
       )}
     </span>
+  );
+}
+
+// Бестиарий-flavoured wrapper: the being's statblock gets cloned from the
+// chosen template on creation (see settingBeings.ts POST), this control just
+// needs to resolve an id+label.
+export function MonsterTemplatePicker({
+  value,
+  onChange,
+}: {
+  value: SearchResult | null;
+  onChange: (entry: SearchResult | null) => void;
+}) {
+  return (
+    <CompendiumEntryPicker
+      value={value}
+      onChange={onChange}
+      kind="monster"
+      placeholder="На основе (Бестиарий)…"
+      selectedLabel="На основе"
+    />
   );
 }

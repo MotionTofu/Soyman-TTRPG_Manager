@@ -897,7 +897,7 @@ function BeingsSection({ settingId }: { settingId: number }) {
 // утопленники") — a separate list from the named personalities above, so
 // the GM gets an at-a-glance answer to "кто вообще населяет мой мир". Each
 // entry may point at one or more system compendium monsters (see
-// BeingCompendiumLinks on the being's own page); the entry itself lives in
+// CompendiumLinks card on the being's own page); the entry itself lives in
 // the setting and works fine with no system attached at all.
 function BestiarySection({ settingId }: { settingId: number }) {
   const [beings, setBeings] = useState<SettingBeing[]>([]);

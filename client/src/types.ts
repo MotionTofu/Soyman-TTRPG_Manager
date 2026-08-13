@@ -1110,7 +1110,7 @@ export interface BeingChapter {
 // Monster templates from any system's compendium linked to this being —
 // used by бестиарий entries, which may carry several systems' versions of
 // the same creature kind.
-export interface BeingCompendiumLink {
+export interface CompendiumLink {
   id: number;
   name: string;
   system_id: number | null;
@@ -1121,7 +1121,7 @@ export interface SettingBeingDetail extends SettingBeing {
   events: BeingEvent[];
   relations: BeingRelation[];
   communities: { id: number; name: string }[];
-  compendium_links: BeingCompendiumLink[];
+  compendium_links: CompendiumLink[];
   important_dates: ImportantDate[];
   chapters: BeingChapter[];
 }
@@ -1278,6 +1278,8 @@ export interface Artifact {
   created_at: string;
   archived_at: string | null;
   chapters: ArtifactChapter[];
+  /** Записи компендиумов систем, описывающие этот же предмет. */
+  compendium_links?: CompendiumLink[];
 }
 
 export interface ArtifactChapter {

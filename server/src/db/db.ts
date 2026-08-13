@@ -1177,6 +1177,20 @@ export function openDatabase(dbDir: string): Database.Database {
     )`);
   }
 
+  // То же для предметов: «Кольцо защиты разума» в сокровищнице приключения и
+  // «Кольцо защиты разума [Ring of Mind Shielding]» в компендиуме системы —
+  // один и тот же предмет, описанный с двух сторон. Связь многие-ко-многим по
+  // той же причине, что и у существ: сеттинг с системой не связан напрямую,
+  // и один город водится сразу под две.
+  if (!tableExists(database, "artifact_compendium_links")) {
+    database.exec(`CREATE TABLE artifact_compendium_links (
+      artifact_id INTEGER NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+      compendium_entry_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (artifact_id, compendium_entry_id)
+    )`);
+  }
+
   // "Приключения" — prepared story content owned by a setting: arcs (an
   // adventure, an arc, a chapter of an imported book; nested via parent_id)
   // holding scenes. See schema.sql for the copy-on-write campaign layer.
