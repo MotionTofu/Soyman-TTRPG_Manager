@@ -161,12 +161,14 @@ playerRouter.get("/search", (req: AuthedRequest, res) => {
   const playerId = req.user!.playerId!;
   const q = String(req.query.q || "").trim();
   if (!q) return res.json([]);
-  const like = `%${q}%`;
+  // lower_u — юникодный lower из db.ts: встроенный LIKE в SQLite приводит
+  // регистр только у латиницы, и «мирт» не находил бы «Мирт».
+  const like = `%${q.toLowerCase()}%`;
   const campaignIds = myCampaignIds(playerId);
   const results: { type: string; id: number; title: string; subtitle?: string }[] = [];
 
   const characters = db
-    .prepare("SELECT id, character_name FROM characters WHERE player_id = ? AND archived_at IS NULL AND character_name LIKE ?")
+    .prepare("SELECT id, character_name FROM characters WHERE player_id = ? AND archived_at IS NULL AND lower_u(character_name) LIKE ?")
     .all(playerId, like) as { id: number; character_name: string }[];
   results.push(...characters.map((c) => ({ type: "character", id: c.id, title: c.character_name })));
 
@@ -175,7 +177,7 @@ playerRouter.get("/search", (req: AuthedRequest, res) => {
     const entries = db
       .prepare(
         `SELECT id, campaign_id, kind, name FROM world_exploration_entries
-         WHERE campaign_id IN (${inClause}) AND archived_at IS NULL AND name LIKE ?`
+         WHERE campaign_id IN (${inClause}) AND archived_at IS NULL AND lower_u(name) LIKE ?`
       )
       .all(...campaignIds, like) as { id: number; campaign_id: number; kind: string; name: string }[];
     results.push(
@@ -190,7 +192,7 @@ playerRouter.get("/search", (req: AuthedRequest, res) => {
       const compendiumEntries = db
         .prepare(
           `SELECT id, system_id, section_id, kind, name FROM compendium_entries
-           WHERE system_id IN (${sysClause}) AND name LIKE ?`
+           WHERE system_id IN (${sysClause}) AND lower_u(name) LIKE ?`
         )
         .all(...systemIds.map((s) => s.system_id), like) as {
         id: number;

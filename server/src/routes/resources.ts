@@ -114,8 +114,10 @@ resourcesRouter.get("/", (req, res) => {
     params.system_id = system_id;
   }
   if (q) {
-    clauses.push("r.name LIKE @q");
-    params.q = `%${q}%`;
+    // lower_u — юникодный lower из db.ts: встроенный LIKE в SQLite приводит
+    // регистр только у латиницы, и «гуманоид» не находил «Гуманоид».
+    clauses.push("lower_u(r.name) LIKE @q");
+    params.q = `%${q.toLowerCase()}%`;
   }
   clauses.push("r.archived_at IS NULL");
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";

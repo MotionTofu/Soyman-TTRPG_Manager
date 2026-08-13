@@ -142,27 +142,29 @@ settingBeingsRouter.get("/", (req, res) => {
     // being (either direction), a member of a matching community, or
     // sharing a location with a matching being.
     clauses.push(`(
-      b.name LIKE @q
+      lower_u(b.name) LIKE @q
       OR b.id IN (
         SELECT r.being_b_id FROM being_relations r
-        JOIN setting_beings mb ON mb.id = r.being_a_id WHERE mb.name LIKE @q
+        JOIN setting_beings mb ON mb.id = r.being_a_id WHERE lower_u(mb.name) LIKE @q
         UNION
         SELECT r.being_a_id FROM being_relations r
-        JOIN setting_beings mb ON mb.id = r.being_b_id WHERE mb.name LIKE @q
+        JOIN setting_beings mb ON mb.id = r.being_b_id WHERE lower_u(mb.name) LIKE @q
       )
       OR b.id IN (
         SELECT bc.being_id FROM being_communities bc
-        JOIN setting_communities mc ON mc.id = bc.community_id WHERE mc.name LIKE @q
+        JOIN setting_communities mc ON mc.id = bc.community_id WHERE lower_u(mc.name) LIKE @q
       )
       OR b.id IN (
         SELECT bl.being_id FROM being_locations bl
         WHERE bl.location_id IN (
           SELECT bl2.location_id FROM being_locations bl2
-          JOIN setting_beings mb ON mb.id = bl2.being_id WHERE mb.name LIKE @q
+          JOIN setting_beings mb ON mb.id = bl2.being_id WHERE lower_u(mb.name) LIKE @q
         )
       )
     )`);
-    params.q = `%${q.trim()}%`;
+    // lower_u — юникодный lower из db.ts: встроенные LIKE и LOWER в SQLite
+    // приводят регистр только у латиницы, и «мирт» не находил «Мирт».
+    params.q = `%${q.trim().toLowerCase()}%`;
   }
   const rows = db
     .prepare(
