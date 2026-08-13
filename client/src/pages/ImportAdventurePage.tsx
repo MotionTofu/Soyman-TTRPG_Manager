@@ -60,6 +60,13 @@ interface ApplyResponse {
   counts: Record<string, number>;
   warnings: Problem[];
 }
+/** Занятый ключ сеттинга: вкладывается в промпт следующей части книги. */
+interface KeyEntry {
+  key: string;
+  type: string;
+  name: string;
+  label: string;
+}
 interface Batch {
   id: number;
   setting_id: number;
@@ -103,6 +110,9 @@ export function ImportAdventurePage() {
 
   const [result, setResult] = useState<ApplyResponse | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [keys, setKeys] = useState<KeyEntry[]>([]);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     api.get<Setting[]>("/settings").then(setSettings);
@@ -113,6 +123,18 @@ export function ImportAdventurePage() {
     api.get<Batch[]>(`/import/batches${query}`).then(setBatches);
   }, [settingId]);
   useEffect(loadBatches, [loadBatches]);
+
+  const loadKeys = useCallback(() => {
+    if (!settingId) return setKeys([]);
+    api.get<KeyEntry[]>(`/import/keys?setting_id=${settingId}`).then(setKeys);
+  }, [settingId]);
+  useEffect(loadKeys, [loadKeys, result]);
+
+  // Готовый к вставке в промпт список: ключ — имя, по строке на сущность.
+  const keysText = useMemo(
+    () => keys.map((k) => `${k.key} — ${k.name} (${k.label})`).join("\n"),
+    [keys]
+  );
 
   const setting = settings.find((s) => s.id === settingId) ?? null;
 
@@ -130,6 +152,7 @@ export function ImportAdventurePage() {
         setSkip({});
         setReuse({});
         setCategories({});
+        setCompendium({});
         setResult(null);
       } finally {
         setBusy(false);
@@ -475,6 +498,48 @@ export function ImportAdventurePage() {
               Откатить импорт
             </button>
           </div>
+        </div>
+      )}
+
+      {/* --- ключи для следующей части --------------------------------------- */}
+      {keys.length > 0 && (
+        <div className="card stack">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h3>
+              Ключи сеттинга <span className="muted">({keys.length})</span>
+            </h3>
+            <div className="row">
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(keysText);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? "Скопировано" : "Скопировать"}
+              </button>
+              <button onClick={() => setKeysOpen((v) => !v)}>
+                {keysOpen ? "Свернуть" : "Показать"}
+              </button>
+            </div>
+          </div>
+          <div className="muted">
+            Разбирая следующую часть той же книги, вложите этот список в промпт — в нём есть
+            раздел «Если это продолжение». Тогда модель возьмёт готовый ключ вместо того,
+            чтобы выдумать для той же локации второй, и части сойдутся.
+          </div>
+          {keysOpen && (
+            <pre
+              style={{
+                maxHeight: 320,
+                overflow: "auto",
+                whiteSpace: "pre-wrap",
+                margin: 0,
+              }}
+            >
+              {keysText}
+            </pre>
+          )}
         </div>
       )}
 

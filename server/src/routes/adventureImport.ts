@@ -9,7 +9,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { validateImport } from "../import/validate";
-import { applyImport, rollbackBatch, knownKeysFor } from "../import/apply";
+import { applyImport, rollbackBatch, knownKeysFor, keyDirectoryFor } from "../import/apply";
 import { buildPlan } from "../import/plan";
 
 export const adventureImportRouter = Router();
@@ -128,6 +128,16 @@ adventureImportRouter.post("/apply", (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: (e as Error).message });
   }
+});
+
+// Ключи, уже занятые в сеттинге: вкладываются в промпт следующей части книги,
+// чтобы модель не выдумала для той же локации второй ключ.
+adventureImportRouter.get("/keys", (req, res) => {
+  const settingId = Number(req.query.setting_id);
+  if (!Number.isInteger(settingId) || settingId <= 0) {
+    return res.status(400).json({ error: "setting_id is required" });
+  }
+  res.json(keyDirectoryFor(settingId));
 });
 
 adventureImportRouter.get("/batches", (req, res) => {

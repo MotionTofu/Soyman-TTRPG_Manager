@@ -1002,6 +1002,61 @@ export function rollbackBatch(batchId: number): { deleted: number } {
   return run();
 }
 
+/** Тип сущности → где взять её имя для справочника ключей. */
+const KEY_NAMES: Record<string, { table: string; column: string }> = {
+  location: { table: "setting_locations", column: "name" },
+  being: { table: "setting_beings", column: "name" },
+  community: { table: "setting_communities", column: "name" },
+  artifact: { table: "artifacts", column: "name" },
+  adventure: { table: "story_arcs", column: "name" },
+  scene: { table: "story_scenes", column: "name" },
+  milestone: { table: "story_milestones", column: "title" },
+  secret: { table: "story_secrets", column: "title" },
+};
+
+/**
+ * Подпись берётся из префикса ключа, а не из типа в базе: в базе и глава, и
+ * приключение — story_arcs, а именной персонаж и вид существ — setting_beings.
+ * Модели же список читать по её собственному словарю префиксов.
+ */
+const KEY_LABELS: Record<string, string> = {
+  "loc.": "локация",
+  "npc.": "персонаж",
+  "bst.": "вид существ",
+  "com.": "сообщество",
+  "item.": "предмет",
+  "adv.": "приключение",
+  "chp.": "глава",
+  "scn.": "сцена",
+  "mls.": "веха",
+  "sec.": "тайна",
+};
+
+/**
+ * Справочник ключей сеттинга: ключ, имя и тип — то, что вкладывается в промпт
+ * следующей части книги.
+ *
+ * Промпт просит выводить ключи детерминированно из имён, но между двумя
+ * разговорами с моделью это держится на честном слове: «Синий переулок» легко
+ * станет то loc.blue_alley, то loc.siniy_pereulok, и вторая часть уедет мимо
+ * первой. Со списком на руках модель не гадает.
+ */
+export function keyDirectoryFor(settingId: number): { key: string; type: string; name: string; label: string }[] {
+  const out: { key: string; type: string; name: string; label: string }[] = [];
+  for (const [key, value] of Object.entries(knownKeysFor(settingId))) {
+    const [type, id] = value.split(":");
+    const meta = KEY_NAMES[type];
+    if (!meta) continue;
+    const row = db
+      .prepare(`SELECT ${meta.column} AS name FROM ${meta.table} WHERE id = ?`)
+      .get(Number(id)) as { name: string } | undefined;
+    if (!row) continue;
+    const prefix = Object.keys(KEY_LABELS).find((p) => key.startsWith(p));
+    out.push({ key, type, name: row.name, label: prefix ? KEY_LABELS[prefix] : type });
+  }
+  return out.sort((a, b) => a.key.localeCompare(b.key));
+}
+
 /** Ключи всех прошлых батчей сеттинга — чтобы второй файл книги видел первый. */
 export function knownKeysFor(settingId: number): Record<string, string> {
   const rows = db
