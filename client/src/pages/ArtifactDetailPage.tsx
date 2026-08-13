@@ -181,7 +181,11 @@ export function ArtifactDetailPage() {
         ) : (
           <div className="stack">
             <div className="card stack">
-              {artifact.owner && <div className="muted">Владелец: {artifact.owner}</div>}
+              {artifact.owner && (
+                <div className="muted">
+                  Владелец: <MentionText text={artifact.owner} />
+                </div>
+              )}
               {!!(artifact.item_type || artifact.rarity || artifact.requires_attunement) && (
                 <div className="row" style={{ gap: 6 }}>
                   {artifact.item_type && <span className="badge tag">{artifact.item_type}</span>}

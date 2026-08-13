@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { MentionText } from "../components/mentions/MentionText";
 import { LinkDropZone } from "../components/LinkDropZone";
 import { useTabState } from "../hooks/useTabState";
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
@@ -147,6 +148,7 @@ export function AdventureDetailPage() {
             entityId={arcId}
             defaultSettingId={arc.setting_id}
             collapsible
+            defaultOpen
           />
           <div className="card">
             <LinkDropZone entityType="adventure" entityId={arcId} title="Связанные сущности" />
@@ -545,7 +547,11 @@ function Milestones({
             )}{" "}
             <strong>{m.title}</strong>
             {m.scene_name && <span className="muted"> · сцена «{m.scene_name}»</span>}
-            {m.description && <div className="muted">{m.description}</div>}
+            {m.description && (
+              <div className="muted">
+                <MentionText text={m.description} />
+              </div>
+            )}
           </span>
           <span className="row">
             <button onClick={() => move(m.id, -1)}>↑</button>
@@ -620,9 +626,20 @@ function Rewards({
       {arc.rewards.map((r) => (
         <div key={r.id} className="row" style={{ justifyContent: "space-between" }}>
           <span>
-            <strong>{r.what}</strong>
-            {r.where_found && <span className="muted"> · {r.where_found}</span>}
-            {r.notes && <div className="muted">{r.notes}</div>}
+            <strong>
+              <MentionText text={r.what} />
+            </strong>
+            {r.where_found && (
+              <span className="muted">
+                {" · "}
+                <MentionText text={r.where_found} />
+              </span>
+            )}
+            {r.notes && (
+              <div className="muted">
+                <MentionText text={r.notes} />
+              </div>
+            )}
           </span>
           <span className="muted">
             {r.scene_name ? (
@@ -694,7 +711,11 @@ function Secrets({
             )}{" "}
             <strong>{s.title}</strong>
             <span className="muted"> · {SECRET_KINDS.find((k) => k.key === s.kind)?.label}</span>
-            {s.content && <div className="muted">{s.content}</div>}
+            {s.content && (
+              <div className="muted">
+                <MentionText text={s.content} />
+              </div>
+            )}
           </span>
           {!campaignId && (
             <button

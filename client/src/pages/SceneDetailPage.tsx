@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import { MentionText } from "../components/mentions/MentionText";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -229,6 +230,7 @@ export function SceneDetailPage() {
         entityId={sceneId}
         defaultSettingId={scene.setting_id}
         collapsible
+        defaultOpen
       />
       <EditableTextCard
         title="Что происходит"
@@ -239,6 +241,7 @@ export function SceneDetailPage() {
         entityId={sceneId}
         defaultSettingId={scene.setting_id}
         collapsible
+        defaultOpen
       />
       <EditableTextCard
         title="Условие входа"
@@ -270,10 +273,20 @@ export function SceneDetailPage() {
           {scene.checks.map((c) => (
             <div key={c.id} className="row" style={{ justifyContent: "space-between" }}>
               <span>
-                <strong>{c.what}</strong>
+                <strong>
+                  <MentionText text={c.what} />
+                </strong>
                 {c.difficulty && <span className="muted"> · {c.difficulty}</span>}
-                {c.on_success && <div className="muted">Успех: {c.on_success}</div>}
-                {c.on_failure && <div className="muted">Провал: {c.on_failure}</div>}
+                {c.on_success && (
+                  <div className="muted">
+                    Успех: <MentionText text={c.on_success} />
+                  </div>
+                )}
+                {c.on_failure && (
+                  <div className="muted">
+                    Провал: <MentionText text={c.on_failure} />
+                  </div>
+                )}
               </span>
               <button
                 className="danger"
@@ -324,9 +337,20 @@ export function SceneDetailPage() {
           {scene.rewards.map((r) => (
             <div key={r.id} className="row" style={{ justifyContent: "space-between" }}>
               <span>
-                <strong>{r.what}</strong>
-                {r.where_found && <span className="muted"> · {r.where_found}</span>}
-                {r.notes && <div className="muted">{r.notes}</div>}
+                <strong>
+                  <MentionText text={r.what} />
+                </strong>
+                {r.where_found && (
+                  <span className="muted">
+                    {" · "}
+                    <MentionText text={r.where_found} />
+                  </span>
+                )}
+                {r.notes && (
+                  <div className="muted">
+                    <MentionText text={r.notes} />
+                  </div>
+                )}
               </span>
               <button
                 className="danger"

@@ -439,6 +439,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       keys.set(item.key, { type: "artifact", id });
       created.add(item.key);
       for (const [column, value] of [
+        ["owner", item.owner],
         ["power", item.power],
         ["history", item.history],
         ["notes", item.notes],
@@ -585,6 +586,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
               .run(sceneId, check.what, check.difficulty, check.on_success, check.on_failure, index)
               .lastInsertRowid
           );
+          remember("story_scene_checks", "what", cId, check.what);
           remember("story_scene_checks", "on_success", cId, check.on_success);
           remember("story_scene_checks", "on_failure", cId, check.on_failure);
           bump("проверки");
@@ -641,6 +643,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
               .run(self.id, reward.what, reward.where_found, reward.notes, artifact?.id ?? null, index)
               .lastInsertRowid
           );
+          remember("story_scene_rewards", "what", rId, reward.what);
+          remember("story_scene_rewards", "where_found", rId, reward.where_found);
           remember("story_scene_rewards", "notes", rId, reward.notes);
           bump("награды");
         });
@@ -691,6 +695,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             .lastInsertRowid
         );
         record("reward", id);
+        remember("story_scene_rewards", "what", id, reward.what);
+        remember("story_scene_rewards", "where_found", id, reward.where_found);
         remember("story_scene_rewards", "notes", id, reward.notes);
         bump("награды");
       });
