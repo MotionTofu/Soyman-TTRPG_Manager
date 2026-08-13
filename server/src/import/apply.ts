@@ -856,8 +856,13 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     // округ» из книги отныне его второе имя. Следующая книга с этим переводом
     // совпадёт уже сама, без ручного выбора.
     const synonyms = new Map<string, string[]>();
-    const collect = (key: string, name: string, original: string | undefined, list: string[]) =>
+    // Оригинал держим отдельно: он не просто ещё одно имя, а самый надёжный
+    // ключ сверки между переводами, и у него своя колонка.
+    const originals = new Map<string, string>();
+    const collect = (key: string, name: string, original: string | undefined, list: string[]) => {
       synonyms.set(key, [name, original ?? "", ...list].filter(Boolean));
+      if (original?.trim()) originals.set(key, original.trim());
+    };
     data.locations.forEach((l) => collect(l.key, l.name, l.name_original, l.aliases));
     data.beings.forEach((b) => collect(b.key, b.name, b.name_original, b.aliases));
     data.bestiary.forEach((b) => collect(b.key, b.name, b.name_original, b.aliases));
@@ -868,9 +873,9 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       const ref = keys.get(key);
       const table = ref ? ALIAS_TABLES[ref.type] : null;
       if (!ref || !table) continue;
-      const row = db.prepare(`SELECT name, aliases FROM ${table} WHERE id = ?`).get(ref.id) as
-        | { name: string; aliases: string }
-        | undefined;
+      const row = db
+        .prepare(`SELECT name, aliases, name_original FROM ${table} WHERE id = ?`)
+        .get(ref.id) as { name: string; aliases: string; name_original: string } | undefined;
       if (!row) continue;
       let current: string[] = [];
       try {
@@ -885,13 +890,24 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         seen.add(normalizeName(candidate));
         added.push(candidate);
       }
-      if (!added.length) continue;
-      record("alias", ref.id, JSON.stringify({ table, aliases: row.aliases }));
-      db.prepare(`UPDATE ${table} SET aliases = ? WHERE id = ?`).run(
+      // Оригинал дописывается только в пустое поле: своё, уже заполненное,
+      // книга перебивать не вправе — там мог быть выверенный вручную вариант.
+      const original = originals.get(key) ?? "";
+      const learnOriginal = !row.name_original.trim() && !!original;
+      if (!added.length && !learnOriginal) continue;
+
+      record(
+        "alias",
+        ref.id,
+        JSON.stringify({ table, aliases: row.aliases, name_original: row.name_original })
+      );
+      db.prepare(`UPDATE ${table} SET aliases = ?, name_original = ? WHERE id = ?`).run(
         JSON.stringify([...current, ...added]),
+        learnOriginal ? original : row.name_original,
         ref.id
       );
-      bump("синонимы", added.length);
+      if (added.length) bump("синонимы", added.length);
+      if (learnOriginal) bump("оригиналы", 1);
     }
 
     // --- батч --------------------------------------------------------------
@@ -962,14 +978,17 @@ export function rollbackBatch(batchId: number): { deleted: number } {
       // нужно вернуть прежнее значение поля.
       if (row.entity_type === "alias") {
         try {
-          const before = JSON.parse(row.payload) as { table: string; aliases: string };
+          const before = JSON.parse(row.payload) as {
+            table: string;
+            aliases: string;
+            name_original?: string;
+          };
           // Имя таблицы идёт в SQL, поэтому берём его не из payload как есть,
           // а сверяем со списком известных.
           if (Object.values(ALIAS_TABLES).includes(before.table)) {
-            db.prepare(`UPDATE ${before.table} SET aliases = ? WHERE id = ?`).run(
-              before.aliases,
-              row.entity_id
-            );
+            db.prepare(
+              `UPDATE ${before.table} SET aliases = ?, name_original = ? WHERE id = ?`
+            ).run(before.aliases, before.name_original ?? "", row.entity_id);
           }
         } catch {
           // Без payload вернуть нечего — лишний синоним безвреден.
