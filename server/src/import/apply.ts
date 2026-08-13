@@ -122,6 +122,67 @@ const ALIAS_TABLES: Record<string, string> = {
   artifact: "artifacts",
 };
 
+/**
+ * Что дозаливается в уже существующую сущность, если у той поле пусто.
+ *
+ * Только простые текстовые колонки: статьи (главы локации, история личности)
+ * лежат отдельными строками, и «пусто ли там» — вопрос куда менее очевидный,
+ * чем пустая строка. Имя, категория и оригинал сюда не входят намеренно: имя
+ * не бывает пустым, категорию человек правит на экране сверки, а оригинал и
+ * синонимы дозаливает склейка.
+ */
+const FILLABLE_TABLES: Record<string, string> = ALIAS_TABLES;
+const FILLABLE_COLUMNS: Record<string, string[]> = {
+  location: ["kind", "short_name", "description"],
+  being: ["short_name", "description", "statblock_short", "statblock_full"],
+  community: ["description", "history", "current_situation", "features", "goals"],
+  artifact: ["short_name", "owner", "power", "history", "notes", "item_type", "rarity"],
+};
+
+/** Ключ → значения из файла, которыми можно дозалить пустое. */
+function fillable(data: ImportFile): [string, Record<string, string>][] {
+  const out: [string, Record<string, string>][] = [];
+  const add = (key: string, values: Record<string, string | undefined>) =>
+    out.push([
+      key,
+      Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v ?? ""])),
+    ]);
+  for (const l of data.locations)
+    add(l.key, { kind: l.kind, short_name: l.short_name, description: l.description });
+  for (const b of data.beings)
+    add(b.key, {
+      short_name: b.short_name,
+      description: b.description,
+      statblock_short: b.statblock_short,
+      statblock_full: b.statblock_full,
+    });
+  for (const b of data.bestiary)
+    add(b.key, {
+      description: b.description,
+      statblock_short: b.statblock_short,
+      statblock_full: b.statblock_full,
+    });
+  for (const c of data.communities)
+    add(c.key, {
+      description: c.description,
+      history: c.history,
+      current_situation: c.current_situation,
+      features: c.features,
+      goals: c.goals,
+    });
+  for (const t of data.treasury)
+    add(t.key, {
+      short_name: t.short_name,
+      owner: t.owner,
+      power: t.power,
+      history: t.history,
+      notes: t.notes,
+      item_type: t.item_type,
+      rarity: t.rarity,
+    });
+  return out;
+}
+
 const mentionRe = () => /\[\[([^\]|]+)\|([^\]]*)\]\]/g;
 
 /**
@@ -986,6 +1047,53 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       }
     }
 
+    // --- дозалив недостающего ----------------------------------------------
+    // Уже существующую сущность импорт не переписывает: там мог быть выверенный
+    // руками текст, и книга не вправе его перебивать. Но пустое поле не «чужое»
+    // — перебивать в нём нечего. Без этого прохода улучшения формата обходили
+    // бы стороной всё, что уже лежит в базе: перелив книгу через промпт со
+    // статблоками, человек получал бы карточки только у новых записей, а у
+    // старых — по-прежнему одну прозу.
+    //
+    // Касается это и ключей, известных по прошлым батчам, и склеенных руками на
+    // экране сверки: и там, и там сущность создали не мы.
+    for (const [key, values] of fillable(data)) {
+      const ref = keys.get(key);
+      if (!ref || created.has(key) || skipped.has(key)) continue;
+      const table = FILLABLE_TABLES[ref.type];
+      if (!table) continue;
+      const columns = Object.keys(values).filter((c) => FILLABLE_COLUMNS[ref.type]?.includes(c));
+      if (!columns.length) continue;
+      const row = db
+        .prepare(`SELECT ${columns.join(", ")} FROM ${table} WHERE id = ?`)
+        .get(ref.id) as Record<string, string | null> | undefined;
+      if (!row) continue;
+      for (const column of columns) {
+        const value = values[column];
+        if (!value.trim() || (row[column] ?? "").trim()) continue;
+        // В payload — прежнее значение: откат вернёт именно его, а не пустоту
+        // наугад. Столбец и таблица оттуда же сверяются со списком.
+        record("field", ref.id, JSON.stringify({ table, column, value: row[column] ?? "" }));
+        db.prepare(`UPDATE ${table} SET ${column} = ? WHERE id = ?`).run(value, ref.id);
+        remember(table, column, ref.id, value);
+        bump("дозалито полей");
+      }
+    }
+    // Карточка статблока: у существа её либо нет вовсе, либо она своя. Пустой
+    // карточки не бывает, поэтому «недостающее» здесь — отсутствие строки.
+    const hasStatblock = db.prepare(
+      "SELECT 1 FROM statblocks WHERE owner_type = 'being' AND owner_id = ?"
+    );
+    for (const source of [...data.beings, ...data.bestiary]) {
+      if (!source.statblock) continue;
+      const ref = keys.get(source.key);
+      if (!ref || ref.type !== "being" || created.has(source.key) || skipped.has(source.key))
+        continue;
+      if (hasStatblock.get(ref.id)) continue;
+      insertStatblock("being", ref.id, source.name, source.statblock);
+      bump("дозалито статблоков");
+    }
+
     // --- меншены -----------------------------------------------------------
     // Ключ, у которого нет своей страницы (вехи, тайны) или которого нет в
     // карте, остаётся в тексте как есть: пользователь увидит его и решит сам.
@@ -1136,6 +1244,7 @@ export function rollbackBatch(batchId: number): { deleted: number } {
         "reward",
         "compendium_link",
         "statblock",
+        "field",
       ].includes(type)
         ? 0
         : type === "setting"
@@ -1160,6 +1269,30 @@ export function rollbackBatch(batchId: number): { deleted: number } {
           }
         } catch {
           // Без payload вернуть нечего — лишний синоним безвреден.
+        }
+        continue;
+      }
+      // Поле, дозалитое в чужую сущность: саму её удалять нельзя, надо вернуть
+      // прежнее значение — оно в payload, а не «пустота наугад».
+      if (row.entity_type === "field") {
+        try {
+          const before = JSON.parse(row.payload) as {
+            table: string;
+            column: string;
+            value: string;
+          };
+          // Таблица и столбец идут в SQL, поэтому сверяются со списком, а не
+          // подставляются из payload как есть.
+          const type = Object.keys(FILLABLE_TABLES).find(
+            (t) => FILLABLE_TABLES[t] === before.table
+          );
+          if (type && FILLABLE_COLUMNS[type]?.includes(before.column)) {
+            db.prepare(
+              `UPDATE ${before.table} SET ${before.column} = ? WHERE id = ?`
+            ).run(before.value, row.entity_id);
+          }
+        } catch {
+          // Без payload вернуть нечего — дозалитый текст безвреден.
         }
         continue;
       }
