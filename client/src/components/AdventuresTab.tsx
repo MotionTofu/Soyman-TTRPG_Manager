@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import { sceneWord } from "../sceneKinds";
+import { chapterWord, sceneWord } from "../sceneKinds";
 import type { StoryArc } from "../types";
 
 // "Приключения" — the index of a setting's prepared story blocks. Everything
@@ -94,6 +94,7 @@ export function AdventuresTab({
               {a.name}
             </Link>
             <span className="muted">
+              {!!a.chapter_count && `${a.chapter_count} ${chapterWord(a.chapter_count)} · `}
               {a.scene_count} {sceneWord(a.scene_count)}
               {a.recommended_level && ` · ${a.recommended_level}`}
             </span>

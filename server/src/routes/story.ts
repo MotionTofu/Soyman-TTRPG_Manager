@@ -175,9 +175,22 @@ function ensureDefaultArc(settingId: number): number {
   return id;
 }
 
+// Сцены книжного приключения висят не на нём самом, а на его главах: в списке
+// приключений такое читалось как «0 сцен» у всего, что приехало импортом.
+// Поэтому счёт идёт по дуге и её главам сразу. Для самой главы формула
+// вырождается в её собственные сцены — детей у главы не бывает.
 function sceneCountSql(alias: string) {
   return `(SELECT COUNT(*) FROM story_scenes s
-           WHERE s.arc_id = ${alias}.id AND s.campaign_id IS NULL AND s.archived_at IS NULL)`;
+             JOIN story_arcs sc ON sc.id = s.arc_id
+            WHERE (sc.id = ${alias}.id OR sc.parent_id = ${alias}.id)
+              AND sc.archived_at IS NULL
+              AND s.campaign_id IS NULL AND s.archived_at IS NULL)`;
+}
+
+/** Глав у приключения: у книжного их пять-шесть, у самодельного обычно ноль. */
+function chapterCountSql(alias: string) {
+  return `(SELECT COUNT(*) FROM story_arcs c
+            WHERE c.parent_id = ${alias}.id AND c.archived_at IS NULL)`;
 }
 
 storyRouter.get("/arcs", (req, res) => {
@@ -186,7 +199,8 @@ storyRouter.get("/arcs", (req, res) => {
   ensureDefaultArc(Number(setting_id));
   const arcs = db
     .prepare(
-      `SELECT a.*, ${sceneCountSql("a")} as scene_count
+      `SELECT a.*, ${sceneCountSql("a")} as scene_count,
+              ${chapterCountSql("a")} as chapter_count
        FROM story_arcs a
        WHERE a.setting_id = ? AND a.archived_at IS NULL
        ORDER BY a.position, a.id`

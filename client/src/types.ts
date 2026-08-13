@@ -1149,7 +1149,10 @@ export interface StoryArc {
   // be renamed or archived.
   is_default: number;
   position: number;
+  /** Сцены дуги вместе со сценами её глав. */
   scene_count: number;
+  /** Только в списке приключений: сколько у дуги глав. */
+  chapter_count?: number;
   created_at: string;
   archived_at: string | null;
 }
