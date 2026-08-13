@@ -302,6 +302,10 @@ CREATE TABLE IF NOT EXISTS setting_locations (
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   parent_id INTEGER REFERENCES setting_locations(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  -- Синонимы имени (JSON-массив) и имя в оригинале: разные переводы одной
+  -- книги зовут сущность по-разному, сходится это по оригиналу.
+  aliases TEXT NOT NULL DEFAULT '[]',
+  name_original TEXT NOT NULL DEFAULT '',
   kind TEXT DEFAULT '',
   description TEXT DEFAULT '',
   folder_path TEXT,
@@ -335,6 +339,10 @@ CREATE TABLE IF NOT EXISTS setting_beings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  -- Синонимы имени (JSON-массив) и имя в оригинале: разные переводы одной
+  -- книги зовут сущность по-разному, сходится это по оригиналу.
+  aliases TEXT NOT NULL DEFAULT '[]',
+  name_original TEXT NOT NULL DEFAULT '',
   category TEXT NOT NULL DEFAULT 'bestiary', -- bestiary | key_figure | influential | notable
   location_id INTEGER REFERENCES setting_locations(id) ON DELETE SET NULL,
   base_monster_id INTEGER REFERENCES compendium_entries(id) ON DELETE SET NULL, -- template this personality was cloned from, if any
@@ -354,6 +362,10 @@ CREATE TABLE IF NOT EXISTS setting_communities (
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   parent_id INTEGER REFERENCES setting_communities(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  -- Синонимы имени (JSON-массив) и имя в оригинале: разные переводы одной
+  -- книги зовут сущность по-разному, сходится это по оригиналу.
+  aliases TEXT NOT NULL DEFAULT '[]',
+  name_original TEXT NOT NULL DEFAULT '',
   description TEXT DEFAULT '',
   history TEXT DEFAULT '',
   current_situation TEXT DEFAULT '',
@@ -411,6 +423,10 @@ CREATE TABLE IF NOT EXISTS artifacts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  -- Синонимы имени (JSON-массив) и имя в оригинале: разные переводы одной
+  -- книги зовут сущность по-разному, сходится это по оригиналу.
+  aliases TEXT NOT NULL DEFAULT '[]',
+  name_original TEXT NOT NULL DEFAULT '',
   short_name TEXT,
   owner TEXT DEFAULT '',
   power TEXT DEFAULT '',
@@ -938,6 +954,8 @@ CREATE TABLE IF NOT EXISTS import_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
   entity_type TEXT NOT NULL,
-  entity_id INTEGER NOT NULL
+  entity_id INTEGER NOT NULL,
+  -- Прежнее значение изменённого поля: откат склейки синонимов.
+  payload TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_import_records_batch ON import_records(batch_id);

@@ -900,6 +900,10 @@ export interface SettingLocation {
   name: string;
   short_name: string | null;
   kind: string;
+  /** Другие названия: переводы, сокращения, прозвища. */
+  aliases: string[];
+  /** Название в оригинале книги: «Sea Ward». */
+  name_original: string;
   description: string;
   folder_path: string | null;
   avatar_image_path: string | null;
@@ -970,6 +974,10 @@ export interface SettingBeing {
   name: string;
   short_name: string | null;
   category: BeingCategory;
+  /** Другие названия: переводы, сокращения, прозвища. */
+  aliases: string[];
+  /** Название в оригинале книги: «Sea Ward». */
+  name_original: string;
   location_id: number | null;
   locations: { id: number; name: string }[];
   base_monster_id: number | null;
@@ -996,6 +1004,10 @@ export interface SettingCommunity {
   parent_id: number | null;
   name: string;
   description: string;
+  /** Другие названия: переводы, сокращения, прозвища. */
+  aliases: string[];
+  /** Название в оригинале книги: «Sea Ward». */
+  name_original: string;
   history: string;
   current_situation: string;
   features: string;
@@ -1248,6 +1260,10 @@ export interface Artifact {
   name: string;
   short_name: string | null;
   owner: string;
+  /** Другие названия: переводы, сокращения, прозвища. */
+  aliases: string[];
+  /** Название в оригинале книги: «Sea Ward». */
+  name_original: string;
   power: string;
   history: string;
   notes: string;

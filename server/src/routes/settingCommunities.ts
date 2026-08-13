@@ -259,7 +259,9 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     .prepare("SELECT * FROM setting_communities WHERE id = ?")
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { name, description, history, current_situation, features, goals, tags } = req.body as {
+  const {
+    name, description, history, current_situation, features, goals, tags, aliases, name_original,
+  } = req.body as {
     name?: string;
     description?: string;
     history?: string;
@@ -267,6 +269,8 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     features?: string;
     goals?: string;
     tags?: string[];
+    aliases?: string[];
+    name_original?: string;
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
@@ -278,6 +282,8 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
        history = COALESCE(?, history), current_situation = COALESCE(?, current_situation),
        features = COALESCE(?, features), goals = COALESCE(?, goals),
        tags = COALESCE(?, tags),
+       aliases = COALESCE(?, aliases),
+       name_original = COALESCE(?, name_original),
        folder_path = ?
      WHERE id = ?`
   ).run(
@@ -288,6 +294,8 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     features ?? null,
     goals ?? null,
     tags ? JSON.stringify(tags) : null,
+    aliases ? JSON.stringify(aliases) : null,
+    name_original ?? null,
     folderPath,
     req.params.id
   );

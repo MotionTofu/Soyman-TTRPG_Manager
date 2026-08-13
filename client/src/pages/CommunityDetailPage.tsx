@@ -1,6 +1,7 @@
 import { useState, useEffect, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { AliasesCard } from "../components/AliasesCard";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
 import { LinkDropZone, SEARCH_DRAG_MIME } from "../components/LinkDropZone";
@@ -493,6 +494,14 @@ export function CommunityDetailPage() {
 
       {tab === "Связи" && (
         <div className="stack">
+          <AliasesCard
+            aliases={community.aliases ?? []}
+            nameOriginal={community.name_original ?? ""}
+            onSave={async (aliases, name_original) => {
+              await api.put(`/setting-communities/${communityId}`, { aliases, name_original });
+              refresh();
+            }}
+          />
           <LinkDropZone entityType="community" entityId={communityId} title="Связанные сущности" />
           <RelationsTab
             entityType="community"

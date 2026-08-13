@@ -21,6 +21,9 @@ interface PlanMatch {
   ref: string;
   name: string;
   hint: string;
+  /** Чем совпало: название, синоним, оригинал — или только похожее написание. */
+  reason: string;
+  exact: boolean;
 }
 interface PlanEntry {
   key: string;
@@ -287,6 +290,11 @@ export function ImportAdventurePage() {
                     Будет создано: {willCreate} · использовано существующих: {willReuse} ·
                     пропущено: {willSkip}
                   </div>
+                  <div className="muted">
+                    Совпадения ищутся по названию, синонимам и оригиналу; то, что нашлось лишь
+                    по похожему написанию, помечено «Похоже, это». Выбранное существующее
+                    запомнит название из книги как своё второе имя.
+                  </div>
                 </div>
               )}
 
@@ -332,10 +340,15 @@ export function ImportAdventurePage() {
                               })
                             }
                           >
-                            <option value="">Создать новую</option>
+                            <option value="">
+                              {entry.matches.some((m) => m.exact)
+                                ? "Создать новую"
+                                : "Создать новую (совпадений нет)"}
+                            </option>
                             {entry.matches.map((m) => (
                               <option key={m.ref} value={m.ref}>
-                                Использовать: {m.name}
+                                {m.exact ? "Использовать" : "Похоже, это"}: {m.name}
+                                {` — ${m.reason}`}
                                 {m.hint ? ` (${m.hint})` : ""}
                               </option>
                             ))}

@@ -614,11 +614,13 @@ settingLocationsRouter.put("/:id", (req, res) => {
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
-  const { name, kind, description, short_name } = req.body as {
+  const { name, kind, description, short_name, aliases, name_original } = req.body as {
     name?: string;
     kind?: string;
     description?: string;
     short_name?: string;
+    aliases?: string[];
+    name_original?: string;
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
@@ -629,6 +631,8 @@ settingLocationsRouter.put("/:id", (req, res) => {
        name = COALESCE(?, name), kind = COALESCE(?, kind),
        description = COALESCE(?, description),
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
+       aliases = COALESCE(?, aliases),
+       name_original = COALESCE(?, name_original),
        folder_path = ?
      WHERE id = ?`
   ).run(
@@ -637,6 +641,8 @@ settingLocationsRouter.put("/:id", (req, res) => {
     description ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
+    aliases ? JSON.stringify(aliases) : null,
+    name_original ?? null,
     folderPath,
     req.params.id
   );

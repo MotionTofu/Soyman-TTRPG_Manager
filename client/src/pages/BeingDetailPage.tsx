@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { AliasesCard } from "../components/AliasesCard";
 import { StatblockList } from "../components/StatblockList";
 import { GalleryTab } from "../components/GalleryTab";
 import { MentionsTab } from "../components/MentionsTab";
@@ -370,6 +371,15 @@ export function BeingDetailPage() {
 
       {tab === "Досье" && (
         <div className="stack">
+          <AliasesCard
+            title="Известен также как"
+            aliases={being.aliases ?? []}
+            nameOriginal={being.name_original ?? ""}
+            onSave={async (aliases, name_original) => {
+              await api.put(`/setting-beings/${beingId}`, { aliases, name_original });
+              refresh();
+            }}
+          />
           <CompendiumLinksCard
             beingId={beingId}
             links={being.compendium_links}

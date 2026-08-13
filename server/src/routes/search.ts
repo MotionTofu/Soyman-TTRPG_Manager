@@ -227,12 +227,15 @@ searchRouter.get("/", (req, res) => {
     );
   }
 
+  // Имя ищется вместе с синонимами и оригиналом: «Sea Ward» и «Морской округ»
+  // должны находить тот же район, что и «Приморский район».
   if (wantsType("location")) {
     const rows = db
       .prepare(
         `SELECT sl.id, sl.name, sl.kind, sl.description, s.name as setting_name
          FROM setting_locations sl JOIN settings s ON s.id = sl.setting_id
-         WHERE (lower_u(sl.name) LIKE ? OR lower_u(sl.description) LIKE ?) AND sl.archived_at IS NULL`
+         WHERE (lower_u(sl.name || ' ' || sl.aliases || ' ' || sl.name_original) LIKE ?
+                OR lower_u(sl.description) LIKE ?) AND sl.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; kind: string; description: string; setting_name: string }[];
     rows.forEach((r) =>
@@ -266,7 +269,8 @@ searchRouter.get("/", (req, res) => {
         `SELECT sb.id, sb.name, sb.category, s.name as setting_name,
                 (sb.history || ' ' || sb.behavior || ' ' || sb.statblock_short || ' ' || sb.statblock_full) as blob
          FROM setting_beings sb JOIN settings s ON s.id = sb.setting_id
-         WHERE (lower_u(sb.name) LIKE ? OR lower_u(blob) LIKE ?) AND sb.archived_at IS NULL`
+         WHERE (lower_u(sb.name || ' ' || sb.aliases || ' ' || sb.name_original) LIKE ?
+                OR lower_u(blob) LIKE ?) AND sb.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; category: string; setting_name: string; blob: string }[];
     rows.forEach((r) =>
@@ -288,7 +292,8 @@ searchRouter.get("/", (req, res) => {
       .prepare(
         `SELECT a.id, a.name, s.name as setting_name, (a.owner || ' ' || a.power || ' ' || a.history || ' ' || a.notes) as blob
          FROM artifacts a JOIN settings s ON s.id = a.setting_id
-         WHERE (lower_u(a.name) LIKE ? OR lower_u(blob) LIKE ?) AND a.archived_at IS NULL`
+         WHERE (lower_u(a.name || ' ' || a.aliases || ' ' || a.name_original) LIKE ?
+                OR lower_u(blob) LIKE ?) AND a.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; setting_name: string; blob: string }[];
     rows.forEach((r) =>
@@ -343,7 +348,8 @@ searchRouter.get("/", (req, res) => {
         `SELECT sc.id, sc.name, s.name as setting_name,
                 (sc.description || ' ' || sc.history || ' ' || sc.current_situation || ' ' || sc.features || ' ' || sc.goals) as blob
          FROM setting_communities sc JOIN settings s ON s.id = sc.setting_id
-         WHERE (lower_u(sc.name) LIKE ? OR lower_u(blob) LIKE ?) AND sc.archived_at IS NULL`
+         WHERE (lower_u(sc.name || ' ' || sc.aliases || ' ' || sc.name_original) LIKE ?
+                OR lower_u(blob) LIKE ?) AND sc.archived_at IS NULL`
       )
       .all(like, like) as { id: number; name: string; setting_name: string; blob: string }[];
     rows.forEach((r) =>

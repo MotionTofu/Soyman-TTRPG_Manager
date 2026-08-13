@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { AliasesCard } from "../components/AliasesCard";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -255,6 +256,17 @@ export function ArtifactDetailPage() {
             </details>
           </div>
         ))}
+
+      {tab === "Досье" && (
+        <AliasesCard
+          aliases={artifact.aliases ?? []}
+          nameOriginal={artifact.name_original ?? ""}
+          onSave={async (aliases, name_original) => {
+            await api.put(`/artifacts/${artifactId}`, { aliases, name_original });
+            refresh();
+          }}
+        />
+      )}
 
       {tab === "Галерея" && <GalleryTab ownerType="artifact" ownerId={artifactId} />}
 

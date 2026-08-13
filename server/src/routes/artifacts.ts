@@ -88,8 +88,11 @@ artifactsRouter.put("/:id", (req, res) => {
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
-  const { name, owner, power, history, notes, short_name, item_type, rarity, requires_attunement } =
-    req.body as Record<string, string | boolean | undefined>;
+  const {
+    name, owner, power, history, notes, short_name, item_type, rarity, requires_attunement,
+    name_original,
+  } = req.body as Record<string, string | boolean | undefined>;
+  const { aliases } = req.body as { aliases?: string[] };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name as string);
@@ -103,6 +106,8 @@ artifactsRouter.put("/:id", (req, res) => {
        item_type = CASE WHEN ? THEN ? ELSE item_type END,
        rarity = CASE WHEN ? THEN ? ELSE rarity END,
        requires_attunement = CASE WHEN ? THEN ? ELSE requires_attunement END,
+       aliases = COALESCE(?, aliases),
+       name_original = COALESCE(?, name_original),
        folder_path = ?
      WHERE id = ?`
   ).run(
@@ -119,6 +124,8 @@ artifactsRouter.put("/:id", (req, res) => {
     rarity ?? null,
     requires_attunement !== undefined ? 1 : 0,
     requires_attunement ? 1 : 0,
+    aliases ? JSON.stringify(aliases) : null,
+    (name_original as string | undefined) ?? null,
     folderPath,
     req.params.id
   );

@@ -75,6 +75,18 @@ export const ROLLBACK_TABLES: Record<string, string> = {
   reward: "story_scene_rewards",
 };
 
+/** Типы, у которых есть поле «Другие названия»: только им можно дописать синоним. */
+const ALIAS_TABLES: Record<string, string> = {
+  location: "setting_locations",
+  being: "setting_beings",
+  community: "setting_communities",
+  artifact: "artifacts",
+};
+
+/** «Ёлка» и «ёлка » — одно имя. Тот же нормализатор, что в plan.ts. */
+const normalizeName = (name: string) =>
+  name.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+
 const mentionRe = () => /\[\[([^\]|]+)\|([^\]]*)\]\]/g;
 
 /**
@@ -106,7 +118,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
   // Текстовые поля, в которых встретились меншены: подменим их вторым проходом,
   // когда карта ключей будет полной.
   const pending: { table: string; column: string; id: number; raw: string }[] = [];
-  const records: { type: string; id: number }[] = [];
+  const records: { type: string; id: number; payload?: string }[] = [];
   const counts: Record<string, number> = {};
   const bump = (what: string, by = 1) => {
     counts[what] = (counts[what] ?? 0) + by;
@@ -115,8 +127,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
   const remember = (table: string, column: string, id: number, raw: string) => {
     if (raw && raw.includes("[[")) pending.push({ table, column, id, raw });
   };
-  const record = (type: string, id: number) => {
-    records.push({ type, id });
+  const record = (type: string, id: number, payload?: string) => {
+    records.push({ type, id, payload });
     return id;
   };
 
@@ -172,13 +184,16 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         const info = db
           .prepare(
             `INSERT INTO setting_locations
-               (setting_id, parent_id, name, short_name, kind, description, folder_path)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
+               (setting_id, parent_id, name, name_original, aliases, short_name, kind, description,
+                folder_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             settingId,
             parentRef?.type === "location" ? parentRef.id : null,
             loc.name,
+            loc.name_original ?? "",
+            JSON.stringify(loc.aliases),
             loc.short_name ?? null,
             loc.kind,
             loc.description,
@@ -212,10 +227,20 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       const folder = locationFolder(geographyRoot, loc.name);
       const info = db
         .prepare(
-          `INSERT INTO setting_locations (setting_id, name, short_name, kind, description, folder_path)
-           VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO setting_locations
+             (setting_id, name, name_original, aliases, short_name, kind, description, folder_path)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(settingId, loc.name, loc.short_name ?? null, loc.kind, loc.description, folder);
+        .run(
+          settingId,
+          loc.name,
+          loc.name_original ?? "",
+          JSON.stringify(loc.aliases),
+          loc.short_name ?? null,
+          loc.kind,
+          loc.description,
+          folder
+        );
       const id = record("location", Number(info.lastInsertRowid));
       keys.set(loc.key, { type: "location", id });
       created.add(loc.key);
@@ -231,12 +256,15 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       const info = db
         .prepare(
           `INSERT INTO setting_communities
-             (setting_id, name, description, history, current_situation, features, goals, folder_path)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+             (setting_id, name, name_original, aliases, description, history, current_situation,
+              features, goals, folder_path)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           settingId,
           com.name,
+          com.name_original ?? "",
+          JSON.stringify(com.aliases),
           com.description,
           com.history,
           com.current_situation,
@@ -285,6 +313,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       category: string,
       fields: {
         short_name?: string | null;
+        name_original?: string;
+        aliases?: string[];
         description: string;
         statblock_short: string;
         statblock_full: string;
@@ -294,13 +324,15 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       const info = db
         .prepare(
           `INSERT INTO setting_beings
-             (setting_id, name, category, short_name, description, statblock_short, statblock_full,
-              history, behavior, folder_path, tags)
-           VALUES (?, ?, ?, ?, ?, ?, ?, '', '', ?, '[]')`
+             (setting_id, name, name_original, aliases, category, short_name, description,
+              statblock_short, statblock_full, history, behavior, folder_path, tags)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, '[]')`
         )
         .run(
           settingId,
           name,
+          fields.name_original ?? "",
+          JSON.stringify(fields.aliases ?? []),
           category,
           fields.short_name ?? null,
           fields.description,
@@ -345,6 +377,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     for (const beast of data.bestiary) {
       if (!shouldCreate(beast.key)) continue;
       insertBeing(beast.key, beast.name, "bestiary", {
+        name_original: beast.name_original,
+        aliases: beast.aliases,
         description: beast.description,
         statblock_short: beast.statblock_short,
         statblock_full: beast.statblock_full,
@@ -418,13 +452,15 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       const info = db
         .prepare(
           `INSERT INTO artifacts
-             (setting_id, name, short_name, owner, power, history, notes, item_type, rarity,
-              requires_attunement, folder_path)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             (setting_id, name, name_original, aliases, short_name, owner, power, history, notes,
+              item_type, rarity, requires_attunement, folder_path)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           settingId,
           item.name,
+          item.name_original ?? "",
+          JSON.stringify(item.aliases),
           item.short_name ?? null,
           item.owner,
           item.power,
@@ -793,6 +829,49 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     }
     if (substituted) bump("упоминания", substituted);
 
+    // --- склейка учит синонимам --------------------------------------------
+    // Человек сказал «это существующий Приморский район» — значит «Морской
+    // округ» из книги отныне его второе имя. Следующая книга с этим переводом
+    // совпадёт уже сама, без ручного выбора.
+    const synonyms = new Map<string, string[]>();
+    const collect = (key: string, name: string, original: string | undefined, list: string[]) =>
+      synonyms.set(key, [name, original ?? "", ...list].filter(Boolean));
+    data.locations.forEach((l) => collect(l.key, l.name, l.name_original, l.aliases));
+    data.beings.forEach((b) => collect(b.key, b.name, b.name_original, b.aliases));
+    data.bestiary.forEach((b) => collect(b.key, b.name, b.name_original, b.aliases));
+    data.communities.forEach((c) => collect(c.key, c.name, c.name_original, c.aliases));
+    data.treasury.forEach((t) => collect(t.key, t.name, t.name_original, t.aliases));
+
+    for (const key of Object.keys(opts.reuse ?? {})) {
+      const ref = keys.get(key);
+      const table = ref ? ALIAS_TABLES[ref.type] : null;
+      if (!ref || !table) continue;
+      const row = db.prepare(`SELECT name, aliases FROM ${table} WHERE id = ?`).get(ref.id) as
+        | { name: string; aliases: string }
+        | undefined;
+      if (!row) continue;
+      let current: string[] = [];
+      try {
+        current = JSON.parse(row.aliases) as string[];
+      } catch {
+        // Битое поле не повод ронять импорт: перезапишем массивом с нуля.
+      }
+      const seen = new Set([row.name, ...current].map(normalizeName));
+      const added: string[] = [];
+      for (const candidate of synonyms.get(key) ?? []) {
+        if (seen.has(normalizeName(candidate))) continue;
+        seen.add(normalizeName(candidate));
+        added.push(candidate);
+      }
+      if (!added.length) continue;
+      record("alias", ref.id, JSON.stringify({ table, aliases: row.aliases }));
+      db.prepare(`UPDATE ${table} SET aliases = ? WHERE id = ?`).run(
+        JSON.stringify([...current, ...added]),
+        ref.id
+      );
+      bump("синонимы", added.length);
+    }
+
     // --- батч --------------------------------------------------------------
     const keyMap: Record<string, string> = {};
     for (const [key, ref] of keys) keyMap[key] = `${ref.type}:${ref.id}`;
@@ -819,9 +898,9 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       );
     const batchId = Number(batchInfo.lastInsertRowid);
     const insertRecord = db.prepare(
-      "INSERT INTO import_records (batch_id, entity_type, entity_id) VALUES (?, ?, ?)"
+      "INSERT INTO import_records (batch_id, entity_type, entity_id, payload) VALUES (?, ?, ?, ?)"
     );
-    for (const r of records) insertRecord.run(batchId, r.type, r.id);
+    for (const r of records) insertRecord.run(batchId, r.type, r.id, r.payload ?? "");
 
     return { batchId, settingId, settingCreated, counts, warnings, keys: keyMap };
   });
@@ -841,8 +920,10 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
 export function rollbackBatch(batchId: number): { deleted: number } {
   const run = db.transaction(() => {
     const rows = db
-      .prepare("SELECT entity_type, entity_id FROM import_records WHERE batch_id = ? ORDER BY id DESC")
-      .all(batchId) as { entity_type: string; entity_id: number }[];
+      .prepare(
+        "SELECT entity_type, entity_id, payload FROM import_records WHERE batch_id = ? ORDER BY id DESC"
+      )
+      .all(batchId) as { entity_type: string; entity_id: number; payload: string }[];
     let deleted = 0;
     // Сначала связи, потом сущности: связь на удалённую строку каскадом не
     // уходит, а вот сущность утащит за собой свои дочерние строки.
@@ -853,6 +934,24 @@ export function rollbackBatch(batchId: number): { deleted: number } {
           ? 2
           : 1;
     for (const row of [...rows].sort((a, b) => order(a.entity_type) - order(b.entity_type))) {
+      // Синоним, дописанный склейкой в чужую сущность: её саму удалять нельзя,
+      // нужно вернуть прежнее значение поля.
+      if (row.entity_type === "alias") {
+        try {
+          const before = JSON.parse(row.payload) as { table: string; aliases: string };
+          // Имя таблицы идёт в SQL, поэтому берём его не из payload как есть,
+          // а сверяем со списком известных.
+          if (Object.values(ALIAS_TABLES).includes(before.table)) {
+            db.prepare(`UPDATE ${before.table} SET aliases = ? WHERE id = ?`).run(
+              before.aliases,
+              row.entity_id
+            );
+          }
+        } catch {
+          // Без payload вернуть нечего — лишний синоним безвреден.
+        }
+        continue;
+      }
       const table = ROLLBACK_TABLES[row.entity_type];
       if (!table) continue;
       deleted += db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(row.entity_id).changes;

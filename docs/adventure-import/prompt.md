@@ -55,6 +55,21 @@
 **Разметка текста:** `**жирный**`, `*курсив*`, `## Заголовок` отдельной строкой,
 `- пункт` отдельной строкой.
 
+## Имена: оригинал и синонимы
+
+У локаций, личностей, видов, сообществ и предметов есть два поля про имя, кроме `name`:
+
+- `name_original` — как сущность называется **в языке оригинала книги**. Если разбираешь
+  английскую книгу — пиши английское название (`Sea Ward`, `Mirt`). Если переводную, но в
+  тексте где-то есть оригинал (в скобках, в оглавлении, в подписи к карте) — бери оттуда.
+  Не знаешь — оставь пустым, не выдумывай.
+- `aliases` — другие названия из самого текста: прозвища, сокращения, второе имя,
+  устаревшее название («Морской округ», «Старый порт», «лорд Мирт»). Не дублируй сюда
+  `name` и не сочиняй варианты, которых в книге нет.
+
+Это нужно, чтобы приложение узнало ту же сущность, когда в него зальют другую книгу про
+тот же мир в другом переводе.
+
 ## Как разбирать материал
 
 **Локации** — всё, что имеет место на карте: регион, город, квартал, здание, комната
@@ -147,13 +162,13 @@
   "source": { "title": "", "authors": "", "pages": "", "part": "" },
 
   "locations": [{
-    "key": "loc.", "name": "", "short_name": "", "kind": "", "parent": "loc.",
+    "key": "loc.", "name": "", "short_name": "", "name_original": "", "kind": "", "parent": "loc.",
     "description": "", "aliases": [],
     "chapters": [{ "title": "", "content": "" }]
   }],
 
   "beings": [{
-    "key": "npc.", "name": "", "short_name": "",
+    "key": "npc.", "name": "", "short_name": "", "name_original": "",
     "category": "key_figure | influential | notable",
     "description": "", "statblock_short": "", "statblock_full": "",
     "history": [{ "title": "", "content": "" }],
@@ -163,18 +178,18 @@
   }],
 
   "bestiary": [{
-    "key": "bst.", "name": "", "description": "",
+    "key": "bst.", "name": "", "name_original": "", "aliases": [], "description": "",
     "statblock_short": "", "statblock_full": "",
     "locations": ["loc."], "compendium_hints": [""]
   }],
 
   "communities": [{
-    "key": "com.", "name": "", "parent": "com.", "description": "", "history": "",
+    "key": "com.", "name": "", "name_original": "", "parent": "com.", "description": "", "history": "",
     "current_situation": "", "features": "", "goals": "", "locations": ["loc."], "aliases": []
   }],
 
   "treasury": [{
-    "key": "item.", "name": "", "short_name": "", "owner": "", "power": "",
+    "key": "item.", "name": "", "short_name": "", "name_original": "", "aliases": [], "owner": "", "power": "",
     "history": "", "notes": "", "item_type": "", "rarity": "", "requires_attunement": false,
     "chapters": [{ "title": "", "content": "" }]
   }],
@@ -295,5 +310,7 @@
   несозданные предметы быть не должно.
 - У каждой сцены заполнены `locations` и `participants` (если в ней вообще кто-то есть).
 - Ни один именной персонаж не попал в `bestiary`, ни один безымянный вид — в `beings`.
+- `name_original` заполнен везде, где оригинальное название известно из текста, и нигде не
+  выдуман; в `aliases` нет вариантов, которых в книге нет.
 - В `calendar_events` нет `month: 0` или `day: 0`.
 - Ответ — валидный JSON, закрытый до последней скобки, и ничего кроме него.

@@ -1375,6 +1375,25 @@ export function openDatabase(dbDir: string): Database.Database {
     )`);
   }
 
+  // Синонимы имени и имя в оригинале. Один и тот же район книги разные
+  // переводчики зовут «Морской округ» и «Приморский район», а сходится это
+  // надёжнее всего по оригинальному «Sea Ward» — без этих двух полей вторая
+  // книга про тот же город создаёт второй комплект локаций.
+  for (const table of [
+    "setting_locations",
+    "setting_beings",
+    "setting_communities",
+    "artifacts",
+  ]) {
+    if (!tableExists(database, table)) continue;
+    if (!columnExists(database, table, "aliases")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'`);
+    }
+    if (!columnExists(database, table, "name_original")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN name_original TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
   // История импортов книг приключений. key_map_json нужен не только для
   // истории: по нему второй файл той же книги видит ключи первого, а откат
   // знает, какие строки создал именно этот батч.
@@ -1400,9 +1419,16 @@ export function openDatabase(dbDir: string): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
       entity_type TEXT NOT NULL,
-      entity_id INTEGER NOT NULL
+      entity_id INTEGER NOT NULL,
+      payload TEXT NOT NULL DEFAULT ''
     )`);
     database.exec("CREATE INDEX idx_import_records_batch ON import_records(batch_id)");
+  }
+  // Импорт умеет не только создавать строки, но и дописывать синонимы в чужие
+  // (склейка с существующей сущностью). Чтобы откат вернул и это, в payload
+  // лежит прежнее значение поля.
+  if (tableExists(database, "import_records") && !columnExists(database, "import_records", "payload")) {
+    database.exec("ALTER TABLE import_records ADD COLUMN payload TEXT NOT NULL DEFAULT ''");
   }
 
   return database;

@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { AliasesCard } from "../components/AliasesCard";
 import { LocationMap } from "../components/LocationMap";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
@@ -338,6 +339,15 @@ export function LocationDetailPage() {
       </div>
 
       {tab === "Информация о локации" && (
+        <div className="stack">
+          <AliasesCard
+            aliases={location.aliases ?? []}
+            nameOriginal={location.name_original ?? ""}
+            onSave={async (aliases, name_original) => {
+              await api.put(`/setting-locations/${locationId}`, { aliases, name_original });
+              refresh();
+            }}
+          />
         <ChapterList
           ownerId={locationId}
           ownerType="location"
@@ -349,6 +359,7 @@ export function LocationDetailPage() {
           defaultSettingId={location.setting_id}
           visibilityToggle
         />
+        </div>
       )}
 
       {tab === "Карта" && (

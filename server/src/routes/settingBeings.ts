@@ -10,13 +10,20 @@ export const settingBeingsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 export function withAvatarUrl<
-  T extends { avatar_image_path?: string | null; thumbnail_image_path?: string | null; tags?: string | string[] }
+  T extends {
+    avatar_image_path?: string | null;
+    thumbnail_image_path?: string | null;
+    tags?: string | string[];
+    aliases?: string | string[];
+  }
 >(row: T) {
   return {
     ...row,
     avatar_image_url: row.avatar_image_path ? toFileUrl(row.avatar_image_path) : null,
     thumbnail_image_url: row.thumbnail_image_path ? toFileUrl(row.thumbnail_image_path) : null,
     tags: parseTags(row.tags),
+    // Синонимы лежат в базе JSON-строкой, наружу отдаются массивом — как теги.
+    aliases: parseTags(row.aliases),
   };
 }
 
@@ -381,6 +388,8 @@ settingBeingsRouter.put("/:id", (req, res) => {
     tags,
     base_monster_id,
     short_name,
+    aliases,
+    name_original,
   } = req.body as {
     name?: string;
     category?: string;
@@ -392,6 +401,8 @@ settingBeingsRouter.put("/:id", (req, res) => {
     tags?: string[];
     base_monster_id?: number | null;
     short_name?: string;
+    aliases?: string[];
+    name_original?: string;
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
@@ -407,6 +418,8 @@ settingBeingsRouter.put("/:id", (req, res) => {
        tags = COALESCE(?, tags),
        base_monster_id = CASE WHEN ? THEN ? ELSE base_monster_id END,
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
+       aliases = COALESCE(?, aliases),
+       name_original = COALESCE(?, name_original),
        folder_path = ?
      WHERE id = ?`
   ).run(
@@ -422,6 +435,8 @@ settingBeingsRouter.put("/:id", (req, res) => {
     base_monster_id ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
+    aliases ? JSON.stringify(aliases) : null,
+    name_original ?? null,
     folderPath,
     req.params.id
   );

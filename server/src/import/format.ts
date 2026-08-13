@@ -19,6 +19,13 @@ const key = (prefix: string) =>
     .min(prefix.length + 1, `ключ должен быть длиннее префикса «${prefix}»`)
     .refine((k) => k.startsWith(prefix), `ключ должен начинаться с «${prefix}»`);
 
+/**
+ * Имя в оригинале книги и синонимы. Между разными переводами одной книги имя
+ * совпадает редко, а «Sea Ward» — почти всегда; алиасы ловят остальное.
+ */
+const nameOriginal = optionalText;
+const aliases = z.array(z.string()).default([]);
+
 /** Ссылка на чужой ключ. Существование проверяется в validate.ts. */
 const ref = z.string().min(1);
 const refs = z.array(ref).default([]);
@@ -40,17 +47,19 @@ const importantDate = z.object({
 export const locationSchema = z.object({
   key: key("loc."),
   name: z.string().min(1),
+  name_original: nameOriginal,
   short_name: optionalText,
   kind: text,
   parent: ref.nullish(),
   description: text,
   chapters,
-  aliases: z.array(z.string()).default([]),
+  aliases,
 });
 
 export const beingSchema = z.object({
   key: key("npc."),
   name: z.string().min(1),
+  name_original: nameOriginal,
   short_name: optionalText,
   category: z.enum(["key_figure", "influential", "notable"]).default("notable"),
   description: text,
@@ -61,12 +70,14 @@ export const beingSchema = z.object({
   locations: refs,
   communities: refs,
   important_dates: z.array(importantDate).default([]),
-  aliases: z.array(z.string()).default([]),
+  aliases,
 });
 
 export const bestiarySchema = z.object({
   key: key("bst."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   description: text,
   statblock_short: text,
   statblock_full: text,
@@ -79,6 +90,7 @@ export const bestiarySchema = z.object({
 export const communitySchema = z.object({
   key: key("com."),
   name: z.string().min(1),
+  name_original: nameOriginal,
   parent: ref.nullish(),
   description: text,
   history: text,
@@ -86,12 +98,14 @@ export const communitySchema = z.object({
   features: text,
   goals: text,
   locations: refs,
-  aliases: z.array(z.string()).default([]),
+  aliases,
 });
 
 export const treasurySchema = z.object({
   key: key("item."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   short_name: optionalText,
   owner: text,
   power: text,
