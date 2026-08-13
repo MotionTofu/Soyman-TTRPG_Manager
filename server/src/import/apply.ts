@@ -22,7 +22,13 @@ import {
 import { ImportFile, ImportStatblock } from "./format";
 import { Problem } from "./validate";
 import { normalizeName } from "./names";
-import { creatureTypeRef, importSystems, parseSizeType, validCompendiumIds } from "./compendium";
+import {
+  cleanChallengeRating,
+  creatureTypeRef,
+  importSystems,
+  parseSizeType,
+  validCompendiumIds,
+} from "./compendium";
 
 export interface ApplyOptions {
   /** Куда импортировать. null — создать новый сеттинг из data.setting. */
@@ -355,6 +361,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       statblock: ImportStatblock
     ) => {
       const { format, ...content } = statblock;
+      content.challengeRating = cleanChallengeRating(content.challengeRating);
       // Навыки и спасброски клиент кладёт в «примечания к защите» с пометкой
       // «(старые данные)» — она про legacy-формат и на свежем импорте врёт.
       // Заполняем примечания сами: увидев эти строки уже внутри, клиент свою
@@ -563,7 +570,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           const { size, type } = parseSizeType(beast.statblock?.sizeTypeAlignment ?? "");
           const entryData: Record<string, unknown> = {};
           if (size) entryData.size = size;
-          if (beast.statblock?.challengeRating) entryData.cr = beast.statblock.challengeRating;
+          const cr = cleanChallengeRating(beast.statblock?.challengeRating ?? "");
+          if (cr) entryData.cr = cr;
           const creatureType = creatureTypeRef(system.id, type);
           if (creatureType) entryData.creature_type = creatureType;
           const entryId = Number(

@@ -144,8 +144,23 @@ const CREATURE_SIZES = ["Крошечный", "Маленький", "Средн�
 export function parseSizeType(sizeTypeAlignment: string): { size: string; type: string } {
   const head = sizeTypeAlignment.split(",")[0]?.trim() ?? "";
   const size = CREATURE_SIZES.find((s) => head.toLowerCase().startsWith(s.toLowerCase()));
-  return { size: size ?? "", type: size ? head.slice(size.length).trim() : head };
+  const type = size ? head.slice(size.length).trim() : head;
+  // Уточнение в скобках — не часть типа: «гуманоид (любая раса)», «монстр
+  // (перевёртыш)». В списке типов системы такого нет, и без обрезки совпадал
+  // бы только тот монстр, у которого уточнения не оказалось.
+  return { size: size ?? "", type: withoutParenthetical(type) };
 }
+
+/**
+ * Опыт из строки опасности: книга пишет «1/2 (100 опыта)», а поле хранит одну
+ * только опасность. Хвост ломает и фильтр раздела (там ровно «1/2»), и расчёт
+ * бонуса мастерства на карточке — он читает число.
+ */
+export function cleanChallengeRating(raw: string): string {
+  return withoutParenthetical(raw.trim());
+}
+
+const withoutParenthetical = (text: string) => text.replace(/\s*\([^)]*\)\s*$/, "").trim();
 
 /** Тип существа из списка механик системы — иначе фильтр по типу его не увидит. */
 export function creatureTypeRef(systemId: number, type: string): { id: number; name: string } | null {
