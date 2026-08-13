@@ -751,8 +751,18 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             beast.description,
             entryData
           );
-          if (entryId && beast.statblock)
+          if (entryId && beast.statblock) {
             insertStatblock("compendium_entry", entryId, title, beast.statblock);
+          } else if (entryId) {
+            // Запись без статблока — оболочка: имя и описание есть, карточки,
+            // размера и опасности нет, фильтры раздела её не видят. Молчать об
+            // этом нельзя: книга, разобранная старым промптом, так засевает
+            // справочник системы пустыми строками.
+            warnings.push({
+              path: `bestiary.${beast.key}`,
+              message: `«${title}» заведён в компендиуме без статблока — в файле его нет`,
+            });
+          }
         }
 
         for (const item of data.treasury) {

@@ -220,13 +220,14 @@ const CREATURE_SIZES = ["Крошечный", "Маленький", "Средн�
  * а карточка статблока к ним не подключена.
  */
 export function parseSizeType(sizeTypeAlignment: string): { size: string; type: string } {
-  const head = sizeTypeAlignment.split(",")[0]?.trim() ?? "";
+  // Скобки снимаются до разбора: уточнение в них — не часть типа («гуманоид
+  // (любая раса)», «монстр (перевёртыш)»), а запятая внутри них не отделяет
+  // мировоззрение. У «Средний гуманоид (человек, перевёртыш), хаотично-злой»
+  // разрез по первой запятой оставлял «гуманоид (человек» — и тип не находился.
+  const plain = sizeTypeAlignment.replace(/\s*\([^)]*\)/g, "");
+  const head = plain.split(",")[0]?.trim() ?? "";
   const size = CREATURE_SIZES.find((s) => head.toLowerCase().startsWith(s.toLowerCase()));
-  const type = size ? head.slice(size.length).trim() : head;
-  // Уточнение в скобках — не часть типа: «гуманоид (любая раса)», «монстр
-  // (перевёртыш)». В списке типов системы такого нет, и без обрезки совпадал
-  // бы только тот монстр, у которого уточнения не оказалось.
-  return { size: size ?? "", type: withoutParenthetical(type) };
+  return { size: size ?? "", type: size ? head.slice(size.length).trim() : head };
 }
 
 /**
