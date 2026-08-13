@@ -157,7 +157,10 @@ export function AdventureDetailPage() {
       )}
 
       {tab === "Главы и сцены" && (
-        <ChaptersAndScenes arc={arc} campaignId={campaignId} onChange={refresh} />
+        <>
+          {campaignId == null && <CrossLinksCard arcId={arcId} />}
+          <ChaptersAndScenes arc={arc} campaignId={campaignId} onChange={refresh} />
+        </>
       )}
 
       {tab === "Вехи" && <Milestones arc={arc} campaignId={campaignId} onChange={refresh} />}
@@ -748,5 +751,146 @@ function Secrets({
         </div>
       )}
     </div>
+  );
+}
+
+interface CrossLinkProposal {
+  sceneId: number;
+  sceneName: string;
+  field: string;
+  fieldLabel: string;
+  ref: string;
+  targetName: string;
+  matched: string;
+  context: string;
+  via: string;
+  suggested: boolean;
+}
+
+const proposalId = (p: CrossLinkProposal) => `${p.sceneId}|${p.field}|${p.ref}|${p.matched}`;
+
+// «Расставить ссылки» — проход по тексту сцен приключения, превращающий имена
+// в кликабельные меншены. Ищет только тех, кто к сцене уже привязан, поэтому
+// ошибается редко, — но именно поэтому и не пишет ничего сам: пять сцен, где
+// «карта» повела на «Карту сокровищ», исправлять дороже, чем снять галочки.
+function CrossLinksCard({ arcId }: { arcId: number }) {
+  const [proposals, setProposals] = useState<CrossLinkProposal[] | null>(null);
+  const [chosen, setChosen] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState("");
+
+  async function load() {
+    setBusy(true);
+    setDone("");
+    try {
+      const found = await api.get<CrossLinkProposal[]>(`/story/arcs/${arcId}/cross-links`);
+      setProposals(found);
+      setChosen(Object.fromEntries(found.map((p) => [proposalId(p), p.suggested])));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function apply() {
+    if (!proposals) return;
+    setBusy(true);
+    try {
+      const picked = proposals.filter((p) => chosen[proposalId(p)]);
+      const result = await api.post<{ written: number }>(`/story/arcs/${arcId}/cross-links`, {
+        chosen: picked.map((p) => ({
+          sceneId: p.sceneId,
+          field: p.field,
+          ref: p.ref,
+          matched: p.matched,
+        })),
+      });
+      setDone(`Расставлено ссылок: ${result.written}.`);
+      setProposals(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Сгруппировано по цели, а не по сценам: решение человек принимает про
+  // сущность целиком — «карта» не значит «Карта сокровищ» нигде, а «Мирт»
+  // значит «Мирт» везде.
+  const groups = new Map<string, CrossLinkProposal[]>();
+  for (const p of proposals ?? []) {
+    const list = groups.get(p.ref) ?? [];
+    list.push(p);
+    groups.set(p.ref, list);
+  }
+  const picked = (proposals ?? []).filter((p) => chosen[proposalId(p)]).length;
+
+  function toggleGroup(list: CrossLinkProposal[], on: boolean) {
+    setChosen((prev) => {
+      const next = { ...prev };
+      for (const p of list) next[proposalId(p)] = on;
+      return next;
+    });
+  }
+
+  return (
+    <details className="card">
+      <summary className="sb-section" style={{ margin: 0 }}>
+        Перекрёстные ссылки
+      </summary>
+      <div className="stack" style={{ marginTop: 8 }}>
+        <span className="muted">
+          Ищет в тексте сцен имена тех, кто к сцене уже привязан — участников, места и
+          предметы, — и делает их кликабельными. Ничего не пишет, пока вы не подтвердите.
+        </span>
+        <div className="row">
+          <button disabled={busy} onClick={() => void load()}>
+            {proposals ? "Искать заново" : "Найти ссылки"}
+          </button>
+          {proposals && proposals.length > 0 && (
+            <button className="primary" disabled={busy || !picked} onClick={() => void apply()}>
+              Расставить отмеченные ({picked})
+            </button>
+          )}
+        </div>
+        {done && <div className="muted">{done}</div>}
+        {proposals?.length === 0 && (
+          <div className="muted">Ничего нового не нашлось — всё уже размечено.</div>
+        )}
+        {[...groups.entries()].map(([ref, list]) => (
+          <div key={ref} className="stack" style={{ gap: 4 }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <strong>
+                {list[0].targetName}{" "}
+                <span className="muted">
+                  — {list.length} · по «{list[0].via}»
+                </span>
+              </strong>
+              <div className="row">
+                <button onClick={() => toggleGroup(list, true)}>Все</button>
+                <button onClick={() => toggleGroup(list, false)}>Никого</button>
+              </div>
+            </div>
+            {list.map((p) => (
+              <label key={proposalId(p)} className="row" style={{ gap: 6, alignItems: "start" }}>
+                <input
+                  type="checkbox"
+                  checked={!!chosen[proposalId(p)]}
+                  onChange={(e) =>
+                    setChosen((prev) => ({ ...prev, [proposalId(p)]: e.target.checked }))
+                  }
+                />
+                <span>
+                  <span className="muted">
+                    {p.sceneName} · {p.fieldLabel}:{" "}
+                  </span>
+                  {p.context.split(p.matched).flatMap((part, i, all) => [
+                    <span key={`t${i}`}>{part}</span>,
+                    i < all.length - 1 ? <strong key={`m${i}`}>{p.matched}</strong> : null,
+                  ])}
+                </span>
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
