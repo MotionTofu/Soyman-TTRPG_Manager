@@ -33,6 +33,8 @@ interface PlanEntry {
   category?: string;
   known: string | null;
   matches: PlanMatch[];
+  /** Только у бестиария: монстры компендиума систем, в которые играют по сеттингу. */
+  compendium?: PlanMatch[];
 }
 interface PlanSection {
   id: string;
@@ -95,6 +97,9 @@ export function ImportAdventurePage() {
   const [skip, setSkip] = useState<Record<string, boolean>>({});
   const [reuse, setReuse] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
+  // key записи бестиария → id монстра компендиума. Связь необязательная: пусто
+  // значит «не связывать», и это нормальный исход.
+  const [compendium, setCompendium] = useState<Record<string, number>>({});
 
   const [result, setResult] = useState<ApplyResponse | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -183,6 +188,13 @@ export function ImportAdventurePage() {
           .map(([key]) => key),
         reuse,
         categories,
+        // Сервер принимает список: у записи бестиария может быть монстр
+        // в компендиуме каждой из систем сеттинга. Здесь выбирается один.
+        compendium: Object.fromEntries(
+          Object.entries(compendium)
+            .filter(([key]) => !skip[key])
+            .map(([key, id]) => [key, [id]])
+        ),
       });
       setResult(response);
       setSettingId(response.setting_id);
@@ -365,6 +377,28 @@ export function ImportAdventurePage() {
                             {CREATABLE_BEING_CATEGORIES.map((c) => (
                               <option key={c.key} value={c.key}>
                                 {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {entry.compendium && entry.compendium.length > 0 && (
+                          <select
+                            value={compendium[entry.key] ?? ""}
+                            onChange={(e) =>
+                              setCompendium((prev) => {
+                                const next = { ...prev };
+                                if (e.target.value) next[entry.key] = Number(e.target.value);
+                                else delete next[entry.key];
+                                return next;
+                              })
+                            }
+                          >
+                            <option value="">Без статблока системы</option>
+                            {entry.compendium.map((m) => (
+                              <option key={m.ref} value={m.ref.split(":")[1]}>
+                                {m.exact ? "Статблок" : "Похоже, это"}: {m.name}
+                                {m.hint ? ` (${m.hint})` : ""}
                               </option>
                             ))}
                           </select>

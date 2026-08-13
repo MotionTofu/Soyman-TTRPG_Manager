@@ -21,6 +21,8 @@ import {
 } from "../services/filesystem";
 import { ImportFile } from "./format";
 import { Problem } from "./validate";
+import { normalizeName } from "./names";
+import { validCompendiumIds } from "./compendium";
 
 export interface ApplyOptions {
   /** Куда импортировать. null — создать новый сеттинг из data.setting. */
@@ -38,6 +40,12 @@ export interface ApplyOptions {
   reuse?: Record<string, string>;
   /** Правка категории личности человеком: key → key_figure | influential | notable. */
   categories?: Record<string, string>;
+  /**
+   * Выбранные на экране сверки монстры компендиума: key записи бестиария →
+   * id записей compendium_entries. Связь дописывается и к уже существующей
+   * записи — это явный выбор человека, а не переписывание чужого.
+   */
+  compendium?: Record<string, number[]>;
 }
 
 export interface ApplyResult {
@@ -82,10 +90,6 @@ const ALIAS_TABLES: Record<string, string> = {
   community: "setting_communities",
   artifact: "artifacts",
 };
-
-/** «Ёлка» и «ёлка » — одно имя. Тот же нормализатор, что в plan.ts. */
-const normalizeName = (name: string) =>
-  name.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
 
 const mentionRe = () => /\[\[([^\]|]+)\|([^\]]*)\]\]/g;
 
@@ -443,6 +447,24 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         ).run(self.id, loc.id);
       }
       if (first) db.prepare("UPDATE setting_beings SET location_id = ? WHERE id = ?").run(first, self.id);
+    }
+
+    // --- бестиарий ↔ компендиум --------------------------------------------
+    // Связь ставится и на созданную запись, и на уже существовавшую: человек
+    // выбрал монстра руками на экране сверки. У таблицы составной ключ без
+    // колонки id, поэтому в import_records кладётся ещё и вторая половина —
+    // иначе откату нечего было бы удалять.
+    const linkCompendium = db.prepare(
+      "INSERT OR IGNORE INTO being_compendium_links (being_id, compendium_entry_id) VALUES (?, ?)"
+    );
+    for (const [key, ids] of Object.entries(opts.compendium ?? {})) {
+      const self = keys.get(key);
+      if (!self || self.type !== "being") continue;
+      for (const entryId of validCompendiumIds(settingId, ids)) {
+        if (!linkCompendium.run(self.id, entryId).changes) continue;
+        record("compendium_link", self.id, JSON.stringify({ entry: entryId }));
+        bump("привязки к компендиуму");
+      }
     }
 
     // --- сокровищница ------------------------------------------------------
@@ -928,7 +950,9 @@ export function rollbackBatch(batchId: number): { deleted: number } {
     // Сначала связи, потом сущности: связь на удалённую строку каскадом не
     // уходит, а вот сущность утащит за собой свои дочерние строки.
     const order = (type: string) =>
-      ["link", "relation", "important_date", "milestone", "secret", "reward"].includes(type)
+      ["link", "relation", "important_date", "milestone", "secret", "reward", "compendium_link"].includes(
+        type
+      )
         ? 0
         : type === "setting"
           ? 2
@@ -949,6 +973,22 @@ export function rollbackBatch(batchId: number): { deleted: number } {
           }
         } catch {
           // Без payload вернуть нечего — лишний синоним безвреден.
+        }
+        continue;
+      }
+      // Привязка бестиария к компендиуму: составной ключ, удалять надо по обеим
+      // половинам — вторая лежит в payload.
+      if (row.entity_type === "compendium_link") {
+        try {
+          const { entry } = JSON.parse(row.payload) as { entry: number };
+          deleted += db
+            .prepare(
+              "DELETE FROM being_compendium_links WHERE being_id = ? AND compendium_entry_id = ?"
+            )
+            .run(row.entity_id, entry).changes;
+        } catch {
+          // Без payload удалять нечего: лишняя связь безвредна, а снести все
+          // связи существа значило бы задеть проставленные руками.
         }
         continue;
       }

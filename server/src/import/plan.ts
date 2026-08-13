@@ -13,16 +13,10 @@
 
 import { db } from "../db/db";
 import { ImportFile } from "./format";
+import { compendiumCandidates, matchCompendium } from "./compendium";
+import { NameMatch, normalizeName as normalize, parseAliases, similarity } from "./names";
 
-export interface PlanMatch {
-  /** Кого нашли: "тип:id" — в этом же виде уходит обратно в apply. */
-  ref: string;
-  name: string;
-  hint: string;
-  /** Чем совпало: имя, синоним, оригинал — или это лишь похожее написание. */
-  reason: string;
-  exact: boolean;
-}
+export type PlanMatch = NameMatch;
 
 export interface PlanEntry {
   key: string;
@@ -35,6 +29,8 @@ export interface PlanEntry {
   /** Ключ уже импортирован раньше — сущность создаваться не будет. */
   known: string | null;
   matches: PlanMatch[];
+  /** Только для бестиария: монстры компендиума, с которыми можно связать. */
+  compendium?: PlanMatch[];
 }
 
 export interface PlanSection {
@@ -51,11 +47,6 @@ export interface ImportPlan {
   extras: Record<string, number>;
 }
 
-/** «Ёлка» и «Ёлка » и «ёлка» — одно и то же имя. */
-function normalize(name: string): string {
-  return name.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
-}
-
 interface ExistingRow {
   id: number;
   name: string;
@@ -70,16 +61,6 @@ interface ExistingIndex {
   exact: Map<string, PlanMatch[]>;
   /** Все имена всех строк — для нечёткого сравнения по словам. */
   all: { row: ExistingRow; names: string[]; ref: string }[];
-}
-
-function parseAliases(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
 }
 
 /** Индекс существующих сущностей одного типа. */
@@ -105,38 +86,6 @@ function indexExisting(rows: ExistingRow[], type: string): ExistingIndex {
     all.push({ row, ref, names: named.map(([n]) => n).filter((n) => n.trim()) });
   }
   return { exact, all };
-}
-
-/**
- * Нечёткое сравнение — на случай переводов, которых никто не предвидел:
- * «Морской район» и «Приморский район» делят и слово, и корень. Порог намеренно
- * высокий: ложный кандидат в списке дороже пропущенного, человек всё равно
- * выбирает руками.
- */
-const STOP_WORDS = new Set(["и", "в", "на", "the", "of", "a"]);
-
-function tokens(name: string): string[] {
-  return normalize(name)
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((t) => t.length > 2 && !STOP_WORDS.has(t));
-}
-
-function similarity(a: string, b: string): number {
-  const left = tokens(a);
-  const right = tokens(b);
-  if (!left.length || !right.length) return 0;
-  // Русский язык приставками и окончаниями рушит прямое сравнение: «морской» не
-  // подстрока «приморского». Поэтому сравниваются корни — первые пять букв.
-  const stem = (token: string) => (token.length >= 5 ? token.slice(0, 5) : token);
-  let shared = 0;
-  for (const token of left) {
-    const matched = right.some(
-      (other) =>
-        other === token || other.includes(stem(token)) || token.includes(stem(other))
-    );
-    if (matched) shared++;
-  }
-  return shared / Math.max(left.length, right.length);
 }
 
 const EMPTY_INDEX: ExistingIndex = { exact: new Map(), all: [] };
@@ -192,6 +141,7 @@ export function buildPlan(
   knownKeys: Record<string, string> = {}
 ): ImportPlan {
   const index = existing(settingId);
+  const monsters = compendiumCandidates(settingId);
 
   const entry = (
     type: keyof typeof index,
@@ -266,9 +216,24 @@ export function buildPlan(
       id: "bestiary",
       title: "Бестиарий",
       type: "being",
-      entries: data.bestiary.map((b) =>
-        entry("being", b.key, b.name, b.compendium_hints.join(", "), b.aliases, undefined, b.name_original)
-      ),
+      entries: data.bestiary.map((b) => ({
+        ...entry(
+          "being",
+          b.key,
+          b.name,
+          b.compendium_hints.join(", "),
+          b.aliases,
+          undefined,
+          b.name_original
+        ),
+        // Подсказки из файла ищем наравне с именами: модель пишет в них то
+        // название, под которым монстр известен в системе, и оно совпадает
+        // с компендиумом чаще, чем имя из книги.
+        compendium: matchCompendium(
+          [b.name, b.name_original ?? "", ...b.aliases, ...b.compendium_hints],
+          monsters
+        ),
+      })),
     },
     {
       id: "communities",
