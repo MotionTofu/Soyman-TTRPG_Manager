@@ -15,7 +15,13 @@ import { db } from "../db/db";
 import { ImportFile } from "./format";
 import { compendiumCandidates, matchCompendium } from "./compendium";
 import { entityName } from "./apply";
-import { NameMatch, normalizeName as normalize, parseAliases, similarity } from "./names";
+import {
+  NameMatch,
+  buildTokenWeights,
+  normalizeName as normalize,
+  parseAliases,
+  similarity,
+} from "./names";
 
 export type PlanMatch = NameMatch;
 
@@ -64,6 +70,8 @@ interface ExistingIndex {
   exact: Map<string, PlanMatch[]>;
   /** Все имена всех строк — для нечёткого сравнения по словам. */
   all: { row: ExistingRow; names: string[]; ref: string }[];
+  /** Вес слов по редкости среди этих же строк: «район» дешёв, «сафар» дорог. */
+  weights: Map<string, number>;
 }
 
 /** Индекс существующих сущностей одного типа. */
@@ -88,10 +96,10 @@ function indexExisting(rows: ExistingRow[], type: string): ExistingIndex {
     }
     all.push({ row, ref, names: named.map(([n]) => n).filter((n) => n.trim()) });
   }
-  return { exact, all };
+  return { exact, all, weights: buildTokenWeights(all.map((r) => r.names)) };
 }
 
-const EMPTY_INDEX: ExistingIndex = { exact: new Map(), all: [] };
+const EMPTY_INDEX: ExistingIndex = { exact: new Map(), all: [], weights: new Map() };
 
 function existing(settingId: number | null): Record<string, ExistingIndex> {
   if (settingId == null) {
@@ -173,7 +181,8 @@ export function buildPlan(
         if (seen.has(row.ref)) continue;
         let score = 0;
         for (const candidate of candidates) {
-          for (const other of row.names) score = Math.max(score, similarity(candidate, other));
+          for (const other of row.names)
+            score = Math.max(score, similarity(candidate, other, index[type].weights));
         }
         if (score >= 0.5) {
           fuzzy.push({

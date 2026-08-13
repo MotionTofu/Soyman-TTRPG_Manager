@@ -11,7 +11,7 @@
 // многие-ко-многим. Автоматически ничего не связывается: выбор за человеком.
 
 import { db } from "../db/db";
-import { NameMatch, normalizeName, similarity } from "./names";
+import { NameMatch, buildTokenWeights, normalizeName, similarity } from "./names";
 
 interface Candidate {
   id: number;
@@ -80,11 +80,15 @@ export function matchCompendium(names: string[], candidates: Candidate[]): NameM
   }
   if (exact.length) return exact;
 
+  // Вес по редкости и здесь: «зверь» встречается у половины бестиария системы
+  // и почти ничего не значит, «нимблрайт» — у одного.
+  const weights = buildTokenWeights(candidates.map((c) => c.names));
   const fuzzy: (NameMatch & { score: number })[] = [];
   for (const candidate of candidates) {
     if (seen.has(candidate.id)) continue;
     let score = 0;
-    for (const w of wanted) for (const cn of candidate.names) score = Math.max(score, similarity(w, cn));
+    for (const w of wanted)
+      for (const cn of candidate.names) score = Math.max(score, similarity(w, cn, weights));
     if (score >= 0.5) {
       fuzzy.push({
         ref: `compendium:${candidate.id}`,
