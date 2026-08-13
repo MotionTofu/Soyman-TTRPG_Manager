@@ -17,6 +17,12 @@ import {
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
+import {
+  CrossLinkChoice,
+  applySettingCrossLinks,
+  planSettingCrossLinks,
+  stripSettingCrossLinks,
+} from "../import/crossLinks";
 
 export const settingsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -36,6 +42,23 @@ settingsRouter.get("/", (_req, res) => {
     .prepare("SELECT * FROM settings WHERE archived_at IS NULL ORDER BY name")
     .all() as { background_image_path: string | null }[];
   res.json(rows.map(withBgUrl));
+});
+
+// Перекрёстные ссылки по всему сеттингу: тексты вне сцен — описания локаций,
+// истории личностей, поля сообществ, сила предметов, синопсисы приключений.
+// Сцены размечает свой проход на странице приключения: у него точнее отбор.
+settingsRouter.get("/:id/cross-links", (req, res) => {
+  res.json(planSettingCrossLinks(Number(req.params.id)));
+});
+
+settingsRouter.post("/:id/cross-links", (req, res) => {
+  const { chosen } = req.body as { chosen?: CrossLinkChoice[] };
+  if (!Array.isArray(chosen)) return res.status(400).json({ error: "chosen is required" });
+  res.json(applySettingCrossLinks(Number(req.params.id), chosen));
+});
+
+settingsRouter.delete("/:id/cross-links", (req, res) => {
+  res.json(stripSettingCrossLinks(Number(req.params.id)));
 });
 
 settingsRouter.get("/:id", (req, res) => {

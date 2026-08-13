@@ -26,6 +26,7 @@ import { SettingEntryList } from "../components/SettingEntryList";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { AdventuresTab } from "../components/AdventuresTab";
+import { CrossLinksCard } from "../components/CrossLinksCard";
 import { RelationGraph } from "../components/RelationGraph";
 import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
 import type { GraphData } from "../graphTypes";
@@ -478,6 +479,11 @@ export function SettingDetailPage() {
             entityType="setting"
             entityId={settingId}
             defaultSettingId={settingId}
+          />
+
+          <CrossLinksCard
+            base={`/settings/${settingId}`}
+            help="Ищет имена сущностей сеттинга в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Сцены размечает такой же проход на странице приключения: там отбор точнее. Ничего не пишет, пока вы не подтвердите."
           />
 
           <div className="card stack">
