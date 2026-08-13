@@ -302,6 +302,7 @@ export function buildPlan(
     "события календаря": data.calendar_events.length,
     отношения: data.relations.length,
     связи: data.links.length,
+    "карточки статблоков": [...data.beings, ...data.bestiary].filter((b) => b.statblock).length,
   };
   for (const [what, count] of Object.entries(extras)) if (!count) delete extras[what];
 

@@ -19,7 +19,7 @@ import {
   communityFolder,
   artifactFolder,
 } from "../services/filesystem";
-import { ImportFile } from "./format";
+import { ImportFile, ImportStatblock } from "./format";
 import { Problem } from "./validate";
 import { normalizeName } from "./names";
 import { validCompendiumIds } from "./compendium";
@@ -90,6 +90,9 @@ export const ROLLBACK_TABLES: Record<string, string> = {
   milestone: "story_milestones",
   secret: "story_secrets",
   reward: "story_scene_rewards",
+  // Статблок висит на существе полиморфно, без внешнего ключа: каскад его не
+  // унесёт, удалять должен откат.
+  statblock: "statblocks",
 };
 
 /** Типы, у которых есть поле «Другие названия»: только им можно дописать синоним. */
@@ -337,6 +340,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         description: string;
         statblock_short: string;
         statblock_full: string;
+        statblock?: ImportStatblock;
       }
     ) => {
       const folder = beingFolder(settingFolderPath, name);
@@ -363,6 +367,34 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       keys.set(key, { type: "being", id });
       created.add(key);
       remember("setting_beings", "description", id, fields.description);
+
+      // Разобранный на поля статблок — отдельной строкой: по ней приложение
+      // рисует карточку. Текстовые statblock_short/full остаются как были:
+      // они всё ещё показываются и служат запасным вариантом, когда модель
+      // структуру не осилила.
+      if (fields.statblock) {
+        const { format, ...content } = fields.statblock;
+        // Навыки и спасброски клиент кладёт в «примечания к защите» с пометкой
+        // «(старые данные)» — она про legacy-формат и на свежем импорте врёт.
+        // Заполняем примечания сами: увидев эти строки уже внутри, клиент свою
+        // пометку не добавит.
+        const defenseNotes = [
+          content.skills && `Навыки: ${content.skills}`,
+          content.savingThrows && `Спасброски: ${content.savingThrows}`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        const sbId = Number(
+          db
+            .prepare(
+              `INSERT INTO statblocks (owner_type, owner_id, kind, format, content)
+               VALUES ('being', ?, 'full', ?, ?)`
+            )
+            .run(id, format, JSON.stringify({ name, ...content, defenseNotes })).lastInsertRowid
+        );
+        record("statblock", sbId);
+        bump("статблоки");
+      }
       return id;
     };
 
@@ -401,6 +433,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         description: beast.description,
         statblock_short: beast.statblock_short,
         statblock_full: beast.statblock_full,
+        statblock: beast.statblock,
       });
       bump("бестиарий");
     }
@@ -998,9 +1031,16 @@ export function rollbackBatch(batchId: number): { deleted: number } {
     // Сначала связи, потом сущности: связь на удалённую строку каскадом не
     // уходит, а вот сущность утащит за собой свои дочерние строки.
     const order = (type: string) =>
-      ["link", "relation", "important_date", "milestone", "secret", "reward", "compendium_link"].includes(
-        type
-      )
+      [
+        "link",
+        "relation",
+        "important_date",
+        "milestone",
+        "secret",
+        "reward",
+        "compendium_link",
+        "statblock",
+      ].includes(type)
         ? 0
         : type === "setting"
           ? 2

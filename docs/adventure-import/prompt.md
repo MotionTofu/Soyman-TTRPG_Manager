@@ -171,7 +171,7 @@
   "beings": [{
     "key": "npc.", "name": "", "short_name": "", "name_original": "",
     "category": "key_figure | influential | notable",
-    "description": "", "statblock_short": "", "statblock_full": "",
+    "description": "", "statblock_short": "", "statblock_full": "", "statblock": {},
     "history": [{ "title": "", "content": "" }],
     "behavior": [{ "title": "", "content": "" }],
     "locations": ["loc."], "communities": ["com."], "aliases": [],
@@ -180,7 +180,7 @@
 
   "bestiary": [{
     "key": "bst.", "name": "", "name_original": "", "aliases": [], "description": "",
-    "statblock_short": "", "statblock_full": "",
+    "statblock_short": "", "statblock_full": "", "statblock": {},
     "locations": ["loc."], "compendium_hints": [""]
   }],
 
@@ -292,6 +292,34 @@
 }
 ```
 
+## Статблок
+
+Если у существа в книге есть боевые характеристики, заполни `statblock` — приложение
+нарисует по нему карточку и само посчитает модификаторы. Пиши значения так, как они
+стоят в книге, ничего не пересчитывая:
+
+```json
+"statblock": {
+  "format": "dnd_creature",
+  "sizeTypeAlignment": "Средний гуманоид, любое мировоззрение",
+  "armorClass": "17 (наборный доспех)",
+  "hitPoints": "58 (9к8 + 18)",
+  "speed": "30 фт.",
+  "abilities": { "str": 16, "dex": 13, "con": 14, "int": 10, "wis": 11, "cha": 10 },
+  "savingThrows": "", "skills": "Атлетика +5, Внимательность +2",
+  "damageVulnerabilities": "", "damageResistances": "", "damageImmunities": "",
+  "conditionImmunities": "", "senses": "пассивная Внимательность 12",
+  "languages": "Общий", "challengeRating": "3",
+  "traits": [{ "name": "", "description": "" }],
+  "actions": [{ "name": "Длинный меч", "description": "+5 к попаданию, 7 (1к8 + 3) рубящего" }],
+  "bonusActions": [], "reactions": [], "legendaryActions": [],
+  "habitat": "", "treasure": "", "notes": ""
+}
+```
+
+`statblock_short` при этом заполняй как и раньше — он остаётся запасным вариантом.
+Статблоки не по правилам D&D в `statblock` не клади, ограничься текстом.
+
 ## Если текст длинный
 
 Разбирай по частям. В каждой части повторяй один и тот же `setting.key` и один и тот же
@@ -342,6 +370,7 @@
   продолжение той же книги; для нового модуля он новый.
 - У каждой сцены заполнены `locations` и `participants` (если в ней вообще кто-то есть).
 - Ни один именной персонаж не попал в `bestiary`, ни один безымянный вид — в `beings`.
+- У каждого существа, чьи боевые характеристики есть в книге, заполнен `statblock`.
 - `name_original` заполнен везде, где оригинальное название известно из текста, и нигде не
   выдуман; в `aliases` нет вариантов, которых в книге нет.
 - В `calendar_events` нет `month: 0` или `day: 0`.

@@ -51,6 +51,62 @@ const chapter = z.object({
 });
 const chapters = z.array(chapter).default([]);
 
+/**
+ * Статблок в разборе на поля, а не прозой.
+ *
+ * Приложение хранит статблоки структурой (таблица statblocks, формат
+ * dnd_creature) и рисует по ней карточку. Импорт же до сих пор клал в базу
+ * строку вида «КД 17 (наборный доспех), Хиты 58 (9к8 + 18), Опасность 3» — все
+ * числа модель извлекала, но сплющивала в текст, и карточки не получалось ни у
+ * одной из 34 записей бестиария.
+ *
+ * Поля намеренно плоские и строковые: normalizeDndCreature на клиенте умеет
+ * разбирать именно такой вид — «17 (наборный доспех)» превращает в значение и
+ * пояснение, «58 (9к8 + 18)» — в кости. Требовать от модели вложенную
+ * структуру значило бы менять надёжность на строгость.
+ */
+const dndCreatureStatblock = z.object({
+  sizeTypeAlignment: text,
+  armorClass: text,
+  hitPoints: text,
+  speed: text,
+  abilities: z
+    .object({
+      str: z.number().int().nullish(),
+      dex: z.number().int().nullish(),
+      con: z.number().int().nullish(),
+      int: z.number().int().nullish(),
+      wis: z.number().int().nullish(),
+      cha: z.number().int().nullish(),
+    })
+    .partial()
+    .optional(),
+  savingThrows: text,
+  skills: text,
+  damageVulnerabilities: text,
+  damageResistances: text,
+  damageImmunities: text,
+  conditionImmunities: text,
+  senses: text,
+  languages: text,
+  challengeRating: text,
+  // Черты и действия: хватает имени и описания, остальное человек уточнит
+  // в редакторе. Требовать разбор урона и бросков — лишний повод ошибиться.
+  traits: z.array(z.object({ name: text, description: text })).default([]),
+  actions: z.array(z.object({ name: text, description: text })).default([]),
+  bonusActions: z.array(z.object({ name: text, description: text })).default([]),
+  reactions: z.array(z.object({ name: text, description: text })).default([]),
+  legendaryActions: z.array(z.object({ name: text, description: text })).default([]),
+  habitat: text,
+  treasure: text,
+  notes: text,
+});
+
+/** Пока разбирается только D&D-подобный статблок; прочие системы — прозой. */
+export const statblockSchema = dndCreatureStatblock.extend({
+  format: z.literal("dnd_creature").default("dnd_creature"),
+});
+
 const importantDate = z.object({
   title: z.string().min(1),
   recurrence: z.enum(["once", "annual", "monthly"]).default("once"),
@@ -82,6 +138,7 @@ export const beingSchema = z.object({
   behavior: chapters,
   statblock_short: text,
   statblock_full: text,
+  statblock: statblockSchema.optional(),
   locations: refs,
   communities: refs,
   important_dates: z.array(importantDate).default([]),
@@ -96,6 +153,7 @@ export const bestiarySchema = z.object({
   description: text,
   statblock_short: text,
   statblock_full: text,
+  statblock: statblockSchema.optional(),
   locations: refs,
   // Названия монстров из системы. По ним экран сверки ищет запись в
   // компендиуме — см. compendium.ts. Сами id машинно-зависимые, поэтому в
@@ -247,6 +305,7 @@ export const importFileSchema = z.object({
     .default([]),
 });
 
+export type ImportStatblock = z.infer<typeof statblockSchema>;
 export type ImportFile = z.infer<typeof importFileSchema>;
 export type ImportScene = z.infer<typeof sceneSchema>;
 export type ImportAdventure = z.infer<typeof adventureSchema>;
