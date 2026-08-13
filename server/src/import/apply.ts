@@ -898,17 +898,24 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       } catch {
         // Битое поле не повод ронять импорт: перезапишем массивом с нуля.
       }
-      const seen = new Set([row.name, ...current].map(normalizeName));
+      // Оригинал дописывается только в пустое поле: своё, уже заполненное,
+      // книга перебивать не вправе — там мог быть выверенный вручную вариант.
+      const original = originals.get(key) ?? "";
+      const learnOriginal = !row.name_original.trim() && !!original;
+
+      // Тот вариант имени, что уже живёт в колонке оригинала, в синонимы не
+      // идёт: сверке он оттуда и так виден, а карточка «Другие названия»
+      // пестрила бы вторым экземпляром одного и того же «North Ward».
+      const inOriginalColumn = learnOriginal ? original : row.name_original;
+      const seen = new Set(
+        [row.name, ...current, inOriginalColumn].filter(Boolean).map(normalizeName)
+      );
       const added: string[] = [];
       for (const candidate of synonyms.get(key) ?? []) {
         if (seen.has(normalizeName(candidate))) continue;
         seen.add(normalizeName(candidate));
         added.push(candidate);
       }
-      // Оригинал дописывается только в пустое поле: своё, уже заполненное,
-      // книга перебивать не вправе — там мог быть выверенный вручную вариант.
-      const original = originals.get(key) ?? "";
-      const learnOriginal = !row.name_original.trim() && !!original;
       if (!added.length && !learnOriginal) continue;
 
       record(
