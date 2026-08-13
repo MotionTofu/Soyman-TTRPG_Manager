@@ -22,7 +22,7 @@ import {
 import { ImportFile, ImportStatblock } from "./format";
 import { Problem } from "./validate";
 import { normalizeName } from "./names";
-import { validCompendiumIds } from "./compendium";
+import { creatureTypeRef, importSystems, parseSizeType, validCompendiumIds } from "./compendium";
 
 export interface ApplyOptions {
   /** Куда импортировать. null — создать новый сеттинг из data.setting. */
@@ -46,6 +46,16 @@ export interface ApplyOptions {
    * записи — это явный выбор человека, а не переписывание чужого.
    */
   compendium?: Record<string, number[]>;
+  /**
+   * Ключи записей бестиария, для которых в компендиуме системы нужно завести
+   * монстра: в книге он есть, в системе его ещё нет.
+   */
+  compendiumNew?: string[];
+  /**
+   * В компендиум какой системы писать. Сеттинг с системой не связан напрямую,
+   * а Вотердип водят сразу в двух — угадать нельзя, выбирает человек.
+   */
+  compendiumSystem?: number | null;
   /**
    * Ключи, про которые человек на экране сверки сказал «это другая сущность».
    *
@@ -93,6 +103,9 @@ export const ROLLBACK_TABLES: Record<string, string> = {
   // Статблок висит на существе полиморфно, без внешнего ключа: каскад его не
   // унесёт, удалять должен откат.
   statblock: "statblocks",
+  // Монстр, заведённый импортом в компендиуме системы. Компендиум общий для
+  // всех кампаний на этой системе, поэтому откат обязан убирать за собой.
+  compendium_entry: "compendium_entries",
 };
 
 /** Типы, у которых есть поле «Другие названия»: только им можно дописать синоним. */
@@ -329,6 +342,41 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     }
 
     // --- личности и бестиарий ----------------------------------------------
+
+    // Разобранный на поля статблок — отдельной строкой: по ней приложение
+    // рисует карточку. Владелец полиморфный: та же строка нужна и существу
+    // сеттинга, и записи компендиума. Текстовые statblock_short/full остаются
+    // как были: они всё ещё показываются и служат запасным вариантом, когда
+    // модель структуру не осилила.
+    const insertStatblock = (
+      ownerType: "being" | "compendium_entry",
+      ownerId: number,
+      name: string,
+      statblock: ImportStatblock
+    ) => {
+      const { format, ...content } = statblock;
+      // Навыки и спасброски клиент кладёт в «примечания к защите» с пометкой
+      // «(старые данные)» — она про legacy-формат и на свежем импорте врёт.
+      // Заполняем примечания сами: увидев эти строки уже внутри, клиент свою
+      // пометку не добавит.
+      const defenseNotes = [
+        content.skills && `Навыки: ${content.skills}`,
+        content.savingThrows && `Спасброски: ${content.savingThrows}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const id = Number(
+        db
+          .prepare(
+            `INSERT INTO statblocks (owner_type, owner_id, kind, format, content)
+             VALUES (?, ?, 'full', ?, ?)`
+          )
+          .run(ownerType, ownerId, format, JSON.stringify({ name, ...content, defenseNotes }))
+          .lastInsertRowid
+      );
+      return record("statblock", id);
+    };
+
     const insertBeing = (
       key: string,
       name: string,
@@ -373,26 +421,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       // они всё ещё показываются и служат запасным вариантом, когда модель
       // структуру не осилила.
       if (fields.statblock) {
-        const { format, ...content } = fields.statblock;
-        // Навыки и спасброски клиент кладёт в «примечания к защите» с пометкой
-        // «(старые данные)» — она про legacy-формат и на свежем импорте врёт.
-        // Заполняем примечания сами: увидев эти строки уже внутри, клиент свою
-        // пометку не добавит.
-        const defenseNotes = [
-          content.skills && `Навыки: ${content.skills}`,
-          content.savingThrows && `Спасброски: ${content.savingThrows}`,
-        ]
-          .filter(Boolean)
-          .join("\n");
-        const sbId = Number(
-          db
-            .prepare(
-              `INSERT INTO statblocks (owner_type, owner_id, kind, format, content)
-               VALUES ('being', ?, 'full', ?, ?)`
-            )
-            .run(id, format, JSON.stringify({ name, ...content, defenseNotes })).lastInsertRowid
-        );
-        record("statblock", sbId);
+        insertStatblock("being", id, name, fields.statblock);
         bump("статблоки");
       }
       return id;
@@ -505,6 +534,65 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
     const linkCompendium = db.prepare(
       "INSERT OR IGNORE INTO being_compendium_links (being_id, compendium_entry_id) VALUES (?, ?)"
     );
+
+    // Монстра, которого в системе ещё нет, импорт может завести сам. Это запись
+    // не приключения, а системы: компендиум общий для всех кампаний на ней,
+    // поэтому создаётся только по явной галочке и только в выбранной системе.
+    const newInCompendium = new Set(opts.compendiumNew ?? []);
+    if (newInCompendium.size) {
+      const system = importSystems(settingId).find((s) => s.id === opts.compendiumSystem);
+      if (!system) {
+        warnings.push({
+          path: "compendium",
+          message: "Система для новых записей компендиума не выбрана — монстры не заведены",
+        });
+      } else {
+        const nextPosition = db.prepare(
+          "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE section_id = ?"
+        );
+        for (const beast of data.bestiary) {
+          if (!newInCompendium.has(beast.key)) continue;
+          const self = keys.get(beast.key);
+          if (!self || self.type !== "being") continue;
+          // Оригинал в скобках — конвенция компендиума: «Нимблрайт [Nimblewright]».
+          // По ней же ищет matchCompendium, так что следующая книга с тем же
+          // монстром найдёт эту запись и второй раз её не заведёт.
+          const name = beast.name_original
+            ? `${beast.name} [${beast.name_original}]`
+            : beast.name;
+          const { size, type } = parseSizeType(beast.statblock?.sizeTypeAlignment ?? "");
+          const entryData: Record<string, unknown> = {};
+          if (size) entryData.size = size;
+          if (beast.statblock?.challengeRating) entryData.cr = beast.statblock.challengeRating;
+          const creatureType = creatureTypeRef(system.id, type);
+          if (creatureType) entryData.creature_type = creatureType;
+          const entryId = Number(
+            db
+              .prepare(
+                `INSERT INTO compendium_entries
+                   (system_id, section_id, parent_id, kind, name, data, description, position)
+                 VALUES (?, ?, NULL, 'monster', ?, ?, ?, ?)`
+              )
+              .run(
+                system.id,
+                system.section_id,
+                name,
+                JSON.stringify(entryData),
+                beast.description,
+                (nextPosition.get(system.section_id) as { p: number }).p
+              ).lastInsertRowid
+          );
+          record("compendium_entry", entryId);
+          if (beast.statblock) insertStatblock("compendium_entry", entryId, beast.name, beast.statblock);
+          // Связь ставится сразу: заводили запись именно ради неё.
+          if (linkCompendium.run(self.id, entryId).changes) {
+            record("compendium_link", self.id, JSON.stringify({ entry: entryId }));
+          }
+          bump("заведено в компендиуме");
+        }
+      }
+    }
+
     for (const [key, ids] of Object.entries(opts.compendium ?? {})) {
       const self = keys.get(key);
       if (!self || self.type !== "being") continue;

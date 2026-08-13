@@ -52,6 +52,8 @@ interface PlanResponse {
   matches: { id: number; name: string; reason: string }[];
   setting?: { key: string; name: string; description: string };
   source?: { title: string; authors: string; pages: string; part: string };
+  /** Системы, в компендиум которых можно заводить недостающих монстров. */
+  systems?: { id: number; name: string; section_id: number }[];
   plan: { sections: PlanSection[]; extras: Record<string, number> };
 }
 interface ApplyResponse {
@@ -106,9 +108,13 @@ export function ImportAdventurePage() {
   const [skip, setSkip] = useState<Record<string, boolean>>({});
   const [reuse, setReuse] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
-  // key записи бестиария → id монстра компендиума. Связь необязательная: пусто
-  // значит «не связывать», и это нормальный исход.
-  const [compendium, setCompendium] = useState<Record<string, number>>({});
+  // key записи бестиария → id монстра компендиума либо "new" — «завести в
+  // компендиуме». Связь необязательная: пусто значит «не связывать», и это
+  // нормальный исход.
+  const [compendium, setCompendium] = useState<Record<string, string>>({});
+  // В компендиум какой системы заводить новых монстров. У сеттинга своей
+  // системы нет: их дают кампании, и Вотердип водят сразу в двух.
+  const [compendiumSystem, setCompendiumSystem] = useState<number | null>(null);
   // Ключи, про которые человек сказал «это другая сущность»: занятый ключ
   // перестаёт считаться занятым, и сущность создаётся заново.
   const [detach, setDetach] = useState<Record<string, boolean>>({});
@@ -185,6 +191,8 @@ export function ImportAdventurePage() {
         setReuse({});
         setCategories({});
         setCompendium({});
+        // Одна система — выбирать не из чего, ставим её сразу.
+        setCompendiumSystem(response.systems?.length === 1 ? response.systems[0].id : null);
         setDetach({});
         setResult(null);
       } finally {
@@ -219,6 +227,10 @@ export function ImportAdventurePage() {
     () => plan?.plan.sections.flatMap((s) => s.entries) ?? [],
     [plan]
   );
+  const systems = plan?.systems ?? [];
+  const newInCompendium = Object.entries(compendium).filter(
+    ([key, value]) => value === "new" && !skip[key]
+  ).length;
   // Отцепленный ключ перестаёт быть занятым: сущность поедет как новая.
   const held = (e: PlanEntry) => !!e.known && !detach[e.key];
   const willCreate = entries.filter((e) => !skip[e.key] && !held(e) && !reuse[e.key]).length;
@@ -250,9 +262,13 @@ export function ImportAdventurePage() {
         // в компендиуме каждой из систем сеттинга. Здесь выбирается один.
         compendium: Object.fromEntries(
           Object.entries(compendium)
-            .filter(([key]) => !skip[key])
-            .map(([key, id]) => [key, [id]])
+            .filter(([key, value]) => !skip[key] && value !== "new")
+            .map(([key, id]) => [key, [Number(id)]])
         ),
+        compendium_new: Object.entries(compendium)
+          .filter(([key, value]) => !skip[key] && value === "new")
+          .map(([key]) => key),
+        compendium_system: compendiumSystem,
         detach: Object.entries(detach)
           .filter(([, on]) => on)
           .map(([key]) => key),
@@ -386,6 +402,35 @@ export function ImportAdventurePage() {
                       <button onClick={() => toggleSection(section, false)}>Никого</button>
                     </div>
                   </div>
+                  {section.id === "bestiary" && newInCompendium > 0 && (
+                    <div className="stack">
+                      <label className="row">
+                        <span className="muted">Заводить монстров в компендиуме системы:</span>
+                        <select
+                          value={compendiumSystem ?? ""}
+                          onChange={(e) =>
+                            setCompendiumSystem(e.target.value ? Number(e.target.value) : null)
+                          }
+                        >
+                          <option value="">Не выбрана</option>
+                          {systems.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="muted">
+                        Компендиум системы общий для всех кампаний на ней — заведённый монстр
+                        появится и в чужих. Откат импорта его удалит.
+                      </div>
+                      {compendiumSystem == null && (
+                        <div className="danger-text">
+                          Система не выбрана — {newInCompendium} монстр(ов) заведено не будет.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="stack">
                     {section.entries.map((entry) => (
                       <div key={entry.key} className="row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -462,13 +507,13 @@ export function ImportAdventurePage() {
                           </select>
                         )}
 
-                        {entry.compendium && entry.compendium.length > 0 && (
+                        {entry.compendium && systems.length > 0 && (
                           <select
                             value={compendium[entry.key] ?? ""}
                             onChange={(e) =>
                               setCompendium((prev) => {
                                 const next = { ...prev };
-                                if (e.target.value) next[entry.key] = Number(e.target.value);
+                                if (e.target.value) next[entry.key] = e.target.value;
                                 else delete next[entry.key];
                                 return next;
                               })
@@ -481,6 +526,7 @@ export function ImportAdventurePage() {
                                 {m.hint ? ` (${m.hint})` : ""}
                               </option>
                             ))}
+                            <option value="new">Завести в компендиуме системы</option>
                           </select>
                         )}
                       </div>

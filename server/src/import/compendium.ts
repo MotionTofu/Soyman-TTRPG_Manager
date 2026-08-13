@@ -108,6 +108,61 @@ export function matchCompendium(names: string[], candidates: Candidate[]): NameM
 }
 
 /**
+ * Системы, в компендиум которых импорт может дописывать монстров: те же, до
+ * которых дотягиваются кампании сеттинга, и только с разделом бестиария —
+ * писать монстра некуда, если раздела в системе нет.
+ */
+export interface ImportSystem {
+  id: number;
+  name: string;
+  /** id раздела kind='monster': именно в него ляжет новая запись. */
+  section_id: number;
+}
+
+export function importSystems(settingId: number | null): ImportSystem[] {
+  if (settingId == null) return [];
+  return db
+    .prepare(
+      `SELECT sys.id, sys.name, sec.id AS section_id
+         FROM systems sys
+         JOIN system_sections sec ON sec.system_id = sys.id AND sec.kind = 'monster'
+        WHERE sys.archived_at IS NULL
+          AND sys.id IN (SELECT DISTINCT system_id FROM campaigns WHERE setting_id = ?)
+        ORDER BY sys.name`
+    )
+    .all(settingId) as ImportSystem[];
+}
+
+const CREATURE_SIZES = ["Крошечный", "Маленький", "Средний", "Большой", "Огромный", "Громадный"];
+
+/**
+ * Размер и тип существа из строки «Средний гуманоид, любое мировоззрение».
+ * Клиент разбирает её так же (normalizeDndCreature), но у записи компендиума
+ * размер и УО живут ещё и в data: по ним работают фильтры раздела бестиария,
+ * а карточка статблока к ним не подключена.
+ */
+export function parseSizeType(sizeTypeAlignment: string): { size: string; type: string } {
+  const head = sizeTypeAlignment.split(",")[0]?.trim() ?? "";
+  const size = CREATURE_SIZES.find((s) => head.toLowerCase().startsWith(s.toLowerCase()));
+  return { size: size ?? "", type: size ? head.slice(size.length).trim() : head };
+}
+
+/** Тип существа из списка механик системы — иначе фильтр по типу его не увидит. */
+export function creatureTypeRef(systemId: number, type: string): { id: number; name: string } | null {
+  if (!type.trim()) return null;
+  const rows = db
+    .prepare(
+      `SELECT child.id, child.name
+         FROM compendium_entries child
+         JOIN compendium_entries grp ON grp.id = child.parent_id
+        WHERE grp.system_id = ? AND grp.kind = 'mechanic_group'
+          AND grp.name = 'Типы существ и их особенности'`
+    )
+    .all(systemId) as { id: number; name: string }[];
+  return rows.find((r) => normalizeName(r.name) === normalizeName(type)) ?? null;
+}
+
+/**
  * Отсев идентификаторов, пришедших с экрана сверки: связать запись бестиария
  * можно только с монстром системы, в которую сеттинг действительно играет.
  * Клиент присылает то, что показали ему мы, но проверить дешевле, чем потом

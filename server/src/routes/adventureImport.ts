@@ -11,6 +11,7 @@ import { db } from "../db/db";
 import { validateImport } from "../import/validate";
 import { applyImport, rollbackBatch, knownKeysFor, keyDirectoryFor } from "../import/apply";
 import { buildPlan } from "../import/plan";
+import { importSystems } from "../import/compendium";
 
 export const adventureImportRouter = Router();
 
@@ -77,22 +78,37 @@ adventureImportRouter.post("/plan", (req, res) => {
     matches: setting?.name ? matchSettings(setting.key ?? "", setting.name) : [],
     setting: result.data.setting,
     source: result.data.source,
+    // Куда можно заводить недостающих монстров: у сеттинга своей системы нет,
+    // их дают кампании, и Вотердип водят сразу в двух — выбирает человек.
+    systems: importSystems(settingId),
     plan: buildPlan(result.data, settingId, known),
   });
 });
 
 adventureImportRouter.post("/apply", (req, res) => {
-  const { data, setting_id, file_name, skip, reuse, categories, compendium, detach } =
-    req.body as {
-      data?: unknown;
-      setting_id?: number | null;
-      file_name?: string;
-      skip?: string[];
-      reuse?: Record<string, string>;
-      categories?: Record<string, string>;
-      compendium?: Record<string, number[]>;
-      detach?: string[];
-    };
+  const {
+    data,
+    setting_id,
+    file_name,
+    skip,
+    reuse,
+    categories,
+    compendium,
+    compendium_new,
+    compendium_system,
+    detach,
+  } = req.body as {
+    data?: unknown;
+    setting_id?: number | null;
+    file_name?: string;
+    skip?: string[];
+    reuse?: Record<string, string>;
+    categories?: Record<string, string>;
+    compendium?: Record<string, number[]>;
+    compendium_new?: string[];
+    compendium_system?: number | null;
+    detach?: string[];
+  };
   if (data === undefined) return res.status(400).json({ error: "data is required" });
 
   const settingId = setting_id ?? null;
@@ -118,6 +134,8 @@ adventureImportRouter.post("/apply", (req, res) => {
       reuse,
       categories,
       compendium,
+      compendiumNew: compendium_new,
+      compendiumSystem: compendium_system ?? null,
       detach,
     });
     res.status(201).json({
