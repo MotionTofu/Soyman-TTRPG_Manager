@@ -625,9 +625,13 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           // Оригинал в скобках — конвенция компендиума: «Нимблрайт [Nimblewright]».
           // По ней же ищет matchCompendium, так что следующая книга с тем же
           // монстром найдёт эту запись и второй раз её не заведёт.
-          const name = beast.name_original
-            ? `${beast.name} [${beast.name_original}]`
-            : beast.name;
+          //
+          // Имя берётся из compendium_hints, а не из name: книга зовёт группу
+          // в этом приключении — «Контрабандисты», — а в справочник системы
+          // идёт название вида, в единственном числе. Промпт просит написать
+          // в подсказку ровно его: «как этот монстр называется в системе».
+          const title = beast.compendium_hints.find((h) => h.trim())?.trim() || beast.name;
+          const name = beast.name_original ? `${title} [${beast.name_original}]` : title;
           const { size, type } = parseSizeType(beast.statblock?.sizeTypeAlignment ?? "");
           const entryData: Record<string, unknown> = {};
           if (size) entryData.size = size;
@@ -652,7 +656,7 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
               ).lastInsertRowid
           );
           record("compendium_entry", entryId);
-          if (beast.statblock) insertStatblock("compendium_entry", entryId, beast.name, beast.statblock);
+          if (beast.statblock) insertStatblock("compendium_entry", entryId, title, beast.statblock);
           // Связь ставится сразу: заводили запись именно ради неё.
           if (linkCompendium.run(self.id, entryId).changes) {
             record("compendium_link", self.id, JSON.stringify({ entry: entryId }));
