@@ -37,19 +37,28 @@ function spellings(name: string): string[] {
   return out.filter((n) => n.trim());
 }
 
-/** Записи бестиария всех систем, в которых водят кампании по этому сеттингу. */
-export function compendiumCandidates(settingId: number | null): Candidate[] {
+/** Вид записи компендиума: монстр для бестиария, маг. предмет для сокровищницы. */
+export type CompendiumKind = "monster" | "magic_item";
+
+/**
+ * Записи одного вида из всех систем, в которых водят кампании по этому
+ * сеттингу.
+ */
+export function compendiumCandidates(
+  settingId: number | null,
+  kind: CompendiumKind = "monster"
+): Candidate[] {
   if (settingId == null) return [];
   const rows = db
     .prepare(
       `SELECT e.id, e.name, sys.name AS system
          FROM compendium_entries e
          JOIN systems sys ON sys.id = e.system_id
-        WHERE e.kind = 'monster'
+        WHERE e.kind = ?
           AND e.system_id IN (SELECT DISTINCT system_id FROM campaigns WHERE setting_id = ?)
         ORDER BY sys.name, e.name`
     )
-    .all(settingId) as { id: number; name: string; system: string }[];
+    .all(kind, settingId) as { id: number; name: string; system: string }[];
   return rows.map((row) => ({ ...row, names: spellings(row.name) }));
 }
 
@@ -108,30 +117,84 @@ export function matchCompendium(names: string[], candidates: Candidate[]): NameM
 }
 
 /**
- * Системы, в компендиум которых импорт может дописывать монстров: те же, до
- * которых дотягиваются кампании сеттинга, и только с разделом бестиария —
- * писать монстра некуда, если раздела в системе нет.
+ * Системы, в компендиум которых импорт может дописывать: те же, до которых
+ * дотягиваются кампании сеттинга. Разделы обоих видов необязательны — система
+ * может вести бестиарий и не вести маг. предметы, — но хотя бы один нужен,
+ * иначе писать некуда и выбирать такую систему не из чего.
  */
 export interface ImportSystem {
   id: number;
   name: string;
-  /** id раздела kind='monster': именно в него ляжет новая запись. */
-  section_id: number;
+  /** id раздела, в который ляжет новая запись. null — раздела в системе нет. */
+  monster_section_id: number | null;
+  magic_item_section_id: number | null;
 }
 
 export function importSystems(settingId: number | null): ImportSystem[] {
   if (settingId == null) return [];
   return db
     .prepare(
-      `SELECT sys.id, sys.name, sec.id AS section_id
+      `SELECT sys.id, sys.name,
+              (SELECT id FROM system_sections WHERE system_id = sys.id AND kind = 'monster')
+                AS monster_section_id,
+              (SELECT id FROM system_sections WHERE system_id = sys.id AND kind = 'magic_item')
+                AS magic_item_section_id
          FROM systems sys
-         JOIN system_sections sec ON sec.system_id = sys.id AND sec.kind = 'monster'
         WHERE sys.archived_at IS NULL
           AND sys.id IN (SELECT DISTINCT system_id FROM campaigns WHERE setting_id = ?)
         ORDER BY sys.name`
     )
-    .all(settingId) as ImportSystem[];
+    .all(settingId)
+    .filter(
+      (s) => (s as ImportSystem).monster_section_id || (s as ImportSystem).magic_item_section_id
+    ) as ImportSystem[];
 }
+
+/**
+ * Словарь типов и редкостей: книга пишет «кольцо, необычное», а компендиум
+ * хранит «Кольца» и «Необычный» — те же значения, что стоят в выпадающих
+ * списках раздела. Без перевода фильтры новую запись не увидят.
+ */
+const ITEM_TYPES = [
+  "Доспехи",
+  "Жезлы",
+  "Зелья",
+  "Кольца",
+  "Оружие",
+  "Палочки",
+  "Посохи",
+  "Свитки",
+  "Чудесные предметы",
+];
+const RARITIES = ["Обычный", "Необычный", "Редкий", "Очень редкий", "Легендарный", "Артефакт"];
+
+/** Слово книги → значение списка: «кольцо» → «Кольца», «необычное» → «Необычный». */
+function fromVocabulary(raw: string, vocabulary: string[]): string {
+  const wanted = normalizeName(raw);
+  if (!wanted) return "";
+  const exact = vocabulary.find((v) => normalizeName(v) === wanted);
+  if (exact) return exact;
+  // Род и число книга пишет как придётся: «необычное», «кольцо», «доспех»,
+  // «чудесный предмет». Расходятся ровно окончания, поэтому слова сверяются
+  // по общему началу — и все, иначе «редкое» цеплялось бы к «Очень редкий».
+  return (
+    vocabulary.find((v) => {
+      const left = normalizeName(v).split(" ");
+      const right = wanted.split(" ");
+      return left.length === right.length && left.every((word, i) => sameStem(word, right[i]));
+    }) ?? ""
+  );
+}
+
+/** Слова с общим началом и разными окончаниями: «кольцо» и «кольца». */
+function sameStem(a: string, b: string): boolean {
+  let shared = 0;
+  while (shared < a.length && shared < b.length && a[shared] === b[shared]) shared++;
+  return shared >= Math.max(4, Math.min(a.length, b.length) - 3);
+}
+
+export const itemType = (raw: string) => fromVocabulary(raw, ITEM_TYPES);
+export const itemRarity = (raw: string) => fromVocabulary(raw, RARITIES);
 
 const CREATURE_SIZES = ["Крошечный", "Маленький", "Средний", "Большой", "Огромный", "Громадный"];
 
@@ -183,9 +246,13 @@ export function creatureTypeRef(systemId: number, type: string): { id: number; n
  * Клиент присылает то, что показали ему мы, но проверить дешевле, чем потом
  * искать в базе связь на монстра из чужой системы.
  */
-export function validCompendiumIds(settingId: number, ids: number[]): number[] {
+export function validCompendiumIds(
+  settingId: number,
+  ids: number[],
+  kind: CompendiumKind = "monster"
+): number[] {
   const wanted = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
   if (!wanted.length) return [];
-  const allowed = new Set(compendiumCandidates(settingId).map((c) => c.id));
+  const allowed = new Set(compendiumCandidates(settingId, kind).map((c) => c.id));
   return wanted.filter((id) => allowed.has(id));
 }

@@ -23,9 +23,12 @@ import { ImportFile, ImportStatblock } from "./format";
 import { Problem } from "./validate";
 import { normalizeName } from "./names";
 import {
+  CompendiumKind,
   cleanChallengeRating,
   creatureTypeRef,
   importSystems,
+  itemRarity,
+  itemType,
   parseSizeType,
   validCompendiumIds,
 } from "./compendium";
@@ -594,88 +597,6 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       if (first) db.prepare("UPDATE setting_beings SET location_id = ? WHERE id = ?").run(first, self.id);
     }
 
-    // --- бестиарий ↔ компендиум --------------------------------------------
-    // Связь ставится и на созданную запись, и на уже существовавшую: человек
-    // выбрал монстра руками на экране сверки. У таблицы составной ключ без
-    // колонки id, поэтому в import_records кладётся ещё и вторая половина —
-    // иначе откату нечего было бы удалять.
-    const linkCompendium = db.prepare(
-      "INSERT OR IGNORE INTO being_compendium_links (being_id, compendium_entry_id) VALUES (?, ?)"
-    );
-
-    // Монстра, которого в системе ещё нет, импорт может завести сам. Это запись
-    // не приключения, а системы: компендиум общий для всех кампаний на ней,
-    // поэтому создаётся только по явной галочке и только в выбранной системе.
-    const newInCompendium = new Set(opts.compendiumNew ?? []);
-    if (newInCompendium.size) {
-      const system = importSystems(settingId).find((s) => s.id === opts.compendiumSystem);
-      if (!system) {
-        warnings.push({
-          path: "compendium",
-          message: "Система для новых записей компендиума не выбрана — монстры не заведены",
-        });
-      } else {
-        const nextPosition = db.prepare(
-          "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE section_id = ?"
-        );
-        for (const beast of data.bestiary) {
-          if (!newInCompendium.has(beast.key)) continue;
-          const self = keys.get(beast.key);
-          if (!self || self.type !== "being") continue;
-          // Оригинал в скобках — конвенция компендиума: «Нимблрайт [Nimblewright]».
-          // По ней же ищет matchCompendium, так что следующая книга с тем же
-          // монстром найдёт эту запись и второй раз её не заведёт.
-          //
-          // Имя берётся из compendium_hints, а не из name: книга зовёт группу
-          // в этом приключении — «Контрабандисты», — а в справочник системы
-          // идёт название вида, в единственном числе. Промпт просит написать
-          // в подсказку ровно его: «как этот монстр называется в системе».
-          const title = beast.compendium_hints.find((h) => h.trim())?.trim() || beast.name;
-          const name = beast.name_original ? `${title} [${beast.name_original}]` : title;
-          const { size, type } = parseSizeType(beast.statblock?.sizeTypeAlignment ?? "");
-          const entryData: Record<string, unknown> = {};
-          if (size) entryData.size = size;
-          const cr = cleanChallengeRating(beast.statblock?.challengeRating ?? "");
-          if (cr) entryData.cr = cr;
-          const creatureType = creatureTypeRef(system.id, type);
-          if (creatureType) entryData.creature_type = creatureType;
-          const entryId = Number(
-            db
-              .prepare(
-                `INSERT INTO compendium_entries
-                   (system_id, section_id, parent_id, kind, name, data, description, position)
-                 VALUES (?, ?, NULL, 'monster', ?, ?, ?, ?)`
-              )
-              .run(
-                system.id,
-                system.section_id,
-                name,
-                JSON.stringify(entryData),
-                beast.description,
-                (nextPosition.get(system.section_id) as { p: number }).p
-              ).lastInsertRowid
-          );
-          record("compendium_entry", entryId);
-          if (beast.statblock) insertStatblock("compendium_entry", entryId, title, beast.statblock);
-          // Связь ставится сразу: заводили запись именно ради неё.
-          if (linkCompendium.run(self.id, entryId).changes) {
-            record("compendium_link", self.id, JSON.stringify({ entry: entryId }));
-          }
-          bump("заведено в компендиуме");
-        }
-      }
-    }
-
-    for (const [key, ids] of Object.entries(opts.compendium ?? {})) {
-      const self = keys.get(key);
-      if (!self || self.type !== "being") continue;
-      for (const entryId of validCompendiumIds(settingId, ids)) {
-        if (!linkCompendium.run(self.id, entryId).changes) continue;
-        record("compendium_link", self.id, JSON.stringify({ entry: entryId }));
-        bump("привязки к компендиуму");
-      }
-    }
-
     // --- сокровищница ------------------------------------------------------
     for (const item of data.treasury) {
       if (!shouldCreate(item.key)) continue;
@@ -722,6 +643,152 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         remember("artifact_chapters", "content", chId, ch.content);
       }
       bump("предметы");
+    }
+
+    // --- компендиум --------------------------------------------------------
+    // Связь ставится и на созданную запись, и на уже существовавшую: человек
+    // выбрал монстра или предмет руками на экране сверки. У обеих таблиц связи
+    // составной ключ без колонки id, поэтому в import_records кладётся ещё и
+    // вторая половина — иначе откату нечего было бы удалять.
+    //
+    // Существо и предмет ведут себя одинаково, различаясь тремя вещами: своей
+    // таблицей связи, разделом системы и тем, что кладётся в data записи.
+    const linkStatements: Record<string, ReturnType<typeof db.prepare<[number, number]>>> = {
+      being: db.prepare(
+        "INSERT OR IGNORE INTO being_compendium_links (being_id, compendium_entry_id) VALUES (?, ?)"
+      ),
+      artifact: db.prepare(
+        "INSERT OR IGNORE INTO artifact_compendium_links (artifact_id, compendium_entry_id) VALUES (?, ?)"
+      ),
+    };
+    const link = (self: Ref, entryId: number) => {
+      const statement = linkStatements[self.type];
+      if (!statement || !statement.run(self.id, entryId).changes) return false;
+      record("compendium_link", self.id, JSON.stringify({ entry: entryId, type: self.type }));
+      return true;
+    };
+
+    // Монстра или предмет, которого в системе ещё нет, импорт может завести сам.
+    // Это запись не приключения, а системы: компендиум общий для всех кампаний
+    // на ней, поэтому создаётся только по явной галочке и в выбранной системе.
+    const newInCompendium = new Set(opts.compendiumNew ?? []);
+    if (newInCompendium.size) {
+      const system = importSystems(settingId).find((s) => s.id === opts.compendiumSystem);
+      if (!system) {
+        warnings.push({
+          path: "compendium",
+          message: "Система для новых записей компендиума не выбрана — записи не заведены",
+        });
+      } else {
+        const nextPosition = db.prepare(
+          "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE section_id = ?"
+        );
+        const insertEntry = db.prepare(
+          `INSERT INTO compendium_entries
+             (system_id, section_id, parent_id, kind, name, data, description, position)
+           VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`
+        );
+        const create = (
+          kind: CompendiumKind,
+          sectionId: number | null,
+          key: string,
+          title: string,
+          nameOriginal: string,
+          description: string,
+          entryData: Record<string, unknown>
+        ) => {
+          const self = keys.get(key);
+          if (!self) return null;
+          if (!sectionId) {
+            warnings.push({
+              path: `compendium.${key}`,
+              message: `В системе «${system.name}» нет подходящего раздела — запись не заведена`,
+            });
+            return null;
+          }
+          // Оригинал в скобках — конвенция компендиума: «Нимблрайт
+          // [Nimblewright]». По ней же ищет matchCompendium, так что следующая
+          // книга с тем же монстром найдёт эту запись и не заведёт вторую.
+          const name = nameOriginal ? `${title} [${nameOriginal}]` : title;
+          const entryId = Number(
+            insertEntry.run(
+              system.id,
+              sectionId,
+              kind,
+              name,
+              JSON.stringify(entryData),
+              description,
+              (nextPosition.get(sectionId) as { p: number }).p
+            ).lastInsertRowid
+          );
+          record("compendium_entry", entryId);
+          // Связь ставится сразу: заводили запись именно ради неё.
+          link(self, entryId);
+          bump("заведено в компендиуме");
+          return entryId;
+        };
+
+        for (const beast of data.bestiary) {
+          if (!newInCompendium.has(beast.key)) continue;
+          // Имя берётся из compendium_hints, а не из name: книга зовёт группу
+          // в этом приключении — «Контрабандисты», — а в справочник системы
+          // идёт название вида, в единственном числе. Промпт просит написать
+          // в подсказку ровно его: «как этот монстр называется в системе».
+          const title = beast.compendium_hints.find((h) => h.trim())?.trim() || beast.name;
+          const { size, type } = parseSizeType(beast.statblock?.sizeTypeAlignment ?? "");
+          const entryData: Record<string, unknown> = {};
+          if (size) entryData.size = size;
+          const cr = cleanChallengeRating(beast.statblock?.challengeRating ?? "");
+          if (cr) entryData.cr = cr;
+          const creatureType = creatureTypeRef(system.id, type);
+          if (creatureType) entryData.creature_type = creatureType;
+          const entryId = create(
+            "monster",
+            system.monster_section_id,
+            beast.key,
+            title,
+            beast.name_original ?? "",
+            beast.description,
+            entryData
+          );
+          if (entryId && beast.statblock)
+            insertStatblock("compendium_entry", entryId, title, beast.statblock);
+        }
+
+        for (const item of data.treasury) {
+          if (!newInCompendium.has(item.key)) continue;
+          // Тип и редкость книга пишет своими словами — «кольцо, необычное», —
+          // а раздел фильтрует по значениям своих списков. Что не перевелось,
+          // не пишем вовсе: пустое поле человек дозаполнит, а мусорное значение
+          // выпадет из всех фильтров молча.
+          const entryData: Record<string, unknown> = { attunement: item.requires_attunement };
+          const type = itemType(item.item_type);
+          if (type) entryData.item_type = type;
+          const rarity = itemRarity(item.rarity);
+          if (rarity) entryData.rarity = rarity;
+          // Правила предмета живут в описании записи: у маг. предмета своего
+          // статблока нет, его сила — это текст.
+          const description = [item.power, item.notes].filter((t) => t.trim()).join("\n\n");
+          create(
+            "magic_item",
+            system.magic_item_section_id,
+            item.key,
+            item.name,
+            item.name_original ?? "",
+            description,
+            entryData
+          );
+        }
+      }
+    }
+
+    for (const [key, ids] of Object.entries(opts.compendium ?? {})) {
+      const self = keys.get(key);
+      if (!self || !linkStatements[self.type]) continue;
+      const kind: CompendiumKind = self.type === "artifact" ? "magic_item" : "monster";
+      for (const entryId of validCompendiumIds(settingId, ids, kind)) {
+        if (link(self, entryId)) bump("привязки к компендиуму");
+      }
     }
 
     // --- приключения -------------------------------------------------------
@@ -1300,15 +1367,19 @@ export function rollbackBatch(batchId: number): { deleted: number } {
         }
         continue;
       }
-      // Привязка бестиария к компендиуму: составной ключ, удалять надо по обеим
-      // половинам — вторая лежит в payload.
+      // Привязка к компендиуму: составной ключ, удалять надо по обеим
+      // половинам — вторая лежит в payload. Тип там же: у существ и предметов
+      // свои таблицы связи. Батчи до появления предметов типа не писали —
+      // для них подразумевается существо.
       if (row.entity_type === "compendium_link") {
         try {
-          const { entry } = JSON.parse(row.payload) as { entry: number };
+          const { entry, type } = JSON.parse(row.payload) as { entry: number; type?: string };
+          const [table, column] =
+            type === "artifact"
+              ? ["artifact_compendium_links", "artifact_id"]
+              : ["being_compendium_links", "being_id"];
           deleted += db
-            .prepare(
-              "DELETE FROM being_compendium_links WHERE being_id = ? AND compendium_entry_id = ?"
-            )
+            .prepare(`DELETE FROM ${table} WHERE ${column} = ? AND compendium_entry_id = ?`)
             .run(row.entity_id, entry).changes;
         } catch {
           // Без payload удалять нечего: лишняя связь безвредна, а снести все

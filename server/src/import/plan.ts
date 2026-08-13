@@ -152,7 +152,8 @@ export function buildPlan(
   knownKeys: Record<string, string> = {}
 ): ImportPlan {
   const index = existing(settingId);
-  const monsters = compendiumCandidates(settingId);
+  const monsters = compendiumCandidates(settingId, "monster");
+  const magicItems = compendiumCandidates(settingId, "magic_item");
 
   const entry = (
     type: keyof typeof index,
@@ -260,8 +261,8 @@ export function buildPlan(
       id: "treasury",
       title: "Сокровищница",
       type: "artifact",
-      entries: data.treasury.map((t) =>
-        entry(
+      entries: data.treasury.map((t) => ({
+        ...entry(
           "artifact",
           t.key,
           t.name,
@@ -269,8 +270,14 @@ export function buildPlan(
           t.aliases,
           undefined,
           t.name_original
-        )
-      ),
+        ),
+        // Только предметы с редкостью: она и отличает вещь правил, которой
+        // место в справочнике системы, от реквизита этой книги — гроссбуха,
+        // письма, ключа от склада. У реквизита редкости не бывает.
+        compendium: t.rarity.trim()
+          ? matchCompendium([t.name, t.name_original ?? "", ...t.aliases], magicItems)
+          : undefined,
+      })),
     },
     {
       id: "adventures",

@@ -53,7 +53,7 @@ interface PlanResponse {
   setting?: { key: string; name: string; description: string };
   source?: { title: string; authors: string; pages: string; part: string };
   /** Системы, в компендиум которых можно заводить недостающих монстров. */
-  systems?: { id: number; name: string; section_id: number }[];
+  systems?: { id: number; name: string }[];
   plan: { sections: PlanSection[]; extras: Record<string, number> };
 }
 interface ApplyResponse {
@@ -407,35 +407,6 @@ export function ImportAdventurePage() {
                       <button onClick={() => toggleSection(section, false)}>Никого</button>
                     </div>
                   </div>
-                  {section.id === "bestiary" && newInCompendium > 0 && (
-                    <div className="stack">
-                      <label className="row">
-                        <span className="muted">Заводить монстров в компендиуме системы:</span>
-                        <select
-                          value={compendiumSystem ?? ""}
-                          onChange={(e) =>
-                            setCompendiumSystem(e.target.value ? Number(e.target.value) : null)
-                          }
-                        >
-                          <option value="">Не выбрана</option>
-                          {systems.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="muted">
-                        Компендиум системы общий для всех кампаний на ней — заведённый монстр
-                        появится и в чужих. Откат импорта его удалит.
-                      </div>
-                      {compendiumSystem == null && (
-                        <div className="danger-text">
-                          Система не выбрана — {newInCompendium} монстр(ов) заведено не будет.
-                        </div>
-                      )}
-                    </div>
-                  )}
                   <div className="stack">
                     {section.entries.map((entry) => (
                       <div key={entry.key} className="row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -524,10 +495,10 @@ export function ImportAdventurePage() {
                               })
                             }
                           >
-                            <option value="">Без статблока системы</option>
+                            <option value="">Без записи компендиума</option>
                             {entry.compendium.map((m) => (
                               <option key={m.ref} value={m.ref.split(":")[1]}>
-                                {m.exact ? "Статблок" : "Похоже, это"}: {m.name}
+                                {m.exact ? "Запись" : "Похоже, это"}: {m.name}
                                 {m.hint ? ` (${m.hint})` : ""}
                               </option>
                             ))}
@@ -539,6 +510,37 @@ export function ImportAdventurePage() {
                   </div>
                 </div>
               ))}
+
+              {newInCompendium > 0 && (
+                <div className="card stack">
+                  <h3>Новые записи компендиума</h3>
+                  <label className="row">
+                    <span className="muted">Заводить в компендиуме системы:</span>
+                    <select
+                      value={compendiumSystem ?? ""}
+                      onChange={(e) =>
+                        setCompendiumSystem(e.target.value ? Number(e.target.value) : null)
+                      }
+                    >
+                      <option value="">Не выбрана</option>
+                      {systems.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="muted">
+                    Компендиум системы общий для всех кампаний на ней — заведённая запись
+                    появится и в чужих. Откат импорта её удалит.
+                  </div>
+                  {compendiumSystem == null && (
+                    <div className="danger-text">
+                      Система не выбрана — {newInCompendium} запис(ей) заведено не будет.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {Object.keys(plan.plan.extras).length > 0 && (
                 <div className="card stack">
