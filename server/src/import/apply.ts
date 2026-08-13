@@ -757,6 +757,16 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       });
 
       adv.rewards.forEach((reward, index) => {
+        // У вех и тайн есть ключи, и повтор отсекается по ним. У награды
+        // приключения ключа нет, так что от второго залива того же файла её
+        // спасает только сравнение по содержимому — как у событий календаря.
+        const duplicate = db
+          .prepare(
+            `SELECT 1 FROM story_scene_rewards
+              WHERE arc_id = ? AND what = ? AND where_found = ?`
+          )
+          .get(advRef.id, reward.what, reward.where_found);
+        if (duplicate) return;
         const artifact = resolve(reward.item, "artifact");
         const id = Number(
           db
@@ -1037,10 +1047,41 @@ export function rollbackBatch(batchId: number): { deleted: number } {
       if (!table) continue;
       deleted += db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(row.entity_id).changes;
     }
+    deleted += sweepDangling();
     db.prepare("DELETE FROM import_batches WHERE id = ?").run(batchId);
     return { deleted };
   });
   return run();
+}
+
+/**
+ * Уборка связей, оставшихся без одного из концов.
+ *
+ * Откатить можно не только последний батч. Если следующие импорты ссылались на
+ * сущности откатываемого — а в цикле ваншотов так и есть, — то после удаления
+ * их связи повисают в пустоте: у полиморфных generic_links и entity_relations
+ * внешних ключей нет, каскад до них не достаёт. Связь без одного конца не
+ * значит ничего и никому не нужна, поэтому подметается вся, а не только своя.
+ */
+function sweepDangling(): number {
+  let removed = 0;
+  const gone = (type: string, id: number) => {
+    const table = ROLLBACK_TABLES[type];
+    // Незнакомый тип не трогаем: мало ли что появится в связях помимо импорта.
+    if (!table) return false;
+    return !db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(id);
+  };
+  for (const table of ["generic_links", "entity_relations"]) {
+    const rows = db
+      .prepare(`SELECT id, from_type, from_id, to_type, to_id FROM ${table}`)
+      .all() as { id: number; from_type: string; from_id: number; to_type: string; to_id: number }[];
+    const drop = db.prepare(`DELETE FROM ${table} WHERE id = ?`);
+    for (const row of rows) {
+      if (!gone(row.from_type, row.from_id) && !gone(row.to_type, row.to_id)) continue;
+      removed += drop.run(row.id).changes;
+    }
+  }
+  return removed;
 }
 
 /** Тип сущности → где взять её имя для справочника ключей. */
