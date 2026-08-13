@@ -28,7 +28,22 @@ const aliases = z.array(z.string()).default([]);
 
 /** Ссылка на чужой ключ. Существование проверяется в validate.ts. */
 const ref = z.string().min(1);
-const refs = z.array(ref).default([]);
+
+/**
+ * Необязательная ссылка. Промпт просит незаполненные поля не писать вовсе, но
+ * модели прилежно пишут `"parent": ""` в значении «родителя нет» — и целая
+ * книга отвергалась из-за пустой строки. Пусто здесь и значит «нет ссылки».
+ */
+const optionalRef = z.preprocess(
+  (v) => (typeof v === "string" && !v.trim() ? undefined : v),
+  ref.nullish()
+);
+
+/** То же для списков: пустая строка в массиве ссылок — просто мусор. */
+const refs = z.preprocess(
+  (v) => (Array.isArray(v) ? v.filter((x) => typeof x !== "string" || x.trim()) : v),
+  z.array(ref).default([])
+);
 
 const chapter = z.object({
   title: text,
@@ -50,7 +65,7 @@ export const locationSchema = z.object({
   name_original: nameOriginal,
   short_name: optionalText,
   kind: text,
-  parent: ref.nullish(),
+  parent: optionalRef,
   description: text,
   chapters,
   aliases,
@@ -92,7 +107,7 @@ export const communitySchema = z.object({
   key: key("com."),
   name: z.string().min(1),
   name_original: nameOriginal,
-  parent: ref.nullish(),
+  parent: optionalRef,
   description: text,
   history: text,
   current_situation: text,
@@ -129,12 +144,12 @@ const rewardSchema = z.object({
   what: text,
   where_found: text,
   notes: text,
-  item: ref.nullish(),
+  item: optionalRef,
 });
 
 export const sceneSchema = z.object({
   key: key("scn."),
-  chapter: ref.nullish(),
+  chapter: optionalRef,
   name: z.string().min(1),
   kind: z.enum(["scene", "encounter", "branch", "ending"]).default("scene"),
   summary: text,
@@ -169,7 +184,7 @@ export const adventureSchema = z.object({
         key: key("mls."),
         title: z.string().min(1),
         description: text,
-        scene: ref.nullish(),
+        scene: optionalRef,
       })
     )
     .default([]),
