@@ -155,6 +155,10 @@ export function importSystems(settingId: number | null): ImportSystem[] {
  * хранит «Кольца» и «Необычный» — те же значения, что стоят в выпадающих
  * списках раздела. Без перевода фильтры новую запись не увидят.
  */
+// Списки повторяют MAGIC_ITEM_TYPES и MAGIC_ITEM_RARITIES из client/src/
+// compendium.ts — это ровно те значения, что стоят в фильтрах раздела и в
+// выпадающих списках редактора. Расходиться им нельзя: значение мимо списка
+// молча выпадает из всех фильтров.
 const ITEM_TYPES = [
   "Доспехи",
   "Жезлы",
@@ -163,10 +167,18 @@ const ITEM_TYPES = [
   "Оружие",
   "Палочки",
   "Посохи",
-  "Свитки",
   "Чудесные предметы",
+  "Щиты",
 ];
-const RARITIES = ["Обычный", "Необычный", "Редкий", "Очень редкий", "Легендарный", "Артефакт"];
+const RARITIES = [
+  "Обычный",
+  "Необычный",
+  "Редкий",
+  "Очень редкий",
+  "Легендарный",
+  "Артефакт",
+  "Варьируется",
+];
 
 /** Слово книги → значение списка: «кольцо» → «Кольца», «необычное» → «Необычный». */
 function fromVocabulary(raw: string, vocabulary: string[]): string {
@@ -190,7 +202,10 @@ function fromVocabulary(raw: string, vocabulary: string[]): string {
 function sameStem(a: string, b: string): boolean {
   let shared = 0;
   while (shared < a.length && shared < b.length && a[shared] === b[shared]) shared++;
-  return shared >= Math.max(4, Math.min(a.length, b.length) - 3);
+  const shortest = Math.min(a.length, b.length);
+  // Обычно хватает четырёх общих букв, но у коротких слов их столько и нет:
+  // «щит» и «Щиты» расходятся одной буквой из четырёх.
+  return shared >= Math.max(Math.min(4, shortest), shortest - 3);
 }
 
 export const itemType = (raw: string) => fromVocabulary(raw, ITEM_TYPES);

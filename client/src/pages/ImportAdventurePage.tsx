@@ -11,6 +11,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { SectionHeading } from "../components/SectionHeading";
 import { CREATABLE_BEING_CATEGORIES } from "../beingCategories";
+import { entryWord } from "../sceneKinds";
 import type { Setting } from "../types";
 
 interface Problem {
@@ -35,7 +36,11 @@ interface PlanEntry {
   /** Имя того, на что ведёт занятый ключ: по нему видно столкновение. */
   knownName?: string | null;
   matches: PlanMatch[];
-  /** Только у бестиария: монстры компендиума систем, в которые играют по сеттингу. */
+  /**
+   * Записи компендиумов систем, в которые играют по сеттингу: монстры для
+   * бестиария, маг. предметы для сокровищницы. У предмета без редкости поля
+   * нет вовсе — реквизиту книги в справочнике системы не место.
+   */
   compendium?: PlanMatch[];
 }
 interface PlanSection {
@@ -52,7 +57,7 @@ interface PlanResponse {
   matches: { id: number; name: string; reason: string }[];
   setting?: { key: string; name: string; description: string };
   source?: { title: string; authors: string; pages: string; part: string };
-  /** Системы, в компендиум которых можно заводить недостающих монстров. */
+  /** Системы, в компендиум которых можно заводить недостающие записи. */
   systems?: { id: number; name: string }[];
   plan: { sections: PlanSection[]; extras: Record<string, number> };
 }
@@ -108,11 +113,11 @@ export function ImportAdventurePage() {
   const [skip, setSkip] = useState<Record<string, boolean>>({});
   const [reuse, setReuse] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
-  // key записи бестиария → id монстра компендиума либо "new" — «завести в
-  // компендиуме». Связь необязательная: пусто значит «не связывать», и это
-  // нормальный исход.
+  // key записи бестиария или предмета → id записи компендиума либо "new" —
+  // «завести в компендиуме». Связь необязательная: пусто значит «не связывать»,
+  // и это нормальный исход.
   const [compendium, setCompendium] = useState<Record<string, string>>({});
-  // В компендиум какой системы заводить новых монстров. У сеттинга своей
+  // В компендиум какой системы заводить новые записи. У сеттинга своей
   // системы нет: их дают кампании, и Вотердип водят сразу в двух.
   const [compendiumSystem, setCompendiumSystem] = useState<number | null>(null);
   // Ключи, про которые человек сказал «это другая сущность»: занятый ключ
@@ -536,7 +541,8 @@ export function ImportAdventurePage() {
                   </div>
                   {compendiumSystem == null && (
                     <div className="danger-text">
-                      Система не выбрана — {newInCompendium} запис(ей) заведено не будет.
+                      Система не выбрана — {newInCompendium} {entryWord(newInCompendium)} заведено
+                      не будет.
                     </div>
                   )}
                 </div>
