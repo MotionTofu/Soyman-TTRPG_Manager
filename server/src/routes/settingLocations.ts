@@ -11,7 +11,12 @@ import {
 } from "../services/filesystem";
 import { renameEntityFolder, moveEntityFolder } from "../services/vaultPaths";
 import { removeOrArchive, storeDeduped } from "../services/vaultDedup";
-import { withAvatarUrl, getCreatureMetaByOwner, getLocations } from "./settingBeings";
+import {
+  withAvatarUrl,
+  getCreatureMetaByOwner,
+  getStatblockCountsByOwner,
+  getLocations,
+} from "./settingBeings";
 
 export const settingLocationsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -118,6 +123,7 @@ settingLocationsRouter.get("/:id", (req, res) => {
   >(rows: T[]) {
     const ids = rows.map((r) => r.id);
     const creatureMeta = getCreatureMetaByOwner("being", ids);
+    const statblockCounts = getStatblockCountsByOwner("being", ids);
     const communitiesByBeing = new Map<number, { id: number; name: string }[]>();
     if (ids.length > 0) {
       const placeholders = ids.map(() => "?").join(",");
@@ -138,6 +144,7 @@ settingLocationsRouter.get("/:id", (req, res) => {
       ...b,
       communities: communitiesByBeing.get(b.id) ?? [],
       creature_meta: creatureMeta.get(b.id) ?? null,
+      statblock_count: statblockCounts.get(b.id) ?? 0,
       locations: getLocations(b.id),
     }));
   }

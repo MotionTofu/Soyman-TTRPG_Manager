@@ -7,6 +7,7 @@ import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { addToBag } from "../bag";
 import { StatblockList } from "./StatblockList";
+import { StatblockIcon, statblockBadgeTitle } from "./StatblockIcon";
 import { NavIcon } from "./NavIcons";
 import { EffectList } from "./dnd/EffectList";
 import { ProgressionEditor, ProgressionView } from "./dnd/ProgressionEditor";
@@ -1421,6 +1422,11 @@ function EntryNode(props: NodeProps) {
           </span>
         )}
         <span className="comp-name">{entry.name || <em className="muted">Без названия</em>}</span>
+        {isMonster && (entry.statblock_count ?? 0) > 0 && (
+          <span className="comp-badge" title={statblockBadgeTitle(entry.statblock_count ?? 0)}>
+            <StatblockIcon />
+          </span>
+        )}
         {isClass && !!entry.data.short_description && (
           <span className="comp-class-short-desc muted">{String(entry.data.short_description)}</span>
         )}

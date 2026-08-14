@@ -5521,6 +5521,14 @@ details[open] > summary.chevron-summary .chevron-icon,
 .comp-name {
   font-weight: 600;
 }
+/* Значок «есть статблок» рядом с именем монстра — тот же, что в строке
+   Населения (.entity-row-badge), поэтому и выглядит так же. */
+.comp-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
 .comp-level {
   font-size: 0.55em;
   color: var(--muted);

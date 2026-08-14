@@ -6,6 +6,7 @@ import { TagChips } from "./TagChips";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { MentionText } from "./mentions/MentionText";
+import { StatblockIcon, statblockBadgeTitle } from "./StatblockIcon";
 
 // Three overlapping circles — flags a being that belongs to more than one
 // faction, so a list scoped to a single faction still shows it isn't the
@@ -121,6 +122,14 @@ export function BeingEntityRowList<B extends SettingBeing>({
                 {meta && <span className="entity-row-meta muted">{meta}</span>}
               </span>
               <span className="muted">{BEING_CATEGORIES.find((c) => c.key === b.category)?.label}</span>
+              {(b.statblock_count ?? 0) > 0 && (
+                <span
+                  className="entity-row-badge"
+                  title={statblockBadgeTitle(b.statblock_count ?? 0)}
+                >
+                  <StatblockIcon />
+                </span>
+              )}
               {factionCount > 1 && (
                 <span className="entity-row-badge" title="Состоит в нескольких фракциях">
                   <MultiFactionIcon />

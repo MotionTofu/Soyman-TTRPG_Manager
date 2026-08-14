@@ -5,7 +5,12 @@ import path from "path";
 import { db } from "../db/db";
 import { communityFolder, locationFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
-import { withAvatarUrl, getCreatureMetaByOwner, getLocations } from "./settingBeings";
+import {
+  withAvatarUrl,
+  getCreatureMetaByOwner,
+  getStatblockCountsByOwner,
+  getLocations,
+} from "./settingBeings";
 
 export const settingCommunitiesRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -134,6 +139,7 @@ settingCommunitiesRouter.get("/:id", (req, res) => {
     .all(req.params.id) as { id: number; avatar_image_path: string | null; thumbnail_image_path: string | null; tags: string }[];
   const memberIds = memberRows.map((r) => r.id);
   const creatureMeta = getCreatureMetaByOwner("being", memberIds);
+  const statblockCounts = getStatblockCountsByOwner("being", memberIds);
   // Every faction each member belongs to (not just this one) — the "belongs
   // to several factions" badge in the UI compares this count, not just
   // membership in the community being viewed.
@@ -151,6 +157,7 @@ settingCommunitiesRouter.get("/:id", (req, res) => {
   const members = memberRows.map(withAvatarUrl).map((b) => ({
     ...b,
     creature_meta: creatureMeta.get(b.id) ?? null,
+    statblock_count: statblockCounts.get(b.id) ?? 0,
     community_count: communityCountByBeing.get(b.id) ?? 1,
     locations: getLocations(b.id),
   }));

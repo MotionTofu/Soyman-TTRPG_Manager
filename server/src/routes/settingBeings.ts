@@ -68,6 +68,29 @@ export interface CreatureMeta {
   alignment: string;
 }
 
+// Сколько карточек статблока заведено у существа — по этому числу список
+// Населения помечает значком тех, у кого статблок вообще есть. Считаются
+// статблоки любого формата: у существа их может быть несколько (короткий и
+// полный, разные системы), а для пометки важно лишь «хотя бы один».
+// Батчем, как и creature_meta: списки не должны опрашивать базу построчно.
+export function getStatblockCountsByOwner(
+  ownerType: string,
+  ownerIds: (number | string)[]
+): Map<number, number> {
+  const map = new Map<number, number>();
+  if (ownerIds.length === 0) return map;
+  const placeholders = ownerIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT owner_id, COUNT(*) as count FROM statblocks
+       WHERE owner_type = ? AND owner_id IN (${placeholders})
+       GROUP BY owner_id`
+    )
+    .all(ownerType, ...ownerIds) as { owner_id: number; count: number }[];
+  for (const r of rows) map.set(r.owner_id, r.count);
+  return map;
+}
+
 // Small gray "Тип существа, размер, мировоззрение" line shown under a
 // being's name — pulled from its dnd_creature statblock (if any) rather than
 // stored redundantly on setting_beings, so it stays in sync with whatever
@@ -186,11 +209,16 @@ settingBeingsRouter.get("/", (req, res) => {
     "being",
     rows.map((r) => r.id)
   );
+  const statblockCounts = getStatblockCountsByOwner(
+    "being",
+    rows.map((r) => r.id)
+  );
   res.json(
     rows.map((r) => ({
       ...withAvatarUrl(r as { avatar_image_path?: string | null }),
       locations: getLocations(r.id),
       creature_meta: creatureMeta.get(r.id) ?? null,
+      statblock_count: statblockCounts.get(r.id) ?? 0,
     }))
   );
 });
@@ -252,6 +280,8 @@ settingBeingsRouter.get("/:id", (req, res) => {
     compendium_links: getCompendiumLinks(req.params.id),
     locations: getLocations(req.params.id),
     creature_meta: getCreatureMetaByOwner("being", [Number(req.params.id)]).get(Number(req.params.id)) ?? null,
+    statblock_count:
+      getStatblockCountsByOwner("being", [Number(req.params.id)]).get(Number(req.params.id)) ?? 0,
     important_dates: importantDates,
     chapters,
   });

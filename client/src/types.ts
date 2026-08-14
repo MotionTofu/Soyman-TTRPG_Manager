@@ -33,6 +33,8 @@ export interface CompendiumEntry {
   description: string;
   position: number;
   created_at: string;
+  /** Сколько карточек статблока у записи: бестиарий помечает значком те, у которых хотя бы одна. */
+  statblock_count?: number;
 }
 
 export interface StorageProfile {
@@ -1019,6 +1021,8 @@ export interface SettingBeing {
   behavior: string;
   description: string;
   creature_meta: CreatureMeta | null;
+  /** Сколько карточек статблока заведено: списки помечают значком тех, у кого хотя бы одна. */
+  statblock_count?: number;
   tags: string[];
   avatar_image_path: string | null;
   avatar_image_url: string | null;

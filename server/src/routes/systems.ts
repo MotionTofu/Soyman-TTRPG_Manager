@@ -131,8 +131,30 @@ systemsRouter.get("/:id/entries", (req, res) => {
       ? db.prepare("SELECT * FROM compendium_entries WHERE section_id = ? ORDER BY position, id").all(section_id)
       : db.prepare("SELECT * FROM compendium_entries WHERE system_id = ? ORDER BY position, id").all(req.params.id)
   ) as EntryRow[];
-  res.json(rows.map(parseEntry));
+  // Сколько карточек статблока у записи — по этому числу бестиарий помечает
+  // значком монстров, у которых статблок уже разобран, а не лежит прозой в
+  // описании. Одним запросом на весь список, а не по записи.
+  const ids = rows.map((r) => Number(r.id));
+  const counts = statblockCounts(ids);
+  res.json(
+    rows.map((row) => ({ ...parseEntry(row), statblock_count: counts.get(Number(row.id)) ?? 0 }))
+  );
 });
+
+function statblockCounts(entryIds: number[]): Map<number, number> {
+  const map = new Map<number, number>();
+  if (entryIds.length === 0) return map;
+  const placeholders = entryIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT owner_id, COUNT(*) as count FROM statblocks
+       WHERE owner_type = 'compendium_entry' AND owner_id IN (${placeholders})
+       GROUP BY owner_id`
+    )
+    .all(...entryIds) as { owner_id: number; count: number }[];
+  for (const r of rows) map.set(r.owner_id, r.count);
+  return map;
+}
 
 systemsRouter.post("/:id/entries", (req, res) => {
   const { section_id, parent_id, kind, name, level, data, description } = req.body as {
