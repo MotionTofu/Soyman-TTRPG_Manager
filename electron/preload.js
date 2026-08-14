@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
+  // После нативного confirm/alert окно на Windows остаётся без клавиатурного
+  // фокуса, и страница перестаёт принимать ввод до переключения на другое окно
+  // и обратно. Клиент дёргает это сразу после диалога — см.
+  // installNativeDialogFocusFix в client/src/electronApi.ts.
+  restoreFocus: () => ipcRenderer.send("restore-focus"),
   // Returns an unsubscribe function, same shape as a DOM addEventListener
   // cleanup — React effects can call it directly on unmount.
   onUpdateStatus: (callback) => {

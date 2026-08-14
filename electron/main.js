@@ -224,6 +224,17 @@ ipcMain.handle("quit-and-install", () => {
   autoUpdater.quitAndInstall();
 });
 
+// Возврат клавиатурного фокуса после нативного диалога (confirm/alert). На
+// Windows фокус уходит диалогу и обратно webContents уже не возвращается:
+// поля не принимают ввод, пока не переключишься на другое окно и назад.
+// Отсюда и лечение — сделать ровно это, но самим и незаметно.
+ipcMain.on("restore-focus", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  win.focus();
+  event.sender.focus();
+});
+
 async function createWindow() {
   seedIfNeeded();
   require(serverEntry);
