@@ -3,15 +3,17 @@ import { db } from "../db/db";
 
 export const entityRelationsRouter = Router();
 
-// Only these participate in typed relations today (beings, player
-// characters, factions/communities, and compendium monster templates) — see
-// the user's original ask: "личности и фракции". Extending this set later
-// just means adding a row here.
+// Кто может участвовать в именованных отношениях. Изначально это были только
+// «личности и фракции»; локации и артефакты добавлены потому, что мир
+// регулярно требует связей вроде «род владеет замком», «изгнан из города»,
+// «одержим клинком», а выразить их было нечем.
 const ENTITY_TABLES: Record<string, { table: string; nameCol: string }> = {
   being: { table: "setting_beings", nameCol: "name" },
   character: { table: "characters", nameCol: "character_name" },
   community: { table: "setting_communities", nameCol: "name" },
   compendium_entry: { table: "compendium_entries", nameCol: "name" },
+  location: { table: "setting_locations", nameCol: "name" },
+  artifact: { table: "artifacts", nameCol: "name" },
 };
 
 function resolveName(type: string, id: number): string | null {

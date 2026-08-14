@@ -10,6 +10,8 @@ import { MentionsTab } from "../components/MentionsTab";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
+import { RelationsTab } from "../components/RelationsTab";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
@@ -50,6 +52,7 @@ const TABS = [
   "Карта",
   "Вложенные локации",
   "Обитатели",
+  "Отношения",
   "Важные даты",
   "Галерея",
   "Карточка локации",
@@ -305,6 +308,7 @@ export function LocationDetailPage() {
             <h1>{location.name}</h1>
             <EntityTypeChip type="location" />
             {location.kind && <span className="badge tag">{location.kind}</span>}
+            <GraphNeighbourhoodLink type="location" id={location.id} />
           </div>
         </div>
         <div className="entity-header-actions">
@@ -438,6 +442,17 @@ export function LocationDetailPage() {
               <p className="muted">Вложенных локаций пока нет.</p>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === "Отношения" && (
+        <div className="card stack">
+          <RelationsTab
+            entityType="location"
+            entityId={location.id}
+            entityName={location.name}
+            defaultSettingId={location.setting_id}
+          />
         </div>
       )}
 

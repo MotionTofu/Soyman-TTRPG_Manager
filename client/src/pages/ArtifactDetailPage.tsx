@@ -11,9 +11,11 @@ import { ChapterList } from "../components/ChapterList";
 import { useTabState } from "../hooks/useTabState";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
 import { CompendiumEntryPicker } from "../components/MonsterTemplatePicker";
+import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
+import { RelationsTab } from "../components/RelationsTab";
 import type { Artifact, CompendiumLink, SearchResult } from "../types";
 
-const TABS = ["Досье", "Галерея", "Карточка предмета"] as const;
+const TABS = ["Досье", "Отношения", "Галерея", "Карточка предмета"] as const;
 
 export function ArtifactDetailPage() {
   const { id } = useParams();
@@ -87,7 +89,10 @@ export function ArtifactDetailPage() {
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1>{artifact.name}</h1>
+        <div className="row" style={{ alignItems: "center" }}>
+          <h1>{artifact.name}</h1>
+          <GraphNeighbourhoodLink type="artifact" id={artifact.id} />
+        </div>
         <div className="entity-header-actions">
           <button className="danger" onClick={archiveArtifact}>
             Архивировать
@@ -348,6 +353,17 @@ export function ArtifactDetailPage() {
           links={artifact.compendium_links ?? []}
           onChange={refresh}
         />
+      )}
+
+      {tab === "Отношения" && (
+        <div className="card stack">
+          <RelationsTab
+            entityType="artifact"
+            entityId={artifact.id}
+            entityName={artifact.name}
+            defaultSettingId={artifact.setting_id}
+          />
+        </div>
       )}
 
       {tab === "Галерея" && <GalleryTab ownerType="artifact" ownerId={artifactId} />}

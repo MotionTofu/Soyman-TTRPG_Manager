@@ -11,6 +11,7 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { formatImportantDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import type { Character, DateRecurrence } from "../types";
 
 // Досье bundles these as collapsible sub-sections in one tab; the remaining
@@ -182,6 +183,7 @@ export function CharacterDetailPage() {
               {character.character_name}
             </h1>
           )}
+          <GraphNeighbourhoodLink type="character" id={character.id} />
           <button className="danger" onClick={archiveCharacter}>
             Архивировать
           </button>

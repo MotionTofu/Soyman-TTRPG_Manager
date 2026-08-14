@@ -53,6 +53,8 @@ const RELATION_ENDPOINT_TABLE: Record<string, string> = {
   character: "characters",
   community: "setting_communities",
   compendium_entry: "compendium_entries",
+  location: "setting_locations",
+  artifact: "artifacts",
 };
 
 export function sweepOrphans(): number {

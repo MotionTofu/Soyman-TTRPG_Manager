@@ -1100,7 +1100,13 @@ export interface BeingRelation {
 }
 
 export type RelationTone = "positive" | "negative" | "neutral" | "mixed";
-export type RelationEntityType = "being" | "character" | "community" | "compendium_entry";
+export type RelationEntityType =
+  | "being"
+  | "character"
+  | "community"
+  | "compendium_entry"
+  | "location"
+  | "artifact";
 
 // Directional: from_* feels `tone` about to_* — not assumed mutual. The API
 // always returns each row alongside `other_type`/`other_id`/`other_name`,

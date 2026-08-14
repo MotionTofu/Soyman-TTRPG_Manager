@@ -28,6 +28,7 @@ import { EntityWizard } from "../components/entityWizard/EntityWizard";
 import { AdventuresTab } from "../components/AdventuresTab";
 import { CrossLinksCard } from "../components/CrossLinksCard";
 import { RelationGraph } from "../components/RelationGraph";
+import { GraphTypeFilters, SETTING_SCOPED_TYPES } from "../components/GraphTypeFilters";
 import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
 import type { GraphData } from "../graphTypes";
 import { NAMED_BEING_CATEGORIES } from "../beingCategories";
@@ -821,16 +822,37 @@ function ImageSlot({
 // mention-links can connect to them too).
 function SettingGraphTab({ settingId }: { settingId: number }) {
   const [data, setData] = useState<GraphData | null>(null);
+  // Раньше вкладка звала три захардкоженных типа: артефакты, сцены и
+  // приключения сеттинга в его же граф не попадали, и переключить это было
+  // нечем. Теперь тот же отбор, что и на общей странице, но из типов, у
+  // которых внутри сеттинга есть дом.
+  const [activeTypes, setActiveTypes] = useState<Set<string>>(
+    () => new Set(SETTING_SCOPED_TYPES)
+  );
 
   useEffect(() => {
-    api
-      .get<GraphData>(`/links/graph?types=being,community,location&setting_id=${settingId}`)
-      .then(setData);
-  }, [settingId]);
+    const params = new URLSearchParams({
+      types: Array.from(activeTypes).join(","),
+      setting_id: String(settingId),
+    });
+    api.get<GraphData>(`/links/graph?${params.toString()}`).then(setData);
+  }, [settingId, activeTypes]);
 
   return (
     <div className="card stack">
-      <RelationGraph data={data} emptyMessage="Связей между существами и фракциями этого сеттинга пока нет." />
+      <GraphTypeFilters
+        activeTypes={activeTypes}
+        setActiveTypes={setActiveTypes}
+        types={SETTING_SCOPED_TYPES}
+      />
+      <RelationGraph
+        data={data}
+        emptyMessage={
+          activeTypes.size === 0
+            ? "Все типы сняты в фильтрах — отметьте хотя бы один."
+            : "Связей между сущностями этого сеттинга пока нет."
+        }
+      />
     </div>
   );
 }

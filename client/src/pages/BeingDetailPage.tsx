@@ -13,6 +13,7 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatImportantDate } from "../inworldCalendar";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { useTabState } from "../hooks/useTabState";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -269,6 +270,7 @@ export function BeingDetailPage() {
             <div className="row" style={{ alignItems: "center" }}>
               <h1>{being.name}</h1>
               <EntityTypeChip type="being" />
+              <GraphNeighbourhoodLink type="being" id={being.id} />
             </div>
             {being.creature_meta && (
               <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>

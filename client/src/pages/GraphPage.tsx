@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { RelationGraph } from "../components/RelationGraph";
-import { TYPE_LABELS, TYPE_COLORS, type GraphData } from "../graphTypes";
+import { TYPE_LABELS, type GraphData } from "../graphTypes";
+import { GraphTypeFilters } from "../components/GraphTypeFilters";
 import { SectionHeading } from "../components/SectionHeading";
 import type { Campaign, Setting } from "../types";
 
+const DEPTH_OPTIONS = [1, 2, 3];
+
 export function GraphPage() {
   const [data, setData] = useState<GraphData | null>(null);
+  // Окрестность одной сущности живёт в адресе, а не в состоянии: на неё ведут
+  // ссылки «Показать в графе» с карточек, и такую ссылку можно сохранить.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focus = searchParams.get("focus");
+  const depth = Number(searchParams.get("depth")) || 2;
   const [activeTypes, setActiveTypes] = useState<Set<string>>(
     () => new Set(Object.keys(TYPE_LABELS))
   );
@@ -14,7 +23,6 @@ export function GraphPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [settingId, setSettingId] = useState<number | "">("");
   const [campaignId, setCampaignId] = useState<number | "">("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     api.get<Setting[]>("/settings").then(setSettings);
@@ -26,17 +34,12 @@ export function GraphPage() {
     const params = new URLSearchParams({ types });
     if (campaignId) params.set("campaign_id", String(campaignId));
     else if (settingId) params.set("setting_id", String(settingId));
+    if (focus) {
+      params.set("focus", focus);
+      params.set("depth", String(depth));
+    }
     api.get<GraphData>(`/links/graph?${params.toString()}`).then(setData);
-  }, [activeTypes, settingId, campaignId]);
-
-  function toggleType(key: string) {
-    setActiveTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
+  }, [activeTypes, settingId, campaignId, focus, depth]);
 
   // Campaigns belong to a setting, so narrowing by campaign only makes sense
   // within the currently chosen setting (or "any" if none chosen yet).
@@ -51,6 +54,27 @@ export function GraphPage() {
         Визуализация всех связей между сущностями. Тащите фон, чтобы перемещаться, крутите колесо, чтобы
         приближать. Клик по узлу — выделить и приблизить его; поиск — быстро найти и перейти к сущности.
       </p>
+      {focus && (
+        <div className="row relation-graph-focus-panel">
+          <strong>
+            Окрестность: {data?.nodes.find((n) => n.key === focus)?.title ?? "выбранная сущность"}
+          </strong>
+          <span className="muted">шагов от центра:</span>
+          {DEPTH_OPTIONS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={depth === d ? "active-sort" : ""}
+              onClick={() => setSearchParams({ focus, depth: String(d) })}
+            >
+              {d}
+            </button>
+          ))}
+          <button type="button" onClick={() => setSearchParams({})}>
+            Показать весь граф
+          </button>
+        </div>
+      )}
       <div className="row">
         <label className="row" style={{ gap: 6 }}>
           Сеттинг
@@ -84,37 +108,7 @@ export function GraphPage() {
           </select>
         </label>
       </div>
-      <div className="row">
-        <button
-          type="button"
-          className={filtersOpen ? "active-sort" : ""}
-          onClick={() => setFiltersOpen((v) => !v)}
-        >
-          Фильтры
-        </button>
-      </div>
-      {filtersOpen && (
-        <>
-          <div className="row">
-            <button onClick={() => setActiveTypes(new Set(Object.keys(TYPE_LABELS)))}>
-              Выбрать всё
-            </button>
-            <button onClick={() => setActiveTypes(new Set())}>Снять все</button>
-          </div>
-          <div className="filters">
-            {Object.entries(TYPE_LABELS).map(([key, label]) => (
-              <label key={key}>
-                <input
-                  type="checkbox"
-                  checked={activeTypes.has(key)}
-                  onChange={() => toggleType(key)}
-                />
-                <span style={{ color: TYPE_COLORS[key] }}>●</span> {label}
-              </label>
-            ))}
-          </div>
-        </>
-      )}
+      <GraphTypeFilters activeTypes={activeTypes} setActiveTypes={setActiveTypes} />
       <RelationGraph
         data={data}
         emptyMessage={

@@ -10,7 +10,7 @@ import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../r
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import type { EntityRelation, EntityRelationsResponse, RelationEntityType, RelationTone, SearchResult } from "../types";
 
-const PICK_TYPES = ["being", "character", "community", "compendium_entry"];
+const PICK_TYPES = ["being", "character", "community", "compendium_entry", "location", "artifact"];
 
 type SortMode = "tone" | "alpha" | "label";
 const SORT_OPTIONS: { key: SortMode; label: string }[] = [
@@ -114,10 +114,14 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
         `/setting-beings?setting_id=${defaultSettingId}`
       ),
       api.get<{ id: number; name: string }[]>(`/setting-communities?setting_id=${defaultSettingId}`),
-    ]).then(([beings, communities]) =>
+      api.get<{ id: number; name: string }[]>(`/setting-locations?setting_id=${defaultSettingId}`),
+      api.get<{ id: number; name: string }[]>(`/artifacts?setting_id=${defaultSettingId}`),
+    ]).then(([beings, communities, locations, artifacts]) =>
       setSettingOptions([
         ...beings.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
         ...communities.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
+        ...locations.map((l) => ({ type: "location", id: l.id, title: l.name } as SearchResult)),
+        ...artifacts.map((a) => ({ type: "artifact", id: a.id, title: a.name } as SearchResult)),
       ])
     );
   }, [listOpen, settingOptions, defaultSettingId]);
@@ -337,7 +341,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     <div className="stack">
       <div className="row" style={{ position: "relative" }}>
         <input
-          placeholder="Найти существо, персонажа или фракцию…"
+          placeholder="Найти существо, персонажа, фракцию, место или предмет…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -362,7 +366,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
         onDrop={handleDrop}
       >
         <span className="muted">
-          Или перетащите сюда существо, персонажа или фракцию из поиска — они добавятся к выбранным
+          Или перетащите сюда сущность из поиска — она добавится к выбранным
         </span>
       </div>
 

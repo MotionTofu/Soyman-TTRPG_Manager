@@ -30,11 +30,26 @@ interface GraphNode {
   id: number;
   title: string;
 }
+// Вид связи. До сих пор клиент различал только «с тоном» и «без тона», и
+// членство, обитание, вложенность, участие в сцене и упоминание рисовались
+// одной и той же серой линией — на тысяче рёбер это главная потеря смысла.
+type EdgeKind = "relation" | "membership" | "habitat" | "nesting" | "scene" | "mention" | "link";
+
 interface GraphEdge {
   from: string;
   to: string;
   section: string | null;
   tone: string | null; // positive | negative | neutral | mixed | null (plain generic_links edge)
+  kind: EdgeKind;
+}
+
+// generic_links свалены в одну таблицу, и вид связи там читается только по
+// section: у сцен свои префиксы, у меншенов своё значение, остальное —
+// ручные связи из drop-zone'ов.
+function linkKind(section: string | null): EdgeKind {
+  if (section === "mention") return "mention";
+  if (section && section.startsWith("scene_")) return "scene";
+  return "link";
 }
 
 // Node types a `setting_id` graph filter can resolve down to. Types not
@@ -107,10 +122,12 @@ function buildScope(campaignId?: string, settingId?: string): Map<string, ScopeQ
 }
 
 linksRouter.get("/graph", (req, res) => {
-  const { types, setting_id, campaign_id } = req.query as {
+  const { types, setting_id, campaign_id, focus, depth } = req.query as {
     types?: string;
     setting_id?: string;
     campaign_id?: string;
+    focus?: string; // "being:416" — центр окрестности
+    depth?: string; // сколько шагов от центра, 1..3
   };
   // Пустая строка — это «типы не выбраны», а не «фильтра нет»: снятые
   // галочки должны давать пустой граф, а не молча весь.
@@ -171,23 +188,26 @@ linksRouter.get("/graph", (req, res) => {
     toType: string,
     toId: number,
     section: string | null,
-    tone: string | null
+    tone: string | null,
+    kind: EdgeKind
   ) => {
     const from = track(fromType, fromId);
     const to = track(toType, toId);
-    if (from && to && from !== to) edges.push({ from, to, section, tone });
+    if (from && to && from !== to) edges.push({ from, to, section, tone, kind });
   };
 
-  for (const l of rawLinks) connect(l.from_type, l.from_id, l.to_type, l.to_id, l.section, null);
+  for (const l of rawLinks)
+    connect(l.from_type, l.from_id, l.to_type, l.to_id, l.section, null, linkKind(l.section));
   for (const r of rawRelations)
-    connect(r.from_type, r.from_id, r.to_type, r.to_id, r.label || null, r.tone);
+    connect(r.from_type, r.from_id, r.to_type, r.to_id, r.label || null, r.tone, "relation");
   for (const m of rawMemberships)
-    connect("community", m.community_id, "being", m.being_id, "участник", null);
-  for (const h of rawHabitats) connect("location", h.location_id, "being", h.being_id, "обитает", null);
+    connect("community", m.community_id, "being", m.being_id, "участник", null, "membership");
+  for (const h of rawHabitats)
+    connect("location", h.location_id, "being", h.being_id, "обитает", null, "habitat");
   for (const n of rawLocationNesting)
-    connect("location", n.parent_id, "location", n.id, "вложенная локация", null);
+    connect("location", n.parent_id, "location", n.id, "вложенная локация", null, "nesting");
   for (const c of rawCommunityLocations)
-    connect("location", c.location_id, "community", c.community_id, "базируется", null);
+    connect("location", c.location_id, "community", c.community_id, "базируется", null, "habitat");
 
   const byType = new Map<string, number[]>();
   for (const { type, id } of wanted.values()) {
@@ -224,10 +244,71 @@ linksRouter.get("/graph", (req, res) => {
   }
 
   const nodeKeys = new Set(nodes.map((n) => n.key));
-  res.json({
-    nodes,
-    edges: edges.filter((e) => nodeKeys.has(e.from) && nodeKeys.has(e.to)),
-  });
+  let visibleEdges = edges.filter((e) => nodeKeys.has(e.from) && nodeKeys.has(e.to));
+
+  // Окрестность одного узла: за столом нужен не мир целиком, а «кто завязан
+  // на этого» — обход в ширину на заданную глубину по уже собранным рёбрам.
+  if (focus) {
+    const neighbours = new Map<string, string[]>();
+    const link = (a: string, b: string) => {
+      const list = neighbours.get(a);
+      if (list) list.push(b);
+      else neighbours.set(a, [b]);
+    };
+    for (const e of visibleEdges) {
+      link(e.from, e.to);
+      link(e.to, e.from);
+    }
+    const maxDepth = Math.min(3, Math.max(1, Number(depth) || 1));
+    const reached = new Set<string>([focus]);
+    let frontier = [focus];
+    for (let step = 0; step < maxDepth && frontier.length > 0; step++) {
+      const next: string[] = [];
+      for (const key of frontier) {
+        for (const other of neighbours.get(key) ?? []) {
+          if (reached.has(other)) continue;
+          reached.add(other);
+          next.push(other);
+        }
+      }
+      frontier = next;
+    }
+    nodes = nodes.filter((n) => reached.has(n.key));
+    visibleEdges = visibleEdges.filter((e) => reached.has(e.from) && reached.has(e.to));
+  }
+
+  // Сущности вообще без связей: граф строится от рёбер и их не показывает, а
+  // «что у меня висит в воздухе» — как раз вопрос, ради которого в граф и
+  // заходят при подготовке. Отдаются отдельным списком, а не узлами на холсте:
+  // сотня одиночек по краю карты сделала бы её нечитаемой. Только в пределах
+  // области — по всей базе это 1800 записей компендиума и прочий шум.
+  const isolated: GraphNode[] = [];
+  if (scopeQueries && !focus) {
+    const connected = new Set<string>();
+    for (const e of visibleEdges) {
+      connected.add(e.from);
+      connected.add(e.to);
+    }
+    for (const [type, query] of scopeQueries) {
+      if (!NODE_TABLES[type]) continue;
+      if (allowedTypes && !allowedTypes.has(type)) continue;
+      const { table, nameCol, archivable = true } = NODE_TABLES[type];
+      const rows = db
+        .prepare(
+          `SELECT id, ${nameCol} as name FROM ${table} WHERE id IN (${query.sql})` +
+            (archivable ? " AND archived_at IS NULL" : "")
+        )
+        .all(query.param) as { id: number; name: string }[];
+      for (const r of rows) {
+        const key = `${type}:${r.id}`;
+        if (connected.has(key)) continue;
+        isolated.push({ key, type, id: r.id, title: r.name });
+      }
+    }
+    isolated.sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
+  }
+
+  res.json({ nodes, edges: visibleEdges, isolated });
 });
 
 // Sessions whose Задумка/Основные события text @-mentions this entity —

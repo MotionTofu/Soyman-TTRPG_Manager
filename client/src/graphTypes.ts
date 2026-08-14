@@ -4,16 +4,56 @@ export interface GraphNode {
   id: number;
   title: string;
 }
+export type EdgeKind =
+  | "relation"
+  | "membership"
+  | "habitat"
+  | "nesting"
+  | "scene"
+  | "mention"
+  | "link";
+
 export interface GraphEdge {
   from: string;
   to: string;
   section: string | null;
   tone: string | null;
+  kind: EdgeKind;
 }
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  // Сущности области без единой связи в текущем срезе — на холст не
+  // выкладываются, показываются списком (см. RelationGraph).
+  isolated?: GraphNode[];
 }
+
+// Вид связи решает, как она выглядит и видна ли по умолчанию. Упоминания
+// выключены: их больше всех (каждый текст, назвавший кого-то по имени, даёт
+// ребро), и они хоронят под собой отношения и структуру.
+export const EDGE_KINDS: {
+  key: EdgeKind;
+  label: string;
+  defaultOn: boolean;
+  width: number;
+  dash?: string;
+}[] = [
+  { key: "relation", label: "Отношения", defaultOn: true, width: 2 },
+  { key: "membership", label: "Членство", defaultOn: true, width: 1.5 },
+  { key: "habitat", label: "Расположение", defaultOn: true, width: 1.5 },
+  { key: "nesting", label: "Вложенность мест", defaultOn: true, width: 1, dash: "6 3" },
+  { key: "scene", label: "Участие в сценах", defaultOn: true, width: 1, dash: "2 3" },
+  { key: "link", label: "Ручные связи", defaultOn: true, width: 1 },
+  { key: "mention", label: "Упоминания в тексте", defaultOn: false, width: 1, dash: "1 4" },
+];
+
+export const EDGE_KIND_STYLE = Object.fromEntries(
+  EDGE_KINDS.map((k) => [k.key, k])
+) as Record<EdgeKind, (typeof EDGE_KINDS)[number]>;
+
+export const DEFAULT_EDGE_KINDS = new Set<EdgeKind>(
+  EDGE_KINDS.filter((k) => k.defaultOn).map((k) => k.key)
+);
 
 export const TYPE_LABELS: Record<string, string> = {
   campaign: "Кампании",

@@ -9,6 +9,7 @@ import { LinkDropZone, SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
@@ -223,6 +224,7 @@ export function CommunityDetailPage() {
             <div className="row" style={{ alignItems: "center" }}>
               <h1>{community.name}</h1>
               <EntityTypeChip type="community" />
+              <GraphNeighbourhoodLink type="community" id={community.id} />
             </div>
             <div className="row" style={{ marginTop: 4 }}>
               <TagChips tags={community.tags} onChange={saveTags} />

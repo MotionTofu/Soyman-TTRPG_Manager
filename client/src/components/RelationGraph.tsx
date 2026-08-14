@@ -3,6 +3,9 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { NavIcon } from "./NavIcons";
 import {
+  DEFAULT_EDGE_KINDS,
+  EDGE_KINDS,
+  EDGE_KIND_STYLE,
   GRAPH_HEIGHT,
   GRAPH_WIDTH,
   TYPE_COLORS,
@@ -10,6 +13,7 @@ import {
   TYPE_ROUTES,
   canvasSizeFor,
   simulateGraph,
+  type EdgeKind,
   type GraphData,
   type GraphNode,
   type NodePositions,
@@ -84,10 +88,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
-  // Off by default: @-mention links are usually the most numerous edge type
-  // (every text field that name-drops something creates one) and quickly
-  // bury the more meaningful relation/membership/habitat edges.
-  const [showMentions, setShowMentions] = useState(false);
+  // Какие виды связей показывать. Раньше здесь был один чекбокс «упоминания»,
+  // а всё остальное — членство, обитание, вложенность, сцены — рисовалось
+  // одинаковой серой линией и не отключалось.
+  const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
   const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
     null
   );
@@ -244,10 +248,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
 
   if (!data) return <p className="muted">Загрузка…</p>;
 
-  // @-mentions are a generic_links edge tagged section === "mention" —
-  // filtered out by default (see showMentions above), everything else
-  // (relations, "участник", "обитает", other generic_links sections) stays.
-  const visibleEdges = data.edges.filter((e) => showMentions || e.section !== "mention");
+  const visibleEdges = data.edges.filter((e) => activeKinds.has(e.kind));
 
   // Dimming only ever reacts to a pinned focus, never to hover — hover-driven
   // dimming made the graph flicker as the cursor passed over nodes.
@@ -327,6 +328,11 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
     </div>
   );
 
+  // Сколько рёбер каждого вида есть в этих данных — галочка без числа не
+  // говорит, стоит ли её вообще трогать.
+  const kindCounts = new Map<EdgeKind, number>();
+  for (const e of data.edges) kindCounts.set(e.kind, (kindCounts.get(e.kind) ?? 0) + 1);
+
   const legend = (
     <div className="relation-graph-legend">
       {RELATION_TONES.map((t) => (
@@ -343,15 +349,65 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
           {t.label}
         </span>
       ))}
-      <label className="row" style={{ gap: 4 }}>
-        <input
-          type="checkbox"
-          checked={showMentions}
-          onChange={(e) => setShowMentions(e.target.checked)}
-        />
-        Показывать упоминания
-      </label>
+      <span className="relation-graph-legend-sep" />
+      {EDGE_KINDS.map((k) => {
+        const count = kindCounts.get(k.key) ?? 0;
+        return (
+          <label key={k.key} className="row" style={{ gap: 4, opacity: count ? 1 : 0.45 }}>
+            <input
+              type="checkbox"
+              checked={activeKinds.has(k.key)}
+              disabled={count === 0}
+              onChange={() =>
+                setActiveKinds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(k.key)) next.delete(k.key);
+                  else next.add(k.key);
+                  return next;
+                })
+              }
+            />
+            <svg width="18" height="8" aria-hidden>
+              <line
+                x1="1"
+                y1="4"
+                x2="17"
+                y2="4"
+                stroke="var(--ink)"
+                strokeWidth={k.width}
+                strokeDasharray={k.dash}
+              />
+            </svg>
+            {k.label} <span className="muted">{count}</span>
+          </label>
+        );
+      })}
     </div>
+  );
+
+  const isolated = data.isolated ?? [];
+  const isolatedPanel = isolated.length > 0 && (
+    <details className="card relation-graph-isolated">
+      <summary>
+        Ни одной связи в этом срезе: {isolated.length}
+      </summary>
+      <div className="stack" style={{ marginTop: 8 }}>
+        <span className="muted">
+          Эти сущности есть в выбранной области, но ни с чем не соединены — их не видно на холсте.
+        </span>
+        <div className="relation-graph-isolated-list">
+          {isolated.map((n) => {
+            const route = TYPE_ROUTES[n.type];
+            return (
+              <span key={n.key} className="row" style={{ gap: 4 }}>
+                <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
+                {route ? <Link to={`${route}/${n.id}`}>{n.title}</Link> : n.title}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </details>
   );
 
   const graphBody =
@@ -376,6 +432,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
               const dim = neighborKeys && !neighborKeys.has(e.from) && !neighborKeys.has(e.to);
               const tone = e.tone as RelationTone | null;
               const color = tone ? RELATION_TONE_COLORS[tone] : "var(--line)";
+              const kindStyle = EDGE_KIND_STYLE[e.kind];
               const fromTitle = nodesByKey.get(e.from)?.title ?? "?";
               const toTitle = nodesByKey.get(e.to)?.title ?? "?";
               const relationLabel = e.section || (tone ? RELATION_TONE_LABELS[tone] : null);
@@ -423,7 +480,8 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
                     y2={by}
                     stroke={color}
                     strokeOpacity={dim ? 0.12 : tone ? 0.75 : 0.6}
-                    strokeWidth={tone ? 2 : 1}
+                    strokeWidth={kindStyle?.width ?? 1}
+                    strokeDasharray={kindStyle?.dash}
                   >
                     <title>{tooltip}</title>
                   </line>
@@ -508,6 +566,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
       {toolbar}
       {legend}
       {graphBody}
+      {isolatedPanel}
     </div>
   );
 }
