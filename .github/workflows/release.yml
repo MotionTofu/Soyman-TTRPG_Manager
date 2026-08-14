@@ -25,9 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22, не 20: better-sqlite3 больше не публикует готовые бинарники
+      # под ABI ноды 20, а сборка из исходников на раннере падает — node-gyp,
+      # который тянет @electron/rebuild, не опознаёт Visual Studio 2026.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install root dependencies
         run: npm ci
