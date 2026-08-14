@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { Breadcrumbs } from "../components/Breadcrumbs";
@@ -352,7 +352,7 @@ function ChaptersAndScenes({
     onChange();
   }
 
-  function renderGroup(title: string, groupArcId: number, scenes: StoryScene[], controls?: JSX.Element) {
+  function renderGroup(title: string, groupArcId: number, scenes: StoryScene[], controls?: ReactNode) {
     const isCollapsed = collapsed.includes(groupArcId);
     return (
       <div className="card stack" key={groupArcId}>
