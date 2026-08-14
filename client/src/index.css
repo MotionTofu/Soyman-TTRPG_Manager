@@ -4953,6 +4953,12 @@ input.litm-theme-title {
 .relation-graph-legend label:has(input:disabled) {
   cursor: default;
 }
+.relation-graph-path-chain {
+  font-size: 13px;
+  max-width: 60ch;
+  overflow-x: auto;
+  white-space: nowrap;
+}
 .relation-graph-isolated summary {
   cursor: pointer;
 }

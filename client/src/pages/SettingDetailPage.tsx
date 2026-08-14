@@ -847,6 +847,7 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
       />
       <RelationGraph
         data={data}
+        layoutKey={`setting:${settingId}`}
         emptyMessage={
           activeTypes.size === 0
             ? "Все типы сняты в фильтрах — отметьте хотя бы один."

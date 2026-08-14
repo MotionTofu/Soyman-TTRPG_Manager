@@ -6,6 +6,10 @@ import {
   DEFAULT_EDGE_KINDS,
   EDGE_KINDS,
   EDGE_KIND_STYLE,
+  GROUP_MODES,
+  findPath,
+  foldGroups,
+  type GroupMode,
   GRAPH_HEIGHT,
   GRAPH_WIDTH,
   TYPE_COLORS,
@@ -75,6 +79,24 @@ interface Props {
   data: GraphData | null;
   height?: number;
   emptyMessage?: string;
+  // Под каким ключом хранить расставленные руками узлы. Разные графы —
+  // разные карты: у сеттинга своя, у общей страницы своя.
+  layoutKey?: string;
+}
+
+interface ManualLayout {
+  [nodeKey: string]: { x: number; y: number };
+}
+
+const LAYOUT_STORE_PREFIX = "rpgManagerGraphLayout:";
+
+function loadLayout(key: string | undefined): ManualLayout {
+  if (!key) return {};
+  try {
+    return JSON.parse(localStorage.getItem(LAYOUT_STORE_PREFIX + key) || "{}") as ManualLayout;
+  } catch {
+    return {};
+  }
 }
 
 // Reusable pan/zoom force-directed graph — the "corkboard with pins and
@@ -82,12 +104,22 @@ interface Props {
 // (dims everyone else and centers/zooms on it), search box to jump straight
 // to a node without hunting for it visually. Used both by the global
 // "Граф связей" page and a setting-scoped graph tab.
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ zoom: 1, panX: 0, panY: 0 });
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
+  // Расставленное руками переживает перезагрузку: карта мира, которую мастер
+  // разложил под себя, — это его работа, а не временное состояние экрана.
+  const [manual, setManual] = useState<ManualLayout>(() => loadLayout(layoutKey));
+  const [groupMode, setGroupMode] = useState<GroupMode>("none");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+  // Концы прокладываемого пути: «как этот связан с той фракцией».
+  const [pathFrom, setPathFrom] = useState<string | null>(null);
+  const [pathTo, setPathTo] = useState<string | null>(null);
+  const dragState = useRef<{ key: string; moved: boolean } | null>(null);
+  const dragOrigin = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
   // Какие виды связей показывать. Раньше здесь был один чекбокс «упоминания»,
   // а всё остальное — членство, обитание, вложенность, сцены — рисовалось
   // одинаковой серой линией и не отключалось.
@@ -106,26 +138,49 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
   // булавками, а не новая карта, поэтому уцелевшие узлы стартуют оттуда, где
   // их только что видели, и доводятся коротким прогоном.
   const lastPositions = useRef<NodePositions | null>(null);
-  const positions = useMemo(() => {
+  const simulated = useMemo(() => {
     if (!data) return new Map() as NodePositions;
+    // Ручные позиции идут и в затравку, и в список закреплённых: узел стоит
+    // там, куда его поставили, а остальные раскладываются вокруг него.
+    const seed: NodePositions = new Map(lastPositions.current ?? []);
+    for (const [key, p] of Object.entries(manual)) seed.set(key, { ...p, vx: 0, vy: 0 });
     const next = simulateGraph(
       data.nodes,
       data.edges,
       canvasSize.width,
       canvasSize.height,
-      lastPositions.current ?? undefined
+      seed.size > 0 ? seed : undefined,
+      new Set(Object.keys(manual))
     );
     lastPositions.current = next;
     return next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  // Позиции для отрисовки: расставленное руками поверх посчитанного. Держится
+  // отдельно от simulated, чтобы перетаскивание не гоняло раскладку заново.
+  const positions = useMemo(() => {
+    const merged: NodePositions = new Map(simulated);
+    for (const [key, p] of Object.entries(manual)) {
+      if (merged.has(key)) merged.set(key, { ...p, vx: 0, vy: 0 });
+    }
+    return merged;
+  }, [simulated, manual]);
+
   // New graph data (e.g. a filter changed) invalidates any pinned focus and
   // resets the view — the previously-focused node may no longer exist here.
   useEffect(() => {
     setFocusedKey(null);
+    setPathFrom(null);
+    setPathTo(null);
     setView({ zoom: 1, panX: 0, panY: 0 });
   }, [data]);
+
+  useEffect(() => {
+    if (!layoutKey) return;
+    if (Object.keys(manual).length === 0) localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
+    else localStorage.setItem(LAYOUT_STORE_PREFIX + layoutKey, JSON.stringify(manual));
+  }, [manual, layoutKey]);
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -179,6 +234,11 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
     setFocusedKey(null);
   }
 
+  function pickPathTo(key: string) {
+    setPathTo(key);
+    setQuery("");
+  }
+
   function focusNode(key: string) {
     const p = positions.get(key);
     if (!p) return;
@@ -190,7 +250,19 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
   }
 
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest(".relation-graph-node")) return;
+    const nodeEl = (e.target as HTMLElement).closest(".relation-graph-node");
+    if (nodeEl) {
+      // Тащат узел, а не фон: запоминаем, откуда он поехал, и ловим указатель
+      // на обёртке — она же принимает pointermove и для панорамирования.
+      const key = nodeEl.getAttribute("data-key");
+      const start = key ? positions.get(key) : null;
+      if (!key || !start) return;
+      e.preventDefault();
+      dragState.current = { key, moved: false };
+      dragOrigin.current = { x: start.x, y: start.y, clientX: e.clientX, clientY: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     // Without this, dragging across the SVG's node-label <text> elements
     // triggers the browser's native text-selection (a blue-highlight drag
     // select), which fires even though the wrap has user-select: none —
@@ -202,6 +274,27 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
   }
 
   function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (dragState.current && dragOrigin.current && wrapRef.current) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      // Экранные пиксели -> единицы холста (svg вписан по ширине) -> мировые
+      // координаты (внутри <g> всё ещё умножено на зум).
+      const scale = (rect.width / canvasSize.width) * view.zoom;
+      const dx = (e.clientX - dragOrigin.current.clientX) / scale;
+      const dy = (e.clientY - dragOrigin.current.clientY) / scale;
+      // Дрожание руки на клике — не перестановка: пока порог не пройден, узел
+      // не попадает в ручную раскладку и не закрепляется в ней.
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.current.moved = true;
+      if (!dragState.current.moved) return;
+      const key = dragState.current.key;
+      setManual((prev) => ({
+        ...prev,
+        [key]: {
+          x: Math.max(30, Math.min(canvasSize.width - 30, dragOrigin.current!.x + dx)),
+          y: Math.max(30, Math.min(canvasSize.height - 30, dragOrigin.current!.y + dy)),
+        },
+      }));
+      return;
+    }
     if (!panState.current || !wrapRef.current) return;
     const rect = wrapRef.current.getBoundingClientRect();
     const scale = rect.width / canvasSize.width;
@@ -219,6 +312,14 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
   }
 
   function handlePointerUp() {
+    if (dragState.current) {
+      // Тот же флаг, что и для панорамирования: он гасит клик-фокус, который
+      // иначе сработал бы в конце перетаскивания.
+      if (dragState.current.moved) justPannedRef.current = true;
+      dragState.current = null;
+      dragOrigin.current = null;
+      return;
+    }
     if (panState.current?.moved) justPannedRef.current = true;
     panState.current = null;
   }
@@ -231,9 +332,24 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
     setFocusedKey(null);
   }
 
-  function handleNodeClick(n: GraphNode) {
+  function handleNodeClick(n: GraphNode, isFoldedGroup = false) {
     if (justPannedRef.current) {
       justPannedRef.current = false;
+      return;
+    }
+    // Свёрнутая группа по клику раскрывается — это и есть способ посмотреть,
+    // кто внутри, не разворачивая всю карту.
+    if (isFoldedGroup) {
+      setExpandedGroups((prev) => new Set(prev).add(n.key));
+      setFocusedKey(n.key);
+      return;
+    }
+    if (expandedGroups.has(n.key)) {
+      setExpandedGroups((prev) => {
+        const next = new Set(prev);
+        next.delete(n.key);
+        return next;
+      });
       return;
     }
     if (focusedKey === n.key) setFocusedKey(null);
@@ -248,7 +364,18 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
 
   if (!data) return <p className="muted">Загрузка…</p>;
 
-  const visibleEdges = data.edges.filter((e) => activeKinds.has(e.kind));
+  const kindEdges = data.edges.filter((e) => activeKinds.has(e.kind));
+  // Свёртка идёт после отбора по видам: если членство скрыто, группировать по
+  // фракциям не по чему, и это честнее, чем считать по невидимым связям.
+  const grouped = foldGroups(data.nodes, kindEdges, groupMode, expandedGroups);
+  const visibleNodes = grouped.nodes;
+  const visibleEdges = grouped.edges;
+
+  // Путь между двумя выбранными узлами — по тем же видимым связям.
+  const path =
+    pathFrom && pathTo ? findPath(visibleEdges, pathFrom, pathTo) : null;
+  const pathKeys = path ? new Set(path.keys) : null;
+  const pathEdges = path ? new Set(path.edges) : null;
 
   // Dimming only ever reacts to a pinned focus, never to hover — hover-driven
   // dimming made the graph flicker as the cursor passed over nodes.
@@ -262,6 +389,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
 
   const focusedNode = focusedKey ? data.nodes.find((n) => n.key === focusedKey) : null;
   const nodesByKey = new Map(data.nodes.map((n) => [n.key, n]));
+  // Искать имеет смысл только среди нарисованного: свёрнутый внутрь группы
+  // узел найдётся, но прыгать будет некуда.
+  const visibleKeys = new Set(visibleNodes.map((n) => n.key));
+  const shownMatches = searchMatches.filter((n) => visibleKeys.has(n.key));
   const pairCounts = new Map<string, number>();
   for (const e of visibleEdges) {
     const k = pairKey(e.from, e.to);
@@ -274,14 +405,18 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
     <div className="row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
       <div className="row" style={{ position: "relative" }}>
         <input
-          placeholder="Найти сущность…"
+          placeholder={pathFrom && !pathTo ? "…и до кого прокладывать путь" : "Найти сущность…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {searchMatches.length > 0 && (
+        {shownMatches.length > 0 && (
           <div className="entity-search-results">
-            {searchMatches.map((n) => (
-              <div key={n.key} className="entity-search-item" onClick={() => focusNode(n.key)}>
+            {shownMatches.map((n) => (
+              <div
+                key={n.key}
+                className="entity-search-item"
+                onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key))}
+              >
                 <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
                 {n.title}
               </div>
@@ -289,6 +424,16 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
           </div>
         )}
       </div>
+      <label className="row" style={{ gap: 6 }}>
+        Группировать
+        <select value={groupMode} onChange={(e) => setGroupMode(e.target.value as GroupMode)}>
+          {GROUP_MODES.map((m) => (
+            <option key={m.key} value={m.key}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <button type="button" onClick={() => zoomBy(1.3)} title="Приблизить">
         <NavIcon name="plus" />
       </button>
@@ -298,6 +443,15 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
       <button type="button" onClick={resetView}>
         Сбросить вид ({Math.round(view.zoom * 100)}%)
       </button>
+      {Object.keys(manual).length > 0 && (
+        <button
+          type="button"
+          onClick={() => setManual({})}
+          title="Вернуть все узлы туда, куда их кладёт автоматическая раскладка"
+        >
+          Сбросить свою раскладку ({Object.keys(manual).length})
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setFullscreen((v) => !v)}
@@ -320,8 +474,53 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
           {TYPE_ROUTES[focusedNode.type] && (
             <Link to={`${TYPE_ROUTES[focusedNode.type]}/${focusedNode.id}`}>Открыть страницу →</Link>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              setPathFrom(focusedNode.key);
+              setPathTo(null);
+              setQuery("");
+            }}
+            title="Проложить цепочку от этой сущности до другой"
+          >
+            Путь отсюда…
+          </button>
           <button type="button" onClick={() => setFocusedKey(null)}>
             Снять фокус
+          </button>
+        </div>
+      )}
+      {pathFrom && (
+        <div className="row relation-graph-focus-panel">
+          <strong>Путь:</strong>
+          <span>{nodesByKey.get(pathFrom)?.title ?? "?"}</span>
+          {!pathTo && <span className="muted">выберите вторую сущность в поиске слева</span>}
+          {pathTo && !path && (
+            <span className="muted">
+              связи между ними в этом срезе нет — попробуйте включить больше видов связей
+            </span>
+          )}
+          {path && (
+            <span className="relation-graph-path-chain">
+              {path.keys.slice(1).map((key, i) => (
+                <span key={key}>
+                  {" ⟶ "}
+                  {path.edges[i]?.section && (
+                    <span className="muted">[{path.edges[i].section}] </span>
+                  )}
+                  {nodesByKey.get(key)?.title ?? "?"}
+                </span>
+              ))}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setPathFrom(null);
+              setPathTo(null);
+            }}
+          >
+            Сбросить путь
           </button>
         </div>
       )}
@@ -467,7 +666,13 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
               // renders upside down — readability matters more than the
               // label always pointing the same way as the arrows.
               const labelAngle = angle > 90 || angle < -90 ? angle + 180 : angle;
-              const showLabel = focusedKey && (e.from === focusedKey || e.to === focusedKey) && relationLabel;
+              const onPath = pathEdges?.has(e) ?? false;
+              // В режиме пути всё, что не цепочка, уходит на задний план —
+              // иначе саму цепочку в тысяче линий не разглядеть.
+              const offPath = pathKeys != null && !onPath;
+              const showLabel =
+                (onPath || (focusedKey && (e.from === focusedKey || e.to === focusedKey))) &&
+                relationLabel;
               const midX = (ax + bx) / 2;
               const midY = (ay + by) / 2;
 
@@ -478,10 +683,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
                     y1={ay}
                     x2={bx}
                     y2={by}
-                    stroke={color}
-                    strokeOpacity={dim ? 0.12 : tone ? 0.75 : 0.6}
-                    strokeWidth={kindStyle?.width ?? 1}
-                    strokeDasharray={kindStyle?.dash}
+                    stroke={onPath ? "var(--accent, #c2683f)" : color}
+                    strokeOpacity={offPath ? 0.08 : dim ? 0.12 : onPath ? 1 : tone ? 0.75 : 0.6}
+                    strokeWidth={onPath ? 3 : kindStyle?.width ?? 1}
+                    strokeDasharray={onPath ? undefined : kindStyle?.dash}
                   >
                     <title>{tooltip}</title>
                   </line>
@@ -514,32 +719,49 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
                 </g>
               );
             })}
-            {data.nodes.map((n) => {
+            {visibleNodes.map((n) => {
               const p = positions.get(n.key);
               if (!p) return null;
+              const foldedCount = grouped.folded.get(n.key) ?? 0;
+              const onPath = pathKeys?.has(n.key) ?? false;
+              const offPath = pathKeys != null && !onPath;
               const dim = neighborKeys && !neighborKeys.has(n.key) && focusedKey !== n.key;
+              const pinned = manual[n.key] != null;
+              // Свёрнутая группа крупнее ровно настолько, насколько она
+              // «толще»: узел на десять жителей должен выглядеть весомее
+              // одиночки, но не заслонять карту.
+              const radius = (focusedKey === n.key ? 12 : 9) + Math.min(6, foldedCount * 0.4);
               return (
                 <g
                   key={n.key}
                   className="relation-graph-node"
+                  data-key={n.key}
                   transform={`translate(${p.x},${p.y})`}
-                  style={{ cursor: "pointer" }}
-                  opacity={dim ? 0.25 : 1}
+                  style={{ cursor: "grab" }}
+                  opacity={offPath ? 0.15 : dim ? 0.25 : 1}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleNodeClick(n);
+                    handleNodeClick(n, foldedCount > 0);
                   }}
                 >
                   <circle
-                    r={focusedKey === n.key ? 12 : 9}
+                    r={radius}
                     fill={TYPE_COLORS[n.type] ?? "#888"}
-                    stroke={focusedKey === n.key ? "var(--ink)" : "none"}
-                    strokeWidth={2}
+                    stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "none"}
+                    strokeWidth={onPath ? 3 : 2}
                   />
-                  <text x={14} y={4} fontSize={11} fill="var(--ink)">
+                  {pinned && (
+                    // Кружок внутри — метка «стоит там, где поставили руками».
+                    <circle r={3} fill="var(--paper)" opacity={0.9} />
+                  )}
+                  <text x={radius + 5} y={4} fontSize={11} fill="var(--ink)">
                     {n.title}
+                    {foldedCount > 0 && <tspan className="muted"> +{foldedCount}</tspan>}
                   </text>
-                  <title>{`${TYPE_LABELS[n.type] ?? n.type}: ${n.title}`}</title>
+                  <title>
+                    {`${TYPE_LABELS[n.type] ?? n.type}: ${n.title}` +
+                      (foldedCount > 0 ? ` — свёрнуто внутрь: ${foldedCount}, нажмите, чтобы раскрыть` : "")}
+                  </title>
                 </g>
               );
             })}

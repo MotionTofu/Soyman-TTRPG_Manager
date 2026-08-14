@@ -101,6 +101,135 @@ export const TYPE_ROUTES: Record<string, string> = {
   compendium_entry: "/compendium",
 };
 
+/**
+ * Кратчайшая цепочка между двумя узлами по видимым связям — ответ на вопрос
+ * «а как этот вообще связан с той фракцией», на который ни поиск, ни вкладки
+ * связей не отвечают. Обход в ширину: рёбра ненаправленные, потому что для
+ * «как связаны» сторона связи значения не имеет.
+ */
+export function findPath(
+  edges: GraphEdge[],
+  from: string,
+  to: string
+): { keys: string[]; edges: GraphEdge[] } | null {
+  if (from === to) return { keys: [from], edges: [] };
+  const adjacency = new Map<string, { next: string; edge: GraphEdge }[]>();
+  const add = (a: string, b: string, edge: GraphEdge) => {
+    const list = adjacency.get(a);
+    if (list) list.push({ next: b, edge });
+    else adjacency.set(a, [{ next: b, edge }]);
+  };
+  for (const e of edges) {
+    add(e.from, e.to, e);
+    add(e.to, e.from, e);
+  }
+  const cameFrom = new Map<string, { prev: string; edge: GraphEdge }>();
+  const seen = new Set([from]);
+  let frontier = [from];
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const key of frontier) {
+      for (const step of adjacency.get(key) ?? []) {
+        if (seen.has(step.next)) continue;
+        seen.add(step.next);
+        cameFrom.set(step.next, { prev: key, edge: step.edge });
+        if (step.next === to) {
+          const keys = [to];
+          const path: GraphEdge[] = [];
+          let cursor = to;
+          while (cursor !== from) {
+            const back = cameFrom.get(cursor)!;
+            path.unshift(back.edge);
+            cursor = back.prev;
+            keys.unshift(cursor);
+          }
+          return { keys, edges: path };
+        }
+        next.push(step.next);
+      }
+    }
+    frontier = next;
+  }
+  return null;
+}
+
+export type GroupMode = "none" | "community" | "location";
+
+export const GROUP_MODES: { key: GroupMode; label: string }[] = [
+  { key: "none", label: "Не группировать" },
+  { key: "community", label: "По фракциям" },
+  { key: "location", label: "По местам" },
+];
+
+export interface FoldedGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /** Сколько узлов свёрнуто внутрь группы — подпись «+N» на её узле. */
+  folded: Map<string, number>;
+}
+
+/**
+ * Свернуть жителей в их группу. Сотни узлов читаются только пачками: существо,
+ * у которого ровно одна фракция (или ровно одно место), прячется внутрь её
+ * узла, а все его связи переезжают на группу. У кого фракций несколько или ни
+ * одной — остаётся сам собой: сваливать его в произвольную из них значило бы
+ * соврать. Развёрнутые группы (expanded) не сворачиваются — так можно раскрыть
+ * одну и смотреть её состав, не разворачивая карту целиком.
+ */
+export function foldGroups(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  mode: GroupMode,
+  expanded: Set<string>
+): FoldedGraph {
+  if (mode === "none") return { nodes, edges, folded: new Map() };
+
+  const groupType = mode === "community" ? "community" : "location";
+  const groupKind: EdgeKind = mode === "community" ? "membership" : "habitat";
+  const nodeKeys = new Set(nodes.map((n) => n.key));
+
+  // Кандидат на сворачивание — узел, у которого ровно одна группа этого вида.
+  const groupsOf = new Map<string, Set<string>>();
+  for (const e of edges) {
+    if (e.kind !== groupKind) continue;
+    const [group, member] = e.from.startsWith(`${groupType}:`) ? [e.from, e.to] : [e.to, e.from];
+    if (!group.startsWith(`${groupType}:`) || member.startsWith(`${groupType}:`)) continue;
+    if (!nodeKeys.has(group) || !nodeKeys.has(member)) continue;
+    const set = groupsOf.get(member) ?? new Set<string>();
+    set.add(group);
+    groupsOf.set(member, set);
+  }
+
+  const foldedInto = new Map<string, string>(); // узел -> группа, в которую он спрятан
+  for (const [member, groups] of groupsOf) {
+    if (groups.size !== 1) continue;
+    const group = [...groups][0];
+    if (expanded.has(group)) continue;
+    foldedInto.set(member, group);
+  }
+  if (foldedInto.size === 0) return { nodes, edges, folded: new Map() };
+
+  const folded = new Map<string, number>();
+  for (const group of foldedInto.values()) folded.set(group, (folded.get(group) ?? 0) + 1);
+
+  const resolve = (key: string) => foldedInto.get(key) ?? key;
+  const keptNodes = nodes.filter((n) => !foldedInto.has(n.key));
+  const seen = new Set<string>();
+  const keptEdges: GraphEdge[] = [];
+  for (const e of edges) {
+    const from = resolve(e.from);
+    const to = resolve(e.to);
+    if (from === to) continue; // связь внутри группы — она теперь один узел
+    // Десять «обитает» от жителей одной фракции к одному городу — это одна
+    // линия, а не десять поверх друг друга.
+    const dedupe = `${from}|${to}|${e.kind}|${e.section ?? ""}|${e.tone ?? ""}`;
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+    keptEdges.push({ ...e, from, to });
+  }
+  return { nodes: keptNodes, edges: keptEdges, folded };
+}
+
 export const GRAPH_WIDTH = 900;
 export const GRAPH_HEIGHT = 640;
 const BASE_NODE_COUNT = 25; // node count the base 900x640 canvas is comfortable for
@@ -148,7 +277,11 @@ export function simulateGraph(
   edges: GraphEdge[],
   width: number = GRAPH_WIDTH,
   height: number = GRAPH_HEIGHT,
-  seed?: NodePositions
+  seed?: NodePositions,
+  // Узлы, которые пользователь расставил руками: силы на них действуют, но с
+  // места они не сходят — иначе своя раскладка расползлась бы на первом же
+  // пересчёте.
+  pinned?: Set<string>
 ): NodePositions {
   const pos: NodePositions = new Map();
   const cx = width / 2;
@@ -240,6 +373,11 @@ export function simulateGraph(
     }
     for (const n of nodes) {
       const p = pos.get(n.key)!;
+      if (pinned?.has(n.key)) {
+        p.vx = 0;
+        p.vy = 0;
+        continue;
+      }
       p.vx += (cx - p.x) * 0.002;
       p.vy += (cy - p.y) * 0.002;
       p.vx *= 0.85;

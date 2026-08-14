@@ -111,6 +111,7 @@ export function GraphPage() {
       <GraphTypeFilters activeTypes={activeTypes} setActiveTypes={setActiveTypes} />
       <RelationGraph
         data={data}
+        layoutKey={campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}
         emptyMessage={
           activeTypes.size === 0
             ? "Все типы сняты в фильтрах — отметьте хотя бы один."
