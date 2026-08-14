@@ -55,6 +55,22 @@ function DiceShape({ kind }: { kind: DiceKind }) {
   }
 }
 
+// How many glyphs fit across the silhouette at full size — the diamond and
+// the hexagon are narrower than the square at the height of the number.
+const WIDTH_BUDGET: Record<DiceKind, number> = { d6: 2.6, d20: 2.4, d8: 2.1 };
+
+// Rough width of the rendered value in "glyph units" — separators and signs
+// are visually narrow, so they count for less than a full digit.
+function valueScale(value: ReactNode, kind: DiceKind): number {
+  if (typeof value !== "string" && typeof value !== "number") return 1;
+  const text = String(value);
+  let units = 0;
+  for (const ch of text) units += /[.,\s+\-'’]/.test(ch) ? 0.4 : 1;
+  const budget = WIDTH_BUDGET[kind];
+  if (units <= budget) return 1;
+  return Math.max(0.4, budget / units);
+}
+
 export function Dice({
   value,
   sub,
@@ -70,6 +86,11 @@ export function Dice({
   const classes = ["dice", `dice-${kind}`, `dice-${state}`, `dice-${size}`, className]
     .filter(Boolean)
     .join(" ");
+  // The number must stay inside the silhouette: the base size fits ~3 glyphs,
+  // longer values shrink proportionally (floored so they stay readable).
+  const valueStyle = {
+    "--dice-value-scale": String(valueScale(value, kind)),
+  } as CSSProperties;
   return (
     <div className={classes} style={style} onClick={onClick} title={title}>
       <div className="dice-shape-box">
@@ -77,7 +98,9 @@ export function Dice({
           <DiceShape kind={kind} />
         </svg>
         <div className="dice-content">
-          <span className="dice-value">{value}</span>
+          <span className="dice-value" style={valueStyle}>
+            {value}
+          </span>
           {sub != null && sub !== "" && <span className="dice-sub">{sub}</span>}
         </div>
       </div>

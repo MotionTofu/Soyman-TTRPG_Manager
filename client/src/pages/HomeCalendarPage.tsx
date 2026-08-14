@@ -14,6 +14,7 @@ import { UpdateChecker } from "../components/UpdateChecker";
 import { hasElectronAPI } from "../electronApi";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
+import { formatCompactNumber } from "../formatNumber";
 import type { AppSettings, Campaign, SessionSummary } from "../types";
 
 interface FinanceSummary {
@@ -246,9 +247,10 @@ export function HomeCalendarPage() {
                   <Dice
                     kind="d6"
                     state="outline"
-                    value={finance.earned}
+                    value={formatCompactNumber(finance.earned)}
                     sub="₽"
                     label="Заработано всего"
+                    title={`${finance.earned.toLocaleString("ru-RU")} ₽`}
                   />
                 )}
                 <Dice kind="d6" state="outline" value={finance.heldSessions} label="Сессий проведено" />

@@ -1,6 +1,6 @@
 {
   "name": "rpg-manager",
-  "version": "2026.8.8",
+  "version": "2026.8.15",
   "private": true,
   "description": "SoyMan_ttrpg — личный менеджер настольных ролевых кампаний",
   "main": "electron/main.js",

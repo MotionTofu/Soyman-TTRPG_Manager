@@ -12,6 +12,7 @@ import { AudioPlayerBar, MiniPlayerBar } from "../audioPlayer";
 import { useNearestSessionCockpitId } from "../nearestSessionCockpit";
 import { openSecondWindow } from "../electronApi";
 import { UnloadTargetsProvider } from "../unloadTargets";
+import { brandLogo } from "../brandLogo";
 
 interface NavItem {
   to: string;
@@ -264,7 +265,7 @@ export function AppShell() {
         <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню">
           <NavIcon name="menu" />
         </button>
-        <img src="/logo.png" alt="SoyMan" className="mobile-topbar-logo" />
+        <img src={brandLogo} alt="SoyMan" className="mobile-topbar-logo" />
         {/* Плеер toggle used to live here too — it's now one of the bottom
             nav's own buttons (see bottomNavItems above), so this row is just
             search. */}
@@ -286,7 +287,7 @@ export function AppShell() {
       ) : (
         <nav className={`app-nav${navOpen ? " open" : ""}`}>
           <ParticleField count={10} className="header-particles" />
-          <img src="/logo.png" alt="SoyMan — TTRPG Manager" className="brand-logo" />
+          <img src={brandLogo} alt="SoyMan — TTRPG Manager" className="brand-logo" />
           {navItems.map((item) => (
             <NavLink
               key={item.to}

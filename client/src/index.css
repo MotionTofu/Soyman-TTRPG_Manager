@@ -3732,12 +3732,13 @@ input.litm-theme-title {
   font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  white-space: nowrap;
 }
 .dice-md .dice-value {
-  font-size: var(--fs-stat);
+  font-size: calc(var(--fs-stat) * var(--dice-value-scale, 1));
 }
 .dice-sm .dice-value {
-  font-size: clamp(14px, 4vw, 18px);
+  font-size: calc(clamp(14px, 4vw, 18px) * var(--dice-value-scale, 1));
 }
 .dice-sub {
   font-family: var(--font-mono);
@@ -3794,7 +3795,7 @@ input.litm-theme-title {
     min-width: 30px;
   }
   .dice-sm .dice-value {
-    font-size: clamp(12px, 5vw, 16px);
+    font-size: calc(clamp(12px, 5vw, 16px) * var(--dice-value-scale, 1));
   }
 }
 
