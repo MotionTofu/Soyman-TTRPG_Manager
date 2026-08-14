@@ -153,6 +153,114 @@ export function findPath(
   return null;
 }
 
+export interface IsolationView {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  positions: NodePositions;
+  width: number;
+  height: number;
+  depthOf: Map<string, number>;
+  /** Сколько узлов добавит следующий шаг — чтобы не жать кнопку вслепую. */
+  nextStepCount: number;
+}
+
+const RING_GAP = 240; // расстояние между кольцами
+const RING_NODE_SPACING = 84; // сколько места нужно узлу с подписью на кольце
+
+/**
+ * Изоляция узла: он в центре, связанные с ним — первым кольцом, связанные с
+ * теми — вторым. Силовая раскладка для окрестности хуже: она разбрасывает
+ * соседей вперемешку, а здесь номер кольца прямо и означает «сколько шагов
+ * отсюда», что и есть вопрос, ради которого узел изолируют.
+ */
+export function buildIsolation(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  centerKey: string,
+  depth: number
+): IsolationView | null {
+  const byKey = new Map(nodes.map((n) => [n.key, n]));
+  if (!byKey.has(centerKey)) return null;
+
+  const adjacency = new Map<string, Set<string>>();
+  const touch = (a: string, b: string) => {
+    const set = adjacency.get(a);
+    if (set) set.add(b);
+    else adjacency.set(a, new Set([b]));
+  };
+  for (const e of edges) {
+    touch(e.from, e.to);
+    touch(e.to, e.from);
+  }
+
+  // Обход в ширину: кольцо = расстояние в шагах. Лишний шаг считается тоже —
+  // им подписывается кнопка «добавить шаг».
+  const depthOf = new Map<string, number>([[centerKey, 0]]);
+  const rings: string[][] = [[centerKey]];
+  for (let d = 1; d <= depth + 1; d++) {
+    const ring: string[] = [];
+    for (const key of rings[d - 1]) {
+      for (const other of adjacency.get(key) ?? []) {
+        if (depthOf.has(other) || !byKey.has(other)) continue;
+        depthOf.set(other, d);
+        ring.push(other);
+      }
+    }
+    rings.push(ring);
+  }
+  const nextStepCount = rings[depth + 1]?.length ?? 0;
+  for (const key of rings[depth + 1] ?? []) depthOf.delete(key); // этот шаг ещё не показываем
+  rings.length = depth + 1;
+
+  const angles = new Map<string, number>([[centerKey, 0]]);
+  const radii = new Map<number, number>([[0, 0]]);
+  for (let d = 1; d < rings.length; d++) {
+    const ring = rings[d];
+    if (ring.length === 0) continue;
+    // Кольцо раздвигается, если на нём тесно: узлам нужно место под подписи.
+    const radius = Math.max(RING_GAP * d, (ring.length * RING_NODE_SPACING) / (2 * Math.PI));
+    radii.set(d, radius);
+    // Соседи одного родителя должны лежать рядом: порядок на кольце — по углу
+    // родителя, иначе связи превращаются в клубок хорд через весь круг.
+    const parentAngle = (key: string) => {
+      let sum = 0;
+      let count = 0;
+      for (const other of adjacency.get(key) ?? []) {
+        if (depthOf.get(other) === d - 1 && angles.has(other)) {
+          sum += angles.get(other)!;
+          count++;
+        }
+      }
+      return count > 0 ? sum / count : 0;
+    };
+    const ordered = ring
+      .map((key) => ({ key, hint: parentAngle(key) }))
+      .sort((a, b) => a.hint - b.hint || a.key.localeCompare(b.key));
+    ordered.forEach((item, i) => {
+      angles.set(item.key, (i / ordered.length) * Math.PI * 2);
+    });
+  }
+
+  const maxRadius = Math.max(...radii.values());
+  const width = Math.round((maxRadius + 220) * 2);
+  const height = Math.round((maxRadius + 160) * 2);
+  const positions: NodePositions = new Map();
+  for (const [key, d] of depthOf) {
+    const radius = radii.get(d) ?? 0;
+    const angle = angles.get(key) ?? 0;
+    positions.set(key, {
+      x: width / 2 + Math.cos(angle) * radius,
+      y: height / 2 + Math.sin(angle) * radius,
+      vx: 0,
+      vy: 0,
+    });
+  }
+
+  const keptNodes = nodes.filter((n) => depthOf.has(n.key));
+  const keptEdges = edges.filter((e) => depthOf.has(e.from) && depthOf.has(e.to));
+  return { nodes: keptNodes, edges: keptEdges, positions, width, height, depthOf, nextStepCount };
+}
+
 export type GroupMode = "none" | "community" | "location";
 
 export const GROUP_MODES: { key: GroupMode; label: string }[] = [

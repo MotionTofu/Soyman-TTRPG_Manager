@@ -1,12 +1,23 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { ContextMenu } from "./ContextMenu";
+import { EntityPreviewModal } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
 import {
   DEFAULT_EDGE_KINDS,
   EDGE_KINDS,
   EDGE_KIND_STYLE,
   GROUP_MODES,
+  buildIsolation,
   findPath,
   foldGroups,
   type GroupMode,
@@ -25,6 +36,7 @@ import {
 import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import type { RelationTone } from "../types";
 
+const ARROW_PAN_STEP = 90; // на сколько единиц холста двигают стрелки
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 6;
 const FOCUS_ZOOM = 2.2;
@@ -106,6 +118,7 @@ function loadLayout(key: string | undefined): ManualLayout {
 // "Граф связей" page and a setting-scoped graph tab.
 export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const [view, setView] = useState<View>({ zoom: 1, panX: 0, panY: 0 });
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -118,6 +131,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // Концы прокладываемого пути: «как этот связан с той фракцией».
   const [pathFrom, setPathFrom] = useState<string | null>(null);
   const [pathTo, setPathTo] = useState<string | null>(null);
+  // Изоляция: узел в центре и всё, что с ним связано, на заданное число шагов.
+  const [isolation, setIsolation] = useState<{ key: string; depth: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
+  const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
   const dragState = useRef<{ key: string; moved: boolean } | null>(null);
   const dragOrigin = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
   // Какие виды связей показывать. Раньше здесь был один чекбокс «упоминания»,
@@ -132,7 +149,25 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // World-space canvas size — grows with the node count so a large setting's
   // graph has room to spread out instead of everything piling up along the
   // clamped edges of a fixed-size canvas.
-  const canvasSize = data ? canvasSizeFor(data.nodes.length) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
+  const baseCanvas = data ? canvasSizeFor(data.nodes.length) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
+
+  // Отбор по видам -> свёртка в группы -> изоляция. Считается здесь, до
+  // раннего выхода: размеры холста и позиции зависят от результата, а ими
+  // пользуются обработчики колеса и панорамирования.
+  const pipeline = useMemo(() => {
+    if (!data) return null;
+    const kindEdges = data.edges.filter((e) => activeKinds.has(e.kind));
+    const grouped = foldGroups(data.nodes, kindEdges, groupMode, expandedGroups);
+    const isolationView = isolation
+      ? buildIsolation(grouped.nodes, grouped.edges, isolation.key, isolation.depth)
+      : null;
+    return { grouped, isolationView };
+  }, [data, activeKinds, groupMode, expandedGroups, isolation]);
+
+  const isolationView = pipeline?.isolationView ?? null;
+  const canvasSize = isolationView
+    ? { width: isolationView.width, height: isolationView.height }
+    : baseCanvas;
 
   // Позиции прошлой раскладки: смена фильтра — это то же поле с убранными
   // булавками, а не новая карта, поэтому уцелевшие узлы стартуют оттуда, где
@@ -147,8 +182,8 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     const next = simulateGraph(
       data.nodes,
       data.edges,
-      canvasSize.width,
-      canvasSize.height,
+      baseCanvas.width,
+      baseCanvas.height,
       seed.size > 0 ? seed : undefined,
       new Set(Object.keys(manual))
     );
@@ -159,13 +194,17 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
 
   // Позиции для отрисовки: расставленное руками поверх посчитанного. Держится
   // отдельно от simulated, чтобы перетаскивание не гоняло раскладку заново.
+  // В изоляции своя радиальная раскладка — ручная карта туда не переносится
+  // (кольца по шагам и есть смысл этого вида) и остаётся нетронутой для
+  // возврата.
   const positions = useMemo(() => {
+    if (isolationView) return isolationView.positions;
     const merged: NodePositions = new Map(simulated);
     for (const [key, p] of Object.entries(manual)) {
       if (merged.has(key)) merged.set(key, { ...p, vx: 0, vy: 0 });
     }
     return merged;
-  }, [simulated, manual]);
+  }, [simulated, manual, isolationView]);
 
   // New graph data (e.g. a filter changed) invalidates any pinned focus and
   // resets the view — the previously-focused node may no longer exist here.
@@ -173,6 +212,9 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setFocusedKey(null);
     setPathFrom(null);
     setPathTo(null);
+    // Новые данные — другая область или другой запрос: изолированного узла в
+    // них может не быть вовсе, и вид повис бы без панели выхода.
+    setIsolation(null);
     setView({ zoom: 1, panX: 0, panY: 0 });
   }, [data]);
 
@@ -234,6 +276,35 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setFocusedKey(null);
   }
 
+  // «Сделать текущее каноничным»: всё, что сейчас видно, закрепляется на своих
+  // местах — дальше карта не переезжает ни при смене фильтров, ни при
+  // появлении новых сущностей, двигаются только они.
+  function saveLayout() {
+    const next: ManualLayout = { ...manual };
+    for (const [key, p] of positions) next[key] = { x: p.x, y: p.y };
+    setManual(next);
+  }
+
+  function isolate(key: string) {
+    setIsolation({ key, depth: 1 });
+    setFocusedKey(key);
+    setPathFrom(null);
+    setPathTo(null);
+    setMenu(null);
+    setView({ zoom: 1, panX: 0, panY: 0 });
+  }
+
+  function leaveIsolation() {
+    setIsolation(null);
+    setView({ zoom: 1, panX: 0, panY: 0 });
+  }
+
+  function handleNodeContextMenu(e: ReactMouseEvent, node: GraphNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY, node });
+  }
+
   function pickPathTo(key: string) {
     setPathTo(key);
     setQuery("");
@@ -249,7 +320,42 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setQuery("");
   }
 
+  function panBy(dx: number, dy: number) {
+    setView((v) => {
+      const clamped = clampPan(v.zoom, v.panX + dx, v.panY + dy, canvasSize.width, canvasSize.height);
+      return { ...v, panX: clamped.x, panY: clamped.y };
+    });
+  }
+
+  // Стрелки двигают холст, когда он в фокусе, — вместе со средней кнопкой это
+  // способ ходить по карте, не задевая узлы левой кнопкой.
+  function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    const step = ARROW_PAN_STEP / view.zoom;
+    if (e.key === "ArrowLeft") panBy(step, 0);
+    else if (e.key === "ArrowRight") panBy(-step, 0);
+    else if (e.key === "ArrowUp") panBy(0, step);
+    else if (e.key === "ArrowDown") panBy(0, -step);
+    else return;
+    e.preventDefault();
+  }
+
+  function startPan(e: ReactPointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    panState.current = { startX: e.clientX, startY: e.clientY, originX: view.panX, originY: view.panY, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    // Холст должен получить фокус, иначе стрелки уйдут в страницу и она
+    // прокрутится вместо графа.
+    wrapRef.current?.focus({ preventScroll: true });
+    // Средняя кнопка панорамирует откуда угодно, в том числе с узла: это
+    // основной способ ходить по карте, когда левая занята перетаскиванием.
+    if (e.button === 1) {
+      startPan(e);
+      return;
+    }
+    if (e.button !== 0) return;
     const nodeEl = (e.target as HTMLElement).closest(".relation-graph-node");
     if (nodeEl) {
       // Тащат узел, а не фон: запоминаем, откуда он поехал, и ловим указатель
@@ -263,14 +369,14 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
-    // Without this, dragging across the SVG's node-label <text> elements
-    // triggers the browser's native text-selection (a blue-highlight drag
-    // select), which fires even though the wrap has user-select: none —
-    // that CSS suppresses the *result* but not the drag-select gesture
-    // itself starting on mousedown.
-    e.preventDefault();
-    panState.current = { startX: e.clientX, startY: e.clientY, originX: view.panX, originY: view.panY, moved: false };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Левый драг по фону тоже панорамирует — средняя кнопка есть не на всяком
+    // тачпаде, и лишать карту единственного привычного способа ходить по ней
+    // из-за этого не стоит.
+    //
+    // preventDefault: без него протаскивание по подписям узлов запускает
+    // штатное выделение текста (синяя подсветка), которое срабатывает вопреки
+    // user-select: none на обёртке — эта CSS гасит результат, но не сам жест.
+    startPan(e);
   }
 
   function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
@@ -364,12 +470,11 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
 
   if (!data) return <p className="muted">Загрузка…</p>;
 
-  const kindEdges = data.edges.filter((e) => activeKinds.has(e.kind));
-  // Свёртка идёт после отбора по видам: если членство скрыто, группировать по
-  // фракциям не по чему, и это честнее, чем считать по невидимым связям.
-  const grouped = foldGroups(data.nodes, kindEdges, groupMode, expandedGroups);
-  const visibleNodes = grouped.nodes;
-  const visibleEdges = grouped.edges;
+  // Конвейер посчитан выше (см. pipeline): отбор по видам -> свёртка в группы
+  // -> изоляция. В изоляции рисуется только окрестность выбранного узла.
+  const grouped = pipeline!.grouped;
+  const visibleNodes = isolationView ? isolationView.nodes : grouped.nodes;
+  const visibleEdges = isolationView ? isolationView.edges : grouped.edges;
 
   // Путь между двумя выбранными узлами — по тем же видимым связям.
   const path =
@@ -392,6 +497,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // Искать имеет смысл только среди нарисованного: свёрнутый внутрь группы
   // узел найдётся, но прыгать будет некуда.
   const visibleKeys = new Set(visibleNodes.map((n) => n.key));
+  // Метка «поставлен руками» имеет смысл, пока такие узлы — исключение. После
+  // «Сохранить раскладку» закреплены все, и метка на каждом узле перестаёт
+  // что-либо различать, оставаясь просто рябью.
+  const showPins = Object.keys(manual).length < visibleNodes.length;
   const shownMatches = searchMatches.filter((n) => visibleKeys.has(n.key));
   const pairCounts = new Map<string, number>();
   for (const e of visibleEdges) {
@@ -443,6 +552,15 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       <button type="button" onClick={resetView}>
         Сбросить вид ({Math.round(view.zoom * 100)}%)
       </button>
+      {!isolationView && (
+        <button
+          type="button"
+          onClick={saveLayout}
+          title="Закрепить всё, что сейчас на экране: узлы перестанут переезжать при пересчёте"
+        >
+          Сохранить раскладку
+        </button>
+      )}
       {Object.keys(manual).length > 0 && (
         <button
           type="button"
@@ -488,6 +606,37 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           <button type="button" onClick={() => setFocusedKey(null)}>
             Снять фокус
           </button>
+        </div>
+      )}
+      {isolationView && (
+        <div className="row relation-graph-focus-panel">
+          <button type="button" onClick={leaveIsolation}>
+            ← Вернуться ко всему графу
+          </button>
+          <strong>{nodesByKey.get(isolation!.key)?.title ?? "?"}</strong>
+          <span className="muted">
+            шагов: {isolation!.depth}, узлов вокруг: {isolationView.nodes.length - 1}
+          </span>
+          <button
+            type="button"
+            disabled={isolationView.nextStepCount === 0}
+            onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth + 1 })}
+            title={
+              isolationView.nextStepCount === 0
+                ? "Дальше связей нет — дальше этого круга сущность ни с чем не соединена"
+                : "Показать связи следующего порядка"
+            }
+          >
+            Добавить шаг {isolationView.nextStepCount > 0 && `(+${isolationView.nextStepCount})`}
+          </button>
+          {isolation!.depth > 1 && (
+            <button
+              type="button"
+              onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth - 1 })}
+            >
+              Убрать шаг
+            </button>
+          )}
         </div>
       )}
       {pathFrom && (
@@ -617,10 +766,16 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         ref={wrapRef}
         className="relation-graph-wrap"
         style={{ height: fullscreen ? undefined : height, flex: fullscreen ? 1 : undefined }}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onClick={handleBackgroundClick}
+        // Своё меню на узлах; на фоне штатное тоже ни к чему — оно перекрывает
+        // карту и ничего полезного для графа не предлагает.
+        onContextMenu={(e) => e.preventDefault()}
+        onAuxClick={(e) => e.preventDefault()}
       >
         <svg viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`} width="100%" height="100%">
           <g transform={`translate(${view.panX},${view.panY}) scale(${view.zoom})`}>
@@ -670,8 +825,13 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
               // В режиме пути всё, что не цепочка, уходит на задний план —
               // иначе саму цепочку в тысяче линий не разглядеть.
               const offPath = pathKeys != null && !onPath;
+              // В изоляции подписи показываются у всех связей: туда и заходят
+              // затем, чтобы прочитать, чем именно сущность связана с
+              // окружением, а узлов там немного.
               const showLabel =
-                (onPath || (focusedKey && (e.from === focusedKey || e.to === focusedKey))) &&
+                (onPath ||
+                  isolationView != null ||
+                  (focusedKey && (e.from === focusedKey || e.to === focusedKey))) &&
                 relationLabel;
               const midX = (ax + bx) / 2;
               const midY = (ay + by) / 2;
@@ -726,7 +886,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
               const onPath = pathKeys?.has(n.key) ?? false;
               const offPath = pathKeys != null && !onPath;
               const dim = neighborKeys && !neighborKeys.has(n.key) && focusedKey !== n.key;
-              const pinned = manual[n.key] != null;
+              const pinned = showPins && manual[n.key] != null;
               // Свёрнутая группа крупнее ровно настолько, насколько она
               // «толще»: узел на десять жителей должен выглядеть весомее
               // одиночки, но не заслонять карту.
@@ -743,6 +903,11 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                     e.stopPropagation();
                     handleNodeClick(n, foldedCount > 0);
                   }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    isolate(n.key);
+                  }}
+                  onContextMenu={(e) => handleNodeContextMenu(e, n)}
                 >
                   <circle
                     r={radius}
@@ -770,6 +935,56 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       </div>
     );
 
+  // Меню и карточка живут вне обоих вариантов вёрстки (обычной и
+  // полноэкранной) — иначе при переключении они бы пропадали.
+  const overlays = (
+    <>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[
+            { label: "Изолировать узел и связи", onClick: () => isolate(menu.node.key) },
+            {
+              label: "Карточка сущности",
+              onClick: () => {
+                setPreview({ type: menu.node.type, id: menu.node.id });
+                setMenu(null);
+              },
+            },
+            ...(TYPE_ROUTES[menu.node.type]
+              ? [
+                  {
+                    label: "Перейти к сущности",
+                    onClick: () => navigate(`${TYPE_ROUTES[menu.node.type]}/${menu.node.id}`),
+                  },
+                ]
+              : []),
+            ...(expandedGroups.has(menu.node.key)
+              ? [
+                  {
+                    label: "Свернуть группу",
+                    onClick: () => {
+                      setExpandedGroups((prev) => {
+                        const next = new Set(prev);
+                        next.delete(menu.node.key);
+                        return next;
+                      });
+                      setMenu(null);
+                    },
+                  },
+                ]
+              : []),
+          ]}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      {preview && (
+        <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />
+      )}
+    </>
+  );
+
   if (fullscreen) {
     return createPortal(
       <div className="relation-graph-fullscreen">
@@ -778,6 +993,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           {legend}
         </div>
         {graphBody}
+        {overlays}
       </div>,
       document.body
     );
@@ -789,6 +1005,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       {legend}
       {graphBody}
       {isolatedPanel}
+      {overlays}
     </div>
   );
 }
