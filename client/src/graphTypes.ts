@@ -365,13 +365,39 @@ export type NodePositions = Map<string, NodePosition>;
 // смысла нет, поэтому пары ищутся по сетке ячеек размером с отсечку: у
 // каждого узла проверяются только соседи из его и восьми смежных ячеек.
 const REPULSION_CUTOFF = 260;
-const REPULSION_STRENGTH = 4000;
+// Силы подобраны так, чтобы равновесие само было разреженным. Со старыми
+// (4000, пружина 130, стягивание 0.002) узлы сходились плотнее минимального
+// промежутка, расталкивание раздвигало их обратно, а следующий пересчёт снова
+// стягивал — карта каждый раз перетасовывалась. Дешевле сразу целиться в
+// расстояние, которое всё равно придётся выдержать.
+const REPULSION_STRENGTH = 9000;
+const IDEAL_EDGE_LENGTH = 175;
+const CENTERING_PULL = 0.0012;
+// Ближе этого узлы не ставятся. Отталкивание само по себе такого не
+// гарантирует: пружины связей и стягивание к центру продавливают его в плотных
+// местах, и подписи наезжают друг на друга. Держится отдельным проходом
+// расталкивания — жёстким ограничением, а не ещё одной силой.
+export const MIN_NODE_DISTANCE = 100;
+const SEPARATION_PASSES = 300;
+// Разводить пару ровно на нехватку — сходиться будет вечно: соседи тут же
+// наезжают обратно. Небольшой перелёт (как в методе верхней релаксации)
+// сокращает число проходов в разы.
+const SEPARATION_OVERSHOOT = 1.35;
+// Проходы прекращаются, когда худшее сближение уложилось в этот допуск: гнаться
+// за последними процентами не стоит, глазу разница между 96 и 100 не видна, а
+// проходов на неё уходит больше, чем на всё остальное.
+const SEPARATION_TOLERANCE = 5;
 const FULL_ITERATIONS = 220;
 // Раскладка от готовых позиций — это доводка, а не построение с нуля: столько
 // шагов хватает, чтобы новые узлы нашли место, а мир не перетасовался.
 const RESEED_ITERATIONS = 70;
 const ALPHA_MIN = 0.02;
-const RESEED_ALPHA = 0.25;
+// Доводка от готовых позиций идёт очень малым шагом: карта уже разложена и
+// разведена по минимальному расстоянию, силовой фазе остаётся только пристроить
+// появившиеся узлы. С прежним 0.25 она успевала стянуть всю картинку к центру,
+// расталкивание разводило её обратно — и узлы уезжали в среднем на три сотни
+// пикселей на каждой смене фильтра.
+const RESEED_ALPHA = 0.06;
 
 // Simple force-directed layout: circular seed positions, then repulsion +
 // spring edges + a gentle centering pull, run for a fixed number of
@@ -394,14 +420,44 @@ export function simulateGraph(
   const pos: NodePositions = new Map();
   const cx = width / 2;
   const cy = height / 2;
+
+  // Холст меняет размер вместе с числом узлов, и позиции с прошлого прогона
+  // могут в новый не поместиться. Обрезать их по краю нельзя: узлы сбиваются в
+  // полосу вдоль границы, и расталкивание потом разбирает эту кучу вместо
+  // того, чтобы просто выдержать промежуток. Карта переносится целиком —
+  // сжимается под новый лист, сохраняя взаимное расположение.
+  const fit = (() => {
+    if (!seed || seed.size === 0) return null;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const n of nodes) {
+      const p = seed.get(n.key);
+      if (!p) continue;
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    if (minX > maxX) return null;
+    const boxW = Math.max(1, maxX - minX);
+    const boxH = Math.max(1, maxY - minY);
+    const scale = Math.min(1, (width - 60) / boxW, (height - 60) / boxH);
+    if (scale > 0.999) return null;
+    return { scale, midX: (minX + maxX) / 2, midY: (minY + maxY) / 2 };
+  })();
+
   let seeded = 0;
   nodes.forEach((n, i) => {
     const known = seed?.get(n.key);
     if (known) {
       seeded++;
+      const x = fit ? cx + (known.x - fit.midX) * fit.scale : known.x;
+      const y = fit ? cy + (known.y - fit.midY) * fit.scale : known.y;
       pos.set(n.key, {
-        x: Math.max(30, Math.min(width - 30, known.x)),
-        y: Math.max(30, Math.min(height - 30, known.y)),
+        x: Math.max(30, Math.min(width - 30, x)),
+        y: Math.max(30, Math.min(height - 30, y)),
         vx: 0,
         vy: 0,
       });
@@ -414,6 +470,14 @@ export function simulateGraph(
 
   const points = nodes.map((n) => pos.get(n.key)!);
   const reseed = seeded > nodes.length * 0.6;
+  // На доводке силы двигают только новые узлы: у остальных место уже найдено и
+  // разведено по минимальному расстоянию, и любое их шевеление — это
+  // перетасовка карты на ровном месте. Расталкивание ниже работает со всеми:
+  // новичок, вставший вплотную к старожилу, должен подвинуть и его.
+  const forcePinned =
+    reseed && seed
+      ? new Set([...(pinned ?? []), ...nodes.filter((n) => seed.has(n.key)).map((n) => n.key)])
+      : pinned;
   const iterations = reseed ? RESEED_ITERATIONS : FULL_ITERATIONS;
   // Шаг затухает от alpha к ALPHA_MIN: без этого раскладка на сотнях узлов не
   // сходится вообще — силы у стенок и в плотных скоплениях не гасятся
@@ -426,7 +490,7 @@ export function simulateGraph(
   const cells = new Map<number, number[]>();
   const columns = Math.max(1, Math.ceil(width / REPULSION_CUTOFF)) + 2;
 
-  const idealLength = 130;
+  const idealLength = IDEAL_EDGE_LENGTH;
   for (let iter = 0; iter < iterations; iter++) {
     // Сетка перестраивается каждый шаг — узлы за шаг успевают переехать.
     cells.clear();
@@ -481,13 +545,13 @@ export function simulateGraph(
     }
     for (const n of nodes) {
       const p = pos.get(n.key)!;
-      if (pinned?.has(n.key)) {
+      if (forcePinned?.has(n.key)) {
         p.vx = 0;
         p.vy = 0;
         continue;
       }
-      p.vx += (cx - p.x) * 0.002;
-      p.vy += (cy - p.y) * 0.002;
+      p.vx += (cx - p.x) * CENTERING_PULL;
+      p.vy += (cy - p.y) * CENTERING_PULL;
       p.vx *= 0.85;
       p.vy *= 0.85;
       p.x += p.vx * alpha;
@@ -496,6 +560,104 @@ export function simulateGraph(
       p.y = Math.max(30, Math.min(height - 30, p.y));
     }
     alpha *= decay;
+  }
+
+  const isPinned = nodes.map((n) => pinned?.has(n.key) ?? false);
+  // Разводятся узлы с запасом на допуск, с которым проходы останавливаются, —
+  // иначе объявленная сотня превращалась бы в «сотня минус допуск».
+  const separationTarget = MIN_NODE_DISTANCE + SEPARATION_TOLERANCE;
+
+  // Прежде чем расталкивать — разредить. Силовая раскладка сбивает узлы в
+  // центр холста: на 657 узлах они занимали 2400x1850 из 4600x3280, то есть
+  // впятеро меньше площади, чем нужно на промежуток в 100. Локальное
+  // расталкивание в такой тесноте не сходится — оно умеет двигать соседа на
+  // шаг, а не переносить узлы через полкарты. Поэтому картинка сначала
+  // растягивается целиком относительно своего центра: форма сохраняется,
+  // место появляется. Если узлы расставлены руками, растяжка пропускается —
+  // это чужая карта, её нельзя двигать.
+  if (!pinned?.size && points.length > 1) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of points) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    const boxW = Math.max(1, maxX - minX);
+    const boxH = Math.max(1, maxY - minY);
+    // Площадь на узел при плотной укладке кружков с шагом MIN_NODE_DISTANCE.
+    const needed = points.length * MIN_NODE_DISTANCE * MIN_NODE_DISTANCE * 0.87;
+    const fits = Math.min((width - 60) / boxW, (height - 60) / boxH);
+    const scale = Math.min(Math.sqrt(needed / (boxW * boxH)), fits);
+    if (scale > 1.01) {
+      const midX = (minX + maxX) / 2;
+      const midY = (minY + maxY) / 2;
+      for (const p of points) {
+        p.x = Math.max(30, Math.min(width - 30, cx + (p.x - midX) * scale));
+        p.y = Math.max(30, Math.min(height - 30, cy + (p.y - midY) * scale));
+      }
+    }
+  }
+
+  // Расталкивание: силы дают приятную форму, но не гарантируют промежутка —
+  // в плотных местах пружины и стягивание к центру сводят узлы вплотную. Тут
+  // пары, оказавшиеся ближе минимума, просто разводятся на нужное расстояние.
+  // Несколько проходов: разведя одну пару, можно наехать на соседнюю.
+  const sepColumns = Math.max(1, Math.ceil(width / MIN_NODE_DISTANCE)) + 2;
+  for (let pass = 0; pass < SEPARATION_PASSES; pass++) {
+    cells.clear();
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const key =
+        Math.floor(p.y / MIN_NODE_DISTANCE) * sepColumns + Math.floor(p.x / MIN_NODE_DISTANCE);
+      const bucket = cells.get(key);
+      if (bucket) bucket.push(i);
+      else cells.set(key, [i]);
+    }
+    let worstOverlap = 0;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i];
+      const col = Math.floor(a.x / MIN_NODE_DISTANCE);
+      const row = Math.floor(a.y / MIN_NODE_DISTANCE);
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const bucket = cells.get((row + dr) * sepColumns + (col + dc));
+          if (!bucket) continue;
+          for (const j of bucket) {
+            if (j <= i) continue;
+            if (isPinned[i] && isPinned[j]) continue; // оба стоят там, где их поставили
+            const b = points[j];
+            let dx = a.x - b.x;
+            let dy = a.y - b.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist >= separationTarget) continue;
+            if (dist < 0.01) {
+              // Совпали точь-в-точь: направление берётся от индексов, чтобы
+              // раскладка осталась воспроизводимой, а не случайной.
+              dx = (i % 2 === 0 ? 1 : -1) * 0.5;
+              dy = (j % 2 === 0 ? 1 : -1) * 0.5;
+              dist = Math.sqrt(dx * dx + dy * dy);
+            }
+            const push = separationTarget - dist;
+            worstOverlap = Math.max(worstOverlap, push);
+            const ux = (dx / dist) * push * SEPARATION_OVERSHOOT;
+            const uy = (dy / dist) * push * SEPARATION_OVERSHOOT;
+            // Закреплённый узел не двигается — весь промежуток отыгрывает
+            // второй.
+            const aShare = isPinned[i] ? 0 : isPinned[j] ? 1 : 0.5;
+            const bShare = 1 - aShare;
+            a.x = Math.max(30, Math.min(width - 30, a.x + ux * aShare));
+            a.y = Math.max(30, Math.min(height - 30, a.y + uy * aShare));
+            b.x = Math.max(30, Math.min(width - 30, b.x - ux * bShare));
+            b.y = Math.max(30, Math.min(height - 30, b.y - uy * bShare));
+          }
+        }
+      }
+    }
+    if (worstOverlap <= SEPARATION_TOLERANCE) break;
   }
   return pos;
 }
