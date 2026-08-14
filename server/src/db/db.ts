@@ -1445,6 +1445,52 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec("ALTER TABLE import_records ADD COLUMN payload TEXT NOT NULL DEFAULT ''");
   }
 
+  // Импорт книги правил (system-import/1) — отдельные таблицы, а не те же, что
+  // у приключений: у приключения цель — сеттинг (setting_id NOT NULL), у книги
+  // правил — система, и главное, приключение заливается один раз, а книга
+  // правил дозаливается и правится. Поэтому связь «ключ файла → запись
+  // компендиума» живёт отдельно от истории батчей: она должна пережить и откат
+  // одного импорта, и удаление истории, иначе повторный импорт той же главы
+  // заведёт вторые копии вместо правки первых.
+  if (!tableExists(database, "system_import_keys")) {
+    database.exec(`CREATE TABLE system_import_keys (
+      system_id INTEGER NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      entry_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      PRIMARY KEY (system_id, key)
+    )`);
+    database.exec("CREATE INDEX idx_system_import_keys_entry ON system_import_keys(entry_id)");
+  }
+  if (!tableExists(database, "system_import_batches")) {
+    database.exec(`CREATE TABLE system_import_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      system_id INTEGER NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+      format TEXT NOT NULL,
+      language TEXT NOT NULL DEFAULT 'ru',
+      system_key TEXT NOT NULL DEFAULT '',
+      source_title TEXT NOT NULL DEFAULT '',
+      source_part TEXT NOT NULL DEFAULT '',
+      file_name TEXT NOT NULL DEFAULT '',
+      counts_json TEXT NOT NULL DEFAULT '{}',
+      warnings_json TEXT NOT NULL DEFAULT '[]',
+      created_system INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+  // Что именно сделал батч: создал запись или переписал существующую. Во
+  // втором случае payload хранит её прежнее содержимое целиком — только так
+  // откат правки возвращает то, что было, а не удаляет чужую запись.
+  if (!tableExists(database, "system_import_records")) {
+    database.exec(`CREATE TABLE system_import_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_id INTEGER NOT NULL REFERENCES system_import_batches(id) ON DELETE CASCADE,
+      entry_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT ''
+    )`);
+    database.exec("CREATE INDEX idx_system_import_records_batch ON system_import_records(batch_id)");
+  }
+
   return database;
 }
 

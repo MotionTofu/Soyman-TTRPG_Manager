@@ -39,6 +39,7 @@ const LocationDetailPage = lazy(() => import("./pages/LocationDetailPage").then(
 const BeingDetailPage = lazy(() => import("./pages/BeingDetailPage").then((m) => ({ default: m.BeingDetailPage })));
 const AdventureDetailPage = lazy(() => import("./pages/AdventureDetailPage").then((m) => ({ default: m.AdventureDetailPage })));
 const ImportAdventurePage = lazy(() => import("./pages/ImportAdventurePage").then((m) => ({ default: m.ImportAdventurePage })));
+const ImportSystemPage = lazy(() => import("./pages/ImportSystemPage").then((m) => ({ default: m.ImportSystemPage })));
 const SceneDetailPage = lazy(() => import("./pages/SceneDetailPage").then((m) => ({ default: m.SceneDetailPage })));
 const ArtifactDetailPage = lazy(() => import("./pages/ArtifactDetailPage").then((m) => ({ default: m.ArtifactDetailPage })));
 const CommunityDetailPage = lazy(() => import("./pages/CommunityDetailPage").then((m) => ({ default: m.CommunityDetailPage })));
@@ -95,6 +96,12 @@ function ImportRoute() {
   if (loading) return null;
   return user?.role === "player" ? <Navigate to="/" replace /> : <ImportAdventurePage />;
 }
+// Импорт книги правил — тоже мастерский инструмент: он правит компендиум системы.
+function ImportSystemRoute() {
+  const { user, loading } = useCurrentUser();
+  if (loading) return null;
+  return user?.role === "player" ? <Navigate to="/" replace /> : <ImportSystemPage />;
+}
 function SettingDetailRoute() {
   const { user, loading } = useCurrentUser();
   if (loading) return null;
@@ -135,6 +142,7 @@ function App() {
               <Route path="/settings" element={<SettingsRoute />} />
               <Route path="/settings/:id" element={<SettingDetailRoute />} />
               <Route path="/import" element={<ImportRoute />} />
+              <Route path="/import-system" element={<ImportSystemRoute />} />
               <Route path="/systems" element={<SystemsListPage />} />
               <Route path="/systems/:id" element={<SystemDetailPage />} />
               <Route path="/resources" element={<ResourcesListPage />} />
