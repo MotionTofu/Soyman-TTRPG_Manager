@@ -121,7 +121,16 @@ settingBeingsRouter.get("/", (req, res) => {
     clauses.push("b.category != @exclude_category");
     params.exclude_category = exclude_category;
   }
-  if (location_id) {
+  if (location_id === "none") {
+    // «Без локации» — ни одной привязки к живой локации. Архивированные
+    // локации не считаются: getLocations их тоже не отдаёт, так что существо
+    // с единственной архивной привязкой в интерфейсе выглядит безлокационным.
+    clauses.push(`b.id NOT IN (
+      SELECT bl.being_id FROM being_locations bl
+      JOIN setting_locations l ON l.id = bl.location_id
+      WHERE l.archived_at IS NULL
+    )`);
+  } else if (location_id) {
     // Requirement 1: filtering by a location also surfaces beings assigned to
     // any location nested underneath it (А → В → С means a being in С shows
     // up when filtering by А or В too), not just an exact location match.
@@ -286,6 +295,72 @@ settingBeingsRouter.post("/:id/thumbnail", upload.single("file"), async (req, re
   res.json(withAvatarUrl({ thumbnail_image_path: target }));
 });
 
+/**
+ * «На основе» существующей записи: статблок и текст приезжают к существу
+ * копией — снимком, а не живой ссылкой, чтобы правки существа не трогали
+ * компендиум, и наоборот.
+ *
+ * Только дополняет: ничего не переписывает и не удаляет. Поэтому смена основы
+ * у уже заполненного существа безопасна — оно получит второй статблок и новые
+ * статьи рядом со своими, а не вместо них. Уже принесённое раньше не
+ * дублируется: статблок сверяется по содержимому, статьи — по заголовку и
+ * тексту.
+ *
+ * У записи компендиума своих глав нет — есть описание и, если запись разбита
+ * на части, дочерние записи. И то и другое приезжает отдельными статьями.
+ */
+function inheritFromBaseMonster(beingId: number, baseMonsterId: number) {
+  const templates = db
+    .prepare(
+      `SELECT kind, format, content, note, theme, density FROM statblocks
+       WHERE owner_type = 'compendium_entry' AND owner_id = ?`
+    )
+    .all(baseMonsterId) as {
+    kind: string;
+    format: string;
+    content: string;
+    note: string | null;
+    theme: string | null;
+    density: string | null;
+  }[];
+  const sameStatblock = db.prepare(
+    "SELECT id FROM statblocks WHERE owner_type = 'being' AND owner_id = ? AND content = ?"
+  );
+  const insertStatblock = db.prepare(
+    `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, theme, density)
+     VALUES ('being', ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const t of templates) {
+    if (sameStatblock.get(beingId, t.content)) continue;
+    insertStatblock.run(beingId, t.kind, t.format, t.content, t.note, t.theme, t.density);
+  }
+
+  const entry = db
+    .prepare("SELECT id, name, description FROM compendium_entries WHERE id = ?")
+    .get(baseMonsterId) as { id: number; name: string; description: string | null } | undefined;
+  if (!entry) return;
+  const parts = [
+    { name: entry.name, description: entry.description },
+    ...(db
+      .prepare(
+        "SELECT name, description FROM compendium_entries WHERE parent_id = ? ORDER BY position, id"
+      )
+      .all(baseMonsterId) as { name: string; description: string | null }[]),
+  ];
+
+  const sameChapter = db.prepare(
+    "SELECT id FROM being_chapters WHERE being_id = ? AND title = ? AND content = ?"
+  );
+  const insertChapter = db.prepare(
+    "INSERT INTO being_chapters (being_id, section, title, content) VALUES (?, 'history', ?, ?)"
+  );
+  for (const part of parts) {
+    if (!part.description?.trim()) continue;
+    if (sameChapter.get(beingId, part.name, part.description)) continue;
+    insertChapter.run(beingId, part.name, part.description);
+  }
+}
+
 settingBeingsRouter.post("/", (req, res) => {
   const {
     setting_id,
@@ -350,15 +425,8 @@ settingBeingsRouter.post("/", (req, res) => {
     );
     for (const communityId of community_ids) insertCommunity.run(info.lastInsertRowid, communityId);
   }
-  // "On the basis of" a Бестиарий template: clone its statblock(s) in as an
-  // editable starting point — a snapshot, not a live link, so later edits to
-  // the template or this being don't affect one another.
   if (base_monster_id) {
-    db.prepare(
-      `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, theme, density)
-       SELECT 'being', ?, kind, format, content, note, theme, density
-       FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ?`
-    ).run(info.lastInsertRowid, base_monster_id);
+    inheritFromBaseMonster(Number(info.lastInsertRowid), base_monster_id);
   }
   res
     .status(201)
@@ -376,7 +444,9 @@ settingBeingsRouter.post("/", (req, res) => {
 settingBeingsRouter.put("/:id", (req, res) => {
   const existing = db
     .prepare("SELECT * FROM setting_beings WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; name: string; location_id: number | null } | undefined;
+    .get(req.params.id) as
+    | { folder_path: string; name: string; location_id: number | null; base_monster_id: number | null }
+    | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
   const {
@@ -442,6 +512,13 @@ settingBeingsRouter.put("/:id", (req, res) => {
     folderPath,
     req.params.id
   );
+  // Основу поменяли у уже существующего — новое приезжает так же, как при
+  // создании. Ничего не затирается: inheritFromBaseMonster только дополняет,
+  // так что своё описание и свой статблок остаются на месте, а прежняя основа
+  // не «отзывается» — то, что от неё уже написано, могло быть дополнено руками.
+  if (base_monster_id && base_monster_id !== existing.base_monster_id) {
+    inheritFromBaseMonster(Number(req.params.id), base_monster_id);
+  }
   res.json(
     db
       .prepare(

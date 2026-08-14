@@ -20,6 +20,14 @@ const SUPPORTS_FIELD_SIZING =
 // Rebuilds the table modal's cell grid to the given size, keeping any values
 // that still fit and defaulting new header cells to "Заголовок N" (matching
 // the old fixed 2×2 template) and new body cells to empty.
+// Сочетание клавиш сверяется по физической клавише (e.code): e.key на
+// кириллической раскладке даёт «и»/«л», и хоткей там бы не работал. Но code
+// приходит пустым у экранных клавиатур и части автоматизации, поэтому буква
+// принимается и как запасной вариант.
+function isShortcutKey(e: KeyboardEvent<HTMLTextAreaElement>, letter: string): boolean {
+  return e.code === `Key${letter}` || e.key.toUpperCase() === letter;
+}
+
 function resizeGrid(prev: string[][], rows: number, cols: number): string[][] {
   return Array.from({ length: rows }, (_, r) =>
     Array.from({ length: cols }, (_, c) => prev[r]?.[c] ?? (r === 0 ? `Заголовок ${c + 1}` : ""))
@@ -51,6 +59,8 @@ export const MentionTextarea = memo(function MentionTextarea({
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuWrapRef = useRef<HTMLDivElement>(null);
+  // Поле адреса — в него встаёт курсор по Ctrl+K.
+  const extUrlRef = useRef<HTMLInputElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null);
   const [queryStart, setQueryStart] = useState(0);
@@ -159,16 +169,14 @@ export const MentionTextarea = memo(function MentionTextarea({
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.ctrlKey || e.metaKey) {
-      // e.code is the physical key (layout-independent) — e.key would be
-      // "и"/"л" etc. on a Cyrillic layout, breaking the shortcut there.
-      if (e.code === "KeyB") {
+      if (isShortcutKey(e, "B")) {
         e.preventDefault();
         wrapSelection("**", "**", "жирный текст");
         return;
       }
-      if (e.code === "KeyK") {
+      if (isShortcutKey(e, "K")) {
         e.preventDefault();
-        setLinkMenuOpen(true);
+        openExternalLink();
         return;
       }
     }
@@ -243,6 +251,22 @@ export const MentionTextarea = memo(function MentionTextarea({
     setQueryStart(start);
     setLinkMenuOpen(false);
     setMenuOpen(false);
+  }
+
+  /**
+   * Ctrl+K — вставка внешней ссылки. Раньше хоткей только поднимал флаг
+   * подменю ссылок, а само подменю живёт внутри свёрнутой панели
+   * форматирования, так что нажатие не давало ничего видимого. Теперь панель
+   * раскрывается вместе с ним, выделенный текст едет в подпись, а курсор
+   * встаёт сразу в адрес: Enter там же и вставляет ссылку.
+   */
+  function openExternalLink() {
+    const el = textareaRef.current;
+    const selected = el ? value.slice(el.selectionStart, el.selectionEnd) : "";
+    if (selected.trim()) setExtLabel(selected);
+    setMenuOpen(true);
+    setLinkMenuOpen(true);
+    requestAnimationFrame(() => extUrlRef.current?.focus());
   }
 
   function insertExternalLink() {
@@ -458,7 +482,7 @@ export const MentionTextarea = memo(function MentionTextarea({
           <button
             type="button"
             className="rt-btn"
-            title="Ссылка"
+            title="Ссылка (Ctrl+K — сразу внешняя)"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setLinkMenuOpen((v) => !v)}
           >
@@ -477,10 +501,19 @@ export const MentionTextarea = memo(function MentionTextarea({
                   onChange={(e) => setExtLabel(e.target.value)}
                 />
                 <input
+                  ref={extUrlRef}
                   placeholder="https://…"
                   value={extUrl}
                   onChange={(e) => setExtUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && insertExternalLink()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") insertExternalLink();
+                    // Передумали — подменю закрывается, курсор возвращается в
+                    // текст на то же место.
+                    if (e.key === "Escape") {
+                      setLinkMenuOpen(false);
+                      textareaRef.current?.focus();
+                    }
+                  }}
                 />
                 <button type="button" className="primary" onClick={insertExternalLink}>
                   Вставить

@@ -24,7 +24,7 @@ const DOSSIER_SECTIONS: { key: "personality" | "backstory" | "personal_arc"; lab
 const TABS = [
   { key: "statblock" as const, label: "Чарник" },
   { key: "about" as const, label: "Досье" },
-  { key: "relations" as const, label: "Связи" },
+  { key: "relations" as const, label: "Отношения" },
   { key: "future_thoughts" as const, label: "Заметки" },
   { key: "inventory" as const, label: "Имущество" },
   { key: "gallery" as const, label: "Галерея" },

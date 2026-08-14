@@ -15,6 +15,9 @@ const ENDPOINTS: Record<string, string> = {
   compendium_entry: "/systems/entries",
   scene: "/story/scenes",
   adventure: "/story/arcs",
+  // У события своей коллекции нет — оно живёт внутри сеттинга, но одиночный
+  // маршрут у него такой же, и связи с ним разрешаются в название.
+  setting_event: "/settings/calendar-events",
 };
 
 // Same endpoint resolveEntityLabel below already hits for the full detail
@@ -62,7 +65,7 @@ export async function resolveEntityLabel(type: string, id: number): Promise<stri
   if (!base) return `${type} #${id}`;
   try {
     const entity = await api.get<Record<string, unknown>>(`${base}/${id}`);
-    if (type === "mastering") return String(entity.title ?? id);
+    if (type === "mastering" || type === "setting_event") return String(entity.title ?? id);
     if (type === "session")
       return `${entity.campaign_name ?? "Сессия"} — ${entity.date ?? id}`;
     if (type === "character") return String(entity.character_name ?? id);

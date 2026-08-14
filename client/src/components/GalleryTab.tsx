@@ -81,7 +81,10 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
   // so the button still does something useful before anyone's bothered to
   // caption their gallery).
   function labelFor(img: GalleryImage): string {
-    return img.caption || decodeURIComponent(img.image_url.split("/").pop() || "");
+    // The URL carries a query string (cache-busting ?v=, ?token=) — cut it off
+    // before taking the basename, or the label ends up with the whole tail.
+    const withoutQuery = img.image_url.split("?")[0];
+    return img.caption || decodeURIComponent(withoutQuery.split("/").pop() || "");
   }
   async function sortAlphabetically() {
     const ids = [...images].sort((a, b) => labelFor(a).localeCompare(labelFor(b), "ru")).map((i) => i.id);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { SettingBeing } from "../types";
 import { BEING_CATEGORIES } from "../beingCategories";
 import { TagChips } from "./TagChips";
@@ -74,6 +74,7 @@ export function BeingEntityRowList<B extends SettingBeing>({
   // Обитатели/Представители embeds keep the richer expand-in-place default.
   asLinks?: boolean;
 }) {
+  const navigate = useNavigate();
   const [menu, setMenu] = useState<{ x: number; y: number; being: B } | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const thumbnailStyles = loadThumbnailStyles();
@@ -129,9 +130,32 @@ export function BeingEntityRowList<B extends SettingBeing>({
                 <TagChips tags={b.tags} />
               </span>
               <span className="entity-row-actions" onClick={(e) => e.stopPropagation()}>
-                <Link to={`/beings/${b.id}`}>{asLinks ? "Изменить" : "Перейти"}</Link>
+                {/* В режиме asLinks вся строка — ссылка, а <a> внутри <a>
+                    недопустима: браузер такую разметку разбирает по-своему.
+                    Поэтому здесь кнопка с той же навигацией. preventDefault
+                    ещё и не даёт строке-ссылке сработать заодно с кнопкой. */}
+                {asLinks ? (
+                  <button
+                    type="button"
+                    className="entity-row-action-link"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigate(`/beings/${b.id}`);
+                    }}
+                  >
+                    Изменить
+                  </button>
+                ) : (
+                  <Link to={`/beings/${b.id}`}>Перейти</Link>
+                )}
                 {!hideDelete?.(b) && (
-                  <button type="button" onClick={() => onDelete(b.id)}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onDelete(b.id);
+                    }}
+                  >
                     {deleteLabel}
                   </button>
                 )}

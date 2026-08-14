@@ -1136,11 +1136,58 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "artifacts", "item_type")) {
     database.exec("ALTER TABLE artifacts ADD COLUMN item_type TEXT");
   }
+  // Род предмета: magic_item | equipment. От него зависит список типов, а у
+  // снаряжения нет редкости и настройки. У записей, заведённых до разделения,
+  // остаётся NULL — тип у них показывается по объединённому списку.
+  if (!columnExists(database, "artifacts", "item_class")) {
+    database.exec("ALTER TABLE artifacts ADD COLUMN item_class TEXT");
+  }
   if (!columnExists(database, "artifacts", "rarity")) {
     database.exec("ALTER TABLE artifacts ADD COLUMN rarity TEXT");
   }
   if (!columnExists(database, "artifacts", "requires_attunement")) {
     database.exec("ALTER TABLE artifacts ADD COLUMN requires_attunement INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Где предмет лежит и у кого он на руках — ссылками на сущности, а не
+  // текстом. Старая текстовая колонка owner остаётся: в ней уже лежат записи
+  // вида «у кого-то из городской стражи», которым не соответствует ни одна
+  // сущность, и терять их нельзя. Владелец полиморфный (личность или
+  // сообщество), поэтому пара колонок owner_type/owner_id, а не внешний ключ.
+  if (!columnExists(database, "artifacts", "location_id")) {
+    database.exec(
+      "ALTER TABLE artifacts ADD COLUMN location_id INTEGER REFERENCES setting_locations(id) ON DELETE SET NULL"
+    );
+  }
+  if (!columnExists(database, "artifacts", "owner_type")) {
+    database.exec("ALTER TABLE artifacts ADD COLUMN owner_type TEXT"); // being | community
+  }
+  if (!columnExists(database, "artifacts", "owner_id")) {
+    database.exec("ALTER TABLE artifacts ADD COLUMN owner_id INTEGER");
+  }
+  // Картинка предмета: file_path — это вложение (скан страницы, арт в полный
+  // размер), а для списков и карточек нужен свой уменьшенный аватар, как у
+  // остальных сущностей.
+  if (!columnExists(database, "artifacts", "avatar_image_path")) {
+    database.exec("ALTER TABLE artifacts ADD COLUMN avatar_image_path TEXT");
+  }
+  // Короткая сводка — то же, что description у локаций, существ и сообществ.
+  // Раньше у предмета были только «Сила», «История» и «Заметки», и краткому
+  // описанию из визарда некуда было лечь.
+  if (!columnExists(database, "artifacts", "description")) {
+    database.exec("ALTER TABLE artifacts ADD COLUMN description TEXT DEFAULT ''");
+  }
+
+  // Событие сеттинга дорастает до самостоятельной сущности со своим профилем:
+  // краткое описание остаётся в description (оно показывается в хронике),
+  // развёрнутый текст и последствия — отдельные поля. Участники и локации
+  // события не заводят своих таблиц: тип setting_event уже участвует в общем
+  // графе связей (entity_links), туда они и ложатся.
+  if (!columnExists(database, "setting_calendar_events", "full_description")) {
+    database.exec("ALTER TABLE setting_calendar_events ADD COLUMN full_description TEXT DEFAULT ''");
+  }
+  if (!columnExists(database, "setting_calendar_events", "consequences")) {
+    database.exec("ALTER TABLE setting_calendar_events ADD COLUMN consequences TEXT DEFAULT ''");
   }
 
   // Persisted, user-editable state for the session cheatsheet generator

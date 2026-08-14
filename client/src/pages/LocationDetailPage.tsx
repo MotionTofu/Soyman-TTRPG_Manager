@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { useUnloadTarget } from "../unloadTargets";
 import { AliasesCard } from "../components/AliasesCard";
 import { LocationMap } from "../components/LocationMap";
 import { ChapterList } from "../components/ChapterList";
@@ -9,6 +10,7 @@ import { MentionsTab } from "../components/MentionsTab";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { LocationCascadePicker } from "../components/LocationCascadePicker";
@@ -63,10 +65,6 @@ export function LocationDetailPage() {
   const [communities, setCommunities] = useState<SettingCommunity[]>([]);
   const [allLocations, setAllLocations] = useState<SettingLocation[]>([]);
   const [tab, selectTab] = useTabState(TABS, "Информация о локации");
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [shortNameDraft, setShortNameDraft] = useState("");
-  const [kindDraft, setKindDraft] = useState("");
   const [editingParent, setEditingParent] = useState(false);
   const [parentDraft, setParentDraft] = useState<number | null>(null);
   const [childName, setChildName] = useState("");
@@ -108,14 +106,19 @@ export function LocationDetailPage() {
     const query = showNestedInhabitants ? "?nested=1" : "";
     api.get<SettingLocationDetail>(`/setting-locations/${locationId}${query}`).then((l) => {
       setLocation(l);
-      setNameDraft(l.name);
-      setShortNameDraft(l.short_name ?? "");
-      setKindDraft(l.kind);
       api.get<SettingCommunity[]>(`/setting-communities?setting_id=${l.setting_id}`).then(setCommunities);
       api.get<SettingLocation[]>(`/setting-locations?setting_id=${l.setting_id}`).then(setAllLocations);
     });
   }
   useEffect(refresh, [locationId, showNestedInhabitants]);
+
+  // Мешок выгружает сюда существ и сообщества — то же, что перетаскивание в
+  // «Обитатели», только без перетаскивания (см. unloadTargets.tsx).
+  useUnloadTarget({
+    label: "Обитатели локации",
+    accepts: (item) => item.type === "being" || item.type === "community",
+    drop: addInhabitant,
+  });
 
   if (!location) return <p className="muted">Загрузка…</p>;
 
@@ -168,14 +171,12 @@ export function LocationDetailPage() {
     a.name.localeCompare(b.name, "ru")
   );
 
-  async function saveNameKind() {
-    if (!nameDraft.trim()) return;
+  async function saveNameKind(values: { name: string; kind: string; short_name: string }) {
     await api.put(`/setting-locations/${locationId}`, {
-      name: nameDraft,
-      kind: kindDraft,
-      short_name: shortNameDraft.trim(),
+      name: values.name,
+      kind: values.kind,
+      short_name: values.short_name.trim(),
     });
-    setEditingName(false);
     refresh();
   }
 
@@ -207,16 +208,21 @@ export function LocationDetailPage() {
     refresh();
   }
 
+  async function addInhabitant(result: SearchResult) {
+    if (result.type !== "being" && result.type !== "community") return;
+    await api.post(`/setting-locations/${locationId}/inhabitants`, {
+      type: result.type,
+      id: result.id,
+    });
+    refresh();
+  }
+
   function handleInhabitantDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setInhabitantsDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
-    if (result.type !== "being" && result.type !== "community") return;
-    api
-      .post(`/setting-locations/${locationId}/inhabitants`, { type: result.type, id: result.id })
-      .then(refresh);
+    addInhabitant(JSON.parse(raw) as SearchResult);
   }
 
   async function removeInhabitant(type: "being" | "community", targetId: number) {
@@ -295,35 +301,15 @@ export function LocationDetailPage() {
 
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row" style={{ alignItems: "flex-start" }}>
-          {editingName ? (
-            <div className="row">
-              <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-              <input
-                placeholder="Тип (континент/город/таверна…)"
-                value={kindDraft}
-                onChange={(e) => setKindDraft(e.target.value)}
-              />
-              <input
-                value={shortNameDraft}
-                onChange={(e) => setShortNameDraft(e.target.value)}
-                placeholder="Короткое имя для карты"
-                title="Показывается вместо полного имени в подписи пина на карте локации"
-              />
-              <button className="primary" onClick={saveNameKind}>
-                Сохранить
-              </button>
-              <button onClick={() => setEditingName(false)}>Отмена</button>
-            </div>
-          ) : (
-            <div className="row" style={{ alignItems: "center" }}>
-              <h1>{location.name}</h1>
-              <EntityTypeChip type="location" />
-              {location.kind && <span className="badge tag">{location.kind}</span>}
-            </div>
-          )}
+          <div className="row" style={{ alignItems: "center" }}>
+            <h1>{location.name}</h1>
+            <EntityTypeChip type="location" />
+            {location.kind && <span className="badge tag">{location.kind}</span>}
+          </div>
         </div>
         <div className="entity-header-actions">
-          <button onClick={() => setEditingName(true)}>Редактировать</button>
+          {/* Имя, тип и короткое имя правятся карточкой «Основное» во вкладке
+              «Информация о локации». */}
           <button className="danger" onClick={archiveLocation}>
             Архивировать
           </button>
@@ -340,6 +326,25 @@ export function LocationDetailPage() {
 
       {tab === "Информация о локации" && (
         <div className="stack">
+          <EntityFieldsCard
+            key={`fields-${location.id}`}
+            fields={[
+              { key: "name", label: "Имя", value: location.name, required: true },
+              {
+                key: "kind",
+                label: "Тип",
+                value: location.kind ?? "",
+                placeholder: "континент/город/таверна…",
+              },
+              {
+                key: "short_name",
+                label: "Короткое имя для карты",
+                value: location.short_name ?? "",
+                title: "Показывается вместо полного имени в подписи пина на карте локации",
+              },
+            ]}
+            onSave={(v) => saveNameKind({ name: v.name, kind: v.kind, short_name: v.short_name })}
+          />
           <AliasesCard
             aliases={location.aliases ?? []}
             nameOriginal={location.name_original ?? ""}

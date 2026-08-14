@@ -154,13 +154,18 @@ export interface SettingCalendarEvent {
   id: number;
   setting_id: number;
   title: string;
+  /** Короткая строка для хроники; развёрнутый текст — в профиле события. */
   description: string;
+  full_description: string;
+  consequences: string;
   inworld_year: number;
   inworld_month: number;
   inworld_day: number;
   important: number;
   visible_to_players: number;
   created_at: string;
+  /** Приходит только у одиночного события — для хлебных крошек профиля. */
+  setting_name?: string;
 }
 
 export type CampaignRole = "gm" | "player";
@@ -1288,6 +1293,7 @@ export interface Artifact {
   setting_id: number;
   name: string;
   short_name: string | null;
+  description: string;
   owner: string;
   /** Другие названия: переводы, сокращения, прозвища. */
   aliases: string[];
@@ -1296,7 +1302,10 @@ export interface Artifact {
   power: string;
   history: string;
   notes: string;
+  /** Род предмета: magic_item | equipment. От него зависит список типов. */
+  item_class: string | null;
   item_type: string | null;
+  /** Редкость и настройка есть только у магических предметов. */
   rarity: string | null;
   requires_attunement: boolean | number;
   file_path: string | null;

@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { useUnloadTarget } from "../unloadTargets";
 import { AliasesCard } from "../components/AliasesCard";
 import { StatblockList } from "../components/StatblockList";
 import { GalleryTab } from "../components/GalleryTab";
@@ -12,6 +13,7 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatImportantDate } from "../inworldCalendar";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { useTabState } from "../hooks/useTabState";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
@@ -32,7 +34,7 @@ import type {
 
 const TABS = [
   "Досье",
-  "Связи",
+  "Отношения",
   "Места обитания",
   "Важные даты",
   "Галерея",
@@ -61,12 +63,11 @@ export function BeingDetailPage() {
 
   const [being, setBeing] = useState<SettingBeingDetail | null>(null);
   const [tab, selectTab] = useTabState(TABS, "Досье");
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [shortNameDraft, setShortNameDraft] = useState("");
-  const [categoryDraft, setCategoryDraft] = useState("bestiary");
   const [communities, setCommunities] = useState<SettingCommunity[]>([]);
   const [communityDraft, setCommunityDraft] = useState<number[]>([]);
+  // «На основе» правится вместе с остальным в карточке «Основное»; в черновике
+  // лежит выбор пикера, а у него формат результата поиска.
+  const [baseDraft, setBaseDraft] = useState<SearchResult | null>(null);
   const [showAllCommunities, setShowAllCommunities] = useState(true);
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -90,13 +91,18 @@ export function BeingDetailPage() {
   function refresh() {
     api.get<SettingBeingDetail>(`/setting-beings/${beingId}`).then((b) => {
       setBeing(b);
-      setNameDraft(b.name);
-      setShortNameDraft(b.short_name ?? "");
-      setCategoryDraft(b.category);
       setCommunityDraft(b.communities.map((c) => c.id));
     });
   }
   useEffect(refresh, [beingId]);
+
+  // Мешок выгружает сюда локации — то же, что перетаскивание в «Места
+  // обитания» (см. unloadTargets.tsx).
+  useUnloadTarget({
+    label: "Места обитания",
+    accepts: (item) => item.type === "location",
+    drop: addLocation,
+  });
 
   useEffect(() => {
     if (!being) return;
@@ -124,15 +130,16 @@ export function BeingDetailPage() {
     refresh();
   }
 
-  async function saveName() {
-    if (!nameDraft.trim()) return;
+  async function saveName(values: { name: string; category: string; short_name: string }) {
     await api.put(`/setting-beings/${beingId}`, {
-      name: nameDraft,
-      category: categoryDraft,
-      short_name: shortNameDraft.trim(),
+      name: values.name,
+      category: values.category,
+      short_name: values.short_name.trim(),
+      // Смена основы догружает её статблок и описание, ничего не затирая, —
+      // поэтому и уходит только когда её действительно поменяли.
+      ...(baseDraft?.id !== being?.base_monster_id ? { base_monster_id: baseDraft?.id ?? null } : {}),
     });
     await api.put(`/setting-beings/${beingId}/communities`, { community_ids: communityDraft });
-    setEditingName(false);
     refresh();
   }
 
@@ -159,14 +166,18 @@ export function BeingDetailPage() {
     navigate(`/settings/${being.setting_id}`);
   }
 
+  async function addLocation(result: SearchResult) {
+    if (result.type !== "location") return;
+    await api.post(`/setting-beings/${beingId}/locations`, { location_id: result.id });
+    refresh();
+  }
+
   function handleLocationDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setLocationsDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
-    if (result.type !== "location") return;
-    api.post(`/setting-beings/${beingId}/locations`, { location_id: result.id }).then(refresh);
+    addLocation(JSON.parse(raw) as SearchResult);
   }
 
   async function removeLocation(locationId: number) {
@@ -254,66 +265,6 @@ export function BeingDetailPage() {
             </label>
             {avatarCrop.modal}
           </div>
-        {editingName ? (
-          <div className="stack">
-            <div className="row">
-              <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-              <input
-                value={shortNameDraft}
-                onChange={(e) => setShortNameDraft(e.target.value)}
-                placeholder="Короткое имя для карты"
-                title="Показывается вместо полного имени в подписи пина на карте локации"
-              />
-              <select value={categoryDraft} onChange={(e) => setCategoryDraft(e.target.value)}>
-                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={showAllCommunities}
-                onChange={(e) => setShowAllCommunities(e.target.checked)}
-              />
-              Показывать все сообщества (а не только выбранные)
-            </label>
-            {communities.length === 0 ? (
-              <span className="muted">Сообществ в сеттинге ещё нет.</span>
-            ) : (
-              <table className="being-community-table">
-                <tbody>
-                  {chunkFours(visibleCommunities).map((row, i) => (
-                    <tr key={i}>
-                      {row.map((c) => (
-                        <td key={c.id}>
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={communityDraft.includes(c.id)}
-                              onChange={() => toggleCommunity(c.id)}
-                            />
-                            {c.name}
-                          </label>
-                        </td>
-                      ))}
-                      {row.length < 4 &&
-                        Array.from({ length: 4 - row.length }, (_, j) => <td key={`pad${j}`} />)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <div className="row">
-              <button className="primary" onClick={saveName}>
-                Сохранить
-              </button>
-              <button onClick={() => setEditingName(false)}>Отмена</button>
-            </div>
-          </div>
-        ) : (
           <div>
             <div className="row" style={{ alignItems: "center" }}>
               <h1>{being.name}</h1>
@@ -351,10 +302,10 @@ export function BeingDetailPage() {
               <TagChips tags={being.tags} onChange={saveTags} />
             </div>
           </div>
-        )}
         </div>
         <div className="entity-header-actions">
-          <button onClick={() => setEditingName(true)}>Редактировать</button>
+          {/* Имя, категория и сообщества правятся карточкой «Основное» во
+              вкладке «Досье». */}
           <button className="danger" onClick={archiveBeing}>
             Архивировать
           </button>
@@ -371,6 +322,84 @@ export function BeingDetailPage() {
 
       {tab === "Досье" && (
         <div className="stack">
+          <EntityFieldsCard
+            key={`fields-${being.id}`}
+            fields={[
+              { key: "name", label: "Имя", value: being.name, required: true },
+              {
+                key: "short_name",
+                label: "Короткое имя для карты",
+                value: being.short_name ?? "",
+                title: "Показывается вместо полного имени в подписи пина на карте локации",
+              },
+              {
+                key: "category",
+                label: "Категория",
+                value: being.category,
+                options: Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
+              },
+            ]}
+            onEditStart={() => {
+              setCommunityDraft(being.communities.map((c) => c.id));
+              setBaseDraft(
+                being.base_monster_id
+                  ? ({
+                      id: being.base_monster_id,
+                      title: being.base_monster_name ?? "",
+                      type: "compendium_entry",
+                    } as SearchResult)
+                  : null
+              );
+            }}
+            onSave={(v) =>
+              saveName({ name: v.name, category: v.category, short_name: v.short_name })
+            }
+            editExtras={
+              <>
+                <span className="editable-card-field-label">На основе</span>
+                <span className="muted">
+                  Смена основы догрузит её статблок и описание отдельными статьями. Уже написанное
+                  останется на месте — ничего не переписывается.
+                </span>
+                <MonsterTemplatePicker value={baseDraft} onChange={setBaseDraft} />
+                <span className="editable-card-field-label">Сообщества</span>
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    checked={showAllCommunities}
+                    onChange={(e) => setShowAllCommunities(e.target.checked)}
+                  />
+                  Показывать все сообщества (а не только выбранные)
+                </label>
+                {communities.length === 0 ? (
+                  <span className="muted">Сообществ в сеттинге ещё нет.</span>
+                ) : (
+                  <table className="being-community-table">
+                    <tbody>
+                      {chunkFours(visibleCommunities).map((row, i) => (
+                        <tr key={i}>
+                          {row.map((c) => (
+                            <td key={c.id}>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={communityDraft.includes(c.id)}
+                                  onChange={() => toggleCommunity(c.id)}
+                                />
+                                {c.name}
+                              </label>
+                            </td>
+                          ))}
+                          {row.length < 4 &&
+                            Array.from({ length: 4 - row.length }, (_, j) => <td key={`pad${j}`} />)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            }
+          />
           <AliasesCard
             title="Известен также как"
             aliases={being.aliases ?? []}
@@ -471,7 +500,7 @@ export function BeingDetailPage() {
 
       {tab === "Упоминания" && <MentionsTab entityType="being" entityId={beingId} />}
 
-      {tab === "Связи" && (
+      {tab === "Отношения" && (
         <RelationsTab
           entityType="being"
           entityId={beingId}

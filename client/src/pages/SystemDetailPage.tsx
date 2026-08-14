@@ -17,8 +17,6 @@ export function SystemDetailPage() {
   const [system, setSystem] = useState<System | null>(null);
   const [sections, setSections] = useState<SystemSection[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportImages, setExportImages] = useState(false);
@@ -28,10 +26,7 @@ export function SystemDetailPage() {
   const focusEntryId = searchParams.get("entry") ? Number(searchParams.get("entry")) : undefined;
 
   function refreshSystem() {
-    api.get<System>(`/systems/${systemId}`).then((s) => {
-      setSystem(s);
-      setNameDraft(s.name);
-    });
+    api.get<System>(`/systems/${systemId}`).then(setSystem);
   }
   function refreshSections() {
     api.get<SystemSection[]>(`/systems/${systemId}/sections`).then(setSections);
@@ -60,10 +55,8 @@ export function SystemDetailPage() {
     setSearchParams(t === "overview" ? {} : { section: t });
   }
 
-  async function saveName() {
-    if (!nameDraft.trim()) return;
-    await api.put(`/systems/${systemId}`, { name: nameDraft });
-    setEditingName(false);
+  async function saveName(name: string) {
+    await api.put(`/systems/${systemId}`, { name });
     refreshSystem();
   }
 
@@ -95,23 +88,13 @@ export function SystemDetailPage() {
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        {editingName ? (
-          <div className="row">
-            <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-            <button className="primary" onClick={saveName}>
-              Сохранить
-            </button>
-            <button onClick={() => setEditingName(false)}>Отмена</button>
-          </div>
-        ) : (
-          <h1>
-            <button type="button" className="entity-title-link" onClick={() => selectTab("overview")} title="К обзору">
-              {system.name}
-            </button>
-          </h1>
-        )}
+        <h1>
+          <button type="button" className="entity-title-link" onClick={() => selectTab("overview")} title="К обзору">
+            {system.name}
+          </button>
+        </h1>
         <div className="entity-header-actions">
-          {!editingName && <button onClick={() => setEditingName(true)}>Редактировать</button>}
+          {/* Название правится в карточке «Описание системы» на обзоре. */}
           <button onClick={() => navigate(`/import-system?system=${systemId}`)}>
             Импорт книги правил
           </button>
@@ -179,6 +162,8 @@ export function SystemDetailPage() {
             rows={6}
             entityType="system"
             entityId={systemId}
+            fields={[{ key: "name", label: "Название системы", value: system.name, required: true }]}
+            onSaveFields={(v) => saveName(v.name)}
           />
           <details className="card">
             <summary>Кампании с этой системой ({campaigns.length})</summary>

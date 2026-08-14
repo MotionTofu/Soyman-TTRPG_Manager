@@ -34,3 +34,7 @@ Thumbs.db
 # Claude Code local state (not project source)
 .claude/
 .mcp.json
+
+# Сгенерированные артефакты инструментов, не исходники проекта
+graphify-out/
+.impeccable/

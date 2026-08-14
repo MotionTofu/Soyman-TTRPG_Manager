@@ -9,7 +9,7 @@ import { MentionsTab } from "../components/MentionsTab";
 import { GalleryTab } from "../components/GalleryTab";
 import { ChapterList } from "../components/ChapterList";
 import { useTabState } from "../hooks/useTabState";
-import { MAGIC_ITEM_TYPES, MAGIC_ITEM_RARITIES } from "../compendium";
+import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
 import { CompendiumEntryPicker } from "../components/MonsterTemplatePicker";
 import type { Artifact, CompendiumLink, SearchResult } from "../types";
 
@@ -24,10 +24,12 @@ export function ArtifactDetailPage() {
   const [form, setForm] = useState({
     name: "",
     short_name: "",
+    description: "",
     owner: "",
     power: "",
     history: "",
     notes: "",
+    item_class: "",
     item_type: "",
     rarity: "",
     requires_attunement: false,
@@ -41,10 +43,12 @@ export function ArtifactDetailPage() {
       setForm({
         name: a.name,
         short_name: a.short_name ?? "",
+        description: a.description ?? "",
         owner: a.owner,
         power: a.power,
         history: a.history,
         notes: a.notes,
+        item_class: a.item_class ?? "",
         item_type: a.item_type ?? "",
         rarity: a.rarity ?? "",
         requires_attunement: !!a.requires_attunement,
@@ -71,6 +75,14 @@ export function ArtifactDetailPage() {
     await api.del(`/artifacts/${artifactId}`);
     navigate(`/settings/${artifact.setting_id}`);
   }
+
+  // Тип, проставленный до разделения на роды (или руками при импорте), может
+  // не значиться ни в одном списке — он добавляется к вариантам, иначе правка
+  // досье молча стёрла бы его.
+  const typeOptions = (() => {
+    const list = itemTypeOptions(form.item_class);
+    return form.item_type && !list.includes(form.item_type) ? [form.item_type, ...list] : list;
+  })();
 
   return (
     <div className="stack">
@@ -113,39 +125,79 @@ export function ArtifactDetailPage() {
             </label>
             <div className="row">
               <label>
+                Род предмета
+                <select
+                  value={form.item_class}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    // Тип, редкость и настройка вне выбранного рода не имеют
+                    // смысла — сбрасываем их вместе с ним.
+                    setForm({
+                      ...form,
+                      item_class: next,
+                      item_type: itemTypeOptions(next).includes(form.item_type) ? form.item_type : "",
+                      ...(next === "equipment" ? { rarity: "", requires_attunement: false } : {}),
+                    });
+                  }}
+                >
+                  <option value="">— не указан —</option>
+                  {ITEM_CLASSES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Тип предмета
                 <select
                   value={form.item_type}
                   onChange={(e) => setForm({ ...form, item_type: e.target.value })}
                 >
                   <option value="">— не указан —</option>
-                  {MAGIC_ITEM_TYPES.map((t) => (
+                  {typeOptions.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
                   ))}
                 </select>
               </label>
-              <label>
-                Редкость
-                <select value={form.rarity} onChange={(e) => setForm({ ...form, rarity: e.target.value })}>
-                  <option value="">— не указана —</option>
-                  {MAGIC_ITEM_RARITIES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="row" style={{ alignItems: "center", gap: 4 }}>
-                <input
-                  type="checkbox"
-                  checked={form.requires_attunement}
-                  onChange={(e) => setForm({ ...form, requires_attunement: e.target.checked })}
-                />
-                Требует настройки
-              </label>
+              {form.item_class !== "equipment" && (
+                <>
+                  <label>
+                    Редкость
+                    <select
+                      value={form.rarity}
+                      onChange={(e) => setForm({ ...form, rarity: e.target.value })}
+                    >
+                      <option value="">— не указана —</option>
+                      {MAGIC_ITEM_RARITIES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="row" style={{ alignItems: "center", gap: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.requires_attunement}
+                      onChange={(e) => setForm({ ...form, requires_attunement: e.target.checked })}
+                    />
+                    Требует настройки
+                  </label>
+                </>
+              )}
             </div>
+            <label>
+              Короткое описание
+              <MentionTextarea
+                value={form.description}
+                onChange={(v) => setForm({ ...form, description: v })}
+                rows={2}
+                defaultSettingId={artifact.setting_id}
+              />
+            </label>
             <label>
               Сила / свойства
               <MentionTextarea
@@ -188,11 +240,30 @@ export function ArtifactDetailPage() {
                   Владелец: <MentionText text={artifact.owner} />
                 </div>
               )}
-              {!!(artifact.item_type || artifact.rarity || artifact.requires_attunement) && (
+              {!!(
+                artifact.item_class ||
+                artifact.item_type ||
+                artifact.rarity ||
+                artifact.requires_attunement
+              ) && (
                 <div className="row" style={{ gap: 6 }}>
+                  {artifact.item_class && (
+                    <span className="badge tag">
+                      {ITEM_CLASSES.find((c) => c.value === artifact.item_class)?.label ??
+                        artifact.item_class}
+                    </span>
+                  )}
                   {artifact.item_type && <span className="badge tag">{artifact.item_type}</span>}
                   {artifact.rarity && <span className="badge tag">{artifact.rarity}</span>}
                   {!!artifact.requires_attunement && <span className="badge tag">Требует настройки</span>}
+                </div>
+              )}
+              {artifact.description && (
+                <div className="stack">
+                  <strong>Короткое описание</strong>
+                  <div style={{ whiteSpace: "pre-wrap" }}>
+                    <MentionText text={artifact.description} />
+                  </div>
                 </div>
               )}
               {artifact.power && (
@@ -224,10 +295,12 @@ export function ArtifactDetailPage() {
                   setForm({
                     name: artifact.name,
                     short_name: artifact.short_name ?? "",
+                    description: artifact.description ?? "",
                     owner: artifact.owner,
                     power: artifact.power,
                     history: artifact.history,
                     notes: artifact.notes,
+                    item_class: artifact.item_class ?? "",
                     item_type: artifact.item_type ?? "",
                     rarity: artifact.rarity ?? "",
                     requires_attunement: !!artifact.requires_attunement,

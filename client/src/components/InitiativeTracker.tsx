@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { api } from "../api/client";
 import { useAudioPlayer, type AudioTrack } from "../audioPlayer";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
+import { useUnloadTarget } from "../unloadTargets";
 import { NavIcon } from "./NavIcons";
 import { parseDndStatblock } from "./EntityPreviewModal";
 import { abilityModifier, formatModifier } from "./dnd/AbilityScores";
@@ -135,12 +136,7 @@ export function InitiativeTracker({ sessionId }: Props) {
     return `${epithet} ${baseName}`;
   }
 
-  async function handleDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragOver(false);
-    const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
-    if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
+  async function addToInitiative(result: SearchResult) {
     if (!ACCEPT_TYPES.includes(result.type)) return;
     const [info, name] = await Promise.all([
       resolveStatblockInfo(result.type, result.id),
@@ -156,6 +152,21 @@ export function InitiativeTracker({ sessionId }: Props) {
       current_hp: info.currentHp,
     });
     load();
+  }
+
+  // Мешок выгружает бойцов сюда же, без перетаскивания (unloadTargets.tsx).
+  useUnloadTarget({
+    label: "Инициатива",
+    accepts: (item) => ACCEPT_TYPES.includes(item.type),
+    drop: addToInitiative,
+  });
+
+  async function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
+    if (!raw) return;
+    await addToInitiative(JSON.parse(raw) as SearchResult);
   }
 
   async function updateInitiative(id: number, initiative: number | null) {

@@ -80,9 +80,14 @@ export const EQUIPMENT_CATEGORIES = [
   "Фокусировка",
   "Инструменты",
   "Ремесленные инструменты",
+  "Материалы",
+  "Расходники",
+  "Безделушки",
   "Прочие предметы",
 ] as const;
 
+// Безделушка — не магический предмет, а раздел снаряжения, поэтому она живёт
+// в EQUIPMENT_CATEGORIES, а не здесь.
 export const MAGIC_ITEM_TYPES = [
   "Доспехи",
   "Жезлы",
@@ -122,6 +127,25 @@ export const MAGIC_ITEM_RARITIES = [
   "Артефакт",
   "Варьируется",
 ] as const;
+
+// Предмет сокровищницы бывает двух родов: магический (у него есть редкость и
+// настройка) и обычное снаряжение (у него их нет). От выбора зависит список
+// типов — те же списки, что и в одноимённых разделах компендиума.
+export const ITEM_CLASSES = [
+  { value: "magic_item", label: "Магический предмет" },
+  { value: "equipment", label: "Обычное снаряжение" },
+] as const;
+
+/**
+ * Типы предмета для выбранного рода. Пока род не выбран (и у старых записей,
+ * заведённых до разделения) отдаётся объединённый список — иначе уже
+ * проставленный тип пропал бы из выпадающего списка.
+ */
+export function itemTypeOptions(itemClass: string | null | undefined): string[] {
+  if (itemClass === "magic_item") return [...MAGIC_ITEM_TYPES];
+  if (itemClass === "equipment") return [...EQUIPMENT_CATEGORIES];
+  return [...new Set([...MAGIC_ITEM_TYPES, ...EQUIPMENT_CATEGORIES])];
+}
 
 export const KIND_DEFS: Record<string, KindDef> = {
   wiki: { label: "Запись", fields: [] },

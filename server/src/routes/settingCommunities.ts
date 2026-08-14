@@ -49,24 +49,47 @@ function archiveDescendants(communityId: number) {
 }
 
 settingCommunitiesRouter.get("/", (req, res) => {
-  const { setting_id, parent_id } = req.query as { setting_id?: string; parent_id?: string };
+  const { setting_id, parent_id, location_id } = req.query as {
+    setting_id?: string;
+    parent_id?: string;
+    location_id?: string;
+  };
   if (!setting_id) return res.status(400).json({ error: "setting_id is required" });
-  const rows =
-    parent_id === undefined
-      ? db
-          .prepare(
-            "SELECT * FROM setting_communities WHERE setting_id = ? AND archived_at IS NULL ORDER BY name"
-          )
-          .all(setting_id)
-      : db
-          .prepare(
-            parent_id === "null" || parent_id === ""
-              ? "SELECT * FROM setting_communities WHERE setting_id = ? AND parent_id IS NULL AND archived_at IS NULL ORDER BY name"
-              : "SELECT * FROM setting_communities WHERE setting_id = ? AND parent_id = ? AND archived_at IS NULL ORDER BY name"
-          )
-          .all(
-            ...(parent_id === "null" || parent_id === "" ? [setting_id] : [setting_id, parent_id])
-          );
+  const clauses = ["setting_id = @setting_id", "archived_at IS NULL"];
+  const params: Record<string, string> = { setting_id };
+  if (parent_id !== undefined) {
+    if (parent_id === "null" || parent_id === "") {
+      clauses.push("parent_id IS NULL");
+    } else {
+      clauses.push("parent_id = @parent_id");
+      params.parent_id = parent_id;
+    }
+  }
+  // Тот же фильтр по локации, что и у существ (см. settingBeings): «none» —
+  // ни одной привязки к живой локации, конкретная локация — включая всё,
+  // что вложено под неё.
+  if (location_id === "none") {
+    clauses.push(`id NOT IN (
+      SELECT cl.community_id FROM community_locations cl
+      JOIN setting_locations l ON l.id = cl.location_id
+      WHERE l.archived_at IS NULL
+    )`);
+  } else if (location_id) {
+    clauses.push(`id IN (
+      SELECT community_id FROM community_locations WHERE location_id IN (
+        WITH RECURSIVE descendants(id) AS (
+          SELECT id FROM setting_locations WHERE id = @location_id
+          UNION ALL
+          SELECT sl.id FROM setting_locations sl JOIN descendants d ON sl.parent_id = d.id
+        )
+        SELECT id FROM descendants
+      )
+    )`);
+    params.location_id = location_id;
+  }
+  const rows = db
+    .prepare(`SELECT * FROM setting_communities WHERE ${clauses.join(" AND ")} ORDER BY name`)
+    .all(params);
   res.json((rows as { thumbnail_image_path: string | null }[]).map(withThumbUrl));
 });
 
@@ -261,8 +284,12 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
   if (!existing) return res.status(404).json({ error: "not found" });
   const {
     name, description, history, current_situation, features, goals, tags, aliases, name_original,
+    parent_id,
   } = req.body as {
     name?: string;
+    // Перевешивание сообщества под другое (визард делает так, назначая
+    // созданному сообществу уже существующие вложенные).
+    parent_id?: number | null;
     description?: string;
     history?: string;
     current_situation?: string;
@@ -284,6 +311,7 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
        tags = COALESCE(?, tags),
        aliases = COALESCE(?, aliases),
        name_original = COALESCE(?, name_original),
+       parent_id = CASE WHEN ? THEN ? ELSE parent_id END,
        folder_path = ?
      WHERE id = ?`
   ).run(
@@ -296,6 +324,8 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     tags ? JSON.stringify(tags) : null,
     aliases ? JSON.stringify(aliases) : null,
     name_original ?? null,
+    parent_id !== undefined ? 1 : 0,
+    parent_id ?? null,
     folderPath,
     req.params.id
   );

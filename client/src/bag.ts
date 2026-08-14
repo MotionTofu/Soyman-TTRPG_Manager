@@ -61,6 +61,13 @@ export function removeFromBag(index: number) {
   saveBagItems(loadBagItems().filter((_, i) => i !== index));
 }
 
+// Убрать сразу несколько — после выгрузки мешка на страницу, где индексы
+// сдвигались бы после каждого удаления.
+export function removeItemsFromBag(items: SearchResult[]) {
+  const keys = new Set(items.map(itemKey));
+  saveBagItems(loadBagItems().filter((i) => !keys.has(itemKey(i))));
+}
+
 export function useBag() {
   const [items, setItems] = useState<SearchResult[]>(loadBagItems);
   const [size, setSize] = useState<number>(loadBagSize);
@@ -71,7 +78,18 @@ export function useBag() {
       setSize(loadBagSize());
     };
     window.addEventListener(BAG_EVENT, onChange);
-    return () => window.removeEventListener(BAG_EVENT, onChange);
+    // Мешок общий на все окна приложения: они смотрят в один localStorage, а
+    // событие storage приходит как раз в *остальные* окна того же адреса. Так
+    // сущность кладут в мешок в окне со списком и достают в окне локации —
+    // перетащить напрямую между окнами Chromium не даёт.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === ITEMS_KEY || e.key === SIZE_KEY) onChange();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(BAG_EVENT, onChange);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   return { items, size };

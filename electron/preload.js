@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // и обратно. Клиент дёргает это сразу после диалога — см.
   // installNativeDialogFocusFix в client/src/electronApi.ts.
   restoreFocus: () => ipcRenderer.send("restore-focus"),
+  // Открыть ещё одно окно приложения на указанном маршруте. Все окна работают
+  // с одним сервером и одной базой — см. spawnWindow в electron/main.js.
+  openWindow: (route) => ipcRenderer.send("open-window", route),
   // Returns an unsubscribe function, same shape as a DOM addEventListener
   // cleanup — React effects can call it directly on unmount.
   onUpdateStatus: (callback) => {

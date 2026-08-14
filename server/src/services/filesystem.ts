@@ -225,9 +225,22 @@ export function openInFileExplorer(target: string, selectFile: boolean): void {
   }
 }
 
+// A replacement upload usually lands at the exact same path (avatar.png ->
+// avatar.png), so the URL never changes — the client refetches the entity,
+// renders <img> with a byte-identical src, and the browser keeps showing the
+// image it already has until a hard reload. Tagging the URL with the file's
+// mtime makes every replacement a genuinely new URL, so the new image appears
+// immediately without Ctrl+R. Missing file (stale path) — plain URL, the 404
+// is the caller's problem either way.
 export function toFileUrl(absolutePath: string): string {
   const relative = path.relative(VAULT_ROOT, absolutePath).split(path.sep).join("/");
-  return `/files/${relative}`;
+  let version = "";
+  try {
+    version = `?v=${Math.floor(fs.statSync(absolutePath).mtimeMs)}`;
+  } catch {
+    /* file gone — serve the bare URL */
+  }
+  return `/files/${relative}${version}`;
 }
 
 // Best-effort recursive removal of an entity's folder, used only by permanent

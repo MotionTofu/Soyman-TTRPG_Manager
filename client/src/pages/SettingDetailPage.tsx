@@ -21,10 +21,10 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { downloadJson } from "../downloadJson";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { TagChips } from "../components/TagChips";
-import { LocationCascadePicker } from "../components/LocationCascadePicker";
+import { LocationFilter } from "../components/LocationCascadePicker";
 import { SettingEntryList } from "../components/SettingEntryList";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
-import { BeingQuickCreate } from "../components/BeingQuickCreate";
+import { EntityWizard } from "../components/entityWizard/EntityWizard";
 import { AdventuresTab } from "../components/AdventuresTab";
 import { CrossLinksCard } from "../components/CrossLinksCard";
 import { RelationGraph } from "../components/RelationGraph";
@@ -139,14 +139,16 @@ export function SettingDetailPage() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [bgFile, setBgFile] = useState<File | null>(null);
-  const bgCrop = useImageCrop("background", setBgFile);
-  const [thumbFile, setThumbFile] = useState<File | null>(null);
-  const thumbCrop = useImageCrop("thumbnail", setThumbFile);
+  // Фон и тамбнейл живут в карточке «Изображения сеттинга» внизу «Обзора» и
+  // заливаются сразу по выбору файла — не откладываются до «Сохранить» рядом с
+  // именем, как было раньше.
+  const [uploadingBg, setUploadingBg] = useState(false);
+  const [uploadingThumb, setUploadingThumb] = useState(false);
+  const bgCrop = useImageCrop("background", (file) => uploadImage("background", file));
+  const thumbCrop = useImageCrop("thumbnail", (file) => uploadImage("thumbnail", file));
   const [tab, selectTab] = useTabState(TABS, "Обзор");
   const [showExport, setShowExport] = useState(false);
+  const [creatingEvent, setCreatingEvent] = useState(false);
 
   const calendar = useSettingCalendar(settingId);
   const [calendarEvents, setCalendarEvents] = useState<SettingCalendarEvent[]>([]);
@@ -198,10 +200,7 @@ export function SettingDetailPage() {
   }
 
   function refresh() {
-    api.get<Setting>(`/settings/${settingId}`).then((s) => {
-      setSetting(s);
-      setNameDraft(s.name);
-    });
+    api.get<Setting>(`/settings/${settingId}`).then(setSetting);
     api
       .get<Resource[]>(`/resources?scope=setting&setting_id=${settingId}`)
       .then(setResources);
@@ -218,23 +217,22 @@ export function SettingDetailPage() {
     refresh();
   }
 
-  async function saveName() {
-    if (!nameDraft.trim()) return;
-    await api.put(`/settings/${settingId}`, { name: nameDraft });
-    if (bgFile) {
-      const form = new FormData();
-      form.append("file", bgFile);
-      await api.post(`/settings/${settingId}/background`, form);
-      setBgFile(null);
-    }
-    if (thumbFile) {
-      const form = new FormData();
-      form.append("file", thumbFile);
-      await api.post(`/settings/${settingId}/thumbnail`, form);
-      setThumbFile(null);
-    }
-    setEditingName(false);
+  async function saveName(name: string) {
+    await api.put(`/settings/${settingId}`, { name });
     refresh();
+  }
+
+  async function uploadImage(kind: "background" | "thumbnail", file: File) {
+    const setUploading = kind === "background" ? setUploadingBg : setUploadingThumb;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await api.post(`/settings/${settingId}/${kind}`, form);
+      refresh();
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function archiveSetting() {
@@ -368,7 +366,11 @@ export function SettingDetailPage() {
             <span>
               {formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar?.months ?? [])}
               {" — "}
-              <strong>{ev.title}</strong>
+              {/* Название ведёт в профиль события: в хронике живёт только
+                  дата и краткая строка, всё остальное — там. */}
+              <Link to={`/events/${ev.id}`}>
+                <strong>{ev.title}</strong>
+              </Link>
             </span>
           </span>
           <div className="row">
@@ -408,38 +410,17 @@ export function SettingDetailPage() {
         />
       )}
       <div className="row" style={{ justifyContent: "space-between" }}>
-        {editingName ? (
-          <div className="row" style={{ alignItems: "flex-end" }}>
-            <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-            <label>
-              Фоновая картинка
-              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => bgCrop.onSelect(e.target.files?.[0] ?? null)} />
-              <span className="muted image-hint">{IMAGE_HINT}</span>
-            </label>
-            {bgCrop.modal}
-            <label>
-              Тамбнейл (для списка сеттингов)
-              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
-              <span className="muted image-hint">{IMAGE_HINT}</span>
-            </label>
-            {thumbCrop.modal}
-            <button className="primary" onClick={saveName}>
-              Сохранить
+        <div className="row" style={{ alignItems: "center" }}>
+          <h1>
+            <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
+              {setting.name}
             </button>
-            <button onClick={() => setEditingName(false)}>Отмена</button>
-          </div>
-        ) : (
-          <div className="row" style={{ alignItems: "center" }}>
-            <h1>
-              <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
-                {setting.name}
-              </button>
-            </h1>
-            <EntityTypeChip type="setting" />
-          </div>
-        )}
+          </h1>
+          <EntityTypeChip type="setting" />
+        </div>
         <div className="entity-header-actions">
-          <button onClick={() => setEditingName(true)}>Редактировать</button>
+          {/* Имя правится в карточке «Описание» на «Обзоре» — вместе с самим
+              описанием, одной кнопкой «Сохранить». */}
           <button onClick={() => setShowExport(true)}>Экспорт</button>
           <label className="row" style={{ cursor: "pointer" }}>
             Импорт
@@ -458,6 +439,15 @@ export function SettingDetailPage() {
 
       {showExport && (
         <SettingExportModal settingId={settingId} settingName={setting.name} onClose={() => setShowExport(false)} />
+      )}
+
+      {creatingEvent && (
+        <EntityWizard
+          initialType="event"
+          ctx={{ settingId }}
+          onClose={() => setCreatingEvent(false)}
+          onCreated={refreshCalendarEvents}
+        />
       )}
 
       <div className="tabs">
@@ -479,6 +469,8 @@ export function SettingDetailPage() {
             entityType="setting"
             entityId={settingId}
             defaultSettingId={settingId}
+            fields={[{ key: "name", label: "Имя", value: setting.name, required: true }]}
+            onSaveFields={(v) => saveName(v.name)}
           />
 
           <CrossLinksCard
@@ -520,6 +512,29 @@ export function SettingDetailPage() {
 
           <div className="card">
             <LinkDropZone entityType="setting" entityId={settingId} title="Связанные сущности" />
+          </div>
+
+          <div className="card stack">
+            <h3>Изображения сеттинга</h3>
+            <div className="entity-image-slots">
+              <ImageSlot
+                title="Фон профиля"
+                hint="Подложка на всех страницах сеттинга."
+                url={setting.background_image_url}
+                wide
+                uploading={uploadingBg}
+                onSelect={bgCrop.onSelect}
+              />
+              <ImageSlot
+                title="Тамбнейл"
+                hint="Карточка в списке сеттингов."
+                url={setting.thumbnail_image_url}
+                uploading={uploadingThumb}
+                onSelect={thumbCrop.onSelect}
+              />
+            </div>
+            {bgCrop.modal}
+            {thumbCrop.modal}
           </div>
         </div>
       )}
@@ -564,7 +579,10 @@ export function SettingDetailPage() {
             <div className="row" style={{ justifyContent: "space-between" }}>
               <strong className="entry-title">Список по эпохам</strong>
               <div className="row">
-                <button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>
+                {/* Создание события через общий визард; правка существующего
+                    и клик по дню календаря по-прежнему открывают быструю
+                    модалку — там уже известна дата. */}
+                <button className="primary" onClick={() => setCreatingEvent(true)}>
                   + Создать событие
                 </button>
                 <button onClick={() => setAddingEra((v) => !v)}>+ Добавить эпоху</button>
@@ -749,6 +767,53 @@ export function SettingDetailPage() {
   );
 }
 
+// Одна ячейка карточки «Изображения сеттинга»: текущая картинка (или пустая
+// рамка, если её нет) плюс кнопка замены. Сама рамка и есть кнопка — клик по
+// превью открывает выбор файла, как у аватарок существ.
+function ImageSlot({
+  title,
+  hint,
+  url,
+  wide,
+  uploading,
+  onSelect,
+}: {
+  title: string;
+  hint: string;
+  url: string | null;
+  wide?: boolean;
+  uploading: boolean;
+  onSelect: (file: File | null) => void;
+}) {
+  return (
+    <div className="stack entity-image-slot">
+      <strong>{title}</strong>
+      <label
+        className={`entity-image-frame${wide ? " wide" : ""}${uploading ? " uploading" : ""}`}
+        title={IMAGE_HINT}
+      >
+        {url ? (
+          <img src={url} alt="" />
+        ) : (
+          // Оверлей «Загрузить» виден только по наведению, а на тач-экране
+          // наведения нет — поэтому пустая рамка сама говорит, что делать.
+          <span className="muted entity-image-empty">Нажмите, чтобы загрузить</span>
+        )}
+        <span className="avatar-upload-hint">
+          {uploading ? "Загрузка…" : url ? "Заменить" : "Загрузить"}
+        </span>
+        <input
+          type="file"
+          accept={IMAGE_ACCEPT}
+          style={{ display: "none" }}
+          onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
+        />
+      </label>
+      <span className="muted image-hint">{hint}</span>
+    </div>
+  );
+}
+
 // Corkboard-with-threads view of every relation between this setting's
 // beings, factions, and locations (player characters are deliberately left
 // out here — per the user's original ask, this graph is scoped to "все
@@ -805,10 +870,11 @@ function PopulationTab({ settingId }: { settingId: number }) {
 function BeingsSection({ settingId }: { settingId: number }) {
   const [category, setCategory] = useState<BeingCategory | "all">("all");
   const [locationFilter, setLocationFilter] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [beings, setBeings] = useState<SettingBeing[]>([]);
   const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
 
   function refresh() {
     const params = new URLSearchParams({ setting_id: String(settingId) });
@@ -823,7 +889,6 @@ function BeingsSection({ settingId }: { settingId: number }) {
 
   useEffect(() => {
     api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`).then(setLocations);
-    api.get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}`).then(setCommunities);
   }, [settingId]);
 
   async function duplicateBeing(being: SettingBeing) {
@@ -859,22 +924,18 @@ function BeingsSection({ settingId }: { settingId: number }) {
           </button>
         ))}
       </div>
-      <BeingQuickCreate
-        settingId={settingId}
-        locations={locations}
-        communities={communities}
-        showLocationPicker
-        showCommunityPicker
-        onCreated={refresh}
-      />
-      {locations.length === 0 && (
-        <p className="muted">
-          В сеттинге ещё нет локаций — существ можно создавать и без них, но чтобы указать
-          локацию, сначала{" "}
-          <Link to={`/settings/${settingId}?tab=${encodeURIComponent("География")}`}>
-            создайте локацию во вкладке «География» →
-          </Link>
-        </p>
+      <div className="row">
+        <button className="primary" onClick={() => setCreating(true)}>
+          Создать
+        </button>
+      </div>
+      {creating && (
+        <EntityWizard
+          initialType="being"
+          ctx={{ settingId }}
+          onClose={() => setCreating(false)}
+          onCreated={refresh}
+        />
       )}
       <div className="row">
         <input
@@ -882,12 +943,18 @@ function BeingsSection({ settingId }: { settingId: number }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <LocationCascadePicker
-          locations={locations}
-          value={locationFilter ? Number(locationFilter) : null}
-          onChange={(id) => setLocationFilter(id ? String(id) : "")}
-        />
+        {/* Фильтр спрятан, поэтому кнопка сама говорит, что он включён —
+            иначе непонятно, почему список короче, чем ожидаешь. */}
+        <button
+          className={`toggle-button${filtersOpen || locationFilter ? " active" : ""}`}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          Фильтры{locationFilter ? " (1)" : ""}
+        </button>
       </div>
+      {filtersOpen && (
+        <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+      )}
       {query.trim() && (
         <span className="muted">
           Показаны существа с этим именем, а также связанные с ним через отношения,
@@ -908,22 +975,22 @@ function BeingsSection({ settingId }: { settingId: number }) {
 function BestiarySection({ settingId }: { settingId: number }) {
   const [beings, setBeings] = useState<SettingBeing[]>([]);
   const [query, setQuery] = useState("");
-  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [locationFilter, setLocationFilter] = useState("");
+  const [locations, setLocations] = useState<SettingLocation[]>([]);
 
   function refresh() {
     const params = new URLSearchParams({ setting_id: String(settingId), category: "bestiary" });
     if (query.trim()) params.set("q", query.trim());
+    if (locationFilter) params.set("location_id", locationFilter);
     api.get<SettingBeing[]>(`/setting-beings?${params.toString()}`).then(setBeings);
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [settingId, query]);
+  useEffect(refresh, [settingId, query, locationFilter]);
 
-  async function create() {
-    if (!name.trim()) return;
-    await api.post("/setting-beings", { setting_id: settingId, name, category: "bestiary" });
-    setName("");
-    refresh();
-  }
+  useEffect(() => {
+    api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`).then(setLocations);
+  }, [settingId]);
 
   async function duplicateBeing(being: SettingBeing) {
     await api.post("/setting-beings", {
@@ -952,39 +1019,48 @@ function BestiarySection({ settingId }: { settingId: number }) {
         компендиумов систем на её собственной странице.
       </p>
       <div className="row">
-        <input
-          placeholder="Название вида (например, «Гоблины Подгорья»)"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button className="primary" onClick={create}>
-          Добавить
+        <button className="primary" onClick={() => setCreating(true)}>
+          Создать
         </button>
       </div>
+      {creating && (
+        <EntityWizard
+          initialType="bestiary"
+          ctx={{ settingId }}
+          onClose={() => setCreating(false)}
+          onCreated={refresh}
+        />
+      )}
       <input placeholder="Поиск по бестиарию…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
       <BeingEntityRowList beings={beings} onDelete={deleteBeing} onDuplicate={duplicateBeing} asLinks />
     </div>
   );
 }
 
 function CommunitiesSection({ settingId }: { settingId: number }) {
+  const navigate = useNavigate();
   const [communities, setCommunities] = useState<SettingCommunity[]>([]);
-  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [locationFilter, setLocationFilter] = useState("");
+  const [locations, setLocations] = useState<SettingLocation[]>([]);
   const thumbnailStyles = loadThumbnailStyles();
 
   function refresh() {
-    api
-      .get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}&parent_id=null`)
-      .then(setCommunities);
+    const params = new URLSearchParams({ setting_id: String(settingId) });
+    // Без фильтра список остаётся витриной верхнего уровня (вложенные живут на
+    // странице родителя). С фильтром это бессмысленно: вложенное сообщество
+    // без локации иначе просто не покажется — поэтому ищем по всем уровням.
+    if (locationFilter) params.set("location_id", locationFilter);
+    else params.set("parent_id", "null");
+    api.get<SettingCommunity[]>(`/setting-communities?${params.toString()}`).then(setCommunities);
   }
-  useEffect(refresh, [settingId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refresh, [settingId, locationFilter]);
 
-  async function create() {
-    if (!name.trim()) return;
-    await api.post("/setting-communities", { setting_id: settingId, name });
-    setName("");
-    refresh();
-  }
+  useEffect(() => {
+    api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`).then(setLocations);
+  }, [settingId]);
 
   async function deleteCommunity(id: number) {
     if (!confirm("Удалить это сообщество?")) return;
@@ -1001,15 +1077,24 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
         сообщества, во вкладке «Вложенные сообщества».
       </p>
       <div className="row">
-        <input
-          placeholder="Название сообщества"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button className="primary" onClick={create}>
-          Добавить
+        <button className="primary" onClick={() => setCreating(true)}>
+          Создать
         </button>
       </div>
+      {creating && (
+        <EntityWizard
+          initialType="community"
+          ctx={{ settingId }}
+          onClose={() => setCreating(false)}
+          onCreated={refresh}
+        />
+      )}
+      <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+      {locationFilter && (
+        <span className="muted">
+          С фильтром показаны и вложенные сообщества, не только верхнеуровневые.
+        </span>
+      )}
       <div className="entity-row-list">
         {communities.map((c) => {
           const url = c.thumbnail_image_url;
@@ -1028,9 +1113,18 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
                 <TagChips tags={c.tags} />
               </span>
               <span className="entity-row-actions">
-                <Link to={`/communities/${c.id}`} onClick={(e) => e.stopPropagation()}>
+                {/* Не <a> внутри <a> — строка целиком уже ссылка. */}
+                <button
+                  type="button"
+                  className="entity-row-action-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(`/communities/${c.id}`);
+                  }}
+                >
                   Изменить
-                </Link>
+                </button>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1052,26 +1146,14 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
 }
 
 function ArtifactsTab({ settingId }: { settingId: number }) {
+  const navigate = useNavigate();
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [name, setName] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
 
   function refresh() {
     api.get<Artifact[]>(`/artifacts?setting_id=${settingId}`).then(setArtifacts);
   }
   useEffect(refresh, [settingId]);
-
-  async function create() {
-    if (!name.trim()) return;
-    const form = new FormData();
-    form.append("setting_id", String(settingId));
-    form.append("name", name);
-    if (file) form.append("file", file);
-    await api.post("/artifacts", form);
-    setName("");
-    setFile(null);
-    refresh();
-  }
 
   async function deleteArtifact(id: number) {
     if (!confirm("Отправить артефакт в архив?")) return;
@@ -1082,21 +1164,36 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
   return (
     <div className="stack">
       <div className="row">
-        <input placeholder="Название артефакта" value={name} onChange={(e) => setName(e.target.value)} />
-        <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <button className="primary" onClick={create}>
-          Добавить
+        <button className="primary" onClick={() => setCreating(true)}>
+          Создать
         </button>
       </div>
+      {creating && (
+        <EntityWizard
+          initialType="artifact"
+          ctx={{ settingId }}
+          onClose={() => setCreating(false)}
+          onCreated={refresh}
+        />
+      )}
       <div className="entity-row-list">
         {artifacts.map((a) => (
           <Link key={a.id} to={`/artifacts/${a.id}`} className="entity-row">
             <span className="entity-row-name">{a.name}</span>
             {a.owner && <span className="muted">{a.owner}</span>}
             <span className="entity-row-actions">
-              <Link to={`/artifacts/${a.id}`} onClick={(e) => e.stopPropagation()}>
+              {/* Не <a> внутри <a> — строка целиком уже ссылка. */}
+              <button
+                type="button"
+                className="entity-row-action-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navigate(`/artifacts/${a.id}`);
+                }}
+              >
                 Изменить
-              </Link>
+              </button>
               <button
                 type="button"
                 onClick={(e) => {

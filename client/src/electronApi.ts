@@ -13,6 +13,8 @@ export interface ElectronAPI {
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
   /** Вернуть клавиатурный фокус странице — см. installNativeDialogFocusFix. */
   restoreFocus: () => void;
+  /** Открыть ещё одно окно приложения на указанном маршруте. */
+  openWindow: (route: string) => void;
 }
 
 declare global {
@@ -26,6 +28,20 @@ declare global {
 // electron/preload.js exposes it.
 export function hasElectronAPI(): boolean {
   return typeof window !== "undefined" && !!window.electronAPI;
+}
+
+/**
+ * Открыть текущую страницу вторым окном: в приложении это настоящее окно
+ * Electron, в браузере — обычное новое окно. Оба варианта смотрят в один
+ * сервер и одну базу, а «Мешок» у них общий (см. bag.ts), поэтому сущность
+ * можно взять в одном окне и перетащить в другом.
+ */
+export function openSecondWindow(route: string = window.location.pathname + window.location.search): void {
+  if (window.electronAPI?.openWindow) {
+    window.electronAPI.openWindow(route);
+    return;
+  }
+  window.open(route, "_blank", "noopener,width=1400,height=900");
 }
 
 /**

@@ -83,7 +83,7 @@ export function BeingQuickCreate({
       )}
       {showCommunityPicker && (
         <button type="button" onClick={() => setPickerOpen(true)}>
-          Организации{communityIds.size > 0 ? ` (${communityIds.size})` : ""}
+          Сообщества{communityIds.size > 0 ? ` (${communityIds.size})` : ""}
         </button>
       )}
       <button className="primary" onClick={create}>
@@ -92,9 +92,9 @@ export function BeingQuickCreate({
       {pickerOpen && (
         <Modal onClose={() => setPickerOpen(false)}>
           <div className="stack">
-            <h3 style={{ margin: 0 }}>Организации</h3>
+            <h3 style={{ margin: 0 }}>Сообщества</h3>
             {(communities ?? []).length === 0 ? (
-              <p className="muted">В сеттинге ещё нет сообществ/организаций.</p>
+              <p className="muted">В сеттинге ещё нет сообществ.</p>
             ) : (
               <div className="stack" style={{ gap: 4, maxHeight: 300, overflowY: "auto" }}>
                 {(communities ?? []).map((c) => (

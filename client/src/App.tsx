@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./layout/AppShell";
 import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
+import { CrossWindowSyncBanner } from "./components/CrossWindowSyncBanner";
 import { useCurrentUser } from "./api/currentUser";
 
 // Every route below is its own chunk (Vite code-splits on dynamic import)
@@ -43,6 +44,7 @@ const ImportSystemPage = lazy(() => import("./pages/ImportSystemPage").then((m) 
 const SceneDetailPage = lazy(() => import("./pages/SceneDetailPage").then((m) => ({ default: m.SceneDetailPage })));
 const ArtifactDetailPage = lazy(() => import("./pages/ArtifactDetailPage").then((m) => ({ default: m.ArtifactDetailPage })));
 const CommunityDetailPage = lazy(() => import("./pages/CommunityDetailPage").then((m) => ({ default: m.CommunityDetailPage })));
+const EventDetailPage = lazy(() => import("./pages/EventDetailPage").then((m) => ({ default: m.EventDetailPage })));
 const CompendiumEntryRedirectPage = lazy(() =>
   import("./pages/CompendiumEntryRedirectPage").then((m) => ({ default: m.CompendiumEntryRedirectPage }))
 );
@@ -118,6 +120,7 @@ function App() {
     <BrowserRouter>
       <LoginGate>
         <RealtimeListener />
+        <CrossWindowSyncBanner />
         <Suspense fallback={<p className="muted" style={{ padding: 24 }}>Загрузка…</p>}>
           <Routes>
             {/* Outside <AppShell> on purpose — a popped-out panel window
@@ -154,6 +157,7 @@ function App() {
               <Route path="/adventures/:id" element={<AdventureDetailPage />} />
               <Route path="/artifacts/:id" element={<ArtifactDetailPage />} />
               <Route path="/communities/:id" element={<CommunityDetailPage />} />
+              <Route path="/events/:id" element={<EventDetailPage />} />
               <Route path="/compendium/:id" element={<CompendiumEntryRedirectPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />

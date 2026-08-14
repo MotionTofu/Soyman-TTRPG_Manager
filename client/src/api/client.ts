@@ -1,3 +1,5 @@
+import { notifyDataChanged } from "../dataSync";
+
 const BASE = "/api";
 const TOKEN_KEY = "rpgManagerAuthToken";
 
@@ -40,6 +42,7 @@ function withFileTokens<T>(value: T): T {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const method = (options?.method ?? "GET").toUpperCase();
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
@@ -64,6 +67,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     }
     throw new Error(message);
   }
+  // Любая удачная правка — повод остальным окнам приложения обновиться: они
+  // работают с той же базой, но своей копией уже загруженных данных.
+  if (method !== "GET") notifyDataChanged();
   return withFileTokens(await res.json());
 }
 
@@ -106,5 +112,6 @@ export async function deleteFileWithChoice(path: string): Promise<boolean> {
     }
   }
   if (!res.ok) throw new Error(await res.text());
+  notifyDataChanged();
   return true;
 }

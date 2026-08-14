@@ -168,6 +168,21 @@ settingsRouter.get("/:id/calendar-events", (req, res) => {
   res.json(rows);
 });
 
+// Одиночное событие — для его профиля. Участники и локации своей таблицы не
+// заводят: они живут в общем графе (generic_links) со стороной setting_event,
+// откуда их и берёт карточка «Участники и локации».
+settingsRouter.get("/calendar-events/:eventId", (req, res) => {
+  const event = db
+    .prepare(
+      `SELECT e.*, s.name as setting_name FROM setting_calendar_events e
+       JOIN settings s ON s.id = e.setting_id
+       WHERE e.id = ?`
+    )
+    .get(req.params.eventId) as Record<string, unknown> | undefined;
+  if (!event) return res.status(404).json({ error: "not found" });
+  res.json(event);
+});
+
 // When a setting-calendar event's description @-mentions a being/location/
 // community, that date is also copied into the mentioned entity's own
 // "Важные даты" list — tagged with source_event_id so re-saving the event
@@ -200,14 +215,20 @@ function syncImportantDatesFromMentions(
 }
 
 settingsRouter.post("/:id/calendar-events", (req, res) => {
-  const { title, description, inworld_year, inworld_month, inworld_day, important } =
-    req.body as {
+  const {
+    title, description, inworld_year, inworld_month, inworld_day, important,
+    full_description, consequences,
+  } = req.body as {
       title: string;
       description?: string;
       inworld_year: number;
       inworld_month: number;
       inworld_day: number;
       important?: boolean;
+      // Профиль события: развёрнутый текст и последствия. В хронике по-прежнему
+      // показывается только краткое description.
+      full_description?: string;
+      consequences?: string;
     };
   if (!title || inworld_year == null || inworld_month == null || inworld_day == null) {
     return res
@@ -217,13 +238,16 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
   const info = db
     .prepare(
       `INSERT INTO setting_calendar_events
-         (setting_id, title, description, inworld_year, inworld_month, inworld_day, important)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (setting_id, title, description, full_description, consequences,
+          inworld_year, inworld_month, inworld_day, important)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       req.params.id,
       title,
       description ?? "",
+      full_description ?? "",
+      consequences ?? "",
       inworld_year,
       inworld_month,
       inworld_day,
@@ -265,8 +289,10 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
 });
 
 settingsRouter.put("/calendar-events/:eventId", (req, res) => {
-  const { title, description, inworld_year, inworld_month, inworld_day, important, visible_to_players } =
-    req.body as {
+  const {
+    title, description, inworld_year, inworld_month, inworld_day, important, visible_to_players,
+    full_description, consequences,
+  } = req.body as {
       title?: string;
       description?: string;
       inworld_year?: number;
@@ -274,6 +300,8 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
       inworld_day?: number;
       important?: boolean;
       visible_to_players?: boolean;
+      full_description?: string;
+      consequences?: string;
     };
   db.prepare(
     `UPDATE setting_calendar_events SET
@@ -283,7 +311,9 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
        inworld_month = COALESCE(?, inworld_month),
        inworld_day = COALESCE(?, inworld_day),
        important = COALESCE(?, important),
-       visible_to_players = COALESCE(?, visible_to_players)
+       visible_to_players = COALESCE(?, visible_to_players),
+       full_description = COALESCE(?, full_description),
+       consequences = COALESCE(?, consequences)
      WHERE id = ?`
   ).run(
     title ?? null,
@@ -293,6 +323,8 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
     inworld_day ?? null,
     important === undefined ? null : important ? 1 : 0,
     visible_to_players === undefined ? null : visible_to_players ? 1 : 0,
+    full_description ?? null,
+    consequences ?? null,
     req.params.eventId
   );
   const updated = db
@@ -318,6 +350,13 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
 
 settingsRouter.delete("/calendar-events/:eventId", (req, res) => {
   db.prepare("DELETE FROM setting_calendar_events WHERE id = ?").run(req.params.eventId);
+  // Связи с участниками внешним ключом не держатся (граф полиморфный), а
+  // осиротев, показываются в чужих профилях как «setting_event #40 (не
+  // найдено)» — поэтому убираются вместе с событием.
+  db.prepare(
+    `DELETE FROM generic_links
+     WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`
+  ).run(req.params.eventId, req.params.eventId);
   res.json({ ok: true });
 });
 

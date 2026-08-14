@@ -10,6 +10,8 @@ import { NavIcon, type NavIconName } from "../components/NavIcons";
 import { ParticleField } from "../components/ParticleField";
 import { AudioPlayerBar, MiniPlayerBar } from "../audioPlayer";
 import { useNearestSessionCockpitId } from "../nearestSessionCockpit";
+import { openSecondWindow } from "../electronApi";
+import { UnloadTargetsProvider } from "../unloadTargets";
 
 interface NavItem {
   to: string;
@@ -158,6 +160,21 @@ function BackupButton() {
   );
 }
 
+// Второе окно на ту же страницу: окна работают с одной базой, «Мешок» у них
+// общий — так сущность берут в одном окне и кладут в другом (перетащить
+// напрямую между окнами Chromium не позволяет).
+function NewWindowButton() {
+  return (
+    <button
+      className="nav-bottom-button"
+      onClick={() => openSecondWindow()}
+      title="Открыть эту же страницу вторым окном. Перенести сущность между окнами можно через «Мешок»."
+    >
+      Новое окно
+    </button>
+  );
+}
+
 function LogoutButton({ username }: { username?: string }) {
   if (!getAuthToken()) return null;
   return (
@@ -239,6 +256,9 @@ export function AppShell() {
       : null;
 
   return (
+    // Провайдер обнимает и страницу, и панель поиска с мешком: зоны приёма
+    // живут на странице, а кнопка «Выгрузить» — в мешке.
+    <UnloadTargetsProvider>
     <div className={`app-shell${isLivePult ? " app-shell-live" : ""}`}>
       <div className="mobile-topbar">
         <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню">
@@ -292,6 +312,7 @@ export function AppShell() {
               </NavLink>
             ))}
             {!isPlayer && <BackupButton />}
+            <NewWindowButton />
             <LogoutButton username={user?.username} />
           </div>
         </nav>
@@ -326,5 +347,6 @@ export function AppShell() {
         showCharacters={isPlayer}
       />
     </div>
+    </UnloadTargetsProvider>
   );
 }

@@ -173,6 +173,12 @@ function createMenu() {
       label: "Файл",
       submenu: [
         {
+          label: "Новое окно",
+          accelerator: "CmdOrCtrl+Shift+N",
+          click: openWindowFromFocused,
+        },
+        { type: "separator" },
+        {
           label: "Открыть папку с данными",
           click: () => shell.openPath(userData),
         },
@@ -235,6 +241,48 @@ ipcMain.on("restore-focus", (event) => {
   event.sender.focus();
 });
 
+// Все окна смотрят в один и тот же локальный сервер и одну базу, поэтому
+// второе окно — это просто ещё один BrowserWindow: отдельная страница
+// приложения, общие данные. Открывается со смещением, чтобы не легло ровно
+// поверх исходного.
+function spawnWindow(route = "/", parent = null) {
+  const offset = parent && !parent.isDestroyed() ? parent.getPosition() : null;
+  const win = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    title: "SoyMan_ttrpg",
+    ...(offset ? { x: offset[0] + 40, y: offset[1] + 40 } : {}),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+  // Клиент на react-router с обычными путями, а сервер отдаёт index.html на
+  // любой не-API маршрут — значит окно можно открыть сразу на нужной странице.
+  win.loadURL(`http://127.0.0.1:${PORT}${route.startsWith("/") ? route : "/" + route}`);
+  if (!isPackaged) {
+    win.webContents.openDevTools({ mode: "detach" });
+  }
+  return win;
+}
+
+// Открыть текущую страницу второй копией — окно просит об этом само (см.
+// preload's openWindow), потому что маршрут знает только оно.
+ipcMain.on("open-window", (event, route) => {
+  const parent = BrowserWindow.fromWebContents(event.sender);
+  spawnWindow(typeof route === "string" ? route : "/", parent);
+});
+
+function openWindowFromFocused() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (!focused) return spawnWindow("/");
+  // Спросить у окна его маршрут напрямую нельзя (это делает рендерер), но
+  // текущий URL знает и главный процесс.
+  const url = new URL(focused.webContents.getURL());
+  spawnWindow(url.pathname + url.search, focused);
+}
+
 async function createWindow() {
   seedIfNeeded();
   require(serverEntry);
@@ -242,21 +290,7 @@ async function createWindow() {
 
   createMenu();
 
-  const win = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    title: "SoyMan_ttrpg",
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, "preload.js"),
-    },
-  });
-  win.loadURL(`http://127.0.0.1:${PORT}`);
-
-  if (!isPackaged) {
-    win.webContents.openDevTools({ mode: "detach" });
-  }
+  const win = spawnWindow("/");
 
   setupAutoUpdater(win);
   checkForUpdates();

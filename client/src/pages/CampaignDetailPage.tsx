@@ -1788,7 +1788,7 @@ function PreproductionTab({
             <strong>Adventure Stakes and Hooks</strong>
             <span className="muted">
               Как эта проблема связана с героями приключения. Перетащите сюда персонажей игроков
-              из поиска — появится связь в разделе «Связи» персонажа.
+              из поиска — появится связь в разделе «Отношения» персонажа.
             </span>
             <MentionTextarea
               value={pre.adventure_stakes_hooks}

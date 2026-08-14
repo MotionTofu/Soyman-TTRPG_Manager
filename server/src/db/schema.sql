@@ -428,13 +428,21 @@ CREATE TABLE IF NOT EXISTS artifacts (
   aliases TEXT NOT NULL DEFAULT '[]',
   name_original TEXT NOT NULL DEFAULT '',
   short_name TEXT,
+  description TEXT DEFAULT '',
   owner TEXT DEFAULT '',
   power TEXT DEFAULT '',
   history TEXT DEFAULT '',
   notes TEXT DEFAULT '',
+  item_class TEXT, -- magic_item | equipment
   item_type TEXT,
   rarity TEXT,
   requires_attunement INTEGER NOT NULL DEFAULT 0,
+  -- Где лежит и у кого на руках: ссылками на сущности. Текстовый owner выше
+  -- остаётся для записей, которым не соответствует ни одна сущность.
+  location_id INTEGER REFERENCES setting_locations(id) ON DELETE SET NULL,
+  owner_type TEXT, -- being | community
+  owner_id INTEGER,
+  avatar_image_path TEXT,
   file_path TEXT,
   folder_path TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -647,7 +655,11 @@ CREATE TABLE IF NOT EXISTS campaign_calendar_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  -- Краткое описание для строки хроники; развёрнутый текст и последствия
+  -- живут в профиле события (участники и локации — в общем графе связей).
   description TEXT DEFAULT '',
+  full_description TEXT DEFAULT '',
+  consequences TEXT DEFAULT '',
   inworld_year INTEGER NOT NULL,
   inworld_month INTEGER NOT NULL,
   inworld_day INTEGER NOT NULL,
@@ -695,7 +707,11 @@ CREATE TABLE IF NOT EXISTS setting_calendar_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  -- Краткое описание для строки хроники; развёрнутый текст и последствия
+  -- показывает профиль события (участники и локации — в общем графе связей).
   description TEXT DEFAULT '',
+  full_description TEXT DEFAULT '',
+  consequences TEXT DEFAULT '',
   inworld_year INTEGER NOT NULL,
   inworld_month INTEGER NOT NULL,
   inworld_day INTEGER NOT NULL,

@@ -8,7 +8,7 @@ import { useTabState } from "../hooks/useTabState";
 import { api } from "../api/client";
 import type { CompendiumEntry, System } from "../types";
 
-const TABS = ["Статблок", "Досье", "Связи", "Упоминания"] as const;
+const TABS = ["Статблок", "Досье", "Отношения", "Упоминания"] as const;
 
 // Standalone profile page for a Бестиарий compendium entry (a global monster
 // template — not tied to any setting/location/faction, unlike a setting's
@@ -69,7 +69,7 @@ export function MonsterDetailPage({
         <EditableTextCard title="Описание" value={entry.description} onSave={saveDescription} rows={6} />
       )}
 
-      {tab === "Связи" && (
+      {tab === "Отношения" && (
         <RelationsTab entityType="compendium_entry" entityId={entryId} entityName={entry.name} />
       )}
 

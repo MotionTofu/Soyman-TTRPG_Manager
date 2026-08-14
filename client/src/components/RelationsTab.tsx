@@ -5,6 +5,7 @@ import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { NavIcon } from "./NavIcons";
+import { RelationLabelInput } from "./RelationLabelInput";
 import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import type { EntityRelation, EntityRelationsResponse, RelationEntityType, RelationTone, SearchResult } from "../types";
@@ -54,7 +55,7 @@ interface Props {
   defaultSettingId?: number;
 }
 
-// Reusable "Связи" tab for Beings/Characters/Communities: directional,
+// Reusable "Отношения" tab for Beings/Characters/Communities: directional,
 // tone-colored relations to any of the other two kinds. Each relation is
 // authored from one side (from_* declares an attitude toward to_*) — the
 // entity being viewed sees its own declared relations (outgoing) plus
@@ -66,10 +67,18 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   const [dragOver, setDragOver] = useState(false);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [pending, setPending] = useState<SearchResult | null>(null);
+  // Адресатов может быть сразу несколько: тон и название у них общие, а лор —
+  // свой у каждой связи, поэтому он спрашивается только когда адресат один.
+  const [targets, setTargets] = useState<SearchResult[]>([]);
+  const [direction, setDirection] = useState<"outgoing" | "incoming">("outgoing");
+  const [mirror, setMirror] = useState(false);
   const [draftTone, setDraftTone] = useState<RelationTone>("neutral");
   const [draftLabel, setDraftLabel] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
+  const [resultNote, setResultNote] = useState("");
+  const [listOpen, setListOpen] = useState(false);
+  const [settingOptions, setSettingOptions] = useState<SearchResult[] | null>(null);
+  const [listQuery, setListQuery] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTone, setEditTone] = useState<RelationTone>("neutral");
   const [editLabel, setEditLabel] = useState("");
@@ -96,13 +105,49 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     return () => clearTimeout(handle);
   }, [query, entityType, entityId]);
 
-  function pickResult(result: SearchResult) {
-    setPending(result);
+  // Список сущностей сеттинга для выбора галочками — грузится только когда
+  // список раскрыли: на профиле он нужен не каждый раз.
+  useEffect(() => {
+    if (!listOpen || settingOptions || !defaultSettingId) return;
+    Promise.all([
+      api.get<{ id: number; name: string; category: string }[]>(
+        `/setting-beings?setting_id=${defaultSettingId}`
+      ),
+      api.get<{ id: number; name: string }[]>(`/setting-communities?setting_id=${defaultSettingId}`),
+    ]).then(([beings, communities]) =>
+      setSettingOptions([
+        ...beings.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
+        ...communities.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
+      ])
+    );
+  }, [listOpen, settingOptions, defaultSettingId]);
+
+  function isSelf(result: SearchResult) {
+    return result.type === entityType && result.id === entityId;
+  }
+
+  function toggleTarget(result: SearchResult) {
+    if (isSelf(result)) return;
+    setResultNote("");
+    setTargets((prev) =>
+      prev.some((t) => t.type === result.type && t.id === result.id)
+        ? prev.filter((t) => !(t.type === result.type && t.id === result.id))
+        : [...prev, result]
+    );
+  }
+
+  function pickResult(found: SearchResult) {
+    toggleTarget(found);
+    setQuery("");
+    setSearchResults([]);
+  }
+
+  function resetDraft() {
+    setTargets([]);
     setDraftTone("neutral");
     setDraftLabel("");
     setDraftDescription("");
-    setQuery("");
-    setSearchResults([]);
+    setMirror(false);
   }
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -117,18 +162,54 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   }
 
   async function confirmAdd() {
-    if (!pending) return;
-    await api.post("/entity-relations", {
-      from_type: entityType,
-      from_id: entityId,
-      to_type: pending.type,
-      to_id: pending.id,
+    if (targets.length === 0) return;
+    const created = await api.post<{ created: number; skipped: number }>("/entity-relations/batch", {
+      entity_type: entityType,
+      entity_id: entityId,
+      targets: targets.map((t) => ({ type: t.type, id: t.id })),
+      direction,
       tone: draftTone,
       label: draftLabel,
-      description: draftDescription,
+      // Лор уходит только когда связь одна: копировать один текст в десять
+      // связей хуже, чем оставить их пустыми и дописать где нужно.
+      description: targets.length === 1 ? draftDescription : "",
+      mirror,
     });
-    setPending(null);
+    setResultNote(
+      created.skipped > 0
+        ? `Создано связей: ${created.created}. Пропущено как уже существующие: ${created.skipped}.`
+        : `Создано связей: ${created.created}.`
+    );
+    resetDraft();
     load();
+  }
+
+  // Зеркало уже существующей связи: та же пара в обратную сторону, тот же тон
+  // и название, лор пустой — он у каждой стороны свой.
+  async function mirrorRelation(r: EntityRelation, side: "out" | "in") {
+    const self = { type: entityType, id: entityId };
+    const other = { type: r.other_type, id: r.other_id };
+    const author = side === "out" ? other : self;
+    const recipient = side === "out" ? self : other;
+    await api.post("/entity-relations", {
+      from_type: author.type,
+      from_id: author.id,
+      to_type: recipient.type,
+      to_id: recipient.id,
+      tone: r.tone,
+      label: r.label,
+    });
+    load();
+  }
+
+  // Обратная связь уже есть? Сверяем по паре и названию: «друзья» в обе
+  // стороны — одно и то же, а «покровитель» и «должник» — разные вещи, и
+  // предлагать зеркало для второй по-прежнему уместно.
+  function hasReverse(r: EntityRelation, side: "out" | "in"): boolean {
+    const list = side === "out" ? data?.incoming : data?.outgoing;
+    return !!list?.some(
+      (x) => x.other_type === r.other_type && x.other_id === r.other_id && x.label === r.label
+    );
   }
 
   function startEdit(r: EntityRelation) {
@@ -150,13 +231,18 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     load();
   }
 
-  function renderRelation(r: EntityRelation, direction: "out" | "in") {
-    const otherRoute = DETAIL_ROUTES[r.other_type];
+  function renderRelation(r: EntityRelation, side: "out" | "in") {
+    // Сущности на том конце может уже не быть: связи полиморфные, каскад по
+    // ним не проходит, и до ближайшей уборки сирот такая строка живёт. Раньше
+    // она выглядела как «? ⟶ Имя» — теперь честно названа, а ссылка на
+    // несуществующую страницу не предлагается.
+    const otherName = r.other_name ?? "удалённая сущность";
+    const otherRoute = r.other_name ? DETAIL_ROUTES[r.other_type] : undefined;
     // Always read as "author ⟶ recipient", regardless of whether this
     // entity is the author (outgoing) or the recipient (incoming) — a plain
     // arrow-then-name-then-name reads ambiguously once the arrow flips.
-    const fromLabel = direction === "out" ? entityName : r.other_name ?? "?";
-    const toLabel = direction === "out" ? r.other_name ?? "?" : entityName;
+    const fromLabel = side === "out" ? entityName : otherName;
+    const toLabel = side === "out" ? otherName : entityName;
     return (
       <details key={r.id} className="card">
         <summary className="chevron-summary">
@@ -192,13 +278,9 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
                   </label>
                 ))}
               </div>
-              <label>
-                Название отношения
-                <input
-                  placeholder="например: любит, ненавидит, должен денег"
-                  value={editLabel}
-                  onChange={(e) => setEditLabel(e.target.value)}
-                />
+              <label className="stack editable-card-field">
+                <span>Название отношения</span>
+                <RelationLabelInput value={editLabel} onChange={setEditLabel} />
               </label>
               <label>
                 Подробности
@@ -218,13 +300,27 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
             </>
           ) : (
             <>
-              {otherRoute && <Link to={`${otherRoute}/${r.other_id}`}>Открыть {r.other_name} →</Link>}
+              {otherRoute ? (
+                <Link to={`${otherRoute}/${r.other_id}`}>Открыть {r.other_name} →</Link>
+              ) : (
+                !r.other_name && (
+                  <span className="muted">Сущность удалена — связь можно только убрать.</span>
+                )
+              )}
               <div style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={r.description} />
               </div>
-              <button style={{ alignSelf: "flex-start" }} onClick={() => startEdit(r)}>
-                Изменить
-              </button>
+              <div className="row">
+                <button onClick={() => startEdit(r)}>Изменить</button>
+                {!hasReverse(r, side) && (
+                  <button
+                    onClick={() => mirrorRelation(r, side)}
+                    title="Завести такую же связь в обратную сторону — отдельной записью, её можно будет править отдельно"
+                  >
+                    Зеркалить
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -266,15 +362,77 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
         onDrop={handleDrop}
       >
         <span className="muted">
-          Или перетащите сюда существо, персонажа или фракцию из поиска, чтобы указать отношение {entityName} к ним
+          Или перетащите сюда существо, персонажа или фракцию из поиска — они добавятся к выбранным
         </span>
       </div>
 
-      {pending && (
+      {defaultSettingId && (
+        <details className="card" open={listOpen} onToggle={(e) => setListOpen(e.currentTarget.open)}>
+          <summary>Выбрать из сеттинга списком</summary>
+          <div className="stack" style={{ marginTop: 8 }}>
+            {settingOptions === null ? (
+              <span className="muted">Загрузка…</span>
+            ) : (
+              <>
+                <input
+                  placeholder="Поиск по списку…"
+                  value={listQuery}
+                  onChange={(e) => setListQuery(e.target.value)}
+                />
+                <div className="relation-pick-list">
+                  {settingOptions
+                    .filter((o) => !isSelf(o))
+                    .filter((o) =>
+                      listQuery.trim()
+                        ? o.title.toLocaleLowerCase().includes(listQuery.trim().toLocaleLowerCase())
+                        : true
+                    )
+                    .map((o) => (
+                      <label key={`${o.type}:${o.id}`} className="row" style={{ gap: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={targets.some((t) => t.type === o.type && t.id === o.id)}
+                          onChange={() => toggleTarget(o)}
+                        />
+                        <span className={`entity-type-chip ${o.type}`}>
+                          {ENTITY_TYPE_SINGULAR[o.type] ?? o.type}
+                        </span>
+                        {o.title}
+                      </label>
+                    ))}
+                </div>
+              </>
+            )}
+          </div>
+        </details>
+      )}
+
+      {targets.length > 0 && (
         <div className="card stack">
-          <strong>
-            {entityName} ⟶ {pending.title}
-          </strong>
+          <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+            {targets.map((t) => (
+              <span key={`${t.type}:${t.id}`} className="relation-target-chip">
+                {t.title}
+                <button title="Убрать" onClick={() => toggleTarget(t)}>
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+          <label className="stack editable-card-field">
+            <span>Кто кому</span>
+            <select
+              value={direction}
+              onChange={(e) => setDirection(e.target.value as "outgoing" | "incoming")}
+            >
+              <option value="outgoing">
+                {entityName} ⟶ выбранные (отношение {entityName} к ним)
+              </option>
+              <option value="incoming">
+                выбранные ⟶ {entityName} (их отношение к {entityName})
+              </option>
+            </select>
+          </label>
           <div className="row">
             {RELATION_TONES.map((t) => (
               <label key={t.key} className="row" style={{ gap: 4 }}>
@@ -289,31 +447,39 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
               </label>
             ))}
           </div>
-          <label>
-            Название отношения
-            <input
-              placeholder="например: любит, ненавидит, должен денег"
-              value={draftLabel}
-              onChange={(e) => setDraftLabel(e.target.value)}
-            />
+          <label className="stack editable-card-field">
+            <span>Название отношения</span>
+            <RelationLabelInput value={draftLabel} onChange={setDraftLabel} />
           </label>
-          <label>
-            Подробности (лор)
-            <MentionTextarea
-              value={draftDescription}
-              onChange={setDraftDescription}
-              rows={3}
-              defaultSettingId={defaultSettingId}
-            />
+          <label className="row" style={{ gap: 6 }}>
+            <input type="checkbox" checked={mirror} onChange={(e) => setMirror(e.target.checked)} />
+            И в обратную сторону — такая же связь навстречу
           </label>
+          {targets.length === 1 ? (
+            <label>
+              Подробности (лор)
+              <MentionTextarea
+                value={draftDescription}
+                onChange={setDraftDescription}
+                rows={3}
+                defaultSettingId={defaultSettingId}
+              />
+            </label>
+          ) : (
+            <span className="muted">
+              Подробности у каждой связи свои — впишутся потом, в самих связях.
+            </span>
+          )}
           <div className="row">
             <button className="primary" onClick={confirmAdd}>
-              Добавить связь
+              {targets.length > 1 ? `Добавить связи (${targets.length})` : "Добавить связь"}
             </button>
-            <button onClick={() => setPending(null)}>Отмена</button>
+            <button onClick={resetDraft}>Отмена</button>
           </div>
         </div>
       )}
+
+      {resultNote && <p className="muted">{resultNote}</p>}
 
       <div className="row">
         <span className="muted">Сортировка:</span>

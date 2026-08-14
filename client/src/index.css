@@ -1187,10 +1187,40 @@ h4 { font-size: var(--fs-body); }
   border-top: var(--card-border-width, 1px) solid var(--line);
   flex-shrink: 0;
 }
+/* Заголовок «Мешок» и кнопка выгрузки в одну строку. */
+.bag-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bag-unload {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+}
 .bag-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
+  border-radius: var(--card-radius);
+}
+/* Мешок принимает перетаскивание целиком, а не отдельными ячейками: попасть в
+   маленький квадрат сложнее, чем в сетку. */
+.bag-grid.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+.unload-plan {
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.unload-plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 .bag-cell {
   aspect-ratio: 1;
@@ -2416,6 +2446,150 @@ details.card[open] summary {
 }
 .avatar-upload-label:hover .avatar-upload-hint {
   opacity: 1;
+}
+
+/* Поля в режиме правки EditableTextCard, когда рядом с текстом правится ещё
+   и имя: подписи «Имя» / «Описание» над своими полями. */
+.editable-card-field {
+  gap: 4px;
+  align-items: stretch;
+}
+.editable-card-field > span,
+.editable-card-field-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+/* «Данные изменились в другом окне» — видна, только когда автообновление
+   отложено из-за незаконченной правки (см. dataSync.ts). */
+.cross-window-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: var(--card-radius);
+  border: var(--card-border-width, 1px) solid var(--accent);
+  background: var(--paper);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 25%);
+}
+
+/* Пошаговое создание сущности (EntityWizard). */
+/* Шагам визарда с их списками выбора тесно в стандартных 420px модалки. */
+.modal:has(.wizard) {
+  width: 620px;
+}
+.wizard {
+  width: 100%;
+}
+.wizard-steps-nav {
+  flex-wrap: wrap;
+}
+.wizard-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--card-radius);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+}
+.wizard-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.wizard-relation-row {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.wizard-avatar-preview {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  border: var(--card-border-width, 1px) solid var(--line);
+}
+.wizard-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  padding-top: 10px;
+}
+
+/* Кнопки, раскрывающие спрятанную панель (Создать, Фильтры): раскрытое
+   состояние — и включённый фильтр — видно по подсветке. */
+.toggle-button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Те же поля в режиме просмотра карточки «Основное»: подпись слева, значение
+   справа от неё. */
+.entity-field-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.entity-field-row > span:first-child {
+  min-width: 180px;
+}
+
+/* Карточка «Изображения …» на профиле сущности: превью текущей картинки,
+   которое само является кнопкой замены (оверлей .avatar-upload-hint). */
+.entity-image-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+.entity-image-slot {
+  gap: 6px;
+  /* Без этого flex сжимает ячейки под ширину строки, и рамка теряет
+     пропорции картинки, которую в неё положат. */
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.entity-image-frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 288px;
+  max-width: 100%;
+  height: 104px;
+  overflow: hidden;
+  border-radius: var(--card-radius);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+  cursor: pointer;
+}
+.entity-image-frame.wide {
+  width: 320px;
+  height: 180px;
+}
+.entity-image-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.entity-image-frame:hover {
+  border-color: var(--accent);
+}
+.entity-image-frame:hover .avatar-upload-hint,
+.entity-image-frame.uploading .avatar-upload-hint {
+  opacity: 1;
+}
+.entity-image-empty {
+  font-size: 12px;
 }
 
 /* This block must stay AFTER the base .character-avatar-col/.character-avatar
@@ -4696,8 +4870,42 @@ input.litm-theme-title {
   cursor: pointer;
   font-size: 13px;
 }
-.entity-search-item:hover {
+.entity-search-item:hover,
+.entity-search-item.highlighted {
   background: var(--bg-elevated);
+}
+
+/* Поле названия отношения с подсказкой: выпадающий список позиционируется от
+   самого поля, поэтому обёртка — точка отсчёта. */
+.relation-label-input {
+  position: relative;
+  display: block;
+}
+.relation-label-input input {
+  width: 100%;
+}
+
+/* Выбранные адресаты связи — чипсы над формой, каждый со снятием. */
+.relation-target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  background: var(--paper-2);
+  font-size: 13px;
+}
+.relation-target-chip button {
+  padding: 0 4px;
+  line-height: 1;
+}
+.relation-pick-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .relation-graph-focus-panel {
   align-items: center;

@@ -1,0 +1,16 @@
+{
+  "name": "SoyMan — TTRPG Manager",
+  "short_name": "SoyMan",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#2b2320",
+  "theme_color": "#2b2320",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

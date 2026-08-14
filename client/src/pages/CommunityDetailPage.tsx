@@ -1,6 +1,7 @@
 import { useState, useEffect, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { useUnloadTarget } from "../unloadTargets";
 import { AliasesCard } from "../components/AliasesCard";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
@@ -8,6 +9,7 @@ import { LinkDropZone, SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { MentionsTab } from "../components/MentionsTab";
@@ -25,7 +27,7 @@ const TABS = [
   "Представители",
   "Места обитания",
   "Вложенные сообщества",
-  "Связи",
+  "Отношения",
   "Галерея",
   "Карточка фракции",
   "Упоминания",
@@ -39,8 +41,6 @@ export function CommunityDetailPage() {
   const [community, setCommunity] = useState<SettingCommunityDetail | null>(null);
   const [locations, setLocations] = useState<SettingLocation[]>([]);
   const [tab, selectTab] = useTabState(TABS, "Досье");
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
   const [membersDragOver, setMembersDragOver] = useState(false);
   const [childName, setChildName] = useState("");
   const [locationsDragOver, setLocationsDragOver] = useState(false);
@@ -57,11 +57,21 @@ export function CommunityDetailPage() {
   function refresh() {
     api.get<SettingCommunityDetail>(`/setting-communities/${communityId}`).then((c) => {
       setCommunity(c);
-      setNameDraft(c.name);
       api.get<SettingLocation[]>(`/setting-locations?setting_id=${c.setting_id}`).then(setLocations);
     });
   }
   useEffect(refresh, [communityId]);
+
+  useUnloadTarget({
+    label: "Представители",
+    accepts: (item) => item.type === "being",
+    drop: addMember,
+  });
+  useUnloadTarget({
+    label: "Места обитания",
+    accepts: (item) => item.type === "location",
+    drop: addLocation,
+  });
 
   async function handleThumbnailChange(file: File | null) {
     if (!file) return;
@@ -87,10 +97,8 @@ export function CommunityDetailPage() {
 
   if (!community) return <p className="muted">Загрузка…</p>;
 
-  async function saveName() {
-    if (!nameDraft.trim()) return;
-    await api.put(`/setting-communities/${communityId}`, { name: nameDraft });
-    setEditingName(false);
+  async function saveName(name: string) {
+    await api.put(`/setting-communities/${communityId}`, { name });
     refresh();
   }
 
@@ -115,14 +123,18 @@ export function CommunityDetailPage() {
     refresh();
   }
 
+  async function addMember(result: SearchResult) {
+    if (result.type !== "being") return;
+    await api.post(`/setting-communities/${communityId}/members`, { being_id: result.id });
+    refresh();
+  }
+
   function handleMemberDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setMembersDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
-    if (result.type !== "being") return;
-    api.post(`/setting-communities/${communityId}/members`, { being_id: result.id }).then(refresh);
+    addMember(JSON.parse(raw) as SearchResult);
   }
 
   async function addChild() {
@@ -136,14 +148,18 @@ export function CommunityDetailPage() {
     refresh();
   }
 
+  async function addLocation(result: SearchResult) {
+    if (result.type !== "location") return;
+    await api.post(`/setting-communities/${communityId}/locations`, { location_id: result.id });
+    refresh();
+  }
+
   function handleLocationDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setLocationsDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
-    if (result.type !== "location") return;
-    api.post(`/setting-communities/${communityId}/locations`, { location_id: result.id }).then(refresh);
+    addLocation(JSON.parse(raw) as SearchResult);
   }
 
   async function removeLocation(locationId: number) {
@@ -203,28 +219,18 @@ export function CommunityDetailPage() {
             />
           </label>
           {avatarCrop.modal}
-          {editingName ? (
-            <div className="row">
-              <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-              <button className="primary" onClick={saveName}>
-                Сохранить
-              </button>
-              <button onClick={() => setEditingName(false)}>Отмена</button>
+          <div>
+            <div className="row" style={{ alignItems: "center" }}>
+              <h1>{community.name}</h1>
+              <EntityTypeChip type="community" />
             </div>
-          ) : (
-            <div>
-              <div className="row" style={{ alignItems: "center" }}>
-                <h1>{community.name}</h1>
-                <EntityTypeChip type="community" />
-              </div>
-              <div className="row" style={{ marginTop: 4 }}>
-                <TagChips tags={community.tags} onChange={saveTags} />
-              </div>
+            <div className="row" style={{ marginTop: 4 }}>
+              <TagChips tags={community.tags} onChange={saveTags} />
             </div>
-          )}
+          </div>
         </div>
         <div className="entity-header-actions">
-          <button onClick={() => setEditingName(true)}>Редактировать</button>
+          {/* Имя правится карточкой «Основное» во вкладке «Досье». */}
           <button className="danger" onClick={archiveCommunity}>
             Архивировать
           </button>
@@ -241,6 +247,21 @@ export function CommunityDetailPage() {
 
       {tab === "Досье" && (
         <div className="stack">
+          <EntityFieldsCard
+            key={`fields-${community.id}`}
+            fields={[{ key: "name", label: "Имя", value: community.name, required: true }]}
+            onSave={(v) => saveName(v.name)}
+          />
+          {/* Синонимы имени стояли на вкладке «Отношения», где их никто не
+              искал: у локации и личности они в досье, здесь теперь тоже. */}
+          <AliasesCard
+            aliases={community.aliases ?? []}
+            nameOriginal={community.name_original ?? ""}
+            onSave={async (aliases, name_original) => {
+              await api.put(`/setting-communities/${communityId}`, { aliases, name_original });
+              refresh();
+            }}
+          />
           <details className="card">
             <summary className="sb-section" style={{ margin: 0 }}>
               История
@@ -492,16 +513,8 @@ export function CommunityDetailPage() {
         </div>
       )}
 
-      {tab === "Связи" && (
+      {tab === "Отношения" && (
         <div className="stack">
-          <AliasesCard
-            aliases={community.aliases ?? []}
-            nameOriginal={community.name_original ?? ""}
-            onSave={async (aliases, name_original) => {
-              await api.put(`/setting-communities/${communityId}`, { aliases, name_original });
-              refresh();
-            }}
-          />
           <LinkDropZone entityType="community" entityId={communityId} title="Связанные сущности" />
           <RelationsTab
             entityType="community"

@@ -36,6 +36,9 @@ export const ENTITY_TYPE_SINGULAR: Record<string, string> = {
   scene: "Сцена",
   session: "Сессия",
   compendium_entry: "Запись компендиума",
+  // Событие хроники — не в ENTITY_TYPES выше: своего раздела и поиска у него
+  // нет, но связи с ним показываются наравне с остальными.
+  setting_event: "Событие",
 };
 
 // Only types with a real "/type/:id" detail page — others (resource, mastering)
@@ -53,4 +56,5 @@ export const DETAIL_ROUTES: Record<string, string> = {
   player: "/players",
   community: "/communities",
   compendium_entry: "/compendium",
+  setting_event: "/events",
 };

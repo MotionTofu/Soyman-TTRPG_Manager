@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "./NavIcons";
+import { EntityWizard } from "./entityWizard/EntityWizard";
 import type { SettingLocation } from "../types";
 
 interface Props {
@@ -11,8 +12,7 @@ interface Props {
 
 export function LocationTree({ settingId }: Props) {
   const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [rootName, setRootName] = useState("");
-  const [rootKind, setRootKind] = useState("");
+  const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
 
   function refresh() {
@@ -21,14 +21,6 @@ export function LocationTree({ settingId }: Props) {
       .then(setLocations);
   }
   useEffect(refresh, [settingId]);
-
-  async function addRoot() {
-    if (!rootName.trim()) return;
-    await api.post("/setting-locations", { setting_id: settingId, name: rootName, kind: rootKind });
-    setRootName("");
-    setRootKind("");
-    refresh();
-  }
 
   const byParent = new Map<number | null, SettingLocation[]>();
   const byId = new Map<number, SettingLocation>();
@@ -70,16 +62,18 @@ export function LocationTree({ settingId }: Props) {
         добавлять вложенные локации (страны, города, районы, конкретные места).
       </p>
       <div className="row">
-        <input placeholder="Название" value={rootName} onChange={(e) => setRootName(e.target.value)} />
-        <input
-          placeholder="Тип (континент, мир…)"
-          value={rootKind}
-          onChange={(e) => setRootKind(e.target.value)}
-        />
-        <button className="primary" onClick={addRoot}>
-          Добавить
+        <button className="primary" onClick={() => setCreating(true)}>
+          Создать
         </button>
       </div>
+      {creating && (
+        <EntityWizard
+          initialType="location"
+          ctx={{ settingId }}
+          onClose={() => setCreating(false)}
+          onCreated={refresh}
+        />
+      )}
       <input
         placeholder="Поиск локации по названию…"
         value={query}

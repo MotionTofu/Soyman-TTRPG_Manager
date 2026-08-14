@@ -28,9 +28,6 @@ export function SceneDetailPage() {
 
   const [scene, setScene] = useState<StorySceneDetail | null>(null);
   const [setting, setSetting] = useState<Setting | null>(null);
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [kindDraft, setKindDraft] = useState("scene");
 
   const [check, setCheck] = useState({ what: "", difficulty: "", on_success: "", on_failure: "" });
   const [reward, setReward] = useState({ what: "", where_found: "", notes: "" });
@@ -40,11 +37,7 @@ export function SceneDetailPage() {
 
   function refresh() {
     const q = campaignId ? `?campaign_id=${campaignId}` : "";
-    api.get<StorySceneDetail>(`/story/scenes/${sceneId}${q}`).then((s) => {
-      setScene(s);
-      setNameDraft(s.name);
-      setKindDraft(s.kind);
-    });
+    api.get<StorySceneDetail>(`/story/scenes/${sceneId}${q}`).then(setScene);
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [sceneId, campaignId]);
@@ -75,10 +68,8 @@ export function SceneDetailPage() {
     refresh();
   }
 
-  async function saveName() {
-    if (!nameDraft.trim()) return;
-    await save({ name: nameDraft.trim(), kind: kindDraft });
-    setEditingName(false);
+  async function saveNameKind(name: string, kind: string) {
+    await save({ name: name.trim(), kind });
   }
 
   async function addCheck() {
@@ -142,23 +133,8 @@ export function SceneDetailPage() {
 
       <div className="entity-header">
         <div className="stack">
-          {editingName ? (
-            <div className="row">
-              <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-              <select value={kindDraft} onChange={(e) => setKindDraft(e.target.value)}>
-                {SCENE_KINDS.map((k) => (
-                  <option key={k.key} value={k.key}>
-                    {k.label}
-                  </option>
-                ))}
-              </select>
-              <button className="primary" onClick={saveName}>
-                Сохранить
-              </button>
-              <button onClick={() => setEditingName(false)}>Отмена</button>
-            </div>
-          ) : (
-            <div className="stack">
+          {/* Имя и вид сцены правятся в карточке «Описание для мастера». */}
+          <div className="stack">
               <h2>{scene.name}</h2>
               <div className="row">
                 <EntityTypeChip type="scene" />
@@ -187,11 +163,9 @@ export function SceneDetailPage() {
                   </select>
                 </div>
               )}
-            </div>
-          )}
+          </div>
         </div>
         <div className="entity-header-actions">
-          <button onClick={() => setEditingName(true)}>Редактировать</button>
           <label className="row">
             <input
               type="checkbox"
@@ -219,6 +193,16 @@ export function SceneDetailPage() {
         defaultSettingId={scene.setting_id}
         collapsible
         defaultOpen
+        fields={[
+          { key: "name", label: "Имя сцены", value: scene.name, required: true },
+          {
+            key: "kind",
+            label: "Вид",
+            value: scene.kind,
+            options: SCENE_KINDS.map((k) => ({ value: k.key, label: k.label })),
+          },
+        ]}
+        onSaveFields={(v) => saveNameKind(v.name, v.kind)}
       />
       <EditableTextCard
         title="Зачитать игрокам"
