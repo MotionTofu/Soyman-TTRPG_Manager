@@ -249,13 +249,18 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     const toLabel = side === "out" ? otherName : entityName;
     return (
       <details key={r.id} className="card">
-        <summary className="chevron-summary">
+        <summary className="chevron-summary relation-summary">
           <NavIcon name="chevron" className="chevron-icon" />
           <ToneDot tone={r.tone} />
-          {fromLabel} ⟶ {toLabel} {r.label && <span className="muted">— {r.label}</span>}
+          {/* Читается как фраза: кто — что за отношение — к кому. Название
+              стояло в конце после тире, и строка распадалась на «двое связаны»
+              и отдельно «чем именно». */}
+          <span className="relation-summary-text">
+            {fromLabel} ⟶ {r.label && <span className="muted">{r.label} ⟶ </span>}
+            {toLabel}
+          </span>
           <button
-            className="danger"
-            style={{ float: "right" }}
+            className="danger relation-summary-delete"
             title="Удалить"
             onClick={(e) => {
               e.preventDefault();

@@ -4894,6 +4894,18 @@ input.litm-theme-title {
   width: 100%;
 }
 
+/* Строка связи: текст занимает всю ширину, кнопка удаления уходит к правому
+   краю. float здесь не работал — summary выложен флексом, и кнопка липла
+   вплотную к тексту. */
+.relation-summary-text {
+  flex: 1;
+  min-width: 0;
+}
+.relation-summary-delete {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 /* Выбранные адресаты связи — чипсы над формой, каждый со снятием. */
 .relation-target-chip {
   display: inline-flex;
