@@ -1,3 +1,5 @@
+import type { DndCheck, DndCost, DndEffect } from "./components/dnd/effects";
+
 export interface System {
   id: number;
   name: string;
@@ -366,6 +368,10 @@ export interface DndManualAttack {
 export interface DndFeature {
   name: string;
   description: string;
+  // Ссылка на запись компендиума, если умение пришло оттуда. Живые поля
+  // (время накладывания, эффекты) читаются по ней при отрисовке, а не
+  // копируются в лист — см. resolveFeature в DndCharacterForm.
+  entryId?: number | null;
   // Set only for features auto-filled from a class/subclass/species pick —
   // the id of that class/subclass/species compendium entry, so picking a
   // different one can find-and-replace just its own features without
@@ -374,6 +380,13 @@ export interface DndFeature {
   // The compendium feature entry's own level (class/subclass features only),
   // shown next to the name.
   level?: number | null;
+  // Снято с записи компендиума: умение с временем накладывания попадает во
+  // вкладку «Действия» наравне с заклинаниями (Второе дыхание, Наложение рук).
+  castingTiming?: DndActionTiming;
+  castingTimingOther?: string;
+  checks?: DndCheck[];
+  effects?: DndEffect[];
+  cost?: DndCost;
 }
 
 // One class entry in a (possibly multiclassed) character's class list.
@@ -497,6 +510,13 @@ export interface DndCharacterData {
   // beyond the current count survives lowering it and reappears if raised.
   spellSlotLevels: number;
   spellSlotPips: number[];
+  // Ячейки считаются из таблиц развития классов (dndSlots.ts). Флаг
+  // поднимается, когда мастер правит их руками: у самодельного класса без
+  // заполненной таблицы или у нестандартной раздачи расчёт мешал бы.
+  spellSlotsManual?: boolean;
+  // Договор магии Колдуна: считается отдельно от обычных ячеек и хранится
+  // только израсходованное — максимум всегда выводится из таблицы класса.
+  pactSlotsUsed?: number;
   // Slots currently expended per level (0..spellSlotPips[i]) — separate from
   // the max-slots-per-level pips above, which only change on level-up/edit.
   // Quick-clicked in view mode during play, reset manually on a long rest.
@@ -557,6 +577,12 @@ export interface DndProficiencyEntry {
 export interface DndSpellEntry {
   entryId: number | null;
   name: string;
+  // Структурные броски и эффекты, снятые с записи компендиума (см.
+  // components/dnd/effects.ts). Поля category/attackSave/damage/healing ниже
+  // — то, чем это было раньше; они сохраняются только для листов, записанных
+  // до перехода, и читаются лишь когда checks/effects пусты.
+  checks?: DndCheck[];
+  effects?: DndEffect[];
   prepared: DndSpellPreparedState;
   // Set only for spells auto-filled from a species/subclass's "Обретаемые
   // заклинания" pick — the id of that compendium entry, so picking a

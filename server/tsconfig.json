@@ -11,5 +11,10 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Разовые утилиты: запускаются через `npx tsx src/scripts/…`, сервером не
+  // импортируются и в dist не нужны. Вынесены из сборки ещё и потому, что
+  // миграциям бывает нужен общий с клиентом разбор (progression.ts), а он
+  // лежит вне rootDir.
+  "exclude": ["src/scripts"]
 }

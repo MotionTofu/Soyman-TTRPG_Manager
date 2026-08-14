@@ -8,6 +8,11 @@ import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { addToBag } from "../bag";
 import { StatblockList } from "./StatblockList";
 import { NavIcon } from "./NavIcons";
+import { EffectList } from "./dnd/EffectList";
+import { ProgressionEditor, ProgressionView } from "./dnd/ProgressionEditor";
+import { StartingEquipmentPicker, type StartingEquipmentPick } from "./dnd/StartingEquipmentPicker";
+import { EMPTY_PROGRESSION, type ClassProgression } from "./dnd/progression";
+import { EMPTY_COST, type DndCheck, type DndCost, type DndEffect } from "./dnd/effects";
 import {
   ABILITY_SCORES,
   ARMOR_TYPES,
@@ -166,6 +171,13 @@ interface EditDraft {
   creatureType: MechanicsOption | null;
   senses: MechanicsPick[];
   speeds: MechanicsPick[];
+  // Shared by everything that can be *applied* — spells, class/species
+  // features, class options, magic items. Deliberately not spell-only: the
+  // old attack_save/damage/healing fields were, and that's why a paladin's
+  // Lay on Hands had nowhere to say it heals. See effects.ts.
+  checks: DndCheck[];
+  effects: DndEffect[];
+  cost: DndCost;
   // Spell-only.
   ritual: boolean;
   concentration: boolean;
@@ -179,6 +191,12 @@ interface EditDraft {
   abilities: string[];
   originFeat: MechanicsOption | null;
   equipmentA: string;
+  // Ссылки на записи снаряжения для наборов А и Б; текст выше остаётся
+  // читаемым описанием и хранит то, чего в компендиуме ещё нет.
+  equipmentAItems: StartingEquipmentPick[];
+  equipmentBItems: StartingEquipmentPick[];
+  equipmentAGold: string;
+  equipmentBGold: string;
   equipmentB: string;
   backgroundSkills: string[];
   // Class-only.
@@ -191,6 +209,10 @@ interface EditDraft {
   skillChoiceCount: string;
   skillChoiceOptions: string[];
   progressionTable: string;
+  // Структурная таблица развития (см. dnd/progression.ts). progressionTable
+  // выше — исходный markdown, оставленный как читаемый дубликат и источник
+  // для повторного разбора.
+  progression: ClassProgression;
   // Species/subclass-only: spells granted when this species/subclass is
   // picked on a character sheet, always shown there as "prepared".
   // grantLevel is the character sheet level (species: total character
@@ -379,6 +401,11 @@ async function loadClassHierarchy(systemId: number): Promise<ClassHierarchy> {
 function spellLevelLabel(level: number): string {
   return level === 0 ? "Заговоры" : `${level} уровень`;
 }
+
+// Entry kinds that carry checks/effects/cost. Spells are the obvious one,
+// but a fighter's Second Wind and a paladin's Lay on Hands are the same
+// shape — an effect plus a cost — and so are magic items with charges.
+const EFFECT_KINDS = new Set(["spell", "feature", "class_option", "magic_item", "equipment"]);
 
 function groupByLevel(list: CompendiumEntry[]): [number, CompendiumEntry[]][] {
   const map = new Map<number, CompendiumEntry[]>();
@@ -623,6 +650,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       creatureType: (entry.data.creature_type as MechanicsOption | undefined) ?? null,
       senses: dedupeByName((entry.data.senses as MechanicsPick[] | undefined) ?? []),
       speeds: dedupeByName((entry.data.speeds as MechanicsPick[] | undefined) ?? []),
+      checks: (entry.data.checks as DndCheck[] | undefined) ?? [],
+      effects: (entry.data.effects as DndEffect[] | undefined) ?? [],
+      cost: (entry.data.cost as DndCost | undefined) ?? EMPTY_COST,
       ritual: !!entry.data.ritual,
       concentration: !!entry.data.concentration,
       spellClasses: (entry.data.classes as MechanicsOption[] | undefined) ?? [],
@@ -635,6 +665,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       abilities: (entry.data.abilities as string[] | undefined) ?? [],
       originFeat: (entry.data.origin_feat as MechanicsOption | undefined) ?? null,
       equipmentA: (entry.data.equipment_a as string | undefined) ?? "",
+      equipmentAItems: (entry.data.equipment_a_items as StartingEquipmentPick[] | undefined) ?? [],
+      equipmentBItems: (entry.data.equipment_b_items as StartingEquipmentPick[] | undefined) ?? [],
+      equipmentAGold: (entry.data.equipment_a_gold as string | undefined) ?? "",
+      equipmentBGold: (entry.data.equipment_b_gold as string | undefined) ?? "",
       equipmentB: (entry.data.equipment_b as string | undefined) ?? "",
       backgroundSkills: Array.isArray(entry.data.skills)
         ? (entry.data.skills as string[])
@@ -652,6 +686,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       skillChoiceCount: entry.data.skill_choice_count != null ? String(entry.data.skill_choice_count) : "",
       skillChoiceOptions: (entry.data.skill_choice_options as string[] | undefined) ?? [],
       progressionTable: (entry.data.progression_table as string | undefined) ?? "",
+      progression: (entry.data.progression as ClassProgression | undefined) ?? EMPTY_PROGRESSION,
       grantedSpells: (
         (entry.data.granted_spells as { id: number; name: string; grantLevel?: number }[] | undefined) ?? []
       ).map((s) => ({ id: s.id, name: s.name, grantLevel: typeof s.grantLevel === "number" ? s.grantLevel : 1 })),
@@ -743,6 +778,11 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data.dex_bonus = editing.armorDexBonus;
       data.stealth_disadvantage = editing.armorStealthDisadvantage;
     }
+    if (original && EFFECT_KINDS.has(original.kind)) {
+      data.checks = editing.checks;
+      data.effects = editing.effects;
+      data.cost = editing.cost;
+    }
     if (original?.kind === "spell") {
       data.ritual = editing.ritual;
       data.concentration = editing.concentration;
@@ -757,6 +797,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data.abilities = editing.abilities;
       data.origin_feat = editing.originFeat;
       data.equipment_a = editing.equipmentA;
+      data.equipment_a_items = editing.equipmentAItems;
+      data.equipment_b_items = editing.equipmentBItems;
+      data.equipment_a_gold = editing.equipmentAGold;
+      data.equipment_b_gold = editing.equipmentBGold;
       data.equipment_b = editing.equipmentB;
       data.skills = editing.backgroundSkills;
     }
@@ -768,10 +812,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data.armor_profs = editing.armorProfs;
       data.tool_profs = editing.toolProfs;
       data.equipment_a = editing.equipmentA;
+      data.equipment_a_items = editing.equipmentAItems;
+      data.equipment_b_items = editing.equipmentBItems;
+      data.equipment_a_gold = editing.equipmentAGold;
+      data.equipment_b_gold = editing.equipmentBGold;
       data.equipment_b = editing.equipmentB;
       data.skill_choice_count = editing.skillChoiceCount ? Number(editing.skillChoiceCount) : 0;
       data.skill_choice_options = editing.skillChoiceOptions;
       data.progression_table = editing.progressionTable;
+      data.progression = editing.progression;
     }
     await api.put(`/systems/entries/${editing.id}`, {
       name: editing.name || "Без названия",
@@ -1292,6 +1341,7 @@ function EntryNode(props: NodeProps) {
   const classEquipmentA = isClass ? (entry.data.equipment_a as string | undefined) ?? "" : "";
   const classEquipmentB = isClass ? (entry.data.equipment_b as string | undefined) ?? "" : "";
   const classProgressionTable = isClass ? (entry.data.progression_table as string | undefined) ?? "" : "";
+  const classProgression = (isClass ? (entry.data.progression as ClassProgression | undefined) : undefined) ?? EMPTY_PROGRESSION;
   const hasClassSummary =
     isClass &&
     (classPrimaryAbilities.length > 0 ||
@@ -1316,6 +1366,15 @@ function EntryNode(props: NodeProps) {
   const armorDexBonus = !!entry.data.dex_bonus;
   const armorStealthDisadvantage = !!entry.data.stealth_disadvantage;
   const hasArmorSummary = isArmorEntry && (armorDexBonus || armorStealthDisadvantage);
+  // Броски и эффекты видны и в режиме просмотра: без них карточка молчала о
+  // главном — что заклинание вообще делает, — и урон приходилось искать
+  // глазами в тексте описания.
+  const viewChecks = (entry.data.checks as DndCheck[] | undefined) ?? [];
+  const viewEffects = (entry.data.effects as DndEffect[] | undefined) ?? [];
+  const viewCost = (entry.data.cost as DndCost | undefined) ?? EMPTY_COST;
+  const hasEffectSummary =
+    EFFECT_KINDS.has(entry.kind) &&
+    (viewChecks.length > 0 || viewEffects.length > 0 || viewCost.kind !== "none");
   const hasBody =
     !!entry.description ||
     filledFields.length > 0 ||
@@ -1329,7 +1388,9 @@ function EntryNode(props: NodeProps) {
     hasMagicItemSummary ||
     hasWeaponSummary ||
     hasArmorSummary ||
+    hasEffectSummary ||
     !!classProgressionTable ||
+    classProgression.columns.length > 0 ||
     isMonster;
 
   const canToggle = hasBody || isEditing;
@@ -1576,6 +1637,20 @@ function EntryNode(props: NodeProps) {
                 />
               </div>
             )}
+            {EFFECT_KINDS.has(entry.kind) && (
+              <div className="stack">
+                <span className="muted">Броски и эффекты</span>
+                <EffectList
+                  systemId={entry.system_id}
+                  checks={editing.checks}
+                  effects={editing.effects}
+                  cost={editing.cost}
+                  isCantrip={editing.level === "0"}
+                  edit
+                  onChange={(patch) => props.onDraftChange({ ...editing, ...patch })}
+                />
+              </div>
+            )}
             {isMagicItem && (
               <div className="stack" style={{ gap: 8 }}>
                 <label className="row" style={{ gap: 6 }}>
@@ -1773,11 +1848,35 @@ function EntryNode(props: NodeProps) {
                   value={editing.equipmentA}
                   onChange={(e) => props.onDraftChange({ ...editing, equipmentA: e.target.value })}
                 />
+                <StartingEquipmentPicker
+                  systemId={entry.system_id}
+                  items={editing.equipmentAItems}
+                  gold={editing.equipmentAGold}
+                  onChange={(patch) =>
+                    props.onDraftChange({
+                      ...editing,
+                      ...(patch.items ? { equipmentAItems: patch.items } : {}),
+                      ...(patch.gold !== undefined ? { equipmentAGold: patch.gold } : {}),
+                    })
+                  }
+                />
                 <textarea
                   placeholder="Снаряжение Б"
                   rows={2}
                   value={editing.equipmentB}
                   onChange={(e) => props.onDraftChange({ ...editing, equipmentB: e.target.value })}
+                />
+                <StartingEquipmentPicker
+                  systemId={entry.system_id}
+                  items={editing.equipmentBItems}
+                  gold={editing.equipmentBGold}
+                  onChange={(patch) =>
+                    props.onDraftChange({
+                      ...editing,
+                      ...(patch.items ? { equipmentBItems: patch.items } : {}),
+                      ...(patch.gold !== undefined ? { equipmentBGold: patch.gold } : {}),
+                    })
+                  }
                 />
               </div>
             )}
@@ -1931,11 +2030,35 @@ function EntryNode(props: NodeProps) {
                   value={editing.equipmentA}
                   onChange={(e) => props.onDraftChange({ ...editing, equipmentA: e.target.value })}
                 />
+                <StartingEquipmentPicker
+                  systemId={entry.system_id}
+                  items={editing.equipmentAItems}
+                  gold={editing.equipmentAGold}
+                  onChange={(patch) =>
+                    props.onDraftChange({
+                      ...editing,
+                      ...(patch.items ? { equipmentAItems: patch.items } : {}),
+                      ...(patch.gold !== undefined ? { equipmentAGold: patch.gold } : {}),
+                    })
+                  }
+                />
                 <textarea
                   placeholder="Начальное снаряжение — комплект Б"
                   rows={2}
                   value={editing.equipmentB}
                   onChange={(e) => props.onDraftChange({ ...editing, equipmentB: e.target.value })}
+                />
+                <StartingEquipmentPicker
+                  systemId={entry.system_id}
+                  items={editing.equipmentBItems}
+                  gold={editing.equipmentBGold}
+                  onChange={(patch) =>
+                    props.onDraftChange({
+                      ...editing,
+                      ...(patch.items ? { equipmentBItems: patch.items } : {}),
+                      ...(patch.gold !== undefined ? { equipmentBGold: patch.gold } : {}),
+                    })
+                  }
                 />
               </div>
             )}
@@ -1970,12 +2093,23 @@ function EntryNode(props: NodeProps) {
                   <NavIcon name="chevron" className="chevron-icon" />
                   Таблица развития
                 </summary>
-                <MentionTextarea
-                  value={editing.progressionTable}
-                  onChange={(v) => props.onDraftChange({ ...editing, progressionTable: v })}
-                  rows={6}
-                  placeholder="Вставьте таблицу кнопкой ▦ в панели форматирования и заполните по уровням"
+                <ProgressionEditor
+                  value={editing.progression}
+                  markdown={editing.progressionTable}
+                  onChange={(v) => props.onDraftChange({ ...editing, progression: v })}
                 />
+                <details className="card">
+                  <summary className="muted chevron-summary">
+                    <NavIcon name="chevron" className="chevron-icon" />
+                    Исходный текст таблицы
+                  </summary>
+                  <MentionTextarea
+                    value={editing.progressionTable}
+                    onChange={(v) => props.onDraftChange({ ...editing, progressionTable: v })}
+                    rows={6}
+                    placeholder="Вставьте таблицу кнопкой ▦ в панели форматирования и заполните по уровням"
+                  />
+                </details>
               </details>
             )}
             <div className="row">
@@ -2008,6 +2142,18 @@ function EntryNode(props: NodeProps) {
                 </div>
               ))}
             </div>
+          )}
+          {/* Сразу после времени и дистанции: «что оно делает» читается раньше
+              школы и компонентов, а не после них. */}
+          {hasEffectSummary && (
+            <EffectList
+              systemId={entry.system_id}
+              checks={viewChecks}
+              effects={viewEffects}
+              cost={viewCost}
+              edit={false}
+              onChange={() => {}}
+            />
           )}
           {hasMonsterSummary && (
             <div className="comp-fields">
@@ -2224,13 +2370,19 @@ function EntryNode(props: NodeProps) {
               <MentionText text={entry.description} />
             </div>
           )}
-          {classProgressionTable && (
+          {(classProgression.columns.length > 0 || classProgressionTable) && (
             <details className="card">
               <summary className="muted chevron-summary">
                 <NavIcon name="chevron" className="chevron-icon" />
                 Таблица развития
               </summary>
-              <MentionText text={classProgressionTable} />
+              {/* Структура — источник истины; markdown показываем только
+                  там, где структуры ещё нет (свой класс, ещё не разобранный). */}
+              {classProgression.columns.length > 0 ? (
+                <ProgressionView value={classProgression} />
+              ) : (
+                <MentionText text={classProgressionTable} />
+              )}
             </details>
           )}
           {isClass

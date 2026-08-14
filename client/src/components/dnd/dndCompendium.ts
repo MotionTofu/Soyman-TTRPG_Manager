@@ -25,7 +25,10 @@ export async function findDndSystemId(): Promise<number | null> {
 export interface DndClassOption {
   id: number;
   name: string;
-  hitDie: string; // e.g. "d10", from the class entry's data.hit_die field
+  hitDie: string; // как записано в data.hit_die, например «к10»
+  // Уровень класса, с которого доступен подкласс (data.subclass_level).
+  // 0 — поле не заполнено, ограничения нет.
+  subclassLevel: number;
 }
 export interface DndSubclassOption {
   id: number;
@@ -46,7 +49,12 @@ export async function loadDndClassHierarchy(systemId: number): Promise<DndClassH
   const classes = entries
     .filter((e) => e.kind === "class" && e.parent_id === null)
     .sort((a, b) => a.position - b.position)
-    .map((e) => ({ id: e.id, name: e.name, hitDie: String(e.data.hit_die ?? "") }));
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      hitDie: String(e.data.hit_die ?? ""),
+      subclassLevel: Number(e.data.subclass_level) || 0,
+    }));
   const subclassesByClass: Record<number, DndSubclassOption[]> = {};
   for (const c of classes) {
     subclassesByClass[c.id] = entries
@@ -156,6 +164,22 @@ export async function loadDndSpellsByLevel(systemId: number, level: number): Pro
     }
   }
   return results;
+}
+
+// Таблицы развития всех классов системы. Нужны в одном узком случае: когда
+// персонаж многоклассовый и среди его классов нет ни одного полного
+// заклинателя (Паладин/Следопыт) — таблицу многоклассья тогда неоткуда взять,
+// кроме как у полного заклинателя из компендиума.
+export async function loadDndClassProgressions(systemId: number): Promise<Record<string, unknown>[]> {
+  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+  const classSection = sections.find((s) => s.kind === "class");
+  if (!classSection) return [];
+  const entries = await api.get<CompendiumEntry[]>(
+    `/systems/${systemId}/entries?section_id=${classSection.id}`
+  );
+  return entries
+    .filter((e) => e.kind === "class" && e.data.progression)
+    .map((e) => e.data.progression as Record<string, unknown>);
 }
 
 export interface DndMechanicsOption {

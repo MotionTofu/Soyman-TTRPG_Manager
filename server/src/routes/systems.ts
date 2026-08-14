@@ -172,6 +172,30 @@ systemsRouter.post("/:id/entries", (req, res) => {
     .json(parseEntry(db.prepare("SELECT * FROM compendium_entries WHERE id = ?").get(info.lastInsertRowid) as EntryRow));
 });
 
+// Пачкой по списку id — чтобы лист персонажа мог подтянуть свои заклинания и
+// умения одним запросом вместо GET на каждое. Объявлено до "/entries/:entryId",
+// иначе "batch" уедет в него как значение параметра.
+//
+// Отсутствующие id молча пропускаются: заклинание могли удалить из
+// компендиума уже после того, как его вписали в лист, и ронять из-за этого
+// весь запрос нельзя — лист покажет такую запись по сохранённому имени.
+systemsRouter.get("/entries/batch", (req, res) => {
+  const raw = String(req.query.ids ?? "");
+  const ids = raw
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (ids.length === 0) return res.json([]);
+  // Ограничение SQLite на число переменных — 999; листов с таким количеством
+  // записей не бывает, но обрезать безопаснее, чем упасть.
+  const capped = ids.slice(0, 900);
+  const placeholders = capped.map(() => "?").join(",");
+  const rows = db
+    .prepare(`SELECT * FROM compendium_entries WHERE id IN (${placeholders})`)
+    .all(...capped) as EntryRow[];
+  res.json(rows.map(parseEntry));
+});
+
 systemsRouter.get("/entries/:entryId", (req, res) => {
   const row = db.prepare("SELECT * FROM compendium_entries WHERE id = ?").get(req.params.entryId) as
     | EntryRow

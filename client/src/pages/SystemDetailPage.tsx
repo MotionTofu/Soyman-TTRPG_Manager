@@ -112,6 +112,9 @@ export function SystemDetailPage() {
         )}
         <div className="entity-header-actions">
           {!editingName && <button onClick={() => setEditingName(true)}>Редактировать</button>}
+          <button onClick={() => navigate(`/import-system?system=${systemId}`)}>
+            Импорт книги правил
+          </button>
           <button className="danger" onClick={archiveSystem}>
             Архивировать
           </button>

@@ -48,6 +48,7 @@ import {
   loadDndBackgroundOptions,
   loadDndClassFeatures,
   loadDndClassHierarchy,
+  loadDndClassProgressions,
   loadDndEquipmentEntries,
   loadDndSpeciesFeatures,
   loadDndSpeciesOptions,
@@ -57,6 +58,19 @@ import {
   type DndSpeciesOption,
   type DndSpellOption,
 } from "./dndCompendium";
+import {
+  checkLabel,
+  checksLabel,
+  costSummary,
+  effectsLabel,
+  hasResolvableEffect,
+  type DndCheck,
+  type DndCost,
+  type DndEffect,
+} from "./effects";
+import { useCompendiumEntries } from "./useCompendiumEntries";
+import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
+import type { ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
 import { PipTrack } from "../litm/PipTrack";
 import { MentionTextarea } from "../mentions/MentionTextarea";
@@ -65,7 +79,7 @@ import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { statblockScopeClass } from "../../statblockThemes";
 import { useBag } from "../../bag";
 import { computeArmorClass } from "./armorClass";
-import { applicableResources } from "./dndResources";
+import { allResources, applicableStats, type ClassResourceSource } from "./dndResources";
 import { Modal } from "../Modal";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
@@ -323,7 +337,19 @@ function featuresFromEntries(entries: CompendiumEntry[], parentId: number, maxLe
   return entries
     .filter((e) => maxLevel == null || (e.level ?? 0) <= maxLevel)
     .sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || a.position - b.position)
-    .map((e) => ({ name: e.name, description: e.description, sourceParentId: parentId, level: e.level }));
+    .map((e) => ({
+      name: e.name,
+      description: e.description,
+      entryId: e.id,
+      sourceParentId: parentId,
+      level: e.level,
+      // Снимаем то же, что и у заклинаний: без времени накладывания умение не
+      // попадёт во вкладку «Действия», а без эффектов там нечего показать.
+      ...spellTimingFromData(e.data),
+      checks: (e.data.checks as DndCheck[] | undefined) ?? [],
+      effects: (e.data.effects as DndEffect[] | undefined) ?? [],
+      cost: e.data.cost as DndCost | undefined,
+    }));
 }
 
 // Removes any auto-filled features tagged with the given source id(s),
@@ -585,20 +611,14 @@ function SpellMetaLine({ s }: { s: DndSpellEntry }) {
   if (letters) parts.push(letters);
   if (s.ritual) parts.push("Ритуал");
   if (s.concentration) parts.push("Концентрация");
-  if (s.attackSave) parts.push(s.attackSave);
-  if (s.damage) {
-    parts.push(
-      <span title={s.upcast || undefined}>
-        {s.damage}
-      </span>
-    );
-  }
-  if (s.healing) {
-    parts.push(
-      <span title={s.upcast || undefined}>
-        Лечение {s.healing}
-      </span>
-    );
+  // Броски и эффекты — из структуры; старые attackSave/damage/healing
+  // остаются только как запасной путь для листов, сохранённых до перехода.
+  if (s.checks && s.checks.length > 0) parts.push(s.checks.map((c) => checkLabel(c)).join(" / "));
+  else if (s.attackSave) parts.push(s.attackSave);
+  if (s.effects && s.effects.length > 0) {
+    parts.push(<span title={s.upcast || undefined}>{effectsLabel(s.effects)}</span>);
+  } else if (s.damage || s.healing) {
+    parts.push(<span title={s.upcast || undefined}>{s.damage || `Лечение ${s.healing}`}</span>);
   }
   if (parts.length === 0) return null;
   return (
@@ -627,6 +647,8 @@ type DndSpellSnapshot = Pick<
   | "componentS"
   | "componentM"
   | "materialComponent"
+  | "checks"
+  | "effects"
   | "category"
   | "attackSave"
   | "damage"
@@ -773,6 +795,8 @@ function spellSnapshotFromEntry(entry: CompendiumEntry): DndSpellSnapshot {
     componentS: !!entry.data.component_s,
     componentM: !!entry.data.component_m,
     materialComponent: typeof entry.data.material_component === "string" ? entry.data.material_component : undefined,
+    checks: (entry.data.checks as DndCheck[] | undefined) ?? [],
+    effects: (entry.data.effects as DndEffect[] | undefined) ?? [],
     category: typeof entry.data.category === "string" ? entry.data.category : undefined,
     attackSave: typeof entry.data.attack_save === "string" ? entry.data.attack_save : undefined,
     damage: typeof entry.data.damage === "string" ? entry.data.damage : undefined,
@@ -781,20 +805,10 @@ function spellSnapshotFromEntry(entry: CompendiumEntry): DndSpellSnapshot {
   };
 }
 
-// Snapshots the flags shown in SpellMetaLine from the compendium entry at
-// add time (drop or search-pick), so rendering a row never needs a fetch.
-async function fetchSpellMeta(entryId: number): Promise<DndSpellSnapshot> {
-  try {
-    const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
-    return spellSnapshotFromEntry(entry);
-  } catch {
-    return {};
-  }
-}
-
 // Snapshots an equipment/magic_item compendium entry's armor/АС fields at
-// add time (same idea as fetchSpellMeta) — computeArmorClass() then reads
-// these cached fields without a live lookup.
+// add time — computeArmorClass() then reads these cached fields without a
+// live lookup. Заклинания от снапшота отказались (см. resolveSpell), но у
+// снаряжения он пока остаётся: КЗ считается вне рендера, где кэша нет.
 async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipmentItem>> {
   try {
     const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
@@ -955,6 +969,49 @@ export async function recomputeGrantedSpells(
   return { cantrips, spellsByLevel, spellSlotLevels };
 }
 
+// Хранимая запись + живые поля из компендиума. Лист держит только entryId,
+// имя и свою пометку подготовки; всё остальное — школа, время, компоненты,
+// броски, эффекты — берётся из компендиума при отрисовке. Сохранённый ранее
+// снапшот остаётся запасным путём: он используется, когда записи нет в кэше
+// (её ещё не догрузили, она удалена или заклинание вписано руками без ссылки).
+function resolveSpell(
+  s: DndSpellEntry,
+  get: (id: number | null | undefined) => CompendiumEntry | undefined
+): DndSpellEntry {
+  const entry = get(s.entryId);
+  return entry ? { ...s, ...spellSnapshotFromEntry(entry) } : s;
+}
+
+function resolveFeature(
+  f: DndFeature,
+  get: (id: number | null | undefined) => CompendiumEntry | undefined
+): DndFeature {
+  const entry = get(f.entryId);
+  if (!entry) return f;
+  return {
+    ...f,
+    ...spellTimingFromData(entry.data),
+    checks: (entry.data.checks as DndCheck[] | undefined) ?? [],
+    effects: (entry.data.effects as DndEffect[] | undefined) ?? [],
+    cost: entry.data.cost as DndCost | undefined,
+  };
+}
+
+// Все id, которые листу нужно догрузить одной пачкой.
+function sheetEntryIds(value: DndCharacterData): (number | null | undefined)[] {
+  const spells = [...value.cantrips, ...value.spellsByLevel.flat()].map((s) => s.entryId);
+  const features = [
+    ...value.classFeatures,
+    ...value.speciesFeatures,
+    ...value.feats,
+    ...value.specialAbilities,
+  ].map((f) => f.entryId);
+  // Записи классов нужны ради таблиц развития (по ним считаются ячейки) и
+  // стартовых наборов; предыстория — только ради набора.
+  const classes = value.classes.map((c) => c.classId);
+  return [...spells, ...features, ...classes, value.backgroundId];
+}
+
 // Full field set shown when a spell name is clicked (requirement 2).
 interface SpellDetail {
   school?: string;
@@ -1058,11 +1115,13 @@ function DndSpellLevelSection({
     }
   }
 
-  async function addSpell(entryId: number | null, name: string) {
+  // Ни запроса за метой, ни снапшота: всё, кроме ссылки и имени, лист берёт
+  // из компендиума при отрисовке (см. resolveSpell). Раньше здесь был GET на
+  // каждое добавляемое заклинание, и он же был источником устаревания.
+  function addSpell(entryId: number | null, name: string) {
     setAdding(false);
     setQuery("");
-    const meta = entryId ? await fetchSpellMeta(entryId) : {};
-    onSpellsChange([...spells, { entryId, name, prepared: 0, ...meta }]);
+    onSpellsChange([...spells, { entryId, name, prepared: 0 }]);
   }
   // Cycles the same star through not prepared → prepared → always prepared.
   function togglePrepared(i: number) {
@@ -1079,8 +1138,7 @@ function DndSpellLevelSection({
     setDragOver(false);
     const result = readSearchDrop(e);
     if (!result || result.kind !== "spell") return;
-    const meta = await fetchSpellMeta(result.id);
-    onSpellsChange([...spells, { entryId: result.id, name: result.title, prepared: 0, ...meta }]);
+    onSpellsChange([...spells, { entryId: result.id, name: result.title, prepared: 0 }]);
   }
 
   const filtered = query.trim()
@@ -1448,6 +1506,8 @@ const DndClassesEdit = memo(function DndClassesEdit({
       </div>
       {classes.map((c, i) => {
         const subclasses = c.classId != null ? hierarchy.subclassesByClass[c.classId] ?? [] : [];
+        const subclassLevelFor = (row: DndClassEntry) =>
+          hierarchy.classes.find((cl) => cl.id === row.classId)?.subclassLevel ?? 0;
         return (
           <div key={i} className="row dnd-class-row">
             {hasCompendiumClasses ? (
@@ -1469,19 +1529,30 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 onChange={(e) => update(i, { className: e.target.value })}
               />
             )}
-            {c.classId != null && subclasses.length > 0 && (
-              <select
-                value={c.subclassId ?? ""}
-                onChange={(e) => onPickSubclass(i, e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">Подкласс…</option>
-                {subclasses.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            {c.classId != null &&
+              subclasses.length > 0 &&
+              // Подкласс доступен не с первого уровня. Раньше выпадающий
+              // список стоял всегда, и ничто не мешало выбрать подкласс
+              // Варвару 1 уровня; теперь до нужного уровня вместо списка
+              // стоит подсказка, а уже выбранный подкласс не прячем — иначе
+              // персонаж с понижённым уровнем потерял бы его молча.
+              (subclassLevelFor(c) > c.level && c.subclassId == null ? (
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                  подкласс с {subclassLevelFor(c)} уровня
+                </span>
+              ) : (
+                <select
+                  value={c.subclassId ?? ""}
+                  onChange={(e) => onPickSubclass(i, e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Подкласс…</option>
+                  {subclasses.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              ))}
             <span className="dnd-class-level-stepper">
               <button
                 type="button"
@@ -1908,13 +1979,37 @@ function EquipmentInlineForm({
 // section gets three add affordances (свой ввод / компендиум / мешок) plus
 // drag-drop straight from the bag/search — no need to open the full
 // DndCharacterEdit form for a quick inventory tweak at the table.
+// Стартовые наборы класса и предыстории, связанные ссылками на записи
+// снаряжения (data.equipment_a_items / equipment_b_items). Пока набор не
+// размечен ссылками, здесь пусто — текстовое описание набора живёт в
+// компендиуме и переносится вручную, как и раньше.
+interface StartingSet {
+  label: string;
+  gold: string;
+  items: { entryId: number; name: string; qty: number }[];
+}
+
+function startingSetsFrom(entry: CompendiumEntry | undefined, ownerLabel: string): StartingSet[] {
+  if (!entry) return [];
+  const sets: StartingSet[] = [];
+  for (const slot of ["a", "b"] as const) {
+    const items = (entry.data[`equipment_${slot}_items`] as StartingSet["items"] | undefined) ?? [];
+    const gold = (entry.data[`equipment_${slot}_gold`] as string | undefined) ?? "";
+    if (items.length === 0 && !gold) continue;
+    sets.push({ label: `${ownerLabel} — набор ${slot.toUpperCase()}`, gold, items });
+  }
+  return sets;
+}
+
 function DndEquipmentQuickView({
   sections,
   systemId,
+  startingSets,
   onQuickUpdate,
 }: {
   sections: DndEquipmentSection[];
   systemId: number | null;
+  startingSets?: StartingSet[];
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
@@ -1976,6 +2071,26 @@ function DndEquipmentQuickView({
     if (addingSection == null || !draft.name.trim()) return;
     appendItem(addingSection, draft);
   }
+  // Кладёт весь набор в первую секцию инвентаря одним нажатием. Мета
+  // (урон, КЗ) снимается так же, как при добавлении вручную, поэтому
+  // надетый доспех из набора сразу участвует в расчёте КЗ.
+  async function takeStartingSet(set: StartingSet) {
+    const added: DndEquipmentItem[] = [];
+    for (const item of set.items) {
+      const meta = await fetchEquipmentMeta(item.entryId);
+      added.push({
+        name: item.name,
+        qty: item.qty > 1 ? String(item.qty) : "",
+        weight: "",
+        notes: "",
+        entryId: item.entryId,
+        ...meta,
+      });
+    }
+    const next = sections.map((sec, idx) => (idx !== 0 ? sec : { ...sec, items: [...sec.items, ...added] }));
+    commit({ equipmentSections: next });
+  }
+
   async function addFromCompendium(si: number, entry: CompendiumEntry) {
     const meta = await fetchEquipmentMeta(entry.id);
     appendItem(si, { name: entry.name, qty: "", weight: "", notes: "", ...meta });
@@ -2034,6 +2149,16 @@ function DndEquipmentQuickView({
   return (
     <>
       <div className="sb-section cs-mt">Снаряжение</div>
+      {(startingSets ?? []).length > 0 && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+          {(startingSets ?? []).map((set) => (
+            <button key={set.label} type="button" className="comp-mini" onClick={() => takeStartingSet(set)}>
+              взять: {set.label}
+              {set.gold && ` (+${set.gold} ЗМ)`}
+            </button>
+          ))}
+        </div>
+      )}
       {sections.map((section, si) => (
         <div
           key={si}
@@ -2899,17 +3024,53 @@ function combatSpellRows(
   const preparedCantrips = cantrips.filter((s) => s.prepared > 0);
   const prepared = spellsByLevel.flat().filter((s) => s.prepared > 0);
   return [...preparedCantrips, ...prepared]
-    .filter((s) => s.category === "Боевое" || s.category === "Лечащее")
+    .filter((s) => {
+      // Раньше здесь стоял фильтр по полю `category`, которое заполнялось
+      // у меньшинства записей и потому прятало большую часть книги. Теперь
+      // критерий механический — есть бросок или числовой эффект; для листов
+      // со старым снапшотом остаётся прежняя проверка.
+      if (s.checks?.length || s.effects?.length) return hasResolvableEffect(s.checks ?? [], s.effects ?? []);
+      return s.category === "Боевое" || s.category === "Лечащее";
+    })
     .map((s) => {
       const timing = s.castingTiming ?? (s.castingTime ? inferTimingFromLegacyText(s.castingTime).timing : "action");
+      const structured = !!(s.checks?.length || s.effects?.length);
       return {
         name: s.name,
-        bonus: formatSpellAttackSave(s.attackSave, spellAttackBonus, spellDc),
-        damage: s.damage || s.healing || "—",
-        range: [spellTimingLabel(s), s.range].filter(Boolean).join(", ") || "—",
+        bonus: structured
+          ? checksLabel(s.checks ?? [], spellAttackBonus, spellDc)
+          : formatSpellAttackSave(s.attackSave, spellAttackBonus, spellDc),
+        damage: structured ? effectsLabel(s.effects ?? []) : s.damage || s.healing || "—",
+        range: s.range || "—",
         timing,
       };
     });
+}
+
+// Умения классов, видов, черт и прочего, у которых проставлено время
+// накладывания — Второе дыхание, Наложение рук, Ярость. До появления
+// эффектов такие способности во вкладку не попадали вовсе: она собиралась
+// только из оружия, заклинаний и вручную вписанных атак.
+function featureActionRows(
+  groups: DndFeature[][],
+  spellAttackBonus: number,
+  spellDc: number
+): AttackRow[] {
+  return groups
+    .flat()
+    .filter((f) => !!f.castingTiming)
+    .map((f) => ({
+      name: f.name,
+      bonus: checksLabel(f.checks ?? [], spellAttackBonus, spellDc),
+      damage: effectsLabel(f.effects ?? []),
+      // Время не дублируем — оно и есть заголовок секции таблицы; в этой
+      // колонке у умения полезнее его стоимость («Ячейка», «1 за долгий
+      // отдых»), и «Иное» показываем только когда оно что-то уточняет.
+      range: [f.castingTiming === "other" ? f.castingTimingOther : "", costSummary(f.cost)]
+        .filter(Boolean)
+        .join(", ") || "—",
+      timing: f.castingTiming as DndActionTiming,
+    }));
 }
 
 function manualAttackRows(attacks: DndManualAttack[]): AttackRow[] {
@@ -2947,9 +3108,9 @@ function AttacksTable({ title, rows }: { title: string; rows: AttackRow[] }) {
         <thead>
           <tr>
             <th>Название</th>
-            <th>Бонус/СЛ</th>
-            <th>Урон/лечение/эффект</th>
-            <th>Время/Дальность</th>
+            <th>АТК/СЛ</th>
+            <th>Эффект</th>
+            <th>Дальность</th>
           </tr>
         </thead>
         <tbody>
@@ -2962,9 +3123,9 @@ function AttacksTable({ title, rows }: { title: string; rows: AttackRow[] }) {
                 </td>
               ) : (
                 <>
-                  <td data-label="Бонус/СЛ">{r.bonus}</td>
-                  <td data-label="Урон/лечение/эффект">{r.damage}</td>
-                  <td data-label="Время/Дальность">{r.range}</td>
+                  <td data-label="АТК/СЛ">{r.bonus}</td>
+                  <td data-label="Эффект">{r.damage}</td>
+                  <td data-label="Дальность">{r.range}</td>
                 </>
               )}
             </tr>
@@ -2976,7 +3137,7 @@ function AttacksTable({ title, rows }: { title: string; rows: AttackRow[] }) {
   );
 }
 
-const DND_VIEW_TABS = ["Бой", "Навыки", "Заклинания", "Инвентарь", "Ресурсы", "Особенности", "Досье"] as const;
+const DND_VIEW_TABS = ["Действия", "Навыки", "Заклинания", "Инвентарь", "Ресурсы", "Особенности", "Досье"] as const;
 type DndViewTab = (typeof DND_VIEW_TABS)[number];
 
 // Flat list of all skills — either grouped by governing ability (default,
@@ -3458,30 +3619,39 @@ function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () =
 // classes/abilities + the small per-resource "доп. бонус" field (external
 // sources — items, feats); only the bonus and used-count are ever stored.
 function DndResourcesView({
-  classes,
+  sources,
   abilities,
   resourceUsed,
   resourceBonus,
   onQuickUpdate,
 }: {
-  classes: DndClassEntry[];
+  sources: ClassResourceSource[];
   abilities: DndCharacterData["abilities"];
   resourceUsed: Record<string, number>;
   resourceBonus: Record<string, number>;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
-  const resources = applicableResources(classes);
-  if (resources.length === 0) return <p className="muted">Нет доступных ресурсов для текущих классов.</p>;
+  const resources = allResources(sources, abilities);
+  const stats = applicableStats(sources);
+  if (resources.length === 0 && stats.length === 0)
+    return <p className="muted">Нет доступных ресурсов для текущих классов.</p>;
+  // Класс подписываем только у многоклассовых персонажей: у одноклассового
+  // это шум, а «Проведение божественности» бывает и у Жреца, и у Паладина
+  // сразу, и различить их иначе нечем.
+  const showClass = sources.filter((s) => s.entry.level > 0).length > 1;
   return (
     <div className="stack">
       {resources.map((r) => {
         const bonus = resourceBonus[r.key] ?? 0;
-        const max = r.computeMax(classes, abilities) + bonus;
+        const max = r.max + bonus;
         const used = Math.min(resourceUsed[r.key] ?? 0, max);
         return (
           <div key={r.key} className="sb-entry">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <span className="sb-prop-label">{r.label}</span>
+              <span className="sb-prop-label">
+                {r.label}
+                {showClass && <span className="muted"> · {r.className}</span>}
+              </span>
               <label className="row muted" style={{ gap: 4, fontSize: 12 }}>
                 доп. бонус
                 <input
@@ -3505,6 +3675,20 @@ function DndResourcesView({
           </div>
         );
       })}
+      {stats.length > 0 && (
+        <div className="sb-entry">
+          {/* Показатели по уровню — тратить нечего, поэтому без дорожек. */}
+          {stats.map((st) => (
+            <div key={st.key} className="row" style={{ justifyContent: "space-between" }}>
+              <span className="sb-prop-label">
+                {st.label}
+                {showClass && <span className="muted"> · {st.className}</span>}
+              </span>
+              <span>{st.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3527,13 +3711,15 @@ function DndRestModal({
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
   onClose: () => void;
 }) {
-  const resources = useMemo(() => applicableResources(value.classes), [value.classes]);
   function longRest() {
     if (!confirm("Провести длинный отдых? Слоты заклинаний, очки ресурсов и хиты будут восстановлены.")) return;
     const resetResourceUsed: Record<string, number> = {};
     for (const key of Object.keys(value.resourceUsed)) resetResourceUsed[key] = 0;
     onQuickUpdate({
       spellSlotsUsed: value.spellSlotsUsed.map(() => 0),
+      // Договор магии восстанавливается и на коротком отдыхе, но короткий
+      // отдых здесь чисто справочный, так что сбрасываем хотя бы тут.
+      pactSlotsUsed: 0,
       resourceUsed: resetResourceUsed,
       hitPointsCurrent: value.hitPointMax,
       hitPointsTemp: "0",
@@ -3567,8 +3753,11 @@ function DndRestModal({
         <div className="stack" style={{ gap: 4 }}>
           <strong>Длинный отдых</strong>
           <p className="muted" style={{ margin: 0 }}>
-            Восстановит хиты до максимума, сбросит спасброски от смерти, все слоты заклинаний
-            {resources.length > 0 && " и ресурсы класса (" + resources.map((r) => r.label).join(", ") + ")"}.
+            {/* Перечислять ресурсы поимённо больше не выходит: их состав
+                теперь зависит от таблиц развития, а диалог отдыха о записях
+                компендиума ничего не знает. Сбрасываются всё равно все. */}
+            Восстановит хиты до максимума, сбросит спасброски от смерти, все слоты заклинаний и
+            ресурсы классов.
           </p>
           <button type="button" className="primary" onClick={longRest} style={{ alignSelf: "flex-start" }}>
             Провести длинный отдых
@@ -3599,7 +3788,11 @@ export function DndCharacterView({
   // Rules of Hooks — each DndCharacterView instance keeps its own tab state
   // locally (not URL-synced) since a page can render several statblocks at
   // once (e.g. a bestiary list), which would collide on a shared query param.
-  const [tab, setTab] = useState<DndViewTab>("Бой");
+  const [tab, setTab] = useState<DndViewTab>("Действия");
+  // Живые данные компендиума для всех заклинаний и умений листа — одной
+  // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
+  const getEntry = useCompendiumEntries(sheetEntryIds(value));
+  const systemIdForSlots = value.systemId;
   // Per-section edit toggles for "Особенности" (only "Особые умения" is
   // user-authored — species/class/feats are inherited compendium content and
   // stay read-only) and "Досье" — separate from StatblockList's whole-card
@@ -3620,8 +3813,58 @@ export function DndCharacterView({
   const [editingInventory, setEditingInventory] = useState(false);
   const [editingSpells, setEditingSpells] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
+  // Запасные таблицы подгружаются лениво и только когда без них не обойтись
+  // (многоклассье без полного заклинателя) — обычному персонажу лишний
+  // запрос ни к чему.
+  const [fallbackProgressions, setFallbackProgressions] = useState<(ClassProgression | undefined)[]>([]);
   const isMobile = useIsMobile();
+  // Считается до раннего выхода: ниже стоят хуки, а компактная карточка
+  // возвращается раньше.
+  const slotSources = value.classes
+    .filter((c) => c.classId != null && c.level > 0)
+    .map((c) => ({
+      level: c.level,
+      progression: getEntry(c.classId)?.data.progression as ClassProgression | undefined,
+    }));
+  // Запасная таблица нужна ровно в одном случае: заклинательных классов
+  // несколько и ни один из них не полный (Паладин + Следопыт). Тогда таблицу
+  // многоклассья брать неоткуда, кроме как у полного заклинателя системы.
+  const needsFallbackTable =
+    slotSources.filter((s) => casterKind(s.progression) !== "none").length > 1 &&
+    !slotSources.some((s) => casterKind(s.progression) === "full");
+  useEffect(() => {
+    if (!needsFallbackTable || !systemIdForSlots || fallbackProgressions.length > 0) return;
+    loadDndClassProgressions(systemIdForSlots).then((list) =>
+      setFallbackProgressions(list as unknown as ClassProgression[])
+    );
+  }, [needsFallbackTable, systemIdForSlots, fallbackProgressions.length]);
+
   if (compact) return <DndCharacterViewMini value={value} theme={theme} density={density} />;
+  const liveCantrips = value.cantrips.map((s) => resolveSpell(s, getEntry));
+  const liveSpellsByLevel = value.spellsByLevel.map((lvl) => lvl.map((s) => resolveSpell(s, getEntry)));
+  const computedSlots = computeSpellSlots(slotSources, fallbackProgressions);
+  // Стартовые наборы: у каждого класса персонажа и у предыстории.
+  const startingSets = [
+    ...value.classes.flatMap((c) => startingSetsFrom(getEntry(c.classId), c.className)),
+    ...startingSetsFrom(getEntry(value.backgroundId), value.backgroundName || "Предыстория"),
+  ];
+  const resourceSources: ClassResourceSource[] = value.classes.map((c) => ({
+    entry: c,
+    progression: getEntry(c.classId)?.data.progression as ClassProgression | undefined,
+  }));
+  // Ручная правка выигрывает всегда: у самодельного класса таблицы может не
+  // быть вовсе, и обнулять ему ячейки расчётом нельзя.
+  const autoSlots = !value.spellSlotsManual && computedSlots.basis !== "none";
+  const shownSlotPips = autoSlots ? computedSlots.slots : value.spellSlotPips;
+  const shownSlotLevels = autoSlots
+    ? Math.max(highestCircle(computedSlots.slots), value.spellSlotLevels)
+    : value.spellSlotLevels;
+  const liveFeatureGroups = [
+    value.classFeatures,
+    value.speciesFeatures,
+    value.feats,
+    value.specialAbilities,
+  ].map((g) => g.map((f) => resolveFeature(f, getEntry)));
   const metaChunks: ReactNode[] = [];
   const namedClasses = value.classes.filter((c) => c.className);
   if (namedClasses.length > 0) {
@@ -3818,12 +4061,17 @@ export function DndCharacterView({
             </div>
           )}
 
-          {tab === "Бой" && (
+          {tab === "Действия" && (
             <div className="stack">
               {(() => {
+                // Вкладка собирает всё, что персонаж может применить, из
+                // всех источников сразу: оружие, заклинания, умения классов,
+                // видов, черт и вручную вписанные атаки. Раньше она звалась
+                // «Бой» и знала только про первые три.
                 const allRows = [
                   ...weaponAttackRows(value.equipmentSections, value.abilities, parseBonus(value.proficiencyBonus)),
-                  ...combatSpellRows(value.cantrips, value.spellsByLevel, spellAttackBonus, spellDc),
+                  ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc),
+                  ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc),
                   ...manualAttackRows(value.attacks),
                 ];
                 const byTiming = (t: DndActionTiming) => allRows.filter((r) => r.timing === t);
@@ -3861,12 +4109,58 @@ export function DndCharacterView({
                   )}
                 </>
               )}
+              {computedSlots.basis !== "none" && (
+                <div className="row sb-entry" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <span className="muted">
+                    {autoSlots
+                      ? computedSlots.basis === "multiclass"
+                        ? `Ячейки рассчитаны по таблице многоклассья (уровень заклинателя ${effectiveCasterLevel(slotSources)})`
+                        : "Ячейки рассчитаны по таблице класса"
+                      : "Ячейки заданы вручную"}
+                  </span>
+                  {onQuickUpdate && (
+                    <button
+                      type="button"
+                      className="comp-mini"
+                      onClick={() =>
+                        onQuickUpdate(
+                          autoSlots
+                            ? // При переходе на ручной режим переносим
+                              // рассчитанное в хранимое, иначе пипсы
+                              // обнулятся у всех, кто их никогда не вбивал.
+                              { spellSlotsManual: true, spellSlotPips: computedSlots.slots }
+                            : { spellSlotsManual: false }
+                        )
+                      }
+                    >
+                      {autoSlots ? "задать вручную" : "считать по классам"}
+                    </button>
+                  )}
+                </div>
+              )}
+              {computedSlots.pact && (
+                <div className="row sb-entry" style={{ gap: 8 }}>
+                  <span className="sb-prop-label">Договор магии</span>
+                  <span>
+                    {computedSlots.pact.count} × {computedSlots.pact.circle} круг
+                  </span>
+                  <span className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
+                    исп.
+                    <PipTrack
+                      value={Math.min(value.pactSlotsUsed ?? 0, computedSlots.pact.count)}
+                      max={computedSlots.pact.count}
+                      onChange={onQuickUpdate ? (v) => onQuickUpdate({ pactSlotsUsed: v }) : undefined}
+                      size={13}
+                    />
+                  </span>
+                </div>
+              )}
               <DndSpellsView
-                cantrips={value.cantrips}
-                spellSlotLevels={value.spellSlotLevels}
-                spellSlotPips={value.spellSlotPips}
+                cantrips={liveCantrips}
+                spellSlotLevels={shownSlotLevels}
+                spellSlotPips={shownSlotPips}
                 spellSlotsUsed={value.spellSlotsUsed}
-                spellsByLevel={value.spellsByLevel}
+                spellsByLevel={liveSpellsByLevel}
                 edit={editingSpells}
                 systemId={value.systemId}
                 onUsedChange={
@@ -3926,6 +4220,7 @@ export function DndCharacterView({
                 <DndEquipmentQuickView
                   sections={value.equipmentSections}
                   systemId={value.systemId}
+                  startingSets={startingSets}
                   onQuickUpdate={onQuickUpdate}
                 />
               )}
@@ -3940,7 +4235,7 @@ export function DndCharacterView({
 
           {tab === "Ресурсы" && (
             <DndResourcesView
-              classes={value.classes}
+              sources={resourceSources}
               abilities={value.abilities}
               resourceUsed={value.resourceUsed}
               resourceBonus={value.resourceBonus}

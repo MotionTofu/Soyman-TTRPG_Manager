@@ -73,19 +73,6 @@ export const FEAT_CATEGORIES = [
 
 export const ABILITY_SCORES = ["Сила", "Ловкость", "Телосложение", "Интеллект", "Мудрость", "Харизма"] as const;
 
-export const SPELL_ATTACK_SAVE_OPTIONS = [
-  "Атака ближняя",
-  "Атака дальняя",
-  `Спасбросок ${ABILITY_SCORES[0]}`,
-  `Спасбросок ${ABILITY_SCORES[1]}`,
-  `Спасбросок ${ABILITY_SCORES[2]}`,
-  `Спасбросок ${ABILITY_SCORES[3]}`,
-  `Спасбросок ${ABILITY_SCORES[4]}`,
-  `Спасбросок ${ABILITY_SCORES[5]}`,
-] as const;
-
-export const SPELL_CATEGORIES = ["Боевое", "Лечащее", "Не боевое"] as const;
-
 export const EQUIPMENT_CATEGORIES = [
   "Оружие",
   "Доспехи",
@@ -143,6 +130,11 @@ export const KIND_DEFS: Record<string, KindDef> = {
     fields: [
       { key: "short_description", label: "Короткое описание", type: "text" },
       { key: "hit_die", label: "Кость хитов", type: "text" },
+      // На каком уровне класса выбирается подкласс. В 5.5 это 3 у всех, но
+      // держим полем, а не константой: в других системах и в самодельных
+      // классах бывает иначе, а зашивать правило в код — ровно то, от чего
+      // компендиум и уводит.
+      { key: "subclass_level", label: "Подкласс выбирается на уровне", type: "text" },
       // When non-empty, the class gets a third collapsible child list (after
       // Умения/Подклассы) with this title — e.g. Колдун's "Таинственные
       // воззвания" or Артефактор's "Схемы магических предметов". Its entries
@@ -160,11 +152,41 @@ export const KIND_DEFS: Record<string, KindDef> = {
     fields: [],
     childKinds: [{ kind: "feature", label: "умение" }],
   },
-  feature: { label: "Умение", hasLevel: true, fields: [] },
+  feature: {
+    label: "Умение",
+    hasLevel: true,
+    fields: [
+      // Умение может быть действием (Второе дыхание — бонусное действие,
+      // Наложение рук — действие), и тогда оно попадает во вкладку
+      // «Действия» листа наравне с заклинаниями и оружием.
+      {
+        key: "casting_timing",
+        label: "Время накладывания",
+        type: "select",
+        options: ["Действие", "Бонусное действие", "Реакция", "Иное"],
+      },
+      { key: "casting_timing_other", label: "Если «Иное» — сколько/когда", type: "text" },
+    ],
+  },
   // An entry in a class's named options list (invocations, infusions,
   // metamagic, …) — like a feature, but kept out of Умения so it never
   // auto-fills character sheets' Классовые особенности.
-  class_option: { label: "Опция", hasLevel: true, fields: [] },
+  class_option: {
+    label: "Опция",
+    hasLevel: true,
+    fields: [
+      // Умение может быть действием (Второе дыхание — бонусное действие,
+      // Наложение рук — действие), и тогда оно попадает во вкладку
+      // «Действия» листа наравне с заклинаниями и оружием.
+      {
+        key: "casting_timing",
+        label: "Время накладывания",
+        type: "select",
+        options: ["Действие", "Бонусное действие", "Реакция", "Иное"],
+      },
+      { key: "casting_timing_other", label: "Если «Иное» — сколько/когда", type: "text" },
+    ],
+  },
   spell: {
     label: "Заклинание",
     hasLevel: true,
@@ -178,11 +200,13 @@ export const KIND_DEFS: Record<string, KindDef> = {
       { key: "casting_timing_other", label: "Если «Иное» — сколько (напр. «10 минут»)", type: "text" },
       { key: "range", label: "Дистанция", type: "text" },
       { key: "duration", label: "Длительность", type: "text" },
-      { key: "category", label: "Категория", type: "select", options: [...SPELL_CATEGORIES] },
-      { key: "attack_save", label: "Атака/спасбросок", type: "select", options: [...SPELL_ATTACK_SAVE_OPTIONS] },
-      { key: "damage", label: "Урон", type: "text" },
-      { key: "healing", label: "Лечение", type: "text" },
-      { key: "upcast", label: "Усиление на более высоком круге", type: "textarea" },
+      // Категория / Атака-спасбросок / Урон / Лечение жили здесь до перехода
+      // на структурные эффекты (data.checks + data.effects, см. effects.ts).
+      // Категория была необязательной, а от неё зависело попадание во вкладку
+      // Бой — 55 из 94 заклинаний туда не доходили. Теперь это выводится из
+      // самих эффектов, а одно поле урона больше не ограничивает заклинание
+      // одним броском и одним типом урона.
+      { key: "upcast", label: "Усиление: примечание", type: "textarea" },
     ],
   },
   item: {

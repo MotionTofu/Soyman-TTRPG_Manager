@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import { cardThumbnailProps, loadThumbnailStyles } from "../thumbnailStyles";
@@ -16,6 +16,7 @@ export function SystemsListPage() {
   const [description, setDescription] = useState("");
   const [viewMode, setViewMode] = useState<ListViewMode>(() => loadListViewMode("systems"));
   const thumbnailStyles = loadThumbnailStyles();
+  const navigate = useNavigate();
 
   function changeViewMode(m: ListViewMode) {
     setViewMode(m);
@@ -42,6 +43,7 @@ export function SystemsListPage() {
         <SectionHeading section="systems">Системы</SectionHeading>
         <div className="row">
           <ViewModeToggle mode={viewMode} onChange={changeViewMode} />
+          <button onClick={() => navigate("/import-system")}>Импорт книги правил</button>
           <button className="primary" onClick={() => setCreating(true)}>
             + Новая система
           </button>

@@ -41,6 +41,7 @@ import {
   type DndSpellOption,
 } from "./dndCompendium";
 import { MECHANICS_CREATURE_TYPE_GROUP, MECHANICS_ALIGNMENT_GROUP } from "../../compendium";
+import { effectsLabel, type DndCheck, type DndEffect } from "./effects";
 import { FeatureListEdit } from "./FeatureList";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
@@ -492,23 +493,34 @@ async function fetchCreatureSpellMeta(
 ): Promise<Partial<DndCreatureSpell>> {
   try {
     const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
+    // Заклинания перешли на структурные броски и эффекты; старые
+    // attack_save/damage/healing читаются только у записей, которые ещё не
+    // мигрировали (их не осталось после migrateSpellEffects, но чужой
+    // импортированный компендиум может быть старым).
+    const checks = (entry.data.checks as DndCheck[] | undefined) ?? [];
+    const effects = (entry.data.effects as DndEffect[] | undefined) ?? [];
     const attackSave = typeof entry.data.attack_save === "string" ? entry.data.attack_save : "";
-    const damage = typeof entry.data.damage === "string" ? entry.data.damage : "";
-    const healing = typeof entry.data.healing === "string" ? entry.data.healing : "";
+    const legacyDamage = typeof entry.data.damage === "string" ? entry.data.damage : "";
+    const legacyHealing = typeof entry.data.healing === "string" ? entry.data.healing : "";
     const abilityMod = ability ? abilityModifier(abilities[ability]) : 0;
     let rollType: DndAttackRollType | undefined;
     let bonus: number | null = null;
     let saveAbility: DndAbilityKey | "" = "";
     let saveDC: number | null = null;
-    if (attackSave.startsWith("Атака")) {
+    const check = checks[0];
+    if (check?.type === "attack" || (!check && attackSave.startsWith("Атака"))) {
       rollType = "attack";
       bonus = abilityMod + proficiencyBonus;
-    } else if (attackSave.startsWith("Спасбросок")) {
+    } else if (check?.type === "save" || (!check && attackSave.startsWith("Спасбросок"))) {
       rollType = "save";
-      saveAbility = ABILITY_NAME_TO_KEY[attackSave.replace("Спасбросок", "").trim()] ?? "";
-      saveDC = 8 + abilityMod + proficiencyBonus;
+      const abilityName = check?.saveAbility ?? attackSave.replace("Спасбросок", "").trim();
+      saveAbility = ABILITY_NAME_TO_KEY[abilityName] ?? "";
+      // У существа своя СЛ — от его характеристики и бонуса мастерства, а не
+      // та, что была бы у заклинателя; dcOverride перебивает и это.
+      saveDC = check?.dcOverride ?? 8 + abilityMod + proficiencyBonus;
     }
-    return { rollType, bonus, saveAbility, saveDC, damage: damage || healing || undefined, description: entry.description || "" };
+    const damage = effects.length > 0 ? effectsLabel(effects) : legacyDamage || legacyHealing;
+    return { rollType, bonus, saveAbility, saveDC, damage: damage || undefined, description: entry.description || "" };
   } catch {
     return {};
   }
