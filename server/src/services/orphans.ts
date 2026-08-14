@@ -44,6 +44,17 @@ const LINK_ENDPOINT_TABLE: Record<string, string> = {
   playlist: "playlists",
 };
 
+// entity_relations полиморфна с обоих концов ровно так же, но до сих пор не
+// подметалась: удалённое существо оставляло за собой связи, и во вкладке
+// «Отношения» второй стороны они рисовались как «? ⟶ Имя». Типы — те, что
+// разрешает routes/entityRelations.ts.
+const RELATION_ENDPOINT_TABLE: Record<string, string> = {
+  being: "setting_beings",
+  character: "characters",
+  community: "setting_communities",
+  compendium_entry: "compendium_entries",
+};
+
 export function sweepOrphans(): number {
   let removed = 0;
   const run = db.transaction(() => {
@@ -65,6 +76,15 @@ export function sweepOrphans(): number {
         .run(type);
       const infoTo = db
         .prepare(`DELETE FROM generic_links WHERE to_type = ? AND to_id NOT IN (SELECT id FROM ${table})`)
+        .run(type);
+      removed += infoFrom.changes + infoTo.changes;
+    }
+    for (const [type, table] of Object.entries(RELATION_ENDPOINT_TABLE)) {
+      const infoFrom = db
+        .prepare(`DELETE FROM entity_relations WHERE from_type = ? AND from_id NOT IN (SELECT id FROM ${table})`)
+        .run(type);
+      const infoTo = db
+        .prepare(`DELETE FROM entity_relations WHERE to_type = ? AND to_id NOT IN (SELECT id FROM ${table})`)
         .run(type);
       removed += infoFrom.changes + infoTo.changes;
     }

@@ -3,7 +3,9 @@ import { db } from "../db/db";
 
 export const linksRouter = Router();
 
-const NODE_TABLES: Record<string, { table: string; nameCol: string }> = {
+// archivable: false — у таблицы нет колонки archived_at (записи компендиума
+// удаляются насовсем), и запрос узлов не должен по ней фильтровать.
+const NODE_TABLES: Record<string, { table: string; nameCol: string; archivable?: boolean }> = {
   campaign: { table: "campaigns", nameCol: "name" },
   setting: { table: "settings", nameCol: "name" },
   player: { table: "players", nameCol: "name" },
@@ -16,6 +18,10 @@ const NODE_TABLES: Record<string, { table: string; nameCol: string }> = {
   mastering: { table: "mastering_notes", nameCol: "title" },
   scene: { table: "story_scenes", nameCol: "name" },
   adventure: { table: "story_arcs", nameCol: "name" },
+  // entity_relations умеет ссылаться на записи компендиума («тот же монстр,
+  // что в бестиарии»), и без этой строки такие связи молча пропадали из
+  // графа: track() отбрасывал неизвестный тип вместе с ребром.
+  compendium_entry: { table: "compendium_entries", nameCol: "name", archivable: false },
 };
 
 interface GraphNode {
@@ -49,14 +55,56 @@ const SETTING_SCOPE_QUERIES: Record<string, string> = {
   adventure: "SELECT id FROM story_arcs WHERE setting_id = ?",
 };
 
-// Node types a `campaign_id` graph filter can resolve down to.
+// Node types a `campaign_id` graph filter resolves through the campaign
+// itself. Всё остальное (существа, фракции, локации, артефакты) кампания
+// наследует от своего сеттинга — см. buildScope: без этого граф кампании
+// оставался почти пустым, хотя её содержание как раз в населении сеттинга.
 const CAMPAIGN_SCOPE_QUERIES: Record<string, string> = {
   character: "SELECT id FROM characters WHERE campaign_id = ?",
   campaign: "SELECT id FROM campaigns WHERE id = ?",
   player: "SELECT player_id as id FROM campaign_roster WHERE campaign_id = ?",
   session: "SELECT id FROM sessions WHERE campaign_id = ?",
+  // Сцены кампании — и собственные, и её copy-on-write копии сценариев.
   scene: "SELECT id FROM story_scenes WHERE campaign_id = ?",
 };
+
+interface ScopeQuery {
+  sql: string;
+  param: string;
+}
+
+/**
+ * Какие узлы каждого типа попадают в выбранную область. Для сеттинга это
+ * просто его собственные строки; для кампании — её строки (персонажи, игроки,
+ * сцены) поверх строк сеттинга, которому она принадлежит. Возвращает null,
+ * если область не задана: тогда граф глобальный и не сужается.
+ */
+function buildScope(campaignId?: string, settingId?: string): Map<string, ScopeQuery> | null {
+  const scope = new Map<string, ScopeQuery>();
+  if (campaignId) {
+    const row = db.prepare("SELECT setting_id FROM campaigns WHERE id = ?").get(campaignId) as
+      | { setting_id: number | null }
+      | undefined;
+    if (row?.setting_id) {
+      for (const [type, sql] of Object.entries(SETTING_SCOPE_QUERIES)) {
+        scope.set(type, { sql, param: String(row.setting_id) });
+      }
+    }
+    // Свои строки кампании перекрывают наследованные от сеттинга: список
+    // персонажей и сцен у кампании собственный, а не «все в сеттинге».
+    for (const [type, sql] of Object.entries(CAMPAIGN_SCOPE_QUERIES)) {
+      scope.set(type, { sql, param: campaignId });
+    }
+    return scope;
+  }
+  if (settingId) {
+    for (const [type, sql] of Object.entries(SETTING_SCOPE_QUERIES)) {
+      scope.set(type, { sql, param: settingId });
+    }
+    return scope;
+  }
+  return null;
+}
 
 linksRouter.get("/graph", (req, res) => {
   const { types, setting_id, campaign_id } = req.query as {
@@ -64,10 +112,11 @@ linksRouter.get("/graph", (req, res) => {
     setting_id?: string;
     campaign_id?: string;
   };
-  const allowedTypes = types ? new Set(types.split(",")) : null;
+  // Пустая строка — это «типы не выбраны», а не «фильтра нет»: снятые
+  // галочки должны давать пустой граф, а не молча весь.
+  const allowedTypes = types === undefined ? null : new Set(types.split(",").filter(Boolean));
   // campaign_id is the narrower scope, so it wins if both are given.
-  const scopeQueries = campaign_id ? CAMPAIGN_SCOPE_QUERIES : setting_id ? SETTING_SCOPE_QUERIES : null;
-  const scopeParam = campaign_id ?? setting_id ?? null;
+  const scopeQueries = buildScope(campaign_id, setting_id);
 
   const rawLinks = db
     .prepare("SELECT from_type, from_id, to_type, to_id, section FROM generic_links")
@@ -93,47 +142,52 @@ linksRouter.get("/graph", (req, res) => {
     .prepare("SELECT id, parent_id FROM setting_locations WHERE parent_id IS NOT NULL AND archived_at IS NULL")
     .all() as { id: number; parent_id: number }[];
 
+  // Сообщество тоже где-то базируется — таблица симметрична being_locations,
+  // но в граф до сих пор не попадала.
+  const rawCommunityLocations = db
+    .prepare("SELECT community_id, location_id FROM community_locations")
+    .all() as { community_id: number; location_id: number }[];
+
   const edges: GraphEdge[] = [];
   const wanted = new Map<string, { type: string; id: number }>();
 
+  // Отбор по типам живёт здесь, а не в каждом цикле: раньше ребро проходило,
+  // если нужного типа был хотя бы один его конец, и узлы снятого типа всё
+  // равно возвращались в граф — притянутые рёбрами от оставшихся. Тип, с
+  // которого сняли галочку, теперь не даёт ключа, а значит и ребро с ним не
+  // создаётся.
   const track = (type: string, id: number) => {
     if (type === "preproduction") type = "campaign"; // preproduction nodes collapse into their campaign
     if (!NODE_TABLES[type]) return null;
+    if (allowedTypes && !allowedTypes.has(type)) return null;
     const key = `${type}:${id}`;
     wanted.set(key, { type, id });
     return key;
   };
 
-  for (const l of rawLinks) {
-    if (allowedTypes && !allowedTypes.has(l.from_type) && !allowedTypes.has(l.to_type)) continue;
-    const from = track(l.from_type, l.from_id);
-    const to = track(l.to_type, l.to_id);
-    if (from && to && from !== to) edges.push({ from, to, section: l.section, tone: null });
-  }
-  for (const r of rawRelations) {
-    if (allowedTypes && !allowedTypes.has(r.from_type) && !allowedTypes.has(r.to_type)) continue;
-    const from = track(r.from_type, r.from_id);
-    const to = track(r.to_type, r.to_id);
-    if (from && to && from !== to) edges.push({ from, to, section: r.label || null, tone: r.tone });
-  }
-  for (const m of rawMemberships) {
-    if (allowedTypes && !allowedTypes.has("community") && !allowedTypes.has("being")) continue;
-    const from = track("community", m.community_id);
-    const to = track("being", m.being_id);
-    if (from && to && from !== to) edges.push({ from, to, section: "участник", tone: null });
-  }
-  for (const h of rawHabitats) {
-    if (allowedTypes && !allowedTypes.has("location") && !allowedTypes.has("being")) continue;
-    const from = track("location", h.location_id);
-    const to = track("being", h.being_id);
-    if (from && to && from !== to) edges.push({ from, to, section: "обитает", tone: null });
-  }
-  for (const n of rawLocationNesting) {
-    if (allowedTypes && !allowedTypes.has("location")) continue;
-    const from = track("location", n.parent_id);
-    const to = track("location", n.id);
-    if (from && to && from !== to) edges.push({ from, to, section: "вложенная локация", tone: null });
-  }
+  const connect = (
+    fromType: string,
+    fromId: number,
+    toType: string,
+    toId: number,
+    section: string | null,
+    tone: string | null
+  ) => {
+    const from = track(fromType, fromId);
+    const to = track(toType, toId);
+    if (from && to && from !== to) edges.push({ from, to, section, tone });
+  };
+
+  for (const l of rawLinks) connect(l.from_type, l.from_id, l.to_type, l.to_id, l.section, null);
+  for (const r of rawRelations)
+    connect(r.from_type, r.from_id, r.to_type, r.to_id, r.label || null, r.tone);
+  for (const m of rawMemberships)
+    connect("community", m.community_id, "being", m.being_id, "участник", null);
+  for (const h of rawHabitats) connect("location", h.location_id, "being", h.being_id, "обитает", null);
+  for (const n of rawLocationNesting)
+    connect("location", n.parent_id, "location", n.id, "вложенная локация", null);
+  for (const c of rawCommunityLocations)
+    connect("location", c.location_id, "community", c.community_id, "базируется", null);
 
   const byType = new Map<string, number[]>();
   for (const { type, id } of wanted.values()) {
@@ -144,23 +198,26 @@ linksRouter.get("/graph", (req, res) => {
 
   let nodes: GraphNode[] = [];
   for (const [type, ids] of byType) {
-    if (scopeQueries && !scopeQueries[type]) continue; // type has no defined home within this scope
-    const { table, nameCol } = NODE_TABLES[type];
+    if (scopeQueries && !scopeQueries.has(type)) continue; // type has no defined home within this scope
+    const { table, nameCol, archivable = true } = NODE_TABLES[type];
     const placeholders = ids.map(() => "?").join(",");
     const rows = db
-      .prepare(`SELECT id, ${nameCol} as name FROM ${table} WHERE id IN (${placeholders}) AND archived_at IS NULL`)
+      .prepare(
+        `SELECT id, ${nameCol} as name FROM ${table} WHERE id IN (${placeholders})` +
+          (archivable ? " AND archived_at IS NULL" : "")
+      )
       .all(...ids) as { id: number; name: string }[];
     for (const r of rows) {
       nodes.push({ key: `${type}:${r.id}`, type, id: r.id, title: r.name });
     }
   }
 
-  if (scopeQueries && scopeParam) {
+  if (scopeQueries) {
     const allowedByType = new Map<string, Set<number>>();
     for (const type of new Set(nodes.map((n) => n.type))) {
-      const query = scopeQueries[type];
+      const query = scopeQueries.get(type);
       if (!query) continue;
-      const rows = db.prepare(query).all(scopeParam) as { id: number }[];
+      const rows = db.prepare(query.sql).all(query.param) as { id: number }[];
       allowedByType.set(type, new Set(rows.map((r) => r.id)));
     }
     nodes = nodes.filter((n) => allowedByType.get(n.type)?.has(n.id));

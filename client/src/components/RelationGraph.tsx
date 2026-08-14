@@ -12,6 +12,7 @@ import {
   simulateGraph,
   type GraphData,
   type GraphNode,
+  type NodePositions,
 } from "../graphTypes";
 import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import type { RelationTone } from "../types";
@@ -97,9 +98,21 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage }: Pro
   // clamped edges of a fixed-size canvas.
   const canvasSize = data ? canvasSizeFor(data.nodes.length) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
 
+  // Позиции прошлой раскладки: смена фильтра — это то же поле с убранными
+  // булавками, а не новая карта, поэтому уцелевшие узлы стартуют оттуда, где
+  // их только что видели, и доводятся коротким прогоном.
+  const lastPositions = useRef<NodePositions | null>(null);
   const positions = useMemo(() => {
-    if (!data) return new Map();
-    return simulateGraph(data.nodes, data.edges, canvasSize.width, canvasSize.height);
+    if (!data) return new Map() as NodePositions;
+    const next = simulateGraph(
+      data.nodes,
+      data.edges,
+      canvasSize.width,
+      canvasSize.height,
+      lastPositions.current ?? undefined
+    );
+    lastPositions.current = next;
+    return next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 

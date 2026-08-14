@@ -99,7 +99,7 @@ export function GraphPage() {
             <button onClick={() => setActiveTypes(new Set(Object.keys(TYPE_LABELS)))}>
               Выбрать всё
             </button>
-            <button onClick={() => setActiveTypes(new Set())}>Сбросить фильтры</button>
+            <button onClick={() => setActiveTypes(new Set())}>Снять все</button>
           </div>
           <div className="filters">
             {Object.entries(TYPE_LABELS).map(([key, label]) => (
@@ -115,7 +115,14 @@ export function GraphPage() {
           </div>
         </>
       )}
-      <RelationGraph data={data} />
+      <RelationGraph
+        data={data}
+        emptyMessage={
+          activeTypes.size === 0
+            ? "Все типы сняты в фильтрах — отметьте хотя бы один."
+            : undefined
+        }
+      />
     </div>
   );
 }
