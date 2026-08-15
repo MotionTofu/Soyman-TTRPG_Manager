@@ -19,6 +19,13 @@ process.env.DB_DIR = path.join(userData, "data");
 process.env.VAULT_ROOT = path.join(userData, "RPG-Vault");
 process.env.PORT = String(PORT);
 
+// Иконка окна и панели задач. В .exe её зашивает electron-builder (win.icon),
+// но окну её всё равно надо отдать явно — иначе в dev-запуске и в taskbar
+// висит дефолтный логотип Electron. Файл лежит рядом с приложением, а не
+// внутри electron/, потому что это тот же исходник, что и для сборщика;
+// build/icon.png добавлен в "files" всех трёх конфигов, чтобы попасть в пакет.
+const APP_ICON = path.join(__dirname, "..", "build", "icon.png");
+
 // The "full" flavor bundles a `seed` resources folder (see seedIfNeeded()
 // below); the "empty" flavor doesn't. Reuse that same signal to tell the
 // server's migration (server/src/db/db.ts) not to seed its four default,
@@ -251,6 +258,7 @@ function spawnWindow(route = "/", parent = null) {
     width: 1400,
     height: 900,
     title: "SoyMan_ttrpg",
+    icon: APP_ICON,
     ...(offset ? { x: offset[0] + 40, y: offset[1] + 40 } : {}),
     webPreferences: {
       contextIsolation: true,

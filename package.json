@@ -36,7 +36,8 @@
       "electron/**/*",
       "server/dist/**/*",
       "server/package.json",
-      "client/dist/**/*"
+      "client/dist/**/*",
+      "build/icon.png"
     ],
     "extraResources": [
       {
@@ -45,6 +46,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.png",
       "target": [
         "portable",
         "nsis"
