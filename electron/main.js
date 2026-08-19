@@ -293,6 +293,10 @@ function openWindowFromFocused() {
 
 async function createWindow() {
   seedIfNeeded();
+  // Сервер поднимается внутри этого же процесса, поэтому версию приложения
+  // проще передать окружением, чем тащить в него electron: она нужна каталогу
+  // модулей, чтобы не предлагать установку того, что эта сборка не прочтёт.
+  process.env.APP_VERSION = app.getVersion();
   require(serverEntry);
   await waitForServer(`http://127.0.0.1:${PORT}/api/health`);
 

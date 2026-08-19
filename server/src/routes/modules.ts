@@ -1,4 +1,6 @@
 import { Router } from "express";
+import fs from "fs";
+import path from "path";
 import { db } from "../db/db";
 import { createSystemBackup, importSystemExport, updateSystemFromExport, type SystemExportData } from "./systems";
 import { createSettingBackup, importSettingExport, updateSettingFromExport, type SettingExportData } from "./settings";
@@ -25,6 +27,55 @@ interface CatalogManifestEntry {
   description: string;
   file: string;
   version: string;
+  /**
+   * Минимальная версия приложения, способная прочесть этот файл.
+   *
+   * Формат выгрузки меняется: в 2026.8.19 ссылки внутри текстов переехали на
+   * глобальные ключи, и сборка, которая о них не знает, покажет вместо ссылок
+   * голые скобки. Поле необязательное — без него запись считается совместимой
+   * со всеми.
+   *
+   * Оговорка, ради которой это стоит помнить: сборки, вышедшие до появления
+   * поля, о нём не знают и всё равно предложат установку. Ограничитель
+   * работает начиная со следующей смены формата, а не задним числом.
+   */
+  minAppVersion?: string;
+}
+
+/**
+ * Версия приложения. В упакованной сборке её кладёт electron/main.js перед
+ * запуском сервера; в разработке берётся из package.json репозитория.
+ */
+function appVersion(): string {
+  if (process.env.APP_VERSION) return process.env.APP_VERSION;
+  for (const candidate of [
+    path.join(__dirname, "..", "..", "..", "package.json"),
+    path.join(process.cwd(), "package.json"),
+    path.join(process.cwd(), "..", "package.json"),
+  ]) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(candidate, "utf-8")) as { version?: string };
+      if (pkg.version && pkg.version !== "0.1.0") return pkg.version;
+    } catch {
+      // Следующий кандидат.
+    }
+  }
+  return "0.0.0";
+}
+
+/** Сравнение календарных версий «2026.8.19» по числовым частям. */
+function isOlder(version: string, than: string): boolean {
+  const a = version.split(".").map((n) => Number(n) || 0);
+  const b = than.split(".").map((n) => Number(n) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0);
+  }
+  return false;
+}
+
+/** Пригодна ли эта сборка для записи каталога. */
+function tooOldFor(entry: CatalogManifestEntry): boolean {
+  return !!entry.minAppVersion && isOlder(appVersion(), entry.minAppVersion);
 }
 
 async function fetchManifest(): Promise<CatalogManifestEntry[]> {
@@ -214,6 +265,8 @@ modulesRouter.get("/catalog", async (_req, res) => {
         installedModuleId: local?.id ?? null,
         installedVersion: local?.remote_version ?? null,
         updateAvailable: local != null && local.remote_version !== entry.version,
+        minAppVersion: entry.minAppVersion ?? null,
+        tooOld: tooOldFor(entry),
       };
     })
   );
@@ -231,6 +284,14 @@ modulesRouter.post("/catalog/:remoteId/install", async (req, res) => {
     data = await fetchModuleFile(entry);
   } catch (e) {
     return res.status(502).json({ error: e instanceof Error ? e.message : "не удалось скачать модуль" });
+  }
+
+  // Запрет не только в интерфейсе: иначе он обходится прямым запросом.
+  if (tooOldFor(entry)) {
+    return res.status(409).json({
+      error:
+        "нужна версия приложения не ниже " + entry.minAppVersion + " — обновитесь и попробуйте снова",
+    });
   }
 
   try {

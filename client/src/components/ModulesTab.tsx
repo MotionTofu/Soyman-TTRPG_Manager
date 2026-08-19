@@ -223,7 +223,12 @@ export function ModulesTab() {
                   <span className="badge tag">v{entry.version}</span>
                   <span className="badge tag">{entry.type === "system" ? "система" : "сеттинг"}</span>
                 </span>
-                {entry.installedModuleId == null ? (
+                {/* Запись новее этой сборки: файл она прочтёт неправильно —
+                    ссылки внутри текстов покажутся голыми скобками. Кнопки нет,
+                    вместо неё сказано, что делать. */}
+                {entry.tooOld ? (
+                  <span className="muted">Нужна версия {entry.minAppVersion} или новее</span>
+                ) : entry.installedModuleId == null ? (
                   <button onClick={() => installFromCatalog(entry)} disabled={catalogBusyId !== null}>
                     {catalogBusyId === entry.remoteId ? "Установка…" : "⬇ Установить"}
                   </button>

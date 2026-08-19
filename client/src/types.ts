@@ -80,6 +80,10 @@ export interface ModuleCatalogEntry {
   installedModuleId: number | null;
   installedVersion: string | null;
   updateAvailable: boolean;
+  /** Минимальная версия приложения для этой записи каталога, если задана. */
+  minAppVersion: string | null;
+  /** Эта сборка старше минимальной: файл она прочтёт неправильно. */
+  tooOld: boolean;
 }
 
 export type PaymentType = "free" | "paid" | "negotiable";
