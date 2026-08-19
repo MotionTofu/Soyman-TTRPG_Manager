@@ -10,6 +10,11 @@ import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
 import { loadListViewMode, saveListViewMode, type ListViewMode } from "../listViewMode";
 import { ViewModeToggle } from "../components/ViewModeToggle";
+import {
+  CalendarPresetPicker,
+  EMPTY_CALENDAR,
+  type CalendarChoice,
+} from "../components/CalendarPresetPicker";
 import type { Setting } from "../types";
 
 export function SettingsListPage() {
@@ -18,6 +23,7 @@ export function SettingsListPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [calendar, setCalendar] = useState<CalendarChoice>(EMPTY_CALENDAR);
   const [viewMode, setViewMode] = useState<ListViewMode>(() => loadListViewMode("settings"));
   const thumbnailStyles = loadThumbnailStyles();
 
@@ -33,11 +39,12 @@ export function SettingsListPage() {
 
   async function create() {
     if (!name.trim()) return;
-    const created = await api.post<Setting>("/settings", { name, description });
+    const created = await api.post<Setting>("/settings", { name, description, calendar });
     syncMentionLinks("setting", created.id, "", description);
     setCreating(false);
     setName("");
     setDescription("");
+    setCalendar(EMPTY_CALENDAR);
     refresh();
   }
 
@@ -106,6 +113,7 @@ export function SettingsListPage() {
               Описание
               <MentionTextarea value={description} onChange={setDescription} />
             </label>
+            <CalendarPresetPicker value={calendar} onChange={setCalendar} />
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button onClick={() => setCreating(false)}>Отмена</button>
               <button className="primary" onClick={create}>
