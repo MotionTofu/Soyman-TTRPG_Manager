@@ -64,6 +64,74 @@ function pruneAndCopy() {
   // next GET /api/modules, so safe to clear.
   db.exec("DELETE FROM modules");
 
+  // Напоминания мастера висят на кампаниях и игроках — тех и других уже нет,
+  // а сами записки личные насквозь («ЧАРНИКИ ЗАПОЛНЯЙТЕ»).
+  db.exec("DELETE FROM gm_reminders");
+
+  // Полиморфные спутники внешнего ключа не имеют, поэтому каскад их не уносит:
+  // после удаления персонажей игроков их листы, галереи и важные даты остаются
+  // в базе целыми. Проверено на живых данных — в сид уезжали 17 статблоков и
+  // 4 изображения персонажей. Правило то же, что в server/src/services/
+  // orphans.ts: спутник живёт, пока жив его владелец.
+  const OWNER_TABLE = {
+    character: "characters",
+    being: "setting_beings",
+    community: "setting_communities",
+    location: "setting_locations",
+    compendium_entry: "compendium_entries",
+  };
+  const SATELLITES = [
+    { table: "statblocks", owners: ["character", "being", "compendium_entry"] },
+    { table: "gallery_images", owners: ["character", "being", "location", "community"] },
+    { table: "important_dates", owners: ["character", "being", "community", "location"] },
+  ];
+  for (const { table, owners } of SATELLITES) {
+    for (const ownerType of owners) {
+      db.prepare(
+        `DELETE FROM ${table}
+          WHERE owner_type = ? AND owner_id NOT IN (SELECT id FROM ${OWNER_TABLE[ownerType]})`
+      ).run(ownerType);
+    }
+    // Владелец неизвестного типа — тоже мусор: все живые типы перечислены выше.
+    db.prepare(
+      `DELETE FROM ${table} WHERE owner_type NOT IN (${owners.map(() => "?").join(",")})`
+    ).run(...owners);
+  }
+
+  // Связи и отношения полиморфны с обоих концов и дангляют так же.
+  const ENDPOINT_TABLE = {
+    campaign: "campaigns",
+    setting: "settings",
+    player: "players",
+    character: "characters",
+    location: "setting_locations",
+    being: "setting_beings",
+    artifact: "artifacts",
+    community: "setting_communities",
+    resource: "resources",
+    mastering: "mastering_notes",
+    session: "sessions",
+    compendium_entry: "compendium_entries",
+    playlist: "playlists",
+  };
+  for (const [type, table] of Object.entries(ENDPOINT_TABLE)) {
+    for (const [f, t] of [
+      ["from_type", "from_id"],
+      ["to_type", "to_id"],
+    ]) {
+      db.prepare(
+        `DELETE FROM generic_links WHERE ${f} = ? AND ${t} NOT IN (SELECT id FROM ${table})`
+      ).run(type);
+      try {
+        db.prepare(
+          `DELETE FROM entity_relations WHERE ${f} = ? AND ${t} NOT IN (SELECT id FROM ${table})`
+        ).run(type);
+      } catch {
+        // entity_relations знает не все типы — это не ошибка.
+      }
+    }
+  }
+
   db.exec("VACUUM");
 
   const after = summarize(db);
