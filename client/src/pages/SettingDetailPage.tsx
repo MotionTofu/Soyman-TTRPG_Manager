@@ -244,7 +244,20 @@ export function SettingDetailPage() {
 
   async function importSetting(file: File) {
     const data = JSON.parse(await file.text());
-    const created = await api.post<Setting>("/settings/import", data);
+    // Файл может нести сотни мегабайт картинок. Спрашиваем один раз здесь, а
+    // не гоняем флаг через маршрут молча: раскладывать их по хранилищу человек
+    // не обязан, а всё остальное содержимое приезжает в любом случае.
+    const heavy = file.size > 5 * 1024 * 1024;
+    const withImages =
+      !heavy ||
+      confirm(
+        `Файл весит ${(file.size / 1024 / 1024).toFixed(0)} МБ — похоже, в нём есть изображения.\n\n` +
+          "ОК — поставить вместе с картинками.\nОтмена — только тексты и связи, без картинок."
+      );
+    const created = await api.post<Setting>(
+      `/settings/import${withImages ? "" : "?images=0"}`,
+      data
+    );
     navigate(`/settings/${created.id}`);
   }
 
@@ -1263,7 +1276,7 @@ function SettingExportModal({
       <h3>Экспорт сеттинга</h3>
       <div className="stack">
         <span className="muted">
-          География, население и сообщества экспортируются всегда. Что добавить ещё:
+          География, население, сообщества, их главы, связи и отношения экспортируются всегда. Что добавить ещё:
         </span>
         <label className="row">
           <input
@@ -1287,7 +1300,7 @@ function SettingExportModal({
             checked={includeImages}
             onChange={(e) => setIncludeImages(e.target.checked)}
           />
-          Изображения, карты локаций (с пинами) и звуковые файлы (значительно увеличит размер файла)
+          Изображения, галереи, карты локаций (с пинами) и звуковые файлы (значительно увеличит размер файла)
         </label>
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <button onClick={onClose}>Отмена</button>

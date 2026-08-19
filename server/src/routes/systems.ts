@@ -4,6 +4,7 @@ import path from "path";
 import { db } from "../db/db";
 import { readFileAsBase64, systemFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
+import { ImportedEntities, exportMention, healAllMentions, rewritePayload } from "../services/mentions";
 
 export const systemsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -397,7 +398,11 @@ function buildSystemExportData(systemId: number | string, includeImages: boolean
   }
   delete systemOut.thumbnail_image_path;
 
-  return { system: systemOut as SystemExportData["system"], sections, entries, templates };
+  // См. buildSettingExportData: в файле не должно остаться локальных id.
+  return rewritePayload(
+    { system: systemOut as SystemExportData["system"], sections, entries, templates },
+    exportMention
+  );
 }
 
 systemsRouter.get("/:id/export", (req, res) => {
@@ -415,6 +420,7 @@ export interface SystemExportData {
   sections: { id: number; position: number; name: string; kind: string }[];
   entries: {
     id: number;
+    uid?: string;
     section_id: number;
     parent_id: number | null;
     kind: string;
@@ -445,8 +451,11 @@ export interface SystemExportData {
 // system, remapping every internal id (sections, entries, and the id
 // references embedded in entry `data`). Shared by the direct-import route
 // and by the modules "enable" flow.
-export async function importSystemExport({ system, sections, entries, templates }: SystemExportData): Promise<number> {
-  if (!system?.name) throw new Error("invalid export file");
+export async function importSystemExport(data: SystemExportData): Promise<number> {
+  if (!data.system?.name) throw new Error("invalid export file");
+  const { system, sections, entries, templates } = data;
+  // Ссылки правятся после вставки — почему именно так, см. ImportedEntities.
+  const imported = new ImportedEntities();
 
   // Only disambiguate the name if it actually collides — a fresh install
   // importing "D&D 5.5" should end up with a system named exactly
@@ -502,6 +511,7 @@ export async function importSystemExport({ system, sections, entries, templates 
       e.position
     );
     entryIdMap.set(e.id, info.lastInsertRowid as number);
+    imported.claim("compendium_entry", info.lastInsertRowid as number, e.uid);
   }
   const updateParent = db.prepare("UPDATE compendium_entries SET parent_id = ? WHERE id = ?");
   for (const e of entries ?? []) {
@@ -519,7 +529,8 @@ export async function importSystemExport({ system, sections, entries, templates 
     const newEntryId = entryIdMap.get(e.id);
     if (!newEntryId || !e.statblocks) continue;
     for (const sb of e.statblocks) {
-      insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+      const sbRow = insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+      imported.track("statblocks", sbRow.lastInsertRowid as number);
     }
   }
 
@@ -552,9 +563,13 @@ export async function importSystemExport({ system, sections, entries, templates 
      VALUES (?, 'statblock_template', 'system', ?, ?, ?, ?, ?)`
   );
   for (const t of templates ?? []) {
-    insertTemplate.run(t.name, newSystemId, t.template_kind, t.template_format, t.tags || "", t.notes || "");
+    const tr = insertTemplate.run(t.name, newSystemId, t.template_kind, t.template_format, t.tags || "", t.notes || "");
+    imported.track("resources", tr.lastInsertRowid as number);
   }
 
+  imported.resolve();
+  // См. importSettingExport: материализация модуля оживляет ссылки на него.
+  healAllMentions();
   return newSystemId;
 }
 
@@ -600,6 +615,10 @@ export async function updateSystemFromExport(
   targetSystemId: number,
   { system, sections, entries, templates }: SystemExportData
 ): Promise<SystemUpdateSummary> {
+  // При слиянии побеждает uid из файла: он — «издательская» личность записи,
+  // общая у всех, кто ставил этот модуль. Локальный ключ такой записи никто
+  // снаружи не видел, и держаться за него незачем.
+  const imported = new ImportedEntities();
   const summary: SystemUpdateSummary = {
     sectionsAdded: 0,
     entriesAdded: 0,
@@ -671,6 +690,7 @@ export async function updateSystemFromExport(
       updateEntry.run(e.name, e.level, JSON.stringify(e.data ?? {}), e.description || "", e.position, existingId);
       entryIdMap.set(e.id, existingId);
       touchedIds.add(existingId);
+      imported.claim("compendium_entry", existingId, e.uid);
       summary.entriesUpdated++;
     } else {
       const newParentId = e.parent_id == null ? null : entryIdMap.get(e.parent_id) ?? null;
@@ -688,6 +708,7 @@ export async function updateSystemFromExport(
       const insertedId = info.lastInsertRowid as number;
       entryIdMap.set(e.id, insertedId);
       touchedIds.add(insertedId);
+      imported.claim("compendium_entry", insertedId, e.uid);
       summary.entriesAdded++;
     }
   }
@@ -745,9 +766,11 @@ export async function updateSystemFromExport(
       const existingId = existingEntryStatblockByKey.get(`${newEntryId}:${sb.format}`);
       if (existingId) {
         updateEntryStatblock.run(sb.kind, sb.content, sb.note || "", sb.theme, sb.density, existingId);
+        imported.track("statblocks", existingId);
         summary.statblocksUpdated++;
       } else {
-        insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+        const sbRow = insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+        imported.track("statblocks", sbRow.lastInsertRowid as number);
         summary.statblocksAdded++;
       }
     }
@@ -792,6 +815,8 @@ export async function updateSystemFromExport(
     }
   }
 
+  imported.resolve();
+  healAllMentions();
   return summary;
 }
 

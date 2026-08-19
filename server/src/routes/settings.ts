@@ -18,11 +18,24 @@ import {
 } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import {
+  CALENDAR_PRESETS,
+  applyCalendarPreset,
+  resolvePreset,
+} from "../services/calendarPresets";
+import {
   CrossLinkChoice,
   applySettingCrossLinks,
   planSettingCrossLinks,
   stripSettingCrossLinks,
 } from "../import/crossLinks";
+import {
+  ImportedEntities,
+  exportMention,
+  healAllMentions,
+  idOfUid,
+  rewritePayload,
+  uidOf,
+} from "../services/mentions";
 
 export const settingsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -61,6 +74,22 @@ settingsRouter.delete("/:id/cross-links", (req, res) => {
   res.json(stripSettingCrossLinks(Number(req.params.id)));
 });
 
+// Объявлено до «/:id»: иначе Express примет «calendar-presets» за номер
+// сеттинга и вернёт 404.
+// Список заготовок календаря для формы создания сеттинга.
+settingsRouter.get("/calendar-presets", (_req, res) => {
+  res.json(
+    CALENDAR_PRESETS.map((p) => ({
+      key: p.key,
+      label: p.label,
+      hint: p.hint,
+      months: p.months.length,
+      weekdays: p.weekdays.length,
+      era: p.era?.name ?? null,
+    }))
+  );
+});
+
 settingsRouter.get("/:id", (req, res) => {
   const row = db
     .prepare("SELECT * FROM settings WHERE id = ?")
@@ -70,9 +99,18 @@ settingsRouter.get("/:id", (req, res) => {
 });
 
 settingsRouter.post("/", (req, res) => {
-  const { name, description } = req.body as {
+  const { name, description, calendar } = req.body as {
     name: string;
     description?: string;
+    // Заготовка календаря: без неё сеттинг заводится с пустым календарём, как
+    // и раньше, и хроника мира до заполнения месяцев ничего не показывает.
+    calendar?: {
+      preset?: string;
+      withEra?: boolean;
+      months?: number;
+      daysPerMonth?: number;
+      weekdays?: number;
+    };
   };
   if (!name) return res.status(400).json({ error: "name is required" });
   const folder = settingFolder(name);
@@ -81,9 +119,10 @@ settingsRouter.post("/", (req, res) => {
       "INSERT INTO settings (name, description, folder_path) VALUES (?, ?, ?)"
     )
     .run(name, description || "", folder);
-  res.status(201).json(
-    db.prepare("SELECT * FROM settings WHERE id = ?").get(info.lastInsertRowid)
-  );
+  const newId = info.lastInsertRowid as number;
+  const preset = calendar ? resolvePreset(calendar) : null;
+  if (preset) applyCalendarPreset(newId, preset, calendar?.withEra === true);
+  res.status(201).json(db.prepare("SELECT * FROM settings WHERE id = ?").get(newId));
 });
 
 function getCalendar(settingId: string | number) {
@@ -490,7 +529,399 @@ settingsRouter.post("/:id/reveal-resources", (req, res) => {
 // `include` to additionally embed every avatar/background/thumbnail/resource
 // file as base64 (same idea as systems.ts's ?images=1, just folded into the
 // existing include-list param instead of a separate flag).
-function buildSettingExportData(settingId: number | string, include: string[]): SettingExportData | null {
+/**
+ * Досылает в только что вставленную строку всё, что приехало в файле, но не
+ * попало в перечень колонок `INSERT`.
+ *
+ * Выгрузка строится через `SELECT *` и несёт все колонки таблицы, а вставки
+ * перечисляют их поимённо — и всё незанесённое в перечень терялось молча:
+ * описания существ, синонимы, оригинальные названия, короткие имена,
+ * настройки масштаба карт, редкость предметов. Копирование по пересечению
+ * «что приехало» с «что есть в таблице» закрывает это разом и не потребует
+ * правки, когда в таблицу добавят следующую колонку.
+ */
+const NEVER_COPY = new Set([
+  "id",
+  "uid",
+  "created_at",
+  "archived_at",
+  "imported_at",
+  "folder_path",
+  // Принадлежность и родство расставляются с пересчётом id, копировать их
+  // как есть значило бы притащить чужие номера.
+  "setting_id",
+  "campaign_id",
+  "session_id",
+  "system_id",
+  "parent_id",
+  "location_id",
+  "being_id",
+  "community_id",
+  "artifact_id",
+  "base_monster_id",
+  // Пути к файлам пишутся при распаковке вложений, а не переносятся строкой.
+  "avatar_image_path",
+  "thumbnail_image_path",
+  "background_image_path",
+  "map_image_path",
+  "file_path",
+]);
+
+function copyPlainFields(table: string, newId: number, row: Record<string, unknown>): void {
+  const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[])
+    .map((c) => c.name)
+    .filter((c) => !NEVER_COPY.has(c) && c in row);
+  const usable = cols.filter((c) => {
+    const v = row[c];
+    return v === null || ["string", "number", "boolean"].includes(typeof v);
+  });
+  if (!usable.length) return;
+  db.prepare(`UPDATE ${table} SET ${usable.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`).run(
+    ...usable.map((c) => (typeof row[c] === "boolean" ? (row[c] ? 1 : 0) : (row[c] as string | number | null))),
+    newId
+  );
+}
+
+/** Главы сущности, с пересчётом владельца. */
+function insertChapters(
+  table: string,
+  ownerColumn: string,
+  ownerId: number,
+  chapters: ChapterData[] | undefined
+): void {
+  if (!chapters?.length) return;
+  const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+    (c) => c.name
+  );
+  for (const ch of chapters) {
+    const fields = ["title", "content", "section", "important", "visible_to_players"].filter(
+      (f) => cols.includes(f) && ch[f as keyof ChapterData] != null
+    );
+    db.prepare(
+      `INSERT INTO ${table} (${ownerColumn}${fields.length ? ", " + fields.join(", ") : ""})
+       VALUES (?${fields.map(() => ", ?").join("")})`
+    ).run(ownerId, ...fields.map((f) => ch[f as keyof ChapterData] as string | number));
+  }
+}
+
+/**
+ * Всё, что связывает уже вставленные строки друг с другом: принадлежность
+ * личностей и сообществ, отношения, ссылки на компендиум, события хроники.
+ *
+ * Отдельным проходом, потому что каждой из этих таблиц нужны готовые карты
+ * пересчёта id — раньше их не существовало, и вся эта часть сеттинга при
+ * переносе просто исчезала.
+ */
+function linkImportedSetting(
+  body: SettingExportData,
+  maps: {
+    locationIdMap: Map<number, number>;
+    beingIdMap: Map<number, number>;
+    communityIdMap: Map<number, number>;
+    newSettingId: number;
+  }
+): void {
+  const { locationIdMap, beingIdMap, communityIdMap, newSettingId } = maps;
+
+  const linkBeingLocation = db.prepare(
+    "INSERT OR IGNORE INTO being_locations (being_id, location_id) VALUES (?, ?)"
+  );
+  const linkBeingCommunity = db.prepare(
+    "INSERT OR IGNORE INTO being_communities (being_id, community_id) VALUES (?, ?)"
+  );
+  const linkCommunityLocation = db.prepare(
+    "INSERT OR IGNORE INTO community_locations (community_id, location_id) VALUES (?, ?)"
+  );
+  const linkCompendium = db.prepare(
+    "INSERT OR IGNORE INTO being_compendium_links (being_id, compendium_entry_id) VALUES (?, ?)"
+  );
+
+  for (const b of body.beings ?? []) {
+    const newBeingId = beingIdMap.get(b.id);
+    if (!newBeingId) continue;
+    for (const oldId of b.inLocations ?? []) {
+      const to = locationIdMap.get(oldId);
+      if (to) linkBeingLocation.run(newBeingId, to);
+    }
+    for (const oldId of b.inCommunities ?? []) {
+      const to = communityIdMap.get(oldId);
+      if (to) linkBeingCommunity.run(newBeingId, to);
+    }
+    // Записи компендиума живут в другом модуле — системе. Ссылка приезжает
+    // глобальным ключом и оживает, только если эта система на устройстве
+    // стоит; иначе тихо пропускается, как и подвешенный меншен.
+    if (b.baseMonsterUid) {
+      const entryId = idOfUid("compendium_entry", b.baseMonsterUid);
+      if (entryId) {
+        db.prepare("UPDATE setting_beings SET base_monster_id = ? WHERE id = ?").run(
+          entryId,
+          newBeingId
+        );
+      }
+    }
+    for (const uid of b.compendiumUids ?? []) {
+      const entryId = idOfUid("compendium_entry", uid);
+      if (entryId) linkCompendium.run(newBeingId, entryId);
+    }
+  }
+
+  for (const c of body.communities ?? []) {
+    const newCommunityId = communityIdMap.get(c.id);
+    if (!newCommunityId) continue;
+    for (const oldId of c.inLocations ?? []) {
+      const to = locationIdMap.get(oldId);
+      if (to) linkCommunityLocation.run(newCommunityId, to);
+    }
+  }
+
+  return;
+}
+
+/** Раскладывает галереи по хранилищу и заводит записи. */
+async function insertGalleries(
+  body: SettingExportData,
+  folder: string,
+  maps: { locationIdMap: Map<number, number>; beingIdMap: Map<number, number>; communityIdMap: Map<number, number> }
+): Promise<void> {
+  const insert = db.prepare(
+    "INSERT INTO gallery_images (owner_type, owner_id, image_path, caption, position) VALUES (?, ?, ?, ?, ?)"
+  );
+  // Галерея устроена одинаково у всех трёх типов, а их полные типы разные —
+  // сводим к тому минимуму, который здесь нужен.
+  type GalleryOwner = { id: number; gallery?: GalleryData[] };
+  const groups: [string, GalleryOwner[], Map<number, number>][] = [
+    ["location", body.locations ?? [], maps.locationIdMap],
+    ["being", body.beings ?? [], maps.beingIdMap],
+    ["community", body.communities ?? [], maps.communityIdMap],
+  ];
+  for (const [ownerType, rows, map] of groups) {
+    for (const row of rows ?? []) {
+      const newId = map.get(row.id);
+      if (!newId || !row.gallery?.length) continue;
+      const target = ensureSubfolder(folder, "Gallery");
+      for (const g of row.gallery) {
+        if (!g.file_data) continue;
+        const filePath = await writeBase64File(target, g.file_data.filename, g.file_data.base64);
+        insert.run(ownerType, newId, filePath, g.caption || "", g.position ?? 0);
+      }
+    }
+  }
+}
+
+function linkRelationsAndCalendar(
+  body: SettingExportData,
+  maps: {
+    locationIdMap: Map<number, number>;
+    beingIdMap: Map<number, number>;
+    communityIdMap: Map<number, number>;
+    newSettingId: number;
+  }
+): void {
+  const { locationIdMap, beingIdMap, communityIdMap, newSettingId } = maps;
+  const remap: Record<string, Map<number, number>> = {
+    location: locationIdMap,
+    being: beingIdMap,
+    community: communityIdMap,
+  };
+  const insertRelation = db.prepare(
+    `INSERT INTO entity_relations (from_type, from_id, to_type, to_id, tone, label, description)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  // Своей уникальности у отношений нет, а слияние зовут повторно — без сверки
+  // каждое «⟳ Обновить» плодило бы вторую копию каждой связи.
+  const relationExists = db.prepare(
+    `SELECT 1 FROM entity_relations
+      WHERE from_type = ? AND from_id = ? AND to_type = ? AND to_id = ? AND label = ?`
+  );
+  for (const r of body.relations ?? []) {
+    const from = remap[r.from_type]?.get(r.from_id);
+    const to = remap[r.to_type]?.get(r.to_id);
+    if (!from || !to) continue;
+    if (relationExists.get(r.from_type, from, r.to_type, to, r.label)) continue;
+    insertRelation.run(r.from_type, from, r.to_type, to, r.tone, r.label, r.description);
+  }
+
+  // События хроники выгружались и раньше, но вставки для них не было вовсе —
+  // календарь приезжал с месяцами и днями недели, но без единого события.
+  if (body.calendarEvents?.length) {
+    const cols = (
+      db.prepare("PRAGMA table_info(setting_calendar_events)").all() as { name: string }[]
+    )
+      .map((c) => c.name)
+      .filter((c) => !NEVER_COPY.has(c));
+    const insertEvent = db.prepare(
+      `INSERT INTO setting_calendar_events (setting_id${cols.length ? ", " + cols.join(", ") : ""})
+       VALUES (?${cols.map(() => ", ?").join("")})`
+    );
+    // По той же причине, что и отношения: слияние зовут повторно, а второго
+    // «Основания Глубоководья» в хронике быть не должно.
+    const eventExists = db.prepare(
+      `SELECT 1 FROM setting_calendar_events
+        WHERE setting_id = ? AND title = ? AND inworld_year = ? AND inworld_month = ? AND inworld_day = ?`
+    );
+    for (const e of body.calendarEvents) {
+      const row = e as unknown as Record<string, unknown>;
+      if (
+        eventExists.get(
+          newSettingId,
+          row.title ?? "",
+          row.inworld_year ?? 0,
+          row.inworld_month ?? 0,
+          row.inworld_day ?? 0
+        )
+      ) {
+        continue;
+      }
+      insertEvent.run(
+        newSettingId,
+        ...cols.map((c) => {
+          const v = row[c];
+          return v === undefined || typeof v === "object" ? null : (v as string | number);
+        })
+      );
+    }
+  }
+}
+
+/** Галерея сущности: подписи вместе с самими файлами. */
+function attachGallery(rows: { id: number; gallery?: GalleryData[] }[], ownerType: string): void {
+  if (!rows.length) return;
+  const stmt = db.prepare(
+    "SELECT image_path, caption, position FROM gallery_images WHERE owner_type = ? AND owner_id = ? ORDER BY position, id"
+  );
+  for (const row of rows) {
+    const list = (stmt.all(ownerType, row.id) as {
+      image_path: string;
+      caption: string;
+      position: number;
+    }[])
+      .map((g) => ({
+        caption: g.caption,
+        position: g.position,
+        file_data: readFileAsBase64(g.image_path),
+      }))
+      .filter((g) => g.file_data);
+    if (list.length) row.gallery = list as GalleryData[];
+  }
+}
+
+/**
+ * Выбрасывает из выгрузки все вложенные файлы, оставляя данные.
+ *
+ * Так работает снятая галочка «с изображениями» на импорте: файл уже скачан
+ * целиком, но раскладывать сотни мегабайт по хранилищу человек не обязан.
+ * Проще выкинуть вложения на входе, чем протаскивать флаг через два десятка
+ * мест, каждое из которых пишет свой файл.
+ */
+function stripEmbeddedFiles(body: SettingExportData): void {
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) return value.forEach(walk);
+    if (!value || typeof value !== "object") return;
+    const obj = value as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+      if (/_data$/.test(key)) obj[key] = null;
+      else walk(obj[key]);
+    }
+  };
+  walk(body);
+  for (const rows of [body.locations, body.beings, body.communities]) {
+    for (const row of rows ?? []) delete (row as { gallery?: unknown }).gallery;
+  }
+}
+
+/**
+ * То же для пути слияния: добавляются только главы, которых у сущности ещё
+ * нет.
+ *
+ * Сверка по заголовку, как и всё остальное в слиянии сеттинга. Правило здесь
+ * то же, что и для локаций с личностями: своё не трогаем, чужое новое
+ * добавляем. Иначе повторное «⟳ Обновить» удваивало бы текст каждой главы.
+ */
+function mergeChapters(
+  table: string,
+  ownerColumn: string,
+  ownerId: number,
+  chapters: ChapterData[] | undefined
+): void {
+  if (!chapters?.length) return;
+  const existing = new Set(
+    (
+      db
+        .prepare(`SELECT title FROM ${table} WHERE ${ownerColumn} = ?`)
+        .all(ownerId) as { title: string }[]
+    ).map((r) => (r.title ?? "").trim())
+  );
+  const fresh = chapters.filter((ch) => !existing.has((ch.title ?? "").trim()));
+  insertChapters(table, ownerColumn, ownerId, fresh);
+}
+
+/** Один столбец выборки списком чисел — связки «многие ко многим» читаются так. */
+function pluck(sql: string, id: number, column: string): number[] {
+  return (db.prepare(sql).all(id) as Record<string, number>[]).map((r) => r[column]);
+}
+
+/**
+ * Главы сущности — её настоящее содержимое.
+ *
+ * Карточка несёт имя и несколько полей, а всё написанное про локацию или
+ * личность лежит главами. Выгрузка их не собирала, поэтому перенесённый
+ * сеттинг приезжал списком имён: 90 глав локаций и 92 главы существ одного
+ * только Вотердипа оставались дома.
+ */
+function attachChapters(
+  rows: { id: number; chapters?: ChapterData[] }[],
+  table: string,
+  ownerColumn: string
+): void {
+  if (!rows.length) return;
+  const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+    (c) => c.name
+  );
+  // У глав существ есть поля, которых нет у остальных (section, important,
+  // campaign_id): берём пересечение, чтобы один запрос обслуживал все четыре
+  // таблицы глав.
+  const wanted = ["title", "content", "section", "important", "visible_to_players"].filter((c) =>
+    cols.includes(c)
+  );
+  const stmt = db.prepare(
+    `SELECT ${wanted.join(", ")} FROM ${table} WHERE ${ownerColumn} = ?
+      ${cols.includes("campaign_id") ? "AND campaign_id IS NULL" : ""} ORDER BY id`
+  );
+  for (const row of rows) {
+    const list = stmt.all(row.id) as ChapterData[];
+    if (list.length) row.chapters = list;
+  }
+}
+
+/**
+ * Отношения, оба конца которых уезжают в этот же файл.
+ *
+ * Односторонние отбрасываются намеренно: связь с сущностью, которой у
+ * получателя нет, восстановить не по чему — в отличие от меншена, у
+ * `entity_relations` нет подписи, которая осталась бы читаемой прозой.
+ */
+function collectRelations(payload: SettingExportData): SettingExportData["relations"] {
+  const scope = new Map<string, Set<number>>([
+    ["location", new Set(payload.locations.map((l) => l.id))],
+    ["being", new Set(payload.beings.map((b) => b.id))],
+    ["community", new Set(payload.communities.map((c) => c.id))],
+    ["artifact", new Set((payload.artifacts ?? []).map((a) => a.id))],
+  ]);
+  const inScope = (type: string, id: number) => scope.get(type)?.has(id) ?? false;
+  const rows = db
+    .prepare(
+      "SELECT from_type, from_id, to_type, to_id, tone, label, description FROM entity_relations"
+    )
+    .all() as SettingExportData["relations"];
+  return (rows ?? []).filter(
+    (r) => inScope(r.from_type, r.from_id) && inScope(r.to_type, r.to_id)
+  );
+}
+
+export function buildSettingExportData(
+  settingId: number | string,
+  include: string[]
+): SettingExportData | null {
   const withImages = include.includes("images");
   const setting = db.prepare("SELECT * FROM settings WHERE id = ?").get(settingId) as
     | (SettingExportData["setting"] & { background_image_path?: string | null; thumbnail_image_path?: string | null })
@@ -581,7 +1012,53 @@ function buildSettingExportData(settingId: number | string, include: string[]): 
     }
   }
 
+  // Главы — это и есть содержимое страницы: карточка сущности несёт имя и
+  // пару полей, а всё написанное про неё живёт здесь. До сих пор выгрузка их
+  // не собирала вовсе, и перенесённый сеттинг приезжал списком имён.
+  attachChapters(locations, "location_chapters", "location_id");
+  attachChapters(beings, "being_chapters", "being_id");
+  attachChapters(communities, "community_chapters", "community_id");
+
+  // Галерея — единственная часть сеттинга, которая тащит за собой мегабайты,
+  // поэтому едет под тем же флагом, что аватары и карты. Без файлов записи
+  // галереи бессмысленны (подпись без картинки), так что гейт общий.
+  if (withImages) {
+    attachGallery(locations, "location");
+    attachGallery(beings, "being");
+    attachGallery(communities, "community");
+  }
+
+  // Принадлежность: где существо живёт, в каких сообществах состоит, какие
+  // локации сообщество занимает. Хранится отдельными таблицами-связками, и
+  // без них перенесённое население висит в пустоте.
+  for (const b of beings) {
+    b.inLocations = pluck("SELECT location_id FROM being_locations WHERE being_id = ?", b.id, "location_id");
+    b.inCommunities = pluck(
+      "SELECT community_id FROM being_communities WHERE being_id = ?",
+      b.id,
+      "community_id"
+    );
+    // Ссылка на запись компендиума ведёт в другой модуль — систему. Едет
+    // глобальным ключом, а не локальным id: у получателя система своя.
+    b.baseMonsterUid = b.base_monster_id != null ? uidOf("compendium_entry", b.base_monster_id) : null;
+    b.compendiumUids = pluck(
+      "SELECT compendium_entry_id FROM being_compendium_links WHERE being_id = ?",
+      b.id,
+      "compendium_entry_id"
+    )
+      .map((id) => uidOf("compendium_entry", id))
+      .filter((u): u is string => !!u);
+  }
+  for (const c of communities) {
+    c.inLocations = pluck(
+      "SELECT location_id FROM community_locations WHERE community_id = ?",
+      c.id,
+      "location_id"
+    );
+  }
+
   const payload: SettingExportData = { setting, locations, beings, communities };
+
 
   if (include.includes("calendar")) {
     payload.calendarMonths = db
@@ -608,7 +1085,14 @@ function buildSettingExportData(settingId: number | string, include: string[]): 
     payload.resources = resources;
   }
 
-  return payload;
+  // Отношения между сущностями. Собираются последними, когда состав файла уже
+  // известен: берутся только те, у которых оба конца уезжают в этот же файл —
+  // половина отношения на чужом устройстве это связь в никуда.
+  payload.relations = collectRelations(payload);
+
+  // Ссылки внутри текстов переводятся в глобальную форму: локальный id в
+  // файле означал бы на чужом устройстве другую сущность (services/mentions.ts).
+  return rewritePayload(payload, exportMention);
 }
 
 settingsRouter.get("/:id/export", (req, res) => {
@@ -624,8 +1108,23 @@ interface FileData {
   base64: string;
 }
 
+export interface GalleryData {
+  caption: string;
+  position: number;
+  file_data: FileData | null;
+}
+
+export interface ChapterData {
+  title: string;
+  content: string;
+  section?: string | null;
+  important?: number | null;
+  visible_to_players?: number | null;
+}
+
 export interface SettingExportData {
   setting: {
+    uid?: string;
     name: string;
     description: string;
     calendar_era: string;
@@ -634,6 +1133,9 @@ export interface SettingExportData {
   };
   locations: {
     id: number;
+    uid?: string;
+    chapters?: ChapterData[];
+    gallery?: GalleryData[];
     parent_id: number | null;
     name: string;
     kind: string;
@@ -657,6 +1159,16 @@ export interface SettingExportData {
   }[];
   beings: {
     id: number;
+    uid?: string;
+    chapters?: ChapterData[];
+    gallery?: GalleryData[];
+    /** Локации и сообщества, к которым личность приписана (таблицы-связки). */
+    inLocations?: number[];
+    inCommunities?: number[];
+    /** Записи компендиума — из другого модуля, поэтому глобальными ключами. */
+    base_monster_id?: number | null;
+    baseMonsterUid?: string | null;
+    compendiumUids?: string[];
     name: string;
     category: string;
     location_id: number | null;
@@ -677,6 +1189,10 @@ export interface SettingExportData {
   }[];
   communities: {
     id: number;
+    uid?: string;
+    chapters?: ChapterData[];
+    gallery?: GalleryData[];
+    inLocations?: number[];
     parent_id: number | null;
     name: string;
     description: string;
@@ -690,8 +1206,30 @@ export interface SettingExportData {
   calendarMonths?: { position: number; name: string; days: number }[];
   calendarWeekdays?: { position: number; name: string }[];
   calendarEvents?: { title: string; description: string; recurrence: string; day: number; month: number | null; year: number | null; important: number }[];
-  artifacts?: { name: string; owner: string; power: string; history: string; notes: string }[];
+  artifacts?: {
+    id: number;
+    uid?: string;
+    name: string;
+    owner: string;
+    power: string;
+    history: string;
+    notes: string;
+  }[];
+  /**
+   * Отношения между сущностями сеттинга. Оба конца всегда внутри этого файла —
+   * см. collectRelations.
+   */
+  relations?: {
+    from_type: string;
+    from_id: number;
+    to_type: string;
+    to_id: number;
+    tone: string;
+    label: string;
+    description: string;
+  }[];
   resources?: {
+    uid?: string;
     name: string;
     type: string;
     category?: string | null;
@@ -728,8 +1266,20 @@ async function writeEntityImages(
   return { avatarPath, thumbnailPath };
 }
 
-export async function importSettingExport(body: SettingExportData): Promise<number> {
+export async function importSettingExport(
+  body: SettingExportData,
+  options: { withImages?: boolean } = {}
+): Promise<number> {
   if (!body.setting?.name) throw new Error("invalid export file");
+  // Файл может нести изображения, а ставить их — не обязательно: на слабой
+  // машине или ради быстрой примерки модуля картинки только мешают.
+  const withImages = options.withImages !== false;
+  if (!withImages) stripEmbeddedFiles(body);
+
+  // Ссылки переводятся не до вставки, а после: пока строки не созданы, их
+  // новых id ещё нет, а глобальный поиск по uid склеил бы новый сеттинг со
+  // старым, если тот же модуль уже стоит (см. ImportedEntities).
+  const imported = new ImportedEntities();
 
   // settings.name has no UNIQUE constraint, so unlike importSystemExport
   // there's no collision to resolve — keep the name exactly as exported.
@@ -742,6 +1292,8 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
     )
     .run(body.setting.name, body.setting.description || "", folder, body.setting.calendar_era || "");
   const newSettingId = info.lastInsertRowid as number;
+  imported.claim("setting", newSettingId, body.setting.uid);
+  copyPlainFields("settings", newSettingId, body.setting as Record<string, unknown>);
 
   if (body.setting.background_data || body.setting.thumbnail_data) {
     const { avatarPath: background, thumbnailPath } = await writeEntityImages(folder, {
@@ -768,6 +1320,9 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
   for (const l of body.locations ?? []) {
     const r = insertLocation.run(newSettingId, l.name, l.kind || "", l.description || "");
     locationIdMap.set(l.id, r.lastInsertRowid as number);
+    imported.claim("location", r.lastInsertRowid as number, l.uid);
+    copyPlainFields("setting_locations", r.lastInsertRowid as number, l as Record<string, unknown>);
+    insertChapters("location_chapters", "location_id", r.lastInsertRowid as number, l.chapters);
   }
   const updateLocationParent = db.prepare("UPDATE setting_locations SET parent_id = ? WHERE id = ?");
   for (const l of body.locations ?? []) {
@@ -839,6 +1394,9 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
     );
     const newBeingId = r.lastInsertRowid as number;
     beingIdMap.set(b.id, newBeingId);
+    imported.claim("being", newBeingId, b.uid);
+    copyPlainFields("setting_beings", newBeingId, b as Record<string, unknown>);
+    insertChapters("being_chapters", "being_id", newBeingId, b.chapters);
     if (b.avatar_data || b.thumbnail_data) {
       const beingFolderPath = beingFolder(folder, b.name);
       const { avatarPath, thumbnailPath } = await writeEntityImages(beingFolderPath, b);
@@ -847,7 +1405,9 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
       ).run(beingFolderPath, avatarPath, thumbnailPath, newBeingId);
     }
     for (const sb of b.statblocks ?? []) {
-      insertBeingStatblock.run(newBeingId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+      const sbRow = insertBeingStatblock.run(newBeingId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
+      // Статблок своего uid не имеет, но ссылки в его содержимом есть.
+      imported.track("statblocks", sbRow.lastInsertRowid as number);
     }
   }
 
@@ -867,6 +1427,9 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
       c.goals || ""
     );
     communityIdMap.set(c.id, r.lastInsertRowid as number);
+    imported.claim("community", r.lastInsertRowid as number, c.uid);
+    copyPlainFields("setting_communities", r.lastInsertRowid as number, c as Record<string, unknown>);
+    insertChapters("community_chapters", "community_id", r.lastInsertRowid as number, c.chapters);
     if (c.avatar_data || c.thumbnail_data) {
       const communityFolderPath = communityFolder(folder, c.name);
       const { avatarPath, thumbnailPath } = await writeEntityImages(communityFolderPath, c);
@@ -936,7 +1499,9 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
       "INSERT INTO artifacts (setting_id, name, owner, power, history, notes) VALUES (?, ?, ?, ?, ?, ?)"
     );
     for (const a of body.artifacts) {
-      insertArtifact.run(newSettingId, a.name, a.owner || "", a.power || "", a.history || "", a.notes || "");
+      const ar = insertArtifact.run(newSettingId, a.name, a.owner || "", a.power || "", a.history || "", a.notes || "");
+      imported.claim("artifact", ar.lastInsertRowid as number, a.uid);
+      copyPlainFields("artifacts", ar.lastInsertRowid as number, a as Record<string, unknown>);
     }
   }
   if (body.resources) {
@@ -951,7 +1516,7 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
         const targetFolder = subdir ? ensureSubfolder(resourcesRoot, subdir) : resourcesRoot;
         filePath = await writeBase64File(targetFolder, r.file_data.filename, r.file_data.base64);
       }
-      insertResource.run(
+      const rr = insertResource.run(
         r.name,
         r.type || "note",
         newSettingId,
@@ -961,9 +1526,20 @@ export async function importSettingExport(body: SettingExportData): Promise<numb
         r.category ?? null,
         filePath
       );
+      imported.claim("resource", rr.lastInsertRowid as number, r.uid);
+      copyPlainFields("resources", rr.lastInsertRowid as number, r as Record<string, unknown>);
     }
   }
 
+  const maps = { locationIdMap, beingIdMap, communityIdMap, newSettingId };
+  linkImportedSetting(body, maps);
+  linkRelationsAndCalendar(body, maps);
+  if (withImages) await insertGalleries(body, folder, maps);
+
+  imported.resolve();
+  // Сеттинг принёс сущности — подвешенные ссылки на них в текстах других
+  // модулей могли ждать именно этого момента.
+  healAllMentions();
   return newSettingId;
 }
 
@@ -1015,6 +1591,9 @@ export async function updateSettingFromExport(
   };
   const geoRoot = settingGeographyRoot(targetSetting.folder_path);
 
+  // См. updateSystemFromExport: при слиянии uid из файла побеждает локальный.
+  const imported = new ImportedEntities();
+
   const summary: SettingUpdateSummary = {
     locationsAdded: 0,
     locationsUpdated: 0,
@@ -1047,6 +1626,9 @@ export async function updateSettingFromExport(
     if (existingId) {
       updateLocation.run(l.kind || "", l.description || "", existingId);
       locationIdMap.set(l.id, existingId);
+      imported.claim("location", existingId, l.uid);
+      copyPlainFields("setting_locations", existingId, l as Record<string, unknown>);
+      mergeChapters("location_chapters", "location_id", existingId, l.chapters);
       touchedLocationIds.add(existingId);
       summary.locationsUpdated++;
     } else {
@@ -1054,6 +1636,9 @@ export async function updateSettingFromExport(
       const info = insertLocation.run(targetSettingId, newParentId, l.name, l.kind || "", l.description || "");
       const insertedId = info.lastInsertRowid as number;
       locationIdMap.set(l.id, insertedId);
+      imported.claim("location", insertedId, l.uid);
+      copyPlainFields("setting_locations", insertedId, l as Record<string, unknown>);
+      mergeChapters("location_chapters", "location_id", insertedId, l.chapters);
       touchedLocationIds.add(insertedId);
       summary.locationsAdded++;
       if (l.avatar_data || l.thumbnail_data || l.map_data) {
@@ -1138,6 +1723,9 @@ export async function updateSettingFromExport(
         existingId
       );
       communityIdMap.set(c.id, existingId);
+      imported.claim("community", existingId, c.uid);
+      copyPlainFields("setting_communities", existingId, c as Record<string, unknown>);
+      mergeChapters("community_chapters", "community_id", existingId, c.chapters);
       touchedCommunityIds.add(existingId);
       summary.communitiesUpdated++;
     } else {
@@ -1154,6 +1742,9 @@ export async function updateSettingFromExport(
       );
       const insertedId = info.lastInsertRowid as number;
       communityIdMap.set(c.id, insertedId);
+      imported.claim("community", insertedId, c.uid);
+      copyPlainFields("setting_communities", insertedId, c as Record<string, unknown>);
+      mergeChapters("community_chapters", "community_id", insertedId, c.chapters);
       touchedCommunityIds.add(insertedId);
       summary.communitiesAdded++;
       if (c.avatar_data || c.thumbnail_data) {
@@ -1207,6 +1798,9 @@ export async function updateSettingFromExport(
       );
       touchedBeingIds.add(existingId);
       beingIdMap.set(b.id, existingId);
+      imported.claim("being", existingId, b.uid);
+      copyPlainFields("setting_beings", existingId, b as Record<string, unknown>);
+      mergeChapters("being_chapters", "being_id", existingId, b.chapters);
       summary.beingsUpdated++;
     } else {
       const info = insertBeing.run(
@@ -1222,6 +1816,9 @@ export async function updateSettingFromExport(
       const insertedId = info.lastInsertRowid as number;
       touchedBeingIds.add(insertedId);
       beingIdMap.set(b.id, insertedId);
+      imported.claim("being", insertedId, b.uid);
+      copyPlainFields("setting_beings", insertedId, b as Record<string, unknown>);
+      mergeChapters("being_chapters", "being_id", insertedId, b.chapters);
       summary.beingsAdded++;
       if (b.avatar_data || b.thumbnail_data) {
         const beingFolderPath = beingFolder(targetSetting.folder_path, b.name);
@@ -1352,6 +1949,12 @@ export async function updateSettingFromExport(
     }
   }
 
+  const mergeMaps = { locationIdMap, beingIdMap, communityIdMap, newSettingId: targetSettingId };
+  linkImportedSetting(body, mergeMaps);
+  linkRelationsAndCalendar(body, mergeMaps);
+
+  imported.resolve();
+  healAllMentions();
   return summary;
 }
 
@@ -1404,7 +2007,11 @@ settingsRouter.post("/:id/update", async (req, res) => {
 settingsRouter.post("/import", async (req, res) => {
   let newSettingId: number;
   try {
-    newSettingId = await importSettingExport(req.body as SettingExportData);
+    // ?images=0 — поставить сеттинг без картинок: файл уже скачан целиком, но
+    // раскладывать сотни мегабайт по хранилищу человек не обязан.
+    newSettingId = await importSettingExport(req.body as SettingExportData, {
+      withImages: req.query.images !== "0",
+    });
   } catch (e) {
     return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
   }
