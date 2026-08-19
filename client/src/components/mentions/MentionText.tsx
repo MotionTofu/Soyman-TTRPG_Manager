@@ -1,14 +1,19 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DETAIL_ROUTES } from "../../entityTypes";
+import { DeadMention } from "./DeadMention";
 
 // Inline markup recognized inside any text field, alongside the existing
 // [[type:id|Label]] mention token: **bold**, *italic*, [label](url) external
 // links, and {span color="…" size="…" font="…"}…{/span} styled runs. A line
 // starting with #/##/### is a heading, a line starting with "- " is a
 // bullet-list item (consecutive "- " lines are grouped into one <ul>).
+// Вторая ветка — подвешенная ссылка `[[being@uid|Модуль|Подпись]]`: цель не
+// установлена, кликать некуда. Она стоит раньше живой формы не случайно: обе
+// начинаются с «[[», и если первой пробовать живую, её `(\d+)` не совпадёт, а
+// разбор уедет в следующий токен.
 const TOKEN_RE =
-  /\[\[(\w+):(\d+)\|([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\{span([^}]*)\}|\{quote\}|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/;
+  /\[\[(\w+)@([0-9a-fA-F][0-9a-fA-F-]{7,})\|([^|\]]*)\|([^\]]*)\]\]|\[\[(\w+):(\d+)\|([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\{span([^}]*)\}|\{quote\}|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/;
 
 function parseSpanAttrs(attrs: string): CSSProperties {
   const style: CSSProperties = {};
@@ -52,9 +57,40 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
     }
     const idx = m.index;
     if (idx > 0) nodes.push(<span key={`${keyPrefix}-${key++}`}>{rest.slice(0, idx)}</span>);
-    const [full, mType, mId, mLabel, linkLabel, linkUrl, spanAttrs, boldText, italicText] = m;
+    const [
+      full,
+      deadType,
+      deadUid,
+      deadSource,
+      deadLabel,
+      mType,
+      mId,
+      mLabel,
+      linkLabel,
+      linkUrl,
+      spanAttrs,
+      boldText,
+      italicText,
+    ] = m;
 
-    if (mType) {
+    if (deadType) {
+      // Подпись остаётся читаемой прозой — меняется только то, что ссылка
+      // зачёркнута и вместо перехода объясняет, чего не хватает.
+      nodes.push(
+        mentionsAsBold ? (
+          <strong key={`${keyPrefix}-${key++}`}>{deadLabel}</strong>
+        ) : (
+          <DeadMention
+            key={`${keyPrefix}-${key++}`}
+            type={deadType}
+            uid={deadUid}
+            source={deadSource}
+            label={deadLabel}
+          />
+        )
+      );
+      pos += idx + full.length;
+    } else if (mType) {
       const id = Number(mId);
       nodes.push(
         mentionsAsBold ? (

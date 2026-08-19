@@ -8,6 +8,31 @@ export interface MentionToken {
 
 const MENTION_RE = /\[\[(\w+):(\d+)\|([^\]]+)\]\]/g;
 
+// Подвешенная ссылка: цель на этом устройстве не установлена, поэтому вместо
+// локального id стоит глобальный uid и имя модуля-источника (подробности —
+// server/src/services/mentions.ts). В граф связей такая не попадает: связывать
+// не с чем, строки в базе нет.
+export const DEAD_MENTION_RE = /\[\[(\w+)@([0-9a-fA-F][0-9a-fA-F-]{7,})\|([^|\]]*)\|([^\]]*)\]\]/g;
+
+export interface DeadMentionToken {
+  type: string;
+  uid: string;
+  /** Имя модуля, который надо поставить, чтобы ссылка ожила. */
+  source: string;
+  label: string;
+}
+
+export function parseDeadMentions(text: string): DeadMentionToken[] {
+  const out: DeadMentionToken[] = [];
+  const seen = new Set<string>();
+  for (const m of text.matchAll(DEAD_MENTION_RE)) {
+    if (seen.has(m[2])) continue;
+    seen.add(m[2]);
+    out.push({ type: m[1], uid: m[2], source: m[3], label: m[4] });
+  }
+  return out;
+}
+
 export function formatMentionToken(type: string, id: number, label: string): string {
   return `[[${type}:${id}|${label}]]`;
 }

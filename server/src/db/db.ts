@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { systemFolder } from "../services/filesystem";
@@ -1536,6 +1537,55 @@ export function openDatabase(dbDir: string): Database.Database {
       payload TEXT NOT NULL DEFAULT ''
     )`);
     database.exec("CREATE INDEX idx_system_import_records_batch ON system_import_records(batch_id)");
+  }
+
+  // Глобальный ключ у всего, на что можно сослаться из текста.
+  //
+  // Числовой id верен только внутри одного файла базы: при переносе сеттинга
+  // на другое устройство он достаётся другой сущности, и ссылка в тексте
+  // молча начинает указывать не туда. uid переживает перенос, и по нему
+  // импорт восстанавливает ссылки, а не гадает.
+  //
+  // Список должен совпадать с MENTIONABLE в services/mentions.ts — там он
+  // источник истины для типов, здесь для таблиц.
+  const UID_TABLES = [
+    "campaigns",
+    "settings",
+    "players",
+    "characters",
+    "setting_locations",
+    "setting_beings",
+    "setting_communities",
+    "artifacts",
+    "resources",
+    "mastering_notes",
+    "story_arcs",
+    "story_scenes",
+    "sessions",
+    "compendium_entries",
+    "setting_calendar_events",
+  ];
+  for (const table of UID_TABLES) {
+    if (!tableExists(database, table)) continue;
+    if (!columnExists(database, table, "uid")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN uid TEXT`);
+    }
+    // UNIQUE, но не NOT NULL: строка могла появиться из ветки, которая про uid
+    // не знает, и такую подхватит uidOf() лениво. Частичный индекс не считает
+    // NULL за дубликат сам по себе, но так намерение видно явно.
+    database.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_uid ON ${table}(uid) WHERE uid IS NOT NULL`
+    );
+    const missing = database.prepare(`SELECT id FROM ${table} WHERE uid IS NULL`).all() as {
+      id: number;
+    }[];
+    if (missing.length) {
+      const set = database.prepare(`UPDATE ${table} SET uid = ? WHERE id = ?`);
+      const fill = database.transaction(() => {
+        for (const row of missing) set.run(randomUUID(), row.id);
+      });
+      fill();
+    }
   }
 
   return database;

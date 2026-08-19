@@ -1,5 +1,13 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import {
+  MENTIONABLE,
+  exists,
+  healAllMentions,
+  mentionTextColumns,
+  rewriteAllMentions,
+  scanMentions,
+} from "../services/mentions";
 
 export const linksRouter = Router();
 
@@ -375,4 +383,93 @@ linksRouter.post("/", (req, res) => {
 linksRouter.delete("/:id", (req, res) => {
   db.prepare("DELETE FROM generic_links WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// --- Подвешенные ссылки: те, чья цель на этом устройстве не установлена ---
+
+// Сколько раз по базе встречается ссылка на одну и ту же отсутствующую цель.
+// Окно «ссылка не работает» показывает это число, чтобы человек понимал
+// масштаб прежде, чем нажать «убрать».
+linksRouter.get("/dangling", (req, res) => {
+  const type = String(req.query.type || "");
+  const uid = String(req.query.uid || "");
+  if (!type || !uid) return res.status(400).json({ error: "нужны type и uid" });
+  let count = 0;
+  for (const { table, column } of mentionTextColumns()) {
+    const rows = db
+      .prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[' || ? || '@' || ? || '|%'`)
+      .all(type, uid) as { v: string }[];
+    for (const r of rows) count += scanMentions(r.v || "").filter((m) => m.kind === "dead" && m.uid === uid).length;
+  }
+  res.json({ count });
+});
+
+// Снятие ссылки: подпись остаётся обычным текстом.
+//
+// Снимается везде, а не в одном месте: подвешенная ссылка на отсутствующую
+// сущность повторяется в десятках текстов сразу (одно приключение — десяток
+// упоминаний), и убирать их поштучно означало бы открыть окно двадцать раз
+// подряд ради одного и того же решения.
+linksRouter.post("/dangling/strip", (req, res) => {
+  const { type, uid } = req.body as { type?: string; uid?: string };
+  if (!type || !uid) return res.status(400).json({ error: "нужны type и uid" });
+  const removed = rewriteAllMentions((m) =>
+    m.kind === "dead" && m.type === type && m.uid === uid ? m.label : null
+  );
+  res.json({ removed });
+});
+
+// «Проверить зависимости» — ручной вариант того же прохода, что сам собой
+// случается после установки модуля.
+linksRouter.post("/heal", (_req, res) => {
+  res.json({ healed: healAllMentions() });
+});
+
+// --- Ссылки, указывающие в никуда ---
+//
+// Наследство: цели удалили до того, как появилось подвешивание, и опознать их
+// уже нечем — глобального ключа у них не было. Такая ссылка выглядит рабочей,
+// но ведёт на несуществующую страницу, и подвесить её нельзя: неизвестно, на
+// что она указывала.
+//
+// Уборка схлопывает их в обычный текст — подпись остаётся, ложная ссылка
+// уходит. Делается кнопкой, а не сама при обновлении: это единственное место,
+// где приложение переписало бы тексты пользователя без его просьбы.
+
+interface BrokenSample {
+  type: string;
+  label: string;
+}
+
+function scanBroken(): { count: number; samples: BrokenSample[] } {
+  const samples: BrokenSample[] = [];
+  const seen = new Set<string>();
+  let count = 0;
+  for (const { table, column } of mentionTextColumns()) {
+    const rows = db
+      .prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%'`)
+      .all() as { v: string | null }[];
+    for (const row of rows) {
+      for (const m of scanMentions(row.v || "")) {
+        if (m.kind !== "live" || !MENTIONABLE[m.type] || exists(m.type, m.id)) continue;
+        count++;
+        const key = `${m.type}:${m.id}`;
+        if (seen.has(key) || samples.length >= 12) continue;
+        seen.add(key);
+        samples.push({ type: m.type, label: m.label });
+      }
+    }
+  }
+  return { count, samples };
+}
+
+linksRouter.get("/broken", (_req, res) => {
+  res.json(scanBroken());
+});
+
+linksRouter.post("/broken/strip", (_req, res) => {
+  const removed = rewriteAllMentions((m) =>
+    m.kind === "live" && MENTIONABLE[m.type] && !exists(m.type, m.id) ? m.label : null
+  );
+  res.json({ removed });
 });

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { ModulesTab } from "../components/ModulesTab";
 import { UpdateChecker } from "../components/UpdateChecker";
+import { LinkMaintenanceCard } from "../components/LinkMaintenanceCard";
 import { hasElectronAPI } from "../electronApi";
 import { NavIcon } from "../components/NavIcons";
 import type { AppSettings, StorageProfile } from "../types";
@@ -240,6 +241,13 @@ export function StoragesSettingsPage() {
           <strong className="entry-title">Модули</strong>
         </summary>
         <ModulesTab />
+      </details>
+
+      <details className="card stack">
+        <summary>
+          <strong className="entry-title">Ссылки в текстах</strong>
+        </summary>
+        <LinkMaintenanceCard />
       </details>
 
       <details className="card stack">
