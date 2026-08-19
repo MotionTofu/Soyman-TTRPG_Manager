@@ -108,19 +108,35 @@ export interface LinkableType {
   hasKind: boolean;
   /** Минимальная длина написания: у типов без синонимов планка выше. */
   minLength: number;
+  /**
+   * Собственное ли имя у сущностей этого типа.
+   *
+   * От этого зависит, как читать регистр в тексте. «Синий переулок» и
+   * «Гильдия Занатара» — имена собственные: строчная буква у них означает,
+   * что это, скорее всего, не они. А «скелет» и «огненный шар» —
+   * нарицательные, и строчная у них норма, а не повод усомниться.
+   *
+   * У существ признак не общий на весь тип: бестиарий — нарицательные виды,
+   * остальные три категории — именованные личности. Поэтому «byCategory».
+   */
+  properNoun: boolean | "byCategory";
 }
 
 export const LINKABLE_TYPES: LinkableType[] = [
-  { key: "location", label: "Локации", table: "setting_locations", owner: "setting", hasShortName: true, hasAliases: true, hasKind: true, minLength: 4 },
-  { key: "being", label: "Личности", table: "setting_beings", owner: "setting", hasShortName: true, hasAliases: true, hasKind: false, minLength: 4 },
-  { key: "community", label: "Сообщества", table: "setting_communities", owner: "setting", hasShortName: false, hasAliases: true, hasKind: false, minLength: 4 },
-  { key: "artifact", label: "Предметы", table: "artifacts", owner: "setting", hasShortName: true, hasAliases: true, hasKind: false, minLength: 4 },
+  { key: "location", label: "Локации", table: "setting_locations", owner: "setting", hasShortName: true, hasAliases: true, hasKind: true, minLength: 4, properNoun: true },
+  { key: "being", label: "Личности и бестиарий", table: "setting_beings", owner: "setting", hasShortName: true, hasAliases: true, hasKind: false, minLength: 4, properNoun: "byCategory" },
+  { key: "community", label: "Сообщества", table: "setting_communities", owner: "setting", hasShortName: false, hasAliases: true, hasKind: false, minLength: 4, properNoun: true },
+  // Предметы — пограничный случай: «Жезл секретов» имя собственное, а «зелье
+  // лечения» нет. Считаем собственными, потому что именованных в сокровищнице
+  // заметно больше; ошибка при этом уводит находку в «сомнительные», то есть
+  // в сторону осторожности.
+  { key: "artifact", label: "Предметы", table: "artifacts", owner: "setting", hasShortName: true, hasAliases: true, hasKind: false, minLength: 4, properNoun: true },
   // Записей компендиума почти две тысячи, и у них нет ни синонимов, ни
   // оригинального названия, ни короткого имени — только `name`. Планка длины
   // поднята, чтобы «Щит» и «Свет» вообще не попадали в поиск: слово из четырёх
   // букв без единого различающего признака даёт ложных срабатываний больше,
   // чем верных.
-  { key: "compendium_entry", label: "Записи компендиума", table: "compendium_entries", owner: "system", hasShortName: false, hasAliases: false, hasKind: false, minLength: 7 },
+  { key: "compendium_entry", label: "Записи компендиума", table: "compendium_entries", owner: "system", hasShortName: false, hasAliases: false, hasKind: false, minLength: 7, properNoun: false },
 ];
 
 const LINKABLE_BY_KEY = new Map(LINKABLE_TYPES.map((t) => [t.key, t]));
@@ -172,6 +188,8 @@ const UPPER = /\p{Lu}/u;
 interface Hit {
   start: number;
   end: number;
+  /** К имени дописан падежный хвост: «Мирт» → «Миртом». */
+  inflected: boolean;
   /** Написание в тексте совпало по регистру с эталонным. */
   caseMatches: boolean;
   /** Находка стоит в начале предложения — регистр там ничего не значит. */
@@ -225,7 +243,13 @@ function findSpelling(text: string, spelling: string): Hit[] {
     // Сравнивается только первая буква: внутри слова регистр ничего не решает,
     // а собственное имя от нарицательного отличает именно она.
     const caseMatches = UPPER.test(spelling[0] ?? "") === UPPER.test(text[at] ?? "");
-    found.push({ start: at, end, caseMatches, atSentenceStart: isSentenceStart(text, at) });
+    found.push({
+      start: at,
+      end,
+      inflected: end > at + needle.length,
+      caseMatches,
+      atSentenceStart: isSentenceStart(text, at),
+    });
   }
   return found;
 }
@@ -253,11 +277,13 @@ interface Candidate {
   ref: string;
   name: string;
   spellings: Spelling[];
+  properNoun: boolean;
 }
 
 interface EntityRow {
   id: number;
   name: string;
+  category: string;
   short_name: string | null;
   aliases: string;
   name_original: string;
@@ -295,7 +321,11 @@ function loadCandidate(type: LinkableType, row: EntityRow): Candidate | null {
   if (!spellings.length) return null;
   // Длинные написания вперёд: «Синий переулок» должен побеждать «Синий».
   spellings.sort((a, b) => b.text.length - a.text.length);
-  return { ref: `${type.key}:${row.id}`, name: row.name, spellings };
+  // Бестиарий — виды существ, а не личности: «скелет» пишется со строчной и
+  // остаётся скелетом. Остальные категории населения — именованные.
+  const properNoun =
+    type.properNoun === "byCategory" ? row.category !== "bestiary" : type.properNoun;
+  return { ref: `${type.key}:${row.id}`, name: row.name, spellings, properNoun };
 }
 
 /** Все кандидаты одного типа из перечисленных источников. */
@@ -307,6 +337,7 @@ function candidatesOfType(type: LinkableType, sources: SourceRef[]): Candidate[]
   const rows = db
     .prepare(
       `SELECT id, name,
+              ${type.properNoun === "byCategory" ? "category" : "'' AS category"},
               ${type.hasShortName ? "short_name" : "'' AS short_name"},
               ${type.hasAliases ? "aliases, name_original" : "'' AS aliases, '' AS name_original"},
               ${type.hasKind ? "kind" : "'' AS kind"}
@@ -523,13 +554,23 @@ export function planCrossLinks(req: PlanRequest): CrossLinkProposal[] {
 
           let tier = spelling.base;
           let doubt = spelling.doubt;
-          // Расхождение регистра в середине предложения — сильный довод против:
-          // «гигантский паук» со строчной почти наверняка не Неззнар по прозвищу
-          // «Паук». В начале предложения прописная не значит ничего, поэтому там
-          // регистр не судится ни за, ни против.
-          if (!hit.caseMatches && !hit.atSentenceStart) {
-            tier = lower(tier, "doubtful");
-            doubt = doubt ?? "регистр не совпал";
+          if (candidate.properNoun) {
+            // У имени собственного строчная буква — сильный довод против:
+            // «гигантский паук» почти наверняка не Неззнар по прозвищу «Паук».
+            // В начале предложения прописная не значит ничего, поэтому там
+            // регистр не судится ни за, ни против.
+            if (!hit.caseMatches && !hit.atSentenceStart) {
+              tier = lower(tier, "doubtful");
+              doubt = doubt ?? "со строчной буквы, а имя собственное";
+            }
+          } else if (hit.inflected) {
+            // У нарицательного строчная — норма: «пятерка скелетов» это и есть
+            // ссылка на бестиарий. Зато опасен дописанный хвост: «шпион» плюс
+            // «ить» даёт глагол «шпионить», а не существо. Морфологии в проекте
+            // нет, отличить нечем — поэтому такие показываются, но галочкой не
+            // отмечаются.
+            tier = lower(tier, "likely");
+            doubt = doubt ?? "слово с дописанным окончанием";
           }
           if (ambiguous.has(spelling.text.toLowerCase())) {
             tier = lower(tier, "doubtful");
