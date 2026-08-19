@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import AdmZip from "adm-zip";
-import { openDatabase, switchToDatabase } from "../db/db";
+import { compactIfBloated, databaseFill, db, openDatabase, switchToDatabase } from "../db/db";
 import { initVaultAt, setVaultRoot, VAULT_ROOT } from "../services/filesystem";
 import {
   addStorage,
@@ -122,4 +122,19 @@ storagesRouter.post("/import-backup", upload.single("file"), (req, res) => {
 
 storagesRouter.get("/current-vault-root", (_req, res) => {
   res.json({ vaultRoot: VAULT_ROOT });
+});
+
+// Сколько места в файле базы занимает пустота от удалённых строк. SQLite не
+// возвращает его системе сам — файл не худеет никогда, пока его не перестроят.
+storagesRouter.get("/db-size", (_req, res) => {
+  res.json(databaseFill(db as unknown as Parameters<typeof databaseFill>[0]));
+});
+
+// Перестройка файла по кнопке — тот же VACUUM, что случается сам при старте,
+// когда пустоты набирается больше половины.
+storagesRouter.post("/compact", (_req, res) => {
+  const target = db as unknown as Parameters<typeof databaseFill>[0];
+  const before = databaseFill(target);
+  compactIfBloated(target, true);
+  res.json({ before, after: databaseFill(target) });
 });

@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { ModulesTab } from "../components/ModulesTab";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { LinkMaintenanceCard } from "../components/LinkMaintenanceCard";
+import { DatabaseSizeCard } from "../components/DatabaseSizeCard";
 import { hasElectronAPI } from "../electronApi";
 import { NavIcon } from "../components/NavIcons";
 import type { AppSettings, StorageProfile } from "../types";
@@ -176,6 +177,8 @@ export function StoragesSettingsPage() {
             </div>
           ))}
         </div>
+
+        <DatabaseSizeCard />
 
         <div className="card stack">
           <h3>Новое хранилище</h3>

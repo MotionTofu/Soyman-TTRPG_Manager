@@ -1588,7 +1588,59 @@ export function openDatabase(dbDir: string): Database.Database {
     }
   }
 
+  compactIfBloated(database);
   return database;
+}
+
+/**
+ * Сколько места в файле базы занято пустотой.
+ *
+ * SQLite не отдаёт место операционной системе сам: удалённые строки
+ * оставляют свободные страницы, которые переиспользуются под новые данные, но
+ * файл при этом не худеет никогда. У базы, из которой много удаляли —
+ * переставляли систему, чистили архив, откатывали импорты, — пустоты
+ * набирается кратно больше самих данных.
+ */
+export function databaseFill(database: Database.Database): {
+  pages: number;
+  freePages: number;
+  freeRatio: number;
+  bytes: number;
+} {
+  const pages = (database.pragma("page_count", { simple: true }) as number) || 0;
+  const freePages = (database.pragma("freelist_count", { simple: true }) as number) || 0;
+  const pageSize = (database.pragma("page_size", { simple: true }) as number) || 4096;
+  return {
+    pages,
+    freePages,
+    freeRatio: pages ? freePages / pages : 0,
+    bytes: pages * pageSize,
+  };
+}
+
+/** Доля пустоты, начиная с которой файл стоит перестроить. */
+const VACUUM_THRESHOLD = 0.5;
+
+/**
+ * Перестраивает файл, если пустоты в нём больше половины.
+ *
+ * Старт — единственный момент, когда база гарантированно никем не занята:
+ * `VACUUM` требует эксклюзивного доступа и не работает внутри транзакции.
+ * Порог нужен, чтобы это случалось редко: перестройка переписывает файл
+ * целиком, и делать её после каждого удаления было бы расточительно.
+ */
+export function compactIfBloated(database: Database.Database, force = false): boolean {
+  const before = databaseFill(database);
+  if (!force && before.freeRatio < VACUUM_THRESHOLD) return false;
+  try {
+    database.exec("VACUUM");
+    return true;
+  } catch (e) {
+    // Не повод не пускать пользователя в приложение: раздутый файл работает,
+    // просто занимает лишнее место.
+    console.error("VACUUM failed:", e);
+    return false;
+  }
 }
 
 const initialDbDir = process.env.DB_DIR || path.join(__dirname, "..", "..", "data");
