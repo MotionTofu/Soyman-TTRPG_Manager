@@ -26,7 +26,7 @@ import { SettingEntryList } from "../components/SettingEntryList";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { EntityWizard } from "../components/entityWizard/EntityWizard";
 import { AdventuresTab } from "../components/AdventuresTab";
-import { CrossLinksCard } from "../components/CrossLinksCard";
+import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { RelationGraph } from "../components/RelationGraph";
 import { GraphTypeFilters, SETTING_SCOPED_TYPES } from "../components/GraphTypeFilters";
 import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
@@ -487,9 +487,10 @@ export function SettingDetailPage() {
             onSaveFields={(v) => saveName(v.name)}
           />
 
-          <CrossLinksCard
-            base={`/settings/${settingId}`}
-            help="Ищет имена сущностей сеттинга в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Сцены размечает такой же проход на странице приключения: там отбор точнее. Ничего не пишет, пока вы не подтвердите."
+          <CrossLinksWizard
+            ownerKind="setting"
+            ownerId={settingId}
+            help="Ищет имена в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Шаг за шагом, по одному типу цели: у каждого своя строгость. Сцены размечает такой же проход на странице приключения. Ничего не пишет, пока вы не подтвердите."
           />
 
           <div className="card stack">

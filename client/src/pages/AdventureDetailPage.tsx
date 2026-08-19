@@ -9,7 +9,7 @@ import { LinkDropZone } from "../components/LinkDropZone";
 import { useTabState } from "../hooks/useTabState";
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
-import { CrossLinksCard } from "../components/CrossLinksCard";
+import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
 
 const TABS = [
@@ -160,9 +160,10 @@ export function AdventureDetailPage() {
       {tab === "Главы и сцены" && (
         <>
           {campaignId == null && (
-            <CrossLinksCard
-              base={`/story/arcs/${arcId}`}
-              help="Ищет в тексте сцен имена тех, кто к сцене уже привязан — участников, места и предметы, — и делает их кликабельными. Ничего не пишет, пока вы не подтвердите."
+            <CrossLinksWizard
+              ownerKind="adventure"
+              ownerId={arcId}
+              help="Ищет в тексте сцен имена сущностей сеттинга и записей компендиума — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
             />
           )}
           <ChaptersAndScenes arc={arc} campaignId={campaignId} onChange={refresh} />

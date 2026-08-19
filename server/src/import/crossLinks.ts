@@ -4,19 +4,22 @@
 // меншенов на 99 сцен. Читаешь «Мирт отправляет вас в Синий переулок» — и ни
 // одно имя не нажимается, хотя обе сущности в базе есть.
 //
-// Проходов два, и отличаются они не поиском, а тем, откуда берутся кандидаты.
+// Проход устроен шагами: один шаг — один тип цели. Так сделано не ради
+// удобства навигации, а потому что типы требуют разной строгости. У локаций и
+// личностей есть синонимы, оригинальные написания и короткие имена; у записей
+// компендиума нет ничего, кроме названия, зато среди них «Щит», «Свет» и
+// «Ловкость» — слова, которые в тексте почти всегда означают себя, а не
+// заклинание. Одним проходом эти правила не развести. Шагами — естественно.
 //
-// **По приключению.** В сцене ищутся только сущности, уже связанные с ней самой:
-// участники, места и предметы, которые импорт расставляет исправно (по три-пять
-// на сцену в каждой книге). Точность отсюда высокая почти даром, и новых связей
-// проход не создаёт — та, на которую он ссылается, уже стоит.
+// Область поиска задаётся снаружи: набор сеттингов, систем и кампаний, откуда
+// брать кандидатов. По умолчанию он зависит от того, где визард запустили, —
+// из сеттинга кампанейские сущности не предлагаются, потому что описание
+// таверны переживёт конкретную партию, а ссылка на её персонажа — нет.
 //
-// **По сеттингу.** Тексты вне сцен — описания локаций, истории личностей, поля
-// сообществ, сила предметов — связей между собой почти не имеют: на 180 находок
-// в Вотердипе пришлось ноль пар, уже соединённых в графе. Якоря нет, поэтому
-// кандидаты берутся из всего сеттинга, а точность держится на другом: имя
-// должно отзываться ровно одной сущности. Что не проходит этот отбор,
-// показывается, но галочкой не отмечается.
+// Каждая находка получает уровень уверенности, а не флажок «отмечено».
+// Сигналы, от сильного к слабому: совпало полное название или только часть;
+// совпал ли регистр; каким написанием поймалось; отзывается ли имя одной
+// сущности или нескольким.
 
 import { db } from "../db/db";
 import { parseAliases } from "./names";
@@ -65,51 +68,93 @@ const OWNER_TEXT: Record<string, { table: string; label: string; fields: Record<
     label: "Приключение",
     fields: { description: "Синопсис", hook: "Завязка" },
   },
+  campaign_entry: {
+    table: "campaign_entries",
+    label: "Запись кампании",
+    fields: { content: "Содержание" },
+  },
+  session: {
+    table: "sessions",
+    label: "Сессия",
+    fields: { idea_notes: "Задумки", main_events: "Главные события" },
+  },
+  preproduction: {
+    table: "preproduction",
+    label: "Препродакшен",
+    fields: {
+      adventure_challenge: "Вызов приключения",
+      background: "Предыстория",
+      adventure_stakes_hooks: "Ставки и зацепки",
+      threads_clues_lore: "Нити, улики, лор",
+    },
+  },
 };
 
-/** Типы, чьи страницы существуют: на них и можно сослаться. */
-const LINKABLE: Record<string, { table: string; hasShortName: boolean }> = {
-  location: { table: "setting_locations", hasShortName: true },
-  being: { table: "setting_beings", hasShortName: true },
-  community: { table: "setting_communities", hasShortName: false },
-  artifact: { table: "artifacts", hasShortName: true },
+/**
+ * Типы, чьи страницы существуют: на них и можно сослаться. Каждый — отдельный
+ * шаг визарда, в объявленном здесь порядке.
+ *
+ * `owner` говорит, к чему сущность приписана: по нему область поиска отбирает
+ * кандидатов. `spellings` — есть ли у типа что-то кроме названия; у записей
+ * компендиума нет, и это главная причина, по которой они судятся строже.
+ */
+export interface LinkableType {
+  key: string;
+  label: string;
+  table: string;
+  owner: "setting" | "system";
+  hasShortName: boolean;
+  hasAliases: boolean;
+  hasKind: boolean;
+  /** Минимальная длина написания: у типов без синонимов планка выше. */
+  minLength: number;
+}
+
+export const LINKABLE_TYPES: LinkableType[] = [
+  { key: "location", label: "Локации", table: "setting_locations", owner: "setting", hasShortName: true, hasAliases: true, hasKind: true, minLength: 4 },
+  { key: "being", label: "Личности", table: "setting_beings", owner: "setting", hasShortName: true, hasAliases: true, hasKind: false, minLength: 4 },
+  { key: "community", label: "Сообщества", table: "setting_communities", owner: "setting", hasShortName: false, hasAliases: true, hasKind: false, minLength: 4 },
+  { key: "artifact", label: "Предметы", table: "artifacts", owner: "setting", hasShortName: true, hasAliases: true, hasKind: false, minLength: 4 },
+  // Записей компендиума почти две тысячи, и у них нет ни синонимов, ни
+  // оригинального названия, ни короткого имени — только `name`. Планка длины
+  // поднята, чтобы «Щит» и «Свет» вообще не попадали в поиск: слово из четырёх
+  // букв без единого различающего признака даёт ложных срабатываний больше,
+  // чем верных.
+  { key: "compendium_entry", label: "Записи компендиума", table: "compendium_entries", owner: "system", hasShortName: false, hasAliases: false, hasKind: false, minLength: 7 },
+];
+
+const LINKABLE_BY_KEY = new Map(LINKABLE_TYPES.map((t) => [t.key, t]));
+
+/** Откуда брать кандидатов: «setting:3», «system:1». */
+export interface SourceRef {
+  kind: "setting" | "system";
+  id: number;
+}
+
+export function parseSources(raw: string | undefined): SourceRef[] {
+  if (!raw) return [];
+  const out: SourceRef[] = [];
+  for (const part of raw.split(",")) {
+    const [kind, id] = part.split(":");
+    if ((kind === "setting" || kind === "system") && Number(id)) {
+      out.push({ kind, id: Number(id) });
+    }
+  }
+  return out;
+}
+
+// ─── Уровни уверенности ──────────────────────────────────────────────────────
+
+/** Точные отмечаются галочкой сразу, остальные — показываются. */
+export type Tier = "exact" | "likely" | "doubtful";
+
+export const TIER_LABEL: Record<Tier, string> = {
+  exact: "точные",
+  likely: "вероятные",
+  doubtful: "сомнительные",
 };
 
-export interface CrossLinkProposal {
-  /** Чей это текст: «scene», «location», «being»… */
-  ownerType: string;
-  ownerId: number;
-  ownerName: string;
-  ownerLabel: string;
-  field: string;
-  fieldLabel: string;
-  /** Тип и id цели: «being:410». */
-  ref: string;
-  targetName: string;
-  /** Как имя написано в тексте: «Миртом», «Синего переулка». */
-  matched: string;
-  /** Кусок текста вокруг находки — по нему человек и решает. */
-  context: string;
-  /** Каким написанием поймалось: по нему видно, насколько находке верить. */
-  via: string;
-  /** Отмечать ли галочкой сразу. */
-  suggested: boolean;
-  /** Почему не отмечено: показывается рядом с группой. */
-  doubt?: string;
-}
-
-interface Spelling {
-  text: string;
-  via: string;
-  suggested: boolean;
-  doubt?: string;
-}
-
-interface Candidate {
-  ref: string;
-  name: string;
-  spellings: Spelling[];
-}
+// ─── Поиск написаний в тексте ────────────────────────────────────────────────
 
 /**
  * Имя может стоять в тексте в любом падеже: «Мирт» → «Миртом», «Мирта».
@@ -122,10 +167,35 @@ interface Candidate {
  */
 const MAX_INFLECTION = 3;
 const LETTER = /[\p{L}\p{M}]/u;
+const UPPER = /\p{Lu}/u;
+
+interface Hit {
+  start: number;
+  end: number;
+  /** Написание в тексте совпало по регистру с эталонным. */
+  caseMatches: boolean;
+  /** Находка стоит в начале предложения — регистр там ничего не значит. */
+  atSentenceStart: boolean;
+}
+
+/**
+ * Начало предложения определяется грубо: точка, восклицательный, вопросительный,
+ * перевод строки или начало поля. Сокращения вроде «т. д.» дадут редкую ошибку,
+ * но в сторону осторожности — находка просто не получит очко за регистр.
+ */
+function isSentenceStart(text: string, at: number): boolean {
+  for (let i = at - 1; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === " " || ch === "\t" || ch === "«" || ch === '"' || ch === "(") continue;
+    if (ch === "\n" || ch === "." || ch === "!" || ch === "?" || ch === ":" || ch === ";") return true;
+    return false;
+  }
+  return true;
+}
 
 /** Границей слова служит всё, что не буква: имя не должно ловиться в середине. */
-function findSpelling(text: string, spelling: string): { start: number; end: number }[] {
-  const found: { start: number; end: number }[] = [];
+function findSpelling(text: string, spelling: string): Hit[] {
+  const found: Hit[] = [];
   const haystack = text.toLowerCase();
   const needle = spelling.toLowerCase();
   if (!needle) return found;
@@ -150,7 +220,12 @@ function findSpelling(text: string, spelling: string): { start: number; end: num
     } else if (text[end] && LETTER.test(text[end])) {
       continue;
     }
-    found.push({ start: at, end });
+    // Регистр — сигнал, которого в проходе раньше не было вовсе: обе стороны
+    // приводились к нижнему, и «Паук» с «гигантский паук» выглядели одинаково.
+    // Сравнивается только первая буква: внутри слова регистр ничего не решает,
+    // а собственное имя от нарицательного отличает именно она.
+    const caseMatches = UPPER.test(spelling[0] ?? "") === UPPER.test(text[at] ?? "");
+    found.push({ start: at, end, caseMatches, atSentenceStart: isSentenceStart(text, at) });
   }
   return found;
 }
@@ -164,6 +239,22 @@ function mentionSpans(text: string): { start: number; end: number }[] {
   return spans;
 }
 
+// ─── Кандидаты ───────────────────────────────────────────────────────────────
+
+interface Spelling {
+  text: string;
+  via: string;
+  /** Уровень до учёта регистра и неоднозначности. */
+  base: Tier;
+  doubt?: string;
+}
+
+interface Candidate {
+  ref: string;
+  name: string;
+  spellings: Spelling[];
+}
+
 interface EntityRow {
   id: number;
   name: string;
@@ -173,7 +264,7 @@ interface EntityRow {
   kind: string;
 }
 
-function spellingsOf(entity: EntityRow): Spelling[] {
+function spellingsOf(entity: EntityRow, type: LinkableType): Spelling[] {
   // Короткое имя заведено для подписи пина на карте, а не для прозы, и часто
   // это простое существительное: у локации «2. Фреска увечий» оно «Фреска»,
   // у «Карты сокровищ» — «Карта». В тексте такие слова стоят сами по себе
@@ -184,72 +275,59 @@ function spellingsOf(entity: EntityRow): Spelling[] {
   // означает коридор, а не эту локацию.
   const named = entity.name.trim().toLowerCase();
   const selfNamed = !!entity.kind && named === entity.kind.trim().toLowerCase();
-  const doubtKind = selfNamed ? "названа собственным видом" : undefined;
   return [
-    { text: entity.name, via: "название", suggested: !selfNamed, doubt: doubtKind },
-    { text: entity.name_original ?? "", via: "оригинал", suggested: true },
-    ...parseAliases(entity.aliases).map((a) => ({ text: a, via: "синоним", suggested: true })),
-    { text: entity.short_name ?? "", via: "короткое имя", suggested: false, doubt: doubtShort },
+    {
+      text: entity.name,
+      via: "название",
+      base: selfNamed ? ("doubtful" as Tier) : ("exact" as Tier),
+      doubt: selfNamed ? "названа собственным видом" : undefined,
+    },
+    { text: entity.name_original ?? "", via: "оригинал", base: "exact" as Tier },
+    ...parseAliases(entity.aliases).map((a) => ({ text: a, via: "синоним", base: "likely" as Tier })),
+    { text: entity.short_name ?? "", via: "короткое имя", base: "doubtful" as Tier, doubt: doubtShort },
   ]
     .map((s) => ({ ...s, text: s.text.trim() }))
-    .filter((s) => s.text.length >= 4);
+    .filter((s) => s.text.length >= type.minLength);
 }
 
-function loadEntity(type: string, id: number): Candidate | null {
-  const meta = LINKABLE[type];
-  if (!meta) return null;
-  const row = db
-    .prepare(
-      `SELECT id, name, ${meta.hasShortName ? "short_name" : "'' AS short_name"},
-              aliases, name_original, ${meta.table === "setting_locations" ? "kind" : "'' AS kind"}
-         FROM ${meta.table} WHERE id = ? AND archived_at IS NULL`
-    )
-    .get(id) as EntityRow | undefined;
-  if (!row) return null;
-  const spellings = spellingsOf(row);
+function loadCandidate(type: LinkableType, row: EntityRow): Candidate | null {
+  const spellings = spellingsOf(row, type);
   if (!spellings.length) return null;
   // Длинные написания вперёд: «Синий переулок» должен побеждать «Синий».
   spellings.sort((a, b) => b.text.length - a.text.length);
-  return { ref: `${type}:${row.id}`, name: row.name, spellings };
+  return { ref: `${type.key}:${row.id}`, name: row.name, spellings };
 }
 
-/** Сущности, уже связанные именно с этой сценой: только среди них и ищем. */
-function candidatesForScene(sceneId: number): Candidate[] {
+/** Все кандидаты одного типа из перечисленных источников. */
+function candidatesOfType(type: LinkableType, sources: SourceRef[]): Candidate[] {
+  const ids = sources.filter((s) => s.kind === type.owner).map((s) => s.id);
+  if (!ids.length) return [];
+  const ownerColumn = type.owner === "system" ? "system_id" : "setting_id";
+  const archived = type.key === "compendium_entry" ? "" : "AND archived_at IS NULL";
   const rows = db
     .prepare(
-      `SELECT to_type AS type, to_id AS id FROM generic_links
-        WHERE from_type = 'scene' AND from_id = ?
-       UNION
-       SELECT from_type AS type, from_id AS id FROM generic_links
-        WHERE to_type = 'scene' AND to_id = ?`
+      `SELECT id, name,
+              ${type.hasShortName ? "short_name" : "'' AS short_name"},
+              ${type.hasAliases ? "aliases, name_original" : "'' AS aliases, '' AS name_original"},
+              ${type.hasKind ? "kind" : "'' AS kind"}
+         FROM ${type.table}
+        WHERE ${ownerColumn} IN (${ids.map(() => "?").join(",")}) ${archived}`
     )
-    .all(sceneId, sceneId) as { type: string; id: number }[];
-  return rows.map((r) => loadEntity(r.type, r.id)).filter((c): c is Candidate => !!c);
-}
-
-/** Все сущности сеттинга, на которые можно сослаться. */
-function candidatesForSetting(settingId: number): Candidate[] {
-  const out: Candidate[] = [];
-  for (const [type, meta] of Object.entries(LINKABLE)) {
-    const rows = db
-      .prepare(`SELECT id FROM ${meta.table} WHERE setting_id = ? AND archived_at IS NULL`)
-      .all(settingId) as { id: number }[];
-    for (const row of rows) {
-      const candidate = loadEntity(type, row.id);
-      if (candidate) out.push(candidate);
-    }
-  }
-  return out;
+    .all(...ids) as EntityRow[];
+  return rows.map((r) => loadCandidate(type, r)).filter((c): c is Candidate => !!c);
 }
 
 /**
- * Сколько сущностей сеттинга отзывается на одно написание. В Вотердипе таких
- * пересечений всего три на 438 написаний, но «черный посох» — это и титул
- * Ваджры, и башня, и угадывать за человека тут нечего.
+ * Сколько сущностей отзывается на одно написание.
+ *
+ * Считается по **всем** типам области поиска разом, хотя сопоставление идёт по
+ * одному типу за шаг. Иначе пошаговость потеряла бы эту защиту: имя, которое
+ * одновременно локация и заклинание, в шаге «локации» выглядело бы
+ * однозначным, и галочка встала бы уверенно.
  */
-function ambiguousSpellings(candidates: Candidate[]): Set<string> {
+function ambiguousSpellings(all: Candidate[]): Set<string> {
   const owners = new Map<string, Set<string>>();
-  for (const c of candidates) {
+  for (const c of all) {
     for (const s of c.spellings) {
       const key = s.text.toLowerCase();
       if (!owners.has(key)) owners.set(key, new Set());
@@ -259,11 +337,32 @@ function ambiguousSpellings(candidates: Candidate[]): Set<string> {
   return new Set([...owners.entries()].filter(([, refs]) => refs.size > 1).map(([key]) => key));
 }
 
+// ─── Тексты, в которых ищем ──────────────────────────────────────────────────
+
 interface Doc {
   ownerType: string;
   ownerId: number;
   ownerName: string;
   text: Record<string, string>;
+}
+
+function readDocs(ownerType: string, where: string, params: unknown[]): Doc[] {
+  const meta = OWNER_TEXT[ownerType];
+  const fields = Object.keys(meta.fields);
+  // У препродакшена и сессий имени нет — показываем то, что есть.
+  const cols = (db.prepare(`PRAGMA table_info(${meta.table})`).all() as { name: string }[]).map(
+    (c) => c.name
+  );
+  const nameExpr = cols.includes("name") ? "name" : cols.includes("title") ? "title" : "''";
+  const rows = db
+    .prepare(`SELECT id, ${nameExpr} AS owner_name, ${fields.join(", ")} FROM ${meta.table} ${where}`)
+    .all(...params) as Record<string, string | number>[];
+  return rows.map((row) => ({
+    ownerType,
+    ownerId: Number(row.id),
+    ownerName: String(row.owner_name || meta.label),
+    text: Object.fromEntries(fields.map((f) => [f, String(row[f] ?? "")])),
+  }));
 }
 
 /** Тексты сцен приключения вместе с его главами. Только оригиналы сеттинга. */
@@ -272,7 +371,7 @@ function docsOfArc(arcId: number): Doc[] {
   return (
     db
       .prepare(
-        `SELECT s.id, s.name, ${fields.map((f) => `s.${f}`).join(", ")}
+        `SELECT s.id, s.name AS owner_name, ${fields.map((f) => `s.${f}`).join(", ")}
            FROM story_scenes s
            JOIN story_arcs a ON a.id = s.arc_id
           WHERE (a.id = ? OR a.parent_id = ?)
@@ -284,7 +383,7 @@ function docsOfArc(arcId: number): Doc[] {
   ).map((row) => ({
     ownerType: "scene",
     ownerId: Number(row.id),
-    ownerName: String(row.name),
+    ownerName: String(row.owner_name),
     text: Object.fromEntries(fields.map((f) => [f, String(row[f] ?? "")])),
   }));
 }
@@ -292,49 +391,127 @@ function docsOfArc(arcId: number): Doc[] {
 /** Тексты сеттинга вне сцен: карточки сущностей и синопсисы приключений. */
 function docsOfSetting(settingId: number): Doc[] {
   const docs: Doc[] = [];
-  for (const [ownerType, meta] of Object.entries(OWNER_TEXT)) {
-    if (ownerType === "scene") continue;
-    const fields = Object.keys(meta.fields);
-    const rows = db
-      .prepare(
-        `SELECT id, name, ${fields.join(", ")} FROM ${meta.table}
-          WHERE setting_id = ? AND archived_at IS NULL`
-      )
-      .all(settingId) as Record<string, string | number>[];
-    for (const row of rows) {
-      docs.push({
-        ownerType,
-        ownerId: Number(row.id),
-        ownerName: String(row.name),
-        text: Object.fromEntries(fields.map((f) => [f, String(row[f] ?? "")])),
-      });
-    }
+  for (const ownerType of ["location", "being", "community", "artifact", "adventure"]) {
+    docs.push(...readDocs(ownerType, "WHERE setting_id = ? AND archived_at IS NULL", [settingId]));
   }
   return docs;
 }
 
+/** Тексты кампании: записи, задумки и события сессий, препродакшен. */
+function docsOfCampaign(campaignId: number): Doc[] {
+  return [
+    ...readDocs("campaign_entry", "WHERE campaign_id = ?", [campaignId]),
+    ...readDocs("session", "WHERE campaign_id = ? AND archived_at IS NULL", [campaignId]),
+    ...readDocs("preproduction", "WHERE campaign_id = ?", [campaignId]),
+  ];
+}
+
+export function docsOfOwner(ownerKind: string, ownerId: number): Doc[] {
+  if (ownerKind === "adventure") return docsOfArc(ownerId);
+  if (ownerKind === "campaign") return docsOfCampaign(ownerId);
+  return docsOfSetting(ownerId);
+}
+
+// ─── Проход ──────────────────────────────────────────────────────────────────
+
+export interface CrossLinkProposal {
+  /** Чей это текст: «scene», «location», «being»… */
+  ownerType: string;
+  ownerId: number;
+  ownerName: string;
+  ownerLabel: string;
+  field: string;
+  fieldLabel: string;
+  /** Тип и id цели: «being:410». */
+  ref: string;
+  targetName: string;
+  /** Как имя написано в тексте: «Миртом», «Синего переулка». */
+  matched: string;
+  /** Кусок текста вокруг находки — по нему человек и решает. */
+  context: string;
+  /** Каким написанием поймалось: по нему видно, насколько находке верить. */
+  via: string;
+  tier: Tier;
+  /** Почему уровень ниже точного: показывается рядом с группой. */
+  doubt?: string;
+}
+
 const CONTEXT = 60;
 
-/** Общее ядро: пройтись по текстам и предложить, что в них разметить. */
-function scan(
-  docs: Doc[],
-  candidatesFor: (doc: Doc) => Candidate[],
-  ambiguous: Set<string>
-): CrossLinkProposal[] {
+/**
+ * Контекст показывается человеку, а не разбирается машиной, поэтому разметку
+ * из него надо убрать: в куске текста вокруг находки почти всегда попадаются
+ * уже расставленные ссылки, а окно в шестьдесят символов режет их посередине,
+ * и в списке появляются обрывки вида «5[[Глубоководьем]]».
+ */
+function readable(snippet: string): string {
+  return snippet
+    .replace(/\[\[(\w+):(\d+)\|([^\]]*)\]\]/g, "$3")
+    .replace(/\[\[(\w+)@[0-9a-fA-F-]+\|[^|\]]*\|([^\]]*)\]\]/g, "$2");
+}
+
+/**
+ * Границы окна контекста, раздвинутые так, чтобы не разрезать ссылку пополам.
+ *
+ * Окно в шестьдесят символов регулярно попадает в середину уже расставленного
+ * меншена, и в списке появляется «…5|Глубоководьем». Чистить обрывки задним
+ * числом бессмысленно — проще не резать: если край окна оказался внутри
+ * токена, край сдвигается наружу, к его границе.
+ */
+function contextRange(
+  text: string,
+  start: number,
+  end: number,
+  spans: { start: number; end: number }[]
+): { from: number; to: number } {
+  let from = Math.max(0, start - CONTEXT);
+  let to = Math.min(text.length, end + CONTEXT);
+  for (const s of spans) {
+    if (from > s.start && from < s.end) from = s.start;
+    if (to > s.start && to < s.end) to = s.end;
+  }
+  return { from, to };
+}
+const TIER_ORDER: Record<Tier, number> = { exact: 0, likely: 1, doubtful: 2 };
+const lower = (t: Tier, to: Tier): Tier => (TIER_ORDER[to] > TIER_ORDER[t] ? to : t);
+
+export interface PlanRequest {
+  ownerKind: string;
+  ownerId: number;
+  targetType: string;
+  sources: SourceRef[];
+}
+
+/** Что проход предлагает разметить. Ничего не пишет. */
+export function planCrossLinks(req: PlanRequest): CrossLinkProposal[] {
+  const type = LINKABLE_BY_KEY.get(req.targetType);
+  if (!type) return [];
+
+  // Карта неоднозначности — по всем типам области, см. ambiguousSpellings.
+  const everything = LINKABLE_TYPES.flatMap((t) => candidatesOfType(t, req.sources));
+  const ambiguous = ambiguousSpellings(everything);
+  const candidates = everything.filter((c) => c.ref.startsWith(`${type.key}:`));
+  if (!candidates.length) return [];
+
   const proposals: CrossLinkProposal[] = [];
-  for (const doc of docs) {
-    const candidates = candidatesFor(doc);
-    if (!candidates.length) continue;
+  for (const doc of docsOfOwner(req.ownerKind, req.ownerId)) {
     const meta = OWNER_TEXT[doc.ownerType];
+    if (!meta) continue;
     for (const [field, fieldLabel] of Object.entries(meta.fields)) {
       const text = doc.text[field] ?? "";
       if (!text.trim()) continue;
       // Занятые куски копятся по ходу: две находки не должны накладываться,
       // а первой идёт та, что нашлась более длинным написанием.
-      const busy = mentionSpans(text);
+      const spans = mentionSpans(text);
+      const busy = [...spans];
       for (const candidate of candidates) {
         // Ссылка сущности на саму себя смысла не имеет.
         if (candidate.ref === `${doc.ownerType}:${doc.ownerId}`) continue;
+        // Одна ссылка на сущность в поле — правило, которое должно держаться и
+        // между запусками. Без этой проверки второй проход предлагал следующее
+        // вхождение того же имени, третий — ещё одно, и текст постепенно
+        // покрывался ссылками на одно и то же.
+        if (text.includes(`[[${candidate.ref}|`)) continue;
         for (const spelling of candidate.spellings) {
           const hits = findSpelling(text, spelling.text);
           if (!hits.length) continue;
@@ -343,7 +520,22 @@ function scan(
           const hit = hits.find((h) => !busy.some((b) => h.start < b.end && b.start < h.end));
           if (!hit) continue;
           busy.push(hit);
-          const collides = ambiguous.has(spelling.text.toLowerCase());
+
+          let tier = spelling.base;
+          let doubt = spelling.doubt;
+          // Расхождение регистра в середине предложения — сильный довод против:
+          // «гигантский паук» со строчной почти наверняка не Неззнар по прозвищу
+          // «Паук». В начале предложения прописная не значит ничего, поэтому там
+          // регистр не судится ни за, ни против.
+          if (!hit.caseMatches && !hit.atSentenceStart) {
+            tier = lower(tier, "doubtful");
+            doubt = doubt ?? "регистр не совпал";
+          }
+          if (ambiguous.has(spelling.text.toLowerCase())) {
+            tier = lower(tier, "doubtful");
+            doubt = "так зовут не только её";
+          }
+
           proposals.push({
             ownerType: doc.ownerType,
             ownerId: doc.ownerId,
@@ -355,34 +547,29 @@ function scan(
             targetName: candidate.name,
             matched: text.slice(hit.start, hit.end),
             via: spelling.via,
-            suggested: spelling.suggested && !collides,
-            doubt: collides ? "так зовут не только её" : spelling.doubt,
-            context:
-              (hit.start > CONTEXT ? "…" : "") +
-              text.slice(Math.max(0, hit.start - CONTEXT), hit.end + CONTEXT).trim() +
-              (hit.end + CONTEXT < text.length ? "…" : ""),
+            tier,
+            doubt,
+            context: (() => {
+              const { from, to } = contextRange(text, hit.start, hit.end, spans);
+              return (
+                (from > 0 ? "…" : "") +
+                readable(text.slice(from, to)).trim() +
+                (to < text.length ? "…" : "")
+              );
+            })(),
           });
           break;
         }
       }
     }
   }
+  // Точные вперёд: человек проверяет список сверху вниз и до сомнительных
+  // доходит, уже поняв, как проход себя ведёт.
+  proposals.sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier]);
   return proposals;
 }
 
-/** Что проход предлагает разметить в сценах приключения. Ничего не пишет. */
-export function planCrossLinks(arcId: number): CrossLinkProposal[] {
-  // Кандидаты берутся из связей самой сцены, поэтому пересечения имён по всему
-  // сеттингу здесь не при чём: две сущности с одним именем в одной сцене —
-  // случай, которого в четырёх книгах не встретилось ни разу.
-  return scan(docsOfArc(arcId), (doc) => candidatesForScene(doc.ownerId), new Set());
-}
-
-/** То же по всем текстам сеттинга вне сцен: там связей-якорей нет. */
-export function planSettingCrossLinks(settingId: number): CrossLinkProposal[] {
-  const candidates = candidatesForSetting(settingId);
-  return scan(docsOfSetting(settingId), () => candidates, ambiguousSpellings(candidates));
-}
+// ─── Запись ──────────────────────────────────────────────────────────────────
 
 export interface CrossLinkChoice {
   ownerType: string;
@@ -400,7 +587,8 @@ const choiceId = (c: CrossLinkChoice | CrossLinkProposal) =>
  * подтверждением текст мог измениться, и подставлять меншен по запомненному
  * смещению значило бы попасть в середину чужого слова.
  */
-function write(proposals: CrossLinkProposal[], chosen: CrossLinkChoice[]): { written: number } {
+export function applyCrossLinks(req: PlanRequest, chosen: CrossLinkChoice[]): { written: number } {
+  const proposals = planCrossLinks(req);
   const wanted = new Set(chosen.map(choiceId));
   const linkMention = db.prepare(
     `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section)
@@ -442,14 +630,9 @@ function write(proposals: CrossLinkProposal[], chosen: CrossLinkChoice[]): { wri
   return run();
 }
 
-export const applyCrossLinks = (arcId: number, chosen: CrossLinkChoice[]) =>
-  write(planCrossLinks(arcId), chosen);
-
-export const applySettingCrossLinks = (settingId: number, chosen: CrossLinkChoice[]) =>
-  write(planSettingCrossLinks(settingId), chosen);
-
 /** Снятие меншенов: подпись остаётся, ссылка уходит. */
-function strip(docs: Doc[]): { removed: number } {
+export function stripCrossLinks(ownerKind: string, ownerId: number): { removed: number } {
+  const docs = docsOfOwner(ownerKind, ownerId);
   const run = db.transaction(() => {
     let removed = 0;
     for (const doc of docs) {
@@ -457,17 +640,18 @@ function strip(docs: Doc[]): { removed: number } {
       for (const field of Object.keys(meta.fields)) {
         const text = doc.text[field] ?? "";
         if (!text.includes("[[")) continue;
-        const next = text.replace(/\[\[[^\]|]+\|([^\]]*)\]\]/g, (_, label: string) => {
+        // Подвешенные ссылки не трогаем: у них четыре поля, и «снять все» тут
+        // означает снять расставленное, а не то, что ждёт своего модуля.
+        const next = text.replace(/\[\[(\w+):(\d+)\|([^\]]*)\]\]/g, (_, __, ___, label: string) => {
           removed++;
           return label;
         });
-        db.prepare(`UPDATE ${meta.table} SET ${field} = ? WHERE id = ?`).run(next, doc.ownerId);
+        if (next !== text) {
+          db.prepare(`UPDATE ${meta.table} SET ${field} = ? WHERE id = ?`).run(next, doc.ownerId);
+        }
       }
     }
     return { removed };
   });
   return run();
 }
-
-export const stripCrossLinks = (arcId: number) => strip(docsOfArc(arcId));
-export const stripSettingCrossLinks = (settingId: number) => strip(docsOfSetting(settingId));

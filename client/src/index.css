@@ -4364,6 +4364,44 @@ input.litm-theme-title {
   font-weight: 600;
 }
 
+/* Уровни уверенности в визарде расстановки ссылок. Цвет — быстрый сигнал,
+   но не единственный: рядом всегда стоит подпись с количеством, потому что
+   на оттенок нельзя опираться в одиночку. Сомнительные — приглушённый
+   янтарный, а не серый: серый здесь уже означает «выключено». */
+.xl-tier {
+  border-left: 3px solid transparent;
+  padding-left: 10px;
+}
+
+.xl-tier-exact {
+  border-left-color: #4a8a52;
+}
+
+.xl-tier-likely {
+  border-left-color: #4a6f8a;
+}
+
+.xl-tier-doubtful {
+  border-left-color: #b08838;
+}
+
+.xl-tier-exact > .row > strong {
+  color: #4a8a52;
+}
+
+.xl-tier-likely > .row > strong {
+  color: #4a6f8a;
+}
+
+.xl-tier-doubtful > .row > strong {
+  color: #b08838;
+}
+
+.xl-tabs {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 /* Ссылка, чья цель не установлена. Зачёркнута и приглушена, но остаётся
    читаемой прозой: подпись — это то, что автор написал глазами, и терять её
    нельзя. Рисуется кнопкой, а не ссылкой, потому что вести ей некуда. */

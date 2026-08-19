@@ -1,11 +1,5 @@
 import { Router } from "express";
 import { db } from "../db/db";
-import {
-  CrossLinkChoice,
-  applyCrossLinks,
-  planCrossLinks,
-  stripCrossLinks,
-} from "../import/crossLinks";
 
 export const storyRouter = Router();
 
@@ -428,21 +422,7 @@ storyRouter.put("/scenes/reorder", (req, res) => {
   res.json({ ok: true });
 });
 
-// Перекрёстные ссылки: что проход предлагает разметить в сценах приключения,
-// и запись подтверждённого. Ничего не пишется до POST — как на экране сверки.
-storyRouter.get("/arcs/:id/cross-links", (req, res) => {
-  res.json(planCrossLinks(Number(req.params.id)));
-});
-
-storyRouter.post("/arcs/:id/cross-links", (req, res) => {
-  const { chosen } = req.body as { chosen?: CrossLinkChoice[] };
-  if (!Array.isArray(chosen)) return res.status(400).json({ error: "chosen is required" });
-  res.json(applyCrossLinks(Number(req.params.id), chosen));
-});
-
-storyRouter.delete("/arcs/:id/cross-links", (req, res) => {
-  res.json(stripCrossLinks(Number(req.params.id)));
-});
+// Перекрёстные ссылки — в общем /api/cross-links, см. routes/crossLinks.ts.
 
 storyRouter.put("/arcs/:id", (req, res) => {
   const arc = db.prepare("SELECT is_default FROM story_arcs WHERE id = ?").get(req.params.id) as
