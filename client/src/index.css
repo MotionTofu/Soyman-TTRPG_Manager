@@ -8,6 +8,17 @@
   font-display: swap;
 }
 
+/* Riot/Neon display font (см. themes.ts RIOT_THEME/NEON_THEME fontDisplay).
+   Заменил собой RookiePunk по просьбе владельца; RookiePunk оставлен в
+   public/fonts на случай, если понадобится вернуть или собрать свою тему. */
+@font-face {
+  font-family: 'NewZelek';
+  src: url('/fonts/New_Zelek.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Riot/Neon theme display font — see themes.ts RIOT_THEME/NEON_THEME
    fontDisplay and the .app-nav a rule below. */
 @font-face {
@@ -18,36 +29,39 @@
   font-display: swap;
 }
 
-/* Theme tokens — these defaults mirror the "Классическая" built-in theme in
-   themes.ts byte-for-byte (see applyTheme()), so this :root block is only
-   the pre-JS fallback / FOUC guard, not a second source of truth. */
+/* Theme tokens — повторяют тему по умолчанию из themes.ts («Соевый Нуар»,
+   DEFAULT_THEME_ID) значение в значение, см. applyTheme(). Этот блок — только
+   предзагрузочная защита от вспышки: до того, как JS применит выбранную
+   пользователем тему, страница уже нарисована в той палитре, которая
+   включится, если ничего не выбрано. Не второй источник истины: меняя тему по
+   умолчанию, надо переснять сюда её значения. */
 :root {
   /* Design-doc vocabulary (design-system-punk-zine.md §3.1). themes.ts emits
      these alongside the legacy names below; both come from the same source
      value, so the old names are exact aliases. */
-  --paper: #16141c;
-  --paper-2: #1e1c26;
-  --ink: #cac5d6;
-  --ink-2: #b4aec2;
-  --muted: #9d97ad;
-  --surface: #cac5d6;
-  --on-surface: #16141c;
-  --line: #35313f;
+  --paper: #e8e4da;
+  --paper-2: #e0dcd2;
+  --ink: #1c1c1c;
+  --ink-2: #4a4947;
+  --muted: #787672;
+  --surface: #1c1c1c;
+  --on-surface: #e8e4da;
+  --line: #2a2a2a;
   --glow: none;
   /* --bg-elevated and --text-bright have no exact design-doc equivalent
      (elevated-surface and dark-mode-brightened-ink derivations that don't
      map 1:1 onto any single §3.1 token — see themes.ts buildTheme()), so
      they stay as their own tokens rather than aliases. */
-  --bg-elevated: #262330;
-  --text-bright: #e9e6f0;
-  --accent: #b08968;
-  --accent-text: #201a14;
-  --accent-soft: #b089682a;
-  --accent-2: #7c9885;
-  --primary-bg: #b08968;
-  --primary-text: #201a14;
-  --font-display: 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Segoe UI', system-ui, sans-serif;
+  --bg-elevated: #dad6cd;
+  --text-bright: #1c1c1c;
+  --accent: #1c1c1c;
+  --accent-text: #ffffff;
+  --accent-soft: #1c1c1c2a;
+  --accent-2: #1c1c1c;
+  --primary-bg: #1c1c1c;
+  --primary-text: #ffffff;
+  --font-display: 'Cormorant SC', serif;
+  --font-body: 'PT Mono', monospace;
   /* Typography voices (design doc §4.1). Display/Body vary per theme (see
      themes.ts); UI and Mono are the same everywhere — the doc doesn't call
      for them to shift per skin, only Display (headline face) does. Both
@@ -59,27 +73,27 @@
   --card-border-width: 1px;
   --card-clip: none;
   --card-band-bg: var(--paper-2);
-  --card-band-image: none;
-  --page-texture: none;
-  --card-body-texture: none;
+  --card-band-image: repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px);
+  --page-texture: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px) 0 0/3px 3px;
+  --card-body-texture: radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px;
   --name-transform: none;
   --name-stroke: none;
-  --status-planned: #bdccdb;
-  --status-planned-fg: #243342;
-  --status-held: #c5dccb;
-  --status-held-fg: #2c4332;
-  --status-cancelled: #dbbdbd;
-  --status-cancelled-fg: #422424;
-  --status-rescheduled: #dfd5b1;
-  --status-rescheduled-fg: #463c18;
-  --role-gm: #a78bfa;
-  --role-gm-soft: #a78bfa22;
-  --role-player: #7a2438;
-  --role-player-soft: #7a243822;
-  --pay-paid: #fbbf24;
-  --pay-paid-soft: #fbbf2422;
-  --pay-free: #4ade80;
-  --pay-free-soft: #4ade8022;
+  --status-planned: #c1c7d1;
+  --status-planned-fg: #282e38;
+  --status-held: #a1ccb1;
+  --status-held-fg: #083318;
+  --status-cancelled: #f1a8a8;
+  --status-cancelled-fg: #580f0f;
+  --status-rescheduled: #e1ba9d;
+  --status-rescheduled-fg: #482104;
+  --role-gm: #7c3aed;
+  --role-gm-soft: #7c3aed22;
+  --role-player: #0369a1;
+  --role-player-soft: #0369a122;
+  --pay-paid: #b45309;
+  --pay-paid-soft: #b4530922;
+  --pay-free: #15803d;
+  --pay-free-soft: #15803d22;
   /* Name/title size scale — same on every theme, this is about scale not
      color/shape, so it lives here rather than in themes.ts. */
   --text-name: 18px;
@@ -1081,6 +1095,16 @@ h4 { font-size: var(--fs-body); }
    never had it — bug from when the mobile drawer was added, not a new one. */
 .audio-player-slot {
   display: contents;
+}
+
+/* Капсула «сейчас играет» — исключительно мобильная: на десктопе её работу
+   делает полная .audio-player-bar внизу. Все её стили описаны внутри
+   мобильного медиа-запроса (см. .mini-player-bar ниже), а сам компонент
+   рендерится при любой ширине — поэтому на ПК он вываливался неоформленным
+   блоком под сайдбар, поверх кнопки «Выйти». Прячем здесь, а мобильный
+   медиа-запрос ниже возвращает ей display: flex. */
+.mini-player-bar {
+  display: none;
 }
 
 .search-panel {
@@ -2323,6 +2347,53 @@ details.card[open] summary {
 .now-playing-seek input[type="range"] {
   width: 100%;
 }
+/* Очередь под транспортом. Строка целиком — попадать пальцем в кнопку на
+   строке на ходу не выйдет; играющая строка инвертирована, как активная
+   кнопка канала в пульте. */
+.now-playing-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.now-playing-queue-head {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding-bottom: 6px;
+}
+.now-playing-queue-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.now-playing-queue-row.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: default;
+}
+.now-playing-queue-num {
+  flex: 0 0 auto;
+  min-width: 1.8em;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.now-playing-queue-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .now-playing-controls {
   display: flex;
   align-items: center;
@@ -2721,7 +2792,7 @@ details.card[open] summary {
 .player-list-row + .player-list-row {
   border-top: var(--card-border-width, 1px) solid var(--line);
 }
-/* Track/playlist rows (GmMusicPage) — names are often long filenames with no
+/* Track/playlist rows — names are often long filenames with no
    spaces to break on, which used to just push the row wider than the screen
    instead of wrapping. min-width:0 + overflow-wrap let the name itself break
    onto multiple lines. flex-wrap is explicitly forced back to nowrap here to
@@ -5281,6 +5352,92 @@ input.litm-theme-title {
   border-top: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius) var(--card-radius) 0 0;
 }
+/* В режиме пульта сессии левая колонка шире (320px вместо 200px) — это
+   докстанция с карточками. Панель звука приколочена к низу окна и своим
+   левым краем наезжала на неё, закрывая нижнюю карточку. */
+.app-shell-live .audio-player-bar {
+  left: 320px;
+}
+/* Кнопки действий панели — «Заглушить всё», «Плейлисты», «Пульт».
+   Обведённая плашка с подписью капсом, а не голая иконка: панель висит на
+   каждой странице, и по значку не понять, куда он ведёт. «Пульт» — единственный
+   акцентный: это вход, а не переключатель. */
+.audio-player-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: var(--card-border-width, 1px) solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: var(--card-radius);
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.audio-player-bar .audio-player-action:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: inherit;
+}
+.audio-player-bar .audio-player-action.active {
+  background: color-mix(in srgb, currentColor 88%, transparent);
+  color: var(--card-band-bg, var(--bg-elevated));
+  border-radius: var(--card-radius);
+}
+.audio-player-bar .audio-player-action.accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.audio-player-bar .audio-player-action.accent:hover {
+  color: var(--accent-text);
+  filter: brightness(1.08);
+}
+
+/* Раскладка панели по макету пульта: транспорт слева, «что играет» с
+   полосой времени во всю оставшуюся ширину, за разделителем — состояние
+   трёх остальных каналов, папка плейлистов и вход в пульт. */
+.audio-player-transport {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.audio-player-now {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.audio-player-now-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.audio-player-progress {
+  display: block;
+  height: 3px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  cursor: pointer;
+}
+.audio-player-progress-fill {
+  display: block;
+  height: 3px;
+  background: currentColor;
+}
+.audio-player-divider {
+  width: 2px;
+  height: 26px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
 .audio-player-bar button {
   padding: 2px 8px;
   background: none;
@@ -5296,8 +5453,13 @@ input.litm-theme-title {
 .audio-player-bar button:hover {
   color: var(--accent);
 }
+/* Раскладка пустого состояния больше не отличается: раньше здесь стоял
+   justify-content: space-between, и кнопки разъезжались по всей ширине, а с
+   началом воспроизведения собирались справа. Теперь левый блок растягивается
+   сам (.audio-player-now), и позиции кнопок не зависят от того, играет
+   что-то или нет — меняются только при изменении ширины окна. */
 .audio-player-bar-empty {
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 .audio-player-suggestion {
   display: flex;
@@ -5330,15 +5492,24 @@ input.litm-theme-title {
   opacity: 0.75;
 }
 .audio-player-track {
+  /* Голос UI из дизайн-системы (§4.1): узкий гротеск капсом с трекингом —
+     тот же, что у заголовков каналов в пульте, чтобы панель и пульт
+     говорили одинаково. */
+  font-family: var(--font-ui);
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 25vw;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .audio-player-time {
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.65;
   flex-shrink: 0;
 }
 .audio-player-seek {

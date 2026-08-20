@@ -11,7 +11,6 @@ import {
   RosterPanel,
   SecretsPanel,
   RemindersPanel,
-  PlaylistPanel,
   CompendiumPanel,
 } from "./sessionLivePanels";
 import type { CampaignDetail, Character, Playlist, SessionDetail } from "../types";
@@ -23,21 +22,17 @@ export function SessionLivePage() {
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
-  const [sessionPlaylists, setSessionPlaylists] = useState<Playlist[]>([]);
-  const [settingPlaylists, setSettingPlaylists] = useState<Playlist[]>([]);
+  // Боевые темы теперь общие: плейлистов сессии и сеттинга больше нет, и
+  // выбирать тему приходится из одного списка, а не из двух.
+  const [battles, setBattles] = useState<Playlist[]>([]);
 
   const refresh = useCallback(() => {
     api.get<SessionDetail>(`/sessions/${sessionId}`).then((s) => {
       setSession(s);
-      api.get<CampaignDetail>(`/campaigns/${s.campaign_id}`).then((c) => {
-        setCampaign(c);
-        if (c.setting_id) {
-          api.get<Playlist[]>(`/playlists?scope=setting&setting_id=${c.setting_id}`).then(setSettingPlaylists);
-        }
-      });
+      api.get<CampaignDetail>(`/campaigns/${s.campaign_id}`).then(setCampaign);
       api.get<Character[]>(`/characters?campaign_id=${s.campaign_id}`).then(setCharacters);
     });
-    api.get<Playlist[]>(`/playlists?scope=session&session_id=${sessionId}`).then(setSessionPlaylists);
+    api.get<Playlist[]>("/playlists").then(setBattles);
   }, [sessionId]);
 
   useEffect(refresh, [refresh]);
@@ -89,20 +84,15 @@ export function SessionLivePage() {
         collapsible
       >
         <label className="row" style={{ gap: 6, alignItems: "center" }}>
-          Плейлист боя:
+          Боевая тема:
           <select
             value={session.battle_playlist_id ?? ""}
             onChange={(e) => saveBattlePlaylist(e.target.value ? Number(e.target.value) : null)}
           >
             <option value="">— не выбран —</option>
-            {sessionPlaylists.map((p) => (
+            {battles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
-              </option>
-            ))}
-            {settingPlaylists.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} (сеттинг)
               </option>
             ))}
           </select>
@@ -141,7 +131,6 @@ export function SessionLivePage() {
         <div className="stack" style={{ flex: 1, minWidth: 260 }}>
           <SecretsPanel {...panelProps} />
           <RemindersPanel {...panelProps} />
-          <PlaylistPanel {...panelProps} />
           <CompendiumPanel {...panelProps} />
         </div>
       </div>

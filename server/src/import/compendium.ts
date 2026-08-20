@@ -167,6 +167,7 @@ const ITEM_TYPES = [
   "Оружие",
   "Палочки",
   "Посохи",
+  "Свитки",
   "Чудесные предметы",
   "Щиты",
 ];
@@ -228,6 +229,19 @@ export function parseSizeType(sizeTypeAlignment: string): { size: string; type: 
   const head = plain.split(",")[0]?.trim() ?? "";
   const size = CREATURE_SIZES.find((s) => head.toLowerCase().startsWith(s.toLowerCase()));
   return { size: size ?? "", type: size ? head.slice(size.length).trim() : head };
+}
+
+/**
+ * Мировоззрение из той же строки «Средний гуманоид, хаотично-злой».
+ *
+ * Скобки снимаются до разреза по той же причине, что и в parseSizeType:
+ * запятая внутри уточнения типа мировоззрение не отделяет. Хвост берётся
+ * целиком — книга пишет там условия («любое не-доброе»), а не пункт списка.
+ */
+export function parseAlignment(sizeTypeAlignment: string): string {
+  const plain = sizeTypeAlignment.replace(/\s*\([^)]*\)/g, "");
+  const comma = plain.indexOf(",");
+  return comma === -1 ? "" : plain.slice(comma + 1).trim();
 }
 
 /**

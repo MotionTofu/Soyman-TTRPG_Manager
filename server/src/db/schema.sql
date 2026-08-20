@@ -176,10 +176,13 @@ CREATE TABLE IF NOT EXISTS resources (
 -- Named, manually-ordered collections of audio resources. A session can
 -- either own playlists directly or attach a setting's playlist via
 -- generic_links (section='attached_playlist') to reuse it without copying.
+-- Плейлист остался ровно под одну роль — боевую тему пульта: она одна на всю
+-- кампанию и переиспользуется, поэтому её имеет смысл держать отдельно от
+-- наборов. Плейлистов сеттинга и сессии больше нет, их работу делает набор.
 CREATE TABLE IF NOT EXISTS playlists (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
-  scope TEXT NOT NULL, -- session | setting
+  scope TEXT NOT NULL, -- battle (session | setting — только в старых базах, чистятся миграцией)
   session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
   setting_id INTEGER REFERENCES settings(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -193,6 +196,49 @@ CREATE TABLE IF NOT EXISTS playlist_items (
   custom_name TEXT, -- overrides the resource's own name, just within this playlist
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Размер файла на момент последней удачной привязки. Нужен ровно одному
+-- механизму: когда файлы переехали и путь указывают заново, совпадение
+-- размера отличает «это тот самый файл» от «просто одноимённый файл из
+-- чужой библиотеки». Хранится отдельной таблицей, а не колонкой на
+-- resources: это кэш файловой системы, а не свойство ресурса.
+CREATE TABLE IF NOT EXISTS resource_file_sizes (
+  resource_id INTEGER PRIMARY KEY REFERENCES resources(id) ON DELETE CASCADE,
+  size_bytes INTEGER NOT NULL
+);
+
+-- Пульт звука. Набор — это то, из чего собран пульт для одного места: какие
+-- кнопки лежат в каналах Бэкграунда, Эмбиента, Погоды и Стингеров. Треки
+-- Бэкграунда лежат в самом наборе (sound_set_items с role = 'background'), а
+-- не отдельным плейлистом: заготавливать список заранее, чтобы потом
+-- подцепить его к набору, — лишний шаг там, где список нужен ровно один раз.
+-- Исключение — боевая тема: она переиспользуется по всей кампании, поэтому
+-- осталась плейлистом. Набор глобальный; setting_id/campaign_id — только
+-- ярлык, по которому список поднимает подходящее наверх, а не владение.
+CREATE TABLE IF NOT EXISTS sound_sets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT,
+  name TEXT NOT NULL,
+  setting_id INTEGER REFERENCES settings(id) ON DELETE SET NULL,
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
+  battle_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Кнопка канала внутри набора. Роль дублирует resources.audio_role
+-- намеренно: набор может показать звук в своём канале и тогда, когда роль у
+-- ресурса потом поменяли, — иначе набор молча терял бы кнопку.
+CREATE TABLE IF NOT EXISTS sound_set_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  set_id INTEGER NOT NULL REFERENCES sound_sets(id) ON DELETE CASCADE,
+  resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+  role TEXT NOT NULL, -- ambient | weather | stinger
+  position INTEGER NOT NULL DEFAULT 0,
+  -- Запускается при включении набора. Только у ambient: Бэкграунд стартует
+  -- плейлистом набора, а Погода и Стингеры при включении не трогаются.
+  is_start INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sound_set_items_set ON sound_set_items(set_id, role, position);
 
 CREATE TABLE IF NOT EXISTS statblocks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,7 +276,7 @@ CREATE TABLE IF NOT EXISTS location_chapters (
 CREATE TABLE IF NOT EXISTS campaign_entries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  category TEXT NOT NULL, -- notes | quotes | tasks | secrets
+  category TEXT NOT NULL, -- notes | quotes | tasks (secrets переехали в story_secrets)
   title TEXT DEFAULT '',
   content TEXT DEFAULT '',
   status TEXT NOT NULL DEFAULT 'none', -- none | done | failed (tasks); none | done (secrets: unrevealed | revealed)
@@ -456,6 +502,13 @@ CREATE TABLE IF NOT EXISTS story_arcs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   parent_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+  -- Copy-on-write campaign layer, exactly as story_scenes has it below: a row
+  -- with campaign_id set and source_arc_id pointing at the setting's original
+  -- is that campaign's own version of the adventure's (or chapter's) texts.
+  -- Cloning an arc never clones its children: a chapter gets its own copy only
+  -- when that chapter is edited.
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+  source_arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'adventure', -- adventure | chapter
   description TEXT NOT NULL DEFAULT '',   -- синопсис
@@ -475,6 +528,19 @@ CREATE TABLE IF NOT EXISTS story_arcs (
   archived_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_story_arcs_setting ON story_arcs(setting_id);
+
+-- Какие приключения сеттинга входят в эту кампанию. Без этой связи кампания
+-- видела все приключения сеттинга сразу, и сеттинг с тремя импортированными
+-- книгами превращал разделы кампании в свалку из чужих глав. Автоматическое
+-- «Сцены вне приключений» сюда не попадает: оно есть у кампании всегда.
+CREATE TABLE IF NOT EXISTS campaign_adventures (
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (campaign_id, arc_id)
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_adventures_arc ON campaign_adventures(arc_id);
 
 -- A scene is the unit the GM actually runs. Two rows can describe the same
 -- scene: the setting's original (campaign_id IS NULL, source_scene_id IS
@@ -544,9 +610,14 @@ CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_arc ON story_scene_rewards(ar
 -- scene that delivers them. Defined once in the setting; whether a campaign
 -- has reached one lives in campaign_milestone_state, same split as scenes and
 -- their progress.
+-- arc_id и campaign_id оба необязательные: веха приключения принадлежит
+-- сеттингу (arc_id, campaign_id NULL), а собственная веха кампании несёт
+-- campaign_id и может быть либо свободной, либо доложенной в чужое
+-- импортированное приключение — тогда у неё заполнены оба.
 CREATE TABLE IF NOT EXISTS story_milestones (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
   scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
@@ -565,9 +636,13 @@ CREATE TABLE IF NOT EXISTS campaign_milestone_state (
 
 -- "Тайны и зацепки" of an adventure — the threads/clues/secrets block books
 -- usually carry. Reveal state is per campaign, like milestones above.
+-- arc_id/campaign_id — как у вех выше. Собственные тайны кампании раньше
+-- жили в campaign_entries категории secrets, отдельной моделью без вида и без
+-- привязки к приключению; db.ts переносит их сюда разово.
 CREATE TABLE IF NOT EXISTS story_secrets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
   kind TEXT NOT NULL DEFAULT 'secret', -- secret | clue | thread
   title TEXT NOT NULL,
   content TEXT NOT NULL DEFAULT '',
@@ -780,9 +855,30 @@ CREATE TABLE IF NOT EXISTS compendium_entries (
   level INTEGER,
   data TEXT DEFAULT '{}',
   description TEXT DEFAULT '',
+  -- Имена записи, как у сущностей сеттинга: синонимы и оригинальное
+  -- (обычно английское) название ищутся наравне с name, короткое имя
+  -- подписывает пин на карте локации — записи компендиума на карту
+  -- перетаскиваются так же, как существа сеттинга.
+  aliases TEXT NOT NULL DEFAULT '[]',
+  name_original TEXT NOT NULL DEFAULT '',
+  short_name TEXT,
   position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- История и Поведение существа бестиария, зеркало being_chapters. Ни
+-- campaign_id, ни visible_to_players: шаблон системы к кампании не привязан
+-- и игроку не синхронизируется, показывают игрокам существо сеттинга.
+CREATE TABLE IF NOT EXISTS compendium_entry_chapters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entry_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+  section TEXT NOT NULL DEFAULT '', -- history | behavior
+  title TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_compendium_entry_chapters_entry
+  ON compendium_entry_chapters(entry_id);
 
 -- Polymorphic multi-image gallery for characters, setting_beings, locations,
 -- communities, and campaign player-sections (see gallery_images: no FK since

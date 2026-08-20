@@ -366,8 +366,20 @@ function inheritFromBaseMonster(beingId: number, baseMonsterId: number) {
   }
 
   const entry = db
-    .prepare("SELECT id, name, description FROM compendium_entries WHERE id = ?")
-    .get(baseMonsterId) as { id: number; name: string; description: string | null } | undefined;
+    .prepare(
+      `SELECT id, name, description, aliases, name_original, short_name
+         FROM compendium_entries WHERE id = ?`
+    )
+    .get(baseMonsterId) as
+    | {
+        id: number;
+        name: string;
+        description: string | null;
+        aliases: string | null;
+        name_original: string | null;
+        short_name: string | null;
+      }
+    | undefined;
   if (!entry) return;
   const parts = [
     { name: entry.name, description: entry.description },
@@ -382,12 +394,61 @@ function inheritFromBaseMonster(beingId: number, baseMonsterId: number) {
     "SELECT id FROM being_chapters WHERE being_id = ? AND title = ? AND content = ?"
   );
   const insertChapter = db.prepare(
-    "INSERT INTO being_chapters (being_id, section, title, content) VALUES (?, 'history', ?, ?)"
+    "INSERT INTO being_chapters (being_id, section, title, content) VALUES (?, ?, ?, ?)"
   );
   for (const part of parts) {
     if (!part.description?.trim()) continue;
     if (sameChapter.get(beingId, part.name, part.description)) continue;
-    insertChapter.run(beingId, part.name, part.description);
+    insertChapter.run(beingId, "history", part.name, part.description);
+  }
+
+  // Главы шаблона переносятся посекционно: история в историю, поведение в
+  // поведение. Раньше переносить было нечего — у записи компендиума глав не
+  // было вовсе, и всё описание сваливалось в «Историю» существа.
+  const templateChapters = db
+    .prepare(
+      "SELECT section, title, content FROM compendium_entry_chapters WHERE entry_id = ? ORDER BY created_at, id"
+    )
+    .all(baseMonsterId) as { section: string; title: string; content: string }[];
+  for (const ch of templateChapters) {
+    if (!ch.content?.trim() && !ch.title?.trim()) continue;
+    if (sameChapter.get(beingId, ch.title, ch.content)) continue;
+    insertChapter.run(beingId, ch.section || "history", ch.title, ch.content);
+  }
+
+  // Имена подставляются только в пустое: правило «ничего не переписывается»
+  // то же, что у статблоков и глав выше.
+  const being = db
+    .prepare("SELECT aliases, name_original, short_name FROM setting_beings WHERE id = ?")
+    .get(beingId) as
+    | { aliases: string | null; name_original: string | null; short_name: string | null }
+    | undefined;
+  if (being) {
+    const beingAliases = parseAliases(being.aliases);
+    const templateAliases = parseAliases(entry.aliases);
+    const mergedAliases = beingAliases.length ? beingAliases : templateAliases;
+    db.prepare(
+      `UPDATE setting_beings SET
+         aliases = ?,
+         name_original = CASE WHEN COALESCE(name_original, '') = '' THEN ? ELSE name_original END,
+         short_name = CASE WHEN COALESCE(short_name, '') = '' THEN ? ELSE short_name END
+       WHERE id = ?`
+    ).run(
+      JSON.stringify(mergedAliases),
+      entry.name_original ?? "",
+      entry.short_name ?? null,
+      beingId
+    );
+  }
+}
+
+function parseAliases(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
   }
 }
 

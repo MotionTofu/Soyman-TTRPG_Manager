@@ -315,13 +315,18 @@ playerRouter.get("/campaigns/:id/visible", (req: AuthedRequest, res) => {
     )
     .all(campaignId);
 
+  // Раскрытые тайны: и собственные записи кампании, и тайны привязанных к
+  // ней приключений — с тех пор как то и другое живёт одной моделью.
   const secrets = db
     .prepare(
-      `SELECT id, title, content, created_at FROM campaign_entries
-       WHERE campaign_id = ? AND category = 'secrets' AND status = 'done'
-       ORDER BY created_at DESC`
+      `SELECT s.id, s.title, s.content, s.kind FROM story_secrets s
+       JOIN campaign_secret_state st ON st.secret_id = s.id AND st.campaign_id = @campaign
+       WHERE st.revealed = 1
+         AND (s.campaign_id = @campaign
+              OR s.arc_id IN (SELECT arc_id FROM campaign_adventures WHERE campaign_id = @campaign))
+       ORDER BY st.updated_at DESC`
     )
-    .all(campaignId);
+    .all({ campaign: campaignId });
 
   let locationArticles: unknown[] = [];
   let beingArticles: unknown[] = [];

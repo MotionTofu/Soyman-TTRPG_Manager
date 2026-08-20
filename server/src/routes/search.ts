@@ -407,7 +407,9 @@ searchRouter.get("/", (req, res) => {
 
   if (wantsType("compendium_entry")) {
     const kindParam = req.query.kind as string | undefined;
-    const clauses = ["lower_u(e.name) LIKE ?"];
+    // Синонимы и оригинальное название ищутся наравне с именем — как у
+    // сущностей сеттинга: «Goblin Boss» должен находить «Гоблина-вожака».
+    const clauses = ["lower_u(e.name || ' ' || e.aliases || ' ' || e.name_original) LIKE ?"];
     const args: (string | number)[] = [like];
     if (systemId != null) {
       clauses.push("e.system_id = ?");

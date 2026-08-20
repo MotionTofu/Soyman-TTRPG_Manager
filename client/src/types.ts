@@ -31,10 +31,26 @@ export interface CompendiumEntry {
   level: number | null;
   data: Record<string, unknown>;
   description: string;
+  /** Синонимы и оригинальное название — ищутся наравне с именем. */
+  aliases: string[];
+  name_original: string;
+  /** Подпись пина на карте локации, если запись перетащили на карту. */
+  short_name: string | null;
   position: number;
   created_at: string;
   /** Сколько карточек статблока у записи: бестиарий помечает значком те, у которых хотя бы одна. */
   statblock_count?: number;
+  /** История и Поведение существа бестиария — приходят только в GET одной записи. */
+  chapters?: CompendiumEntryChapter[];
+}
+
+export interface CompendiumEntryChapter {
+  id: number;
+  entry_id: number;
+  section: string;
+  title: string;
+  content: string;
+  created_at: string;
 }
 
 export interface StorageProfile {
@@ -889,21 +905,17 @@ export interface PlaylistItem {
   src: string | null;
 }
 
+// Единственный оставшийся вид плейлиста — боевая тема: глобальная, без
+// владельца. Плейлисты сессий и сеттингов убраны вместе с их разделами,
+// музыку теперь держит набор своими треками.
 export interface Playlist {
   id: number;
   name: string;
-  scope: "session" | "setting";
+  scope: "battle";
   session_id: number | null;
   setting_id: number | null;
   created_at: string;
   item_count: number;
-  // Only present on GET /playlists (no filter) — used to group the player's
-  // playlist-navigation menu by owning session/setting.
-  session_date?: string | null;
-  campaign_name?: string | null;
-  setting_name?: string | null;
-  // Only present on GET /playlists (no filter) — see Resource.also_in_settings.
-  also_in_settings?: number[];
 }
 
 export interface PlaylistDetail extends Playlist {
@@ -1200,11 +1212,36 @@ export interface StoryArc {
   chapter_count?: number;
   created_at: string;
   archived_at: string | null;
+  // Приходят при чтении из кампании: тексты подменены её собственной копией
+  // приключения, а override_id — id этой копии. Сам id остаётся id оригинала:
+  // главы, сцены, вехи и тайны висят именно на нём.
+  is_override?: boolean;
+  override_id?: number | null;
+  /** Есть ли у кампании хоть какие-то свои правки или прогресс по нему. */
+  has_campaign_edits?: boolean;
+}
+
+/** Приключение кампании вместе с его главами и сценами (раздел «Главы и сцены»). */
+export interface CampaignAdventureTree extends StoryArc {
+  scenes: StoryScene[];
+  chapters: (StoryArc & { scenes: StoryScene[] })[];
+}
+
+/**
+ * Вехи или тайны кампании, разложенные по её приключениям. `own` — записи
+ * самой кампании, не привязанные ни к одному приключению.
+ */
+export interface CampaignGrouped<T> {
+  groups: { arc: { id: number; name: string; is_default: number }; items: T[] }[];
+  own: T[];
 }
 
 export interface StoryMilestone {
   id: number;
-  arc_id: number;
+  /** Пусто у собственной вехи кампании, не привязанной к приключению. */
+  arc_id: number | null;
+  /** Заполнено у собственной вехи кампании — своей или доложенной в чужое приключение. */
+  campaign_id?: number | null;
   scene_id: number | null;
   scene_name: string | null;
   title: string;
@@ -1215,7 +1252,10 @@ export interface StoryMilestone {
 
 export interface StorySecret {
   id: number;
-  arc_id: number;
+  /** Пусто у собственной тайны кампании, не привязанной к приключению. */
+  arc_id: number | null;
+  /** Заполнено у собственной тайны кампании. */
+  campaign_id?: number | null;
   kind: "secret" | "clue" | "thread";
   title: string;
   content: string;
@@ -1398,7 +1438,9 @@ export interface LinkNote {
 export interface CampaignEntry {
   id: number;
   campaign_id: number;
-  category: "notes" | "quotes" | "tasks" | "secrets" | "gm_notes" | "post_production";
+  // secrets переехали в story_secrets: собственные тайны кампании и тайны
+  // приключений теперь одна модель.
+  category: "notes" | "quotes" | "tasks" | "gm_notes" | "post_production";
   title: string;
   content: string;
   status: "none" | "done" | "failed";

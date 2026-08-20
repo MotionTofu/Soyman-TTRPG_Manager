@@ -16,8 +16,10 @@ import { formatInworldDate } from "../inworldCalendar";
 import { loadHideFinance } from "../financePrivacy";
 import type {
   Campaign,
-  CampaignEntry,
+  CampaignGrouped,
   PaymentType,
+  Playlist,
+  StorySecret,
   SessionDetail,
   SessionStatus,
   SessionSummary,
@@ -49,7 +51,8 @@ export function SessionDetailPage() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [campaignSessions, setCampaignSessions] = useState<SessionSummary[]>([]);
-  const [unrevealedSecrets, setUnrevealedSecrets] = useState<CampaignEntry[]>([]);
+  const [battles, setBattles] = useState<Playlist[]>([]);
+  const [unrevealedSecrets, setUnrevealedSecrets] = useState<StorySecret[]>([]);
   const [inworldYearDraft, setInworldYearDraft] = useState("");
   const [inworldMonthDraft, setInworldMonthDraft] = useState("");
   const [inworldDayDraft, setInworldDayDraft] = useState("");
@@ -77,16 +80,32 @@ export function SessionDetailPage() {
       api
         .get<SessionSummary[]>(`/campaigns/${s.campaign_id}/sessions`)
         .then(setCampaignSessions);
+      // Тайны кампании и тайны её приключений — один список: с тех пор как
+      // это одна модель, за игровым столом разделять их незачем.
       api
-        .get<CampaignEntry[]>(`/campaign-entries?campaign_id=${s.campaign_id}&category=secrets`)
-        .then((rows) => setUnrevealedSecrets(rows.filter((r) => r.status !== "done")));
+        .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${s.campaign_id}`)
+        .then((data) =>
+          setUnrevealedSecrets(
+            [...data.own, ...data.groups.flatMap((g) => g.items)].filter(
+              (x) => x.state?.revealed !== 1
+            )
+          )
+        );
     });
   }, [sessionId]);
 
   useEffect(refresh, [refresh]);
 
+  useEffect(() => {
+    api.get<Playlist[]>("/playlists").then(setBattles).catch(() => setBattles([]));
+  }, []);
+
   async function markSecretRevealed(secretId: number) {
-    await api.put(`/campaign-entries/${secretId}`, { status: "done" });
+    if (!session) return;
+    await api.put(`/story/secrets/${secretId}/state`, {
+      campaign_id: session.campaign_id,
+      revealed: true,
+    });
     setUnrevealedSecrets((prev) => prev.filter((s) => s.id !== secretId));
   }
 
@@ -625,7 +644,25 @@ export function SessionDetailPage() {
             entityType="session"
             entityId={sessionId}
             collapsible
-          />
+          >
+            {/* Боевая тема задаётся здесь же, рядом с задумкой: её выбирают
+                на подготовке к конкретному вечеру, и она главнее темы
+                набора — набор заготовлен на всю кампанию. */}
+            <label className="row" style={{ gap: 6, alignItems: "center" }}>
+              Боевая тема:
+              <select
+                value={session.battle_playlist_id ?? ""}
+                onChange={(e) => setBattlePlaylist(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">— из набора —</option>
+                {battles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </EditableTextCard>
 
           <div className="row" style={{ alignItems: "flex-start" }}>
             <LazyDetails
@@ -760,8 +797,6 @@ export function SessionDetailPage() {
           resources={linkResources}
           onChange={refresh}
           settingId={campaign?.setting_id ?? null}
-          sessionBattlePlaylistId={session.battle_playlist_id}
-          onSetBattlePlaylist={setBattlePlaylist}
         />
       )}
     </div>

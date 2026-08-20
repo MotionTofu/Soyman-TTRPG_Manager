@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAudioPlayer } from "../audioPlayer";
 import { NavIcon } from "../components/NavIcons";
-import type { Campaign, PlaylistDetail, Resource, SessionDetail, Setting } from "../types";
+import type { PlaylistDetail, Resource, Setting } from "../types";
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) seconds = 0;
@@ -25,6 +25,7 @@ export function NowPlayingPage() {
   const navigate = useNavigate();
   const {
     current,
+    tracks,
     index,
     count,
     isPlaying,
@@ -37,9 +38,24 @@ export function NowPlayingPage() {
     next,
     prev,
     seek,
+    playTrackAt,
     setRepeatMode,
     setShuffleMode,
   } = useAudioPlayer();
+
+  // Играющая строка сама подкручивается в видимую часть — на телефоне список
+  // длиннее экрана всегда.
+  // Кадром позже, а не сразу: на монтировании страницы список ещё не получил
+  // окончательную высоту, и прокрутка уезжала в никуда. Строка ставится по
+  // центру, а не «ближайшим краем»: у нижнего края её накрывает плавающая
+  // навигация.
+  const activeTrackRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      activeTrackRef.current?.scrollIntoView({ block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [index]);
 
   const [subtitle, setSubtitle] = useState("");
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
@@ -58,21 +74,9 @@ export function NowPlayingPage() {
       } catch {
         // fall through to the playlist-based lookup below
       }
-      if (cancelled || !activePlaylistId) return null;
-      // Fallback: the active playlist's own setting (directly, or via its
-      // session's campaign) — covers playlists whose tracks are global
-      // resources with no setting_id of their own.
-      const playlist = await api.get<PlaylistDetail>(`/playlists/${activePlaylistId}`);
-      if (playlist.scope === "setting" && playlist.setting_id) {
-        return await api.get<Setting>(`/settings/${playlist.setting_id}`);
-      }
-      if (playlist.scope === "session" && playlist.session_id) {
-        const session = await api.get<SessionDetail>(`/sessions/${playlist.session_id}`);
-        if (session.campaign_id) {
-          const campaign = await api.get<Campaign>(`/campaigns/${session.campaign_id}`);
-          if (campaign.setting_id) return await api.get<Setting>(`/settings/${campaign.setting_id}`);
-        }
-      }
+      // Запасного пути по плейлисту больше нет: плейлист остался только
+      // боевой темой и ничьему сеттингу не принадлежит. Если у самого трека
+      // сеттинга нет — обложки не будет, и это честнее выдуманной.
       return null;
     }
 
@@ -164,11 +168,37 @@ export function NowPlayingPage() {
           type="button"
           className={repeatMode !== "off" ? "active" : ""}
           onClick={() => setRepeatMode(repeatMode === "off" ? "playlist" : repeatMode === "playlist" ? "track" : "off")}
-          title="Повторять"
+          title={
+            repeatMode === "off" ? "Повтор выключен" : repeatMode === "playlist" ? "По кругу" : "Один трек"
+          }
         >
           <NavIcon name={repeatMode === "track" ? "repeatTrack" : "repeatPlaylist"} />
         </button>
       </div>
+
+      {/* Очередь целиком: щелчок по строке переключает на неё. Страница из-за
+          этого стала прокручиваемой — обложку не режем, она здесь и есть
+          главное, а список живёт ниже транспорта. */}
+      {tracks.length > 1 ? (
+        <div className="now-playing-queue">
+          <div className="muted now-playing-queue-head">Очередь · {tracks.length}</div>
+          {tracks.map((t, i) => (
+            <button
+              key={i}
+              type="button"
+              className={i === index ? "now-playing-queue-row active" : "now-playing-queue-row"}
+              ref={i === index ? activeTrackRef : undefined}
+              onClick={() => {
+                if (i === index) return; // по играющему не бьём
+                playTrackAt(i);
+              }}
+            >
+              <span className="now-playing-queue-num">{i + 1}</span>
+              <span className="now-playing-queue-name">{t.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

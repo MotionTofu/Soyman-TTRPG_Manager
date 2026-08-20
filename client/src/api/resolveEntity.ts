@@ -34,10 +34,19 @@ export async function fetchEntityDetail(type: string, id: number): Promise<Recor
   }
 }
 
-// Same lookup as resolveEntityLabel, but for the four entity types that can
-// carry an optional short_name (used to keep map-pin labels compact) —
-// prefers it over the full name when set, otherwise falls back identically.
-const SHORT_NAME_TYPES = new Set(["being", "character", "location", "artifact"]);
+// Same lookup as resolveEntityLabel, but for the entity types that can carry
+// an optional short_name (used to keep map-pin labels compact) — prefers it
+// over the full name when set, otherwise falls back identically. Запись
+// компендиума здесь потому, что карта принимает перетаскиванием любой
+// результат поиска: существо бестиария на неё ставится наравне с существом
+// сеттинга, и подписываться должно так же коротко.
+const SHORT_NAME_TYPES = new Set([
+  "being",
+  "character",
+  "location",
+  "artifact",
+  "compendium_entry",
+]);
 export async function resolveEntityMapLabel(type: string, id: number): Promise<string> {
   if (!SHORT_NAME_TYPES.has(type)) return resolveEntityLabel(type, id);
   const base = ENDPOINTS[type];

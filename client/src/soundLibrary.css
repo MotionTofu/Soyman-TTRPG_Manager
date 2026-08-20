@@ -1,0 +1,539 @@
+/* Вкладка «Звук» в Ресурсах.
+ *
+ * Своя раскладка, а не общие .card/.card-grid: у звука сотня коротких
+ * записей, и карточка на каждую превращает библиотеку в простыню, по
+ * которой нельзя окинуть взглядом «что у меня вообще есть». Поэтому
+ * бэкграунд идёт строчками (у трека важно имя и длина), а эмбиент, погода и
+ * стингеры — плитками с иконкой: в пульте они выглядят так же, и глаз
+ * запоминает их одинаково в обоих местах.
+ *
+ * Правка роли и иконки убрана в отдельное окно по щелчку. На плитке она
+ * держала два выпадающих списка на каждый звук — полсотни органов
+ * управления в разделе, куда заходят раз в месяц. */
+
+.sl-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.sl-alert-body { flex: 1 1 auto; min-width: 0; }
+.sl-alert-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.sl-alert-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.sl-section { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.sl-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+.sl-section-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sl-section-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.sl-section-spacer { flex: 1 1 auto; }
+
+.sl-add {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 0;
+  padding: 6px 12px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+}
+.sl-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Бэкграунд: строчки */
+.sl-tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-2);
+}
+.sl-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sl-track:hover { border-color: var(--accent); }
+.sl-track-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-track-time {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+.sl-track.broken {
+  background: transparent;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--muted);
+}
+
+/* Эмбиент, погода, стингеры: плитки */
+.sl-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--sp-2);
+}
+.sl-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 104px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+.sl-tile:hover { border-color: var(--accent); }
+.sl-tile.broken {
+  background: transparent;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--muted);
+}
+.sl-tile-name {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.15;
+}
+.sl-tile-note {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+.sl-tile-note.broken { color: var(--accent); }
+.sl-pin {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: var(--fs-micro);
+  color: var(--accent);
+}
+
+.sl-empty {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sl-foot {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Окно правки звука */
+.sl-edit { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 340px; }
+.sl-edit-head { display: flex; align-items: center; gap: 10px; }
+.sl-edit-name { font-family: var(--font-ui); font-size: var(--fs-h3); font-weight: 600; }
+.sl-edit-path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.sl-edit-field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.sl-edit-field > span {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sl-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: var(--sp-1);
+  max-height: 190px;
+  overflow-y: auto;
+}
+.sl-icon-pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.sl-icon-pick.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.sl-edit-actions { display: flex; align-items: center; gap: var(--sp-2); }
+
+.sl-seg { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+.sl-seg button {
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.sl-seg button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.sl-edit audio { width: 100%; }
+
+/* --- Вкладка «Аудио-наборы» --- */
+
+.ss-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+.ss-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ss-list-head { display: flex; align-items: center; gap: var(--sp-2); }
+.ss-list-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ss-list-note {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.ss-set {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+.ss-set:hover { border-color: var(--accent); }
+/* Выбранный набор — плотная инверсия, а не подсветка рамкой: список
+   короткий, и «какой сейчас открыт» должно читаться боковым зрением. */
+.ss-set.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.ss-set-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.ss-set-meta {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  opacity: 0.7;
+  /* Счётчик четырёх каналов в 280-пиксельную колонку не влезает и раньше
+     вылезал за рамку карточки — переносим по словам, а не режем. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ss-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.ss-editor-head { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.ss-editor-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.ss-on {
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  background: var(--accent);
+  color: var(--accent-text);
+  padding: 7px 14px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ss-on[disabled] { opacity: 0.55; cursor: default; }
+
+.ss-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+  align-items: start;
+}
+.ss-col { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.ss-col-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ss-col-add {
+  margin-left: auto;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 1px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.ss-col-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.ss-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+.ss-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Стартовый эмбиент — тоже инверсия: в наборе он ровно один, и его видно
+   раньше, чем прочтёшь подпись. */
+.ss-row.start {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.ss-row-badge {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ss-dot {
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
+}
+.ss-note {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ss-pinned {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px dashed color-mix(in srgb, var(--ink) 20%, transparent);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1.4;
+}
+.ss-pinned .sl-pin { position: static; }
+
+/* Трек Бэкграунда в наборе. Имя в две строки, а не в одну с многоточием:
+   у половины библиотеки различие в конце названия («…_loop», «…_short»),
+   и обрезанное имя превращает выбор в угадайку. Колонка при этом остаётся
+   такой же ширины, как остальные три — набор читается как одно целое. */
+.ss-track {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.ss-track.dragging { opacity: 0.4; }
+.ss-track.over { border-color: var(--accent); }
+.ss-track-grip {
+  flex: 0 0 auto;
+  cursor: grab;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  user-select: none;
+}
+.ss-track-num {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.ss-track-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.ss-track-name.broken { color: var(--accent); }
+.ss-track-drop {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 2px;
+}
+.ss-track-drop:hover { color: var(--accent); }
+
+/* Принадлежность набора и боевая тема — под колонками: это свойства всего
+   набора, а не одного канала. */
+.ss-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.ss-field { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 160px; }
+.ss-field > span {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ss-empty {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Окно состава канала */
+.ss-pick { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 320px; }
+.ss-pick-list { display: flex; flex-direction: column; gap: var(--sp-1); max-height: 340px; overflow-y: auto; }
+.ss-pick-row { display: flex; align-items: center; gap: var(--sp-2); }
+
+/* Раздел живёт в колонке страницы Ресурсов, а её ширина зависит не от окна, а
+   от того, раскрыта ли правая панель. Поэтому запрос к контейнеру, а не к
+   окну: иначе на узкой колонке редактор набора сжимается до нечитаемых
+   164-пиксельных столбцов при формально широком экране. */
+.ss-wrap { container-type: inline-size; }
+@container (max-width: 720px) {
+  .ss-layout { grid-template-columns: minmax(0, 1fr); }
+}

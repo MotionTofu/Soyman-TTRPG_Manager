@@ -7,9 +7,9 @@ import { syncMentionLinks } from "../mentions";
 import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } from "../resourceCategories";
 import { hasElectronAPI } from "../electronApi";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
-import { PlaylistsSection } from "./PlaylistsSection";
 import { NavIcon } from "./NavIcons";
-import type { Playlist, Resource, SearchResult } from "../types";
+import type { SoundSetDetail, SoundSetSummary } from "../sound/types";
+import type { Resource, SearchResult } from "../types";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac|aac)$/i;
@@ -39,10 +39,6 @@ interface Props {
   // "В сеттинг" (promote an owned resource up to that setting) so the
   // same file doesn't get re-uploaded into every session that needs it.
   settingId?: number | null;
-  // Only meaningful for scope==="session" — see PlaylistsSection's identical
-  // props, threaded straight through to it.
-  sessionBattlePlaylistId?: number | null;
-  onSetBattlePlaylist?: (id: number | null) => void;
 }
 
 // Shared "Ресурсы" UI for both sessions and settings: modal-based creation,
@@ -60,8 +56,6 @@ export const ResourcesSection = memo(function ResourcesSection({
   resources,
   onChange,
   settingId,
-  sessionBattlePlaylistId,
-  onSetBattlePlaylist,
 }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [draftFile, setDraftFile] = useState<File | null>(null);
@@ -71,7 +65,6 @@ export const ResourcesSection = memo(function ResourcesSection({
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [attached, setAttached] = useState<AttachedEntry[]>([]);
-  const [playlistsRefreshKey, setPlaylistsRefreshKey] = useState(0);
   const [libraryOpen, setLibraryOpen] = useState(false);
 
   async function loadAttached() {
@@ -278,22 +271,6 @@ export const ResourcesSection = memo(function ResourcesSection({
         {busy && <span className="muted">Добавляю файлы…</span>}
       </div>
 
-      <details className="stack" style={{ gap: 4 }}>
-        <summary className="row chevron-summary" style={{ gap: 10 }}>
-          <NavIcon name="chevron" className="chevron-icon" />
-          <strong>Плейлисты</strong>
-        </summary>
-        <PlaylistsSection
-          key={playlistsRefreshKey}
-          scope={scope}
-          entityId={entityId}
-          settingId={scope === "session" ? settingId : undefined}
-          onPlaylistsChanged={() => setPlaylistsRefreshKey((k) => k + 1)}
-          battlePlaylistId={scope === "session" ? sessionBattlePlaylistId : undefined}
-          onSetBattlePlaylist={scope === "session" ? onSetBattlePlaylist : undefined}
-        />
-      </details>
-
       {allItems.length === 0 && <p className="muted">Ресурсов пока нет.</p>}
 
       {grouped
@@ -309,8 +286,6 @@ export const ResourcesSection = memo(function ResourcesSection({
             {g.key === "audio" ? (
               <AudioGroup
                 items={g.items}
-                scope={scope}
-                entityId={entityId}
                 onChange={onChange}
                 onArchive={archiveResource}
                 attachedResourceIds={attachedResourceIds}
@@ -320,8 +295,6 @@ export const ResourcesSection = memo(function ResourcesSection({
                 }}
                 canPromote={(id) => scope === "session" && !!settingId && !attachedResourceIds.has(id)}
                 onPromote={promoteResource}
-                onPlaylistsChanged={() => setPlaylistsRefreshKey((k) => k + 1)}
-                refreshKey={playlistsRefreshKey}
               />
             ) : (
               <SortableResourceGroup
@@ -513,46 +486,36 @@ function LibraryPickerModal({
 }
 
 // "Звуки" gets extra powers over the other categories: checkbox multi-select
-// feeding a "send selected to / create playlist from" bar, and each row is
-// draggable as a SEARCH_DRAG_MIME payload (same shape a global-search result
-// carries) so it can be dropped straight onto a playlist block.
+// feeding a "добавить в набор" bar, and each row is draggable as a
+// SEARCH_DRAG_MIME payload (same shape a global-search result carries).
+//
+// Раньше выбранное отправлялось в плейлист. Плейлистов у сессий и сеттингов
+// больше нет — музыку слушает набор, и добавлять надо прямо в него, а не в
+// промежуточный список, который потом ещё надо в набор положить.
 function AudioGroup({
   items,
-  scope,
-  entityId,
   onChange,
   onArchive,
   attachedResourceIds,
   onDetach,
   canPromote,
   onPromote,
-  onPlaylistsChanged,
-  refreshKey,
 }: {
   items: Resource[];
-  scope: Scope;
-  entityId: number;
   onChange: () => void;
   onArchive: (id: number) => void;
   attachedResourceIds: Set<number>;
   onDetach: (resourceId: number) => void;
   canPromote: (resourceId: number) => boolean;
   onPromote: (resourceId: number) => Promise<void>;
-  onPlaylistsChanged: () => void;
-  // Bumped by the parent whenever a playlist is created/renamed/deleted
-  // elsewhere (the Плейлисты block) — refetches this dropdown's options so a
-  // just-created playlist is selectable immediately, without a page reload.
-  refreshKey: number;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [sets, setSets] = useState<SoundSetSummary[]>([]);
+  const [busySet, setBusySet] = useState(false);
 
   useEffect(() => {
-    api
-      .get<Playlist[]>(`/playlists?scope=${scope}&${scope === "session" ? "session_id" : "setting_id"}=${entityId}`)
-      .then(setPlaylists);
-  }, [scope, entityId, refreshKey]);
+    api.get<SoundSetSummary[]>("/sound-sets").then(setSets).catch(() => setSets([]));
+  }, []);
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -563,27 +526,32 @@ function AudioGroup({
     });
   }
 
-  async function sendToPlaylist(playlistId: number) {
-    for (const id of selected) {
-      await api.post(`/playlists/${playlistId}/items`, { resource_id: id });
+  // Состав набора переписывается целиком, поэтому выбранное дописывается к
+  // тому, что в наборе уже есть, а не заменяет его. Заодно каждому звуку
+  // проставляется роль Бэкграунда: без роли он не попадёт ни в один канал
+  // пульта и молча пропадёт из набора.
+  async function addToSet(setId: number) {
+    setBusySet(true);
+    try {
+      const detail = await api.get<SoundSetDetail>(`/sound-sets/${setId}`);
+      const ids = detail.tracks.map((t) => t.resource_id);
+      for (const id of selected) {
+        if (!ids.includes(id)) {
+          await api.put(`/sounds/${id}`, { audio_role: "background" });
+          ids.push(id);
+        }
+      }
+      await api.put(`/sound-sets/${setId}/items`, {
+        tracks: ids,
+        ambient: detail.ambient.map((b) => b.resource_id),
+        weather: detail.weather.map((b) => b.resource_id),
+        stingers: detail.stingers.map((b) => b.resource_id),
+        start_ambient_id: detail.ambient.find((b) => b.is_start)?.resource_id ?? null,
+      });
+      setSelected(new Set());
+    } finally {
+      setBusySet(false);
     }
-    setSelected(new Set());
-    onPlaylistsChanged();
-  }
-
-  async function createFromSelected() {
-    if (!newPlaylistName.trim() || selected.size === 0) return;
-    const playlist = await api.post<Playlist>("/playlists", {
-      name: newPlaylistName.trim(),
-      scope,
-      [scope === "session" ? "session_id" : "setting_id"]: entityId,
-    });
-    for (const id of selected) {
-      await api.post(`/playlists/${playlist.id}/items`, { resource_id: id });
-    }
-    setNewPlaylistName("");
-    setSelected(new Set());
-    onPlaylistsChanged();
   }
 
   function sortAlphabetically() {
@@ -608,29 +576,24 @@ function AudioGroup({
               onChange();
             }}
           />
-          {playlists.length > 0 && (
+          {sets.length > 0 ? (
             <select
               value=""
+              disabled={busySet}
               onChange={(e) => {
-                if (e.target.value) sendToPlaylist(Number(e.target.value));
+                if (e.target.value) void addToSet(Number(e.target.value));
               }}
             >
-              <option value="">Отправить в плейлист…</option>
-              {playlists.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              <option value="">{busySet ? "Добавляю…" : "Добавить в набор…"}</option>
+              {sets.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>
+          ) : (
+            <span className="muted">Наборов ещё нет — их заводят в Ресурсах, вкладка «Аудио-наборы».</span>
           )}
-          <input
-            placeholder="Название нового плейлиста"
-            value={newPlaylistName}
-            onChange={(e) => setNewPlaylistName(e.target.value)}
-          />
-          <button type="button" onClick={createFromSelected} disabled={!newPlaylistName.trim()}>
-            Создать плейлист из выбранного
-          </button>
         </div>
       )}
       {items.map((r) => (

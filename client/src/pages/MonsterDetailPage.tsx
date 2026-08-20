@@ -1,21 +1,63 @@
+import { useEffect, useState } from "react";
 import { StatblockList } from "../components/StatblockList";
 import { MentionsTab } from "../components/MentionsTab";
-import { RelationsTab } from "../components/RelationsTab";
+import { ChapterList } from "../components/ChapterList";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCard";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { useTabState } from "../hooks/useTabState";
 import { api } from "../api/client";
-import type { CompendiumEntry, System } from "../types";
+import {
+  CREATURE_SIZES,
+  MECHANICS_ALIGNMENT_GROUP,
+  MECHANICS_CREATURE_TYPE_GROUP,
+} from "../compendium";
+import type { CompendiumEntry, System, SystemSection } from "../types";
 
-const TABS = ["Статблок", "Досье", "Отношения", "Упоминания"] as const;
+const TABS = ["Статблоки", "Досье", "Карточка существа", "Упоминания"] as const;
+
+interface MechanicsOption {
+  id: number;
+  name: string;
+}
+
+// Тип существа и мировоззрение живут в справочнике механик системы — там же,
+// откуда их берёт редактор компендиума. Тип подставляется выбором (по нему
+// работает фильтр раздела и он хранится ссылкой), мировоззрение — только
+// подсказками к свободному тексту: книга пишет там условия, а не пункты.
+async function loadCreatureLists(
+  systemId: number
+): Promise<{ types: MechanicsOption[]; alignments: string[] }> {
+  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+  const mechSection = sections.find((s) => s.kind === "mechanics");
+  if (!mechSection) return { types: [], alignments: [] };
+  const entries = await api.get<CompendiumEntry[]>(
+    `/systems/${systemId}/entries?section_id=${mechSection.id}`
+  );
+  const groupsByName = new Map(entries.filter((e) => e.parent_id === null).map((e) => [e.name, e]));
+  const childrenOf = (groupName: string) => {
+    const group = groupsByName.get(groupName);
+    if (!group) return [];
+    return entries
+      .filter((e) => e.parent_id === group.id)
+      .sort((a, b) => a.position - b.position)
+      .map((e) => ({ id: e.id, name: e.name }));
+  };
+  return {
+    types: childrenOf(MECHANICS_CREATURE_TYPE_GROUP),
+    alignments: childrenOf(MECHANICS_ALIGNMENT_GROUP).map((o) => o.name),
+  };
+}
 
 // Standalone profile page for a Бестиарий compendium entry (a global monster
 // template — not tied to any setting/location/faction, unlike a setting's
 // own Being instances). Deliberately a smaller tab set than BeingDetailPage:
 // Места обитания/Галерея don't fit here (no vault folder, no setting scope
 // to be "in") — those stay properties of the setting-specific being, not the
-// template it was created from.
+// template it was created from. «Отношения» тоже нет: у шаблона системы
+// связей с сущностями сеттинга не бывает, а если такое существо нужно с
+// кем-то связать — связывают его версию в сеттинге.
 export function MonsterDetailPage({
   entry,
   system,
@@ -26,12 +68,89 @@ export function MonsterDetailPage({
   onChange: () => void;
 }) {
   const entryId = entry.id;
-  const [tab, selectTab] = useTabState(TABS, "Статблок");
+  // Сохранённая ссылка на «Статблок» должна открывать «Статблоки», а не
+  // молча падать на вкладку по умолчанию — здесь это одна и та же вкладка.
+  const [tab, selectTab] = useTabState(TABS, "Статблоки", { Статблок: "Статблоки" });
+  const [lists, setLists] = useState<{ types: MechanicsOption[]; alignments: string[] }>({
+    types: [],
+    alignments: [],
+  });
+  const [aliasDraft, setAliasDraft] = useState("");
+
+  useEffect(() => {
+    if (!system) return;
+    loadCreatureLists(system.id).then(setLists);
+  }, [system?.id]);
 
   async function saveDescription(value: string) {
     await api.put(`/systems/entries/${entryId}`, { description: value });
     onChange();
   }
+
+  const creatureType = entry.data.creature_type as MechanicsOption | undefined;
+  const size = typeof entry.data.size === "string" ? entry.data.size : "";
+  const alignment = typeof entry.data.alignment === "string" ? entry.data.alignment : "";
+  const aliases = entry.aliases ?? [];
+
+  // Класс опасности в сводку не входит: он — механика конкретных правил и
+  // живёт в статблоке и в фильтрах раздела. Сводка — лор существа, то, что
+  // переживает перекладывание на другую систему.
+  const fields: EntityField[] = [
+    { key: "name", label: "Имя", value: entry.name, required: true },
+    { key: "name_original", label: "Оригинальное название", value: entry.name_original ?? "" },
+    {
+      key: "short_name",
+      label: "Короткое имя для карты",
+      value: entry.short_name ?? "",
+      title: "Показывается вместо полного имени в подписи пина, если запись поставили на карту локации",
+    },
+    {
+      key: "creature_type",
+      label: "Тип существа",
+      value: creatureType?.name ?? "",
+      options: [
+        { value: "", label: "—" },
+        ...lists.types.map((t) => ({ value: t.name, label: t.name })),
+      ],
+    },
+    {
+      key: "size",
+      label: "Размер",
+      value: size,
+      options: [{ value: "", label: "—" }, ...CREATURE_SIZES.map((s) => ({ value: s, label: s }))],
+    },
+    {
+      key: "alignment",
+      label: "Мировоззрение",
+      value: alignment,
+      suggestions: lists.alignments,
+    },
+  ];
+
+  async function saveSummary(values: Record<string, string>) {
+    const nextAliases = aliasDraft
+      .split(",")
+      .map((a) => a.trim())
+      .filter(Boolean);
+    const type = lists.types.find((t) => t.name === values.creature_type);
+    const data: Record<string, unknown> = { ...entry.data };
+    if (values.size) data.size = values.size;
+    else delete data.size;
+    if (values.alignment.trim()) data.alignment = values.alignment.trim();
+    else delete data.alignment;
+    if (type) data.creature_type = type;
+    else delete data.creature_type;
+    await api.put(`/systems/entries/${entryId}`, {
+      name: values.name.trim(),
+      name_original: values.name_original.trim(),
+      short_name: values.short_name.trim(),
+      aliases: nextAliases,
+      data,
+    });
+    onChange();
+  }
+
+  const chapters = entry.chapters ?? [];
 
   return (
     <div className="stack">
@@ -55,22 +174,90 @@ export function MonsterDetailPage({
         ))}
       </div>
 
-      {tab === "Статблок" && (
+      {tab === "Статблоки" && (
         <StatblockList
           ownerType="compendium_entry"
           ownerId={entryId}
           ownerName={entry.name}
-          ownerCreatureType={typeof entry.data.creatureType === "string" ? entry.data.creatureType : undefined}
-          ownerCreatureSize={typeof entry.data.size === "string" ? entry.data.size : undefined}
+          ownerCreatureType={creatureType?.name}
+          ownerCreatureSize={size || undefined}
         />
       )}
 
       {tab === "Досье" && (
-        <EditableTextCard title="Описание" value={entry.description} onSave={saveDescription} rows={6} />
+        <div className="stack">
+          <EntityFieldsCard
+            key={`summary-${entryId}`}
+            title="Сводка"
+            fields={fields}
+            hideEmptyInView
+            onEditStart={() => setAliasDraft(aliases.join(", "))}
+            onSave={saveSummary}
+            editExtras={
+              <label className="stack editable-card-field">
+                <span>Другие названия</span>
+                <input
+                  value={aliasDraft}
+                  placeholder="через запятую"
+                  onChange={(e) => setAliasDraft(e.target.value)}
+                />
+              </label>
+            }
+            viewExtras={
+              aliases.length > 0 ? (
+                <div className="entity-field-row">
+                  <span className="muted">Другие названия</span>
+                  <span>{aliases.join(", ")}</span>
+                </div>
+              ) : null
+            }
+          />
+          <EditableTextCard
+            title="Описание"
+            value={entry.description}
+            onSave={saveDescription}
+            rows={6}
+            entityType="compendium_entry"
+            entityId={entryId}
+            collapsible
+            defaultOpen
+          />
+          <details className="card">
+            <summary className="sb-section" style={{ margin: 0 }}>
+              История
+            </summary>
+            <ChapterList
+              ownerId={entryId}
+              ownerType="compendium_entry"
+              apiBase="/systems/entries"
+              section="history"
+              chapters={chapters.filter((c) => c.section === "history")}
+              onChange={onChange}
+            />
+          </details>
+          <details className="card">
+            <summary className="sb-section" style={{ margin: 0 }}>
+              Поведение
+            </summary>
+            <ChapterList
+              ownerId={entryId}
+              ownerType="compendium_entry"
+              apiBase="/systems/entries"
+              section="behavior"
+              chapters={chapters.filter((c) => c.section === "behavior")}
+              onChange={onChange}
+            />
+          </details>
+        </div>
       )}
 
-      {tab === "Отношения" && (
-        <RelationsTab entityType="compendium_entry" entityId={entryId} entityName={entry.name} />
+      {tab === "Карточка существа" && (
+        <div className="card stack">
+          <p className="muted">
+            Карточка существа — скоро здесь появится компактная витрина для показа игрокам (пульт
+            управления сессией и другие места).
+          </p>
+        </div>
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="compendium_entry" entityId={entryId} />}

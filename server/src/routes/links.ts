@@ -75,7 +75,9 @@ const SETTING_SCOPE_QUERIES: Record<string, string> = {
   // Only the setting's own scenes — a campaign's copy-on-write overrides
   // belong to that campaign's view, not to the setting-wide graph.
   scene: "SELECT id FROM story_scenes WHERE setting_id = ? AND campaign_id IS NULL",
-  adventure: "SELECT id FROM story_arcs WHERE setting_id = ?",
+  // Same as scenes above: a campaign's copy-on-write version of an
+  // adventure belongs to that campaign's view, not to the setting-wide graph.
+  adventure: "SELECT id FROM story_arcs WHERE setting_id = ? AND campaign_id IS NULL",
 };
 
 // Node types a `campaign_id` graph filter resolves through the campaign

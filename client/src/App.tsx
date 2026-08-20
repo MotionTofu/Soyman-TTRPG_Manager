@@ -18,11 +18,13 @@ const LibraryPage = lazy(() => import("./pages/LibraryPage").then((m) => ({ defa
 const PlayerLibraryPage = lazy(() =>
   import("./pages/PlayerLibraryPage").then((m) => ({ default: m.PlayerLibraryPage }))
 );
-const GmMusicPage = lazy(() => import("./pages/GmMusicPage").then((m) => ({ default: m.GmMusicPage })));
 const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage").then((m) => ({ default: m.NowPlayingPage })));
 const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage").then((m) => ({ default: m.CampaignDetailPage })));
 const SessionDetailPage = lazy(() => import("./pages/SessionDetailPage").then((m) => ({ default: m.SessionDetailPage })));
 const SessionLivePage = lazy(() => import("./pages/SessionLivePage").then((m) => ({ default: m.SessionLivePage })));
+const SoundConsolePage = lazy(() =>
+  import("./pages/SoundConsolePage").then((m) => ({ default: m.SoundConsolePage }))
+);
 const SessionPanelPopoutPage = lazy(() =>
   import("./pages/SessionPanelPopoutPage").then((m) => ({ default: m.SessionPanelPopoutPage }))
 );
@@ -127,10 +129,14 @@ function App() {
                 (see sessionLivePanels.tsx) has no room to spare for the
                 sidebar/search/audio-bar chrome that wraps every other route. */}
             <Route path="/sessions/:id/live/panel/:panelKey" element={<SessionPanelPopoutPage />} />
+            {/* Пульт звука — тоже вне <AppShell>: отдельное окно на второй
+                монитор, где сайдбар и нижняя панель только отняли бы место.
+                Своего звука у него нет — движок живёт в главном окне, см.
+                sound/engine.tsx. */}
+            <Route path="/sound-console" element={<SoundConsolePage />} />
             <Route element={<AppShell />}>
               <Route path="/" element={<HomeRoute />} />
               <Route path="/library" element={<LibraryRoute />} />
-              <Route path="/player" element={<GmMusicPage />} />
               <Route path="/now-playing" element={<NowPlayingPage />} />
               <Route path="/campaigns" element={<CampaignsRoute />} />
               <Route path="/campaigns/:id" element={<CampaignDetailRoute />} />

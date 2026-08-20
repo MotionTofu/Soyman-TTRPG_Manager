@@ -98,6 +98,8 @@ export function ImportAdventurePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const settingParam = params.get("setting");
+  // Импорт, начатый из кампании: приключения книги сразу привяжутся к ней.
+  const campaignParam = params.get("campaign");
   const [settingId, setSettingId] = useState<number | null>(
     settingParam ? Number(settingParam) : null
   );
@@ -257,6 +259,7 @@ export function ImportAdventurePage() {
       const response = await api.post<ApplyResponse>("/import/apply", {
         data: raw,
         setting_id: settingId,
+        campaign_id: campaignParam ? Number(campaignParam) : null,
         file_name: fileName,
         skip: Object.entries(skip)
           .filter(([, on]) => on)

@@ -203,8 +203,9 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
 }
 
 // Three zine skins from docs/design-system-punk-zine.md §3.1 plus the two
-// themes the user kept. `zine` is first, so it is both the default and the
-// fallback `findTheme` lands on when a saved id no longer exists.
+// themes the user kept. Порядок здесь — это порядок в списке выбора; тема по
+// умолчанию задаётся отдельно (DEFAULT_THEME_ID), чтобы её можно было менять,
+// не переставляя список.
 //
 // riot/neon are written as literal palettes rather than buildTheme configs:
 // the doc pins their exact values, and buildTheme's mixing would drift from
@@ -307,7 +308,7 @@ const RIOT_THEME = skinTheme("riot", "Riot", "dark", {
   accent: "#C7261B", accent2: "#F2EDE1",
   surface: "#F2EDE1", onSurface: "#0B0B0B",
   line: "rgba(242,237,225,.22)", glow: "none",
-  fontDisplay: "'RookiePunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   bandBg: "#F2EDE1",
   pageTexture: "radial-gradient(rgba(242,237,225,.05) 1px, transparent 1px) 0 0/3px 3px",
   semantic: { gm: "#F2EDE1", player: "#C7261B", paid: "#C7261B", free: "#8A8378", active: "#F2EDE1", hold: "#8A8378", danger: "#C7261B" },
@@ -320,7 +321,7 @@ const NEON_THEME = skinTheme("neon", "Neon", "dark", {
   accent: "#FF2E88", accent2: "#B6FF2E",
   surface: "#0F0F14", onSurface: "#F0FFE8",
   line: "rgba(182,255,46,.35)", glow: "0 0 12px rgba(182,255,46,.45)",
-  fontDisplay: "'RookiePunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   bandBg: "#0F0F14",
   bandImage: "repeating-linear-gradient(0deg, rgba(182,255,46,.07) 0 2px, transparent 2px 4px)",
   semantic: { gm: "#FF2E88", player: "#B6FF2E", paid: "#B6FF2E", free: "#B6FF2E", active: "#B6FF2E", hold: "#6F7A6A", danger: "#FF2E88" },
@@ -345,6 +346,10 @@ const ABERRANT_THEME = buildTheme("aberrant", "Аберрантный", "dark", 
 
 export const BUILTIN_THEMES: Theme[] = [ZINE_THEME, RIOT_THEME, NEON_THEME, SOY_NOIR_THEME, ABERRANT_THEME];
 
+// Тема по умолчанию — «Соевый Нуар»: на неё же настроен предзагрузочный
+// :root в index.css (защита от вспышки чужой палитры до запуска JS).
+export const DEFAULT_THEME_ID = "noir";
+
 // ---------- persistence + application ----------
 const STORAGE_KEY = "rpgManagerTheme";
 
@@ -358,12 +363,12 @@ export function loadThemePrefs(): StoredThemePrefs {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { themeId: parsed.themeId || "zine", customThemes: parsed.customThemes || [] };
+      return { themeId: parsed.themeId || DEFAULT_THEME_ID, customThemes: parsed.customThemes || [] };
     }
   } catch {
     /* ignore */
   }
-  return { themeId: "zine", customThemes: [] };
+  return { themeId: DEFAULT_THEME_ID, customThemes: [] };
 }
 
 export function saveThemePrefs(prefs: StoredThemePrefs) {
@@ -379,7 +384,12 @@ export function allThemes(customThemes: Theme[] = []): Theme[] {
 }
 
 export function findTheme(id: string, customThemes: Theme[] = []): Theme {
-  return allThemes(customThemes).find((t) => t.id === id) || BUILTIN_THEMES[0];
+  const themes = allThemes(customThemes);
+  return (
+    themes.find((t) => t.id === id) ||
+    themes.find((t) => t.id === DEFAULT_THEME_ID) ||
+    BUILTIN_THEMES[0]
+  );
 }
 
 // Personal corner-radius override (px), independent of the active theme —

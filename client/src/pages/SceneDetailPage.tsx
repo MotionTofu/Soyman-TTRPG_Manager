@@ -28,6 +28,8 @@ export function SceneDetailPage() {
 
   const [scene, setScene] = useState<StorySceneDetail | null>(null);
   const [setting, setSetting] = useState<Setting | null>(null);
+  // Нужна только ради имени в «хлебных крошках», когда сцену открыли из кампании.
+  const [campaignName, setCampaignName] = useState("");
 
   const [check, setCheck] = useState({ what: "", difficulty: "", on_success: "", on_failure: "" });
   const [reward, setReward] = useState({ what: "", where_found: "", notes: "" });
@@ -41,6 +43,11 @@ export function SceneDetailPage() {
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [sceneId, campaignId]);
+
+  useEffect(() => {
+    if (!campaignId) return;
+    api.get<{ name: string }>(`/campaigns/${campaignId}`).then((c) => setCampaignName(c.name));
+  }, [campaignId]);
 
   useEffect(() => {
     if (!scene) return;
@@ -120,15 +127,28 @@ export function SceneDetailPage() {
 
   return (
     <div className="stack">
+      {/* Из кампании крошки ведут обратно в её раздел «Главы и сцены», а не
+          в сеттинг: мастер пришёл сюда оттуда и туда же возвращается. */}
       <Breadcrumbs
-        items={[
-          { label: setting?.name ?? "Сеттинг", to: `/settings/${scene.setting_id}` },
-          {
-            label: "Приключения",
-            to: `/settings/${scene.setting_id}?tab=${encodeURIComponent("Приключения")}`,
-          },
-          { label: scene.name },
-        ]}
+        items={
+          campaignId
+            ? [
+                { label: campaignName || "Кампания", to: `/campaigns/${campaignId}` },
+                {
+                  label: "Главы и сцены",
+                  to: `/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}`,
+                },
+                { label: scene.name },
+              ]
+            : [
+                { label: setting?.name ?? "Сеттинг", to: `/settings/${scene.setting_id}` },
+                {
+                  label: "Приключения",
+                  to: `/settings/${scene.setting_id}?tab=${encodeURIComponent("Приключения")}`,
+                },
+                { label: scene.name },
+              ]
+        }
       />
 
       <div className="entity-header">

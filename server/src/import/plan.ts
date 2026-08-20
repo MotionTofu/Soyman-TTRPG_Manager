@@ -139,7 +139,8 @@ function existing(settingId: number | null): Record<string, ExistingIndex> {
       q<ExistingRow>(
         `SELECT id, name, '' as short_name, '[]' as aliases, '' as name_original, kind as hint
          FROM story_arcs
-         WHERE setting_id = ? AND archived_at IS NULL AND kind = 'adventure'`
+         WHERE setting_id = ? AND archived_at IS NULL AND kind = 'adventure'
+           AND campaign_id IS NULL`
       ),
       "adventure"
     ),

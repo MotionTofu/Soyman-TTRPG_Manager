@@ -89,6 +89,7 @@ adventureImportRouter.post("/apply", (req, res) => {
   const {
     data,
     setting_id,
+    campaign_id,
     file_name,
     skip,
     reuse,
@@ -100,6 +101,7 @@ adventureImportRouter.post("/apply", (req, res) => {
   } = req.body as {
     data?: unknown;
     setting_id?: number | null;
+    campaign_id?: number | null;
     file_name?: string;
     skip?: string[];
     reuse?: Record<string, string>;
@@ -128,6 +130,7 @@ adventureImportRouter.post("/apply", (req, res) => {
   try {
     const applied = applyImport(result.data, {
       settingId,
+      campaignId: campaign_id ?? null,
       fileName: file_name ?? "",
       knownKeys: known,
       skip,

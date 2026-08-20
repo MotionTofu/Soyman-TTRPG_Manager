@@ -7,7 +7,7 @@ export const playlistsRouter = Router();
 interface PlaylistRow {
   id: number;
   name: string;
-  scope: "session" | "setting";
+  scope: "battle";
   session_id: number | null;
   setting_id: number | null;
   created_at: string;
@@ -20,54 +20,13 @@ function withItemCount(row: PlaylistRow) {
   return { ...row, item_count: count.c };
 }
 
-// scope=session&session_id=X or scope=setting&setting_id=Y — playlists owned
-// by that entity. Omit both to list every playlist (used by the player's
-// "Открыть плейлист" navigation menu, joined with the owning session/setting
-// name so it can group them).
-playlistsRouter.get("/", (req, res) => {
-  const { scope, session_id, setting_id } = req.query as {
-    scope?: string;
-    session_id?: string;
-    setting_id?: string;
-  };
-  if (scope === "session" && session_id) {
-    const rows = db
-      .prepare("SELECT * FROM playlists WHERE scope = 'session' AND session_id = ? ORDER BY created_at")
-      .all(session_id) as PlaylistRow[];
-    return res.json(rows.map(withItemCount));
-  }
-  if (scope === "setting" && setting_id) {
-    const rows = db
-      .prepare("SELECT * FROM playlists WHERE scope = 'setting' AND setting_id = ? ORDER BY created_at")
-      .all(setting_id) as PlaylistRow[];
-    return res.json(rows.map(withItemCount));
-  }
+// Плейлист остался ровно один по смыслу — боевая тема пульта, глобальная и
+// без владельца, поэтому и фильтров по сессии/сеттингу здесь больше нет.
+playlistsRouter.get("/", (_req, res) => {
   const rows = db
-    .prepare(
-      `SELECT p.*, s.date as session_date, c.name as campaign_name, st.name as setting_name
-       FROM playlists p
-       LEFT JOIN sessions s ON s.id = p.session_id
-       LEFT JOIN campaigns c ON c.id = s.campaign_id
-       LEFT JOIN settings st ON st.id = p.setting_id
-       ORDER BY st.name, c.name, p.created_at`
-    )
-    .all() as (PlaylistRow & { session_date: string | null; campaign_name: string | null; setting_name: string | null })[];
-
-  // Same batched-lookup pattern as GET /resources — one extra query for the
-  // whole list, not N+1 — for the global Ресурсы library's multi-setting tags.
-  const linkRows = db
-    .prepare("SELECT owner_id, setting_id FROM resource_setting_links WHERE owner_type = 'playlist'")
-    .all() as { owner_id: number; setting_id: number }[];
-  const linksByPlaylist = new Map<number, number[]>();
-  for (const l of linkRows) {
-    const list = linksByPlaylist.get(l.owner_id) ?? [];
-    list.push(l.setting_id);
-    linksByPlaylist.set(l.owner_id, list);
-  }
-
-  res.json(
-    rows.map((row) => ({ ...withItemCount(row), also_in_settings: linksByPlaylist.get(row.id) ?? [] }))
-  );
+    .prepare("SELECT * FROM playlists WHERE scope = 'battle' ORDER BY name COLLATE NOCASE")
+    .all() as PlaylistRow[];
+  res.json(rows.map(withItemCount));
 });
 
 playlistsRouter.get("/:id", (req, res) => {
@@ -106,55 +65,6 @@ playlistsRouter.get("/:id", (req, res) => {
   });
 });
 
-// --- "Also present in this setting" tags (global Ресурсы library) ---
-// Marking a playlist also-in-a-setting cascades to every one of its tracks
-// (each an individual resources row) — the whole point of the feature per
-// the user's request ("если отметим плейлист, то и треки тоже отмечаются").
-
-playlistsRouter.get("/:id/settings", (req, res) => {
-  const rows = db
-    .prepare("SELECT setting_id FROM resource_setting_links WHERE owner_type = 'playlist' AND owner_id = ?")
-    .all(req.params.id) as { setting_id: number }[];
-  res.json(rows.map((r) => r.setting_id));
-});
-
-playlistsRouter.post("/:id/settings", (req, res) => {
-  const { setting_id } = req.body as { setting_id?: number };
-  if (!setting_id) return res.status(400).json({ error: "setting_id is required" });
-  const trackIds = db
-    .prepare("SELECT resource_id FROM playlist_items WHERE playlist_id = ?")
-    .all(req.params.id) as { resource_id: number }[];
-  const insertPlaylistLink = db.prepare(
-    "INSERT OR IGNORE INTO resource_setting_links (owner_type, owner_id, setting_id) VALUES ('playlist', ?, ?)"
-  );
-  const insertResourceLink = db.prepare(
-    "INSERT OR IGNORE INTO resource_setting_links (owner_type, owner_id, setting_id) VALUES ('resource', ?, ?)"
-  );
-  const tx = db.transaction(() => {
-    insertPlaylistLink.run(req.params.id, setting_id);
-    for (const t of trackIds) insertResourceLink.run(t.resource_id, setting_id);
-  });
-  tx();
-  res.json({ ok: true });
-});
-
-playlistsRouter.delete("/:id/settings/:settingId", (req, res) => {
-  const trackIds = db
-    .prepare("SELECT resource_id FROM playlist_items WHERE playlist_id = ?")
-    .all(req.params.id) as { resource_id: number }[];
-  const deletePlaylistLink = db.prepare(
-    "DELETE FROM resource_setting_links WHERE owner_type = 'playlist' AND owner_id = ? AND setting_id = ?"
-  );
-  const deleteResourceLink = db.prepare(
-    "DELETE FROM resource_setting_links WHERE owner_type = 'resource' AND owner_id = ? AND setting_id = ?"
-  );
-  const tx = db.transaction(() => {
-    deletePlaylistLink.run(req.params.id, req.params.settingId);
-    for (const t of trackIds) deleteResourceLink.run(t.resource_id, req.params.settingId);
-  });
-  tx();
-  res.json({ ok: true });
-});
 
 // Must be registered before PUT /:id/items/:itemId below — Express matches
 // route patterns in registration order, and "/:id/items/:itemId" matches a
@@ -192,9 +102,9 @@ playlistsRouter.post("/", (req, res) => {
     setting_id?: number;
   };
   if (!name || !name.trim()) return res.status(400).json({ error: "name is required" });
-  if (scope !== "session" && scope !== "setting") return res.status(400).json({ error: "invalid scope" });
-  if (scope === "session" && !session_id) return res.status(400).json({ error: "session_id is required" });
-  if (scope === "setting" && !setting_id) return res.status(400).json({ error: "setting_id is required" });
+  // Единственный оставшийся вид плейлиста — боевая тема, и владельца у неё
+  // нет: она глобальная, как и наборы.
+  if (scope !== "battle") return res.status(400).json({ error: "invalid scope" });
   const info = db
     .prepare("INSERT INTO playlists (name, scope, session_id, setting_id) VALUES (?, ?, ?, ?)")
     .run(name.trim(), scope, session_id ?? null, setting_id ?? null);

@@ -137,6 +137,88 @@ function sceneExtras(sceneId: number) {
 
 // ---------------------------------------------------------------- arcs
 
+// Поля приключения, которые кампания может переписать под себя. Всё
+// остальное (место в дереве, порядок, признак стандартного) принадлежит
+// сеттингу и одинаково во всех кампаниях.
+const ARC_OVERRIDE_FIELDS = [
+  "name",
+  "description",
+  "hook",
+  "recommended_level",
+  "player_count",
+  "duration",
+  "source",
+  "tags",
+] as const;
+
+interface ArcRow {
+  id: number;
+  setting_id: number;
+  parent_id: number | null;
+  campaign_id: number | null;
+  source_arc_id: number | null;
+  name: string;
+  is_default: number;
+  position: number;
+}
+
+// Правки приключений, сделанные внутри кампании, ключ — оригинал из
+// сеттинга. Копия несёт только собственные тексты: главы, сцены, вехи и
+// тайны всегда висят на оригинальной строке, поэтому наружу отдаётся id
+// оригинала с подменёнными текстами, а не id копии. Иначе пришлось бы
+// переклеивать половину базы при первой же правке названия.
+function arcOverrideMap(campaignId: number, settingId: number): Map<number, Record<string, unknown>> {
+  const rows = db
+    .prepare(
+      `SELECT * FROM story_arcs
+       WHERE campaign_id = ? AND setting_id = ? AND source_arc_id IS NOT NULL
+         AND archived_at IS NULL`
+    )
+    .all(campaignId, settingId) as Record<string, unknown>[];
+  return new Map(rows.map((r) => [r.source_arc_id as number, r]));
+}
+
+function applyArcOverride(
+  arc: Record<string, unknown>,
+  override: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (!override) return { ...arc, is_override: false, override_id: null };
+  const patch: Record<string, unknown> = {};
+  for (const f of ARC_OVERRIDE_FIELDS) patch[f] = override[f];
+  return { ...arc, ...patch, is_override: true, override_id: override.id as number };
+}
+
+// Строка приключения, в которую должна уйти правка, сделанная внутри
+// кампании: уже существующая копия, свежая копия или сам оригинал, когда
+// правят из сеттинга. Дети не копируются — глава получает свою копию только
+// тогда, когда правят саму главу.
+function resolveWritableArc(arcId: number, campaignId: number | null): ArcRow | null {
+  const arc = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(arcId) as ArcRow | undefined;
+  if (!arc) return null;
+  if (campaignId == null || arc.campaign_id === campaignId) return arc;
+
+  const existing = db
+    .prepare(
+      "SELECT * FROM story_arcs WHERE campaign_id = ? AND source_arc_id = ? AND archived_at IS NULL"
+    )
+    .get(campaignId, arcId) as ArcRow | undefined;
+  if (existing) return existing;
+
+  const info = db
+    .prepare(
+      `INSERT INTO story_arcs
+         (setting_id, parent_id, campaign_id, source_arc_id, name, kind, description, hook,
+          recommended_level, player_count, duration, source, tags, thumbnail_image_path,
+          is_default, position)
+       SELECT setting_id, parent_id, ?, id, name, kind, description, hook,
+              recommended_level, player_count, duration, source, tags, thumbnail_image_path,
+              0, position
+       FROM story_arcs WHERE id = ?`
+    )
+    .run(campaignId, arcId);
+  return db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(Number(info.lastInsertRowid)) as ArcRow;
+}
+
 const ARC_FIELDS = [
   "name",
   "kind",
@@ -168,10 +250,20 @@ function ensureDefaultArc(settingId: number): number {
         )
         .run(settingId).lastInsertRowid
     );
-  db.prepare("UPDATE story_scenes SET arc_id = ? WHERE setting_id = ? AND arc_id IS NULL").run(
-    id,
-    settingId
-  );
+  // Подметание бесхозных сцен — запись, а её нельзя делать на каждое чтение:
+  // раздел кампании читает список приключений при каждом обновлении, и лишний
+  // UPDATE каждый раз берёт блокировку записи в WAL (на медленном диске это
+  // ощущается как подвисание интерфейса). Сначала дешёвая проверка, есть ли
+  // вообще что подметать.
+  const orphan = db
+    .prepare("SELECT 1 FROM story_scenes WHERE setting_id = ? AND arc_id IS NULL LIMIT 1")
+    .get(settingId);
+  if (orphan) {
+    db.prepare("UPDATE story_scenes SET arc_id = ? WHERE setting_id = ? AND arc_id IS NULL").run(
+      id,
+      settingId
+    );
+  }
   return id;
 }
 
@@ -183,14 +275,15 @@ function sceneCountSql(alias: string) {
   return `(SELECT COUNT(*) FROM story_scenes s
              JOIN story_arcs sc ON sc.id = s.arc_id
             WHERE (sc.id = ${alias}.id OR sc.parent_id = ${alias}.id)
-              AND sc.archived_at IS NULL
+              AND sc.archived_at IS NULL AND sc.campaign_id IS NULL
               AND s.campaign_id IS NULL AND s.archived_at IS NULL)`;
 }
 
 /** Глав у приключения: у книжного их пять-шесть, у самодельного обычно ноль. */
 function chapterCountSql(alias: string) {
   return `(SELECT COUNT(*) FROM story_arcs c
-            WHERE c.parent_id = ${alias}.id AND c.archived_at IS NULL)`;
+            WHERE c.parent_id = ${alias}.id AND c.archived_at IS NULL
+              AND c.campaign_id IS NULL)`;
 }
 
 storyRouter.get("/arcs", (req, res) => {
@@ -202,7 +295,7 @@ storyRouter.get("/arcs", (req, res) => {
       `SELECT a.*, ${sceneCountSql("a")} as scene_count,
               ${chapterCountSql("a")} as chapter_count
        FROM story_arcs a
-       WHERE a.setting_id = ? AND a.archived_at IS NULL
+       WHERE a.setting_id = ? AND a.archived_at IS NULL AND a.campaign_id IS NULL
        ORDER BY a.position, a.id`
     )
     .all(setting_id);
@@ -223,7 +316,8 @@ storyRouter.get("/arcs/:id", (req, res) => {
   const chapters = db
     .prepare(
       `SELECT a.*, ${sceneCountSql("a")} as scene_count FROM story_arcs a
-       WHERE a.parent_id = ? AND a.archived_at IS NULL ORDER BY a.position, a.id`
+       WHERE a.parent_id = ? AND a.archived_at IS NULL AND a.campaign_id IS NULL
+       ORDER BY a.position, a.id`
     )
     .all(arc.id) as { id: number }[];
   const arcIds = [arc.id, ...chapters.map((c) => c.id)];
@@ -266,16 +360,23 @@ storyRouter.get("/arcs/:id", (req, res) => {
       .sort((a, b) => a.position - b.position || a.id - b.id);
   }
 
+  // Собственные вехи и тайны кампании, доложенные в это приключение, идут
+  // в общем списке с его родными: для мастера это один список целей.
   const milestones = db
     .prepare(
       `SELECT m.*, s.name as scene_name FROM story_milestones m
        LEFT JOIN story_scenes s ON s.id = m.scene_id
-       WHERE m.arc_id = ? ORDER BY m.position, m.id`
+       WHERE m.arc_id = @arc AND (m.campaign_id IS NULL OR m.campaign_id = @campaign)
+       ORDER BY m.position, m.id`
     )
-    .all(arc.id) as { id: number }[];
+    .all({ arc: arc.id, campaign: campaignId }) as { id: number }[];
   const secrets = db
-    .prepare("SELECT * FROM story_secrets WHERE arc_id = ? ORDER BY position, id")
-    .all(arc.id) as { id: number }[];
+    .prepare(
+      `SELECT * FROM story_secrets
+       WHERE arc_id = @arc AND (campaign_id IS NULL OR campaign_id = @campaign)
+       ORDER BY position, id`
+    )
+    .all({ arc: arc.id, campaign: campaignId }) as { id: number }[];
   if (campaignId != null) {
     const ms = db.prepare(
       "SELECT achieved, note FROM campaign_milestone_state WHERE campaign_id = ? AND milestone_id = ?"
@@ -312,9 +413,12 @@ storyRouter.get("/arcs/:id", (req, res) => {
       : []),
   ];
 
+  const overrides = campaignId != null ? arcOverrideMap(campaignId, arc.setting_id) : null;
   res.json({
-    ...arc,
-    chapters,
+    ...applyArcOverride(arc as unknown as Record<string, unknown>, overrides?.get(arc.id)),
+    chapters: chapters.map((c) =>
+      applyArcOverride(c as unknown as Record<string, unknown>, overrides?.get(c.id))
+    ),
     scenes,
     milestones,
     secrets,
@@ -433,17 +537,40 @@ storyRouter.put("/arcs/:id", (req, res) => {
   if (arc.is_default === 1 && req.body.name !== undefined) {
     return res.status(400).json({ error: "Стандартное приключение нельзя переименовать" });
   }
+  // Правка изнутри кампании уходит в её собственную копию приключения, а не
+  // в оригинал сеттинга, который читают все остальные кампании.
+  const campaignId = req.body.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableArc(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  const allowed: readonly string[] = campaignId != null ? ARC_OVERRIDE_FIELDS : ARC_FIELDS;
+
   const sets: string[] = [];
   const values: unknown[] = [];
-  for (const field of ARC_FIELDS) {
+  for (const field of allowed) {
     if (req.body[field] === undefined) continue;
     sets.push(`${field} = ?`);
     values.push(req.body[field]);
   }
   if (sets.length > 0) {
-    db.prepare(`UPDATE story_arcs SET ${sets.join(", ")} WHERE id = ?`).run(...values, req.params.id);
+    db.prepare(`UPDATE story_arcs SET ${sets.join(", ")} WHERE id = ?`).run(...values, target.id);
   }
-  res.json(db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(req.params.id));
+  const saved = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(target.id) as Record<string, unknown>;
+  if (campaignId == null) return res.json(saved);
+  const original = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(req.params.id) as Record<string, unknown>;
+  res.json(applyArcOverride(original, saved));
+});
+
+// Отказ от собственной версии приключения: копия кампании удаляется, и
+// сквозь неё снова виден оригинал сеттинга. Главы и сцены со своими копиями
+// живут отдельно и этой кнопкой не затрагиваются.
+storyRouter.post("/arcs/:id/revert", (req, res) => {
+  const campaignId = Number(req.body.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  db.prepare("DELETE FROM story_arcs WHERE campaign_id = ? AND source_arc_id = ?").run(
+    campaignId,
+    req.params.id
+  );
+  res.json({ ok: true });
 });
 
 storyRouter.delete("/arcs/:id", (req, res) => {
@@ -455,6 +582,287 @@ storyRouter.delete("/arcs/:id", (req, res) => {
   }
   db.prepare("UPDATE story_arcs SET archived_at = datetime('now') WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// ------------------------------------------- приключения кампании (привязка)
+
+// Кампания видит не все приключения своего сеттинга, а только привязанные —
+// иначе сеттинг с тремя импортированными книгами превращает её разделы в
+// свалку из чужих глав. «Сцены вне приключений» привязки не требуют: они
+// есть у кампании всегда и отвязать их нельзя, иначе собственные сцены
+// кампании пропадут с экрана, оставшись в базе.
+const HAS_CAMPAIGN_EDITS_SQL = `
+  SELECT (
+    EXISTS (SELECT 1 FROM story_arcs o
+             WHERE o.campaign_id = @campaign
+               AND o.source_arc_id IN (SELECT id FROM story_arcs WHERE id = @arc OR parent_id = @arc))
+    OR EXISTS (SELECT 1 FROM story_scenes s
+                WHERE s.campaign_id = @campaign
+                  AND s.arc_id IN (SELECT id FROM story_arcs WHERE id = @arc OR parent_id = @arc))
+    OR EXISTS (SELECT 1 FROM campaign_scene_state st JOIN story_scenes s ON s.id = st.scene_id
+                WHERE st.campaign_id = @campaign
+                  AND s.arc_id IN (SELECT id FROM story_arcs WHERE id = @arc OR parent_id = @arc))
+    OR EXISTS (SELECT 1 FROM story_milestones m
+                WHERE m.campaign_id = @campaign AND m.arc_id = @arc)
+    OR EXISTS (SELECT 1 FROM story_secrets x
+                WHERE x.campaign_id = @campaign AND x.arc_id = @arc)
+    OR EXISTS (SELECT 1 FROM campaign_milestone_state ms JOIN story_milestones m2 ON m2.id = ms.milestone_id
+                WHERE ms.campaign_id = @campaign AND m2.arc_id = @arc)
+    OR EXISTS (SELECT 1 FROM campaign_secret_state ss JOIN story_secrets s2 ON s2.id = ss.secret_id
+                WHERE ss.campaign_id = @campaign AND s2.arc_id = @arc)
+  ) as has_edits`;
+
+function campaignSettingId(campaignId: number): number | null {
+  const row = db.prepare("SELECT setting_id FROM campaigns WHERE id = ?").get(campaignId) as
+    | { setting_id: number | null }
+    | undefined;
+  return row?.setting_id ?? null;
+}
+
+// Приключения кампании в порядке привязки, с подменёнными текстами и
+// «Сценами вне приключений» последним блоком.
+function campaignAdventures(
+  campaignId: number
+): (Record<string, unknown> & { has_campaign_edits: boolean })[] {
+  const settingId = campaignSettingId(campaignId);
+  if (settingId == null) return [];
+  ensureDefaultArc(settingId);
+  const rows = db
+    .prepare(
+      `SELECT a.*, ca.position as link_position, ${sceneCountSql("a")} as scene_count,
+              ${chapterCountSql("a")} as chapter_count
+       FROM campaign_adventures ca
+       JOIN story_arcs a ON a.id = ca.arc_id
+       WHERE ca.campaign_id = ? AND a.archived_at IS NULL AND a.campaign_id IS NULL
+       ORDER BY ca.position, a.id`
+    )
+    .all(campaignId) as Record<string, unknown>[];
+  const bucket = db
+    .prepare(
+      `SELECT a.*, 1000000 as link_position, ${sceneCountSql("a")} as scene_count,
+              ${chapterCountSql("a")} as chapter_count
+       FROM story_arcs a
+       WHERE a.setting_id = ? AND a.is_default = 1 AND a.archived_at IS NULL`
+    )
+    .all(settingId) as Record<string, unknown>[];
+  const overrides = arcOverrideMap(campaignId, settingId);
+  const hasEdits = db.prepare(HAS_CAMPAIGN_EDITS_SQL);
+  return [...rows, ...bucket].map((a) => ({
+    ...applyArcOverride(a, overrides.get(a.id as number)),
+    has_campaign_edits:
+      !!(hasEdits.get({ campaign: campaignId, arc: a.id }) as { has_edits: number }).has_edits,
+  }));
+}
+
+storyRouter.get("/campaign-adventures", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  res.json(campaignAdventures(campaignId));
+});
+
+// Что ещё можно добавить в кампанию: приключения её сеттинга, которых в ней
+// пока нет.
+storyRouter.get("/campaign-adventures/available", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  const settingId = campaignSettingId(campaignId);
+  if (settingId == null) return res.json([]);
+  res.json(
+    db
+      .prepare(
+        `SELECT a.id, a.name, a.recommended_level, ${sceneCountSql("a")} as scene_count,
+                ${chapterCountSql("a")} as chapter_count
+         FROM story_arcs a
+         WHERE a.setting_id = ? AND a.archived_at IS NULL AND a.campaign_id IS NULL
+           AND a.parent_id IS NULL AND a.is_default = 0
+           AND a.id NOT IN (SELECT arc_id FROM campaign_adventures WHERE campaign_id = ?)
+         ORDER BY a.position, a.id`
+      )
+      .all(settingId, campaignId)
+  );
+});
+
+storyRouter.post("/campaign-adventures", (req, res) => {
+  const { campaign_id, arc_id } = req.body as { campaign_id?: number; arc_id?: number };
+  if (!campaign_id || !arc_id) {
+    return res.status(400).json({ error: "campaign_id and arc_id are required" });
+  }
+  const position =
+    (db
+      .prepare("SELECT IFNULL(MAX(position), -1) as m FROM campaign_adventures WHERE campaign_id = ?")
+      .get(campaign_id) as { m: number }).m + 1;
+  db.prepare(
+    "INSERT OR IGNORE INTO campaign_adventures (campaign_id, arc_id, position) VALUES (?, ?, ?)"
+  ).run(campaign_id, arc_id, position);
+  res.status(201).json({ ok: true });
+});
+
+storyRouter.put("/campaign-adventures/reorder", (req, res) => {
+  const { campaign_id, order } = req.body as { campaign_id?: number; order?: number[] };
+  if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  const setPos = db.prepare(
+    "UPDATE campaign_adventures SET position = ? WHERE campaign_id = ? AND arc_id = ?"
+  );
+  db.transaction((ids: number[]) => ids.forEach((id, i) => setPos.run(i, campaign_id, id)))(order ?? []);
+  res.json({ ok: true });
+});
+
+// Отвязка убирает только связь. Собственные копии приключения, глав и сцен,
+// а также прогресс кампании остаются в базе и вернутся, если приключение
+// привязать заново.
+storyRouter.delete("/campaign-adventures", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  const arcId = Number(req.query.arc_id);
+  if (!campaignId || !arcId) {
+    return res.status(400).json({ error: "campaign_id and arc_id are required" });
+  }
+  db.prepare("DELETE FROM campaign_adventures WHERE campaign_id = ? AND arc_id = ?").run(
+    campaignId,
+    arcId
+  );
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------- разделы профиля кампании
+
+// Сцены привязанных приключений: оригиналы сеттинга с подменёнными копиями
+// кампании, её собственные сцены и её же прогресс. Ключ — arc_id оригинала:
+// копия сцены наследует его, поэтому группировка не разъезжается.
+function campaignScenesByArc(arcIds: number[], settingId: number, campaignId: number) {
+  const byArc = new Map<number, Record<string, unknown>[]>();
+  if (arcIds.length === 0) return byArc;
+  const placeholders = arcIds.map(() => "?").join(",");
+  const originals = db
+    .prepare(
+      `SELECT * FROM story_scenes
+       WHERE arc_id IN (${placeholders}) AND campaign_id IS NULL AND archived_at IS NULL
+       ORDER BY position, id`
+    )
+    .all(...arcIds) as SceneRow[];
+  const overrides = overrideMap(campaignId, settingId);
+  const own = db
+    .prepare(
+      `SELECT * FROM story_scenes
+       WHERE campaign_id = ? AND arc_id IN (${placeholders})
+         AND source_scene_id IS NULL AND archived_at IS NULL
+       ORDER BY position, id`
+    )
+    .all(campaignId, ...arcIds) as SceneRow[];
+  const getState = db.prepare(
+    "SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?"
+  );
+  const all = [...originals.map((s) => overrides.get(s.id) ?? s), ...own]
+    .map((s) => ({
+      ...s,
+      is_override: s.campaign_id === campaignId && s.source_scene_id != null,
+      campaign_only: s.campaign_id === campaignId && s.source_scene_id == null,
+      state: getState.get(campaignId, s.id) ?? null,
+    }))
+    .sort((a, b) => a.position - b.position || a.id - b.id);
+  for (const scene of all) {
+    const key = scene.arc_id as number;
+    if (!byArc.has(key)) byArc.set(key, []);
+    byArc.get(key)!.push(scene as unknown as Record<string, unknown>);
+  }
+  return byArc;
+}
+
+// Раздел «Главы и сцены»: приключение → главы → сцены одним запросом, чтобы
+// свёрнутое дерево раскрывалось без похода на сервер за каждым уровнем.
+storyRouter.get("/campaign-tree", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  const settingId = campaignSettingId(campaignId);
+  if (settingId == null) return res.json([]);
+  const adventures = campaignAdventures(campaignId);
+  const overrides = arcOverrideMap(campaignId, settingId);
+
+  const chaptersOf = db.prepare(
+    `SELECT * FROM story_arcs
+     WHERE parent_id = ? AND archived_at IS NULL AND campaign_id IS NULL
+     ORDER BY position, id`
+  );
+  const tree = adventures.map((adv) => {
+    const advId = adv.id as number;
+    const chapters = chaptersOf.all(advId) as Record<string, unknown>[];
+    const arcIds = [advId, ...chapters.map((c) => c.id as number)];
+    const scenes = campaignScenesByArc(arcIds, settingId, campaignId);
+    return {
+      ...adv,
+      scenes: scenes.get(advId) ?? [],
+      chapters: chapters.map((c) => ({
+        ...applyArcOverride(c, overrides.get(c.id as number)),
+        scenes: scenes.get(c.id as number) ?? [],
+      })),
+    };
+  });
+  res.json(tree);
+});
+
+// Разделы «Вехи» и «Тайны и зацепки»: те же приключения, но с их вехами и
+// тайнами, плюс собственные записи кампании, не привязанные ни к одному
+// приключению.
+function campaignGrouped(campaignId: number, kind: "milestones" | "secrets") {
+  const settingId = campaignSettingId(campaignId);
+  if (settingId == null) return { groups: [], own: [] };
+  const adventures = campaignAdventures(campaignId);
+
+  const rowsFor =
+    kind === "milestones"
+      ? db.prepare(
+          `SELECT m.*, s.name as scene_name FROM story_milestones m
+           LEFT JOIN story_scenes s ON s.id = m.scene_id
+           WHERE m.arc_id = @arc AND (m.campaign_id IS NULL OR m.campaign_id = @campaign)
+           ORDER BY m.position, m.id`
+        )
+      : db.prepare(
+          `SELECT * FROM story_secrets
+           WHERE arc_id = @arc AND (campaign_id IS NULL OR campaign_id = @campaign)
+           ORDER BY position, id`
+        );
+  const stateFor =
+    kind === "milestones"
+      ? db.prepare(
+          "SELECT achieved, note FROM campaign_milestone_state WHERE campaign_id = ? AND milestone_id = ?"
+        )
+      : db.prepare(
+          "SELECT revealed, note FROM campaign_secret_state WHERE campaign_id = ? AND secret_id = ?"
+        );
+  const withState = (rows: { id: number }[]) =>
+    rows.map((r) => ({ ...r, state: stateFor.get(campaignId, r.id) ?? null }));
+
+  const groups = adventures.map((adv) => ({
+    arc: { id: adv.id as number, name: adv.name as string, is_default: adv.is_default as number },
+    items: withState(rowsFor.all({ arc: adv.id as number, campaign: campaignId }) as { id: number }[]),
+  }));
+
+  const ownRows =
+    kind === "milestones"
+      ? (db
+          .prepare(
+            `SELECT m.*, s.name as scene_name FROM story_milestones m
+             LEFT JOIN story_scenes s ON s.id = m.scene_id
+             WHERE m.campaign_id = ? AND m.arc_id IS NULL ORDER BY m.position, m.id`
+          )
+          .all(campaignId) as { id: number }[])
+      : (db
+          .prepare(
+            "SELECT * FROM story_secrets WHERE campaign_id = ? AND arc_id IS NULL ORDER BY position, id"
+          )
+          .all(campaignId) as { id: number }[]);
+  return { groups, own: withState(ownRows) };
+}
+
+storyRouter.get("/campaign-milestones", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  res.json(campaignGrouped(campaignId, "milestones"));
+});
+
+storyRouter.get("/campaign-secrets", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  res.json(campaignGrouped(campaignId, "secrets"));
 });
 
 // ------------------------------------------------------ milestones / secrets
@@ -474,6 +882,57 @@ storyRouter.post("/arcs/:id/milestones", (req, res) => {
     "INSERT INTO story_milestones (arc_id, scene_id, title, description, position) VALUES (?, ?, ?, ?, ?)"
   ).run(req.params.id, scene_id ?? null, title.trim(), description ?? "", position + 1);
   res.status(201).json({ ok: true });
+});
+
+// Собственная веха кампании: свободная (arc_id пустой) или доложенная в
+// приключение сеттинга, не трогая его оригинал.
+storyRouter.post("/milestones", (req, res) => {
+  const { campaign_id, arc_id, title, description, scene_id } = req.body as {
+    campaign_id?: number;
+    arc_id?: number | null;
+    title?: string;
+    description?: string;
+    scene_id?: number | null;
+  };
+  if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  if (!title?.trim()) return res.status(400).json({ error: "title is required" });
+  const position =
+    (db
+      .prepare(
+        "SELECT MAX(position) as m FROM story_milestones WHERE IFNULL(arc_id, 0) = IFNULL(?, 0)"
+      )
+      .get(arc_id ?? null) as { m: number | null }).m ?? -1;
+  const info = db
+    .prepare(
+      `INSERT INTO story_milestones (arc_id, campaign_id, scene_id, title, description, position)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(arc_id ?? null, campaign_id, scene_id ?? null, title.trim(), description ?? "", position + 1);
+  res.status(201).json(db.prepare("SELECT * FROM story_milestones WHERE id = ?").get(info.lastInsertRowid));
+});
+
+// То же для тайн и зацепок: собственная запись кампании живёт в одной модели
+// с тайнами приключений — с видом (тайна/улика/нить) и общим «раскрыта».
+storyRouter.post("/secrets", (req, res) => {
+  const { campaign_id, arc_id, title, content, kind } = req.body as {
+    campaign_id?: number;
+    arc_id?: number | null;
+    title?: string;
+    content?: string;
+    kind?: string;
+  };
+  if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  if (!title?.trim()) return res.status(400).json({ error: "title is required" });
+  const position =
+    (db
+      .prepare("SELECT MAX(position) as m FROM story_secrets WHERE IFNULL(arc_id, 0) = IFNULL(?, 0)")
+      .get(arc_id ?? null) as { m: number | null }).m ?? -1;
+  const info = db
+    .prepare(
+      "INSERT INTO story_secrets (arc_id, campaign_id, kind, title, content, position) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .run(arc_id ?? null, campaign_id, kind ?? "secret", title.trim(), content ?? "", position + 1);
+  res.status(201).json(db.prepare("SELECT * FROM story_secrets WHERE id = ?").get(info.lastInsertRowid));
 });
 
 storyRouter.put("/milestones/reorder", (req, res) => {

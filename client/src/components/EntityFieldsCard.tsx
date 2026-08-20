@@ -15,6 +15,11 @@ export interface EntityField {
   title?: string;
   // Если задано — select вместо однострочного поля.
   options?: { value: string; label: string }[];
+  // Если задано — обычное поле с подсказками: значение остаётся свободным
+  // текстом, но совпадения подставляются из справочника (мировоззрение
+  // существа книга пишет условиями — «любое не-доброе», — и загонять их в
+  // жёсткий список нельзя).
+  suggestions?: string[];
 }
 
 export type EntityFieldValues = Record<string, string>;
@@ -50,11 +55,21 @@ export function EntityFieldInputs({
               ))}
             </select>
           ) : (
-            <input
-              value={values[f.key] ?? ""}
-              placeholder={f.placeholder}
-              onChange={(e) => onChange(f.key, e.target.value)}
-            />
+            <>
+              <input
+                value={values[f.key] ?? ""}
+                placeholder={f.placeholder}
+                list={f.suggestions?.length ? `field-suggestions-${f.key}` : undefined}
+                onChange={(e) => onChange(f.key, e.target.value)}
+              />
+              {f.suggestions?.length ? (
+                <datalist id={`field-suggestions-${f.key}`}>
+                  {f.suggestions.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              ) : null}
+            </>
           )}
         </label>
       ))}
@@ -69,15 +84,24 @@ export function EntityFieldsCard({
   fields,
   onSave,
   editExtras,
+  viewExtras,
   onEditStart,
+  hideEmptyInView = false,
 }: {
   title?: string;
   fields: EntityField[];
   onSave: (values: EntityFieldValues) => Promise<unknown>;
   // Разметка, которая правится вместе с полями (у существа — сообщества).
   editExtras?: ReactNode;
+  // Разметка, которая только показывается (у существа бестиария — синонимы).
+  viewExtras?: ReactNode;
   // Дать странице переинициализировать черновики своих editExtras.
   onEditStart?: () => void;
+  // Прочерк вместо значения обещает механику, которой в системе может не
+  // быть вовсе: размера и класса опасности нет ни у одного существа Legend
+  // in the Mist. Там, где набор полей общий на все системы, незаполненное
+  // честнее не показывать.
+  hideEmptyInView?: boolean;
 }) {
   const [editMode, setEditMode] = useState(false);
   const [values, setValues] = useState<EntityFieldValues>(() => toFieldValues(fields));
@@ -121,7 +145,7 @@ export function EntityFieldsCard({
         </>
       ) : (
         <>
-          {fields.map((f) => (
+          {(hideEmptyInView ? fields.filter((f) => f.value.trim()) : fields).map((f) => (
             <div key={f.key} className="entity-field-row">
               <span className="muted">{f.label}</span>
               <span>
@@ -131,6 +155,7 @@ export function EntityFieldsCard({
               </span>
             </div>
           ))}
+          {viewExtras}
           <button onClick={startEdit} style={{ alignSelf: "flex-start" }}>
             Редактировать
           </button>

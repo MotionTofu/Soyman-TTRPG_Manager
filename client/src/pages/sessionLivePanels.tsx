@@ -4,9 +4,8 @@ import { SectionDropZone } from "../components/SectionDropZone";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { LazyDetails } from "../components/LazyDetails";
-import { SecretsTracker } from "../components/SecretsTracker";
+import { CampaignSecrets } from "../components/CampaignSecrets";
 import { RemindersWidget } from "../components/RemindersWidget";
-import { PlaylistsSection } from "../components/PlaylistsSection";
 import type { CampaignDetail, Character, SessionDetail } from "../types";
 
 // Same module-level constants as SessionDetailPage.tsx — SectionDropZone is
@@ -24,7 +23,6 @@ export type SessionPanelKey =
   | "roster"
   | "secrets"
   | "reminders"
-  | "playlist"
   | "compendium";
 
 export const SESSION_PANEL_TITLES: Record<SessionPanelKey, string> = {
@@ -35,7 +33,6 @@ export const SESSION_PANEL_TITLES: Record<SessionPanelKey, string> = {
   roster: "Состав кампании",
   secrets: "Тайны и зацепки",
   reminders: "Напоминания",
-  playlist: "Плейлист",
   compendium: "Компендиум",
 };
 
@@ -162,15 +159,11 @@ function RosterContent({ campaign, characters }: PanelProps) {
 }
 
 function SecretsContent({ campaign }: PanelProps) {
-  return <SecretsTracker campaignId={campaign.id} />;
+  return <CampaignSecrets campaignId={campaign.id} settingId={campaign.setting_id} />;
 }
 
 function RemindersContent({ campaign }: PanelProps) {
   return <RemindersWidget targetType="campaign" targetId={campaign.id} />;
-}
-
-function PlaylistContent({ sessionId, campaign }: PanelProps) {
-  return <PlaylistsSection scope="session" entityId={sessionId} settingId={campaign.setting_id} />;
 }
 
 function CompendiumContent({ campaign }: PanelProps) {
@@ -192,7 +185,6 @@ export const SESSION_PANEL_CONTENT: Record<SessionPanelKey, (props: PanelProps) 
   roster: RosterContent,
   secrets: SecretsContent,
   reminders: RemindersContent,
-  playlist: PlaylistContent,
   compendium: CompendiumContent,
 };
 
@@ -263,14 +255,6 @@ export function RemindersPanel(props: PanelProps) {
       </div>
       <RemindersContent {...props} />
     </div>
-  );
-}
-
-export function PlaylistPanel(props: PanelProps) {
-  return (
-    <LazyDetails title={SESSION_PANEL_TITLES.playlist} defaultOpen actions={<PopoutButton sessionId={props.sessionId} panelKey="playlist" />}>
-      <PlaylistContent {...props} />
-    </LazyDetails>
   );
 }
 

@@ -19,7 +19,7 @@ interface Props {
 // its tracks (see POST/DELETE /playlists/:id/settings), so this component
 // doesn't need to know that; it just calls the same two endpoint shapes for
 // both owner types. Same absolute-positioned popover pattern as
-// PlaylistNavMenu.tsx (.playlist-nav-menu), styled via .setting-links-popover.
+// SoundSetNavMenu.tsx (.playlist-nav-menu), styled via .setting-links-popover.
 export function SettingLinksPopover({ ownerType, ownerId, homeSettingId, linkedSettingIds, allSettings, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const linked = new Set(linkedSettingIds);

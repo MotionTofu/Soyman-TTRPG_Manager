@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { api } from "../api/client";
-import { useAudioPlayer, type AudioTrack } from "../audioPlayer";
+import { useSoundEngineOptional } from "../sound/engine";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { useUnloadTarget } from "../unloadTargets";
 import { NavIcon } from "./NavIcons";
@@ -14,7 +14,6 @@ import type {
   DndCreatureData,
   DndCreatureHitPoints,
   InitiativeEntry,
-  PlaylistDetail,
   SearchResult,
   SessionDetail,
   Statblock,
@@ -75,7 +74,7 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [hpAmount, setHpAmount] = useState("");
   const [conditionPickerFor, setConditionPickerFor] = useState<number | null>(null);
   const [conditionOptions, setConditionOptions] = useState<{ id: number; name: string }[]>([]);
-  const { playPlaylist } = useAudioPlayer();
+  const sound = useSoundEngineOptional();
 
   function load() {
     api.get<InitiativeEntry[]>(`/initiative-entries?session_id=${sessionId}`).then(setEntries);
@@ -284,17 +283,19 @@ export function InitiativeTracker({ sessionId }: Props) {
   async function startCombat() {
     if (aliveSorted.length === 0) return;
     await setCombat(true, aliveSorted[0].id);
-    if (session?.battle_playlist_id) {
-      const detail = await api.get<PlaylistDetail>(`/playlists/${session.battle_playlist_id}`);
-      const tracks: AudioTrack[] = detail.items
-        .filter((it) => it.src)
-        .map((it) => ({ id: it.resource_id, name: it.name, src: it.src! }));
-      if (tracks.length) playPlaylist(tracks, 0, session.battle_playlist_id);
-    }
+    // Переключение идёт через движок пульта, а не напрямую в плеер: он
+    // запоминает, что играло до боя, и показывает в пульте, что Бэкграунд
+    // сменил трекер инициативы, а не Мастер.
+    // Тема сессии главнее темы набора: сессионную выбирают под конкретный
+    // вечер, а набор заготовлен на всю кампанию.
+    const theme = session?.battle_playlist_id ?? sound?.state.data?.battle?.id ?? null;
+    if (theme) sound?.enterCombat(theme);
   }
 
   function stopCombat() {
     setCombat(false, null);
+    // Бой кончился — возвращаем то, что играло до него.
+    sound?.exitCombat();
   }
 
   function step(delta: 1 | -1) {

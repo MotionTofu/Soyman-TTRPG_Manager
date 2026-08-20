@@ -5,9 +5,10 @@ import { chapterWord, sceneWord } from "../sceneKinds";
 import type { StoryArc } from "../types";
 
 // "Приключения" — the index of a setting's prepared story blocks. Everything
-// inside one (chapters, scenes, milestones, cast…) lives on the adventure's
+// inside one (chapters, scenes, milestones, secrets) lives on the adventure's
 // own profile page, so this stays a short list instead of an endless scroll.
-// Rendered on the setting profile and, with campaignId, on a campaign's.
+// Rendered on the setting profile only: a campaign shows the adventures it is
+// linked to in its own sections instead.
 export function AdventuresTab({
   settingId,
   campaignId,
@@ -58,7 +59,7 @@ export function AdventuresTab({
     <div className="stack">
       <p className="muted">
         Приключение — блок подготовленного сюжета внутри сеттинга (книга, ваншот, арка). Внутри
-        него главы, сцены, вехи и действующие лица.{" "}
+        него главы, сцены, вехи, тайны и зацепки.{" "}
         {campaignId
           ? "Кампания видит приключения сеттинга: правка сцены создаёт копию только для этой кампании, оригинал не меняется."
           : "Кампании наследуют эти приключения и могут править сцены у себя, не трогая оригинал."}

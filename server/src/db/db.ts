@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { systemFolder } from "../services/filesystem";
+import { backfillAllSummaries } from "../services/monsterSummary";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -1437,6 +1438,152 @@ export function openDatabase(dbDir: string): Database.Database {
     )`);
   }
 
+  // Copy-on-write добрался и до самих приключений: раньше кампания могла
+  // завести свою версию сцены, а тексты приключения были общими на весь
+  // сеттинг, и правка в одной кампании меняла их всем остальным.
+  for (const [col, ddl] of [
+    [
+      "campaign_id",
+      "ALTER TABLE story_arcs ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE",
+    ],
+    [
+      "source_arc_id",
+      "ALTER TABLE story_arcs ADD COLUMN source_arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE",
+    ],
+  ] as const) {
+    if (tableExists(database, "story_arcs") && !columnExists(database, "story_arcs", col)) {
+      database.exec(ddl);
+    }
+  }
+  if (tableExists(database, "story_arcs")) {
+    database.exec(
+      "CREATE INDEX IF NOT EXISTS idx_story_arcs_campaign ON story_arcs(campaign_id, source_arc_id)"
+    );
+  }
+
+  // Какие приключения сеттинга входят в кампанию. До этой таблицы кампания
+  // показывала все приключения своего сеттинга — с тремя импортированными
+  // книгами разделы кампании превращались в свалку из чужих глав.
+  if (!tableExists(database, "campaign_adventures")) {
+    database.exec(`CREATE TABLE campaign_adventures (
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (campaign_id, arc_id)
+    )`);
+  }
+  database.exec("CREATE INDEX IF NOT EXISTS idx_campaign_adventures_arc ON campaign_adventures(arc_id)");
+
+  // Разовый перенос: существующие кампании продолжают видеть ровно то, что
+  // видели раньше — все приключения своего сеттинга; лишнее мастер отвяжет
+  // руками. «Сцены вне приключений» (is_default) не привязываются: они у
+  // кампании есть всегда. Отметка о переносе нужна отдельно от «таблица
+  // только что создана»: саму таблицу заводит schema.sql, и по её появлению
+  // судить нельзя — а повторный перенос вернул бы всё отвязанное обратно.
+  const backfillKey = "campaign_adventures_backfilled";
+  const backfilled = database
+    .prepare("SELECT value FROM app_settings WHERE key = ?")
+    .get(backfillKey) as { value: string } | undefined;
+  if (!backfilled && tableExists(database, "story_arcs")) {
+    database.exec(`INSERT OR IGNORE INTO campaign_adventures (campaign_id, arc_id, position)
+      SELECT c.id, a.id, a.position
+      FROM campaigns c
+      JOIN story_arcs a ON a.setting_id = c.setting_id
+      WHERE a.parent_id IS NULL AND a.is_default = 0 AND a.archived_at IS NULL
+        AND a.campaign_id IS NULL`);
+    database
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
+      .run(backfillKey);
+  }
+
+  // Вехи и тайны получают необязательные arc_id/campaign_id: кампания может
+  // завести свою веху или тайну — свободную или доложенную в чужое
+  // импортированное приключение. NOT NULL с arc_id снимается только полной
+  // пересборкой таблицы; создаём новую и переименовываем, как у characters
+  // выше, чтобы внешние ключи состояния не поехали.
+  for (const [table, ddl, columns] of [
+    [
+      "story_milestones",
+      `CREATE TABLE story_milestones_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+        campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+        scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        position INTEGER NOT NULL DEFAULT 0
+      )`,
+      "id, arc_id, scene_id, title, description, position",
+    ],
+    [
+      "story_secrets",
+      `CREATE TABLE story_secrets_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+        campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL DEFAULT 'secret',
+        title TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        position INTEGER NOT NULL DEFAULT 0
+      )`,
+      "id, arc_id, kind, title, content, position",
+    ],
+  ] as const) {
+    if (!tableExists(database, table)) continue;
+    if (columnIsNotNull(database, table, "arc_id")) {
+      database.exec("PRAGMA foreign_keys = OFF");
+      database.exec(`DROP TABLE IF EXISTS ${table}_new`);
+      database.exec(ddl);
+      database.exec(
+        `INSERT INTO ${table}_new (${columns}) SELECT ${columns} FROM ${table}`
+      );
+      database.exec(`DROP TABLE ${table}`);
+      database.exec(`ALTER TABLE ${table}_new RENAME TO ${table}`);
+      database.exec("PRAGMA foreign_keys = ON");
+    } else if (!columnExists(database, table, "campaign_id")) {
+      database.exec(
+        `ALTER TABLE ${table} ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE`
+      );
+    }
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_arc ON ${table}(arc_id)`);
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_campaign ON ${table}(campaign_id)`);
+  }
+
+  // Собственные тайны кампании жили в campaign_entries категории secrets —
+  // другой сущностью, без вида (тайна/улика/нить) и без привязки к
+  // приключению, хотя на экране должны стоять рядом с тайнами приключений.
+  // Переносим их в story_secrets; старые строки не удаляем, а помечаем
+  // перенесёнными, чтобы миграция оставалась обратимой.
+  if (tableExists(database, "campaign_entries") && tableExists(database, "story_secrets")) {
+    const legacy = database
+      .prepare(
+        "SELECT id, campaign_id, title, content, status FROM campaign_entries WHERE category = 'secrets' ORDER BY id"
+      )
+      .all() as { id: number; campaign_id: number; title: string; content: string; status: string }[];
+    if (legacy.length > 0) {
+      const nextPos = database.prepare(
+        "SELECT IFNULL(MAX(position), -1) + 1 as p FROM story_secrets WHERE campaign_id = ? AND arc_id IS NULL"
+      );
+      const insert = database.prepare(
+        "INSERT INTO story_secrets (campaign_id, kind, title, content, position) VALUES (?, 'secret', ?, ?, ?)"
+      );
+      const markRevealed = database.prepare(
+        `INSERT OR IGNORE INTO campaign_secret_state (campaign_id, secret_id, revealed, note)
+         VALUES (?, ?, 1, '')`
+      );
+      const move = database.transaction(() => {
+        for (const row of legacy) {
+          const pos = (nextPos.get(row.campaign_id) as { p: number }).p;
+          const info = insert.run(row.campaign_id, row.title ?? "", row.content ?? "", pos);
+          if (row.status === "done") markRevealed.run(row.campaign_id, Number(info.lastInsertRowid));
+        }
+        database.exec("UPDATE campaign_entries SET category = 'secrets_moved' WHERE category = 'secrets'");
+      });
+      move();
+    }
+  }
+
   // Синонимы имени и имя в оригинале. Один и тот же район книги разные
   // переводчики зовут «Морской округ» и «Приморский район», а сходится это
   // надёжнее всего по оригинальному «Sea Ward» — без этих двух полей вторая
@@ -1587,6 +1734,137 @@ export function openDatabase(dbDir: string): Database.Database {
       fill();
     }
   }
+
+  // Пульт звука: роль аудиоресурса и его вид на кнопке.
+  //
+  // Аудио в базе опознаётся по category = 'audio', а не по type: треки
+  // заводятся как type='link' с категорией (см. AddTracksModal на клиенте),
+  // и отдельного типа 'audio' у ресурсов никогда не было.
+  //
+  // Роль одна на файл: звук лежит ровно в одном канале. Всё существующее
+  // аудио получает «background» — оно и так собрано в плейлисты, а редкий
+  // шум дождя, попавший туда по ошибке, переставляется одним полем. Пустая
+  // роль вместо этого означала бы кучу «не разобрано», сваленную на голову
+  // в момент обновления.
+  for (const [column, def] of [
+    ["audio_role", "TEXT"], // background | ambient | weather | stinger
+    ["audio_icon", "TEXT"], // имя встроенного глифа
+    ["audio_icon_image_path", "TEXT"], // своя картинка, если глифа мало
+    // Стингер из постоянного состава пульта: он виден при любом наборе.
+    // «Бой» и «Провал» — словарь Мастера, а не свойство таверны.
+    ["audio_pinned", "INTEGER NOT NULL DEFAULT 0"],
+  ] as const) {
+    if (!columnExists(database, "resources", column)) {
+      database.exec(`ALTER TABLE resources ADD COLUMN ${column} ${def}`);
+    }
+  }
+  database.exec(
+    "UPDATE resources SET audio_role = 'background' WHERE category = 'audio' AND audio_role IS NULL"
+  );
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_resources_audio_role ON resources(audio_role) WHERE audio_role IS NOT NULL"
+  );
+
+  // uid у набора — по той же причине, что у сущностей выше: обмен наборами
+  // между Мастерами (см. later.md) обязан узнавать уже импортированный набор,
+  // иначе повторный импорт будет плодить дубли.
+  if (tableExists(database, "sound_sets")) {
+    database.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sound_sets_uid ON sound_sets(uid) WHERE uid IS NOT NULL"
+    );
+    const missingSetUids = database
+      .prepare("SELECT id FROM sound_sets WHERE uid IS NULL")
+      .all() as { id: number }[];
+    if (missingSetUids.length) {
+      const set = database.prepare("UPDATE sound_sets SET uid = ? WHERE id = ?");
+      const fill = database.transaction(() => {
+        for (const row of missingSetUids) set.run(randomUUID(), row.id);
+      });
+      fill();
+    }
+  }
+
+  // Наборы получили собственный список треков Бэкграунда и свою боевую тему,
+  // а плейлисты сеттинга и сессии перестали существовать: набор из одних
+  // треков — это и есть плейлист, только включается одной кнопкой вместе с
+  // эмбиентом. Плейлист остался в модели ровно под одну роль — боевую тему,
+  // которая переиспользуется по всей кампании и потому имеет смысл отдельно.
+  if (!columnExists(database, "sound_sets", "battle_playlist_id")) {
+    database.exec(
+      "ALTER TABLE sound_sets ADD COLUMN battle_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL"
+    );
+  }
+
+  // Разовая чистка: владелец решил не переносить ни один из старых плейлистов
+  // (все шесть были пробными или уже неактуальными), поэтому переезда состава
+  // здесь нет — только роспуск списков. Сами звуки не трогаются: удаляются
+  // playlists и playlist_items, а ресурсы остаются в библиотеке.
+  //
+  // Признак «уже сделано» — колонка scope: у боевых тем она 'battle', и
+  // старые строки со scope 'session'/'setting' после чистки не появляются.
+  if (tableExists(database, "playlists")) {
+    const legacy = database
+      .prepare("SELECT COUNT(*) AS c FROM playlists WHERE scope IN ('session', 'setting')")
+      .get() as { c: number };
+    if (legacy.c > 0) {
+      const purge = database.transaction(() => {
+        database.exec(
+          `DELETE FROM playlist_items WHERE playlist_id IN
+             (SELECT id FROM playlists WHERE scope IN ('session', 'setting'))`
+        );
+        database.exec(
+          `UPDATE sessions SET battle_playlist_id = NULL WHERE battle_playlist_id IN
+             (SELECT id FROM playlists WHERE scope IN ('session', 'setting'))`
+        );
+        database.exec("DELETE FROM resource_setting_links WHERE owner_type = 'playlist'");
+        database.exec("DELETE FROM playlists WHERE scope IN ('session', 'setting')");
+      });
+      purge();
+    }
+  }
+
+  // Плейлист набора заменён его собственным списком треков. Колонку убираем,
+  // а не оставляем пустой: оставленная, она стала бы вторым источником
+  // истины про Бэкграунд, который однажды разойдётся с первым.
+  if (columnExists(database, "sound_sets", "background_playlist_id")) {
+    database.exec("ALTER TABLE sound_sets DROP COLUMN background_playlist_id");
+  }
+
+  // Имена записи компендиума — как у сущностей сеттинга. Синонимы и
+  // оригинальное название нужны поиску (иначе «Goblin Boss» не находит
+  // «Гоблина-вожака»), короткое имя подписывает пин: карта принимает
+  // перетаскиванием любой результат поиска, включая запись бестиария.
+  for (const [column, def] of [
+    ["aliases", "TEXT NOT NULL DEFAULT '[]'"],
+    ["name_original", "TEXT NOT NULL DEFAULT ''"],
+    ["short_name", "TEXT"],
+  ] as const) {
+    if (!columnExists(database, "compendium_entries", column)) {
+      database.exec(`ALTER TABLE compendium_entries ADD COLUMN ${column} ${def}`);
+    }
+  }
+
+  // История и Поведение существа бестиария — зеркало being_chapters без
+  // campaign_id и visible_to_players: шаблон системы к кампании не привязан и
+  // игроку не синхронизируется.
+  if (!tableExists(database, "compendium_entry_chapters")) {
+    database.exec(`CREATE TABLE compendium_entry_chapters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      section TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(
+      "CREATE INDEX idx_compendium_entry_chapters_entry ON compendium_entry_chapters(entry_id)"
+    );
+  }
+
+  // Размер, тип и мировоззрение у большинства импортированных существ знает
+  // только статблок, а фильтры раздела бестиария читают data. Проход
+  // идемпотентен — заполняет пустое, ничего не перезаписывая.
+  backfillAllSummaries(database);
 
   compactIfBloated(database);
   return database;

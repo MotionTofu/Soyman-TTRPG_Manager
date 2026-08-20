@@ -5,6 +5,7 @@ import { db } from "../db/db";
 import { readFileAsBase64, systemFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { ImportedEntities, exportMention, healAllMentions, rewritePayload } from "../services/mentions";
+import { backfillEntrySummary, writeDndCreatureSummary } from "../services/monsterSummary";
 
 export const systemsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -18,10 +19,12 @@ function withThumbUrl<T extends { thumbnail_image_path?: string | null }>(row: T
 
 interface EntryRow {
   data: string;
+  aliases?: string;
   [key: string]: unknown;
 }
 // The `data` column is JSON text in SQLite; parse it so the client gets a
 // ready object instead of a string it would have to JSON.parse itself.
+// `aliases` — тем же способом и по той же причине, что у сущностей сеттинга.
 function parseEntry(row: EntryRow | undefined) {
   if (!row) return row;
   let data: unknown = {};
@@ -30,7 +33,14 @@ function parseEntry(row: EntryRow | undefined) {
   } catch {
     data = {};
   }
-  return { ...row, data };
+  let aliases: string[] = [];
+  try {
+    const parsed = JSON.parse(row.aliases || "[]");
+    if (Array.isArray(parsed)) aliases = parsed.map(String);
+  } catch {
+    aliases = [];
+  }
+  return { ...row, data, aliases };
 }
 
 // --- Compendium: per-system sections (tabs) ---
@@ -220,22 +230,34 @@ systemsRouter.get("/entries/batch", (req, res) => {
 });
 
 systemsRouter.get("/entries/:entryId", (req, res) => {
+  // Сводка существа дозаполняется из его D&D-статблока перед выдачей: у
+  // импортированных записей размер и тип знает статблок, а data пустая, и
+  // профиль иначе показывал бы прочерки поверх заполненного статблока.
+  // Заполняется только пустое — руками заданное не трогается.
+  backfillEntrySummary(db, Number(req.params.entryId));
   const row = db.prepare("SELECT * FROM compendium_entries WHERE id = ?").get(req.params.entryId) as
     | EntryRow
     | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
-  res.json(parseEntry(row));
+  const chapters = db
+    .prepare("SELECT * FROM compendium_entry_chapters WHERE entry_id = ? ORDER BY created_at, id")
+    .all(req.params.entryId);
+  res.json({ ...parseEntry(row), chapters });
 });
 
 systemsRouter.put("/entries/:entryId", (req, res) => {
-  const { name, kind, level, data, description, position } = req.body as {
-    name?: string;
-    kind?: string;
-    level?: number | null;
-    data?: unknown;
-    description?: string;
-    position?: number;
-  };
+  const { name, kind, level, data, description, position, aliases, name_original, short_name } =
+    req.body as {
+      name?: string;
+      kind?: string;
+      level?: number | null;
+      data?: unknown;
+      description?: string;
+      position?: number;
+      aliases?: string[];
+      name_original?: string;
+      short_name?: string | null;
+    };
   db.prepare(
     `UPDATE compendium_entries SET
        name = COALESCE(?, name),
@@ -243,7 +265,10 @@ systemsRouter.put("/entries/:entryId", (req, res) => {
        level = COALESCE(?, level),
        data = COALESCE(?, data),
        description = COALESCE(?, description),
-       position = COALESCE(?, position)
+       position = COALESCE(?, position),
+       aliases = COALESCE(?, aliases),
+       name_original = COALESCE(?, name_original),
+       short_name = CASE WHEN ? THEN ? ELSE short_name END
      WHERE id = ?`
   ).run(
     name ?? null,
@@ -252,9 +277,65 @@ systemsRouter.put("/entries/:entryId", (req, res) => {
     data !== undefined ? JSON.stringify(data) : null,
     description ?? null,
     position ?? null,
+    aliases !== undefined ? JSON.stringify(aliases) : null,
+    name_original ?? null,
+    short_name !== undefined ? 1 : 0,
+    short_name ?? null,
     req.params.entryId
   );
+
+  // Правка сводки уходит в статблоки того же существа: размер, тип и
+  // мировоззрение хранятся и там, и в data, и разъехавшись показывают на
+  // одной странице два разных ответа на один вопрос.
+  if (data !== undefined && data && typeof data === "object") {
+    const d = data as Record<string, unknown>;
+    const type = d.creature_type as { name?: string } | undefined;
+    writeDndCreatureSummary(db, Number(req.params.entryId), {
+      ...(typeof d.size === "string" ? { size: d.size } : {}),
+      ...(typeof d.alignment === "string" ? { alignment: d.alignment } : {}),
+      ...(type && typeof type.name === "string" ? { creatureType: type.name } : {}),
+    });
+  }
+
   res.json(parseEntry(db.prepare("SELECT * FROM compendium_entries WHERE id = ?").get(req.params.entryId) as EntryRow));
+});
+
+// --- Главы «История» и «Поведение» существа бестиария ---
+//
+// Форма маршрутов та же, что у существа сеттинга и персонажа: ChapterList
+// принимает apiBase и дальше сам знает, куда стучаться.
+systemsRouter.post("/entries/:entryId/chapters", (req, res) => {
+  const { section, title, content } = req.body as {
+    section?: string;
+    title?: string;
+    content?: string;
+  };
+  const info = db
+    .prepare(
+      "INSERT INTO compendium_entry_chapters (entry_id, section, title, content) VALUES (?, ?, ?, ?)"
+    )
+    .run(req.params.entryId, section ?? "", title ?? "", content ?? "");
+  res
+    .status(201)
+    .json(
+      db.prepare("SELECT * FROM compendium_entry_chapters WHERE id = ?").get(info.lastInsertRowid)
+    );
+});
+
+systemsRouter.put("/entries/chapters/:chapterId", (req, res) => {
+  const { title, content } = req.body as { title?: string; content?: string };
+  db.prepare(
+    `UPDATE compendium_entry_chapters SET
+       title = COALESCE(?, title),
+       content = COALESCE(?, content)
+     WHERE id = ?`
+  ).run(title ?? null, content ?? null, req.params.chapterId);
+  res.json(db.prepare("SELECT * FROM compendium_entry_chapters WHERE id = ?").get(req.params.chapterId));
+});
+
+systemsRouter.delete("/entries/chapters/:chapterId", (req, res) => {
+  db.prepare("DELETE FROM compendium_entry_chapters WHERE id = ?").run(req.params.chapterId);
+  res.json({ ok: true });
 });
 
 systemsRouter.delete("/entries/:entryId", (req, res) => {

@@ -29,6 +29,7 @@ import {
   importSystems,
   itemRarity,
   itemType,
+  parseAlignment,
   parseSizeType,
   validCompendiumIds,
 } from "./compendium";
@@ -36,6 +37,11 @@ import {
 export interface ApplyOptions {
   /** Куда импортировать. null — создать новый сеттинг из data.setting. */
   settingId: number | null;
+  /**
+   * Из какой кампании запущен импорт: приключения книги сразу привязываются
+   * к ней, раз мастер импортировал их, находясь в кампании.
+   */
+  campaignId?: number | null;
   fileName: string;
   /** Ключи прошлых батчей этого сеттинга: key → "тип:id". Многофайловость. */
   knownKeys?: Record<string, string>;
@@ -735,9 +741,12 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           // идёт название вида, в единственном числе. Промпт просит написать
           // в подсказку ровно его: «как этот монстр называется в системе».
           const title = beast.compendium_hints.find((h) => h.trim())?.trim() || beast.name;
-          const { size, type } = parseSizeType(beast.statblock?.sizeTypeAlignment ?? "");
+          const sizeTypeAlignment = beast.statblock?.sizeTypeAlignment ?? "";
+          const { size, type } = parseSizeType(sizeTypeAlignment);
           const entryData: Record<string, unknown> = {};
           if (size) entryData.size = size;
+          const alignment = parseAlignment(sizeTypeAlignment);
+          if (alignment) entryData.alignment = alignment;
           const cr = cleanChallengeRating(beast.statblock?.challengeRating ?? "");
           if (cr) entryData.cr = cr;
           const creatureType = creatureTypeRef(system.id, type);
@@ -846,6 +855,20 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         remember("story_arcs", "description", advId, adv.description);
         remember("story_arcs", "hook", advId, adv.hook);
         bump("приключения");
+      }
+
+      // Импорт из кампании сразу привязывает приключение к ней: иначе мастер
+      // импортировал книгу и не увидел бы её там, откуда начинал.
+      if (opts.campaignId) {
+        const linkPosition =
+          (db
+            .prepare(
+              "SELECT IFNULL(MAX(position), -1) as p FROM campaign_adventures WHERE campaign_id = ?"
+            )
+            .get(opts.campaignId) as { p: number }).p + 1;
+        db.prepare(
+          "INSERT OR IGNORE INTO campaign_adventures (campaign_id, arc_id, position) VALUES (?, ?, ?)"
+        ).run(opts.campaignId, advId, linkPosition);
       }
 
       // Дозалив в существующее приключение продолжает его нумерацию, а не

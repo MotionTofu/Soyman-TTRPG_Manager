@@ -3,11 +3,13 @@ import { api } from "../api/client";
 import { ResourceCard } from "../components/ResourceCard";
 import { SettingLinksPopover } from "../components/SettingLinksPopover";
 import { TemplatesTab } from "../components/TemplatesTab";
+import { SoundLibraryTab } from "../components/SoundLibraryTab";
+import { SoundSetsTab } from "../components/SoundSetsTab";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
 import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } from "../resourceCategories";
-import type { Campaign, Playlist, Resource, Setting } from "../types";
+import type { Campaign, Resource, Setting } from "../types";
 
 const TEMPLATE_TYPE = "statblock_template";
 type SortMode = "az" | "size" | "date";
@@ -25,20 +27,9 @@ function sortResources(list: Resource[], mode: SortMode): Resource[] {
   return arr;
 }
 
-function sortPlaylists(list: Playlist[], mode: SortMode): Playlist[] {
-  const arr = [...list];
-  if (mode === "az") arr.sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  // Playlists have no byte size of their own — track count stands in as the
-  // closest equivalent for the "Размер" sort.
-  else if (mode === "size") arr.sort((a, b) => b.item_count - a.item_count);
-  else arr.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-  return arr;
-}
-
 export function ResourcesListPage() {
-  const [section, setSection] = useState<"all" | "templates">("all");
+  const [section, setSection] = useState<"all" | "sound" | "sets" | "templates">("all");
   const [resources, setResources] = useState<Resource[]>([]);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [settings, setSettings] = useState<Setting[]>([]);
   const [query, setQuery] = useState("");
@@ -61,7 +52,6 @@ export function ResourcesListPage() {
     api.get<Resource[]>(`/resources?${params.toString()}`).then((all) =>
       setResources(all.filter((r) => r.type !== TEMPLATE_TYPE))
     );
-    api.get<Playlist[]>("/playlists").then(setPlaylists);
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [query]);
@@ -100,35 +90,34 @@ export function ResourcesListPage() {
     }
     return true;
   });
-  // Playlists have no campaign_id of their own (only session-scoped ones are
-  // indirectly linked via their session) — the Кампания filter only narrows
-  // resources; the Сеттинг filter applies to both.
-  const filteredPlaylists = playlists.filter((p) => {
-    if (settingFilter && p.setting_id !== settingFilter && !(p.also_in_settings ?? []).includes(settingFilter)) {
-      return false;
-    }
-    return true;
-  });
-
-  const groups = RESOURCE_CATEGORIES.map((c) => ({
+  // Звук из общего списка убран: у него есть свои вкладки «Звук» и
+  // «Аудио-наборы», где он показан по ролям, а здесь он только разбавлял
+  // карты и справочники строчками без иконок.
+  const groups = RESOURCE_CATEGORIES.filter((c) => c.key !== "audio").map((c) => ({
     ...c,
     items: sortResources(
       filteredResources.filter((r) => categoryOf(r) === c.key),
       sortMode
     ),
   })).filter((g) => g.items.length > 0);
-  const sortedPlaylists = sortPlaylists(filteredPlaylists, sortMode);
 
   return (
     <div className="stack">
       <SectionHeading section="resources">Ресурсы</SectionHeading>
       <p className="muted">
-        Библиотека всего, что есть в приложении — статблоки, лут, справочные материалы, плейлисты.
+        Библиотека всего, что есть в приложении — статблоки, лут, справочные материалы. Звук живёт
+        в своих вкладках.
       </p>
 
       <div className="tabs">
         <button className={section === "all" ? "active" : ""} onClick={() => setSection("all")}>
           Все
+        </button>
+        <button className={section === "sound" ? "active" : ""} onClick={() => setSection("sound")}>
+          Звук
+        </button>
+        <button className={section === "sets" ? "active" : ""} onClick={() => setSection("sets")}>
+          Аудио-наборы
         </button>
         <button
           className={section === "templates" ? "active" : ""}
@@ -213,7 +202,7 @@ export function ResourcesListPage() {
             </label>
           </div>
 
-          {groups.length === 0 && sortedPlaylists.length === 0 && (
+          {groups.length === 0 && (
             <EmptyState
               icon="barcode"
               title="Полки пусты"
@@ -270,41 +259,11 @@ export function ResourcesListPage() {
             </details>
           ))}
 
-          {sortedPlaylists.length > 0 && (
-            <details className="card stack">
-              <summary className="chevron-summary">
-                <NavIcon name="chevron" className="chevron-icon" />
-                <strong className="entry-title">Плейлисты</strong>{" "}
-                <span className="muted">({sortedPlaylists.length})</span>
-              </summary>
-              <div className="stack" style={{ gap: 0 }}>
-                {sortedPlaylists.map((p) => (
-                  <div key={p.id} className="resource-row row" style={{ justifyContent: "space-between" }}>
-                    <div className="row" style={{ gap: 8, minWidth: 0 }}>
-                      <span style={{ fontWeight: 600 }}>{p.name}</span>
-                      <span className="muted">{p.item_count} треков</span>
-                      <span className="muted">
-                        {p.setting_name
-                          ? `Сеттинг: ${p.setting_name}`
-                          : p.campaign_name
-                            ? `${p.campaign_name}${p.session_date ? ` — ${p.session_date}` : ""}`
-                            : ""}
-                      </span>
-                    </div>
-                    <SettingLinksPopover
-                      ownerType="playlist"
-                      ownerId={p.id}
-                      homeSettingId={p.setting_id}
-                      linkedSettingIds={p.also_in_settings ?? []}
-                      allSettings={settings}
-                      onChange={refresh}
-                    />
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
         </>
+      ) : section === "sound" ? (
+        <SoundLibraryTab />
+      ) : section === "sets" ? (
+        <SoundSetsTab />
       ) : (
         <>
           <p className="muted">

@@ -9,6 +9,8 @@ import { MobileQuickAccess, type QuickAccessContextualAction } from "./MobileQui
 import { NavIcon, type NavIconName } from "../components/NavIcons";
 import { ParticleField } from "../components/ParticleField";
 import { AudioPlayerBar, MiniPlayerBar } from "../audioPlayer";
+import { SoundEngineProvider } from "../sound/engine";
+import { SoundBarExtras, SoundSetEmpty } from "../sound/SoundBarExtras";
 import { useNearestSessionCockpitId } from "../nearestSessionCockpit";
 import { openSecondWindow } from "../electronApi";
 import { UnloadTargetsProvider } from "../unloadTargets";
@@ -63,10 +65,9 @@ const PLAYER_NAV_BOTTOM_ITEMS: NavItem[] = [
 // things worth one tap. GM's "Библиотека" points at the new /library page
 // (see LibraryPage.tsx); the player-role variant still points at /campaigns
 // as the closest existing equivalent until Phase 7 builds its own read-only
-// version. "Плеер" is a plain link to the full-screen /player library
-// (GmMusicPage.tsx) — there's no drawer to toggle anymore, playback status
-// lives in MiniPlayerBar instead (see AudioPlayerBar/MiniPlayerBar in
-// audioPlayer.tsx).
+// version. Отдельной страницы «Плеер» больше нет:
+// музыкой управляет пульт, а состояние воспроизведения видно в MiniPlayerBar
+// (см. AudioPlayerBar/MiniPlayerBar в audioPlayer.tsx).
 interface BottomNavItem {
   key: string;
   label: string;
@@ -239,7 +240,6 @@ export function AppShell() {
     ? [{ key: "home", label: "Главная", icon: "home", to: "/" }]
     : [
         { key: "players", label: "Игроки", icon: "players", to: "/players" },
-        { key: "player", label: "Плеер", icon: "player", to: "/player" },
       ];
 
   // Contextual action offered in the quick-access sheet: for the GM, jump to
@@ -257,8 +257,12 @@ export function AppShell() {
       : null;
 
   return (
-    // Провайдер обнимает и страницу, и панель поиска с мешком: зоны приёма
-    // живут на странице, а кнопка «Выгрузить» — в мешке.
+    // Движок пульта звука живёт здесь, а не в main.tsx: окно самого пульта
+    // рендерится ВНЕ AppShell, и звук в нём заводиться не должен — иначе
+    // каналы играли бы в двух окнах сразу (см. sound/engine.tsx).
+    <SoundEngineProvider>
+    {/* Провайдер обнимает и страницу, и панель поиска с мешком: зоны приёма
+        живут на странице, а кнопка «Выгрузить» — в мешке. */}
     <UnloadTargetsProvider>
     <div className={`app-shell${isLivePult ? " app-shell-live" : ""}`}>
       <div className="mobile-topbar">
@@ -332,7 +336,7 @@ export function AppShell() {
           actually playing, tapping it opens NowPlayingPage. */}
       {!isPlayer && (
         <div className="audio-player-slot">
-          <AudioPlayerBar />
+          <AudioPlayerBar extras={<SoundBarExtras />} empty={<SoundSetEmpty />} />
         </div>
       )}
       {!isPlayer && pathname !== "/now-playing" && <MiniPlayerBar />}
@@ -349,5 +353,6 @@ export function AppShell() {
       />
     </div>
     </UnloadTargetsProvider>
+    </SoundEngineProvider>
   );
 }

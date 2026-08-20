@@ -10,7 +10,10 @@ import { CampaignEntryList } from "../components/CampaignEntryList";
 import { WorldExplorationTab } from "../components/WorldExplorationTab";
 import { CampaignPlayerSectionsTab } from "../components/CampaignPlayerSectionsTab";
 import { TaskTracker } from "../components/TaskTracker";
-import { SecretsTracker } from "../components/SecretsTracker";
+import { CampaignSecrets } from "../components/CampaignSecrets";
+import { CampaignMilestones } from "../components/CampaignMilestones";
+import { CampaignChaptersScenes } from "../components/CampaignChaptersScenes";
+import { CampaignAdventuresCard } from "../components/CampaignAdventuresCard";
 import { ResourceCard } from "../components/ResourceCard";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { NavIcon } from "../components/NavIcons";
@@ -37,11 +40,10 @@ import { EntityTypeChip } from "../components/EntityTypeChip";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { cardThumbnailProps, loadThumbnailStyles, type ThumbnailStyle } from "../thumbnailStyles";
 import { loadHideFinance } from "../financePrivacy";
-import { AdventuresTab } from "../components/AdventuresTab";
 import type {
   CampaignCalendarEvent,
   CampaignDetail,
-  CampaignEntry,
+  CampaignGrouped,
   CampaignType,
   Character,
   ImportantDate,
@@ -56,19 +58,26 @@ import type {
   SessionStatus,
   SessionSummary,
   Setting,
+  StorySecret,
   System,
 } from "../types";
 
 const GM_TABS = [
   "Обзор",
   "Игроки и персонажи",
-  "Приключения",
+  // Сюжет кампании стоит сразу за игроками: к игре готовятся по нему, а не
+  // по мастерским заметкам.
+  "Главы и сцены",
+  "Вехи",
   "Тайны и зацепки",
-  "Заметки по ведению",
+  "Заметки",
   "Хроника игр",
   "Хроника мира",
   "Для игроков",
 ] as const;
+
+// Сохранённые ссылки на прежнее имя вкладки не должны падать на «Обзор».
+const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки" } as const;
 const PLAYER_TABS = ["Персонаж", "Заметки", "Клёвые цитаты", "Трекер задач", "Хроника игр", "Исследование Мира"] as const;
 
 export function CampaignDetailPage() {
@@ -81,7 +90,11 @@ export function CampaignDetailPage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const tabs = campaign?.role === "player" ? PLAYER_TABS : GM_TABS;
-  const [tab, selectTab] = useTabState(tabs, campaign?.role === "player" ? "Персонаж" : "Обзор");
+  const [tab, selectTab] = useTabState(
+    tabs,
+    campaign?.role === "player" ? "Персонаж" : "Обзор",
+    campaign?.role === "player" ? undefined : GM_TAB_ALIASES
+  );
   const [worldView, setWorldView] = useState<"calendar" | "list">(
     () => (localStorage.getItem("campaignWorldView") as "calendar" | "list") || "calendar"
   );
@@ -499,7 +512,7 @@ export function CampaignDetailPage() {
 
       {tab === "Персонаж" && <PlayerCharacterTab campaignId={campaignId} />}
 
-      {tab === "Заметки" && (
+      {tab === "Заметки" && campaign.role === "player" && (
         <CampaignEntryList
           campaignId={campaignId}
           category="notes"
@@ -519,12 +532,12 @@ export function CampaignDetailPage() {
         />
       )}
 
-      {tab === "Заметки по ведению" && (
+      {tab === "Заметки" && campaign.role !== "player" && (
         <CampaignEntryList
           campaignId={campaignId}
           category="gm_notes"
           addLabel="+ Добавить заметку"
-          emptyLabel="Заметок по ведению пока нет."
+          emptyLabel="Заметок пока нет."
           defaultSettingId={campaign.setting_id ?? undefined}
         />
       )}
@@ -533,19 +546,16 @@ export function CampaignDetailPage() {
         <TaskTracker campaignId={campaignId} defaultSettingId={campaign.setting_id ?? undefined} />
       )}
 
-      {tab === "Приключения" &&
-        (campaign.setting_id ? (
-          <div className="card stack">
-            <AdventuresTab settingId={campaign.setting_id} campaignId={campaignId} />
-          </div>
-        ) : (
-          <p className="muted">
-            Приключения живут в сеттинге — выберите сеттинг кампании во вкладке «Обзор».
-          </p>
-        ))}
+      {tab === "Главы и сцены" && (
+        <CampaignChaptersScenes campaignId={campaignId} settingId={campaign.setting_id} />
+      )}
+
+      {tab === "Вехи" && (
+        <CampaignMilestones campaignId={campaignId} settingId={campaign.setting_id} />
+      )}
 
       {tab === "Тайны и зацепки" && (
-        <SecretsTracker campaignId={campaignId} defaultSettingId={campaign.setting_id ?? undefined} />
+        <CampaignSecrets campaignId={campaignId} settingId={campaign.setting_id} />
       )}
 
       {tab === "Обзор" && (
@@ -1563,6 +1573,17 @@ function OverviewTab({
 
   return (
     <div className="stack">
+      {/* Приключения идут первым блоком: с них начинается разговор о кампании,
+          а препродакшен, продакшен и пост-продакшен — это уже её жизнь. */}
+      <details className="card" open>
+        <summary>
+          <strong className="entry-title">Приключения</strong>
+        </summary>
+        <div style={{ marginTop: 8 }}>
+          <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} />
+        </div>
+      </details>
+
       <details className="card" open={!hasSessions}>
         <summary>
           <strong className="entry-title">Препродакшен</strong>
@@ -1609,8 +1630,11 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
 
   useEffect(() => {
     api
-      .get<CampaignEntry[]>(`/campaign-entries?campaign_id=${campaign.id}&category=secrets`)
-      .then((rows) => setSecretsCount(rows.filter((r) => r.status !== "done").length));
+      .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${campaign.id}`)
+      .then((data) => {
+        const all = [...data.own, ...data.groups.flatMap((g) => g.items)];
+        setSecretsCount(all.filter((s) => s.state?.revealed !== 1).length);
+      });
   }, [campaign.id]);
 
   const today = new Date().toISOString().slice(0, 10);

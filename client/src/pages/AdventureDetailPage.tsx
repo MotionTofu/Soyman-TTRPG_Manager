@@ -5,21 +5,16 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { MentionText } from "../components/mentions/MentionText";
-import { LinkDropZone } from "../components/LinkDropZone";
 import { useTabState } from "../hooks/useTabState";
-import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
 
-const TABS = [
-  "Обзор",
-  "Главы и сцены",
-  "Вехи",
-  "Действующие лица",
-  "Награды",
-  "Тайны и зацепки",
-] as const;
+// «Действующие лица» и «Награды» убраны с профиля: список действующих лиц
+// собирался из связей сцен и информационной пользы не нёс, а награды книги без
+// работы с сокровищницей выглядели свалкой строк. Данные наград и связей
+// остались в базе нетронутыми — вернуть их будет чем.
+const TABS = ["Обзор", "Главы и сцены", "Вехи", "Тайны и зацепки"] as const;
 
 const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
@@ -66,8 +61,6 @@ export function AdventureDetailPage() {
     await api.del(`/story/arcs/${arcId}`);
     navigate(`/settings/${arc?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
   }
-
-  const sceneSuffix = campaignId ? `?campaign=${campaignId}` : "";
 
   return (
     <div className="stack">
@@ -151,9 +144,6 @@ export function AdventureDetailPage() {
             collapsible
             defaultOpen
           />
-          <div className="card">
-            <LinkDropZone entityType="adventure" entityId={arcId} title="Связанные сущности" />
-          </div>
         </div>
       )}
 
@@ -171,36 +161,6 @@ export function AdventureDetailPage() {
       )}
 
       {tab === "Вехи" && <Milestones arc={arc} campaignId={campaignId} onChange={refresh} />}
-
-      {tab === "Действующие лица" && (
-        <div className="card stack">
-          <span className="muted">
-            Собрано со всех сцен приключения: кто и что в них задействовано.
-          </span>
-          {arc.cast.map((c) => (
-            <div key={`${c.type}:${c.id}`} className="row" style={{ justifyContent: "space-between" }}>
-              <span>
-                {DETAIL_ROUTES[c.type] ? (
-                  <Link to={`${DETAIL_ROUTES[c.type]}/${c.id}`}>{c.name}</Link>
-                ) : (
-                  c.name
-                )}
-                <span className="muted"> · {ENTITY_TYPE_SINGULAR[c.type] ?? c.type}</span>
-              </span>
-              <span className="muted">{c.scenes.join(", ") || "приключение целиком"}</span>
-            </div>
-          ))}
-          {arc.cast.length === 0 && (
-            <p className="muted">
-              Пока пусто. Действующие лица появятся здесь, когда их перетащат в сцены.
-            </p>
-          )}
-        </div>
-      )}
-
-      {tab === "Награды" && (
-        <Rewards arc={arc} sceneSuffix={sceneSuffix} campaignId={campaignId} onChange={refresh} />
-      )}
 
       {tab === "Тайны и зацепки" && (
         <Secrets arc={arc} campaignId={campaignId} onChange={refresh} />
@@ -599,76 +559,6 @@ function Milestones({
           </select>
           <button className="primary" onClick={add}>
             Добавить
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Rewards({
-  arc,
-  sceneSuffix,
-  campaignId,
-  onChange,
-}: {
-  arc: StoryArcDetail;
-  sceneSuffix: string;
-  campaignId: number | null;
-  onChange: () => void;
-}) {
-  const [what, setWhat] = useState("");
-  const [where, setWhere] = useState("");
-
-  async function add() {
-    if (!what.trim()) return;
-    await api.post(`/story/arcs/${arc.id}/rewards`, { what, where_found: where });
-    setWhat("");
-    setWhere("");
-    onChange();
-  }
-
-  return (
-    <div className="card stack">
-      <span className="muted">
-        Награды уровня приключения и весь лут, разложенный по его сценам.
-      </span>
-      {arc.rewards.map((r) => (
-        <div key={r.id} className="row" style={{ justifyContent: "space-between" }}>
-          <span>
-            <strong>
-              <MentionText text={r.what} />
-            </strong>
-            {r.where_found && (
-              <span className="muted">
-                {" · "}
-                <MentionText text={r.where_found} />
-              </span>
-            )}
-            {r.notes && (
-              <div className="muted">
-                <MentionText text={r.notes} />
-              </div>
-            )}
-          </span>
-          <span className="muted">
-            {r.scene_name ? (
-              <Link to={`/scenes/${r.scene_id}${sceneSuffix}`}>{r.scene_name}</Link>
-            ) : (
-              "за приключение"
-            )}
-          </span>
-        </div>
-      ))}
-      {arc.rewards.length === 0 && <p className="muted">Наград пока нет.</p>}
-      {/* Adventure-level rewards belong to the setting and have no campaign
-          override layer, so they're only editable outside a campaign. */}
-      {!campaignId && (
-        <div className="row">
-          <input placeholder="Что" value={what} onChange={(e) => setWhat(e.target.value)} />
-          <input placeholder="За что / где" value={where} onChange={(e) => setWhere(e.target.value)} />
-          <button className="primary" onClick={add}>
-            Добавить за приключение
           </button>
         </div>
       )}

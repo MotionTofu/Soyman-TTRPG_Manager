@@ -1,0 +1,505 @@
+/* Пульт звука. Открывается отдельным окном, поэтому у него своя оболочка, а
+ * не .card/.stack общего приложения: здесь нет ни сайдбара, ни хлебных
+ * крошек, а органы управления должны попадаться не глядя.
+ *
+ * Стекло и приглушённый контраст — сознательное отступление от двух правил
+ * дизайн-системы («теней в системе нет вообще, глубину даёт инверсия» и
+ * «заливка плоская»), принятое владельцем именно для пульта. Прозрачности
+ * считаются от токенов темы через color-mix, поэтому пульт остаётся рабочим
+ * в любой теме, а не только в тёмной.
+ *
+ * Активная кнопка канала — единственное место, где стекла нет: она
+ * инвертирована в плотную плашку. Это единственный способ понять «что
+ * сейчас играет», не вглядываясь в экран. */
+
+.sc-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--paper);
+  background-image:
+    radial-gradient(900px 420px at 12% -8%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%),
+    radial-gradient(760px 380px at 88% 6%, color-mix(in srgb, var(--ink) 7%, transparent), transparent 60%);
+  color: var(--ink);
+  font-family: var(--font-body);
+  overflow: hidden;
+}
+
+.sc-glass {
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(
+    158deg,
+    color-mix(in srgb, var(--ink) 12%, transparent),
+    color-mix(in srgb, var(--ink) 3%, transparent) 46%,
+    color-mix(in srgb, var(--ink) 6%, transparent)
+  );
+  backdrop-filter: blur(26px) saturate(140%);
+  box-shadow:
+    0 26px 60px rgba(0, 0, 0, 0.55),
+    0 2px 10px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 color-mix(in srgb, var(--ink) 22%, transparent),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.sc-head,
+.sc-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-4) 22px;
+  backdrop-filter: blur(24px) saturate(140%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ink) 10%, transparent), color-mix(in srgb, var(--ink) 3%, transparent));
+}
+.sc-head {
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 color-mix(in srgb, var(--ink) 18%, transparent);
+}
+.sc-foot {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.sc-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.sc-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sc-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sc-chip,
+.sc-ghost {
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink-2, var(--ink));
+  backdrop-filter: blur(10px);
+}
+.sc-chip.active {
+  background: color-mix(in srgb, var(--ink) 86%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 90%, transparent);
+  color: var(--paper);
+}
+
+.sc-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1.55fr 1fr 1fr 1.06fr;
+  gap: var(--sp-3);
+  padding: var(--sp-4) 22px;
+}
+
+.sc-channel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.sc-channel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 9px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ink) 16%, transparent), color-mix(in srgb, var(--ink) 6%, transparent));
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.sc-channel-state {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.sc-channel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
+.sc-pads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.sc-pads.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.sc-pad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 74px;
+  padding: 4px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.15;
+}
+.sc-pad.active {
+  background: color-mix(in srgb, var(--ink) 86%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 90%, transparent);
+  color: var(--paper);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+/* Выбран, но канал остановлен: полная подсветка соврала бы про звук,
+   погашенный пад — про выбор. */
+.sc-pad.active.stopped {
+  background: color-mix(in srgb, var(--ink) 34%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+  color: color-mix(in srgb, var(--paper) 78%, transparent);
+  box-shadow: none;
+}
+.sc-pad.missing {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: color-mix(in srgb, var(--ink) 40%, transparent);
+  cursor: not-allowed;
+}
+.sc-pad-note {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.sc-pad-key {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+.sc-pad.active .sc-pad-key {
+  color: var(--paper);
+}
+.sc-pad-dot {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
+}
+
+.sc-more {
+  border-radius: 0;
+  padding: 7px;
+  border: 1px dashed color-mix(in srgb, var(--ink) 24%, transparent);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Крутилка. Круг вместо полоски — потому что за столом важнее увидеть
+ * положение боковым зрением, чем попасть по нему точно. */
+.sc-knob-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.sc-knob {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  background: radial-gradient(
+    138px 138px at 34% 26%,
+    rgba(255, 255, 255, 0.18),
+    color-mix(in srgb, var(--ink) 5%, transparent) 46%,
+    rgba(0, 0, 0, 0.3)
+  );
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.55),
+    inset 0 2px 3px rgba(255, 255, 255, 0.28),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.sc-knob.dragging {
+  cursor: grabbing;
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.55),
+    inset 0 2px 3px rgba(255, 255, 255, 0.28),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.45),
+    0 0 0 4px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+/* Только собственная графика ручки, но не значок внутри кнопки стопа: тот
+   лежит в потоке кнопки и центрируется ею. */
+.sc-knob > svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+.sc-knob-stop svg {
+  position: static;
+  display: block;
+  pointer-events: none;
+}
+/* Внутренний круг ручки — настоящая кнопка: попадать в неё надо не глядя,
+   поэтому она ровно того же размера, что нарисованный круг под ней. */
+.sc-knob-stop {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  background: rgba(0, 0, 0, 0.28);
+  /* Знак рисуется чернилами, а не бумагой: центр ручки — это тёмный намыв
+     поверх светлой шайбы, и светлый знак на нём почти не читается. */
+  color: color-mix(in srgb, var(--ink) 82%, transparent);
+  cursor: pointer;
+}
+.sc-knob-stop:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.38);
+  color: var(--ink);
+}
+.sc-knob-stop:disabled {
+  cursor: default;
+  color: color-mix(in srgb, var(--ink) 30%, transparent);
+}
+/* Остановленный канал: кольцо гаснет, знак в центре — «играть». Вместе это
+   читается без вглядывания: что звучит, видно по кольцу, что будет по
+   нажатию — по знаку. */
+.sc-knob.stopped svg {
+  opacity: 0.45;
+}
+.sc-knob.stopped .sc-knob-stop svg {
+  opacity: 1;
+}
+
+.sc-knob-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-bright, var(--ink));
+}
+
+.sc-duck {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sc-duck.on {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.sc-silence {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+  border-radius: 0;
+  padding: 13px 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 85%, transparent);
+  background: color-mix(in srgb, var(--accent) 72%, transparent);
+  color: var(--accent-text, var(--paper));
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+}
+.sc-silence.on {
+  background: color-mix(in srgb, var(--ink) 86%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 90%, transparent);
+  color: var(--paper);
+}
+
+.sc-master {
+  position: relative;
+  flex: 1 1 auto;
+  height: 8px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  cursor: pointer;
+}
+.sc-master-fill {
+  height: 6px;
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+
+.sc-track-now {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+/* Список забирает весь остаток колонки и прокручивается внутри себя:
+   фиксированная высота либо оставляет дыру на коротком плейлисте, либо
+   режет длинный. Ручка громкости остаётся прибитой к низу канала. */
+.sc-track-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  padding-top: var(--sp-3);
+}
+.sc-track-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 5px 6px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sc-track-row:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--text-bright, var(--ink));
+}
+.sc-track-num {
+  flex: 0 0 auto;
+  min-width: 1.6em;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+.sc-track-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Играющая строка — плотная плашка, как активная кнопка канала: понять «что
+   сейчас играет» надо не вглядываясь. */
+.sc-track-row.active {
+  background: color-mix(in srgb, var(--ink) 86%, transparent);
+  color: var(--paper);
+  cursor: default;
+}
+.sc-track-row.active:hover {
+  background: color-mix(in srgb, var(--ink) 86%, transparent);
+  color: var(--paper);
+}
+
+.sc-progress {
+  height: 5px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.sc-progress-fill {
+  height: 3px;
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+
+.sc-empty {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.sc-warn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 8px 22px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+/* Индикаторы остальных каналов в нижней панели приложения: только
+ * состояние, без органов управления — панель говорит, что звучит, а крутят
+ * это в пульте. */
+.audio-player-bar .sc-bar-channels {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.audio-player-bar .sc-bar-channel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.audio-player-bar .sc-bar-channel.off {
+  opacity: 0.45;
+}

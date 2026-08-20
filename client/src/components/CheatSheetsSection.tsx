@@ -6,7 +6,7 @@ import { abilityModifier, parseBonus, SKILLS_BY_ABILITY } from "./dnd/AbilitySco
 import { computeArmorClass } from "./dnd/armorClass";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
-import type { Character, CampaignEntry, DndCharacterData, SettingBeing, Statblock } from "../types";
+import type { Character, DndCharacterData, SettingBeing, Statblock, StorySecret } from "../types";
 
 type SheetFormat = "a4" | "a5";
 type SheetKind = "session" | "combat" | "characters";
@@ -44,7 +44,7 @@ interface Props {
   campaignId: number;
   ideaNotes: string;
   cheatsheetData: string | null;
-  unrevealedSecrets: CampaignEntry[];
+  unrevealedSecrets: StorySecret[];
 }
 
 async function loadLinkedLabels(sessionId: number, section: string): Promise<LinkedEntry[]> {
@@ -407,7 +407,7 @@ function SessionSheetTable({
   onBlurSave,
 }: {
   sheet: SessionCheatsheetData;
-  unrevealedSecrets: CampaignEntry[];
+  unrevealedSecrets: StorySecret[];
   onUpdateLine: (section: "locations" | "npcs" | "loot", id: string, note: string) => void;
   onUpdateText: (field: "notes" | "clues", value: string) => void;
   onBlurSave: () => void;
@@ -520,7 +520,7 @@ function SessionPrintView({
   unrevealedSecrets,
 }: {
   sheet: SessionCheatsheetData;
-  unrevealedSecrets: CampaignEntry[];
+  unrevealedSecrets: StorySecret[];
 }) {
   function printList(lines: CheatsheetLine[]) {
     return (
