@@ -10,6 +10,7 @@ import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
 import { Dice } from "../components/Dice";
 import { EmptyState } from "../components/EmptyState";
+import { HomeArticleCard } from "../components/HomeArticleCard";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { hasElectronAPI } from "../electronApi";
 import { loadHideFinance } from "../financePrivacy";
@@ -224,6 +225,9 @@ export function HomeCalendarPage() {
               )}
             </div>
           </div>
+
+          {/* Случайная статья из справочника — «Напомню!». */}
+          <HomeArticleCard />
         </div>
 
         {/* Rail — stack of narrow widgets. */}

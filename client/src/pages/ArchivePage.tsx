@@ -20,6 +20,53 @@ const RESTORE_ENDPOINTS: Record<string, string> = {
 
 const TABS = ["Сущности", "Файлы"] as const;
 
+// Что необратимо оборвётся вместе с сущностью (server/src/routes/archive.ts).
+// Кампании перечисляются поимённо: сводное «5 кампаний» не даёт понять, что
+// среди них та, которую ведут в эту субботу.
+interface PurgeImpact {
+  detachedCampaigns: string[];
+  compendiumLinks: number;
+  baseMonsters: number;
+  resources: number;
+  characters: number;
+  masteringNotes: number;
+  modules: number;
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return `${n} ${many}`;
+  if (mod10 === 1) return `${n} ${one}`;
+  if (mod10 >= 2 && mod10 <= 4) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+function impactLines(impact: PurgeImpact | null): string[] {
+  if (!impact) return [];
+  const lines: string[] = [];
+  if (impact.detachedCampaigns.length > 0) {
+    lines.push(
+      `Останутся без системы: ${impact.detachedCampaigns.join(", ")}. Систему им придётся выбрать заново.`
+    );
+  }
+  const severed: string[] = [];
+  if (impact.compendiumLinks > 0)
+    severed.push(plural(impact.compendiumLinks, "связь", "связи", "связей") + " со справочником и бестиарием");
+  if (impact.baseMonsters > 0)
+    severed.push(plural(impact.baseMonsters, "досье", "досье", "досье") + " существ потеряют базовый статблок");
+  if (impact.characters > 0)
+    severed.push(plural(impact.characters, "персонаж", "персонажа", "персонажей") + " останутся без системы");
+  if (impact.resources > 0)
+    severed.push(plural(impact.resources, "ресурс", "ресурса", "ресурсов") + " потеряют привязку");
+  if (impact.masteringNotes > 0)
+    severed.push(plural(impact.masteringNotes, "заметка", "заметки", "заметок") + " мастерения потеряют привязку");
+  if (impact.modules > 0)
+    severed.push(plural(impact.modules, "модуль", "модуля", "модулей") + " будет удалён");
+  if (severed.length > 0) lines.push(`Будет разорвано: ${severed.join("; ")}.`);
+  return lines;
+}
+
 function formatSize(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} МБ` : `${(bytes / 1024).toFixed(0)} КБ`;
 }
@@ -43,19 +90,37 @@ export function ArchivePage() {
   }
 
   async function purge(item: ArchiveItem) {
-    if (
-      !confirm(
-        `Удалить «${item.title}» НАВСЕГДА? Это необратимо — запись и все её вложенные данные (разделы, записи, вложения) будут стёрты без возможности восстановления.`
-      )
-    )
+    let impact: PurgeImpact | null = null;
+    try {
+      impact = await api.get<PurgeImpact>(`/archive/${item.type}/${item.id}/impact`);
+    } catch {
+      // Сводка — не условие удаления: если её не удалось получить, спрашиваем
+      // общим текстом, а не отказываем в действии.
+    }
+    const warning = [
+      `Удалить «${item.title}» НАВСЕГДА? Это необратимо — запись и все её вложенные данные (разделы, записи, вложения) будут стёрты без возможности восстановления.`,
+      ...impactLines(impact),
+    ].join("\n\n");
+    if (!confirm(warning)) return;
+    try {
+      await api.del(`/archive/${item.type}/${item.id}`);
+    } catch (e) {
+      // Иначе ошибка удаления уходила в консоль необработанным промисом, а
+      // Мастер видел молча не исчезнувшую строку.
+      alert(`Не удалось удалить: ${e instanceof Error ? e.message : String(e)}`);
       return;
-    await api.del(`/archive/${item.type}/${item.id}`);
+    }
     refresh();
   }
 
   async function purgeFile(file: ArchivedFile) {
     if (!confirm(`Удалить файл «${file.original_name}» из архива навсегда?`)) return;
-    await api.del(`/archived-files/${file.id}`);
+    try {
+      await api.del(`/archived-files/${file.id}`);
+    } catch (e) {
+      alert(`Не удалось удалить: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     refresh();
   }
 

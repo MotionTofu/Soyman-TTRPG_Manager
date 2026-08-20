@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import { db } from "../db/db";
+import { ensureDefaultMechanicsSection } from "../db/defaultSections";
 import { readFileAsBase64, systemFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { ImportedEntities, exportMention, healAllMentions, rewritePayload } from "../services/mentions";
@@ -83,15 +84,17 @@ function seedMechanicsGroups(systemId: string | number, sectionId: number) {
 }
 
 systemsRouter.get("/:id/sections", (req, res) => {
-  const rows = db
-    .prepare("SELECT * FROM system_sections WHERE system_id = ? ORDER BY position, id")
-    .all(req.params.id) as { id: number; kind: string }[];
-  // Backfills any mechanics groups added to MECHANICS_GROUPS since this
-  // system's "mechanics" section was first created (e.g. "Школы магии").
-  for (const row of rows) {
-    if (row.kind === "mechanics") seedMechanicsGroups(req.params.id, row.id);
-  }
-  res.json(rows);
+  // Досева здесь больше нет. Раньше каждый GET добирал недостающие группы из
+  // MECHANICS_GROUPS — и удалённая группа возвращалась при следующем открытии
+  // раздела, то есть удалить её насовсем было нельзя. Группы сеются один раз,
+  // когда раздел заводят руками (POST/PUT ниже); «Справочник», который система
+  // получает по умолчанию, остаётся пустым — «Школам магии» и «Владениям
+  // доспехами» в Legend in the Mist делать нечего.
+  res.json(
+    db
+      .prepare("SELECT * FROM system_sections WHERE system_id = ? ORDER BY position, id")
+      .all(req.params.id)
+  );
 });
 
 systemsRouter.post("/:id/sections", (req, res) => {
@@ -388,6 +391,7 @@ systemsRouter.post("/", (req, res) => {
   const info = db
     .prepare("INSERT INTO systems (name, description, folder_path) VALUES (?, ?, ?)")
     .run(name, description || "", folder);
+  ensureDefaultMechanicsSection(db, Number(info.lastInsertRowid));
   res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(info.lastInsertRowid));
 });
 
@@ -572,6 +576,10 @@ export async function importSystemExport(data: SystemExportData): Promise<number
     const info = insertSection.run(newSystemId, s.position, s.name, s.kind);
     sectionIdMap.set(s.id, info.lastInsertRowid as number);
   }
+  // Импорт может не содержать «Справочника» вовсе — базовый раздел всё равно
+  // должен быть, как у системы, заведённой руками. Если он в выгрузке был,
+  // вызов ничего не делает.
+  ensureDefaultMechanicsSection(db, newSystemId);
 
   const entryIdMap = new Map<number, number>();
   const insertEntry = db.prepare(

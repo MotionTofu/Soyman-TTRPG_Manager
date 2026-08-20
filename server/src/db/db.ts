@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { systemFolder } from "../services/filesystem";
 import { backfillAllSummaries } from "../services/monsterSummary";
+import { backfillDefaultMechanicsSections } from "./defaultSections";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -1865,6 +1866,10 @@ export function openDatabase(dbDir: string): Database.Database {
   // только статблок, а фильтры раздела бестиария читают data. Проход
   // идемпотентен — заполняет пустое, ничего не перезаписывая.
   backfillAllSummaries(database);
+
+  // «Справочник» стал базовым разделом системы — системам, заведённым раньше,
+  // он добавляется один раз (см. defaultSections.ts).
+  backfillDefaultMechanicsSections(database);
 
   compactIfBloated(database);
   return database;

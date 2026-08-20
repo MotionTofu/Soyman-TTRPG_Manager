@@ -3133,6 +3133,66 @@ details.card[open] summary {
   gap: var(--sp-4);
 }
 
+/* Блок «Напомню!» — случайная статья из справочника (HomeArticleCard).
+   Карточка кликабельна целиком и открывает ту же модалку записи, что и
+   ссылка-меншен в любом тексте, поэтому своей «кнопки» у неё нет. */
+.home-article {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+.home-article:hover {
+  background-color: var(--bg-elevated);
+}
+.home-article:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.home-article-path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.home-article-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  color: var(--text-bright, var(--ink));
+}
+/* Высота главной не должна зависеть от того, какая статья выпала: длинное
+   тело обрезается по высоте и уходит в затухание, короткое влезает целиком. */
+.home-article-body {
+  position: relative;
+  max-height: 132px;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.home-article-body-clipped::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  pointer-events: none;
+  background-image: linear-gradient(180deg, transparent 0%, var(--paper-2) 100%);
+}
+.home-article-more {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
 @media (max-width: 1280px) {
   .home-layout {
     grid-template-columns: 1fr;

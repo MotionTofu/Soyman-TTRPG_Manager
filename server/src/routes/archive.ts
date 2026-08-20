@@ -183,6 +183,72 @@ archiveRouter.get("/", (_req, res) => {
   res.json(items);
 });
 
+// Что необратимо оборвётся вместе с сущностью — считается ДО удаления и
+// показывается Мастеру списком имён. Кампания системы не держит её удаление
+// (FK у `campaigns.system_id` — NO ACTION, и до этой сводки удаление системы
+// с живыми кампаниями просто падало пятисоткой): кампания отвязывается, а
+// Мастер заранее видит, какие именно останутся без системы.
+//
+// Пока считается только для системы — у остальных типов каскад ничего
+// ценного за собой не рвёт. Ответ намеренно пустой, а не отсутствующий:
+// клиенту не приходится знать, для каких типов сводка бывает.
+interface PurgeImpact {
+  detachedCampaigns: string[];
+  compendiumLinks: number;
+  baseMonsters: number;
+  resources: number;
+  characters: number;
+  masteringNotes: number;
+  modules: number;
+}
+
+function systemPurgeImpact(systemId: string | number): PurgeImpact {
+  const count = (sql: string): number =>
+    (db.prepare(sql).get(systemId) as { c: number }).c;
+  return {
+    detachedCampaigns: (
+      db
+        .prepare("SELECT name FROM campaigns WHERE system_id = ? ORDER BY name")
+        .all(systemId) as { name: string }[]
+    ).map((r) => r.name),
+    compendiumLinks:
+      count(
+        `SELECT COUNT(*) AS c FROM being_compendium_links l
+           JOIN compendium_entries e ON e.id = l.compendium_entry_id
+          WHERE e.system_id = ?`
+      ) +
+      count(
+        `SELECT COUNT(*) AS c FROM artifact_compendium_links l
+           JOIN compendium_entries e ON e.id = l.compendium_entry_id
+          WHERE e.system_id = ?`
+      ),
+    baseMonsters: count(
+      `SELECT COUNT(*) AS c FROM setting_beings b
+         JOIN compendium_entries e ON e.id = b.base_monster_id
+        WHERE e.system_id = ?`
+    ),
+    resources: count("SELECT COUNT(*) AS c FROM resources WHERE system_id = ?"),
+    characters: count("SELECT COUNT(*) AS c FROM characters WHERE system_id = ?"),
+    masteringNotes: count("SELECT COUNT(*) AS c FROM mastering_notes WHERE system_id = ?"),
+    modules: count("SELECT COUNT(*) AS c FROM modules WHERE system_id = ?"),
+  };
+}
+
+const EMPTY_IMPACT: PurgeImpact = {
+  detachedCampaigns: [],
+  compendiumLinks: 0,
+  baseMonsters: 0,
+  resources: 0,
+  characters: 0,
+  masteringNotes: 0,
+  modules: 0,
+};
+
+archiveRouter.get("/:type/:id/impact", (req, res) => {
+  if (!ARCHIVE_TABLES[req.params.type]) return res.status(400).json({ error: "unknown type" });
+  res.json(req.params.type === "system" ? systemPurgeImpact(req.params.id) : EMPTY_IMPACT);
+});
+
 // The one place permanent, irreversible deletion lives — uniform across every
 // archivable type. Only rows that are *already archived* can be hard-deleted,
 // so nothing active is ever destroyed by a stray call. Table names come from a
@@ -230,6 +296,11 @@ archiveRouter.delete("/:type/:id", (req, res) => {
   // doesn't linger as a dangling row (its FK is ON DELETE SET NULL, not cascade).
   if (req.params.type === "system") {
     db.prepare("DELETE FROM modules WHERE system_id = ?").run(req.params.id);
+    // Кампании — единственная ссылка на систему без каскада (NO ACTION), так
+    // что без этого удаление упало бы на FK. Отвязываем: кампания без системы
+    // хуже кампании с системой, но лучше удалённой кампании, а Мастер уже
+    // видел в предупреждении, каких именно кампаний это коснётся.
+    db.prepare("UPDATE campaigns SET system_id = NULL WHERE system_id = ?").run(req.params.id);
   } else if (req.params.type === "setting") {
     db.prepare("DELETE FROM modules WHERE setting_id = ?").run(req.params.id);
   }
