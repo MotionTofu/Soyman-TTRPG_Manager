@@ -5,7 +5,8 @@ import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
 import { parseMentions } from "../mentions";
-import type { SearchResult } from "../types";
+import type { SearchResult, SessionUnionRow } from "../types";
+import { ToInitiativeButton } from "./ToInitiativeButton";
 
 interface GenericLink {
   id: number;
@@ -14,6 +15,7 @@ interface GenericLink {
   to_type: string;
   to_id: number;
   origin: string;
+  qty: string | null;
 }
 
 interface Entry {
@@ -22,6 +24,10 @@ interface Entry {
   id: number;
   label: string;
   origin: string;
+  qty: string | null;
+  /** Пришёл объединением по сценам сессии, а не связью. */
+  fromScenes?: string[];
+  inScene?: boolean;
 }
 
 interface Props {
@@ -46,6 +52,17 @@ interface Props {
   // e.g. Потенциальный лут accepts compendium items but not spells/monsters.
   // Ignored for other accepted types.
   acceptCompendiumKinds?: string[];
+  // Счётчик запусков сцен на пульте. Запуск подменяет состав панели на
+  // сервере, а зона о нём не знает — без этого Мастер увидит прошлую сцену до
+  // перезагрузки страницы, то есть ровно тогда, когда смотреть некогда.
+  version?: number;
+  // Состав всех сцен сессии для этой панели. Показывается строками без
+  // крестика: удалить участника отсюда значило бы удалить его из сцены, а это
+  // правка приключения, а не пульта.
+  unionRows?: SessionUnionRow[];
+  // Показывать ли кнопку «в трекер инициативы» у существ. Только на пульте:
+  // на странице сессии до игры трекера ещё нет.
+  toInitiative?: boolean;
 }
 
 // Memoized — see ObstacleDropZone's comment. acceptTypes/mentionTypes are
@@ -62,6 +79,9 @@ export const SectionDropZone = memo(function SectionDropZone({
   mentionTypes,
   origin,
   acceptCompendiumKinds,
+  version,
+  unionRows,
+  toInitiative,
 }: Props) {
   const [linkEntries, setLinkEntries] = useState<Entry[]>([]);
   const [mentionEntries, setMentionEntries] = useState<Entry[]>([]);
@@ -79,7 +99,7 @@ export const SectionDropZone = memo(function SectionDropZone({
             ? { type: l.to_type, id: l.to_id }
             : { type: l.from_type, id: l.from_id };
         const label = await resolveEntityLabel(other.type, other.id);
-        return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin };
+        return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin, qty: l.qty ?? null };
       })
     );
     setLinkEntries(resolved);
@@ -88,7 +108,7 @@ export const SectionDropZone = memo(function SectionDropZone({
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityType, entityId, section]);
+  }, [entityType, entityId, section, version]);
 
   useEffect(() => {
     if (!mentionText || !mentionTypes || mentionTypes.length === 0) {
@@ -104,6 +124,7 @@ export const SectionDropZone = memo(function SectionDropZone({
         id: m.id,
         label: await resolveEntityLabel(m.type, m.id),
         origin: "planned",
+        qty: null,
       }))
     ).then((rows) => {
       if (!cancelled) setMentionEntries(rows);
@@ -115,7 +136,22 @@ export const SectionDropZone = memo(function SectionDropZone({
   }, [mentionText, mentionTypes?.join(",")]);
 
   const linkKeys = new Set(linkEntries.map((e) => `${e.type}:${e.id}`));
-  const entries = [...linkEntries, ...mentionEntries.filter((e) => !linkKeys.has(`${e.type}:${e.id}`))];
+  const unionEntries: Entry[] = (unionRows ?? []).map((u) => ({
+    linkId: null,
+    type: u.to_type,
+    id: u.to_id,
+    label: u.name,
+    origin: "planned",
+    qty: u.qty || null,
+    fromScenes: u.scenes,
+    inScene: u.inScene,
+  }));
+  // Связь Мастера бьёт объединение: он положил её рукой, и его количество
+  // точнее заготовки. Две одинаковых карточки за столом читаются как «их
+  // двое», а это прямая ошибка в бою.
+  const shown = [...linkEntries, ...unionEntries.filter((e) => !linkKeys.has(`${e.type}:${e.id}`))];
+  const shownKeys = new Set(shown.map((e) => `${e.type}:${e.id}`));
+  const entries = [...shown, ...mentionEntries.filter((e) => !shownKeys.has(`${e.type}:${e.id}`))];
 
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -167,7 +203,13 @@ export const SectionDropZone = memo(function SectionDropZone({
               justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
             }}
-            title={entry.origin === "live" ? "Добавлено на ходу во время сессии" : undefined}
+            title={
+              entry.origin === "live"
+                ? "Добавлено на ходу во время сессии"
+                : entry.origin === "scene"
+                  ? "Принесла запущенная сцена — уйдёт со следующей"
+                  : undefined
+            }
             draggable
             onDragStart={(e) => {
               e.dataTransfer.setData(
@@ -197,7 +239,21 @@ export const SectionDropZone = memo(function SectionDropZone({
               ) : (
                 <span style={{ fontWeight: 600 }}>{entry.label}</span>
               )}
-              {entry.linkId === null && <span className="muted">из задумки</span>}
+              {/* Количество приехало вместе с составом сцены: напоминание
+                  нужно там, куда Мастер смотрит в бою. */}
+              {entry.qty && <span className="muted qty-chip">{entry.qty}</span>}
+              {/* Кто в запущенной сцене — плашкой: среди двадцати имён глаз
+                  иначе не найдёт нужного. */}
+              {entry.inScene && <span className="in-scene-chip">в сцене</span>}
+              {entry.linkId === null && !entry.fromScenes && <span className="muted">из задумки</span>}
+              {entry.fromScenes && !entry.inScene && (
+                <span className="muted" title={entry.fromScenes.join(", ")}>
+                  {entry.fromScenes.length === 1 ? entry.fromScenes[0] : `сцен: ${entry.fromScenes.length}`}
+                </span>
+              )}
+              {toInitiative && (
+                <ToInitiativeButton item={{ type: entry.type, id: entry.id, title: entry.label } as SearchResult} />
+              )}
             </div>
             {entry.linkId !== null && (
               <button className="comp-mini" onClick={() => remove(entry.linkId!)}>

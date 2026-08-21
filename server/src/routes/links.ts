@@ -349,15 +349,19 @@ linksRouter.get("/mentioning-sessions", (req, res) => {
 linksRouter.get("/", (req, res) => {
   const { type, id, section } = req.query as { type?: string; id?: string; section?: string };
   if (!type || !id) return res.status(400).json({ error: "type and id are required" });
+  // Количество приезжает вместе со связью: панели пульта показывают «1к6»
+  // рядом с именем, и отдельным запросом за спутником ходить незачем.
   const rows = section
     ? db
         .prepare(
-          `SELECT * FROM generic_links WHERE ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?)) AND section = ?`
+          `SELECT gl.*, lc.qty FROM generic_links gl LEFT JOIN link_cast lc ON lc.link_id = gl.id
+           WHERE ((gl.from_type = ? AND gl.from_id = ?) OR (gl.to_type = ? AND gl.to_id = ?)) AND gl.section = ?`
         )
         .all(type, id, type, id, section)
     : db
         .prepare(
-          `SELECT * FROM generic_links WHERE (from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?)`
+          `SELECT gl.*, lc.qty FROM generic_links gl LEFT JOIN link_cast lc ON lc.link_id = gl.id
+           WHERE (gl.from_type = ? AND gl.from_id = ?) OR (gl.to_type = ? AND gl.to_id = ?)`
         )
         .all(type, id, type, id);
   res.json(rows);

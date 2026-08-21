@@ -15,6 +15,8 @@ import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { InworldDatedItem } from "../components/InworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
+import { Timeline } from "../components/Timeline";
+import { SettingCycles } from "../components/SettingCycles";
 import { formatEventDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -43,6 +45,7 @@ import type {
   SettingCalendarEra,
   SettingCalendarEvent,
   SettingCommunity,
+  SettingCycle,
   SettingLocation,
 } from "../types";
 
@@ -153,6 +156,10 @@ export function SettingDetailPage() {
 
   const calendar = useSettingCalendar(settingId);
   const [calendarEvents, setCalendarEvents] = useState<SettingCalendarEvent[]>([]);
+  // Список и ось — два вида одних и тех же событий, а не две вкладки: список
+  // читают и правят, ось показывает расстояния между датами.
+  const [chronicleView, setChronicleView] = useState<"list" | "axis">("list");
+  const [cycles, setCycles] = useState<SettingCycle[]>([]);
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
@@ -169,6 +176,7 @@ export function SettingDetailPage() {
 
   function refreshCalendarEvents() {
     api.get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`).then(setCalendarEvents);
+    api.get<SettingCycle[]>(`/settings/${settingId}/cycles`).then(setCycles);
   }
   useEffect(refreshCalendarEvents, [settingId]);
 
@@ -259,6 +267,22 @@ export function SettingDetailPage() {
       data
     );
     navigate(`/settings/${created.id}`);
+  }
+
+  // Перетаскивание события по оси: сдвиг и уточнение — один жест. Точность
+  // приходит от масштаба, на котором бросили, поэтому её отправляем вместе с
+  // датой, а не вычисляем на сервере.
+  async function moveCalendarEvent(
+    id: number,
+    date: { year: number; month: number; day: number; precision: string }
+  ) {
+    await api.put(`/settings/calendar-events/${id}`, {
+      inworld_year: date.year,
+      inworld_month: date.month,
+      inworld_day: date.day,
+      date_precision: date.precision,
+    });
+    refreshCalendarEvents();
   }
 
   async function pinSettingCalendar(pinned: { year: number; month: number } | null) {
@@ -590,9 +614,26 @@ export function SettingDetailPage() {
             />
           </div>
 
+          {/* Циклы рядом с календарём: и то и другое — устройство мира,
+              заводится один раз при создании сеттинга. */}
+          <SettingCycles settingId={settingId} />
+
           <div className="card stack">
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <strong className="entry-title">Список по эпохам</strong>
+              <div className="row sort-toggle" style={{ gap: 4 }}>
+                <button
+                  className={chronicleView === "list" ? "active-sort" : ""}
+                  onClick={() => setChronicleView("list")}
+                >
+                  Списком
+                </button>
+                <button
+                  className={chronicleView === "axis" ? "active-sort" : ""}
+                  onClick={() => setChronicleView("axis")}
+                >
+                  Осью
+                </button>
+              </div>
               <div className="row">
                 {/* Создание события через общий визард; правка существующего
                     и клик по дню календаря по-прежнему открывают быструю
@@ -625,7 +666,36 @@ export function SettingDetailPage() {
               </div>
             )}
 
-            <div className="stack">
+            {chronicleView === "axis" && (
+              <Timeline
+                events={calendarEvents.map((e) => ({
+                  id: e.id,
+                  title: e.title,
+                  year: e.inworld_year,
+                  month: e.inworld_month,
+                  day: e.inworld_day,
+                  precision: e.date_precision,
+                  year_end: e.inworld_year_end,
+                  month_end: e.inworld_month_end,
+                  day_end: e.inworld_day_end,
+                  status: e.status,
+                  important: e.important === 1,
+                }))}
+                months={calendar?.months ?? []}
+                era={calendar?.era ?? ""}
+                now={
+                  setting.pinned_calendar_year != null && setting.pinned_calendar_month != null
+                    ? { year: setting.pinned_calendar_year, month: setting.pinned_calendar_month }
+                    : null
+                }
+                cycles={cycles}
+                onMoveEvent={moveCalendarEvent}
+                onNowChange={(date) => pinSettingCalendar(date)}
+                onEventClick={(id) => navigate(`/events/${id}`)}
+              />
+            )}
+
+            <div className="stack" hidden={chronicleView === "axis"}>
               {buildEraBuckets(eras, calendarEvents).map((bucket) => (
                 <details key={bucket.era?.id ?? "no-era"} className="card" open>
                   <summary className="row" style={{ justifyContent: "space-between" }}>

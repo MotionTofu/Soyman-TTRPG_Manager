@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { onDataChangedElsewhere } from "../dataSync";
 import { SESSION_PANEL_CONTENT, SESSION_PANEL_TITLES, type SessionPanelKey } from "./sessionLivePanels";
 import type { CampaignDetail, Character, SessionDetail } from "../types";
 
@@ -26,6 +27,12 @@ export function SessionPanelPopoutPage() {
 
   useEffect(refresh, [refresh]);
 
+  // Вынесенная панель живёт в своём окне и про запуск сцены в главном не
+  // знает. Правки объявляются между окнами (dataSync.ts) — этого хватает:
+  // отдельного канала под пульт заводить незачем.
+  const [launches, setLaunches] = useState(0);
+  useEffect(() => onDataChangedElsewhere(() => setLaunches((n) => n + 1)), []);
+
   if (!session || !campaign || !panelKey || !(panelKey in SESSION_PANEL_CONTENT)) return null;
 
   const Content = SESSION_PANEL_CONTENT[panelKey];
@@ -33,7 +40,13 @@ export function SessionPanelPopoutPage() {
   return (
     <div className="stack" style={{ padding: 16 }}>
       <h2>{SESSION_PANEL_TITLES[panelKey]}</h2>
-      <Content sessionId={sessionId} session={session} campaign={campaign} characters={characters} />
+      <Content
+        sessionId={sessionId}
+        session={session}
+        campaign={campaign}
+        characters={characters}
+        launches={launches}
+      />
     </div>
   );
 }

@@ -35,6 +35,11 @@ interface Props {
   // же «Сохранить». Так имени не нужна отдельная кнопка в шапке профиля.
   fields?: EntityField[];
   onSaveFields?: (values: EntityFieldValues) => Promise<unknown>;
+  // Второе действие рядом с «Сохранить»: получает набранный текст и делает с
+  // ним что-то ещё («сохранить и завершить сессию»). Отдельной кнопкой снаружи
+  // это не сделать — черновик живёт внутри карточки, и кнопка под ней
+  // сохранила бы прошлую версию текста.
+  extraAction?: { label: string; onAct: (draft: string) => Promise<unknown> };
 }
 
 export function EditableTextCard({
@@ -51,6 +56,7 @@ export function EditableTextCard({
   children,
   fields,
   onSaveFields,
+  extraAction,
 }: Props) {
   const [editMode, setEditMode] = useState(() => !value);
   const [draft, setDraft] = useState(value);
@@ -67,6 +73,14 @@ export function EditableTextCard({
   function cancelEdit() {
     setDraft(value);
     setFieldValues(toFieldValues(fields ?? []));
+    setEditMode(false);
+  }
+
+  async function handleExtra() {
+    if (!extraAction) return;
+    await onSave(draft);
+    if (entityType && entityId) syncMentionLinks(entityType, entityId, value, draft);
+    await extraAction.onAct(draft);
     setEditMode(false);
   }
 
@@ -108,6 +122,12 @@ export function EditableTextCard({
               Сохранить
             </button>
             <button onClick={cancelEdit}>Отмена</button>
+            {extraAction && (
+              <>
+                <span style={{ flex: 1 }} />
+                <button onClick={handleExtra}>{extraAction.label}</button>
+              </>
+            )}
           </div>
         </>
       ) : (
@@ -115,9 +135,15 @@ export function EditableTextCard({
           <div style={{ whiteSpace: "pre-wrap" }}>
             {value ? <MentionText text={value} /> : <span className="muted">Пусто</span>}
           </div>
-          <button onClick={startEdit} style={{ alignSelf: "flex-start" }}>
-            Редактировать
-          </button>
+          <div className="row">
+            <button onClick={startEdit}>Редактировать</button>
+            {extraAction && (
+              <>
+                <span style={{ flex: 1 }} />
+                <button onClick={() => extraAction.onAct(value)}>{extraAction.label}</button>
+              </>
+            )}
+          </div>
         </>
       )}
       {children}

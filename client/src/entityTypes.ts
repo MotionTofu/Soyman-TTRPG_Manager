@@ -8,7 +8,10 @@ export const ENTITY_TYPES: { key: string; label: string }[] = [
   { key: "community", label: "Сообщества" },
   { key: "artifact", label: "Артефакты" },
   { key: "resource", label: "Ресурсы" },
-  { key: "mastering", label: "Мастерение" },
+  // «Мастерение» из поиска убрано (решение владельца, 2026-08-21): три
+  // заметки на всю базу, и находят их глазами в своём разделе, а не поиском.
+  // Серверный блок `wantsType("mastering")` цел — вернуть значит вписать сюда
+  // ту же строку обратно.
   { key: "adventure", label: "Приключения" },
   { key: "scene", label: "Сцены" },
   { key: "session", label: "Сессии" },

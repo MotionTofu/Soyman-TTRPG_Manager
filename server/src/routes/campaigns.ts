@@ -3,6 +3,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
+import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
 import { campaignFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { campaignEarnings } from "../services/finance";
@@ -396,11 +397,15 @@ campaignsRouter.post("/:id/calendar-events", (req, res) => {
       .status(400)
       .json({ error: "title, inworld_year, inworld_month, inworld_day are required" });
   }
+  // «Сейчас» кампании — закреплённая дата, а без неё последняя проведённая
+  // сессия: у расписания будущее и есть основной случай, и ставить всему
+  // «случилось» значило бы врать почти каждой записи.
+  const status = defaultStatus(inworld_year, inworld_month, campaignNow(Number(req.params.id)));
   const info = db
     .prepare(
       `INSERT INTO campaign_calendar_events
-         (campaign_id, title, description, inworld_year, inworld_month, inworld_day, important)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (campaign_id, title, description, inworld_year, inworld_month, inworld_day, important, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       req.params.id,
@@ -409,7 +414,8 @@ campaignsRouter.post("/:id/calendar-events", (req, res) => {
       inworld_year,
       inworld_month,
       inworld_day,
-      important ? 1 : 0
+      important ? 1 : 0,
+      status
     );
   res
     .status(201)
@@ -444,6 +450,13 @@ campaignsRouter.put("/calendar-events/:eventId", (req, res) => {
     important === undefined ? null : important ? 1 : 0,
     req.params.eventId
   );
+  const time = timePatch(req.body as Record<string, unknown>);
+  if (time.sets.length > 0) {
+    db.prepare(`UPDATE campaign_calendar_events SET ${time.sets.join(", ")} WHERE id = ?`).run(
+      ...time.values,
+      req.params.eventId
+    );
+  }
   res.json(db.prepare("SELECT * FROM campaign_calendar_events WHERE id = ?").get(req.params.eventId));
 });
 

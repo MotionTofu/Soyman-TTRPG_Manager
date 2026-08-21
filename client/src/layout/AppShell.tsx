@@ -31,6 +31,7 @@ const GM_NAV_ITEMS: NavItem[] = [
   { to: "/players", label: "Игроки", icon: "players" },
   { to: "/mastering", label: "Мастерение", icon: "mastering" },
   { to: "/resources", label: "Ресурсы", icon: "resources" },
+  { to: "/canvas", label: "Полотно", icon: "canvas" },
   { to: "/graph", label: "Граф связей", icon: "graph" },
 ];
 

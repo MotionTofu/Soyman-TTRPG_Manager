@@ -160,7 +160,7 @@ export interface ImportantDate {
   created_at: string;
 }
 
-export interface CampaignCalendarEvent {
+export interface CampaignCalendarEvent extends EventTimeFields {
   id: number;
   campaign_id: number;
   title: string;
@@ -172,7 +172,46 @@ export interface CampaignCalendarEvent {
   created_at: string;
 }
 
-export interface SettingCalendarEvent {
+/** Точность даты события: её задаёт масштаб, на котором событие поставили. */
+export type DatePrecision = "century" | "decade" | "year" | "month" | "day";
+/** Предстоит / случилось / отменено. */
+export type EventStatus = "upcoming" | "happened" | "cancelled";
+
+/** Общие поля времени у обеих таблиц событий. */
+export interface EventTimeFields {
+  date_precision: DatePrecision;
+  /** Конец периода. Пусто — событие точечное, а не растянутое. */
+  inworld_year_end: number | null;
+  inworld_month_end: number | null;
+  inworld_day_end: number | null;
+  status: EventStatus;
+  /** Чем отменилось: что игроки сделали, чтобы этого не произошло. */
+  cancel_note: string;
+}
+
+/** Цикл сеттинга: «каждые N дней, начиная с такой-то даты». */
+export interface SettingCycle {
+  id: number;
+  setting_id: number;
+  name: string;
+  period_days: number;
+  anchor_year: number;
+  anchor_month: number;
+  anchor_day: number;
+  position: number;
+  points: SettingCyclePoint[];
+}
+
+/** Именованная точка внутри оборота: «полнолуние» на 14-м дне. */
+export interface SettingCyclePoint {
+  id: number;
+  cycle_id: number;
+  name: string;
+  day_offset: number;
+  position: number;
+}
+
+export interface SettingCalendarEvent extends EventTimeFields {
   id: number;
   setting_id: number;
   title: string;
@@ -800,7 +839,10 @@ export interface DndCreatureData {
   notes: string;
 }
 
-export type SessionStatus = "planned" | "held" | "cancelled" | "rescheduled";
+// «Перенесена» была четвёртым статусом при старом «переносе», который
+// заводил новую сессию вместо правки даты. Перенос убран, дата правится
+// прямо на сессии — статус больше не нужен.
+export type SessionStatus = "planned" | "held" | "cancelled";
 
 // A session that @-mentions some other entity — see GET /links/mentioning-sessions.
 export interface MentioningSession {
@@ -822,8 +864,6 @@ export interface SessionSummary {
   payment_override: PaymentType | null;
   effective_payment_type: PaymentType;
   session_number?: number;
-  rescheduled_to_id: number | null;
-  rescheduled_from_id: number | null;
   campaign_role?: CampaignRole;
   main_events?: string;
   idea_notes?: string;
@@ -1282,10 +1322,18 @@ export interface StoryArcDetail extends StoryArc {
 
 export interface StoryScene {
   id: number;
-  setting_id: number;
+  /** Пусто у заготовки, чей сеттинг удалили: сеттинг — метка, а не владелец. */
+  setting_id: number | null;
   arc_id: number | null;
   campaign_id: number | null;
   source_scene_id: number | null;
+  /** Эта строка — вставка заготовки и читает её тексты, пока не тронута. */
+  library_scene_id: number | null;
+  /** Имя и сеттинг заготовки — для пометки «по заготовке». null у обычной сцены. */
+  library_name: string | null;
+  library_setting_id: number | null;
+  /** Сцена лежит на полке заготовок и предлагается к вставке. */
+  in_library: number;
   name: string;
   kind: SceneKind;
   summary: string;
@@ -1295,8 +1343,6 @@ export interface StoryScene {
   outcomes: string;
   hidden_from_players: number;
   position: number;
-  canvas_x: number | null;
-  canvas_y: number | null;
   created_at: string;
   archived_at: string | null;
   // Present on campaign-scoped reads: this row is the campaign's edited copy
@@ -1306,13 +1352,36 @@ export interface StoryScene {
   state: { status: SceneStatus; note: string } | null;
 }
 
+/**
+ * Исход проверки. Подпись — имя разъёма («Успех», «Провал с последствиями»),
+ * `consequence` — что происходит словами, target_* — необязательная связь
+ * «а дальше сюда». Число исходов задаёт система, а не программа, поэтому
+ * список свободный.
+ */
+export interface CheckOutcome {
+  id: number;
+  check_id: number;
+  label: string;
+  consequence: string;
+  target_type: string | null;
+  target_id: number | null;
+  /** Имя сцены, в которую ведёт исход — иначе панель показала бы «ведёт в #37». */
+  target_name: string | null;
+  position: number;
+}
+
 export interface SceneCheck {
   id: number;
   scene_id: number;
   what: string;
   difficulty: string;
-  on_success: string;
-  on_failure: string;
+  /**
+   * on_success/on_failure сервер по-прежнему отдаёт (колонки живы до
+   * отдельной миграции), но в типе их нет намеренно: последствия читаются
+   * только из outcomes, и поле, которого нет в типе, нельзя случайно
+   * показать вместо актуального.
+   */
+  outcomes: CheckOutcome[];
   position: number;
 }
 
@@ -1478,8 +1547,12 @@ export interface InitiativeEntry {
   temp_hp: number | null;
   dead: boolean | number;
   conditions: string; // JSON-encoded string[], parse before use
+  // creature — боец; lair, environment, custom — строки без хитов.
+  kind: InitiativeKind;
   created_at: string;
 }
+
+export type InitiativeKind = "creature" | "lair" | "environment" | "custom";
 
 export interface SettingEntry {
   id: number;
@@ -1659,4 +1732,295 @@ export interface PartyMember {
   player_name: string;
   avatar_image_path: string | null;
   avatar_image_url: string | null;
+}
+
+// ------------------------------------------------------------------ полотно
+
+/** Нода на холсте: ссылка на реальную запись плюс её место. */
+export interface CanvasNode {
+  /** Ключ ноды «вид:номер»: сцена 41 и существо 41 — разные ноды. */
+  key: string;
+  node_type: "scene";
+  node_id: number;
+  x: number;
+  y: number;
+  /** false — позицию ещё ни разу не сохраняли, показана раскладка по умолчанию. */
+  placed: boolean;
+  scene: {
+    id: number;
+    name: string;
+    kind: SceneKind;
+    arc_id: number | null;
+    is_override: boolean;
+    campaign_only: boolean;
+    /** Сцена лежит на полке заготовок. */
+    in_library: boolean;
+    /** Вставка заготовки: id и имя источника, пока вставку не тронули. */
+    library_scene_id: number | null;
+    library_name: string | null;
+    /** Сколько ссылок сцены ведёт в другой сеттинг. */
+    foreign_links: number;
+  };
+}
+
+/**
+ * Ссылка сцены, ведущая за пределы её сеттинга: вставленная заготовка тащит
+ * за собой существ и локации того мира, где её писали.
+ */
+export interface ForeignLink {
+  to_type: string;
+  to_id: number;
+  type_label: string;
+  name: string;
+  setting_id: number | null;
+  setting_name: string | null;
+  /** Структурных связей и упоминаний в текстах — чинятся по-разному. */
+  links: number;
+  mentions: number;
+  candidates: {
+    id: number;
+    name: string;
+    tier: "exact" | "likely" | "doubtful";
+    /** Чем поймалось: имя, оригинал, синоним. */
+    via: string;
+  }[];
+}
+
+/** Строка состава сцены: кто участвует и сколько их. */
+export interface SceneCastRow {
+  link_id: number;
+  section: string;
+  role: "location" | "plot_characters" | "obstacles" | "loot";
+  to_type: string;
+  to_id: number;
+  name: string;
+  /** «4», «1к6», «2к4+1». Пусто — значит один. */
+  qty: string;
+}
+
+/** Строка полки наборов. */
+export interface LibraryBundle {
+  id: number;
+  name: string;
+  content_type: string | null;
+  setting_id: number | null;
+  setting_name: string | null;
+  members: number;
+  foreign: boolean;
+}
+
+/** Строка полки заготовок. */
+export interface LibraryScene {
+  id: number;
+  name: string;
+  kind: SceneKind;
+  summary: string;
+  setting_id: number | null;
+  setting_name: string | null;
+  arc_id: number | null;
+  arc_name: string | null;
+  /** Сколько вставок этой заготовки сейчас стоит в приключениях. */
+  insertions: number;
+  /** Заготовка написана в другом сеттинге, чем открытый на холсте. */
+  foreign: boolean;
+}
+
+/**
+ * Ребро холста. Два вида: `transition` — переход между сценами, `outcome` —
+ * исход проверки, ведущий в другую сцену. id строковый, вида
+ * `вид:строка:нода-начало` — нумерация у видов своя, а одна заготовка может
+ * стоять в приключении дважды, и тогда её переход даёт два разных ребра.
+ */
+export interface CanvasEdge {
+  id: string;
+  /**
+   * transition — переход между сценами, outcome — исход проверки,
+   * cast — сущность втекает в сцену, member — член набора.
+   */
+  kind: "transition" | "outcome" | "cast" | "member";
+  /** Ключи нод, а не номера: на холсте рядом со сценами стоят сущности. */
+  source: string;
+  target: string;
+  /** В какой разъём воткнуто: story | location | participants | items | members. */
+  target_handle: string;
+  label: string;
+}
+
+/** Нода сущности на холсте — существо, локация, предмет, запись компендиума. */
+export interface CanvasEntityNode {
+  key: string;
+  node_type: "being" | "location" | "artifact" | "community" | "compendium_entry";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  entity: {
+    id: number;
+    name: string;
+    kind: string | null;
+    thumbnail_image_url: string | null;
+    /** Сколько сцен упоминает её в текстах, не подцепляя. */
+    mentioned_in: number;
+  };
+}
+
+/** Нода события хроники или расписания. */
+export interface CanvasEventNode {
+  key: string;
+  node_type: "setting_event" | "campaign_event";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  event: {
+    id: number;
+    title: string;
+    year: number;
+    month: number;
+    day: number;
+    precision: DatePrecision;
+    status: EventStatus;
+    important: boolean;
+  };
+}
+
+/** Нода набора: имя, вид содержимого и перечисление членов. */
+export interface CanvasBundleNode {
+  key: string;
+  node_type: "bundle";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  bundle: {
+    id: number;
+    name: string;
+    content_type: string | null;
+    in_library: boolean;
+    library_bundle_id: number | null;
+    members: { link_id: number; to_type: string; to_id: number; qty: string; name: string }[];
+  };
+}
+
+export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode;
+
+/** Рамка главы на холсте приключения. */
+export interface CanvasGroup {
+  arc_id: number;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface CanvasBoard {
+  board_id: number;
+  arc: { id: number; name: string; setting_id: number };
+  campaign_id: number | null;
+  nodes: CanvasAnyNode[];
+  groups: CanvasGroup[];
+  edges: CanvasEdge[];
+}
+
+
+// --------------------------------------------------------- пульт сессии
+
+export interface StageScene {
+  id: number;
+  name: string;
+  kind: string | null;
+  arc_id: number | null;
+  arc_name: string | null;
+}
+
+/** Сцена из заготовки вечера: та же сцена плюс отметка «уже играли». */
+export type PlannedScene = StageScene & { played: boolean };
+
+export interface SessionStage {
+  /** Заготовка вечера — её собирают в подготовке, а не здесь. */
+  planned: PlannedScene[];
+  current: StageScene | null;
+  exits: { scene: StageScene; label: string }[];
+  sound: { id: number; name: string } | null;
+  journal: { id: number; scene_id: number; name: string }[];
+}
+
+// ------------------------------------------- дерево приключений и глав
+
+export interface TreeScene {
+  id: number;
+  name: string;
+  kind: string | null;
+  /** Сколько сущностей в составе — видно, размечена ли сцена вообще. */
+  cast: number;
+}
+
+/** `id: null` — собственные сцены приключения, у которых главы нет. */
+export interface TreeChapter {
+  id: number | null;
+  name: string;
+  scenes: TreeScene[];
+}
+
+export interface TreeAdventure {
+  id: number;
+  name: string;
+  chapters: TreeChapter[];
+}
+
+/** Строка экстренного поиска сцен на пульте. */
+export interface SceneSearchRow {
+  id: number;
+  name: string;
+  in_library: number;
+  arc_name: string;
+  chapter_name: string;
+}
+
+/** Итог вечера — GET /sessions/:id/summary. */
+export interface SessionReport {
+  held: boolean;
+  planned: number;
+  played: number;
+  revealed: { id: number; title: string }[];
+  settingId: number | null;
+  from: { year: number; month: number | null; day: number | null } | null;
+  to: { year: number; month: number | null; day: number | null } | null;
+}
+
+export interface LaunchResult {
+  scene: StageScene;
+  soundSetId: number | null;
+  soundSetName: string | null;
+  added: number;
+  removed: number;
+}
+
+/**
+ * Строка объединения: кого сцены сессии обещают в этой панели. Приезжает с
+ * GET /sessions/:id/cast-union и живёт рядом со связями, а не вместо них.
+ */
+export interface SessionUnionRow {
+  panel: string;
+  to_type: string;
+  to_id: number;
+  name: string;
+  qty: string;
+  /** В сцене, запущенной прямо сейчас. */
+  inScene: boolean;
+  /** В каких сценах вечера встречается — подсказкой на строке. */
+  scenes: string[];
+}
+
+/** Карточка предпросмотра сцены на пульте — GET /sessions/:id/preview/:sceneId. */
+export interface ScenePreview {
+  scene: StageScene;
+  readAloud: string;
+  summary: string;
+  entryCondition: string;
+  cast: { role: string; name: string; qty: string }[];
+  checks: { what: string; dc: string; outcomes: string[] }[];
+  sound: { id: number; name: string } | null;
+  exits: { scene: StageScene; label: string }[];
 }

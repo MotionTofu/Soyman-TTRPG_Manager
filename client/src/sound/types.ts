@@ -99,4 +99,7 @@ export interface SoundState {
   };
   data: ConsolePayload | null;
   autoSwitch: { from: string; to: string } | null;
+  // Набор, включённый запуском сцены. Отдельно от autoSwitch: там возврат —
+  // это прежняя очередь треков, здесь — прежний набор целиком.
+  sceneSwitch: { scene: string; to: string } | null;
 }

@@ -209,6 +209,21 @@ export function SoundConsolePage() {
         </div>
       ) : null}
 
+      {state.sceneSwitch ? (
+        <div className="sc-warn">
+          <NavIcon name="navCockpit" />
+          <span className="sc-label" style={{ color: "var(--accent)" }}>
+            Включила сцена
+          </span>
+          <span className="sc-sub" style={{ flex: "1 1 auto" }}>
+            Набор ушёл на «{state.sceneSwitch.to}» — это запуск сцены «{state.sceneSwitch.scene}», не вы.
+          </span>
+          <button type="button" className="sc-ghost" onClick={() => remote.revertSceneSet()}>
+            Вернуть прежний
+          </button>
+        </div>
+      ) : null}
+
       {missing.length > 0 ? (
         <div className="sc-warn">
           <NavIcon name="warning" />

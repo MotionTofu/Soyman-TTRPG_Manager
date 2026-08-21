@@ -51,6 +51,9 @@ const CompendiumEntryRedirectPage = lazy(() =>
   import("./pages/CompendiumEntryRedirectPage").then((m) => ({ default: m.CompendiumEntryRedirectPage }))
 );
 const GraphPage = lazy(() => import("./pages/GraphPage").then((m) => ({ default: m.GraphPage })));
+// Полотно тянет за собой @xyflow/react — единственную тяжёлую внешнюю
+// зависимость клиента, и грузить её тем, кто на холст не заходит, незачем.
+const CanvasPage = lazy(() => import("./pages/CanvasPage").then((m) => ({ default: m.CanvasPage })));
 const StoragesSettingsPage = lazy(() => import("./pages/StoragesSettingsPage").then((m) => ({ default: m.StoragesSettingsPage })));
 const AppearanceSettingsPage = lazy(() =>
   import("./pages/AppearanceSettingsPage").then((m) => ({ default: m.AppearanceSettingsPage }))
@@ -165,6 +168,7 @@ function App() {
               <Route path="/communities/:id" element={<CommunityDetailPage />} />
               <Route path="/events/:id" element={<EventDetailPage />} />
               <Route path="/compendium/:id" element={<CompendiumEntryRedirectPage />} />
+              <Route path="/canvas" element={<CanvasPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />
               <Route path="/appearance" element={<AppearanceSettingsPage />} />

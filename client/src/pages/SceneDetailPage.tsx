@@ -210,7 +210,7 @@ export function SceneDetailPage() {
         rows={4}
         entityType="scene"
         entityId={sceneId}
-        defaultSettingId={scene.setting_id}
+        defaultSettingId={scene.setting_id ?? undefined}
         collapsible
         defaultOpen
         fields={[
@@ -232,7 +232,7 @@ export function SceneDetailPage() {
         rows={5}
         entityType="scene"
         entityId={sceneId}
-        defaultSettingId={scene.setting_id}
+        defaultSettingId={scene.setting_id ?? undefined}
         collapsible
         defaultOpen
       />
@@ -243,7 +243,7 @@ export function SceneDetailPage() {
         rows={5}
         entityType="scene"
         entityId={sceneId}
-        defaultSettingId={scene.setting_id}
+        defaultSettingId={scene.setting_id ?? undefined}
         collapsible
         defaultOpen
       />
@@ -255,7 +255,7 @@ export function SceneDetailPage() {
         rows={3}
         entityType="scene"
         entityId={sceneId}
-        defaultSettingId={scene.setting_id}
+        defaultSettingId={scene.setting_id ?? undefined}
         collapsible
       />
       <EditableTextCard
@@ -265,7 +265,7 @@ export function SceneDetailPage() {
         rows={4}
         entityType="scene"
         entityId={sceneId}
-        defaultSettingId={scene.setting_id}
+        defaultSettingId={scene.setting_id ?? undefined}
         collapsible
       />
 
@@ -281,16 +281,21 @@ export function SceneDetailPage() {
                   <MentionText text={c.what} />
                 </strong>
                 {c.difficulty && <span className="muted"> · {c.difficulty}</span>}
-                {c.on_success && (
-                  <div className="muted">
-                    Успех: <MentionText text={c.on_success} />
+                {/* Исходы, а не пара «успех/провал»: последствий у проверки
+                    столько, сколько назвала система, и правятся они на
+                    «Полотне». Здесь список только показывается — иначе
+                    страница сцены и холст разошлись бы текстами. */}
+                {c.outcomes.map((o) => (
+                  <div key={o.id} className="muted">
+                    {o.label}
+                    {o.consequence ? (
+                      <>
+                        : <MentionText text={o.consequence} />
+                      </>
+                    ) : null}
+                    {o.target_name && <span> → {o.target_name}</span>}
                   </div>
-                )}
-                {c.on_failure && (
-                  <div className="muted">
-                    Провал: <MentionText text={c.on_failure} />
-                  </div>
-                )}
+                ))}
               </span>
               <button
                 className="danger"

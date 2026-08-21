@@ -416,8 +416,12 @@ searchRouter.get("/", (req, res) => {
       args.push(systemId);
     }
     if (kindParam) {
-      clauses.push("e.kind = ?");
-      args.push(kindParam);
+      // Список через запятую: палитра холста ищет предметы сразу двумя
+      // видами (magic_item и equipment), и два запроса ради одного поля —
+      // это два запроса на каждую букву в поисковой строке.
+      const kinds = kindParam.split(",").map((k) => k.trim()).filter(Boolean);
+      clauses.push(`e.kind IN (${kinds.map(() => "?").join(",")})`);
+      args.push(...kinds);
     }
     const rows = db
       .prepare(

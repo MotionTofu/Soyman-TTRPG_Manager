@@ -1,5 +1,20 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import {
+  contentSceneId,
+  copySceneChildren,
+  detachFromLibrary,
+  withLibraryContent,
+} from "../story/library";
+import { foreignLinksFor, repointSceneLink } from "../story/foreignLinks";
+import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
+import {
+  CAST_ROLE_BY_SECTION,
+  CAST_SECTIONS,
+  CONSEQUENCE_SECTION,
+  linkTargetName,
+  setLinkQty,
+} from "../story/cast";
 
 export const storyRouter = Router();
 
@@ -18,17 +33,19 @@ const SCENE_FIELDS = [
   "outcomes",
   "hidden_from_players",
   "position",
-  "canvas_x",
-  "canvas_y",
   "arc_id",
 ] as const;
 
 interface SceneRow {
   id: number;
-  setting_id: number;
+  setting_id: number | null;
   arc_id: number | null;
   campaign_id: number | null;
   source_scene_id: number | null;
+  /** Заполнено у вставки заготовки: строка читает её содержимое. */
+  library_scene_id: number | null;
+  /** Сцена лежит на полке заготовок. */
+  in_library: number;
   name: string;
   position: number;
 }
@@ -49,12 +66,23 @@ function overrideMap(campaignId: number, settingId: number): Map<number, SceneRo
 // the campaign's existing override, a freshly cloned one, or the row itself
 // when it already belongs to that campaign (or when there's no campaign at
 // all and we're editing the setting's original).
+//
+// Здесь же вставка отвязывается от заготовки. Это единственная точка входа
+// всех правок сцены — текстов, проверок, наград, переходов, — и правило
+// «тронул значит отвязал» держится ровно потому, что живёт в одном месте, а
+// не повторяется в каждом эндпоинте.
 function resolveWritableScene(sceneId: number, campaignId: number | null): SceneRow | null {
   const scene = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(sceneId) as
     | SceneRow
     | undefined;
   if (!scene) return null;
-  if (campaignId == null || scene.campaign_id === campaignId) return scene;
+  if (campaignId == null || scene.campaign_id === campaignId) {
+    if (scene.library_scene_id != null) {
+      detachFromLibrary(scene.id);
+      return db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(scene.id) as SceneRow;
+    }
+    return scene;
+  }
 
   const existing = db
     .prepare(
@@ -69,55 +97,73 @@ function resolveWritableScene(sceneId: number, campaignId: number | null): Scene
 // First edit of a setting scene inside a campaign: deep-copy the row and
 // everything hanging off it, so the campaign's version is fully independent
 // and the original stays untouched.
+//
+// Место в дереве берётся у самой сцены, а содержимое — оттуда, где оно
+// лежит: у нетронутой вставки заготовки своих текстов нет, и копия «как
+// есть» приехала бы в кампанию пустой. Ссылку на заготовку копия не
+// наследует: правка в кампании — это и есть то самое «тронул», после
+// которого сцена живёт своей жизнью.
 function cloneSceneForCampaign(sceneId: number, campaignId: number): SceneRow {
   const clone = db.transaction(() => {
+    const source = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(sceneId) as Record<
+      string,
+      unknown
+    >;
+    const contentId = (source.library_scene_id as number | null) ?? sceneId;
+    const content =
+      contentId === sceneId
+        ? source
+        : ((db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(contentId) ??
+            source) as Record<string, unknown>);
+
     const info = db
       .prepare(
         `INSERT INTO story_scenes
            (setting_id, arc_id, campaign_id, source_scene_id, name, kind, summary, read_aloud,
-            whats_happening, entry_condition, outcomes, hidden_from_players, position,
-            canvas_x, canvas_y)
-         SELECT setting_id, arc_id, ?, id, name, kind, summary, read_aloud,
-                whats_happening, entry_condition, outcomes, hidden_from_players, position,
-                canvas_x, canvas_y
-         FROM story_scenes WHERE id = ?`
+            whats_happening, entry_condition, outcomes, hidden_from_players, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(campaignId, sceneId);
+      .run(
+        source.setting_id,
+        source.arc_id,
+        campaignId,
+        sceneId,
+        content.name,
+        content.kind,
+        content.summary,
+        content.read_aloud,
+        content.whats_happening,
+        content.entry_condition,
+        content.outcomes,
+        content.hidden_from_players,
+        source.position
+      );
     const newId = Number(info.lastInsertRowid);
-
-    db.prepare(
-      `INSERT INTO story_scene_checks (scene_id, what, difficulty, on_success, on_failure, position)
-       SELECT ?, what, difficulty, on_success, on_failure, position
-       FROM story_scene_checks WHERE scene_id = ?`
-    ).run(newId, sceneId);
-    db.prepare(
-      `INSERT INTO story_scene_rewards (scene_id, what, where_found, notes, artifact_id, position)
-       SELECT ?, what, where_found, notes, artifact_id, position
-       FROM story_scene_rewards WHERE scene_id = ?`
-    ).run(newId, sceneId);
-    // to_scene_id keeps pointing at the setting's originals; the list
-    // endpoints map those through the override table when displaying.
-    db.prepare(
-      `INSERT OR IGNORE INTO story_scene_transitions (from_scene_id, to_scene_id, label, position)
-       SELECT ?, to_scene_id, label, position
-       FROM story_scene_transitions WHERE from_scene_id = ?`
-    ).run(newId, sceneId);
-    db.prepare(
-      `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section, origin)
-       SELECT 'scene', ?, to_type, to_id, section, origin
-       FROM generic_links WHERE from_type = 'scene' AND from_id = ?`
-    ).run(newId, sceneId);
-
+    copySceneChildren(contentId, newId);
     return db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(newId) as SceneRow;
   });
   return clone();
 }
 
+// Исходы одной проверки вместе с именем сцены, в которую ведёт связь: без
+// имени панель показала бы «ведёт в #37».
+function outcomesFor(checkId: number) {
+  return db
+    .prepare(
+      `SELECT o.*, s.name AS target_name
+       FROM story_check_outcomes o
+       LEFT JOIN story_scenes s ON o.target_type = 'scene' AND s.id = o.target_id
+       WHERE o.check_id = ? ORDER BY o.position, o.id`
+    )
+    .all(checkId);
+}
+
 function sceneExtras(sceneId: number) {
+  const checks = db
+    .prepare("SELECT * FROM story_scene_checks WHERE scene_id = ? ORDER BY position, id")
+    .all(sceneId) as { id: number }[];
   return {
-    checks: db
-      .prepare("SELECT * FROM story_scene_checks WHERE scene_id = ? ORDER BY position, id")
-      .all(sceneId),
+    checks: checks.map((c) => ({ ...c, outcomes: outcomesFor(c.id) })),
     rewards: db
       .prepare(
         `SELECT r.*, a.name as artifact_name FROM story_scene_rewards r
@@ -1008,18 +1054,33 @@ storyRouter.delete("/secrets/:secretId", (req, res) => {
 });
 
 storyRouter.put("/secrets/:secretId/state", (req, res) => {
-  const { campaign_id, revealed, note } = req.body as {
+  const { campaign_id, revealed, note, session_id } = req.body as {
     campaign_id: number;
     revealed?: boolean;
     note?: string;
+    session_id?: number | null;
   };
   if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  // Сессия запоминается только при раскрытии и только если её прислали:
+  // тайну отмечают и с пульта, и из профиля сессии, и из профиля кампании —
+  // в последнем случае вечера у неё нет. Снятие отметки чистит и сессию,
+  // иначе «раскрылось в этот вечер» показало бы то, что потом отменили.
+  const sid = revealed && session_id ? Number(session_id) : null;
   db.prepare(
-    `INSERT INTO campaign_secret_state (campaign_id, secret_id, revealed, note, updated_at)
-     VALUES (?, ?, ?, ?, datetime('now'))
+    `INSERT INTO campaign_secret_state (campaign_id, secret_id, revealed, note, revealed_session_id, updated_at)
+     VALUES (?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(campaign_id, secret_id) DO UPDATE SET
-       revealed = excluded.revealed, note = excluded.note, updated_at = datetime('now')`
-  ).run(campaign_id, req.params.secretId, revealed ? 1 : 0, note ?? "");
+       revealed = excluded.revealed,
+       note = excluded.note,
+       -- Пришла сессия — записываем; не пришла, но тайна остаётся раскрытой —
+       -- оставляем прежнюю: правка заметки не должна стирать, где это было.
+       revealed_session_id = CASE
+         WHEN excluded.revealed = 0 THEN NULL
+         WHEN excluded.revealed_session_id IS NOT NULL THEN excluded.revealed_session_id
+         ELSE campaign_secret_state.revealed_session_id
+       END,
+       updated_at = datetime('now')`
+  ).run(campaign_id, req.params.secretId, revealed ? 1 : 0, note ?? "", sid);
   res.json({ ok: true });
 });
 
@@ -1064,7 +1125,13 @@ storyRouter.get("/scenes", (req, res) => {
     .all(params) as SceneRow[];
 
   if (campaignId == null) {
-    return res.json(originals.map((s) => ({ ...s, is_override: false, state: null })));
+    return res.json(
+      originals.map((s) => ({
+        ...withLibraryContent(s),
+        is_override: false,
+        state: null,
+      }))
+    );
   }
 
   const overrides = overrideMap(campaignId, Number(setting_id));
@@ -1079,7 +1146,7 @@ storyRouter.get("/scenes", (req, res) => {
 
   const getState = db.prepare("SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?");
   const resolved = [...originals.map((s) => overrides.get(s.id) ?? s), ...own].map((s) => ({
-    ...s,
+    ...withLibraryContent(s),
     is_override: s.campaign_id === campaignId && s.source_scene_id != null,
     campaign_only: s.campaign_id === campaignId && s.source_scene_id == null,
     // Progress is always keyed by the scene the campaign actually shows, so
@@ -1099,11 +1166,13 @@ storyRouter.get("/scenes/:id", (req, res) => {
   // Asking for a setting original from inside a campaign that already
   // overrode it should show the override, not the original.
   let shown = scene;
-  if (campaignId != null && scene.campaign_id == null) {
+  // setting_id может быть пустым у заготовки, чей сеттинг удалили: своих
+  // переопределений у такой строки нет и искать их не по чему.
+  if (campaignId != null && scene.campaign_id == null && scene.setting_id != null) {
     shown = (overrideMap(campaignId, scene.setting_id).get(scene.id) ?? scene) as SceneRow;
   }
   res.json({
-    ...shown,
+    ...withLibraryContent(shown),
     is_override: shown.campaign_id != null && shown.source_scene_id != null,
     campaign_only: shown.campaign_id != null && shown.source_scene_id == null,
     state:
@@ -1112,7 +1181,9 @@ storyRouter.get("/scenes/:id", (req, res) => {
             .prepare("SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?")
             .get(campaignId, shown.id) ?? null
         : null,
-    ...sceneExtras(shown.id),
+    // Проверки, награды и переходы у нетронутой вставки тоже читаются с
+    // заготовки: своих у неё нет до первой правки.
+    ...sceneExtras(contentSceneId(shown.id)),
   });
 });
 
@@ -1166,8 +1237,16 @@ storyRouter.put("/scenes/:id", (req, res) => {
 });
 
 storyRouter.delete("/scenes/:id", (req, res) => {
+  // Уходящая с полки заготовка сначала материализует свои вставки: каждая
+  // ещё не тронутая получает содержимое внутрь и становится обычной сценой.
+  // Иначе из чужих приключений молча пропадает по сцене — а Мастер всего
+  // лишь прибирал полку.
+  const insertions = db
+    .prepare("SELECT id FROM story_scenes WHERE library_scene_id = ? AND archived_at IS NULL")
+    .all(req.params.id) as { id: number }[];
+  insertions.forEach((i) => detachFromLibrary(i.id));
   db.prepare("UPDATE story_scenes SET archived_at = datetime('now') WHERE id = ?").run(req.params.id);
-  res.json({ ok: true });
+  res.json({ ok: true, materialized: insertions.length });
 });
 
 // Drop a campaign's override so the setting's original shows through again.
@@ -1215,6 +1294,277 @@ storyRouter.put("/scenes/:id/state", (req, res) => {
   );
 });
 
+// --------------------------------------------------- состав сцены (холст)
+
+/**
+ * Воткнуть сущность в сцену. Проходит через resolveWritableScene, поэтому
+ * работает и copy-on-write кампании, и отвязка вставки от заготовки:
+ * протянутая стрелка — такая же правка сцены, как правка текста.
+ */
+storyRouter.post("/scenes/:id/cast", (req, res) => {
+  const { to_type, to_id, role, qty } = req.body as {
+    to_type?: string;
+    to_id?: number;
+    role?: string;
+    qty?: string;
+  };
+  // «Последствия» — не состав, но втыкается тем же эндпоинтом: для сервера
+  // это такая же связь сцены, отличается только разъёмом и направлением
+  // смысла.
+  const section = role === "consequences" ? CONSEQUENCE_SECTION : CAST_SECTIONS[role ?? ""];
+  if (!to_type || !to_id || !section) {
+    return res.status(400).json({ error: "to_type, to_id and a known role are required" });
+  }
+  const campaignId = req.body.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+
+  // Сначала ищем, потом вставляем. Раньше было наоборот — `INSERT OR IGNORE`,
+  // а при changes = 0 достать существующую строку, — и это разваливалось на
+  // ровном месте: `OR IGNORE` молчит про любое нарушение ограничения, а не
+  // только про UNIQUE, и когда поиск не находил строку, маршрут падал с
+  // «Cannot read properties of undefined». Ошибка вместо связи прямо во время
+  // разметки приключения — слишком дорого за экономию одного запроса.
+  const existing = db
+    .prepare(
+      `SELECT id FROM generic_links
+       WHERE from_type = 'scene' AND from_id = ? AND to_type = ? AND to_id = ? AND section = ?`
+    )
+    .get(target.id, to_type, Number(to_id), section) as { id: number } | undefined;
+
+  const linkId =
+    existing?.id ??
+    Number(
+      db
+        .prepare(
+          `INSERT INTO generic_links (from_type, from_id, to_type, to_id, section)
+           VALUES ('scene', ?, ?, ?, ?)`
+        )
+        .run(target.id, to_type, Number(to_id), section).lastInsertRowid
+    );
+
+  if (qty != null && String(qty).trim()) setLinkQty(linkId, String(qty));
+  res.status(201).json({ link_id: linkId, scene_id: target.id });
+});
+
+/**
+ * Состав сцены: кто в ней участвует, где она происходит и что в ней лежит —
+ * с именами и количествами.
+ *
+ * Отдельным запросом, а не полем sceneExtras: страница сцены собирает то же
+ * самое своими drop-зонами через /links, и подмешивать состав в общий ответ
+ * значило бы завести второй источник того же списка.
+ */
+storyRouter.get("/scenes/:id/cast", (req, res) => {
+  // У нетронутой вставки состав тоже читается с заготовки: своего у неё нет.
+  const sceneId = contentSceneId(Number(req.params.id));
+  const rows = db
+    .prepare(
+      `SELECT l.id AS link_id, l.section, l.to_type, l.to_id, IFNULL(c.qty, '') AS qty
+       FROM generic_links l LEFT JOIN link_cast c ON c.link_id = l.id
+       WHERE l.from_type = 'scene' AND l.from_id = ?
+         AND l.section IN (${Object.values(CAST_SECTIONS).map(() => "?").join(",")})
+       ORDER BY l.section, l.id`
+    )
+    .all(sceneId, ...Object.values(CAST_SECTIONS)) as {
+    link_id: number;
+    section: string;
+    to_type: string;
+    to_id: number;
+    qty: string;
+  }[];
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      role: CAST_ROLE_BY_SECTION[r.section],
+      name: linkTargetName(r.to_type, r.to_id),
+    }))
+  );
+});
+
+/**
+ * Количество на связи: «4», «1к6», «2к4+1».
+ *
+ * Пустая строка убирает спутника, а не хранит пустоту: «один» — умолчание, и
+ * подписывать им каждую стрелку значит зашумить схему ради нуля информации.
+ */
+storyRouter.put("/cast/:linkId", (req, res) => {
+  const qty = String((req.body as { qty?: string }).qty ?? "");
+  setLinkQty(Number(req.params.linkId), qty);
+  res.json({ ok: true });
+});
+
+storyRouter.delete("/cast/:linkId", (req, res) => {
+  db.prepare("DELETE FROM generic_links WHERE id = ?").run(req.params.linkId);
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------------- полка заготовок
+
+/**
+ * Полка. Глобальная и над сеттингами: заготовка, написанная в одном мире,
+ * предлагается и в другом — переносимость определяется содержимым, а не
+ * галочкой, и решает это Мастер, а не фильтр.
+ *
+ * setting_id в запросе — не фильтр, а «откуда смотрят»: свои заготовки
+ * поднимаются наверх, чужие помечаются именем сеттинга.
+ */
+storyRouter.get("/library", (req, res) => {
+  const settingId = req.query.setting_id ? Number(req.query.setting_id) : null;
+  const rows = db
+    .prepare(
+      `SELECT s.id, s.name, s.kind, s.summary, s.setting_id, s.arc_id,
+              t.name AS setting_name, a.name AS arc_name,
+              (SELECT COUNT(*) FROM story_scenes i
+                WHERE i.library_scene_id = s.id AND i.archived_at IS NULL) AS insertions
+       FROM story_scenes s
+       LEFT JOIN settings t ON t.id = s.setting_id
+       LEFT JOIN story_arcs a ON a.id = s.arc_id AND a.is_default = 0
+       WHERE s.in_library = 1 AND s.archived_at IS NULL AND s.campaign_id IS NULL
+       ORDER BY s.name COLLATE NOCASE`
+    )
+    .all() as Record<string, unknown>[];
+  const shelf = rows.map((r) => ({ ...r, foreign: settingId != null && r.setting_id !== settingId }));
+  shelf.sort((a, b) => Number(a.foreign) - Number(b.foreign));
+  res.json(shelf);
+});
+
+/**
+ * Положить сцену на полку / снять с полки.
+ *
+ * Сцена кампании кладётся НЕЗАВИСИМОЙ КОПИЕЙ, а не собой: строка кампании
+ * умирает вместе с кампанией, а полка переживает всё остальное. Ссылаться на
+ * смертное значит строить цепочку, у которой середина исчезнет.
+ */
+storyRouter.post("/scenes/:id/library", (req, res) => {
+  const scene = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(req.params.id) as
+    | SceneRow
+    | undefined;
+  if (!scene) return res.status(404).json({ error: "not found" });
+
+  if (scene.campaign_id == null) {
+    db.prepare("UPDATE story_scenes SET in_library = 1 WHERE id = ?").run(scene.id);
+    return res.json(db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(scene.id));
+  }
+
+  const copy = db.transaction(() => {
+    const contentId = scene.library_scene_id ?? scene.id;
+    const content = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(contentId) as Record<
+      string,
+      unknown
+    >;
+    // Копия ложится на полку бездомной: приключение и кампания, где сцену
+    // писали, к заготовке отношения не имеют.
+    const info = db
+      .prepare(
+        `INSERT INTO story_scenes
+           (setting_id, in_library, name, kind, summary, read_aloud, whats_happening,
+            entry_condition, outcomes, hidden_from_players, position)
+         VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 0)`
+      )
+      .run(
+        scene.setting_id,
+        content.name,
+        content.kind,
+        content.summary,
+        content.read_aloud,
+        content.whats_happening,
+        content.entry_condition,
+        content.outcomes,
+        content.hidden_from_players
+      );
+    const newId = Number(info.lastInsertRowid);
+    copySceneChildren(contentId, newId);
+    return db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(newId);
+  });
+  res.status(201).json(copy());
+});
+
+storyRouter.delete("/scenes/:id/library", (req, res) => {
+  // Только снимаем с полки. Уже сделанные вставки продолжают читать эту
+  // сцену: снять с полки — значит «больше не предлагать», а не «отобрать у
+  // тех, кто взял».
+  db.prepare("UPDATE story_scenes SET in_library = 0 WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+/**
+ * Вставить заготовку в приключение. Появляется строка-ссылка: своё место и
+ * порядок, но тексты читаются с заготовки, пока вставку не тронули.
+ */
+storyRouter.post("/library/:id/insert", (req, res) => {
+  const blank = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(req.params.id) as
+    | SceneRow
+    | undefined;
+  if (!blank) return res.status(404).json({ error: "not found" });
+  const { arc_id, campaign_id } = req.body as { arc_id?: number; campaign_id?: number | null };
+  if (!arc_id) return res.status(400).json({ error: "arc_id is required" });
+  const arc = db.prepare("SELECT id, setting_id FROM story_arcs WHERE id = ?").get(arc_id) as
+    | { id: number; setting_id: number }
+    | undefined;
+  if (!arc) return res.status(404).json({ error: "arc not found" });
+
+  const position =
+    ((db
+      .prepare("SELECT MAX(position) as m FROM story_scenes WHERE arc_id = ?")
+      .get(arc_id) as { m: number | null }).m ?? -1) + 1;
+  // Сеттинг у вставки — тот, куда вставили, а не тот, где написана
+  // заготовка: сцена стоит в этом приключении и принадлежит ему.
+  const info = db
+    .prepare(
+      `INSERT INTO story_scenes (setting_id, arc_id, campaign_id, library_scene_id, name, position)
+       VALUES (?, ?, ?, ?, '', ?)`
+    )
+    .run(arc.setting_id, arc_id, campaign_id ?? null, blank.id, position);
+  const created = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(info.lastInsertRowid);
+  res.status(201).json(withLibraryContent(created as SceneRow));
+});
+
+/**
+ * Чужие ссылки сцены: на кого она показывает за пределы своего сеттинга и
+ * что в этом сеттинге можно предложить взамен.
+ */
+storyRouter.get("/scenes/:id/foreign-links", (req, res) => {
+  res.json(foreignLinksFor(Number(req.params.id)));
+});
+
+/**
+ * Перевести чужую ссылку на местную запись.
+ *
+ * Разбор — это правка сцены, поэтому вставка сначала отвязывается от
+ * заготовки: чинить ссылки «на месте» значило бы переписать заготовку и
+ * поменять её во всех остальных приключениях, где она стоит. Мастер правит
+ * свою сцену, а не общую полку.
+ */
+storyRouter.post("/scenes/:id/foreign-links/repoint", (req, res) => {
+  const { to_type, from_id, to_id } = req.body as {
+    to_type?: string;
+    from_id?: number;
+    to_id?: number;
+  };
+  if (!to_type || !from_id || !to_id) {
+    return res.status(400).json({ error: "to_type, from_id and to_id are required" });
+  }
+  const campaignId = req.body.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  const moved = repointSceneLink(target.id, to_type, Number(from_id), Number(to_id));
+  res.json({ ...moved, scene_id: target.id });
+});
+
+/**
+ * Отвязать вставку руками. Отдельно от автоматики намеренно: «эта засада
+ * дальше пойдёт своим путём» решают ДО правки, а не в момент.
+ */
+storyRouter.post("/scenes/:id/detach", (req, res) => {
+  const scene = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(req.params.id) as
+    | SceneRow
+    | undefined;
+  if (!scene) return res.status(404).json({ error: "not found" });
+  detachFromLibrary(scene.id);
+  res.json(db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(scene.id));
+});
+
 // ------------------------------------------------- checks / rewards / edges
 
 storyRouter.post("/scenes/:id/checks", (req, res) => {
@@ -1225,32 +1575,99 @@ storyRouter.post("/scenes/:id/checks", (req, res) => {
     (db.prepare("SELECT MAX(position) as m FROM story_scene_checks WHERE scene_id = ?").get(target.id) as {
       m: number | null;
     }).m ?? -1;
+  // on_success/on_failure не заполняются: последствия живут в исходах, а
+  // колонки ждут ближайшей пересборки таблицы. Писать в них «на всякий
+  // случай» значит завести второе место для того же текста и следующей же
+  // правкой исхода их рассинхронить.
   db.prepare(
-    "INSERT INTO story_scene_checks (scene_id, what, difficulty, on_success, on_failure, position) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(
-    target.id,
-    req.body.what ?? "",
-    req.body.difficulty ?? "",
-    req.body.on_success ?? "",
-    req.body.on_failure ?? "",
-    position + 1
+    "INSERT INTO story_scene_checks (scene_id, what, difficulty, position) VALUES (?, ?, ?, ?)"
+  ).run(target.id, req.body.what ?? "", req.body.difficulty ?? "", position + 1);
+  // Новая проверка сразу получает два исхода: нода без разъёмов ничего не
+  // ветвит, а «добавьте исход» — работа, которую Мастер делал бы каждый раз.
+  // Тексты берутся из on_success/on_failure тела запроса — так их называет
+  // форма на странице сцены, и переучивать её ради имён колонок незачем.
+  const checkId = db.prepare("SELECT last_insert_rowid() as id").get() as { id: number };
+  const addOutcome = db.prepare(
+    "INSERT INTO story_check_outcomes (check_id, label, consequence, position) VALUES (?, ?, ?, ?)"
   );
+  addOutcome.run(checkId.id, "Успех", req.body.on_success ?? "", 0);
+  addOutcome.run(checkId.id, "Провал", req.body.on_failure ?? "", 1);
   res.status(201).json(sceneExtras(target.id).checks);
 });
 
 storyRouter.put("/checks/:checkId", (req, res) => {
-  const { what, difficulty, on_success, on_failure } = req.body as Record<string, string | undefined>;
+  // Последствия сюда не принимаются: у них своя таблица и свои эндпоинты
+  // (/checks/:id/outcomes, /outcomes/:id). Оставить приём on_success значило
+  // бы держать путь записи в колонку, которую никто не читает.
+  const { what, difficulty } = req.body as Record<string, string | undefined>;
   db.prepare(
     `UPDATE story_scene_checks SET
-       what = COALESCE(?, what), difficulty = COALESCE(?, difficulty),
-       on_success = COALESCE(?, on_success), on_failure = COALESCE(?, on_failure)
+       what = COALESCE(?, what), difficulty = COALESCE(?, difficulty)
      WHERE id = ?`
-  ).run(what ?? null, difficulty ?? null, on_success ?? null, on_failure ?? null, req.params.checkId);
+  ).run(what ?? null, difficulty ?? null, req.params.checkId);
   res.json(db.prepare("SELECT * FROM story_scene_checks WHERE id = ?").get(req.params.checkId));
 });
 
 storyRouter.delete("/checks/:checkId", (req, res) => {
   db.prepare("DELETE FROM story_scene_checks WHERE id = ?").run(req.params.checkId);
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------- исходы проверки
+//
+// Свободный список: у D&D их два, у Legends in the Mist три, у Daggerheart
+// четыре. Подпись — имя разъёма, `consequence` — что происходит словами,
+// target_* — необязательная связь «а дальше вот сюда». См. schema.sql.
+
+storyRouter.post("/checks/:checkId/outcomes", (req, res) => {
+  const checkId = Number(req.params.checkId);
+  const exists = db.prepare("SELECT id FROM story_scene_checks WHERE id = ?").get(checkId);
+  if (!exists) return res.status(404).json({ error: "not found" });
+  const position =
+    (db.prepare("SELECT MAX(position) as m FROM story_check_outcomes WHERE check_id = ?").get(checkId) as {
+      m: number | null;
+    }).m ?? -1;
+  db.prepare(
+    `INSERT INTO story_check_outcomes (check_id, label, consequence, target_type, target_id, position)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    checkId,
+    req.body.label ?? "",
+    req.body.consequence ?? "",
+    req.body.target_type ?? null,
+    req.body.target_id ?? null,
+    position + 1
+  );
+  res.status(201).json(outcomesFor(checkId));
+});
+
+storyRouter.put("/outcomes/:outcomeId", (req, res) => {
+  const { label, consequence } = req.body as Record<string, string | undefined>;
+  // target_* правится иначе, чем тексты: связь снимают, присваивая null, а
+  // COALESCE такое отличить не может — «не передали» и «очистить» выглядят
+  // одинаково. Поэтому явная проверка на присутствие ключа в теле.
+  const hasTarget = Object.prototype.hasOwnProperty.call(req.body, "target_type");
+  db.prepare(
+    `UPDATE story_check_outcomes SET
+       label = COALESCE(?, label),
+       consequence = COALESCE(?, consequence),
+       target_type = CASE WHEN ? THEN ? ELSE target_type END,
+       target_id = CASE WHEN ? THEN ? ELSE target_id END
+     WHERE id = ?`
+  ).run(
+    label ?? null,
+    consequence ?? null,
+    hasTarget ? 1 : 0,
+    req.body.target_type ?? null,
+    hasTarget ? 1 : 0,
+    req.body.target_id ?? null,
+    req.params.outcomeId
+  );
+  res.json(db.prepare("SELECT * FROM story_check_outcomes WHERE id = ?").get(req.params.outcomeId));
+});
+
+storyRouter.delete("/outcomes/:outcomeId", (req, res) => {
+  db.prepare("DELETE FROM story_check_outcomes WHERE id = ?").run(req.params.outcomeId);
   res.json({ ok: true });
 });
 
@@ -1314,4 +1731,37 @@ storyRouter.post("/scenes/:id/transitions", (req, res) => {
 storyRouter.delete("/transitions/:transitionId", (req, res) => {
   db.prepare("DELETE FROM story_scene_transitions WHERE id = ?").run(req.params.transitionId);
   res.json({ ok: true });
+});
+
+// --------------------------------------------------- набор звука у сцены
+
+/**
+ * Набор пульта звука, привязанный к сцене: «из чего собран пульт для этого
+ * места». Ссылка на готовый набор, а не свой список звуков, — один и тот же
+ * «Таверна» пойдёт в десяток сцен, и собирать пульт заново под каждую значило
+ * бы делать работу, которая уже сделана.
+ *
+ * Ровно один набор на сцену: PUT заменяет, а не добавляет. Два набора
+ * одновременно пульт включить не может, и хранить второй было бы враньём.
+ */
+storyRouter.get("/scenes/:id/sound-set", (req, res) => {
+  res.json(sceneSoundSet(Number(req.params.id)));
+});
+
+storyRouter.put("/scenes/:id/sound-set", (req, res) => {
+  const setId = req.body?.sound_set_id == null ? null : Number(req.body.sound_set_id);
+  const campaignId = req.body?.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+
+  db.prepare(
+    "DELETE FROM generic_links WHERE from_type = 'scene' AND from_id = ? AND section = ?"
+  ).run(target.id, SCENE_SOUND_SECTION);
+  if (setId != null && Number.isFinite(setId)) {
+    db.prepare(
+      `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section)
+       VALUES ('scene', ?, 'sound_set', ?, ?)`
+    ).run(target.id, setId, SCENE_SOUND_SECTION);
+  }
+  res.json({ scene_id: target.id, sound: sceneSoundSet(target.id) });
 });

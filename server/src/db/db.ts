@@ -1270,10 +1270,12 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!tableExists(database, "story_scenes")) {
     database.exec(`CREATE TABLE story_scenes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+      setting_id INTEGER REFERENCES settings(id) ON DELETE CASCADE,
       arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
       campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
       source_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+      library_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+      in_library INTEGER NOT NULL DEFAULT 0,
       name TEXT NOT NULL,
       kind TEXT NOT NULL DEFAULT 'scene',
       summary TEXT NOT NULL DEFAULT '',
@@ -1283,8 +1285,6 @@ export function openDatabase(dbDir: string): Database.Database {
       outcomes TEXT NOT NULL DEFAULT '',
       hidden_from_players INTEGER NOT NULL DEFAULT 1,
       position INTEGER NOT NULL DEFAULT 0,
-      canvas_x REAL,
-      canvas_y REAL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       archived_at TEXT
     )`);
@@ -1496,6 +1496,172 @@ export function openDatabase(dbDir: string): Database.Database {
     database
       .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
       .run(backfillKey);
+  }
+
+  // Разовый перенос исходов проверки: два текстовых поля превращаются в две
+  // строки story_check_outcomes. Тексты не теряются — они уезжают в
+  // `consequence`, а `label` получает имя разъёма. Сами колонки
+  // on_success/on_failure НЕ удаляются: снос требует пересборки таблицы, и
+  // пока перенос не обкатан, дешевле оставить их лежать (см. также мёртвые
+  // story_scenes.canvas_x/canvas_y).
+  //
+  // Исходы заводятся у каждой проверки, даже когда оба текста пусты: у ноды
+  // проверки должны быть разъёмы, а пустой исход — это «здесь ещё не
+  // решено», а не отсутствие ветки. Отметка о переносе отдельная, потому что
+  // таблицу создаёт schema.sql, и по её появлению судить нельзя: повторный
+  // перенос вернул бы удалённые Мастером исходы обратно.
+  const outcomesKey = "story_check_outcomes_backfilled";
+  const outcomesDone = database
+    .prepare("SELECT value FROM app_settings WHERE key = ?")
+    .get(outcomesKey) as { value: string } | undefined;
+  if (
+    !outcomesDone &&
+    tableExists(database, "story_scene_checks") &&
+    tableExists(database, "story_check_outcomes") &&
+    columnExists(database, "story_scene_checks", "on_success")
+  ) {
+    database.exec(`INSERT INTO story_check_outcomes (check_id, label, consequence, position)
+      SELECT id, 'Успех', COALESCE(on_success, ''), 0 FROM story_scene_checks`);
+    database.exec(`INSERT INTO story_check_outcomes (check_id, label, consequence, position)
+      SELECT id, 'Провал', COALESCE(on_failure, ''), 1 FROM story_scene_checks`);
+    database
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
+      .run(outcomesKey);
+  }
+
+  // Время на оси: точность даты, конец периода, статус и заметка «чем
+  // отменилось» — обеим таблицам событий одинаково.
+  //
+  // Простым ALTER TABLE: колонки только добавляются, ничего не снимается, и
+  // пересборка не нужна.
+  for (const table of ["setting_calendar_events", "campaign_calendar_events"]) {
+    if (!tableExists(database, table)) continue;
+    for (const [column, ddl] of [
+      // Существующее становится точным до дня: другой честной догадки нет.
+      // Событие, дату которого поставили наугад, выглядит сейчас ровно так же,
+      // как назначенное, и различить их задним числом нечем.
+      ["date_precision", "TEXT NOT NULL DEFAULT 'day'"],
+      ["inworld_year_end", "INTEGER"],
+      ["inworld_month_end", "INTEGER"],
+      ["inworld_day_end", "INTEGER"],
+      ["status", "TEXT NOT NULL DEFAULT 'happened'"],
+      ["cancel_note", "TEXT NOT NULL DEFAULT ''"],
+    ] as const) {
+      if (!columnExists(database, table, column)) {
+        database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      }
+    }
+  }
+
+  // Статус у перенесённых событий вычисляется по «сейчас» в мире, а не
+  // ставится всем одинаково: событие 1200 года в мире, где сейчас 1496-й,
+  // предстоящим быть не может, а затмение через год — случившимся.
+  //
+  // «Сейчас» — закреплённая дата сеттинга (у событий кампании — её
+  // собственная). Где её не задали, всё остаётся «случилось»: прошлое
+  // вероятнее, и ошибка в эту сторону тише.
+  //
+  // Разово, по ключу: Мастер может поменять статус руками, и повторный проход
+  // затёр бы его правку.
+  const eventStatusKey = "calendar_event_status_backfilled";
+  const eventStatusDone = database
+    .prepare("SELECT value FROM app_settings WHERE key = ?")
+    .get(eventStatusKey) as { value: string } | undefined;
+  if (
+    !eventStatusDone &&
+    tableExists(database, "setting_calendar_events") &&
+    columnExists(database, "setting_calendar_events", "status")
+  ) {
+    database.exec(`
+      UPDATE setting_calendar_events SET status = 'upcoming'
+      WHERE id IN (
+        SELECT e.id FROM setting_calendar_events e
+        JOIN settings s ON s.id = e.setting_id
+        WHERE s.pinned_calendar_year IS NOT NULL
+          AND (e.inworld_year > s.pinned_calendar_year
+               OR (e.inworld_year = s.pinned_calendar_year
+                   AND e.inworld_month > IFNULL(s.pinned_calendar_month, 0)))
+      )`);
+    database.exec(`
+      UPDATE campaign_calendar_events SET status = 'upcoming'
+      WHERE id IN (
+        SELECT e.id FROM campaign_calendar_events e
+        JOIN campaigns c ON c.id = e.campaign_id
+        WHERE c.pinned_calendar_year IS NOT NULL
+          AND (e.inworld_year > c.pinned_calendar_year
+               OR (e.inworld_year = c.pinned_calendar_year
+                   AND e.inworld_month > IFNULL(c.pinned_calendar_month, 0)))
+      )`);
+    database
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
+      .run(eventStatusKey);
+  }
+
+  // Полка заготовок: story_scenes пересобирается один раз.
+  //
+  // Что меняется. setting_id теряет NOT NULL и становится меткой — у
+  // заготовки сеттинг говорит «где написана», а не «кому принадлежит».
+  // Появляются in_library (лежит на полке) и library_scene_id (эта строка —
+  // вставка такой заготовки). Уходят canvas_x/canvas_y: раскладка с первого
+  // этапа живёт в canvas_nodes, а координаты на строке сцены означали бы, что
+  // сдвиг ноды мышкой внутри кампании порождает копию сцены.
+  //
+  // Почему пересборкой. SQLite снимает NOT NULL и выбрасывает колонки только
+  // так — ALTER TABLE этого не умеет. Признак «уже сделано» — сам факт, что
+  // setting_id ещё NOT NULL; отдельного ключа в app_settings не нужно, в
+  // отличие от переноса исходов, где повторный проход вернул бы удалённое.
+  //
+  // Проверки и сессии в эту пересборку намеренно не берутся
+  // (on_success/on_failure, rescheduled_*): импортёр приключений только что
+  // переучен на исходы и на живых данных ещё не проезжал, и складывать
+  // непроверенный импорт с непроверенной миграцией в одну корзину незачем.
+  if (tableExists(database, "story_scenes") && columnIsNotNull(database, "story_scenes", "setting_id")) {
+    // uid переносится вручную и явно. Колонку добавляет отдельная миграция
+    // НИЖЕ по файлу, поэтому пересобранная без неё таблица уехала бы к ней
+    // пустой — и та честно раздала бы всем сценам новые ключи. А uid — это
+    // опознание сцены между устройствами: сменить его значит превратить
+    // обновление опубликованного сеттинга в россыпь дублей.
+    const hasUid = columnExists(database, "story_scenes", "uid");
+    database.exec("PRAGMA foreign_keys = OFF");
+    database.exec("DROP TABLE IF EXISTS story_scenes_new");
+    database.exec(`CREATE TABLE story_scenes_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ${hasUid ? "uid TEXT," : ""}
+      setting_id INTEGER REFERENCES settings(id) ON DELETE CASCADE,
+      arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+      campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+      source_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+      library_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+      in_library INTEGER NOT NULL DEFAULT 0,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'scene',
+      summary TEXT NOT NULL DEFAULT '',
+      read_aloud TEXT NOT NULL DEFAULT '',
+      whats_happening TEXT NOT NULL DEFAULT '',
+      entry_condition TEXT NOT NULL DEFAULT '',
+      outcomes TEXT NOT NULL DEFAULT '',
+      hidden_from_players INTEGER NOT NULL DEFAULT 1,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      archived_at TEXT
+    )`);
+    const carried =
+      "id, setting_id, arc_id, campaign_id, source_scene_id, name, kind, summary, read_aloud," +
+      " whats_happening, entry_condition, outcomes, hidden_from_players, position, created_at, archived_at" +
+      (hasUid ? ", uid" : "");
+    database.exec(`INSERT INTO story_scenes_new (${carried}) SELECT ${carried} FROM story_scenes`);
+    database.exec("DROP TABLE story_scenes");
+    database.exec("ALTER TABLE story_scenes_new RENAME TO story_scenes");
+    database.exec("PRAGMA foreign_keys = ON");
+  }
+  if (tableExists(database, "story_scenes")) {
+    database.exec("CREATE INDEX IF NOT EXISTS idx_story_scenes_arc ON story_scenes(arc_id)");
+    database.exec(
+      "CREATE INDEX IF NOT EXISTS idx_story_scenes_campaign ON story_scenes(campaign_id, source_scene_id)"
+    );
+    database.exec(
+      "CREATE INDEX IF NOT EXISTS idx_story_scenes_library ON story_scenes(library_scene_id)"
+    );
   }
 
   // Вехи и тайны получают необязательные arc_id/campaign_id: кампания может
@@ -1867,12 +2033,167 @@ export function openDatabase(dbDir: string): Database.Database {
   // идемпотентен — заполняет пустое, ничего не перезаписывая.
   backfillAllSummaries(database);
 
+  // Тайна помнит, в какой сессии её раскрыли. У раскрытых раньше колонка
+  // остаётся пустой — так и показываем: «раскрыто раньше».
+  if (!columnExists(database, "campaign_secret_state", "revealed_session_id")) {
+    database.exec(
+      "ALTER TABLE campaign_secret_state ADD COLUMN revealed_session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL"
+    );
+  }
+
+  // Приключение внутри приключения — след эксперимента, а не замысел: четыре
+  // пустые строки под «Атакой склада» с kind='adventure' при родителе. В новом
+  // дереве они выглядели бы поломкой приложения. Удалять чужое без просьбы не
+  // станем, правки вида достаточно.
+  database.exec(
+    `UPDATE story_arcs SET kind = 'chapter'
+     WHERE kind = 'adventure' AND parent_id IS NOT NULL`
+  );
+
+  // Заготовка сессии стала списком сцен, а таблица отметок приключений ушла.
+  // Живого содержимого в ней не было: она прожила один день.
+  if (tableExists(database, "session_adventures")) {
+    database.exec("DROP TABLE session_adventures");
+  }
+
+  migrateChapterBoards(database);
+
+  // Разъёмы состава сцены названы как панели пульта — одно имя на весь путь.
+  // Всё, что лежало в «участниках», уезжает в «Препятствия»: именно туда оно
+  // и попадало на пульте по прежнему правилу, так что для Мастера ничего не
+  // меняется. Разложить часть по «Сюжетным персонажам» он теперь может сам.
+  const castRenameKey = "scene_cast_sections_renamed";
+  const castRenamed = database
+    .prepare("SELECT value FROM app_settings WHERE key = ?")
+    .get(castRenameKey) as { value: string } | undefined;
+  if (!castRenamed) {
+    for (const [from, to] of [
+      ["scene_participants", "scene_obstacles"],
+      ["scene_items", "scene_loot"],
+    ]) {
+      database
+        .prepare("UPDATE generic_links SET section = ? WHERE from_type = 'scene' AND section = ?")
+        .run(to, from);
+    }
+    database.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, '1')").run(castRenameKey);
+  }
+
+  // Строки трекера инициативы, у которых нет хитов: действие логова, действие
+  // окружения и своё событие Мастера. Умолчание 'creature' — всё, что уже
+  // лежит в трекере, это бойцы.
+  if (!columnExists(database, "initiative_entries", "kind")) {
+    database.exec("ALTER TABLE initiative_entries ADD COLUMN kind TEXT NOT NULL DEFAULT 'creature'");
+  }
+
   // «Справочник» стал базовым разделом системы — системам, заведённым раньше,
   // он добавляется один раз (см. defaultSections.ts).
   backfillDefaultMechanicsSections(database);
 
   compactIfBloated(database);
   return database;
+}
+
+/**
+ * Холст переезжает с главы на приключение.
+ *
+ * До появления глав в интерфейсе Мастер раскладывал сцены на холстах ГЛАВ —
+ * у «Главы 1. Друг в беде» 14 нод, у «Эпизода 1. Призыв к действию» 11. Теперь
+ * приключение показывает сцены всех своих глав, и им нужна одна система
+ * координат.
+ *
+ * Каждая глава получает свою полосу по вертикали: иначе три раскладки,
+ * начинавшиеся от нуля, легли бы одна на другую. Полоса — честное умолчание,
+ * дальше Мастер двигает как хочет, и это уже его раскладка. Заодно заводится
+ * рамка главы по границам её нод.
+ *
+ * Складывать чужие системы координат «на лету», не мигрируя, отвергнуто: это
+ * та же работа, только при каждом открытии и без возможности подвинуть.
+ */
+function migrateChapterBoards(database: Database.Database): void {
+  const key = "canvas_boards_moved_to_adventures";
+  const done = database.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as
+    | { value: string }
+    | undefined;
+  if (done) return;
+
+  const boards = database
+    .prepare(
+      `SELECT b.id AS board_id, b.scope_id AS arc_id, a.parent_id
+       FROM canvas_boards b
+       JOIN story_arcs a ON a.id = b.scope_id
+       WHERE b.scope_type = 'arc' AND a.parent_id IS NOT NULL`
+    )
+    .all() as { board_id: number; arc_id: number; parent_id: number }[];
+
+  const LANE = 520;      // высота полосы главы
+  const PAD = 40;        // поля рамки вокруг нод
+
+  const run = database.transaction(() => {
+    for (const b of boards) {
+      // Холст приключения: свой или заводится сейчас.
+      let target = database
+        .prepare("SELECT id FROM canvas_boards WHERE scope_type = 'arc' AND scope_id = ?")
+        .get(b.parent_id) as { id: number } | undefined;
+      if (!target) {
+        const info = database
+          .prepare("INSERT INTO canvas_boards (scope_type, scope_id) VALUES ('arc', ?)")
+          .run(b.parent_id);
+        target = { id: Number(info.lastInsertRowid) };
+      }
+
+      const nodes = database
+        .prepare("SELECT id, x, y FROM canvas_nodes WHERE board_id = ?")
+        .all(b.board_id) as { id: number; x: number; y: number }[];
+
+      // Номер полосы — по порядку главы среди сестёр, чтобы раскладка
+      // повторяла порядок приключения, а не порядок миграции.
+      const lane = (database
+        .prepare(
+          `SELECT COUNT(*) n FROM story_arcs
+           WHERE parent_id = ? AND (position, id) < (SELECT position, id FROM story_arcs WHERE id = ?)`
+        )
+        .get(b.parent_id, b.arc_id) as { n: number }).n;
+      const shift = lane * LANE;
+
+      if (nodes.length > 0) {
+        const move = database.prepare(
+          `INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y)
+           SELECT ?, node_type, node_id, x, y + ? FROM canvas_nodes WHERE id = ?
+           ON CONFLICT(board_id, node_type, node_id) DO NOTHING`
+        );
+        for (const n of nodes) move.run(target.id, shift, n.id);
+
+        const xs = nodes.map((n) => n.x);
+        const ys = nodes.map((n) => n.y + shift);
+        database
+          .prepare(
+            `INSERT INTO canvas_groups (board_id, arc_id, x, y, w, h) VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(board_id, arc_id) DO NOTHING`
+          )
+          .run(
+            target.id,
+            b.arc_id,
+            Math.min(...xs) - PAD,
+            Math.min(...ys) - PAD,
+            Math.max(...xs) - Math.min(...xs) + 220 + PAD * 2,
+            Math.max(...ys) - Math.min(...ys) + 160 + PAD * 2
+          );
+      } else {
+        // Пустая глава тоже получает рамку: иначе в неё некуда положить
+        // первую сцену.
+        database
+          .prepare(
+            `INSERT INTO canvas_groups (board_id, arc_id, x, y, w, h) VALUES (?, ?, 40, ?, 360, 300)
+             ON CONFLICT(board_id, arc_id) DO NOTHING`
+          )
+          .run(target.id, b.arc_id, 40 + shift);
+      }
+
+      database.prepare("DELETE FROM canvas_boards WHERE id = ?").run(b.board_id);
+    }
+    database.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, '1')").run(key);
+  });
+  run();
 }
 
 /**

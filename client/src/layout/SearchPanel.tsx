@@ -12,6 +12,7 @@ import { ParticleField } from "../components/ParticleField";
 import { NavIcon } from "../components/NavIcons";
 import { BagWidget } from "../components/BagWidget";
 import { InitiativeTracker } from "../components/InitiativeTracker";
+import { EntityPreviewModal } from "../components/EntityPreviewModal";
 
 // Most types deep-link via DETAIL_ROUTES/:id; compendium entries instead
 // live inside a System's tab and need system_id+section_id to open at.
@@ -27,6 +28,12 @@ interface Props {
 }
 
 const LIVE_SESSION_PATH = /^\/sessions\/(\d+)\/live$/;
+
+// Типы, у которых у карточки есть тело — см. EntityPreviewContent. Список тот
+// же, что принимает докстанция превью, и это не совпадение: рисует их одна и
+// та же функция. Остальным результатам иконки карточки нет — пустая карточка с
+// одним лишь именем, которое ты уже прочёл в строке, обещает больше, чем даёт.
+const CARD_TYPES = ["being", "character", "location", "artifact", "resource", "compendium_entry"];
 
 export function SearchPanel({ horizontal }: Props = {}) {
   const location = useLocation();
@@ -44,6 +51,9 @@ export function SearchPanel({ horizontal }: Props = {}) {
   // the same name would otherwise clutter the results.
   const [dndOnly, setDndOnly] = useState(false);
   const [dndSystemId, setDndSystemId] = useState<number | null>(null);
+  // Открытая карточка. Ради неё всё и затевалось: подглядеть правило, не уходя
+  // со страницы, — за столом это чаще всего «что делает Опутанный».
+  const [card, setCard] = useState<{ type: string; id: number } | null>(null);
   const { pins, pin, unpin } = usePinnedPages();
 
   useEffect(() => {
@@ -181,12 +191,19 @@ export function SearchPanel({ horizontal }: Props = {}) {
               draggable
               onDragStart={(e) => handleDragStart(e, r)}
             >
-              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div className="row" style={{ gap: 6, alignItems: "center" }}>
+              {/* Не переносится: столбик действий должен оставаться у правого
+                  края. Когда шапка переносилась, в узкой панели пара иконок
+                  сваливалась под фишку типа и висела посреди строки ничьей.
+                  Уступает длинный контекст — он и так подпись. */}
+              <div className="search-result-head">
+                <div className="search-result-head__left">
                   <div className={`entity-type-chip ${r.type}`}>{ENTITY_TYPE_SINGULAR[r.type] ?? r.type}</div>
-                  {r.context && <span className="muted" style={{ fontSize: 12 }}>{r.context}</span>}
+                  {r.context && <span className="muted search-result-context">{r.context}</span>}
                 </div>
-                <div className="row" style={{ gap: 4, alignItems: "center" }}>
+                {/* Столбиком, а не рядом: ширина в этой колонке — то, чего не
+                    хватает, и три мелкие кнопки одна под другой съедают её
+                    меньше, чем три в ряд. */}
+                <div className="search-result-actions">
                   {canDock && (
                     <button
                       type="button"
@@ -202,6 +219,20 @@ export function SearchPanel({ horizontal }: Props = {}) {
                       <NavIcon name="arrowRight" />
                     </Link>
                   )}
+                  {/* Карточку открывает только эта кнопка, а не щелчок по
+                      строке: строка — источник перетаскивания, а короткое
+                      перетаскивание браузер отдаёт как щелчок, и окно
+                      выскакивало бы поверх того места, куда несут существо. */}
+                  {CARD_TYPES.includes(r.type) && (
+                    <button
+                      type="button"
+                      className="search-result-card"
+                      title="Показать карточку"
+                      onClick={() => setCard({ type: r.type, id: r.id })}
+                    >
+                      <NavIcon name="card" />
+                    </button>
+                  )}
                 </div>
               </div>
               <div>{r.title}</div>
@@ -210,6 +241,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
           );
         })}
       </div>
+      {card && <EntityPreviewModal type={card.type} id={card.id} onClose={() => setCard(null)} />}
       {liveMatch ? <InitiativeTracker sessionId={Number(liveMatch[1])} /> : horizontal ? null : <BagWidget />}
       <div className="search-pins">
         <strong>Закреплённые страницы</strong>

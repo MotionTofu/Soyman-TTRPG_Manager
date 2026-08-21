@@ -4,7 +4,8 @@ import { resolveEntityLabel } from "../api/resolveEntity";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
-import type { SearchResult, SettingBeing } from "../types";
+import type { SearchResult, SessionUnionRow, SettingBeing } from "../types";
+import { ToInitiativeButton } from "./ToInitiativeButton";
 
 // "Препятствия" — broader than the old "Противники" (enemies-only, beings-only)
 // block: any existing entity can represent an obstacle (a creature, an NPC,
@@ -23,14 +24,19 @@ interface GenericLink {
   to_type: string;
   to_id: number;
   origin: string;
+  qty: string | null;
 }
 
 interface Entry {
-  linkId: number;
+  linkId: number | null;
   type: string;
   id: number;
   label: string;
   origin: string;
+  qty: string | null;
+  /** Пришёл объединением по сценам сессии, а не связью. */
+  fromScenes?: string[];
+  inScene?: boolean;
 }
 
 interface Props {
@@ -39,12 +45,24 @@ interface Props {
   // during a running session are tagged distinctly from ones planned ahead
   // of time via the session profile page (same drop zone, different caller).
   origin?: string;
+  /** Счётчик запусков сцен — см. SectionDropZone. */
+  version?: number;
+  /** Состав всех сцен сессии для этой панели — строками без крестика. */
+  unionRows?: SessionUnionRow[];
+  /** Показывать ли «в трекер инициативы» у существ. */
+  toInitiative?: boolean;
 }
 
 // Memoized so an unrelated setState elsewhere on the session page (e.g.
 // typing in the Игровая дата fields) doesn't force this drop zone — and its
 // own fetch-on-mount effect — to re-render along with everything else.
-export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, origin }: Props) {
+export const ObstacleDropZone = memo(function ObstacleDropZone({
+  sessionId,
+  origin,
+  version,
+  unionRows,
+  toInitiative,
+}: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
@@ -53,8 +71,8 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
     const links = await api.get<GenericLink[]>(
       `/links?type=session&id=${sessionId}&section=enemies`
     );
-    const resolved = await Promise.all(
-      links.map(async (l) => {
+    const resolved: (Entry | null)[] = await Promise.all(
+      links.map(async (l): Promise<Entry | null> => {
         const other =
           l.from_type === "session" && l.from_id === sessionId
             ? { type: l.to_type, id: l.to_id }
@@ -62,22 +80,44 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
         try {
           if (other.type === "being") {
             const being = await api.get<SettingBeing>(`/setting-beings/${other.id}`);
-            return { linkId: l.id, type: other.type, id: other.id, label: being.name, origin: l.origin };
+            return {
+              linkId: l.id,
+              type: other.type,
+              id: other.id,
+              label: being.name,
+              origin: l.origin,
+              qty: l.qty ?? null,
+            };
           }
           const label = await resolveEntityLabel(other.type, other.id);
-          return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin };
+          return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin, qty: l.qty ?? null };
         } catch {
           return null;
         }
       })
     );
-    setEntries(resolved.filter((e): e is Entry => e !== null));
+    const rows = resolved.filter((e): e is Entry => e !== null);
+    const keys = new Set(rows.map((e) => `${e.type}:${e.id}`));
+    // Связь Мастера бьёт объединение: рука точнее заготовки.
+    const union: Entry[] = (unionRows ?? [])
+      .filter((u) => !keys.has(`${u.to_type}:${u.to_id}`))
+      .map((u) => ({
+        linkId: null,
+        type: u.to_type,
+        id: u.to_id,
+        label: u.name,
+        origin: "planned",
+        qty: u.qty || null,
+        fromScenes: u.scenes,
+        inScene: u.inScene,
+      }));
+    setEntries([...rows, ...union]);
   }
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, version, unionRows]);
 
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -128,7 +168,13 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
               justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
             }}
-            title={entry.origin === "live" ? "Добавлено на ходу во время сессии" : undefined}
+            title={
+              entry.origin === "live"
+                ? "Добавлено на ходу во время сессии"
+                : entry.origin === "scene"
+                  ? "Принесла запущенная сцена — уйдёт со следующей"
+                  : undefined
+            }
             draggable
             onDragStart={(e) => {
               e.dataTransfer.setData(SEARCH_DRAG_MIME, JSON.stringify({ type: entry.type, id: entry.id, title: entry.label }));
@@ -155,10 +201,27 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({ sessionId, orig
               ) : (
                 <span style={{ fontWeight: 600 }}>{entry.label}</span>
               )}
+              {/* Количество приехало вместе с составом сцены. Это напоминание,
+                  а не счётчик: «1к6» Мастер кинет настоящим кубиком за столом,
+                  и приложение за него этого не делает. */}
+              {entry.qty && <span className="muted qty-chip">{entry.qty}</span>}
+              {entry.inScene && <span className="in-scene-chip">в сцене</span>}
+              {entry.fromScenes && !entry.inScene && (
+                <span className="muted" title={entry.fromScenes.join(", ")}>
+                  {entry.fromScenes.length === 1 ? entry.fromScenes[0] : `сцен: ${entry.fromScenes.length}`}
+                </span>
+              )}
             </div>
-            <button className="comp-mini" onClick={() => remove(entry.linkId)}>
-              ✕
-            </button>
+            {toInitiative && (
+              <ToInitiativeButton item={{ type: entry.type, id: entry.id, title: entry.label } as SearchResult} />
+            )}
+            {/* Строку объединения удалить нельзя: она не связь сессии, а состав
+                сцены — правится в приключении, а не на пульте. */}
+            {entry.linkId !== null && (
+              <button className="comp-mini" onClick={() => remove(entry.linkId!)}>
+                ✕
+              </button>
+            )}
           </div>
         ))}
       </div>

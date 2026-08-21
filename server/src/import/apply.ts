@@ -947,15 +947,31 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           const cId = Number(
             db
               .prepare(
-                `INSERT INTO story_scene_checks (scene_id, what, difficulty, on_success, on_failure, position)
-                 VALUES (?, ?, ?, ?, ?, ?)`
+                `INSERT INTO story_scene_checks (scene_id, what, difficulty, position)
+                 VALUES (?, ?, ?, ?)`
               )
-              .run(sceneId, check.what, check.difficulty, check.on_success, check.on_failure, index)
+              .run(sceneId, check.what, check.difficulty, index)
               .lastInsertRowid
           );
           remember("story_scene_checks", "what", cId, check.what);
-          remember("story_scene_checks", "on_success", cId, check.on_success);
-          remember("story_scene_checks", "on_failure", cId, check.on_failure);
+          // Формат обмена по-прежнему знает успех и провал двумя полями —
+          // так его пишут книги и так его читает модель. В базе это два
+          // исхода: без них импортированная проверка приезжает без
+          // последствий, а приключение — без ветвлений на холсте.
+          [
+            ["Успех", check.on_success],
+            ["Провал", check.on_failure],
+          ].forEach(([label, consequence], outcomeIndex) => {
+            const oId = Number(
+              db
+                .prepare(
+                  `INSERT INTO story_check_outcomes (check_id, label, consequence, position)
+                   VALUES (?, ?, ?, ?)`
+                )
+                .run(cId, label, consequence, outcomeIndex).lastInsertRowid
+            );
+            remember("story_check_outcomes", "consequence", oId, consequence);
+          });
           bump("проверки");
         });
         bump("сцены");

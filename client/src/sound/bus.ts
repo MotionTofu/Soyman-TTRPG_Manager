@@ -32,6 +32,11 @@ export type SoundCommand =
   | { kind: "shuffle"; on: boolean }
   | { kind: "keys"; layout: "digits" | "letters" }
   | { kind: "revertAutoSwitch" }
+  // Набор включила запущенная сцена, а не рука Мастера. Отдельно от "set"
+  // ровно потому же, почему бой отделён от обычного переключения: смену, о
+  // которой не просили, надо подписать и уметь откатить.
+  | { kind: "sceneSet"; setId: number | null; sceneName: string; setName: string }
+  | { kind: "revertSceneSet" }
   | { kind: "reload" };
 
 type Envelope = { from: string; command?: SoundCommand; state?: SoundState };

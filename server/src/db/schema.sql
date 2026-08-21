@@ -550,14 +550,44 @@ CREATE INDEX IF NOT EXISTS idx_campaign_adventures_arc ON campaign_adventures(ar
 -- copy is only created on the first edit made inside that campaign, and
 -- deleting it restores the original. A row with campaign_id set and
 -- source_scene_id NULL is a scene invented inside that campaign, which never
--- appears in the setting. canvas_x/canvas_y are unused by the current list
--- UI and reserved for the future node editor.
+-- appears in the setting.
+--
+-- Полка заготовок («Заготовки») живёт этими же строками, двумя колонками:
+--
+--   in_library = 1        — сцена лежит на полке и предлагается к вставке.
+--                           Ставится галочкой на ЛЮБОЙ сцене, в том числе
+--                           стоящей внутри приключения: переиспользуемость
+--                           обнаруживается задним числом.
+--   library_scene_id      — эта строка есть ВСТАВКА такой заготовки. У неё
+--                           своё место в приключении и свой порядок, но нет
+--                           своих текстов: пока не тронули, показывается
+--                           содержимое заготовки. Первая правка копирует
+--                           содержимое внутрь и обнуляет колонку.
+--
+-- Почему это НЕ source_scene_id, хотя механика «отвязки при первой правке»
+-- та же: связи разного направления. Переопределение кампании — копия вперёд
+-- (у копии есть свои тексты, оригинал цел, показ подменяет одно другим).
+-- Вставка — чтение назад (у строки текстов нет, она смотрит в заготовку).
+-- Одна колонка на две разные связи означала бы, что копия кампании,
+-- сделанная поверх вставки, неотличима от самой вставки.
+--
+-- setting_id необязателен НАМЕРЕННО: у заготовки сеттинг — это метка «где
+-- написана», а не владелец (тот же уговор, что у sound_sets). Удаление
+-- сеттинга уносит его обычные сцены каскадом, а заготовки остаются с пустой
+-- меткой — иначе удаление старого сеттинга снесло бы каскадом ещё и вставки
+-- в ЧУЖИХ приключениях. Обнуление делает маршрут удаления сеттинга; у
+-- обычных сцен каскад работает как работал.
 CREATE TABLE IF NOT EXISTS story_scenes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  setting_id INTEGER REFERENCES settings(id) ON DELETE CASCADE,
   arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
   campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
   source_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+  -- Каскад здесь — подстраховка, а не поведение: удаление заготовки сначала
+  -- материализует свои вставки (маршрут DELETE /story/scenes/:id), и до
+  -- каскада доходить не должно.
+  library_scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+  in_library INTEGER NOT NULL DEFAULT 0,
   name TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'scene', -- scene | encounter | branch | ending
   summary TEXT NOT NULL DEFAULT '',        -- краткое описание для мастера
@@ -567,13 +597,17 @@ CREATE TABLE IF NOT EXISTS story_scenes (
   outcomes TEXT NOT NULL DEFAULT '',
   hidden_from_players INTEGER NOT NULL DEFAULT 1,
   position INTEGER NOT NULL DEFAULT 0,
-  canvas_x REAL,
-  canvas_y REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_story_scenes_arc ON story_scenes(arc_id);
 CREATE INDEX IF NOT EXISTS idx_story_scenes_campaign ON story_scenes(campaign_id, source_scene_id);
+-- Индекса по library_scene_id здесь НЕТ намеренно, хотя он нужен: «покажи все
+-- вставки этой заготовки» — запрос удаления и отвязки, а ведущая колонка
+-- индекса выше campaign_id. Этот файл выполняется ДО миграций, и на базе,
+-- заведённой раньше колонки, CREATE INDEX по ней падает — CREATE TABLE IF NOT
+-- EXISTS старую таблицу не трогает. Индекс создаётся в db.ts, рядом с
+-- пересборкой таблицы, где колонка уже точно есть.
 
 -- Ability/skill checks a scene calls for. `difficulty` is deliberately free
 -- text ("DC 14", "Сложность 2", a PbtA move name) so non-d20 systems fit
@@ -655,6 +689,11 @@ CREATE TABLE IF NOT EXISTS campaign_secret_state (
   secret_id INTEGER NOT NULL REFERENCES story_secrets(id) ON DELETE CASCADE,
   revealed INTEGER NOT NULL DEFAULT 0,
   note TEXT NOT NULL DEFAULT '',
+  -- В какой сессии раскрыли. Вычислять по updated_at нельзя: Мастер отмечает
+  -- тайны и на следующий день, разбирая записи, и после двух сессий за
+  -- выходные — время правки уведёт их не в тот вечер. У раскрытых до
+  -- появления колонки она пустая, так и показываем: «раскрыто раньше».
+  revealed_session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (campaign_id, secret_id)
 );
@@ -671,6 +710,46 @@ CREATE TABLE IF NOT EXISTS story_scene_transitions (
   UNIQUE(from_scene_id, to_scene_id, label)
 );
 CREATE INDEX IF NOT EXISTS idx_story_scene_transitions_from ON story_scene_transitions(from_scene_id);
+
+-- Заготовка вечера: какие сцены Мастер набрал на эту сессию.
+--
+-- Хранятся именно СЦЕНЫ, а не отметки приключений и глав. Галочка главы в
+-- подготовке — просто способ добавить её сцены разом. Разница видна на одном
+-- сценарии: отметили главу, потом в приключение добавилась новая сцена — при
+-- хранении отметок она молча приедет в подготовленную сессию, которую Мастер
+-- не готовил и в глаза не видел.
+--
+-- Порядка у заготовки нет: это набор, показываемый деревом в порядке самого
+-- приключения. Вручную собранная очередь отвергнута — она ломается на первой
+-- развилке, а «куда дальше» пульт берёт из переходов.
+--
+-- На следующую сессию переезжают заготовленные, но НЕ сыгранные: что играли,
+-- знает session_scenes.
+CREATE TABLE IF NOT EXISTS session_planned_scenes (
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (session_id, scene_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_planned_scene ON session_planned_scenes(scene_id);
+
+-- Журнал запусков сцен: лента вечера, а не список посещённого. Последняя
+-- строка — это «где мы сейчас» (переживает перезагрузку страницы), весь
+-- журнал — «что прошли», из чего Мастер одной кнопкой набирает «Основные
+-- события сессии».
+--
+-- Возврат в пройденную сцену пишется НОВОЙ строкой: «таверна → подземелье →
+-- таверна» рассказывает про сессию больше, чем «таверна, подземелье».
+--
+-- Отдельно от campaign_scene_state: та отвечает «пройдено ли это в кампании
+-- вообще», эта — «что было в этот вечер и в каком порядке».
+CREATE TABLE IF NOT EXISTS session_scenes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  launched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_session_scenes_session ON session_scenes(session_id, id);
 
 -- Per-campaign playthrough progress. Kept out of story_scenes on purpose:
 -- marking a scene "пройдена" must not spawn a copy-on-write override, which
@@ -738,6 +817,37 @@ CREATE TABLE IF NOT EXISTS campaign_calendar_events (
   inworld_year INTEGER NOT NULL,
   inworld_month INTEGER NOT NULL,
   inworld_day INTEGER NOT NULL,
+  -- Точность даты: century | decade | year | month | day.
+  --
+  -- Не выбирается из списка — её задаёт масштаб, на котором событие поставили
+  -- или перетащили на оси. Бросили на полосу десятилетия — «десятилетие»;
+  -- зазумились до дней и подвинули — стало точным до дня. Уточнение и сдвиг —
+  -- один жест на разных зумах.
+  --
+  -- Запись «1492-06-15, точность month» читается как «июнь 1492»; 15-е —
+  -- место при сортировке. Отдельного поля «примерно» рядом с точной датой нет:
+  -- два поля даты у одной записи дают вопрос «какое из них правда» при каждом
+  -- чтении.
+  date_precision TEXT NOT NULL DEFAULT 'day',
+  -- Конец периода: «осада длилась три месяца». Пусто — событие точечное.
+  -- Период и неточность — разные вещи и рисуются по-разному: период сплошной
+  -- полосой с засечками, неточность размытой. Неточное событие ждёт
+  -- уточнения, а период уже точен и уточнять в нём нечего.
+  inworld_year_end INTEGER,
+  inworld_month_end INTEGER,
+  inworld_day_end INTEGER,
+  -- upcoming | happened | cancelled.
+  --
+  -- «Отменено» нужно и хронике мира: в неё пишут и будущее — пророчество,
+  -- затмение, коронацию. Без этого статуса Мастер, помешавший событию, обязан
+  -- его удалить и потеряет память о том, что это планировалось и почему не
+  -- вышло, — а через месяц вспомнить захочется именно это.
+  status TEXT NOT NULL DEFAULT 'happened',
+  -- Чем ОТМЕНИЛОСЬ: что игроки сделали, чтобы этого не произошло. Чем
+  -- отменяется (в отличие от «чем отменилось») отдельным полем не пишется:
+  -- это связь, и стрелка от сцены к событию на полотне скажет то же самое, но
+  -- переживёт переименование.
+  cancel_note TEXT NOT NULL DEFAULT '',
   important INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -790,6 +900,37 @@ CREATE TABLE IF NOT EXISTS setting_calendar_events (
   inworld_year INTEGER NOT NULL,
   inworld_month INTEGER NOT NULL,
   inworld_day INTEGER NOT NULL,
+  -- Точность даты: century | decade | year | month | day.
+  --
+  -- Не выбирается из списка — её задаёт масштаб, на котором событие поставили
+  -- или перетащили на оси. Бросили на полосу десятилетия — «десятилетие»;
+  -- зазумились до дней и подвинули — стало точным до дня. Уточнение и сдвиг —
+  -- один жест на разных зумах.
+  --
+  -- Запись «1492-06-15, точность month» читается как «июнь 1492»; 15-е —
+  -- место при сортировке. Отдельного поля «примерно» рядом с точной датой нет:
+  -- два поля даты у одной записи дают вопрос «какое из них правда» при каждом
+  -- чтении.
+  date_precision TEXT NOT NULL DEFAULT 'day',
+  -- Конец периода: «осада длилась три месяца». Пусто — событие точечное.
+  -- Период и неточность — разные вещи и рисуются по-разному: период сплошной
+  -- полосой с засечками, неточность размытой. Неточное событие ждёт
+  -- уточнения, а период уже точен и уточнять в нём нечего.
+  inworld_year_end INTEGER,
+  inworld_month_end INTEGER,
+  inworld_day_end INTEGER,
+  -- upcoming | happened | cancelled.
+  --
+  -- «Отменено» нужно и хронике мира: в неё пишут и будущее — пророчество,
+  -- затмение, коронацию. Без этого статуса Мастер, помешавший событию, обязан
+  -- его удалить и потеряет память о том, что это планировалось и почему не
+  -- вышло, — а через месяц вспомнить захочется именно это.
+  status TEXT NOT NULL DEFAULT 'happened',
+  -- Чем ОТМЕНИЛОСЬ: что игроки сделали, чтобы этого не произошло. Чем
+  -- отменяется (в отличие от «чем отменилось») отдельным полем не пишется:
+  -- это связь, и стрелка от сцены к событию на полотне скажет то же самое, но
+  -- переживёт переименование.
+  cancel_note TEXT NOT NULL DEFAULT '',
   important INTEGER NOT NULL DEFAULT 0,
   visible_to_players INTEGER NOT NULL DEFAULT 0, -- explicit GM reveal, shown via the player sync API
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -800,6 +941,42 @@ CREATE TABLE IF NOT EXISTS setting_calendar_events (
 -- of a flat chronological list. An era spans from its own start_year up to
 -- (but not including) the next era's start_year, ordered by start_year — no
 -- explicit end_year column, so eras can't overlap or leave gaps by accident.
+
+-- Цикл сеттинга: «каждые N дней, начиная с такой-то даты».
+--
+-- Обобщённый, а не «луна с фазами». Нынешние повторения
+-- (important_dates.recurrence = once | annual | monthly) не покрывают луну с
+-- периодом 28 дней в году из 360, а отдельная сущность «луна» стоила бы
+-- столько же и покрыла бы только луны. Цикл берёт заодно приливы, ярмарку раз
+-- в десять дней, смену стражи и мир с двумя лунами разного периода.
+-- Приложению не нужно знать, что такое луна: ему нужно считать «каждые N
+-- дней» и подписывать точки.
+CREATE TABLE IF NOT EXISTS setting_cycles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  period_days INTEGER NOT NULL,
+  -- Дата отсчёта: с неё цикл начинает первый оборот.
+  anchor_year INTEGER NOT NULL,
+  anchor_month INTEGER NOT NULL,
+  anchor_day INTEGER NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_setting_cycles_setting ON setting_cycles(setting_id);
+
+-- Именованная точка внутри оборота: «полнолуние» на 14-м дне, «новолуние» на
+-- 28-м. Необязательна — цикл без точек это просто «каждые N дней».
+CREATE TABLE IF NOT EXISTS setting_cycle_points (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cycle_id INTEGER NOT NULL REFERENCES setting_cycles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  -- Смещение в днях от начала оборота, 0 — сам день отсчёта.
+  day_offset INTEGER NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_setting_cycle_points_cycle ON setting_cycle_points(cycle_id);
+
 CREATE TABLE IF NOT EXISTS setting_calendar_eras (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
@@ -991,6 +1168,12 @@ CREATE TABLE IF NOT EXISTS initiative_entries (
   temp_hp INTEGER,
   dead INTEGER NOT NULL DEFAULT 0,
   conditions TEXT NOT NULL DEFAULT '[]',
+  -- Что это за строка. creature — боец (в том числе вбитый руками, без
+  -- entity_type); lair — действие логова, environment — действие окружения,
+  -- custom — своё событие Мастера. У трёх последних нет хитов и нечему
+  -- умирать, поэтому и колонка своя: пустой entity_type уже занят другим
+  -- смыслом — «существо, вбитое руками», а это обычный боец.
+  kind TEXT NOT NULL DEFAULT 'creature',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_initiative_entries_session ON initiative_entries(session_id);
@@ -1071,3 +1254,174 @@ CREATE TABLE IF NOT EXISTS import_records (
   payload TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_import_records_batch ON import_records(batch_id);
+
+-- ---------------------------------------------------------------- полотно
+--
+-- Раскладка узлового редактора («Полотно»). Позиция ноды принадлежит холсту,
+-- а не сущности, и это не мелочь оформления, а два конкретных требования.
+--
+-- Первое: одна и та же сцена (или существо, когда полотно поедет дальше
+-- приключений) должна лежать сразу на нескольких холстах, каждый раз в своём
+-- месте. Колонка на строке сущности даёт ровно одну позицию на всё.
+--
+-- Второе, и оно серьёзнее: у сцен есть copy-on-write слой кампании
+-- (campaign_id + source_scene_id — см. story_scenes выше). Запись координат в
+-- саму строку сцены означала бы, что сдвиг ноды мышкой внутри кампании
+-- порождает копию сцены: Мастер подвинул квадратик, чтобы не мешал, и молча
+-- отвязал сцену от оригинала. Поэтому раскладка живёт на слое сеттинга и
+-- copy-on-write не запускает.
+--
+-- Отсюда же мёртвый задел story_scenes.canvas_x/canvas_y: он рассчитывал на
+-- первый вариант и не используется. Убрать его отдельной миграцией, когда
+-- полотно поедет в работу.
+CREATE TABLE IF NOT EXISTS canvas_boards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  -- Пока единственный вид: 'arc' — холст одного приключения. Полиморфно с
+  -- прицелом на холсты лора и сессии, поэтому FK нет (как у generic_links).
+  scope_type TEXT NOT NULL,
+  scope_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(scope_type, scope_id)
+);
+
+-- Нода на холсте — это ссылка на реальную запись плюс её место.
+--
+-- У строки два разных смысла, и это намеренно.
+--
+-- Ноды СЦЕН выводятся из приключения: холст показывает все его сцены, а
+-- строка здесь нужна только чтобы запомнить, куда ноду подвинули. У
+-- неподвинутой позиция вычисляется раскладкой по умолчанию, и холст свежего
+-- приключения не требует ни одной записи.
+--
+-- Ноды СУЩНОСТЕЙ и НАБОРОВ выводить не из чего: в приключении на двадцать
+-- сцен подцеплено под сотню существ и локаций, и показывать их все значит
+-- заставить Мастера расчищать схему вместо того, чтобы её рисовать. Поэтому
+-- такая нода существует ровно потому, что её сюда положили, и строка здесь —
+-- и есть факт её существования на этом холсте.
+--
+-- Отсюда же разный смысл удаления: убрать ноду сущности — убрать строку
+-- отсюда, и связь «участник сцены» при этом остаётся жить. Связь снимается
+-- отсоединением стрелки, а не уборкой квадратика.
+CREATE TABLE IF NOT EXISTS canvas_nodes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  -- scene | being | location | artifact | community | compendium_entry | bundle
+  node_type TEXT NOT NULL,
+  node_id INTEGER NOT NULL,
+  x REAL NOT NULL DEFAULT 0,
+  y REAL NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(board_id, node_type, node_id)
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_nodes_board ON canvas_nodes(board_id);
+
+-- Рамка главы на холсте приключения: своя нода-группа, а не обводка по
+-- содержимому. Обводка обошлась бы без хранения, но переставить главу местами
+-- значило бы выделить и не промахнувшись перетащить четырнадцать нод — а
+-- переставлять их хочется сразу после переезда.
+--
+-- Хранится один прямоугольник на главу. Сцены внутри держат СВОИ координаты в
+-- системе холста, а не относительно рамки: иначе перетаскивание сцены из
+-- главы в главу пересчитывало бы её место, и она бы прыгала.
+CREATE TABLE IF NOT EXISTS canvas_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  x REAL NOT NULL DEFAULT 0,
+  y REAL NOT NULL DEFAULT 0,
+  w REAL NOT NULL DEFAULT 320,
+  h REAL NOT NULL DEFAULT 240,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(board_id, arc_id)
+);
+
+-- Набор — универсальный объединитель узлового редактора: своё имя, внутри
+-- перечисление сущностей с количеством, один выход. Отряд гоблинов, связка
+-- ключей, три двери подземелья.
+--
+-- Типизируется содержимым: что положили первым, того набор и есть. Набор
+-- существ втыкается только во вход «участники», набор предметов — только в
+-- «предметы». Без этого правила универсальный объединитель ломает то, ради
+-- чего у сцены три отдельных входа.
+--
+-- Своей записью, а не при полотне: поэтому переносится между полотнами и
+-- уезжает с экспортом приключения на тех же условиях, что сцена — едет
+-- структура, привязки едут ссылками.
+--
+-- Переиспользуется по правилу заготовки, той же парой колонок, что у сцены:
+-- in_library — лежит на полке; library_bundle_id — эта строка есть вставка
+-- такого набора и следует за ним, пока её не тронули. Правило одно на весь
+-- редактор: две несовместимые механики переиспользования гарантируют вопрос
+-- «почему тут правка разошлась, а тут разъехалась».
+-- uid у набора нет намеренно, хотя экспорт его потребует: список UID_TABLES в
+-- db.ts обязан совпадать с MENTIONABLE, а набор не упоминается в текстах.
+-- Заводить колонку впрок — это ровно тот мёртвый задел, каким оказались
+-- story_scenes.canvas_x/canvas_y; добавится, когда наборы поедут в экспорт.
+CREATE TABLE IF NOT EXISTS canvas_bundles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL DEFAULT '',
+  -- being | artifact | location | compendium_entry — вид содержимого.
+  -- Пусто у пустого набора: он ещё ничем не стал.
+  content_type TEXT,
+  library_bundle_id INTEGER REFERENCES canvas_bundles(id) ON DELETE CASCADE,
+  in_library INTEGER NOT NULL DEFAULT 0,
+  -- Метка «где заведён», а не владение — как у заготовки и у наборов пульта
+  -- звука. Удаление сеттинга набор переживает.
+  setting_id INTEGER REFERENCES settings(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_bundles_library ON canvas_bundles(library_bundle_id);
+
+-- Сколько именно: «4», «1к6», «2к4+1».
+--
+-- Свойство СВЯЗИ, а не существа: в одной сцене гоблинов четверо, в другой
+-- 1к6, а гоблин один и тот же. Спутник, а не колонка в generic_links: та
+-- держит на себе всё приложение, и колонка, осмысленная в одной секции из
+-- двадцати, через полгода никем не удаляется.
+--
+-- Один ключ — строка generic_links, поэтому таблица обслуживает разом состав
+-- сцены (scene_participants) и состав набора (from_type = 'bundle').
+CREATE TABLE IF NOT EXISTS link_cast (
+  link_id INTEGER PRIMARY KEY REFERENCES generic_links(id) ON DELETE CASCADE,
+  -- Свободная строка на входе, разбирается как бросок при показе: что не
+  -- разобралось, показывается текстом и в инициативу не размножается.
+  qty TEXT NOT NULL DEFAULT ''
+);
+
+-- Исходы проверки. Раньше это были два текстовых поля story_scene_checks
+-- .on_success/.on_failure, и ветвление подземелья было спрятано внутри
+-- строки: «провалил — попадает в яму» читается человеком, но не рисуется
+-- схемой и не переживает переименования ямы.
+--
+-- Число исходов задаёт система, а не программа: в D&D их два, в Legends in
+-- the Mist три, в Daggerheart четыре. Поэтому список свободный — по два
+-- («Успех», «Провал») при создании проверки, дальше Мастер добавляет и
+-- переименовывает. Прибитые четыре означали бы две вечно пустые дырки в
+-- каждой d20-проверке, а Мастер начал бы их чем-то заполнять просто потому,
+-- что они есть. Тот же довод, по которому difficulty оставлен свободным
+-- текстом.
+--
+-- Полей два, а не одно. Подпись (`label`) — имя разъёма, короткое, его видно
+-- на схеме. Последствие (`consequence`) — что при этом происходит, словами.
+-- Слить их в одно значило бы либо потерять существующие тексты при переносе,
+-- либо подписывать разъём абзацем.
+--
+-- target_type/target_id — необязательная связь: куда ведёт этот исход. Пока
+-- это сцена (тогда исход рисуется ребром на холсте приключения); поле
+-- полиморфное с прицелом на награду, артефакт и событие. FK нет по той же
+-- причине, что у generic_links.
+--
+-- Входов у проверки нет намеренно: если у ноды стрелки сходятся с обеих
+-- сторон, схема читается медленнее текста, ради которого её и рисовали.
+-- Общее последствие на несколько проверок выражается тем, что несколько
+-- исходов ведут в одну ноду.
+CREATE TABLE IF NOT EXISTS story_check_outcomes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  check_id INTEGER NOT NULL REFERENCES story_scene_checks(id) ON DELETE CASCADE,
+  label TEXT NOT NULL DEFAULT '',
+  consequence TEXT NOT NULL DEFAULT '',
+  target_type TEXT,
+  target_id INTEGER,
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_story_check_outcomes_check ON story_check_outcomes(check_id);

@@ -42,6 +42,9 @@ export function useSoundRemote() {
     setRepeat: (mode: "off" | "track" | "playlist") => sendCommand({ kind: "repeat", mode }),
     setShuffle: (on: boolean) => sendCommand({ kind: "shuffle", on }),
     revertAutoSwitch: () => sendCommand({ kind: "revertAutoSwitch" }),
+    sceneSet: (setId: number | null, sceneName: string, setName: string) =>
+      sendCommand({ kind: "sceneSet", setId, sceneName, setName }),
+    revertSceneSet: () => sendCommand({ kind: "revertSceneSet" }),
     reload: () => sendCommand({ kind: "reload" }),
   };
 }

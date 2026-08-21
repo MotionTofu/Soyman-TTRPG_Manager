@@ -12,7 +12,7 @@ interface DashboardSession {
   date: string;
   title: string | null;
   start_time: string | null;
-  status: "planned" | "held" | "cancelled" | "rescheduled";
+  status: "planned" | "held" | "cancelled";
 }
 
 interface UnpaidSession {

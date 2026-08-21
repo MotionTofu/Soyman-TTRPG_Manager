@@ -1,0 +1,437 @@
+/* Пульт сессии: переключатель сцен и полоса времени.
+
+   Никаких новых цветов — только --paper/--ink/--accent/--line, как в
+   docs/design-system-punk-zine.md §3.2. Различия делаются формой и толщиной:
+   в палитре ровно три цвета, и различие должно переживать чёрно-белую печать.
+
+   Это каркас, а не оформление: расположение утверждено, вид пойдёт отдельным
+   проходом по дизайну. */
+
+/* ------------------------------------------------ переключатель сцен */
+
+/* Две колонки: слева ярусы «Сейчас / Дальше / Приключения», справа
+   предпросмотр. Слева фиксированная ширина — ярусы это список одинаковых
+   строк, растягивать его незачем; всё лишнее место достаётся зачитке. */
+.sw-wrap {
+  container-type: inline-size;
+}
+
+.sw {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.sw-left {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border-right: var(--card-border-width) solid var(--line);
+}
+.sw-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--paper);
+}
+
+.sw-now {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Подпись яруса: мелкая, прописными, моноширинная — она называет ярус, а не
+   соперничает с названием сцены. */
+.sw-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+/* Название запущенной сцены — самое крупное в колонке: система требует на
+   каждом экране одно крупное, ряд среднего и плотный список мелкого (§10.5). */
+.sw-scene-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1.05;
+}
+.sw-arc-name {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+
+/* Подпись автосмены звука — инверсией, как всё важное в системе: заливка
+   вместо второго цвета. Мастер должен заметить её краем глаза. */
+.sw-sound.is-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 8px;
+  margin-top: 6px;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-size: var(--fs-meta);
+}
+
+.sw-exits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Кнопка перехода: рамка вдвое толще обычной — это то, ради чего пульт
+   открыт, и палец должен попадать не глядя. Радиуса нет: в системе его нет
+   вовсе, а скругление смягчило бы ровно то, что должно быть заметным. */
+.sw-exit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  white-space: normal;
+}
+.sw-exit:hover {
+  background: var(--paper-2);
+  border-color: var(--ink);
+}
+/* Выбранная для предпросмотра — инверсией. Не рамкой потолще: рамка уже
+   толстая, и разница между 2 и 3 пикселями за столом не читается. */
+.sw-exit.is-picked {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
+}
+
+.sw-exit-name {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--fs-meta);
+}
+
+.sw-exit-label {
+  font-family: var(--font-body);
+  font-size: var(--fs-micro);
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.75;
+}
+
+/* Приключение чужой сцены — акцентом: единственная пометка на кнопке, которая
+   предупреждает, а не описывает. */
+.sw-exit-arc {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--accent);
+}
+.sw-exit.is-picked .sw-exit-arc {
+  color: var(--on-surface);
+}
+
+.sw-arc > summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+.sw-arc > summary .muted {
+  font-family: var(--font-mono);
+}
+
+.sw-arc-scenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 7px 0 9px 14px;
+}
+
+/* Сцена из списка — тоньше рамкой и без капса: список это страховка, а не
+   основной путь, и он не должен спорить с ярусом выше. */
+.sw-arc-scenes .sw-exit {
+  border-width: 1px;
+  padding: 2px 7px;
+}
+.sw-arc-scenes .sw-exit-name {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-family: var(--font-body);
+}
+
+/* ------------------------------------------------------- предпросмотр */
+
+.sw-preview-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: var(--card-border-width) solid var(--line);
+}
+/* Имя занимает не меньше 200px: иначе кнопка запуска отжимает его в полоску,
+   а длинное название вроде «Оранжерея» рвать негде — оно вылезает и наезжает
+   на кнопку. Не влезли оба — кнопка уходит на строку ниже. */
+.sw-preview-head > div:first-child {
+  flex: 1 1 200px;
+}
+.sw-preview-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  line-height: 1;
+  margin-top: 2px;
+  /* Длинное слово без пробелов рвётся, а не вылезает за карточку. */
+  overflow-wrap: anywhere;
+}
+.sw-launch {
+  border-radius: 0;
+  padding: 9px 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sw-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sw-entry {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* «Зачитать» — единственный текст на пульте, который произносят вслух.
+   Курсив и толстая рамка: за столом его находят глазами, не читая, что
+   вокруг. */
+.sw-read {
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  padding: 10px 12px;
+}
+.sw-read p {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-h3);
+  line-height: 1.5;
+  font-style: italic;
+}
+/* Пересказ вместо зачитки — прямым начертанием: вслух его не говорят, и
+   курсив соврал бы. */
+.sw-read.is-summary p {
+  font-style: normal;
+  font-size: var(--fs-body);
+}
+
+.sw-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+.sw-card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  display: flex;
+  flex-direction: column;
+}
+.sw-card__head {
+  border-bottom: var(--card-border-width) solid var(--line);
+  padding: 5px 9px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.sw-card__body {
+  padding: 8px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+}
+.sw-check-meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+
+/* Контейнерный запрос, а не медиа: ширину пульта задаёт колонка между доками,
+   а не окно. На экране 1280 эта колонка бывает уже 400px, и медиа-запрос
+   схлопнул бы колонки слишком поздно — проверено, название сцены к тому
+   моменту рассыпалось по букве в строку. Контейнер объявляет .sw-wrap: ни
+   один предок в приложении container-type не ставит. */
+@container (max-width: 760px) {
+  .sw {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sw-left {
+    border-right: none;
+    border-bottom: var(--card-border-width) solid var(--line);
+  }
+}
+
+/* ------------------------------------------------------ полоса времени */
+
+.ts {
+  gap: 0;
+  flex-wrap: wrap;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Дата отделена от событий вертикальной чертой, а не отступом: это два разных
+   вопроса — «какое сегодня» и «что надвигается», — и черта отвечает на них
+   раздельно, не тратя ширину. */
+.ts-today {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border-right: var(--card-border-width) solid var(--line);
+}
+.ts-date {
+  font-family: var(--font-mono);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ts-near {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: var(--fs-meta);
+}
+.ts-event {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+/* Расстояние моноширинным и крупнее названия: за столом спрашивают «сколько
+   осталось», а не «как называется». */
+.ts-in {
+  font-family: var(--font-mono);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+}
+.ts-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.ts-event.is-important .ts-in {
+  color: var(--accent);
+}
+.ts-event.is-important .ts-title {
+  font-weight: 700;
+}
+
+.ts-actions {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+}
+.ts-empty {
+  padding: 10px 14px;
+  gap: 10px;
+  align-items: center;
+}
+
+
+/* -------------------------------------------------------- количество */
+
+/* Количество на карточке панели: моноширинное и в скобкообразной рамке —
+   чтобы «1к6» не читалось как часть имени. */
+.qty-chip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  border: 1px solid var(--line);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+/* «В сцене» — инверсией, как всё важное в системе: заливка вместо второго
+   цвета. Панель собрана из всех сцен вечера, и это единственная пометка,
+   которая говорит «вот прямо сейчас». */
+.in-scene-chip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 0 5px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------- особые строки инициативы */
+
+.initiative-specials {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+}
+
+/* Логово, окружение и своё событие — пунктирной рамкой: они ходят в
+   инициативе, но никем не являются, и сплошная рамка обещала бы бойца. */
+.initiative-tile.initiative-lair,
+.initiative-tile.initiative-environment,
+.initiative-tile.initiative-custom {
+  border-style: dashed;
+}
+
+/* Персонаж игрока — шлемом перед именем. Кромку слева не трогаем: её уже
+   занял «сейчас его ход» (.initiative-current), и вторая полоса слила бы два
+   разных факта в один — тем более что в теме по умолчанию --accent и --ink
+   это один и тот же цвет.
+
+   Метка стоит в слоте постоянной ширины, иначе имена НПЦ и игроков разъехались
+   бы по горизонтали и столбик перестал читаться. */
+.initiative-mark {
+  width: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.initiative-mark .nav-icon {
+  fill: var(--ink);
+  stroke: none;
+}
+/* НПЦ и монстры — полый квадрат: тот же словарь, что у разъёмов на полотне,
+   где квадрат означает сущность. */
+.initiative-mark--npc {
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--ink);
+}
+
+/* Сыгранная сцена в списке вечера. Пунктир и приглушение, а не исчезновение:
+   в сцены возвращаются — и чаще, чем кажется, когда партия ходит кругами. */
+.sw-exit.is-played {
+  border-style: dashed;
+  opacity: 0.6;
+}

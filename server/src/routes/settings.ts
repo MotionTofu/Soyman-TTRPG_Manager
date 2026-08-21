@@ -3,6 +3,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
+import { defaultStatus, settingNow, timePatch } from "../services/eventTime";
 import {
   beingFolder,
   communityFolder,
@@ -255,12 +256,15 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
       .status(400)
       .json({ error: "title, inworld_year, inworld_month, inworld_day are required" });
   }
+  // Статус вычисляется по «сейчас» в мире, а не ставится «случилось» всем
+  // подряд: в хронику пишут и будущее — пророчество, затмение, коронацию.
+  const status = defaultStatus(inworld_year, inworld_month, settingNow(Number(req.params.id)));
   const info = db
     .prepare(
       `INSERT INTO setting_calendar_events
          (setting_id, title, description, full_description, consequences,
-          inworld_year, inworld_month, inworld_day, important)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          inworld_year, inworld_month, inworld_day, important, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       req.params.id,
@@ -271,7 +275,8 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
       inworld_year,
       inworld_month,
       inworld_day,
-      important ? 1 : 0
+      important ? 1 : 0,
+      status
     );
 
   const campaigns = db
@@ -347,6 +352,16 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
     consequences ?? null,
     req.params.eventId
   );
+  // Точность, конец периода, статус и «чем отменилось» — отдельным патчем:
+  // конец периода надо уметь СНЯТЬ, а COALESCE не отличает «не передали» от
+  // «очистили».
+  const time = timePatch(req.body as Record<string, unknown>);
+  if (time.sets.length > 0) {
+    db.prepare(`UPDATE setting_calendar_events SET ${time.sets.join(", ")} WHERE id = ?`).run(
+      ...time.values,
+      req.params.eventId
+    );
+  }
   const updated = db
     .prepare("SELECT * FROM setting_calendar_events WHERE id = ?")
     .get(req.params.eventId) as {
@@ -366,6 +381,109 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
     updated.inworld_day
   );
   res.json(updated);
+});
+
+// ------------------------------------------------------------- циклы
+
+// Обобщённый цикл сеттинга: «каждые N дней, начиная с такой-то даты», с
+// необязательными именованными точками внутри. Приложению не нужно знать, что
+// такое луна: ему нужно считать «каждые N дней» и подписывать точки — тогда
+// та же механика берёт приливы, ярмарку раз в десять дней и смену стражи.
+
+settingsRouter.get("/:id/cycles", (req, res) => {
+  const cycles = db
+    .prepare("SELECT * FROM setting_cycles WHERE setting_id = ? ORDER BY position, id")
+    .all(req.params.id) as { id: number }[];
+  const points = db.prepare(
+    "SELECT * FROM setting_cycle_points WHERE cycle_id = ? ORDER BY day_offset, position, id"
+  );
+  res.json(cycles.map((c) => ({ ...c, points: points.all(c.id) })));
+});
+
+settingsRouter.post("/:id/cycles", (req, res) => {
+  const { name, period_days, anchor_year, anchor_month, anchor_day } = req.body as {
+    name?: string;
+    period_days?: number;
+    anchor_year?: number;
+    anchor_month?: number;
+    anchor_day?: number;
+  };
+  if (!name?.trim() || !period_days || period_days < 1) {
+    return res.status(400).json({ error: "нужны название и период в днях" });
+  }
+  const position =
+    ((db.prepare("SELECT MAX(position) m FROM setting_cycles WHERE setting_id = ?").get(req.params.id) as {
+      m: number | null;
+    }).m ?? -1) + 1;
+  const info = db
+    .prepare(
+      `INSERT INTO setting_cycles (setting_id, name, period_days, anchor_year, anchor_month, anchor_day, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      req.params.id,
+      name.trim(),
+      Math.round(period_days),
+      anchor_year ?? 1,
+      anchor_month ?? 1,
+      anchor_day ?? 1,
+      position
+    );
+  res.status(201).json(db.prepare("SELECT * FROM setting_cycles WHERE id = ?").get(info.lastInsertRowid));
+});
+
+settingsRouter.put("/cycles/:cycleId", (req, res) => {
+  const { name, period_days, anchor_year, anchor_month, anchor_day } = req.body as Record<
+    string,
+    unknown
+  >;
+  db.prepare(
+    `UPDATE setting_cycles SET
+       name = COALESCE(?, name),
+       period_days = COALESCE(?, period_days),
+       anchor_year = COALESCE(?, anchor_year),
+       anchor_month = COALESCE(?, anchor_month),
+       anchor_day = COALESCE(?, anchor_day)
+     WHERE id = ?`
+  ).run(
+    name === undefined ? null : String(name).trim(),
+    period_days === undefined ? null : Math.max(1, Math.round(Number(period_days))),
+    anchor_year === undefined ? null : Number(anchor_year),
+    anchor_month === undefined ? null : Number(anchor_month),
+    anchor_day === undefined ? null : Number(anchor_day),
+    req.params.cycleId
+  );
+  res.json(db.prepare("SELECT * FROM setting_cycles WHERE id = ?").get(req.params.cycleId));
+});
+
+settingsRouter.delete("/cycles/:cycleId", (req, res) => {
+  db.prepare("DELETE FROM setting_cycles WHERE id = ?").run(req.params.cycleId);
+  res.json({ ok: true });
+});
+
+settingsRouter.post("/cycles/:cycleId/points", (req, res) => {
+  const { name, day_offset } = req.body as { name?: string; day_offset?: number };
+  if (!name?.trim() || day_offset == null) {
+    return res.status(400).json({ error: "нужны название и день внутри оборота" });
+  }
+  const cycle = db.prepare("SELECT period_days FROM setting_cycles WHERE id = ?").get(req.params.cycleId) as
+    | { period_days: number }
+    | undefined;
+  if (!cycle) return res.status(404).json({ error: "not found" });
+  // День за пределами оборота — почти наверняка опечатка, и молча свернуть его
+  // по модулю значило бы поставить точку не туда, где Мастер её ждёт.
+  if (day_offset < 0 || day_offset >= cycle.period_days) {
+    return res.status(400).json({ error: `день должен быть от 0 до ${cycle.period_days - 1}` });
+  }
+  const info = db
+    .prepare("INSERT INTO setting_cycle_points (cycle_id, name, day_offset) VALUES (?, ?, ?)")
+    .run(req.params.cycleId, name.trim(), Math.round(day_offset));
+  res.status(201).json(db.prepare("SELECT * FROM setting_cycle_points WHERE id = ?").get(info.lastInsertRowid));
+});
+
+settingsRouter.delete("/cycle-points/:pointId", (req, res) => {
+  db.prepare("DELETE FROM setting_cycle_points WHERE id = ?").run(req.params.pointId);
+  res.json({ ok: true });
 });
 
 settingsRouter.delete("/calendar-events/:eventId", (req, res) => {

@@ -58,9 +58,15 @@ import type {
   SessionStatus,
   SessionSummary,
   Setting,
+  SettingCycle,
   StorySecret,
   System,
 } from "../types";
+import { Timeline } from "../components/Timeline";
+
+// Три вида одних и тех же событий: сетка показывает месяц, список — порядок,
+// ось — расстояния.
+type WorldView = "calendar" | "list" | "axis";
 
 const GM_TABS = [
   "Обзор",
@@ -95,13 +101,20 @@ export function CampaignDetailPage() {
     campaign?.role === "player" ? "Персонаж" : "Обзор",
     campaign?.role === "player" ? undefined : GM_TAB_ALIASES
   );
-  const [worldView, setWorldView] = useState<"calendar" | "list">(
-    () => (localStorage.getItem("campaignWorldView") as "calendar" | "list") || "calendar"
+  // Третий вид рядом с сеткой и списком: сетка показывает месяц, список —
+  // порядок, ось — расстояния и «сколько у них осталось».
+  const [worldView, setWorldView] = useState<WorldView>(
+    () => (localStorage.getItem("campaignWorldView") as WorldView) || "calendar"
   );
-  function changeWorldView(v: "calendar" | "list") {
+  function changeWorldView(v: WorldView) {
     setWorldView(v);
     localStorage.setItem("campaignWorldView", v);
   }
+  const [cycles, setCycles] = useState<SettingCycle[]>([]);
+  useEffect(() => {
+    if (!campaign?.setting_id) return;
+    api.get<SettingCycle[]>(`/settings/${campaign.setting_id}/cycles`).then(setCycles);
+  }, [campaign?.setting_id]);
 
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<SessionStatus>("planned");
@@ -255,6 +268,24 @@ export function CampaignDetailPage() {
 
   async function toggleEventImportant(ev: CampaignCalendarEvent) {
     await api.put(`/campaigns/calendar-events/${ev.id}`, { important: !ev.important });
+    refreshCalendarEvents();
+  }
+
+  // Сдвиг события по оси: точность приходит от масштаба, на котором бросили.
+  async function moveCampaignEvent(
+    id: number,
+    date: { year: number; month: number; day: number; precision: string }
+  ) {
+    // Сессию по оси не двигают: её внутриигровая дата — часть записи о
+    // проведённой игре, и менять её мимо страницы сессии значило бы править
+    // историю жестом, который задумывался как «переставить план».
+    if (id < 0) return;
+    await api.put(`/campaigns/calendar-events/${id}`, {
+      inworld_year: date.year,
+      inworld_month: date.month,
+      inworld_day: date.day,
+      date_precision: date.precision,
+    });
     refreshCalendarEvents();
   }
 
@@ -704,13 +735,69 @@ export function CampaignDetailPage() {
               <button className={worldView === "list" ? "active-sort" : ""} onClick={() => changeWorldView("list")}>
                 Список
               </button>
+              <button className={worldView === "axis" ? "active-sort" : ""} onClick={() => changeWorldView("axis")}>
+                Ось
+              </button>
             </div>
             <button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>
               + Создать событие
             </button>
           </div>
 
-          {worldView === "calendar" ? (
+          {worldView === "axis" ? (
+            <Timeline
+              // События кампании и сессии вместе: без «где были» и «сейчас»
+              // ось отвечает на «когда что случится», но не на «сколько у них
+              // осталось», а давить на игроков сроками можно только вторым.
+              events={[
+                ...sortedCalendarEvents.map((ev) => ({
+                  id: ev.id,
+                  title: ev.title,
+                  year: ev.inworld_year,
+                  month: ev.inworld_month,
+                  day: ev.inworld_day,
+                  precision: ev.date_precision,
+                  year_end: ev.inworld_year_end,
+                  month_end: ev.inworld_month_end,
+                  day_end: ev.inworld_day_end,
+                  status: ev.status,
+                  important: ev.important === 1,
+                  kind: "event" as const,
+                })),
+                ...sessions
+                  .filter((s) => s.inworld_year != null && s.status !== "cancelled")
+                  .map((s) => ({
+                    id: -s.id, // отрицательные — чтобы не столкнуться с id событий
+                    title: s.title || `Сессия №${s.session_number ?? ""}`,
+                    year: s.inworld_year as number,
+                    month: s.inworld_month ?? 1,
+                    day: s.inworld_day ?? 1,
+                    precision: "day" as const,
+                    year_end: s.inworld_year_end ?? null,
+                    month_end: s.inworld_month_end ?? null,
+                    day_end: s.inworld_day_end ?? null,
+                    status: "happened" as const,
+                    important: false,
+                    kind: "session" as const,
+                  })),
+              ]}
+              months={calendar?.months ?? []}
+              era={calendar?.era ?? ""}
+              now={
+                campaign.pinned_calendar_year != null && campaign.pinned_calendar_month != null
+                  ? { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month }
+                  : null
+              }
+              cycles={cycles}
+              onMoveEvent={moveCampaignEvent}
+              onNowChange={(date) => pinCampaignCalendar(date)}
+              onEventClick={(id) => {
+                // Сессии на оси лежат с отрицательным id — по ним открывается
+                // сама сессия, а не событие.
+                if (id < 0) navigate(`/sessions/${-id}`);
+              }}
+            />
+          ) : worldView === "calendar" ? (
             <>
               {!campaign.setting_id ? (
                 <p className="muted">У кампании не привязан сеттинг — календарь недоступен.</p>

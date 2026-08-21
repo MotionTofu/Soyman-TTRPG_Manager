@@ -303,6 +303,22 @@ archiveRouter.delete("/:type/:id", (req, res) => {
     db.prepare("UPDATE campaigns SET system_id = NULL WHERE system_id = ?").run(req.params.id);
   } else if (req.params.type === "setting") {
     db.prepare("DELETE FROM modules WHERE setting_id = ?").run(req.params.id);
+    // Заготовки полки переживают свой сеттинг: у них он метка «где написана»,
+    // а не владелец. Без этого каскад унёс бы не только саму заготовку, но и
+    // все ещё не отвязанные вставки в ЧУЖИХ приключениях (source-каскад по
+    // library_scene_id) — Мастер удалил старый мир и обнаружил дыры в
+    // приключениях, которые к нему отношения не имели.
+    //
+    // Снимается и arc_id: приключение уйдёт каскадом вместе с сеттингом, и
+    // строка, оставшаяся в нём, ушла бы следом. Заготовка становится
+    // бездомной — тем, чем она по смыслу и была.
+    // archived_at IS NULL — иначе уже удалённая заготовка пережила бы свой
+    // сеттинг и осталась висеть в базе бездомной строкой, которую больше
+    // ниоткуда не видно.
+    db.prepare(
+      `UPDATE story_scenes SET setting_id = NULL, arc_id = NULL
+       WHERE setting_id = ? AND in_library = 1 AND archived_at IS NULL`
+    ).run(req.params.id);
   }
   // Кто чем был — снимается до удаления: после DELETE у исчезнувших строк
   // уже не прочесть uid, и ссылки на них подвесить будет нечем.

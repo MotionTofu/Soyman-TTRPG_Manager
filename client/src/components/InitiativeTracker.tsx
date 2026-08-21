@@ -10,6 +10,7 @@ import { rollDiceFormula } from "./dnd/diceRoll";
 import { findDndSystemId, loadDndMechanicsGroup } from "./dnd/dndCompendium";
 import { loadUseEpithets, INITIATIVE_EPITHETS } from "../initiativeTrackerPrefs";
 import type {
+  InitiativeKind,
   DndCharacterData,
   DndCreatureData,
   DndCreatureHitPoints,
@@ -20,6 +21,18 @@ import type {
 } from "../types";
 
 const ACCEPT_TYPES = ["being", "character", "compendium_entry"];
+
+// Строки, которые ходят в инициативе, но никем не являются.
+//
+// Умолчания взяты из книги: логово ходит на 20, окружение — в начале раунда,
+// а «начало раунда» в списке инициативы и выражается сверхвысоким числом.
+// Отдельного флага «в начале раунда» нет намеренно: он потребовал бы своего
+// правила сортировки и своего объяснения за столом, а 999 встаёт наверх сам и
+// правится тем же двойным щелчком, что у всех.
+const SPECIAL_ROWS: { kind: InitiativeKind; name: string; initiative: number }[] = [
+  { kind: "lair", name: "Действие логова", initiative: 20 },
+  { kind: "environment", name: "Действие окружения", initiative: 999 },
+];
 
 // Same 10-color palette used nowhere else yet — deterministic per condition
 // name (hash → index) so a given condition always gets the same chip color
@@ -66,6 +79,9 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [entries, setEntries] = useState<InitiativeEntry[]>([]);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customInit, setCustomInit] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [rollingId, setRollingId] = useState<number | null>(null);
   const [hpErrorId, setHpErrorId] = useState<number | null>(null);
@@ -181,6 +197,39 @@ export function InitiativeTracker({ sessionId }: Props) {
 
   async function clearAll() {
     await api.del(`/initiative-entries?session_id=${sessionId}`);
+    load();
+  }
+
+  /**
+   * Галочка особой строки. Снятая галочка убирает строку без подтверждения —
+   * в отличие от «Убрать» у бойца: там за строкой стоят брошенные хиты и
+   * набранные состояния, а здесь только имя и число.
+   */
+  async function toggleSpecial(spec: (typeof SPECIAL_ROWS)[number]) {
+    const existing = entries.find((e) => e.kind === spec.kind);
+    if (existing) await api.del(`/initiative-entries/${existing.id}`);
+    else
+      await api.post("/initiative-entries", {
+        session_id: sessionId,
+        name: spec.name,
+        kind: spec.kind,
+        initiative: spec.initiative,
+      });
+    load();
+  }
+
+  async function addCustom() {
+    const name = customName.trim();
+    if (!name) return;
+    await api.post("/initiative-entries", {
+      session_id: sessionId,
+      name,
+      kind: "custom",
+      initiative: customInit === "" ? null : Number(customInit),
+    });
+    setCustomName("");
+    setCustomInit("");
+    setAddingCustom(false);
     load();
   }
 
@@ -353,12 +402,67 @@ export function InitiativeTracker({ sessionId }: Props) {
           <NavIcon name="arrowRight" />
         </button>
       </div>
+      {/* Логово и окружение — галочками, потому что решение про них бинарно:
+          они в этом бою или их нет. Своё событие — плюсиком: у него надо
+          спросить имя и число. */}
+      <div className="initiative-specials stack" style={{ gap: 2 }}>
+        {SPECIAL_ROWS.map((spec) => (
+          <label key={spec.kind} className="row muted" style={{ gap: 6, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={entries.some((e) => e.kind === spec.kind)}
+              onChange={() => toggleSpecial(spec)}
+            />
+            {spec.name}
+            <span style={{ fontSize: "0.8em" }}>({spec.initiative})</span>
+          </label>
+        ))}
+        {addingCustom ? (
+          <div className="row" style={{ gap: 4 }}>
+            <input
+              autoFocus
+              placeholder="Событие"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addCustom();
+                if (e.key === "Escape") setAddingCustom(false);
+              }}
+            />
+            <input
+              type="number"
+              placeholder="Иниц."
+              style={{ width: 64 }}
+              value={customInit}
+              onChange={(e) => setCustomInit(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addCustom();
+              }}
+            />
+            <button type="button" className="comp-mini" onClick={addCustom}>
+              Добавить
+            </button>
+            <button type="button" className="comp-mini" onClick={() => setAddingCustom(false)}>
+              <NavIcon name="close" />
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="comp-mini" onClick={() => setAddingCustom(true)}>
+            + Своё событие
+          </button>
+        )}
+      </div>
+
       {entries.length === 0 && (
         <span className="muted">Перетащите сюда существо или персонажа</span>
       )}
       <div className="stack" style={{ gap: 4 }}>
         {sorted.map((entry) => {
           const dead = isDead(entry);
+          // У логова, окружения и своего события нет хитов и нечему умирать.
+          // Пустые поля в бою — лишние места, куда можно ткнуть по ошибке.
+          // Состояния остаются: «логово подавлено на раунд» — обычный ход дел.
+          const special = entry.kind !== "creature";
           const conditions = parseConditions(entry.conditions);
           const hpPct =
             entry.max_hp && entry.max_hp > 0
@@ -367,7 +471,7 @@ export function InitiativeTracker({ sessionId }: Props) {
           return (
             <div
               key={entry.id}
-              className={`initiative-tile${
+              className={`initiative-tile initiative-${entry.kind}${
                 session?.combat_active && entry.id === session.combat_turn_entry_id ? " initiative-current" : ""
               }${dead ? " initiative-dead" : ""}`}
             >
@@ -386,7 +490,17 @@ export function InitiativeTracker({ sessionId }: Props) {
                 </div>
               )}
               <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {/* Шлем — персонаж игрока, полый квадрат — все остальные.
+                    У логова и окружения метки нет: они никем не являются. */}
+                <span className="initiative-mark">
+                  {!special &&
+                    (entry.entity_type === "character" ? (
+                      <NavIcon name="helm" />
+                    ) : (
+                      <span className="initiative-mark--npc" />
+                    ))}
+                </span>
+                <span style={{ fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
                   {entry.name}
                 </span>
                 {editingId === entry.id ? (
@@ -410,30 +524,40 @@ export function InitiativeTracker({ sessionId }: Props) {
                     style={{ cursor: "pointer", whiteSpace: "nowrap" }}
                   >
                     {entry.initiative ?? "—"}
-                    <span className="muted" style={{ fontSize: "0.8em" }}>
-                      {" "}
-                      · {formatModifier(entry.dex_modifier)}
-                    </span>
+                    {/* Ловкость у логова смысла не имеет, а «· +0» рядом с
+                        числом читается как настоящий модификатор. */}
+                    {!special && (
+                      <span className="muted" style={{ fontSize: "0.8em" }}>
+                        {" "}
+                        · {formatModifier(entry.dex_modifier)}
+                      </span>
+                    )}
                   </span>
                 )}
                 <div className="row initiative-actions" style={{ gap: 2 }}>
-                  {/* Ticket 10 (icons: shared components): 💀/😐/♥/⚠ below are
-                      kept as emoji on purpose — they're compact semantic
-                      pictograms (dead/conditions/roll-HP/HP-error) for a dense
-                      action row, not generic close/edit/delete chrome, and the
-                      drawn icon set has no skull/heart/face equivalents. Only
-                      the plain ✕ remove/close buttons in this row were
-                      converted to the shared NavIcon delete/close icons. */}
-                  <button type="button" className="comp-mini" title="Отметить мёртвым" onClick={() => toggleDead(entry)}>
-                    💀
-                  </button>
+                  {/* Череп и метка состояния были эмодзи ровно потому, что в
+                      рисованном наборе не было ни того, ни другого. Теперь
+                      есть — см. NavIcons. ♥ и ⚠ (бросок ХП и его ошибка)
+                      остались эмодзи: сердце в наборе тоже появилось, но
+                      различать «бросить» и «не вышло» одной фигурой нечем, а
+                      два значка ради одной кнопки — лишняя работа. */}
+                  {!special && (
+                    <button
+                      type="button"
+                      className="comp-mini"
+                      title="Отметить мёртвым"
+                      onClick={() => toggleDead(entry)}
+                    >
+                      <NavIcon name="skull" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="comp-mini"
                     title="Состояния"
                     onClick={() => setConditionPickerFor((v) => (v === entry.id ? null : entry.id))}
                   >
-                    😐
+                    <NavIcon name="conditions" />
                   </button>
                   {(entry.entity_type === "being" || entry.entity_type === "compendium_entry") &&
                     confirmRerollId !== entry.id && (
@@ -501,7 +625,7 @@ export function InitiativeTracker({ sessionId }: Props) {
                   ))}
                 </div>
               )}
-              {hpPct != null && (
+              {hpPct != null && !special && (
                 <div className="row" style={{ gap: 6, alignItems: "center" }}>
                   <span className="muted" style={{ fontSize: "0.8em", whiteSpace: "nowrap" }}>
                     ХП: {entry.current_hp ?? "—"} / {entry.max_hp}

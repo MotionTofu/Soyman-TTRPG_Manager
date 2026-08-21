@@ -6,7 +6,7 @@ import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { LazyDetails } from "../components/LazyDetails";
 import { CampaignSecrets } from "../components/CampaignSecrets";
 import { RemindersWidget } from "../components/RemindersWidget";
-import type { CampaignDetail, Character, SessionDetail } from "../types";
+import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
 
 // Same module-level constants as SessionDetailPage.tsx — SectionDropZone is
 // React.memo'd, so an inline array literal here would be a new reference
@@ -41,6 +41,20 @@ interface PanelProps {
   session: SessionDetail;
   campaign: CampaignDetail;
   characters: Character[];
+  /** Счётчик запусков сцен: панели перечитываются, когда сцена сменилась. */
+  launches: number;
+  /**
+   * Состав всех сцен сессии. Панели показывают его строками наравне со
+   * связями: Мастеру полезнее видеть весь вечер сразу, а не состав одной
+   * запущенной сцены — у самого большого приключения 29 сцен и 10 разных
+   * участников, так что объединение это два десятка строк, а не сотня.
+   */
+  union?: SessionUnionRow[];
+}
+
+/** Строки объединения для одной панели. */
+function forPanel(union: SessionUnionRow[] | undefined, panel: string): SessionUnionRow[] {
+  return (union ?? []).filter((u) => u.panel === panel);
 }
 
 // Popped-out panel windows are opened by name, so re-clicking the same
@@ -66,7 +80,7 @@ function PopoutButton({ sessionId, panelKey }: { sessionId: number; panelKey: Se
   );
 }
 
-function LocationsContent({ sessionId, session }: PanelProps) {
+function LocationsContent({ sessionId, session, launches }: PanelProps) {
   return (
     <SectionDropZone
       entityType="session"
@@ -77,11 +91,12 @@ function LocationsContent({ sessionId, session }: PanelProps) {
       mentionText={session.idea_notes}
       mentionTypes={LOCATION_TYPES}
       origin="live"
+      version={launches}
     />
   );
 }
 
-function PlotCharactersContent({ sessionId, session }: PanelProps) {
+function PlotCharactersContent({ sessionId, session, launches, union }: PanelProps) {
   return (
     <SectionDropZone
       entityType="session"
@@ -92,15 +107,26 @@ function PlotCharactersContent({ sessionId, session }: PanelProps) {
       mentionText={session.idea_notes}
       mentionTypes={PLOT_CHARACTER_TYPES}
       origin="live"
+      version={launches}
+      unionRows={forPanel(union, "plot_characters")}
+      toInitiative
     />
   );
 }
 
-function ObstaclesContent({ sessionId }: PanelProps) {
-  return <ObstacleDropZone sessionId={sessionId} origin="live" />;
+function ObstaclesContent({ sessionId, launches, union }: PanelProps) {
+  return (
+    <ObstacleDropZone
+      sessionId={sessionId}
+      origin="live"
+      version={launches}
+      unionRows={forPanel(union, "enemies")}
+      toInitiative
+    />
+  );
 }
 
-function LootContent({ sessionId }: PanelProps) {
+function LootContent({ sessionId, launches, union }: PanelProps) {
   return (
     <SectionDropZone
       entityType="session"
@@ -109,6 +135,8 @@ function LootContent({ sessionId }: PanelProps) {
       acceptTypes={LOOT_TYPES}
       placeholder="Перетащите сюда ресурс или артефакт из поиска"
       origin="live"
+      version={launches}
+      unionRows={forPanel(union, "loot")}
     />
   );
 }

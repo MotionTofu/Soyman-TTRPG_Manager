@@ -42,6 +42,20 @@ const LINK_ENDPOINT_TABLE: Record<string, string> = {
   session: "sessions",
   compendium_entry: "compendium_entries",
   playlist: "playlists",
+  // Сцены и приключения в этой таблице отсутствовали: у generic_links нет FK,
+  // и связь удалённой сцены («участники», «место», упоминание) оставалась
+  // висеть, выглядя при этом рабочей. Проверено на живой базе — до сих пор не
+  // укусило только потому, что сеттинги целиком тут ещё не удаляли.
+  scene: "story_scenes",
+  adventure: "story_arcs",
+  // Набор узлового редактора. Сущностью мира он не является и в графе связей
+  // его нет, но членство в нём — обычные generic_links, и без уборки удалённый
+  // набор оставлял бы их висеть.
+  bundle: "canvas_bundles",
+  // Набор пульта звука: сцена ссылается на него секцией scene_sound, а FK у
+  // generic_links нет — удалённый набор оставил бы у сцены ссылку в никуда, и
+  // запуск сцены пытался бы включить то, чего больше нет.
+  sound_set: "sound_sets",
 };
 
 // entity_relations полиморфна с обоих концов ровно так же, но до сих пор не
@@ -90,6 +104,17 @@ export function sweepOrphans(): number {
         .run(type);
       removed += infoFrom.changes + infoTo.changes;
     }
+    // Полотна узлового редактора привязаны к владельцу полиморфно
+    // (scope_type/scope_id), поэтому каскада за удалённым приключением у них
+    // нет — как и у спутников выше. Без этой уборки после удаления сеттинга
+    // остаются полотна с координатами нод, которых больше нет.
+    const boards = db
+      .prepare(
+        `DELETE FROM canvas_boards
+         WHERE scope_type = 'arc' AND scope_id NOT IN (SELECT id FROM story_arcs)`
+      )
+      .run();
+    removed += boards.changes;
   });
   run();
   return removed;

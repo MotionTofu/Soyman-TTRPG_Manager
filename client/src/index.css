@@ -1432,21 +1432,70 @@ h4 { font-size: var(--fs-body); }
 .search-result:active {
   cursor: grabbing;
 }
-.search-result-goto {
+.search-result-head {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.search-result-head__left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* Фишка типа не сжимается — сжимается контекст: «Запись компендиума» в две
+   строки читается хуже, чем обрезанное многоточием «Система: D&D…». */
+.search-result-head__left > .entity-type-chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.search-result-context {
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Действия результата — столбиком. Ширину в этой колонке экономим: у дока она
+   порядка 290px, и ряд из трёх кнопок отжимал бы название сущности в полоску. */
+.search-result-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.search-result-goto,
+.search-result-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   color: var(--muted);
   text-decoration: none;
-  font-size: 39px;
+  background: none;
+  border: none;
   line-height: 1;
-  padding: 0 4px;
   border-radius: var(--card-radius);
+  cursor: pointer;
 }
-.search-result-goto:hover {
+.search-result-goto:hover,
+.search-result-card:hover {
   color: var(--accent);
   background: var(--accent-soft);
 }
 .search-result-dock-add {
-  min-width: 32px;
-  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 26px;
   padding: 0;
   font-size: 20px;
   line-height: 1;
@@ -1455,6 +1504,20 @@ h4 { font-size: var(--fs-body); }
   background: var(--accent-soft);
   border: 1px solid var(--accent);
   border-radius: var(--card-radius);
+}
+
+/* Пальцем — крупнее. На мыши 26px хватает и экономит высоту строки, но «+» на
+   пульте задуман именно как замена перетаскиванию для касания, и ужимать его
+   до 26 значило бы чинить одно, ломая другое. */
+@media (pointer: coarse) {
+  .search-result-goto,
+  .search-result-card,
+  .search-result-dock-add {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+  }
 }
 
 /* Floating nav widget — theme-aware via the same CSS vars as .card. */

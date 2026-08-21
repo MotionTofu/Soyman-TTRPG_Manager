@@ -8,11 +8,12 @@ import { NavIcon } from "../components/NavIcons";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { ResourcesSection } from "../components/ResourcesSection";
 import { CheatSheetsSection } from "../components/CheatSheetsSection";
+import { SessionSceneTree } from "../components/SessionSceneTree";
 import { LazyDetails } from "../components/LazyDetails";
 import { MentionText } from "../components/mentions/MentionText";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
-import { formatInworldDate } from "../inworldCalendar";
+import { elapsedDays, formatInworldDate, formatInworldRange } from "../inworldCalendar";
 import { loadHideFinance } from "../financePrivacy";
 import type {
   Campaign,
@@ -21,9 +22,11 @@ import type {
   Playlist,
   StorySecret,
   SessionDetail,
+  SessionReport,
   SessionStatus,
   SessionSummary,
 } from "../types";
+import "../session.css";
 
 // Module-level so SectionDropZone (React.memo'd) sees a stable reference —
 // an inline array literal in the JSX below would be a new object every
@@ -33,8 +36,24 @@ const LOCATION_TYPES = ["location"];
 const LOOT_TYPES = ["resource", "artifact", "compendium_entry"];
 const LOOT_COMPENDIUM_KINDS = ["equipment", "magic_item"];
 
-const SESSION_TABS = ["Обзор", "Подготовка", "Хроника", "Ресурсы"] as const;
+// «Хроника» переименована в «Резюме»: в ней теперь не летопись, а итог
+// вечера — сколько прошло дней в мире, что раскрылось, кто пришёл и заплатил.
+const SESSION_TABS = ["Обзор", "Подготовка", "Резюме", "Ресурсы"] as const;
 type SessionTab = (typeof SESSION_TABS)[number];
+
+const STATUS_LABELS: Record<string, string> = {
+  planned: "Запланирована",
+  held: "Состоялась",
+  cancelled: "Отменена",
+};
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
 
 export function SessionDetailPage() {
   const { id } = useParams();
@@ -44,15 +63,15 @@ export function SessionDetailPage() {
 
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [showReschedule, setShowReschedule] = useState(false);
-  const [toDate, setToDate] = useState("");
+  const [dateDraft, setDateDraft] = useState("");
   const [stakeDraft, setStakeDraft] = useState("");
   const [startTimeDraft, setStartTimeDraft] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [campaignSessions, setCampaignSessions] = useState<SessionSummary[]>([]);
   const [battles, setBattles] = useState<Playlist[]>([]);
-  const [unrevealedSecrets, setUnrevealedSecrets] = useState<StorySecret[]>([]);
+  const [secrets, setSecrets] = useState<StorySecret[]>([]);
+  const [report, setReport] = useState<SessionReport | null>(null);
   const [inworldYearDraft, setInworldYearDraft] = useState("");
   const [inworldMonthDraft, setInworldMonthDraft] = useState("");
   const [inworldDayDraft, setInworldDayDraft] = useState("");
@@ -67,6 +86,7 @@ export function SessionDetailPage() {
     api.get<SessionDetail>(`/sessions/${sessionId}`).then((s) => {
       setSession(s);
       setStakeDraft(s.stake_override != null ? String(s.stake_override) : "");
+      setDateDraft(s.date);
       setStartTimeDraft(s.start_time || "");
       setTitleDraft(s.title || "");
       setInworldYearDraft(s.inworld_year != null ? String(s.inworld_year) : "");
@@ -84,14 +104,9 @@ export function SessionDetailPage() {
       // это одна модель, за игровым столом разделять их незачем.
       api
         .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${s.campaign_id}`)
-        .then((data) =>
-          setUnrevealedSecrets(
-            [...data.own, ...data.groups.flatMap((g) => g.items)].filter(
-              (x) => x.state?.revealed !== 1
-            )
-          )
-        );
+        .then((data) => setSecrets([...data.own, ...data.groups.flatMap((g) => g.items)]));
     });
+    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then(setReport).catch(() => setReport(null));
   }, [sessionId]);
 
   useEffect(refresh, [refresh]);
@@ -100,13 +115,28 @@ export function SessionDetailPage() {
     api.get<Playlist[]>("/playlists").then(setBattles).catch(() => setBattles([]));
   }, []);
 
+  const unrevealedSecrets = useMemo(
+    () => secrets.filter((x) => x.state?.revealed !== 1),
+    [secrets]
+  );
+
   async function markSecretRevealed(secretId: number) {
     if (!session) return;
+    // Сессия уезжает вместе с отметкой: «Раскрылось в этот вечер» в резюме
+    // строится по ней, а не по дате правки.
     await api.put(`/story/secrets/${secretId}/state`, {
       campaign_id: session.campaign_id,
       revealed: true,
+      session_id: sessionId,
     });
-    setUnrevealedSecrets((prev) => prev.filter((s) => s.id !== secretId));
+    setSecrets((prev) =>
+      prev.map((s) =>
+        s.id === secretId
+          ? { ...s, state: { revealed: 1, note: s.state?.note ?? "" } }
+          : s
+      )
+    );
+    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then(setReport);
   }
 
   // useMemo (not a plain filter) so ResourcesSection's React.memo sees a
@@ -283,13 +313,15 @@ export function SessionDetailPage() {
     refresh();
   }
 
-  async function doReschedule() {
-    if (!toDate) return;
-    const result = await api.post<{ newSession: { id: number } }>(
-      `/sessions/${sessionId}/reschedule`,
-      { to_date: toDate }
-    );
-    navigate(`/sessions/${result.newSession.id}`);
+  // Перенос сессии — это правка её даты, а не заведение новой. Прежняя
+  // кнопка «Перенести» создавала пустой дубль и помечала старую сессию
+  // rescheduled: название, задумка, состав и подготовка оставались на
+  // брошенной записи. Номер сессии считается по порядку дат, так что после
+  // правки он пересчитается сам.
+  async function saveDate() {
+    if (!session || !dateDraft || dateDraft === session.date) return;
+    await api.put(`/sessions/${sessionId}`, { date: dateDraft });
+    refresh();
   }
 
   const sortedSessions = [...campaignSessions].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -303,9 +335,57 @@ export function SessionDetailPage() {
   const isPaidEffective = session.effective_payment_type === "paid";
   const isPlayer = campaign.role === "player";
   const hideFinance = loadHideFinance();
+  const held = session.status === "held";
+
+  const whenLabel = [
+    new Date(`${session.date}T00:00:00`).toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "long",
+    }),
+    session.start_time || null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  // «В мире» в шапке — промежуток одной строкой и БЕЗ эры: шапку читают
+  // мельком, а «Летоисчисление Долин» дважды в строке — это половина её длины
+  // на то, что и так известно. Полная запись с эрой осталась в «Обзоре».
+  const worldLabel =
+    (calendar
+      ? formatInworldRange(
+          { year: draftYear, month: draftMonth, day: draftDay },
+          showEndDate ? { year: draftYearEnd, month: draftMonthEnd, day: draftDayEnd } : null,
+          calendar.months,
+          ""
+        )
+      : null) ?? "не указана";
+
+  // Сколько прошло внутриигровых дней. Считается тем же способом, что и
+  // полоса времени на пульте, иначе они разошлись бы.
+  const daysPassed =
+    calendar &&
+    session.inworld_year != null &&
+    session.inworld_month != null &&
+    session.inworld_day != null &&
+    session.inworld_year_end != null &&
+    session.inworld_month_end != null &&
+    session.inworld_day_end != null
+      ? elapsedDays(
+          session.inworld_year_end,
+          session.inworld_month_end,
+          session.inworld_day_end,
+          calendar.months
+        ) -
+        elapsedDays(
+          session.inworld_year,
+          session.inworld_month,
+          session.inworld_day,
+          calendar.months
+        )
+      : null;
 
   return (
-    <div className="stack">
+    <div className="stack session-profile">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <button disabled={!prevSession} onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}>
           ← Пред. сессия
@@ -314,28 +394,45 @@ export function SessionDetailPage() {
           След. сессия →
         </button>
       </div>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div>
-          {editingTitle ? (
-            <div className="row">
-              <input
-                placeholder={`Сессия №${session.session_number ?? ""}`}
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-              />
-              <button className="primary" onClick={saveTitle}>
-                Сохранить
-              </button>
-              <button onClick={() => setEditingTitle(false)}>Отмена</button>
-            </div>
-          ) : (
-            <h1 onDoubleClick={() => setEditingTitle(true)}>
-              <Link to={`/campaigns/${campaign.id}`}>{campaign.name}</Link> —{" "}
+
+      {/* Заголовок. Название правится прямо здесь: пунктир под ним и карандаш
+          рядом — единственное, что говорит «это можно переписать». Двойной
+          щелчок работал и раньше, но о нём никто не знал, а кнопка «Название»
+          в углу стояла среди действий над сессией, а не над её именем. */}
+      <div className="row sp-header" style={{ justifyContent: "space-between" }}>
+        {editingTitle ? (
+          <div className="row">
+            <input
+              autoFocus
+              placeholder={`Сессия №${session.session_number ?? ""}`}
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveTitle();
+                if (e.key === "Escape") setEditingTitle(false);
+              }}
+            />
+            <button className="primary" onClick={saveTitle}>
+              Сохранить
+            </button>
+            <button onClick={() => setEditingTitle(false)}>Отмена</button>
+          </div>
+        ) : (
+          <h1 className="sp-h1">
+            <Link to={`/campaigns/${campaign.id}`}>{campaign.name}</Link> —{" "}
+            <span className="sp-name" onClick={() => setEditingTitle(true)}>
               {session.title || `Сессия №${session.session_number ?? ""}`}
-            </h1>
-          )}
-          <span className={`badge ${session.status}`}>{session.status}</span>
-        </div>
+            </span>
+            <button
+              className="sp-pencil"
+              title="Переименовать сессию"
+              onClick={() => setEditingTitle(true)}
+            >
+              <NavIcon name="edit" />
+            </button>
+          </h1>
+        )}
+
         <div className="row">
           {!isPlayer && !hideFinance && (
             <div className="badge held">
@@ -344,15 +441,40 @@ export function SessionDetailPage() {
           )}
           <div className="entity-header-actions">
             {!isPlayer && (
-              <button onClick={() => navigate(`/sessions/${sessionId}/live`)}>
+              <button className="primary" onClick={() => navigate(`/sessions/${sessionId}/live`)}>
                 <NavIcon name="die" /> Пульт сессии
               </button>
             )}
-            <button onClick={() => setEditingTitle(true)}>Название</button>
             <button className="danger" onClick={archiveSession}>
               Архивировать
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Шапка одной строкой на всех вкладках, только чтение: «когда», «в
+          мире» и номер — это то, что переспрашивают на любой вкладке, а
+          править их есть где (Обзор). */}
+      <div className="sp-strip">
+        <div className="sp-strip__cell">
+          <span className="sp-label">Когда</span>
+          <span className="sp-value">{whenLabel}</span>
+        </div>
+        {campaign.setting_id && (
+          <div className="sp-strip__cell">
+            <span className="sp-label">В мире</span>
+            <span className="sp-value">{worldLabel}</span>
+          </div>
+        )}
+        <div className="sp-strip__cell">
+          <span className="sp-label">Номер</span>
+          <span className="sp-value">№{session.session_number ?? "—"}</span>
+        </div>
+        <span style={{ flex: 1 }} />
+        <div className="sp-strip__status">
+          <span className={`badge ${session.status}`}>
+            {STATUS_LABELS[session.status] ?? session.status}
+          </span>
         </div>
       </div>
 
@@ -409,62 +531,77 @@ export function SessionDetailPage() {
                   />
                 </label>
               )}
-              <button onClick={() => setShowReschedule((v) => !v)}>Перенести</button>
-              {session.rescheduled_to_id && (
-                <Link to={`/sessions/${session.rescheduled_to_id}`}>→ перенесена на новую дату</Link>
-              )}
-              {session.rescheduled_from_id && (
-                <Link to={`/sessions/${session.rescheduled_from_id}`}>← перенесена с другой даты</Link>
-              )}
             </div>
           )}
 
-          {showReschedule && (
-            <div className="row">
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-              <button className="primary" onClick={doReschedule}>
-                Подтвердить перенос
-              </button>
+          {/* Два времени, а не одно поле на четыре значения: слева когда
+              садимся за стол, справа какое число в мире. Это разные вопросы,
+              и слепленные в ряд они читались как один невнятный список. */}
+          <div className="card sp-time">
+            <div className="sp-time__side">
+              <div className="sp-time__head">
+                <NavIcon name="calendar" /> За столом
+              </div>
+              <div className="sp-time__body">
+                {/* Дата правится и в кампаниях, где владелец играет, а не
+                    ведёт (решение владельца, 2026-08-20): статус, оплата и
+                    пульт там скрыты как чужая епархия, а дата — то, что
+                    переносят всей группой. */}
+                <label className="sp-field">
+                  <span className="sp-label">Дата</span>
+                  <input
+                    type="date"
+                    value={dateDraft}
+                    onChange={(e) => setDateDraft(e.target.value)}
+                    onBlur={saveDate}
+                  />
+                </label>
+                <label className="sp-field">
+                  <span className="sp-label">Начало</span>
+                  <input
+                    type="time"
+                    value={startTimeDraft}
+                    onChange={(e) => setStartTimeDraft(e.target.value)}
+                    onBlur={saveStartTime}
+                  />
+                </label>
+              </div>
             </div>
-          )}
 
-          <div className="card stack">
-            <strong className="entry-title">Время и дата</strong>
-            <div className="row">
-              <label className="row">
-                Время начала
-                <input
-                  type="time"
-                  value={startTimeDraft}
-                  onChange={(e) => setStartTimeDraft(e.target.value)}
-                  onBlur={saveStartTime}
-                />
-              </label>
-              <span className="muted">{session.date}</span>
-            </div>
+            <div className="sp-time__split" />
 
-            {campaign.setting_id && calendar && (
-              <div className="stack">
-                {!editingInworldDate ? (
-                  <span
-                    className="badge planned"
-                    style={{ cursor: "pointer", alignSelf: "flex-start" }}
-                    onClick={() => setEditingInworldDate(true)}
-                  >
-                    {inworldBadge ? (
-                      <>
-                        {inworldBadge}
-                        {showEndDate && inworldBadgeEnd && <> – {inworldBadgeEnd}</>}
-                      </>
-                    ) : (
-                      "Указать внутриигровую дату"
-                    )}
+            <div className="sp-time__side">
+              <div className="sp-time__head">
+                <NavIcon name="globe" /> В мире
+              </div>
+              <div className="sp-time__body">
+                {!campaign.setting_id || !calendar ? (
+                  <span className="muted">
+                    У кампании нет сеттинга — внутриигровой даты не из чего собрать.
                   </span>
+                ) : !editingInworldDate ? (
+                  <>
+                    <div className="sp-field">
+                      <span className="sp-label">Начало</span>
+                      <button className="sp-inworld" onClick={() => setEditingInworldDate(true)}>
+                        {inworldBadge ?? "указать дату"}
+                      </button>
+                    </div>
+                    <div className="sp-field">
+                      <span className="sp-label">Конец</span>
+                      <button
+                        className={`sp-inworld${inworldBadgeEnd ? "" : " is-empty"}`}
+                        onClick={() => setEditingInworldDate(true)}
+                      >
+                        {inworldBadgeEnd ?? "не указан"}
+                      </button>
+                    </div>
+                  </>
                 ) : (
-                  <div className="stack">
+                  <div className="stack" style={{ width: "100%" }}>
                     <div className="row">
                       <label className="row">
-                        Игровая дата: год
+                        Год
                         <input
                           type="number"
                           style={{ width: 90 }}
@@ -504,7 +641,6 @@ export function SessionDetailPage() {
                         />
                         указать дату окончания
                       </label>
-                      <button onClick={saveInworldDate}>Сохранить дату</button>
                     </div>
                     {showEndDate && (
                       <div className="row">
@@ -543,6 +679,12 @@ export function SessionDetailPage() {
                         </label>
                       </div>
                     )}
+                    <div className="row">
+                      <button className="primary" onClick={saveInworldDate}>
+                        Сохранить дату
+                      </button>
+                      <button onClick={() => setEditingInworldDate(false)}>Отмена</button>
+                    </div>
                     {calendar.months.length === 0 && (
                       <span className="muted">
                         Настройте месяцы в{" "}
@@ -553,89 +695,46 @@ export function SessionDetailPage() {
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
 
-          <details className="card stack" open>
-            <summary>
-              <strong className="entry-title">Игроки</strong>
-            </summary>
-            <div className="session-attendance-table-wrap">
-            <table className="session-attendance-table">
-              <thead>
-                <tr>
-                  <th>Игрок</th>
-                  <th
-                    style={{ cursor: "pointer" }}
-                    title="Отметить/снять всех"
-                    onClick={toggleAllAttendance}
-                  >
-                    Пришёл
-                  </th>
-                  {!isPlayer && !hideFinance && (
-                    <th
-                      style={isPaidEffective ? { cursor: "pointer" } : undefined}
-                      title={isPaidEffective ? "Оплатить всем по умолчанию" : undefined}
-                      onClick={isPaidEffective ? payAllDefault : undefined}
-                    >
-                      Оплачено
-                    </th>
-                  )}
-                  {!isPlayer && !hideFinance && isPaidEffective && <th></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {session.attendance.map((a) => (
-                  <tr key={a.player_id}>
-                    <td data-label="Игрок">{a.name}</td>
-                    <td data-label="Пришёл">
-                      <input
-                        type="checkbox"
-                        checked={!!a.attended}
-                        onChange={(e) =>
-                          updateAttendance(a.player_id, "attended", e.target.checked ? 1 : 0)
-                        }
-                      />
-                    </td>
-                    {!isPlayer && !hideFinance && (
-                      <td data-label="Оплачено">
-                        <input
-                          type="number"
-                          style={{ width: 90 }}
-                          value={a.amount_paid || ""}
-                          placeholder="0"
-                          disabled={session.effective_payment_type === "free"}
-                          onChange={(e) =>
-                            updateAttendance(a.player_id, "amount_paid", Number(e.target.value) || 0)
-                          }
-                        />
-                      </td>
-                    )}
-                    {!isPlayer && !hideFinance && isPaidEffective && (
-                      <td>
-                        <button onClick={() => updateAttendance(a.player_id, "amount_paid", defaultStake())}>
-                          Ставка ({defaultStake()})
-                        </button>
-                      </td>
-                    )}
-                  </tr>
+          {/* Нераскрытые тайны переехали сюда из «Хроники»: это долг,
+              перенесённый с прошлых вечеров, и смотреть на него надо, когда
+              вечер только назначают, а не когда он кончился. */}
+          {!isPlayer && unrevealedSecrets.length > 0 && (
+            <div className="card sp-secrets">
+              <div className="sp-secrets__head">
+                <span className="sp-title">Нераскрытые тайны и зацепки</span>
+                <span className="sp-count">
+                  {unrevealedSecrets.length} из {secrets.length}
+                </span>
+                <span style={{ flex: 1 }} />
+                <span className="muted sp-note">перенесены с прошлых сессий кампании</span>
+              </div>
+              <div className="stack sp-secrets__body">
+                {unrevealedSecrets.map((s) => (
+                  <label key={s.id} className="row" style={{ alignItems: "flex-start" }}>
+                    <input type="checkbox" onChange={() => markSecretRevealed(s.id)} />
+                    <span>
+                      <strong>{s.title}</strong>
+                      {s.content && (
+                        <div className="muted" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                          <MentionText text={s.content} />
+                        </div>
+                      )}
+                    </span>
+                  </label>
                 ))}
-                {session.attendance.length === 0 && (
-                  <tr>
-                    <td colSpan={isPlayer || hideFinance ? 2 : 4} className="muted">
-                      В составе кампании нет игроков.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              </div>
             </div>
-          </details>
+          )}
         </div>
       )}
 
       {tab === "Подготовка" && (
         <div className="stack">
+          {!isPlayer && <SessionSceneTree sessionId={sessionId} />}
+
           <EditableTextCard
             key={`idea-${session.id}`}
             title="Задумка на сессию"
@@ -737,8 +836,37 @@ export function SessionDetailPage() {
         </div>
       )}
 
-      {tab === "Хроника" && (
+      {tab === "Резюме" && (
         <div className="stack">
+          {/* Числа вечера появляются только у проведённой сессии: «прошло 0
+              дней, раскрыто 0 тайн» на ещё не сыгранной выглядит как
+              сломанный подсчёт, а не как «ещё не время». */}
+          {held && report && (
+            <div className="sp-stats">
+              {daysPassed != null && (
+                <div className="sp-stat is-lead">
+                  <span className="sp-label">Прошло в мире</span>
+                  <span className="sp-stat__value">
+                    {daysPassed} {plural(daysPassed, "день", "дня", "дней")}
+                  </span>
+                  <span className="sp-stat__note">{worldLabel}</span>
+                </div>
+              )}
+              <div className="sp-stat">
+                <span className="sp-label">Сыграно сцен</span>
+                <span className="sp-stat__value">{report.played}</span>
+                <span className="sp-stat__note">
+                  из {report.planned} {plural(report.planned, "заготовленной", "заготовленных", "заготовленных")}
+                </span>
+              </div>
+              <div className="sp-stat">
+                <span className="sp-label">Раскрыто тайн</span>
+                <span className="sp-stat__value">{report.revealed.length}</span>
+                <span className="sp-stat__note">из {secrets.length} по кампании</span>
+              </div>
+            </div>
+          )}
+
           <EditableTextCard
             key={`events-${session.id}`}
             title="Основные события сессии"
@@ -764,28 +892,118 @@ export function SessionDetailPage() {
             </label>
           </EditableTextCard>
 
-          {unrevealedSecrets.length > 0 && (
-            <details className="card stack" open>
-              <summary>
-                <strong className="entry-title">Нераскрытые тайны и зацепки</strong>
-              </summary>
-              <span className="muted">Перенесены из предыдущих сессий кампании — отметьте, если раскрыли.</span>
-              <div className="stack">
-                {unrevealedSecrets.map((s) => (
-                  <label key={s.id} className="row" style={{ alignItems: "flex-start" }}>
-                    <input type="checkbox" onChange={() => markSecretRevealed(s.id)} />
-                    <span>
-                      <strong>{s.title}</strong>
-                      {s.content && (
-                        <div className="muted" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-                          <MentionText text={s.content} />
-                        </div>
-                      )}
-                    </span>
-                  </label>
-                ))}
+          {held && report && (
+            <div className="card sp-revealed">
+              <div className="sp-secrets__head">
+                <span className="sp-title">Раскрылось в этот вечер</span>
               </div>
-            </details>
+              <div className="stack sp-secrets__body">
+                {report.revealed.map((r) => (
+                  <div key={r.id} className="row" style={{ gap: 8, alignItems: "baseline" }}>
+                    <NavIcon name="check" />
+                    <span>{r.title}</span>
+                  </div>
+                ))}
+                {report.revealed.length === 0 && (
+                  <span className="muted">Ни одной — партия ходила кругами.</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!held && (
+            <div className="sp-pending">
+              <NavIcon name="clock" />
+              <span>
+                Остальное соберётся, когда отметите сессию проведённой: сколько прошло
+                внутриигровых дней и какие тайны раскрылись.
+              </span>
+            </div>
+          )}
+
+          {/* Игроки переехали сюда из «Обзора»: состав кампании из сессии в
+              сессию один и тот же, а «кто пришёл» и «кто заплатил» отмечают
+              ПОСЛЕ вечера, вместе с остальным итогом. */}
+          <details className="card stack" open>
+            <summary>
+              <strong className="entry-title">Игроки</strong>
+            </summary>
+            <div className="session-attendance-table-wrap">
+              <table className="session-attendance-table">
+                <thead>
+                  <tr>
+                    <th>Игрок</th>
+                    <th
+                      style={{ cursor: "pointer" }}
+                      title="Отметить/снять всех"
+                      onClick={toggleAllAttendance}
+                    >
+                      Пришёл
+                    </th>
+                    {!isPlayer && !hideFinance && (
+                      <th
+                        style={isPaidEffective ? { cursor: "pointer" } : undefined}
+                        title={isPaidEffective ? "Оплатить всем по умолчанию" : undefined}
+                        onClick={isPaidEffective ? payAllDefault : undefined}
+                      >
+                        Оплачено
+                      </th>
+                    )}
+                    {!isPlayer && !hideFinance && isPaidEffective && <th></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {session.attendance.map((a) => (
+                    <tr key={a.player_id}>
+                      <td data-label="Игрок">{a.name}</td>
+                      <td data-label="Пришёл">
+                        <input
+                          type="checkbox"
+                          checked={!!a.attended}
+                          onChange={(e) =>
+                            updateAttendance(a.player_id, "attended", e.target.checked ? 1 : 0)
+                          }
+                        />
+                      </td>
+                      {!isPlayer && !hideFinance && (
+                        <td data-label="Оплачено">
+                          <input
+                            type="number"
+                            style={{ width: 90 }}
+                            value={a.amount_paid || ""}
+                            placeholder="0"
+                            disabled={session.effective_payment_type === "free"}
+                            onChange={(e) =>
+                              updateAttendance(a.player_id, "amount_paid", Number(e.target.value) || 0)
+                            }
+                          />
+                        </td>
+                      )}
+                      {!isPlayer && !hideFinance && isPaidEffective && (
+                        <td>
+                          <button onClick={() => updateAttendance(a.player_id, "amount_paid", defaultStake())}>
+                            Ставка ({defaultStake()})
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {session.attendance.length === 0 && (
+                    <tr>
+                      <td colSpan={isPlayer || hideFinance ? 2 : 4} className="muted">
+                        В составе кампании нет игроков.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          {!isPlayer && !held && (
+            <button className="primary sp-finish" onClick={() => setStatus("held")}>
+              Отметить сессию проведённой
+            </button>
           )}
         </div>
       )}

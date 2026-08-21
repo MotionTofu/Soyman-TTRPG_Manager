@@ -1,0 +1,166 @@
+/* Ось времени. Никаких новых цветов: всё через --paper/--ink/--accent/--line,
+   как в docs/design-system-punk-zine.md §3.2. Различия — формой и толщиной, а
+   не оттенком: в палитре ровно три цвета, и различие должно переживать
+   чёрно-белую печать. */
+
+.tl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tl-toolbar {
+  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.tl-canvas {
+  position: relative;
+  height: 220px;
+  overflow: hidden;
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper);
+  /* Курсор говорит, что фон можно возить, — иначе жест приходится угадывать. */
+  cursor: grab;
+  touch-action: none;
+}
+.tl-canvas:active {
+  cursor: grabbing;
+}
+
+/* Засечка: тонкая линия во всю высоту и подпись у основания. Подпись внизу, а
+   не вверху, потому что события живут в середине и наезжали бы на неё. */
+.tl-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--line);
+  pointer-events: none;
+}
+.tl-tick span {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Точка цикла: короткий штрих у самого низа, чтобы не спорить с событиями.
+   Рисуется только на дне и месяце — см. Timeline.tsx. */
+.tl-cycle {
+  position: absolute;
+  bottom: 18px;
+  width: 0;
+  height: 8px;
+  border-left: 2px solid var(--ink);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.tl-item {
+  position: absolute;
+  top: 60px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tl-event-title {
+  pointer-events: none;
+}
+
+/* Важное — инверсией, как везде в системе: заливка вместо второго цвета. */
+.tl-event.is-important {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
+}
+
+/* Предстоящее — пунктирной рамкой: его ещё не было, и сплошная рамка
+   обещала бы свершившийся факт. */
+.tl-event.is-upcoming {
+  border-style: dashed;
+}
+
+/* Отменённое — зачёркнутым названием. Это единственный статус, меняющий смысл
+   всей записи, и различать его по мелкому слову за столом не выйдет. */
+.tl-event.is-cancelled .tl-event-title {
+  text-decoration: line-through;
+}
+.tl-event.is-cancelled {
+  opacity: 0.6;
+}
+
+/* Период — сплошная полоса с засечками на концах. */
+.tl-event.is-period {
+  border-left-width: 4px;
+  border-right-width: 4px;
+}
+
+/* Неточность — размытые края: событие определено до месяца или года, и
+   резкая граница врала бы о точности, которой нет. Именно поэтому период и
+   неточность рисуются по-разному: период уже точен, уточнять в нём нечего. */
+.tl-event.is-fuzzy {
+  border-left: none;
+  border-right: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+
+/* Сессия — отметка «где были», а не факт мира: ниже событий и без рамки
+   сверху, чтобы ряды не путались. */
+.tl-event.is-session {
+  top: 96px;
+  border-style: dotted;
+}
+
+/* Свёртка слипшихся: круглая метка с числом. Круг — единственная круглая
+   вещь на оси, поэтому читается как «не событие, а счётчик». */
+.tl-cluster {
+  top: 60px;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  text-align: center;
+  padding: 0;
+  font-family: var(--font-mono);
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
+}
+
+/* «Сейчас» — единственное место на оси, где уместен акцентный цвет: это не
+   данные, а положение наблюдателя. */
+.tl-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--accent);
+  pointer-events: none;
+}
+.tl-now.is-draggable {
+  pointer-events: auto;
+  cursor: ew-resize;
+}
+.tl-now-head {
+  position: absolute;
+  top: 0;
+  left: -6px;
+  width: 0;
+  height: 0;
+  /* Треугольник рамками: одна фигура без картинки и без лишнего элемента. */
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 9px solid var(--accent);
+}
+

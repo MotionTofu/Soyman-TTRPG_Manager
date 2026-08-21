@@ -50,6 +50,7 @@ import { playerRouter } from "./routes/player";
 import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
 import { visibilityGrantsRouter } from "./routes/visibilityGrants";
 import { storyRouter } from "./routes/story";
+import { canvasRouter } from "./routes/canvas";
 import { adventureImportRouter } from "./routes/adventureImport";
 import { systemImportRouter } from "./routes/systemImport";
 import { sweepOrphans } from "./services/orphans";
@@ -198,6 +199,7 @@ app.use("/api/files", filesRouter);
 app.use("/api/campaign-player-sections", campaignPlayerSectionsRouter);
 app.use("/api/visibility-grants", visibilityGrantsRouter);
 app.use("/api/story", storyRouter);
+app.use("/api/canvas", canvasRouter);
 app.use("/api/import", adventureImportRouter);
 app.use("/api/system-import", systemImportRouter);
 

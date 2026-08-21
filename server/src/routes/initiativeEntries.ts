@@ -12,23 +12,41 @@ initiativeEntriesRouter.get("/", (req, res) => {
   res.json(rows);
 });
 
+// Что за строка. 'creature' — боец, в том числе вбитый руками; остальные три
+// хитов не имеют и умирать им нечем.
+const KINDS = ["creature", "lair", "environment", "custom"];
+
 initiativeEntriesRouter.post("/", (req, res) => {
-  const { session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp } = req.body as {
-    session_id?: number;
-    entity_type?: string;
-    entity_id?: number;
-    name?: string;
-    dex_modifier?: number;
-    max_hp?: number | null;
-    current_hp?: number | null;
-  };
+  const { session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp, kind, initiative } =
+    req.body as {
+      session_id?: number;
+      entity_type?: string;
+      entity_id?: number;
+      name?: string;
+      dex_modifier?: number;
+      max_hp?: number | null;
+      current_hp?: number | null;
+      kind?: string;
+      initiative?: number | null;
+    };
   if (!session_id || !name) return res.status(400).json({ error: "session_id and name are required" });
   const info = db
     .prepare(
-      `INSERT INTO initiative_entries (session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO initiative_entries
+         (session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp, kind, initiative)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(session_id, entity_type ?? null, entity_id ?? null, name, dex_modifier ?? 0, max_hp ?? null, current_hp ?? null);
+    .run(
+      session_id,
+      entity_type ?? null,
+      entity_id ?? null,
+      name,
+      dex_modifier ?? 0,
+      max_hp ?? null,
+      current_hp ?? null,
+      kind && KINDS.includes(kind) ? kind : "creature",
+      initiative ?? null
+    );
   res.status(201).json(db.prepare("SELECT * FROM initiative_entries WHERE id = ?").get(info.lastInsertRowid));
 });
 

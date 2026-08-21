@@ -90,6 +90,8 @@ interface SoundEngineValue {
   enterCombat: (battlePlaylistId: number) => void;
   exitCombat: () => void;
   setSet: (setId: number | null) => void;
+  sceneSet: (setId: number | null, sceneName: string, setName: string) => void;
+  revertSceneSet: () => void;
   playAmbient: (resourceId: number | null) => void;
   playWeather: (resourceId: number | null) => void;
   fireStinger: (resourceId: number) => void;
@@ -140,6 +142,13 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
   // отсутствия, поэтому она ровно одна и всегда видима.
   // Запоминается не id плейлиста, а сам список треков и позиция в нём:
   // Бэкграунд набора не плейлист, возвращать его «по id» больше не из чего.
+  // Набор, включённый запуском сцены. Хранится id прежнего набора, а не его
+  // очередь треков: набор возвращается целиком одной командой, в отличие от
+  // боевой темы, которая перебивает только Бэкграунд.
+  const [sceneSwitch, setSceneSwitch] = useState<
+    { scene: string; to: string; previousSetId: number | null } | null
+  >(null);
+
   const [autoSwitch, setAutoSwitch] = useState<
     {
       from: string;
@@ -525,6 +534,33 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
     [background.tracks, background.index, background.currentTime, data, playPlaylistById]
   );
 
+  /**
+   * Набор включила сцена. Запуск сцены делает это сам (решение раунда 3): у
+   * Мастера перед этим был предпросмотр, и просить его нажать ещё одну кнопку
+   * — лишний орган управления там, где он уже подтвердил.
+   *
+   * Подпись обязательна: пульт звука у большинства не на втором мониторе, и
+   * набор, сменившийся сам по себе, читается как поломка.
+   */
+  const sceneSet = useCallback(
+    (nextSetId: number | null, sceneName: string, setName: string) => {
+      const previousSetId = setId;
+      setSet(nextSetId);
+      // Тот же набор — не смена: подписывать «включил то, что и так играло»
+      // значит приучить Мастера не читать подпись.
+      setSceneSwitch(
+        nextSetId === previousSetId ? null : { scene: sceneName, to: setName, previousSetId }
+      );
+    },
+    [setId, setSet]
+  );
+
+  const revertSceneSet = useCallback(() => {
+    const prev = sceneSwitch?.previousSetId ?? null;
+    setSceneSwitch(null);
+    setSet(prev);
+  }, [sceneSwitch, setSet]);
+
   const exitCombat = useCallback(() => {
     const prev = autoSwitch?.previous ?? null;
     setAutoSwitch(null);
@@ -562,6 +598,7 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
       },
       data,
       autoSwitch: autoSwitch ? { from: autoSwitch.from, to: autoSwitch.to } : null,
+      sceneSwitch: sceneSwitch ? { scene: sceneSwitch.scene, to: sceneSwitch.to } : null,
     }),
     [
       setId,
@@ -642,6 +679,12 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
         case "revertAutoSwitch":
           exitCombat();
           break;
+        case "sceneSet":
+          sceneSet(command.setId, command.sceneName, command.setName);
+          break;
+        case "revertSceneSet":
+          revertSceneSet();
+          break;
         case "reload":
           reload();
           break;
@@ -649,13 +692,15 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
           break;
       }
     });
-  }, [state, setSet, playAmbient, playWeather, fireStinger, setVolume, setSilence, setKeys, reload, exitCombat, background, toggleStop]);
+  }, [state, setSet, playAmbient, playWeather, fireStinger, setVolume, setSilence, setKeys, reload, exitCombat, sceneSet, revertSceneSet, background, toggleStop]);
 
   const value: SoundEngineValue = {
     state,
     enterCombat,
     exitCombat,
     setSet,
+    sceneSet,
+    revertSceneSet,
     playAmbient,
     playWeather,
     fireStinger,
