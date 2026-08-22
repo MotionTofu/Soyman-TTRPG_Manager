@@ -8,6 +8,7 @@ import { downloadJson } from "../downloadJson";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemSection } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -55,8 +56,15 @@ export function SystemDetailPage() {
     setSearchParams(t === "overview" ? {} : { section: t });
   }
 
-  async function saveName(name: string) {
-    await api.put(`/systems/${systemId}`, { name });
+  async function saveName(name: string, code: string) {
+    // Двойник кода называется, но не запрещается — см. SettingDetailPage.
+    const saved = await api.put<{ code_taken_by: string | null }>(`/systems/${systemId}`, {
+      name,
+      code,
+    });
+    if (saved.code_taken_by) {
+      alert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
+    }
     refreshSystem();
   }
 
@@ -99,7 +107,7 @@ export function SystemDetailPage() {
             Импорт книги правил
           </button>
           <button className="danger" onClick={archiveSystem}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>
@@ -162,8 +170,17 @@ export function SystemDetailPage() {
             rows={6}
             entityType="system"
             entityId={systemId}
-            fields={[{ key: "name", label: "Название системы", value: system.name, required: true }]}
-            onSaveFields={(v) => saveName(v.name)}
+            fields={[
+              { key: "name", label: "Название системы", value: system.name, required: true },
+              {
+                key: "code",
+                label: "Код",
+                value: system.code ?? "",
+                placeholder: "phb",
+                title: 'Короткое сокращение модуля — «phb», «dh». Подставляется в ссылки внутри текстов вместо полного имени: токен Мастер видит при каждой правке, и короткий читается заметно легче. Его же увидит тот, у кого этого модуля нет.',
+              },
+            ]}
+            onSaveFields={(v) => saveName(v.name, v.code)}
           />
           <details className="card">
             <summary>Кампании с этой системой ({campaigns.length})</summary>

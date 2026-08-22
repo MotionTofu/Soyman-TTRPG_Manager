@@ -13,6 +13,7 @@ import { formatImportantDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import type { Character, DateRecurrence } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 // Досье bundles these as collapsible sub-sections in one tab; the remaining
 // chapter sections stay standalone tabs.
@@ -185,7 +186,7 @@ export function CharacterDetailPage() {
           )}
           <GraphNeighbourhoodLink type="character" id={character.id} />
           <button className="danger" onClick={archiveCharacter}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
         <div className="muted">

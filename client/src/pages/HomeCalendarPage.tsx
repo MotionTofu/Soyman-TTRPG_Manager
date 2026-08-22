@@ -1,18 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { UpcomingSessionsNotice } from "../components/UpcomingSessionsNotice";
 import { MiniCalendar, type MiniEvent } from "../components/MiniCalendar";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
 import { copySessionPrep } from "../sessionCopy";
 import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
-import { Dice } from "../components/Dice";
 import { EmptyState } from "../components/EmptyState";
 import { HomeArticleCard } from "../components/HomeArticleCard";
-import { UpdateChecker } from "../components/UpdateChecker";
-import { hasElectronAPI } from "../electronApi";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
 import { formatCompactNumber } from "../formatNumber";
@@ -31,7 +27,12 @@ export function HomeCalendarPage() {
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [homeBgUrl, setHomeBgUrl] = useState<string | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    title?: string;
+    items: ContextMenuItem[];
+  } | null>(null);
   const [createModal, setCreateModal] = useState<{
     date: string;
     campaignId: string;
@@ -40,10 +41,12 @@ export function HomeCalendarPage() {
   } | null>(null);
   const [oneshotSessions, setOneshotSessions] = useState<SessionSummary[]>([]);
   const [initialLoad, setInitialLoad] = useState(false);
+  const [calendarRefresh, setCalendarRefresh] = useState(0);
   const navigate = useNavigate();
 
   function refreshSessions() {
     api.get<SessionSummary[]>("/calendar").then(setSessions);
+    setCalendarRefresh((n) => n + 1);
   }
 
   useEffect(() => {
@@ -159,30 +162,55 @@ export function HomeCalendarPage() {
 
   return (
     <div className="stack" style={{ position: "relative" }}>
-      {(homeBgUrl ?? bgUrl) && (
-        <div
-          className="campaign-bg-layer"
-          style={{ backgroundImage: `url("${homeBgUrl ?? bgUrl}")` }}
-        />
+      {/* Фоновый слой — только если владелец задал СВОЙ фон главной. Раньше,
+          когда своего фона не было, сюда подставлялась обложка ближайшей
+          кампании — та же самая картинка, что и на герое, призраком на 15 %
+          позади всей страницы: один арт работал дважды.
+
+          Заголовка «Главная» здесь больше нет: имя экрана на экране по
+          умолчанию — служебная надпись, а представляет страницу герой. */}
+      {homeBgUrl && (
+        <div className="campaign-bg-layer cover-photo">
+          <div className="cover-art-image" style={{ backgroundImage: `url("${homeBgUrl}")` }} />
+        </div>
       )}
-      <SectionHeading section="home">Главная</SectionHeading>
 
       <div className="home-layout">
         <div className="home-main">
           {/* Hero — nearest upcoming session's campaign, full-bleed cover. */}
           {nearestSession ? (
+            // Ведёт в карточку сессии, а не в пульт: с главной ныряют
+            // ГОТОВИТЬ ближайшую игру. Кнопка в пульт есть в навигационном
+            // виджете из любой точки приложения.
             <Link to={`/sessions/${nearestSession.id}`} className="card home-hero">
-              <div
-                className={`home-hero-cover${bgUrl ? "" : " campaign-card-band zine-grain zine-torn-bottom"}`}
-                style={bgUrl ? { backgroundImage: `url("${bgUrl}")` } : undefined}
-              >
+              <div className="home-hero-cover cover-halftone">
+                {bgUrl ? (
+                  <div className="cover-art cover-photo">
+                    <div className="cover-art-image" style={{ backgroundImage: `url("${bgUrl}")` }} />
+                  </div>
+                ) : (
+                  <div className="cover-art cover-art-fallback zine-grain" />
+                )}
                 <div className="home-hero-scrim" />
                 <div className="home-hero-content">
                   <span className="home-hero-eyebrow">Ближайшая сессия</span>
                   <h2 className="home-hero-title">{nearestSession.campaign_name}</h2>
+                  {nearestSession.title && (
+                    <span className="home-hero-session">{nearestSession.title}</span>
+                  )}
+                  {/* Номер, дата и время — факты, а не выдуманная метрика
+                      готовности: индикатор «начата ли подготовка» приложение
+                      считало бы за мастера и врал бы (пустые заметки ещё не
+                      значат неготовность), а раз соврёт — ему перестанут
+                      верить. */}
                   <span className="home-hero-date">
-                    {formatNearestDate(nearestSession.date)}
-                    {nearestSession.start_time ? ` · ${nearestSession.start_time}` : ""}
+                    {[
+                      nearestSession.session_number ? `Сессия №${nearestSession.session_number}` : null,
+                      formatNearestDate(nearestSession.date),
+                      nearestSession.start_time,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </div>
               </div>
@@ -203,82 +231,89 @@ export function HomeCalendarPage() {
           )}
 
           {/* Tiles — quick campaign row. */}
-          <div className="home-section">
-            <SectionHeading level="section" icon="campaigns" action={{ label: "все кампании", to: "/campaigns" }}>
-              Кампании
-            </SectionHeading>
-            <div className="home-tiles">
-              {campaigns.slice(0, 4).map((c) => (
-                <CampaignCoverTile key={c.id} campaign={c} />
-              ))}
-              {campaigns.length === 0 && (
-                <EmptyState
-                  icon="skullDie"
-                  title="Пока тихо"
-                  hint="Ни одной кампании ещё нет — начните первую."
-                  action={
-                    <button className="primary" onClick={() => navigate("/campaigns")}>
-                      + Кампании
-                    </button>
-                  }
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Случайная статья из справочника — «Напомню!». */}
-          <HomeArticleCard />
-        </div>
-
-        {/* Rail — stack of narrow widgets. */}
-        <div className="home-rail">
-          {hasElectronAPI() && (
-            <div className="card stack">
-              <SectionHeading level="section" icon="download">
-                Обновления
+          {/* Блок, которому нечего показать, не показывает пустоту — он не
+              показывается вовсе. Пустое состояние оставлено только герою:
+              он главный блок экрана и обязан объяснить, что здесь будет. */}
+          {campaigns.length > 0 && (
+            <div className="home-section home-section-campaigns">
+              <SectionHeading level="section" icon="campaigns" action={{ label: "все кампании", to: "/campaigns" }}>
+                Кампании
               </SectionHeading>
-              <UpdateChecker />
-            </div>
-          )}
-
-          {finance && (
-            <div className="card stack">
-              <SectionHeading level="section" icon="graph">
-                Статистика
-              </SectionHeading>
-              <div className="finance-summary-card">
-                {!loadHideFinance() && (
-                  <Dice
-                    kind="d6"
-                    state="outline"
-                    value={formatCompactNumber(finance.earned)}
-                    sub="₽"
-                    label="Заработано всего"
-                    title={`${finance.earned.toLocaleString("ru-RU")} ₽`}
-                  />
-                )}
-                <Dice kind="d6" state="outline" value={finance.heldSessions} label="Сессий проведено" />
-                <Dice kind="d6" state="outline" value={finance.playedSessions} label="Сессий сыграно" />
-                <Dice kind="d6" state="outline" value={finance.campaigns} label="Активных кампаний" />
+              <div className="home-tiles">
+                {campaigns.slice(0, 4).map((c) => (
+                  <CampaignCoverTile key={c.id} campaign={c} />
+                ))}
               </div>
             </div>
           )}
 
-          {sessions.some((s) => s.status === "planned" && s.date >= today) && (
-            <div className="stack">
-              <SectionHeading level="section" icon="star">
-                Ближайшие сессии
+          {/* Случайная статья из справочника — «Напомню!». Сама не
+              отрисуется, пока справочники пусты. */}
+          <div className="home-section-article">
+            <HomeArticleCard />
+          </div>
+        </div>
+
+        {/* Рельс. Дизайн-ревизия вынесла отсюда два блока.
+
+            «Обновления» — обслуживание приложения, а не владения мастера:
+            переехали в «О программе», в навигации осталась точка.
+
+            «Ближайшие сессии» — дубль героя дословно: виджет выводил до трёх
+            сессий, каждую подписывал «Ближайшая сессия:», и первой строкой
+            всегда шло то, что уже стоит героем во всю ширину. */}
+        <div className="home-rail">
+          {finance && (
+            <div className="card stack home-rail-stats">
+              <SectionHeading level="section" icon="graph">
+                Сводка
               </SectionHeading>
-              <UpcomingSessionsNotice sessions={sessions} />
+              {/* Плашки, а не кости: на главной силуэт кости выбивался из
+                  ряда прямоугольных блоков вокруг. Кость осталась там, где
+                  она значит бросок, — в характеристиках существ. */}
+              <div className="finance-summary-card">
+                {!loadHideFinance() && (
+                  <div
+                    className="stat-plate stat-plate-lead"
+                    title={`${finance.earned.toLocaleString("ru-RU")} ₽`}
+                  >
+                    <span className="stat-plate-value">
+                      {formatCompactNumber(finance.earned)}
+                      <span className="stat-plate-unit">₽</span>
+                    </span>
+                    <span className="stat-plate-label">Заработано всего</span>
+                  </div>
+                )}
+                <div className="finance-summary-row">
+                  <div className="stat-plate">
+                    <span className="stat-plate-value">{finance.heldSessions}</span>
+                    <span className="stat-plate-label">Сессий проведено</span>
+                  </div>
+                  <div className="stat-plate">
+                    <span className="stat-plate-value">{finance.playedSessions}</span>
+                    <span className="stat-plate-label">Сессий сыграно</span>
+                  </div>
+                  <div className="stat-plate">
+                    <span className="stat-plate-value">{finance.campaigns}</span>
+                    <span className="stat-plate-label">Кампании в работе</span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="card stack">
+          <div className="card stack home-rail-calendar">
             <SectionHeading level="section" icon="calendar">
               Календарь
             </SectionHeading>
             <MiniCalendar
-              onEventContextMenu={(event, x, y) => setMenu({ x, y, items: eventMenuItems(event) })}
+              refreshKey={calendarRefresh}
+              // Клетка календаря показывает только число, поэтому меню
+              // само называет игру, к которой относятся его пункты: иначе
+              // «Удалить (в архив)» в дне с игрой — действие вслепую.
+              onEventContextMenu={(event, x, y) =>
+                setMenu({ x, y, title: event.campaignName ?? "Сессия", items: eventMenuItems(event) })
+              }
               onDayContextMenu={(date, x, y) =>
                 setMenu({ x, y, items: [{ label: "+ Добавить сессию", onClick: () => openCreateModal(date) }] })
               }
@@ -288,7 +323,7 @@ export function HomeCalendarPage() {
       </div>
 
       {menu && (
-        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+        <ContextMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={() => setMenu(null)} />
       )}
 
       {createModal && (

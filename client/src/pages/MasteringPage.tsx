@@ -5,6 +5,7 @@ import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SectionHeading } from "../components/SectionHeading";
 import type { MasteringNote, System } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 const CATEGORIES: { key: MasteringNote["category"]; label: string }[] = [
   { key: "prep", label: "Подготовка" },
@@ -119,7 +120,7 @@ export function NoteCard({
         <div className="entity-header-actions">
           {!editMode && <button onClick={() => setEditMode(true)}>Редактировать</button>}
           <button className="danger" onClick={() => onArchive(note.id)}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>

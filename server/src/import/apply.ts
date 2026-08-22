@@ -19,6 +19,7 @@ import {
   communityFolder,
   artifactFolder,
 } from "../services/filesystem";
+import { formatRef, prefixOf, sourceCodeOf } from "../services/mentions";
 import { ImportFile, ImportStatblock } from "./format";
 import { Problem } from "./validate";
 import { normalizeName } from "./names";
@@ -1223,9 +1224,14 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
       const next = field.raw.replace(mentionRe(), (whole, key: string, label: string) => {
         const ref = keys.get(key);
         if (!linkable(ref)) return whole;
+        // Глобальный ключ, а не локальный id: книга из этого импорта может
+        // потом уехать модулем на другое устройство, и число указало бы там
+        // на чужую сущность (services/mentions.ts).
+        const prefix = prefixOf(ref.type, ref.id);
+        if (!prefix) return whole;
         changed = true;
         substituted++;
-        return `[[${ref.type}:${ref.id}|${label}]]`;
+        return formatRef(ref.type, prefix, sourceCodeOf(ref.type, ref.id), label);
       });
       if (changed) {
         db.prepare(`UPDATE ${field.table} SET ${field.column} = ? WHERE id = ?`).run(next, field.id);

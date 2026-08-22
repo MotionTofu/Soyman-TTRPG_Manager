@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { refreshMentionIndex } from "../mentions";
 import { NavIcon } from "../components/NavIcons";
 import type { ArchiveItem, ArchivedFile } from "../types";
 
@@ -110,6 +111,10 @@ export function ArchivePage() {
       alert(`Не удалось удалить: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+    // Каскад унёс потомков на любую глубину, и ссылки на них в текстах должны
+    // стать зачёркнутыми сразу, а не после перезапуска: «жива ли ссылка» —
+    // это вопрос к карте глобальных ключей (mentions.ts), и она устарела.
+    void refreshMentionIndex();
     refresh();
   }
 

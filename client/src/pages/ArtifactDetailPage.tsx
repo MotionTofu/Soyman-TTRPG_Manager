@@ -14,6 +14,7 @@ import { CompendiumEntryPicker } from "../components/MonsterTemplatePicker";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { RelationsTab } from "../components/RelationsTab";
 import type { Artifact, CompendiumLink, SearchResult } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 const TABS = ["Досье", "Отношения", "Галерея", "Карточка предмета"] as const;
 
@@ -95,7 +96,7 @@ export function ArtifactDetailPage() {
         </div>
         <div className="entity-header-actions">
           <button className="danger" onClick={archiveArtifact}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>

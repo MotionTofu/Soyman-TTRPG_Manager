@@ -9,6 +9,7 @@ import { useTabState } from "../hooks/useTabState";
 import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 // «Действующие лица» и «Награды» убраны с профиля: список действующих лиц
 // собирался из связей сцен и информационной пользы не нёс, а награды книги без
@@ -97,7 +98,7 @@ export function AdventureDetailPage() {
                 Переименовать
               </button>
               <button className="danger" onClick={archive}>
-                Архивировать
+                <NavIcon name="archive" /> Архивировать
               </button>
             </>
           )}
@@ -370,7 +371,7 @@ function ChaptersAndScenes({
                         that belong to this campaign can be archived here. */}
                     {(!campaignId || s.campaign_only) && (
                       <button className="danger" onClick={() => archiveScene(s)}>
-                        Архивировать
+                        <NavIcon name="archive" /> Архивировать
                       </button>
                     )}
                   </span>
@@ -429,7 +430,7 @@ function ChaptersAndScenes({
                     onChange();
                   }}
                 >
-                  Архивировать
+                  <NavIcon name="archive" /> Архивировать
                 </button>
               </>
             )}

@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import { EmptyState } from "./EmptyState";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { MentionText } from "./mentions/MentionText";
-import { SectionHeading } from "./SectionHeading";
 
 interface RandomArticle {
   id: number;
@@ -44,58 +42,77 @@ export function HomeArticleCard() {
     setClipped(el.scrollHeight > el.clientHeight + 1);
   }, [article]);
 
-  if (article === undefined) return null;
+  if (article === undefined || article === null) return null;
+
+  // Единственный блок главной, который каждый раз другой, — и единственный,
+  // имеющий право выглядеть вырванным из журнала. Поэтому не карточка с
+  // заголовком секции над ней, а вырезка: чернильная плашка-шапка с
+  // названием внутри, рваный нижний край, штамп выпуска.
+  //
+  // Наклона нет. Он был единственным наклонённым объектом на экране и потому
+  // читался не как приём, а как сбой вёрстки: §5.5 разрешает наклон бейджам,
+  // наклейкам и одной карточке в РЯДУ — то есть там, где рядом есть ровные
+  // соседи, на фоне которых наклон заметен нарочно.
+  const issue = (() => {
+    const now = new Date();
+    // Номер недели от начала года — «выпуск» меняется вместе со статьёй и
+    // не врёт: это настоящая дата, а не декоративное число.
+    const start = new Date(now.getFullYear(), 0, 1);
+    const week = Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
+    return `ВЫПУСК ${now.getFullYear()}.${week}`;
+  })();
 
   return (
     <div className="home-section">
-      <SectionHeading level="section" icon="systems">
-        Напомню!
-      </SectionHeading>
-      {article ? (
-        <div
-          className="card home-article"
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            // Ссылка-меншен внутри тела ведёт к своей сущности — её щелчок не
-            // должен ещё и открывать статью, поверх которой он стоит.
-            if ((e.target as HTMLElement).closest("a")) return;
+      <div
+        className="home-article"
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          // Ссылка-меншен внутри тела ведёт к своей сущности — её щелчок не
+          // должен ещё и открывать статью, поверх которой он стоит.
+          if ((e.target as HTMLElement).closest("a")) return;
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
             setOpen(true);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setOpen(true);
-            }
-          }}
-        >
-          <div className="home-article-path">{article.path.join(" · ")}</div>
-          <h3 className="home-article-title">{article.name}</h3>
-          <div
-            ref={bodyRef}
-            className={`home-article-body${clipped ? " home-article-body-clipped" : ""}`}
-          >
-            <MentionText text={article.description} />
+          }
+        }}
+      >
+        <div className="home-article-band">
+          <span className="home-article-band-title">Напомню!</span>
+          <span className="home-article-issue">{issue}</span>
+        </div>
+        {/* Вырезка занимает всю ширину колонки, а мера строки держится
+            разворотом: слева — откуда статья и как называется, справа —
+            сама проза. Ограничение ширины было на блоке целиком, и вырезка
+            стояла узкой полосой с пустым листом справа от себя. */}
+        <div className="home-article-body-wrap">
+          <div className="home-article-head">
+            <div className="home-article-path">{article.path.join(" · ")}</div>
+            <h3 className="home-article-title">{article.name}</h3>
           </div>
-          {clipped && (
-            <span className="home-article-more">
-              Читать целиком
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </span>
-          )}
+          <div className="home-article-text">
+            <div
+              ref={bodyRef}
+              className={`home-article-body${clipped ? " home-article-body-clipped" : ""}`}
+            >
+              <MentionText text={article.description} />
+            </div>
+            {clipped && (
+              <span className="home-article-more">
+                Читать целиком
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </span>
+            )}
+          </div>
         </div>
-      ) : (
-        <div className="card">
-          <EmptyState
-            icon="issueStamp"
-            title="Справочник пока пуст"
-            hint="Заполняйте справочники систем — здесь будет появляться случайная статья из них."
-          />
-        </div>
-      )}
-      {open && article && (
+      </div>
+      {open && (
         <EntityPreviewModal type="compendium_entry" id={article.id} onClose={() => setOpen(false)} />
       )}
     </div>

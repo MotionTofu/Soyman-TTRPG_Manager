@@ -527,7 +527,7 @@ export function CampaignDetailPage() {
           <div className="entity-header-actions">
             <button onClick={() => setEditing(true)}>Редактировать</button>
             <button className="danger" onClick={archiveCampaign}>
-              Архивировать
+              <NavIcon name="archive" /> Архивировать
             </button>
           </div>
         </div>

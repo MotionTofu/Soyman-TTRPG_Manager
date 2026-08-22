@@ -3,8 +3,8 @@ import { db } from "../db/db";
 import {
   MENTIONABLE,
   exists,
-  healAllMentions,
   mentionTextColumns,
+  normUid,
   rewriteAllMentions,
   scanMentions,
 } from "../services/mentions";
@@ -400,12 +400,17 @@ linksRouter.get("/dangling", (req, res) => {
   const type = String(req.query.type || "");
   const uid = String(req.query.uid || "");
   if (!type || !uid) return res.status(400).json({ error: "нужны type и uid" });
+  const want = normUid(uid);
   let count = 0;
   for (const { table, column } of mentionTextColumns()) {
     const rows = db
       .prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[' || ? || '@' || ? || '|%'`)
       .all(type, uid) as { v: string }[];
-    for (const r of rows) count += scanMentions(r.v || "").filter((m) => m.kind === "dead" && m.uid === uid).length;
+    for (const r of rows) {
+      count += scanMentions(r.v || "").filter(
+        (m) => m.kind === "ref" && m.type === type && normUid(m.uid) === want
+      ).length;
+    }
   }
   res.json({ count });
 });
@@ -419,24 +424,20 @@ linksRouter.get("/dangling", (req, res) => {
 linksRouter.post("/dangling/strip", (req, res) => {
   const { type, uid } = req.body as { type?: string; uid?: string };
   if (!type || !uid) return res.status(400).json({ error: "нужны type и uid" });
+  const want = normUid(uid);
   const removed = rewriteAllMentions((m) =>
-    m.kind === "dead" && m.type === type && m.uid === uid ? m.label : null
+    m.kind === "ref" && m.type === type && normUid(m.uid) === want ? m.label : null
   );
   res.json({ removed });
 });
 
-// «Проверить зависимости» — ручной вариант того же прохода, что сам собой
-// случается после установки модуля.
-linksRouter.post("/heal", (_req, res) => {
-  res.json({ healed: healAllMentions() });
-});
-
 // --- Ссылки, указывающие в никуда ---
 //
-// Наследство: цели удалили до того, как появилось подвешивание, и опознать их
-// уже нечем — глобального ключа у них не было. Такая ссылка выглядит рабочей,
-// но ведёт на несуществующую страницу, и подвесить её нельзя: неизвестно, на
-// что она указывала.
+// Наследство в чистом виде: токен со старым локальным id, чья цель давно
+// удалена. Разовая миграция такие схлопнула, но она не заходит в
+// `modules.source_json` — а оттуда старый токен может всплыть при
+// разворачивании модуля. Опознать его цель нечем: глобального ключа у
+// пропавшей строки не было и уже не будет.
 //
 // Уборка схлопывает их в обычный текст — подпись остаётся, ложная ссылка
 // уходит. Делается кнопкой, а не сама при обновлении: это единственное место,
@@ -457,7 +458,7 @@ function scanBroken(): { count: number; samples: BrokenSample[] } {
       .all() as { v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
-        if (m.kind !== "live" || !MENTIONABLE[m.type] || exists(m.type, m.id)) continue;
+        if (m.kind !== "legacy" || !MENTIONABLE[m.type] || exists(m.type, m.id)) continue;
         count++;
         const key = `${m.type}:${m.id}`;
         if (seen.has(key) || samples.length >= 12) continue;
@@ -475,7 +476,7 @@ linksRouter.get("/broken", (_req, res) => {
 
 linksRouter.post("/broken/strip", (_req, res) => {
   const removed = rewriteAllMentions((m) =>
-    m.kind === "live" && MENTIONABLE[m.type] && !exists(m.type, m.id) ? m.label : null
+    m.kind === "legacy" && MENTIONABLE[m.type] && !exists(m.type, m.id) ? m.label : null
   );
   res.json({ removed });
 });

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DETAIL_ROUTES } from "../../entityTypes";
+import { ANY_MENTION_RE, resolveMention, useMentionIndex } from "../../mentions";
 import { DeadMention } from "./DeadMention";
 
 // Inline markup recognized inside any text field, alongside the existing
@@ -8,10 +9,15 @@ import { DeadMention } from "./DeadMention";
 // links, and {span color="…" size="…" font="…"}…{/span} styled runs. A line
 // starting with #/##/### is a heading, a line starting with "- " is a
 // bullet-list item (consecutive "- " lines are grouped into one <ul>).
-// Вторая ветка — подвешенная ссылка `[[being@uid|Модуль|Подпись]]`: цель не
-// установлена, кликать некуда. Она стоит раньше живой формы не случайно: обе
-// начинаются с «[[», и если первой пробовать живую, её `(\d+)` не совпадёт, а
-// разбор уедет в следующий токен.
+// Первая ветка — ссылка на сущность: `[[being@8f3c1a2e|wdh|Мирт]]`. Куда она
+// ведёт и ведёт ли вообще, решает карта глобальных ключей (mentions.ts): ключ
+// нашёлся — обычная ссылка, не нашёлся — зачёркнутая, объясняющая, какого
+// модуля не хватает. Состояние не записано в текст, а вычисляется, поэтому
+// ссылка оживает и гаснет сама, без проходов по базе.
+//
+// Вторая ветка — наследство `[[being:412|Мирт]]` с локальным id. Только
+// читается. Стоит второй не случайно: обе начинаются с «[[», и если первой
+// пробовать её, `(\d+)` не совпадёт с «@», а разбор уедет в следующий токен.
 const TOKEN_RE =
   /\[\[(\w+)@([0-9a-fA-F][0-9a-fA-F-]{7,})\|([^|\]]*)\|([^\]]*)\]\]|\[\[(\w+):(\d+)\|([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\{span([^}]*)\}|\{quote\}|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/;
 
@@ -59,10 +65,10 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
     if (idx > 0) nodes.push(<span key={`${keyPrefix}-${key++}`}>{rest.slice(0, idx)}</span>);
     const [
       full,
-      deadType,
-      deadUid,
-      deadSource,
-      deadLabel,
+      refType,
+      refUid,
+      refSource,
+      refLabel,
       mType,
       mId,
       mLabel,
@@ -73,19 +79,33 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
       italicText,
     ] = m;
 
-    if (deadType) {
-      // Подпись остаётся читаемой прозой — меняется только то, что ссылка
-      // зачёркнута и вместо перехода объясняет, чего не хватает.
+    if (refType) {
+      // Подпись остаётся читаемой прозой в обоих случаях — «Мирт отправляет вас
+      // в Синий переулок» читается одинаково; меняется только то, кликается
+      // ссылка или зачёркнута и объясняет, чего не хватает.
+      const target = resolveMention(refType, refUid);
       nodes.push(
         mentionsAsBold ? (
-          <strong key={`${keyPrefix}-${key++}`}>{deadLabel}</strong>
+          <strong key={`${keyPrefix}-${key++}`}>{refLabel}</strong>
+        ) : target != null && DETAIL_ROUTES[refType] ? (
+          <Link
+            key={`${keyPrefix}-${key++}`}
+            className="mention-link"
+            to={`${DETAIL_ROUTES[refType]}/${target}`}
+          >
+            {refLabel}
+          </Link>
+        ) : target != null ? (
+          <span key={`${keyPrefix}-${key++}`} className="mention-link">
+            {refLabel}
+          </span>
         ) : (
           <DeadMention
             key={`${keyPrefix}-${key++}`}
-            type={deadType}
-            uid={deadUid}
-            source={deadSource}
-            label={deadLabel}
+            type={refType}
+            uid={refUid}
+            source={refSource}
+            label={refLabel}
           />
         )
       );
@@ -173,15 +193,18 @@ function splitTableRow(line: string): string[] {
     .map((c) => c.trim());
 }
 
-// A mention token's own "|" (between type:id and Label) is indistinguishable
-// from a table-cell separator once a line has been recognized as a table
-// row — mask each token out to a pipe-free placeholder before row-splitting,
-// then restore it into whichever cell it landed in.
-const MENTION_TOKEN_RE = /\[\[\w+:\d+\|[^\]]+\]\]/g;
+// A mention token's own "|" is indistinguishable from a table-cell separator
+// once a line has been recognized as a table row — mask each token out to a
+// pipe-free placeholder before row-splitting, then restore it into whichever
+// cell it landed in.
+//
+// Маскируются обе формы одной регуляркой из mentions.ts: пока эта строка знала
+// только про локальный id, ссылка с глобальным ключом внутри таблицы
+// разъезжалась по ячейкам — у неё разделителей на один больше.
 
 function maskMentions(line: string): { masked: string; tokens: string[] } {
   const tokens: string[] = [];
-  const masked = line.replace(MENTION_TOKEN_RE, (m) => {
+  const masked = line.replace(ANY_MENTION_RE, (m) => {
     tokens.push(m);
     return `\u0000${tokens.length - 1}\u0000`;
   });

@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    body { margin: 0; background: #D9D2C2; color: #12100E; font-family: 'Archivo', sans-serif; }
+    * { box-sizing: border-box; }
+    .fld { display: flex; flex-direction: column; gap: 4px; }
+    .fld label { font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #6E675C; }
+    .fld .in { border: 1.5px solid #12100E; background: #EDE7D9; padding: 7px 9px; font-family: 'Archivo', sans-serif; font-size: 12.5px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .fld .in.mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</helmet>
+
+<div style="width: 1000px; padding: 40px; display: flex; justify-content: center; background: #D9D2C2;">
+<div style="width: 920px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; border: 2px solid #12100E;">
+
+  <div style="background: #12100E; color: #EDE7D9; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="width: 64px; height: 64px; border: 2px solid #E5DFD1; background: linear-gradient(150deg, #5c3a5c 0%, #2a2440 100%); flex-shrink: 0;"></div>
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-family: 'Anton', sans-serif; font-size: 27px; line-height: .94; letter-spacing: -.005em; text-transform: uppercase;">Кассандра Вран</div>
+        <div style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #A39A88;">Паладин 5 · Тифлинг · Солдат</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #A39A88;">Игрок: Настя · ОПЫТ 6500</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; border: 1.5px solid #A39A88; padding: 4px 9px 4px 10px; flex-shrink: 0;">
+      <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #A39A88;">Тема: Зин</span>
+      <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#A39A88" stroke-width="2"><path d="M4 7l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <div style="padding: 18px 20px 22px 20px; display: flex; flex-direction: column; gap: 18px;">
+
+    <!-- Однокликовые поля — не требуют карандаша и не входят в
+         режим редактирования: у них своя, уже готовая механика. -->
+    <div style="display: flex; border: 2px solid #12100E; background: #E5DFD1;">
+      <div style="flex: 1.3; padding: 8px 12px; border-right: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; gap: 3px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">ХП — клик по числу</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1; border-bottom: 1.5px dotted #12100E; cursor: pointer;">44 / 44</span>
+      </div>
+      <div style="flex: 1; padding: 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Вдохновение — клик</span>
+        <span style="width: 13px; height: 13px; background: #12100E; display: inline-block; transform: rotate(45deg); cursor: pointer;"></span>
+      </div>
+    </div>
+
+    <!-- Открыто карандашом ШАПКИ (не вкладкой — «Персонаж» как отдельный
+         подраздел убрали, дублировал то, что и так на виду в шапке).
+         Черновик, а не мгновенное сохранение — цена ошибки высокая:
+         класс/раса/мировоззрение меняются редко и правятся вдумчиво.
+         Ярлык «ЧЕРНОВИК» — кривизна зина, наклон −1.5°, отмечает
+         несохранённое состояние прямо на разделе, а не баннером. -->
+    <div style="display: flex; flex-direction: column; gap: 0; position: relative;">
+      <div style="position: absolute; top: -10px; right: 6px; transform: rotate(-1.5deg); background: #EDE7D9; border: 1.5px solid #D6321E; color: #D6321E; padding: 2px 8px; font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; z-index: 1;">Черновик</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #12100E; padding-bottom: 6px; margin-bottom: 12px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">Шапка персонажа — редактирование</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 90px 1fr; gap: 12px 14px;">
+        <div class="fld">
+          <label>Класс</label>
+          <div class="in">Паладин <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="2"><path d="M4 7l6 6 6-6"/></svg></div>
+        </div>
+        <div class="fld">
+          <label>Уровень</label>
+          <div class="in mono" style="justify-content: center; gap: 10px;">
+            <span style="cursor: pointer;">−</span><span>5</span><span style="cursor: pointer;">+</span>
+          </div>
+        </div>
+        <div class="fld">
+          <label>Подкласс</label>
+          <div class="in">Клятва Мести <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="2"><path d="M4 7l6 6 6-6"/></svg></div>
+        </div>
+
+        <div class="fld">
+          <label>Раса</label>
+          <div class="in">Тифлинг <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="2"><path d="M4 7l6 6 6-6"/></svg></div>
+        </div>
+        <div></div>
+        <div class="fld">
+          <label>Предыстория</label>
+          <div class="in">Солдат <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="2"><path d="M4 7l6 6 6-6"/></svg></div>
+        </div>
+
+        <div class="fld">
+          <label>Мировоззрение</label>
+          <div class="in">Законно-добрый <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="2"><path d="M4 7l6 6 6-6"/></svg></div>
+        </div>
+        <div></div>
+        <div class="fld">
+          <label>Опыт</label>
+          <div class="in mono">6500</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px;">
+        <button style="border: 1.5px solid #12100E; background: transparent; padding: 6px 12px; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;">+ Класс</button>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; border-top: 1.5px solid rgba(18,16,14,.28); padding-top: 14px;">
+        <button style="border: 1.5px solid #12100E; background: #EDE7D9; color: #12100E; padding: 8px 18px; font-family: 'Oswald', sans-serif; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; cursor: pointer;">Отмена</button>
+        <button style="border: 1.5px solid #12100E; background: #D6321E; color: #ffffff; padding: 8px 18px; font-family: 'Oswald', sans-serif; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; cursor: pointer;">Сохранить</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

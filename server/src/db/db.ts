@@ -27,6 +27,222 @@ function columnIsNotNull(database: Database.Database, table: string, column: str
   return cols.some((c) => c.name === column && c.notnull === 1);
 }
 
+// ─── Разовый перевод ссылок в текстах на глобальные ключи ────────────────────
+//
+// Всё, что относится к этой миграции, живёт здесь и ни от чего не зависит.
+// services/mentions.ts делает то же самое для работающего приложения, но ходит
+// в базу через прокси `db`, который во время openDatabase указывает ещё на
+// прежнее подключение, — поэтому разовый проход знает грамматику сам.
+
+/** Типы, на которые можно сослаться, и их таблицы. Совпадает с MENTIONABLE. */
+const MENTION_TABLES: Record<string, string> = {
+  campaign: "campaigns",
+  setting: "settings",
+  player: "players",
+  character: "characters",
+  location: "setting_locations",
+  being: "setting_beings",
+  community: "setting_communities",
+  artifact: "artifacts",
+  resource: "resources",
+  mastering: "mastering_notes",
+  adventure: "story_arcs",
+  scene: "story_scenes",
+  session: "sessions",
+  compendium_entry: "compendium_entries",
+  setting_event: "setting_calendar_events",
+};
+
+/** Тексты, которые нельзя трогать. Совпадает с NEVER_REWRITE. */
+const MENTION_FROZEN = new Set([
+  "modules",
+  "import_batches",
+  "import_records",
+  "system_import_batches",
+  "system_import_records",
+  "archived_files",
+  "app_settings",
+  "vault_files",
+]);
+
+const LEGACY_MENTION_RE = /\[\[(\w+):(\d+)\|([^\]]*)\]\]/g;
+
+/**
+ * Кратчайшие однозначные префиксы uid для одного типа: `id → префикс`.
+ *
+ * Восемь шестнадцатеричных символов на три сотни целей — запас в миллионы раз,
+ * и он ещё шире, потому что однозначность нужна только внутри своего типа.
+ * Двойник всё же возможен, и тогда именно этой паре достаётся префикс подлиннее,
+ * а не всем остальным заодно.
+ */
+function mentionPrefixes(database: Database.Database, table: string): Map<number, string> {
+  const rows = database.prepare(`SELECT id, uid FROM ${table} WHERE uid IS NOT NULL`).all() as {
+    id: number;
+    uid: string;
+  }[];
+  const norm = (u: string) => u.replace(/-/g, "").toLowerCase();
+  const out = new Map<number, string>();
+  const buckets = new Map<string, { id: number; uid: string }[]>();
+  for (const r of rows) {
+    const uid = norm(r.uid);
+    const head = uid.slice(0, 8);
+    const list = buckets.get(head) ?? [];
+    list.push({ id: r.id, uid });
+    buckets.set(head, list);
+  }
+  for (const [head, list] of buckets) {
+    if (list.length === 1) {
+      out.set(list[0].id, head);
+      continue;
+    }
+    for (const self of list) {
+      let chosen = self.uid;
+      for (let len = 12; len < self.uid.length; len += 4) {
+        const candidate = self.uid.slice(0, len);
+        if (!list.some((o) => o.id !== self.id && o.uid.startsWith(candidate))) {
+          chosen = candidate;
+          break;
+        }
+      }
+      out.set(self.id, chosen);
+    }
+  }
+  return out;
+}
+
+/** `id → код или имя модуля`, откуда сущность родом. */
+function mentionSources(database: Database.Database, type: string): Map<number, string> {
+  const table = MENTION_TABLES[type];
+  const out = new Map<number, string>();
+  const pick = (code: string | null, name: string) => (code || "").trim() || name;
+  if (type === "setting") {
+    for (const r of database.prepare("SELECT id, code, name FROM settings").all() as {
+      id: number;
+      code: string | null;
+      name: string;
+    }[]) {
+      out.set(r.id, pick(r.code, r.name));
+    }
+    return out;
+  }
+  const owner =
+    type === "compendium_entry"
+      ? { column: "system_id", table: "systems" }
+      : { column: "setting_id", table: "settings" };
+  if (!columnExists(database, table, owner.column)) return out;
+  const rows = database
+    .prepare(
+      `SELECT t.id AS id, o.code AS code, o.name AS name FROM ${table} t
+         JOIN ${owner.table} o ON o.id = t.${owner.column}`
+    )
+    .all() as { id: number; code: string | null; name: string }[];
+  for (const r of rows) out.set(r.id, pick(r.code, r.name));
+  return out;
+}
+
+/**
+ * Переписывает каждую ссылку `[[тип:id|Подпись]]` в `[[тип@префикс|код|Подпись]]`.
+ *
+ * Идёт по текстовым колонкам, а не по именам полей: меншен можно поставить в
+ * несколько десятков разных мест, часть из которых — JSON внутри
+ * `statblocks.content` и `compendium_entries.data`. Перечислять их поимённо
+ * значит гарантированно что-то забыть, а забытое поле — это ссылка, которая
+ * после перехода останется на локальном id и однажды уедет не туда.
+ *
+ * Ссылка, чью цель уже удалили, схлопывается в обычный текст: опознать её нечем
+ * — глобального ключа у пропавшей строки не осталось, — а оставить её живой
+ * значит сохранить ссылку в никуда.
+ *
+ * Возвращает false, если снимок сделать не удалось: без него необратимый проход
+ * по всем текстам сразу не запускается, и переход просто откладывается до
+ * следующего запуска.
+ */
+function migrateMentionTokens(database: Database.Database, dbDir: string): boolean {
+  const anyTokens = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name = 'app_settings'")
+    .get();
+  if (!anyTokens) return false;
+
+  const snapshot = path.join(dbDir, "app-before-uid-mentions.db");
+  try {
+    if (!fs.existsSync(snapshot)) {
+      database.exec(`VACUUM INTO '${snapshot.replace(/'/g, "''")}'`);
+    }
+  } catch (e) {
+    console.error("Меншены на uid: снимок базы не сделан, переход отложен:", e);
+    return false;
+  }
+
+  const prefixes = new Map<string, Map<number, string>>();
+  const sources = new Map<string, Map<number, string>>();
+  for (const [type, table] of Object.entries(MENTION_TABLES)) {
+    if (!tableExists(database, table) || !columnExists(database, table, "uid")) continue;
+    prefixes.set(type, mentionPrefixes(database, table));
+    sources.set(type, mentionSources(database, type));
+  }
+
+  const clean = (s: string) => s.replace(/[|\]\[]/g, " ").trim();
+  let fields = 0;
+  let tokens = 0;
+  let dropped = 0;
+
+  const run = database.transaction(() => {
+    const tables = database
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .all() as { name: string }[];
+    for (const { name } of tables) {
+      if (MENTION_FROZEN.has(name)) continue;
+      const cols = database.prepare(`PRAGMA table_info(${name})`).all() as {
+        name: string;
+        type: string;
+      }[];
+      if (!cols.some((c) => c.name === "id")) continue;
+      for (const col of cols) {
+        if (!/TEXT|CLOB|CHAR/i.test(col.type)) continue;
+        const rows = database
+          .prepare(`SELECT id, "${col.name}" AS value FROM ${name} WHERE "${col.name}" LIKE '%[[%'`)
+          .all() as { id: number; value: string | null }[];
+        if (!rows.length) continue;
+        const update = database.prepare(`UPDATE ${name} SET "${col.name}" = ? WHERE id = ?`);
+        for (const row of rows) {
+          if (!row.value) continue;
+          LEGACY_MENTION_RE.lastIndex = 0;
+          const next = row.value.replace(
+            LEGACY_MENTION_RE,
+            (whole, type: string, rawId: string, label: string) => {
+              const prefix = prefixes.get(type)?.get(Number(rawId));
+              if (!prefix) {
+                if (MENTION_TABLES[type]) {
+                  dropped++;
+                  return label;
+                }
+                return whole;
+              }
+              tokens++;
+              const source = sources.get(type)?.get(Number(rawId)) ?? "";
+              return `[[${type}@${prefix}|${clean(source)}|${label}]]`;
+            }
+          );
+          if (next !== row.value) {
+            update.run(next, row.id);
+            fields++;
+          }
+        }
+      }
+    }
+  });
+  run();
+
+  if (fields) {
+    console.log(
+      `Меншены на uid: переведено ссылок ${tokens} в ${fields} полях` +
+        (dropped ? `, снято потерявших цель ${dropped}` : "") +
+        `. Снимок до перехода: ${snapshot}`
+    );
+  }
+  return true;
+}
+
 // Opens (creating if needed) the SQLite database at dbDir/app.db and brings
 // it up to the current schema. Used both at startup and whenever the active
 // storage profile changes, so it must be safe to run repeatedly and against
@@ -1900,6 +2116,48 @@ export function openDatabase(dbDir: string): Database.Database {
       });
       fill();
     }
+  }
+
+  // Короткий код модуля: «wdh» вместо «Вотердип».
+  //
+  // Он пишется третьим полем в каждую ссылку внутри текста, а текст Мастер
+  // правит в сыром textarea и видит токен целиком. Разница между
+  // `[[being@8f3c1a2e|wdh|Мирт]]` и тем же с полным именем — это разница между
+  // читаемым абзацем и кашей, и платится она при каждой правке.
+  //
+  // Необязателен: пустой код означает «подставлять имя», как было раньше.
+  // Поэтому засыпать существующие строки нечем и не нужно — Мастер проставит
+  // коды тогда, когда захочет, и ничего не сломается, пока он этого не сделал.
+  for (const table of ["settings", "systems"]) {
+    if (!tableExists(database, table)) continue;
+    if (!columnExists(database, table, "code")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN code TEXT`);
+    }
+  }
+
+  // Разовый перевод ссылок в текстах с локального id на глобальный ключ.
+  //
+  // Было `[[being:412|Мирт]]`, стало `[[being@8f3c1a2e|wdh|Мирт]]`. Смысл — в
+  // том, что число 412 верно ровно внутри этого файла базы: любой путь
+  // переноса данных обязан отдельно переписывать все id в текстах, и путь,
+  // который об этом забудет, молча переклеит ссылки на чужие сущности.
+  //
+  // Написана здесь целиком, а не через services/mentions.ts, намеренно: тот
+  // модуль ходит в базу через прокси `db`, который во время openDatabase ещё
+  // указывает на прежнее подключение. Разовому проходу дешевле знать грамматику
+  // самому, чем городить исключение в общем коде.
+  //
+  // Перед проходом снимается копия файла базы: правка необратима и идёт по
+  // всем текстовым колонкам сразу. VACUUM INTO даёт согласованный снимок
+  // синхронно, в отличие от асинхронного database.backup().
+  const tokensKey = "mentions_uid_tokens";
+  const tokensDone = database
+    .prepare("SELECT value FROM app_settings WHERE key = ?")
+    .get(tokensKey) as { value: string } | undefined;
+  if (!tokensDone && migrateMentionTokens(database, dbDir)) {
+    database
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
+      .run(tokensKey);
   }
 
   // Пульт звука: роль аудиоресурса и его вид на кнопке.

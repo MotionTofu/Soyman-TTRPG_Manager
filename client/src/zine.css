@@ -196,3 +196,106 @@
 .zine-rotate-r {
   transform: rotate(1.5deg);
 }
+
+/* ---------------------------------------------------------------------- */
+/* Дуотон на декоративных изображениях (дизайн-ревизия, design_revision.md */
+/* §3). Включается флагом [data-cover-duotone] на <html> — см.             */
+/* client/src/imagePrefs.ts.                                              */
+/* ---------------------------------------------------------------------- */
+
+/* ОБЛАСТЬ. Классы ниже вешаются ТОЛЬКО на изображение-фон: обложка героя
+ * главной, плитка кампании, фоновый слой страницы. Изображение-содержимое —
+ * карта локации, портрет, галерея, лайтбокс — не обрабатывается никогда:
+ * дуотоновая карта это сломанная карта.
+ *
+ * УСТРОЙСТВО. Картинка живёт отдельным слоем (.cover-art-image), чтобы
+ * grayscale-фильтр не достался ни подписи поверх обложки, ни самим полюсам:
+ * filter наследуется потомками, и палитра, наложенная поверх, обесцветилась
+ * бы вместе с фотографией — тёплая бумага #EDE7D9 стала бы серой.
+ *
+ * Два полюса вместо трёх: акцент в дуотон не входит. Он самый дефицитный
+ * ресурс системы, и подкраска фонов съела бы его до того, как он понадобится
+ * действительно горячему объекту на экране. */
+.cover-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.cover-art-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+/* Обложки нет — на её месте тематическая полоса из токенов режима. Своей
+ * высоты не задаёт, в отличие от .campaign-card-band: слой должен заполнить
+ * рамку, а не быть шапкой в 90 px. */
+.cover-art-fallback {
+  background: var(--card-band-bg);
+  background-image: var(--card-band-image);
+  background-size: cover;
+  background-position: center;
+}
+
+/* Обработка применяется только к .cover-photo — слою с ЗАГРУЖЕННОЙ картинкой.
+ * Запасная полоса (.cover-art-fallback) собрана из токенов темы и уже в
+ * палитре: пропускать её через дуотон значило бы мутить то, что и так свой. */
+[data-cover-duotone] .cover-photo {
+  isolation: isolate;
+}
+/* 13 %, а не в полную силу. Полный дуотон съедал арты владельца целиком:
+ * единство экрана достигалось ценой того, ради чего обложку и ставят.
+ * На этой доле обработка работает как лёгкий общий тон, а не как перекраска;
+ * арт остаётся собой. */
+[data-cover-duotone] .cover-photo .cover-art-image {
+  filter: grayscale(0.13) contrast(1.01);
+}
+[data-cover-duotone] .cover-photo::before,
+[data-cover-duotone] .cover-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.13;
+}
+/* multiply тянет светлые тона к светлому полюсу, lighten поднимает пол до
+ * тёмного. Какой из --paper/--ink светлый, зависит от режима: в тёмных
+ * режимах бумага чёрная, а чернила бумажные, поэтому полюса меняются
+ * местами — иначе multiply задавил бы картинку в чёрное. */
+[data-cover-duotone] .cover-photo::before {
+  background: var(--paper);
+  mix-blend-mode: multiply;
+}
+[data-cover-duotone] .cover-photo::after {
+  background: var(--ink);
+  mix-blend-mode: lighten;
+}
+[data-cover-duotone][data-theme-mode="dark"] .cover-photo::before {
+  background: var(--ink);
+}
+[data-cover-duotone][data-theme-mode="dark"] .cover-photo::after {
+  background: var(--paper);
+}
+
+/* Растр поверх дуотона — только верхняя треть. §5.2 запрещает халфтон под
+ * текстом, а подпись обложки лежит внизу: сплошной растр читался бы сквозь
+ * название. Вешается на РАМКУ обложки, не на слой картинки, чтобы не попасть
+ * под её grayscale. */
+[data-cover-duotone] .cover-halftone:has(.cover-photo)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 38%;
+  z-index: 1;
+  pointer-events: none;
+  background-image: radial-gradient(var(--ink) 1.1px, transparent 1.2px);
+  background-size: 5px 5px;
+  /* Та же доля, что и у дуотона: растр должен читаться как фактура печати,
+   * а не как сетка поверх картинки. */
+  opacity: 0.13;
+}
+
+/* Смена тумблера не анимируется: §9 запрещает длинные fade, а плавная
+ * перекраска половины экрана — ровно оно и есть. */

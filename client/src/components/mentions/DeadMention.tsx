@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api } from "../../api/client";
 import { ENTITY_TYPE_SINGULAR } from "../../entityTypes";
+import { knownSourceName } from "../../mentions";
 
 // Ссылка, чья цель на этом устройстве не установлена.
 //
@@ -11,8 +12,14 @@ import { ENTITY_TYPE_SINGULAR } from "../../entityTypes";
 // осмысленное действие, если ставить его не собираешься: снять ссылку,
 // оставив текст.
 //
-// Оживает такая ссылка сама, без участия человека: установка модуля запускает
-// проход исцеления (server/src/services/mentions.ts).
+// Оживает такая ссылка сама, без участия человека и без всякого прохода по
+// базе: «жива ли» не записано в текст, а вычисляется — ключ появился в карте,
+// значит ссылка ведёт куда надо (client/src/mentions.ts).
+//
+// В тексте лежит короткий код модуля («wdh»), потому что токен Мастер видит
+// при каждой правке. Но здесь, в единственном месте, где источник показывается
+// человеку, коротким быть незачем: код разворачивается в имя, которое Мастер
+// найдёт в списке модулей, — сначала по своей базе, потом по каталогу.
 
 interface Props {
   type: string;
@@ -26,6 +33,7 @@ export function DeadMention({ type, uid, source, label }: Props) {
   const [count, setCount] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<number | null>(null);
+  const [sourceName, setSourceName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -35,6 +43,19 @@ export function DeadMention({ type, uid, source, label }: Props) {
       .then((r) => setCount(r.count))
       .catch(() => setCount(null));
   }, [open, type, uid]);
+
+  useEffect(() => {
+    if (!open || !source) return;
+    const local = knownSourceName(source);
+    if (local) {
+      setSourceName(local);
+      return;
+    }
+    api
+      .get<{ name: string | null }>(`/modules/source-name?code=${encodeURIComponent(source)}`)
+      .then((r) => setSourceName(r.name))
+      .catch(() => setSourceName(null));
+  }, [open, source]);
 
   async function strip() {
     setBusy(true);
@@ -70,8 +91,11 @@ export function DeadMention({ type, uid, source, label }: Props) {
                   {source ? (
                     <>
                       {" "}
-                      Она из модуля <strong>{source}</strong> — поставьте его, и ссылка заработает
-                      сама.
+                      Она из модуля <strong>{sourceName ?? source}</strong>
+                      {sourceName && sourceName !== source ? (
+                        <span className="muted"> ({source})</span>
+                      ) : null}{" "}
+                      — поставьте его, и ссылка заработает сама.
                     </>
                   ) : (
                     " Модуль, из которого она родом, в ссылке не записан."

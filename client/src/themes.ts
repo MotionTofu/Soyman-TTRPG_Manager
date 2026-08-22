@@ -146,6 +146,13 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
   // In every reference palette that resolves to ink-on-paper flipped.
   const surface = ink;
   const onSurface = paper;
+  // Muted text ON an inverted plate. `--muted` is derived against the PAGE,
+  // so it is unreadable on the plate (zine: #6E675C on #12100E ≈ 1.9:1) —
+  // every eyebrow/meta line inside an ink header band needs its own token.
+  // Коэффициент подобран так, чтобы в зине выйти ровно на #A39A88 из
+  // артбордов референса: (0xA3-0x12)/(0xED-0x12) = 0.66 бумаги, то есть
+  // 0.34 подмеса чернил.
+  const onSurfaceMuted = mixHex(onSurface, surface, 0.34);
 
   const vars: Record<string, string> = {
     "--paper": paper,
@@ -155,6 +162,7 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--muted": muted,
     "--surface": surface,
     "--on-surface": onSurface,
+    "--on-surface-muted": onSurfaceMuted,
     "--line": line,
     "--glow": cfg.glow || "none",
     // --bg-elevated and --text-bright have no exact §3.1 equivalent (an
@@ -239,6 +247,9 @@ function skinTheme(
       "--muted": d.muted,
       "--surface": d.surface,
       "--on-surface": d.onSurface,
+      // See buildTheme's note: `--muted` is derived against the page and is
+      // unreadable on an inverted plate, so plates carry their own muted.
+      "--on-surface-muted": mixHex(d.onSurface, d.surface, 0.34),
       "--line": d.line,
       "--glow": d.glow,
       // See buildTheme()'s comment: --bg-elevated/--text-bright have no
@@ -285,7 +296,7 @@ function skinTheme(
 }
 
 // ZINE — the base skin: aged paper, ink, one blood red. Palette from §3.1.
-const ZINE_THEME = buildTheme("zine", "Зин", "light", {
+const ZINE_THEME = buildTheme("zine", "Соевый панк", "light", {
   bg: "#EDE7D9", text: "#12100E", accent: "#D6321E", border: "#12100E",
   fontDisplay: "'RussianPunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   textMutedOverride: "#6E675C",
@@ -302,7 +313,7 @@ const ZINE_THEME = buildTheme("zine", "Зин", "light", {
 });
 
 // RIOT — the same world inverted: a black sheet with paper scraps on it.
-const RIOT_THEME = skinTheme("riot", "Riot", "dark", {
+const RIOT_THEME = skinTheme("riot", "Соевый бунт", "dark", {
   paper: "#0B0B0B", paper2: "#141414", elevated: "#1C1C1C",
   ink: "#F2EDE1", ink2: "#C9C2B4", muted: "#8A8378",
   accent: "#C7261B", accent2: "#F2EDE1",
@@ -315,7 +326,7 @@ const RIOT_THEME = skinTheme("riot", "Riot", "dark", {
 });
 
 // NEON — acid. The only skin that uses --glow (§3.1).
-const NEON_THEME = skinTheme("neon", "Neon", "dark", {
+const NEON_THEME = skinTheme("neon", "Соевый неон", "dark", {
   paper: "#07070A", paper2: "#0F0F14", elevated: "#16161C",
   ink: "#F0FFE8", ink2: "#B9D6AC", muted: "#6F7A6A",
   accent: "#FF2E88", accent2: "#B6FF2E",
@@ -327,7 +338,7 @@ const NEON_THEME = skinTheme("neon", "Neon", "dark", {
   semantic: { gm: "#FF2E88", player: "#B6FF2E", paid: "#B6FF2E", free: "#B6FF2E", active: "#B6FF2E", hold: "#6F7A6A", danger: "#FF2E88" },
 });
 
-const SOY_NOIR_THEME = buildTheme("noir", "Соевый Нуар", "light", {
+const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
   bg: "#e8e4da", text: "#1c1c1c", accent: "#1c1c1c", border: "#2a2a2a",
   fontDisplay: "'Cormorant SC', serif", fontBody: "'PT Mono', monospace",
   bandImage: "repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px)",
@@ -335,7 +346,7 @@ const SOY_NOIR_THEME = buildTheme("noir", "Соевый Нуар", "light", {
   cardBodyTexture: "radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px",
 });
 
-const ABERRANT_THEME = buildTheme("aberrant", "Аберрантный", "dark", {
+const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация", "dark", {
   bg: "#0e0c14", text: "#c4b8d4", accent: "#b366e8", border: "#4a2f5c",
   fontDisplay: "'PT Serif', serif", fontBody: "'PT Serif', serif",
   bandBg: "radial-gradient(ellipse at 30% -10%, #3a1f4a, #0e0c14 70%)",

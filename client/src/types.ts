@@ -3,6 +3,8 @@ import type { DndCheck, DndCost, DndEffect } from "./components/dnd/effects";
 export interface System {
   id: number;
   name: string;
+  /** Короткое сокращение модуля — «phb». См. Setting.code. */
+  code: string | null;
   description: string;
   folder_path: string | null;
   thumbnail_image_path: string | null;
@@ -110,6 +112,9 @@ export type RateSplit = "per_person" | "per_table";
 export interface Setting {
   id: number;
   name: string;
+  /** Короткое сокращение модуля — «wdh». Идёт в ссылки внутри текстов вместо
+      полного имени: см. client/src/mentions.ts. Пустой — значит имя. */
+  code: string | null;
   description: string;
   background_image_path: string | null;
   background_image_url: string | null;

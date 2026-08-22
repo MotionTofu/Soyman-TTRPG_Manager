@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    body { margin: 0; background: #D9D2C2; color: #12100E; font-family: 'Archivo', sans-serif; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1000px; padding: 40px; display: flex; justify-content: center; background: #D9D2C2;">
+<div style="width: 920px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; border: 2px solid #12100E;">
+
+  <!-- ШАПКА — плашка-инверсия. Портрет — новый слот, тот же аватар, что
+       на странице персонажа. Тема — пилюля справа, единственная активная
+       из трёх опций сейчас (нуар/аберрантный не спроектированы). -->
+  <div style="background: #12100E; color: #EDE7D9; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="width: 64px; height: 64px; border: 2px solid #E5DFD1; background: linear-gradient(150deg, #5c3a5c 0%, #2a2440 100%); flex-shrink: 0;"></div>
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-family: 'Anton', sans-serif; font-size: 27px; line-height: .94; letter-spacing: -.005em; text-transform: uppercase;">Кассандра Вран</div>
+        <div style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #A39A88;">Паладин 5 · Тифлинг · Солдат</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #A39A88;">Игрок: Настя · ОПЫТ 6500</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+      <!-- Карандаш шапки — редактирует то, что и так всегда на виду
+           здесь (имя/класс/раса/предыстория/мировоззрение/опыт/портрет),
+           поэтому больше не дублируется отдельным подразделом вкладки. -->
+      <div style="width: 22px; height: 22px; border: 1.5px solid #A39A88; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;">
+        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="#A39A88" stroke-width="1.6"><path d="M13.5 3.5l3 3L6 17l-4 1 1-4z"/></svg>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px; border: 1.5px solid #A39A88; padding: 4px 9px 4px 10px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #A39A88;">Тема: Зин</span>
+        <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#A39A88" stroke-width="2"><path d="M4 7l6 6 6-6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 18px 20px 22px 20px; display: flex; flex-direction: column; gap: 18px;">
+
+    <!-- VITALS — ряд плашек, состыкованных без радиуса. Обычное
+         состояние: ХП не акцентирован, спасброски от смерти не
+         показываются (нечего показывать — блок скрыт целиком). -->
+    <div style="display: flex; border: 2px solid #12100E; background: #E5DFD1;">
+      <div style="flex: 1; padding: 8px 12px; border-right: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">КЗ</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1;">18</span>
+      </div>
+      <div style="flex: 1; padding: 8px 12px; border-right: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Иниц.</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1;">+0</span>
+      </div>
+      <div style="flex: 1; padding: 8px 12px; border-right: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Скорость</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1;">9М</span>
+      </div>
+      <div style="flex: 1.3; padding: 8px 12px; border-right: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">ХП</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1;">44 / 44</span>
+      </div>
+      <div style="flex: 1; padding: 8px 12px; border-right: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Кости</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1;">5г10</span>
+      </div>
+      <div style="flex: 1.1; padding: 8px 12px; border-right: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Мастерство</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1;">+3</span>
+      </div>
+      <div style="flex: 1; padding: 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Вдохн.</span>
+        <span style="width: 13px; height: 13px; border: 2px solid #12100E; display: inline-block; transform: rotate(45deg);"></span>
+      </div>
+    </div>
+
+    <!-- СПОСОБНОСТИ — тоже всегда на виду, поэтому карандаш стоит прямо
+         на подписи ряда, а не дублируется вкладкой. 6 плашек, число —
+         значение (моно), под плашкой ромб — отметка владения спасброском. -->
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <span style="font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Способности</span>
+      <div style="width: 20px; height: 20px; border: 1.5px solid #12100E; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+        <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="1.6"><path d="M13.5 3.5l3 3L6 17l-4 1 1-4z"/></svg>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px;">
+      <div style="border: 2px solid #12100E; background: #EDE7D9; padding: 8px 4px 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Сила</span>
+        <span style="font-family: 'Anton', sans-serif; font-size: 23px; line-height: 1;">16</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #403C35;">+3</span>
+      </div>
+      <div style="border: 2px solid #12100E; background: #EDE7D9; padding: 8px 4px 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Ловк.</span>
+        <span style="font-family: 'Anton', sans-serif; font-size: 23px; line-height: 1;">10</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #403C35;">+0</span>
+      </div>
+      <div style="border: 2px solid #12100E; background: #EDE7D9; padding: 8px 4px 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Телосл.</span>
+        <span style="font-family: 'Anton', sans-serif; font-size: 23px; line-height: 1;">14</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #403C35;">+2</span>
+      </div>
+      <div style="border: 2px solid #12100E; background: #EDE7D9; padding: 8px 4px 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Интел.</span>
+        <span style="font-family: 'Anton', sans-serif; font-size: 23px; line-height: 1;">8</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #403C35;">−1</span>
+      </div>
+      <div style="border: 2px solid #12100E; background: #EDE7D9; padding: 8px 4px 4px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Мудр.</span>
+        <span style="font-family: 'Anton', sans-serif; font-size: 23px; line-height: 1;">12</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #403C35;">+1</span>
+        <span title="Владение спасброском" style="width: 7px; height: 7px; background: #12100E; display: inline-block; transform: rotate(45deg); margin-top: 3px;"></span>
+      </div>
+      <div style="border: 2px solid #12100E; background: #EDE7D9; padding: 8px 4px 4px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C;">Харизма</span>
+        <span style="font-family: 'Anton', sans-serif; font-size: 23px; line-height: 1;">15</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #403C35;">+2</span>
+        <span title="Владение спасброском" style="width: 7px; height: 7px; background: #12100E; display: inline-block; transform: rotate(45deg); margin-top: 3px;"></span>
+      </div>
+    </div>
+    </div>
+
+    <!-- ВКЛАДКИ — сегментный переключатель, состыкован без радиуса.
+         «Основное» убрана: класс/раса/характеристики и так всегда на
+         виду в шапке и над способностями, отдельный подраздел дублировал
+         их. «Владения» — единственное, чему нужна собственная вкладка,
+         перенесена в конец горизонтали. -->
+    <div style="display: flex; border: 2px solid #12100E;">
+      <div style="flex: 1; padding: 8px 4px; background: #E5DFD1; color: #4A4740; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; border-right: 1.5px solid rgba(18,16,14,.28);">Действия</div>
+      <div style="flex: 1; padding: 8px 4px; background: #E5DFD1; color: #4A4740; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; border-right: 1.5px solid rgba(18,16,14,.28);">Навыки</div>
+      <div style="flex: 1; padding: 8px 4px; background: #E5DFD1; color: #4A4740; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; border-right: 1.5px solid rgba(18,16,14,.28);">Заклинания</div>
+      <div style="flex: 1; padding: 8px 4px; background: #E5DFD1; color: #4A4740; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; border-right: 1.5px solid rgba(18,16,14,.28);">Инвентарь</div>
+      <div style="flex: 1; padding: 8px 4px; background: #E5DFD1; color: #4A4740; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; border-right: 1.5px solid rgba(18,16,14,.28);">Ресурсы</div>
+      <div style="flex: 1; padding: 8px 4px; background: #E5DFD1; color: #4A4740; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; border-right: 1.5px solid rgba(18,16,14,.28);">Особенности</div>
+      <div style="flex: 1; padding: 8px 4px; background: #E5DFD1; color: #4A4740; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; text-align: center; border-right: 1.5px solid rgba(18,16,14,.28);">Досье</div>
+      <div style="flex: 1; padding: 8px 4px; background: #12100E; color: #EDE7D9; font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; text-align: center;">Владения</div>
+    </div>
+
+    <!-- ТЕЛО ВКЛАДКИ «ВЛАДЕНИЯ» -->
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #12100E; padding-bottom: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">Владения</span>
+          <div style="width: 22px; height: 22px; border: 1.5px solid #12100E; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="1.6"><path d="M13.5 3.5l3 3L6 17l-4 1 1-4z"/></svg>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #6E675C;">Языки:</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Общий</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Инфернальный</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #6E675C;">Оружие:</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Простое</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Воинское</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #6E675C;">Доспехи:</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Лёгкие</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Средние</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Тяжёлые</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Щиты</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #6E675C;">Инструменты:</span>
+          <span style="border: 1.5px solid #12100E; padding: 3px 9px; font-family: 'Archivo', sans-serif; font-size: 11px;">Игральные кости</span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

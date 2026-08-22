@@ -8,6 +8,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
 import type { Setting, StoryScene, StorySceneDetail } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 // Stable references — SectionDropZone is memoized and would re-render on
 // every parent render if these were inline literals.
@@ -198,7 +199,7 @@ export function SceneDetailPage() {
             <button onClick={revert}>Вернуть к оригиналу</button>
           )}
           <button className="danger" onClick={archiveScene}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>

@@ -21,6 +21,7 @@ import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { formatImportantDate } from "../inworldCalendar";
+import { NavIcon } from "../components/NavIcons";
 import type {
   DateRecurrence,
   SearchResult,
@@ -315,7 +316,7 @@ export function LocationDetailPage() {
           {/* Имя, тип и короткое имя правятся карточкой «Основное» во вкладке
               «Информация о локации». */}
           <button className="danger" onClick={archiveLocation}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>

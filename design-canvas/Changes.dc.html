@@ -1,0 +1,217 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    body { margin: 0; background: #EDE7D9; color: #12100E; font-family: 'Archivo', sans-serif; }
+    a { color: #D6321E; text-decoration: none; } a:hover { color: #12100E; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1000px; height: 760px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; overflow: hidden;">
+
+  <div style="display: flex; align-items: baseline; gap: 14px; border-bottom: 2px solid #12100E; padding-bottom: 8px;">
+    <div style="font-family: 'Anton', sans-serif; font-size: 28px; line-height: .92; text-transform: uppercase;">Было / стало</div>
+    <div style="font-family: 'Archivo', sans-serif; font-size: 12px; color: #6E675C;">четыре решения, которые видно только вблизи</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 32px; flex-grow: 1;">
+
+    <!-- ============ 1. ПЛИТКА КАМПАНИИ ============ -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="background: #12100E; color: #EDE7D9; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px;">01</span>
+        <span style="font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">Плитка кампании</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+        <!-- было -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">Было — шесть фактов одним голосом</span>
+          <div style="border: 2px solid rgba(18,16,14,.28); background: #E5DFD1;">
+            <div style="height: 74px; background: linear-gradient(150deg, #35406b 0%, #7b4a63 100%); position: relative;">
+              <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(18,16,14,.8) 100%);"></div>
+              <div style="position: absolute; left: 8px; bottom: 5px; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 13px; color: #EDE7D9;">Врата Балдура</div>
+            </div>
+            <div style="padding: 8px; display: flex; flex-direction: column; gap: 3px;">
+              <div style="font-family: 'Archivo', sans-serif; font-size: 11px; color: #6E675C;">D&amp;D 5.5</div>
+              <div style="font-family: 'Archivo', sans-serif; font-size: 11px; color: #6E675C;">Забытые Королевства</div>
+              <div style="display: flex; gap: 4px;">
+                <span style="font-family: 'Archivo', sans-serif; font-size: 10px; color: #6E675C; border: 1px solid rgba(18,16,14,.28); padding: 1px 5px;">active</span>
+                <span style="font-family: 'Archivo', sans-serif; font-size: 10px; color: #6E675C; border: 1px solid rgba(18,16,14,.28); padding: 1px 5px;">Платная</span>
+              </div>
+              <div style="font-family: 'Archivo', sans-serif; font-size: 11px; color: #6E675C;">Игроков: 4 · Сессий состоялось: 13</div>
+              <div style="font-family: 'Archivo', sans-serif; font-size: 11px; color: #6E675C;">Ближайшая сессия: 2026-08-30</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- стало -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #D6321E;">Стало — три факта, три голоса</span>
+          <div style="border: 2px solid #12100E; background: #E5DFD1;">
+            <div style="height: 74px; background: linear-gradient(150deg, #17150F 0%, #8d867a 100%); position: relative;">
+              <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 38%, rgba(18,16,14,.86) 100%);"></div>
+              <div style="position: absolute; left: 8px; right: 8px; bottom: 5px; font-family: 'Anton', sans-serif; font-size: 15px; line-height: .96; text-transform: uppercase; color: #EDE7D9;">Врата Балдура</div>
+            </div>
+            <div style="border-top: 2px solid #12100E; padding: 8px 9px; display: flex; flex-direction: column; gap: 5px;">
+              <div style="font-family: 'Archivo', sans-serif; font-size: 12px; color: #403C35;">D&amp;D 5.5</div>
+              <div style="display: flex; align-items: center; gap: 7px;">
+                <span style="width: 7px; height: 7px; background: #12100E; display: inline-block; transform: rotate(45deg);"></span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6E675C;">30 августа</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-family: 'Archivo', sans-serif; font-size: 11px; line-height: 1.4; color: #6E675C; border-left: 2px solid #12100E; padding-left: 9px;">Сеттинг, счётчики и оплата ушли внутрь кампании: сводка отвечает «которая это и когда следующая», а не описывает объект.</div>
+    </div>
+
+    <!-- ============ 2. ЯЧЕЙКА КАЛЕНДАРЯ ============ -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="background: #12100E; color: #EDE7D9; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px;">02</span>
+        <span style="font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">Ячейка календаря</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">Было — одна метка на любой день</span>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
+            <div style="height: 46px; border: 1.5px solid rgba(18,16,14,.28); display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-size: 13px; color: #403C35;">22</div>
+            <div style="height: 46px; border: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+              <span style="width: 7px; height: 7px; background: #6E675C; display: inline-block;"></span>
+              <span style="font-family: 'Archivo', sans-serif; font-size: 13px; color: #403C35;">23</span>
+            </div>
+            <div style="height: 46px; border: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+              <span style="width: 7px; height: 7px; background: #6E675C; display: inline-block;"></span>
+              <span style="font-family: 'Archivo', sans-serif; font-size: 13px; color: #403C35;">29</span>
+            </div>
+            <div style="height: 46px; border: 1.5px solid rgba(18,16,14,.28); display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-size: 13px; color: #403C35;">31</div>
+          </div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #D6321E; line-height: 1.4;">29-е несёт три игры — метка одна, клик ведёт вслепую</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #D6321E;">Стало — четыре состояния</span>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
+            <div style="height: 46px; border: 1.5px solid rgba(18,16,14,.28); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #403C35;">22</div>
+            <div style="height: 46px; border: 2px solid #12100E; background: #EDE7D9; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #12100E;">23</div>
+            <div style="height: 46px; background: #12100E; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: #EDE7D9; line-height: 1;">29</span>
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #A39A88; line-height: 1;">3</span>
+            </div>
+            <div style="height: 46px; border: 1.5px solid rgba(18,16,14,.28); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: #D6321E;">21</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px; font-family: 'Archivo', sans-serif; font-size: 10px; color: #6E675C; line-height: 1.45;">
+            <span>пусто · одна игра · несколько (счётчик) · сегодня</span>
+          </div>
+        </div>
+      </div>
+      <div style="font-family: 'Archivo', sans-serif; font-size: 11px; line-height: 1.4; color: #6E675C; border-left: 2px solid #12100E; padding-left: 9px;">Множественность — сменой состояния ячейки, а не размножением меток по 6 px. Инверсия читается с любого расстояния.</div>
+    </div>
+
+    <!-- ============ 3. ЧАСТИЦЫ ЗА ЗАГОЛОВКОМ ============ -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="background: #12100E; color: #EDE7D9; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px;">03</span>
+        <span style="font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">Россыпь за заголовком</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">Было — круги, свечение, пульсация</span>
+          <div style="position: relative; height: 78px; border: 1.5px solid rgba(18,16,14,.28); background: #E5DFD1; overflow: hidden; display: flex; align-items: center; padding-left: 14px;">
+            <span style="position: absolute; left: 22px; top: 14px; width: 5px; height: 5px; border-radius: 50%; background: #D6321E; box-shadow: 0 0 5px 1px #D6321E; opacity: .45;"></span>
+            <span style="position: absolute; left: 96px; top: 52px; width: 4px; height: 4px; border-radius: 50%; background: #D6321E; box-shadow: 0 0 5px 1px #D6321E; opacity: .38;"></span>
+            <span style="position: absolute; left: 148px; top: 20px; width: 6px; height: 6px; border-radius: 50%; background: #D6321E; box-shadow: 0 0 5px 1px #D6321E; opacity: .5;"></span>
+            <span style="position: absolute; left: 186px; top: 60px; width: 4px; height: 4px; border-radius: 50%; background: #D6321E; box-shadow: 0 0 5px 1px #D6321E; opacity: .3;"></span>
+            <span style="font-family: 'Anton', sans-serif; font-size: 26px; text-transform: uppercase; position: relative;">Кампании</span>
+          </div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #D6321E; line-height: 1.4;">три запрета разом: круги · тени · «дыхание»</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #D6321E;">Стало — статичная зинная россыпь</span>
+          <div style="position: relative; height: 78px; border: 1.5px solid rgba(18,16,14,.28); background: #E5DFD1; overflow: hidden; display: flex; align-items: center; padding-left: 14px;">
+            <span style="position: absolute; left: 24px; top: 13px; width: 6px; height: 6px; background: rgba(110,103,92,.55); transform: rotate(20deg);"></span>
+            <svg style="position: absolute; left: 92px; top: 50px;" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="rgba(110,103,92,.55)" stroke-width="1.6"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+            <svg style="position: absolute; left: 150px; top: 16px;" width="14" height="14" viewBox="0 0 14 14" fill="rgba(110,103,92,.5)"><path d="M7 0l1.7 4.6L13.5 5l-3.6 3 1.3 4.7L7 10.2 2.8 12.7 4.1 8 .5 5l4.8-.4z"/></svg>
+            <span style="position: absolute; left: 190px; top: 58px; width: 5px; height: 5px; background: rgba(110,103,92,.45); transform: rotate(-14deg);"></span>
+            <svg style="position: absolute; left: 216px; top: 24px;" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="rgba(110,103,92,.45)" stroke-width="1.6"><path d="M6 1v10M1 6h10"/></svg>
+            <span style="font-family: 'Anton', sans-serif; font-size: 26px; text-transform: uppercase; position: relative;">Кампании</span>
+          </div>
+          <div style="font-family: 'Archivo', sans-serif; font-size: 10px; color: #6E675C; line-height: 1.45;">квадраты, крестики, звёздочки · --muted 40 % · без анимации</div>
+        </div>
+      </div>
+      <div style="font-family: 'Archivo', sans-serif; font-size: 11px; line-height: 1.4; color: #6E675C; border-left: 2px solid #12100E; padding-left: 9px;">Правка задевает все страницы разом — компонент один, он стоит за каждым заголовком и за логотипом навигации.</div>
+    </div>
+
+    <!-- ============ 4. НАВИГАЦИОННЫЙ ВИДЖЕТ ============ -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="background: #12100E; color: #EDE7D9; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px;">04</span>
+        <span style="font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">Навигационный виджет</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">Было — пять одинаковых кнопок, полупрозрачная рамка</span>
+          <div style="display: inline-flex; align-self: flex-start; gap: 4px; background: #E5DFD1; border: 1.5px solid rgba(18,16,14,.28); padding: 6px;">
+            <sc-for list="{{ oldButtons }}" as="b" hint-placeholder-count="5">
+              <div style="display: flex; align-items: center; gap: 5px; padding: 5px 8px; font-family: 'Archivo', sans-serif; font-size: 11px; color: #403C35;">
+                <span style="width: 12px; height: 12px; border: 1.5px solid #6E675C; display: inline-block;"></span>
+                {{ b }}
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #D6321E;">Стало — чернила, капс, отбитый пульт</span>
+          <div style="display: inline-flex; align-self: flex-start; align-items: stretch; background: #E5DFD1; border: 2px solid #12100E;">
+            <sc-for list="{{ newButtons }}" as="b" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 6px; padding: 7px 11px; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #4A4740;">
+                <span style="width: 11px; height: 11px; border: 1.5px solid #4A4740; display: inline-block;"></span>
+                {{ b }}
+              </div>
+            </sc-for>
+            <div style="width: 2px; background: #12100E;"></div>
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; background: #D6321E; color: #ffffff; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600;">
+              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="14" height="10"/><path d="M7 15v2M13 15v2M6 9h2M11 9h3"/></svg>
+              Пульт сессии
+            </div>
+            <div style="width: 2px; background: #12100E;"></div>
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 11px; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #4A4740;">
+              <span style="width: 11px; height: 11px; border: 1.5px solid #4A4740; display: inline-block;"></span>
+              Закрепить
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-family: 'Archivo', sans-serif; font-size: 11px; line-height: 1.4; color: #6E675C; border-left: 2px solid #12100E; padding-left: 9px;">Единственная кнопка-переход среди четырёх утилит перестаёт требовать чтения подписей. Цена — акцент в постоянной обёртке: у обёртки свой бюджет в один объект.</div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      oldButtons: ["Наверх", "Вниз", "Назад", "Пульт сессии", "Закрепить"],
+      newButtons: ["Наверх", "Вниз", "Назад"],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -34,19 +34,42 @@ export function NavWidget() {
   const atCap = pins.length >= MAX_PINS;
   const alreadyPinned = pins.some((p) => p.path === location.pathname + location.search);
 
-  const buttons: { key: string; icon: Parameters<typeof NavIcon>[0]["name"]; label: string; onClick: () => void; disabled?: boolean; title?: string }[] = [
-    { key: "up", icon: "navUp", label: "Наверх", onClick: scrollTop },
-    { key: "down", icon: "navDown", label: "Вниз", onClick: scrollBottom },
-    { key: "back", icon: "navBack", label: "Назад", onClick: goBack },
+  // `divider` отбивает «Пульт сессии» от утилит: это единственная кнопка-
+  // переход в ряду, и без отбивки её приходилось искать чтением подписей.
+  // Отбивка стоит с обеих сторон и остаётся видимой, даже когда сессии нет
+  // и акцентная заливка погашена — иначе группировка пропадала бы ровно
+  // тогда, когда она объясняет, почему кнопка неактивна.
+  type WidgetItem =
+    | { kind: "divider"; key: string }
+    | {
+        kind: "button";
+        key: string;
+        icon: Parameters<typeof NavIcon>[0]["name"];
+        label: string;
+        onClick: () => void;
+        disabled?: boolean;
+        title?: string;
+        className?: string;
+      };
+
+  const items: WidgetItem[] = [
+    { kind: "button", key: "up", icon: "navUp", label: "Наверх", onClick: scrollTop },
+    { kind: "button", key: "down", icon: "navDown", label: "Вниз", onClick: scrollBottom },
+    { kind: "button", key: "back", icon: "navBack", label: "Назад", onClick: goBack },
+    { kind: "divider", key: "div-cockpit" },
     {
+      kind: "button",
       key: "cockpit",
       icon: "navCockpit",
       label: "Пульт сессии",
+      className: "nav-widget-button-cockpit",
       onClick: () => navigate(`/sessions/${cockpitId}/live`),
       disabled: !cockpitId,
       title: cockpitId ? "Перейти к ближайшей сессии" : "Нет запланированных сессий",
     },
+    { kind: "divider", key: "div-pin" },
     {
+      kind: "button",
       key: "pin",
       icon: "navPin",
       label: "Закрепить",
@@ -58,19 +81,23 @@ export function NavWidget() {
 
   return (
     <div className={`nav-widget nav-widget-${prefs.position}${prefs.showLabels ? "" : " nav-widget-compact"}`}>
-      {buttons.map((b) => (
-        <button
-          key={b.key}
-          type="button"
-          className="nav-widget-button"
-          onClick={b.onClick}
-          disabled={b.disabled}
-          title={b.title ?? b.label}
-        >
-          <NavIcon name={b.icon} />
-          {prefs.showLabels && <span>{b.label}</span>}
-        </button>
-      ))}
+      {items.map((it) =>
+        it.kind === "divider" ? (
+          <span key={it.key} className="nav-widget-divider" aria-hidden="true" />
+        ) : (
+          <button
+            key={it.key}
+            type="button"
+            className={`nav-widget-button${it.className ? ` ${it.className}` : ""}`}
+            onClick={it.onClick}
+            disabled={it.disabled}
+            title={it.title ?? it.label}
+          >
+            <NavIcon name={it.icon} />
+            {prefs.showLabels && <span>{it.label}</span>}
+          </button>
+        )
+      )}
     </div>
   );
 }

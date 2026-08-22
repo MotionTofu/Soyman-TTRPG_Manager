@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { refreshMentionIndex } from "../mentions";
 import type { Module, ModuleCatalogEntry } from "../types";
 
 // "Модули" — toggleable Systems/Settings. Existing (non-imported) rows are
@@ -20,6 +21,11 @@ export function ModulesTab() {
 
   function refresh() {
     api.get<Module[]>("/modules").then(setModules);
+    // Установка, включение, обновление и удаление модуля меняют состав
+    // сущностей пачкой — а по карте глобальных ключей ссылки в текстах решают,
+    // куда ведут. Без перечитывания только что поставленный модуль оживил бы
+    // ссылки на себя лишь после перезапуска приложения.
+    void refreshMentionIndex();
   }
   useEffect(refresh, []);
 

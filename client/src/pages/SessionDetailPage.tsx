@@ -70,7 +70,10 @@ export function SessionDetailPage() {
   const [titleDraft, setTitleDraft] = useState("");
   const [campaignSessions, setCampaignSessions] = useState<SessionSummary[]>([]);
   const [battles, setBattles] = useState<Playlist[]>([]);
-  const [secrets, setSecrets] = useState<StorySecret[]>([]);
+  const [secretData, setSecretData] = useState<CampaignGrouped<StorySecret>>({
+    groups: [],
+    own: [],
+  });
   const [report, setReport] = useState<SessionReport | null>(null);
   const [inworldYearDraft, setInworldYearDraft] = useState("");
   const [inworldMonthDraft, setInworldMonthDraft] = useState("");
@@ -80,6 +83,10 @@ export function SessionDetailPage() {
   const [inworldDayEndDraft, setInworldDayEndDraft] = useState("");
   const [showEndDate, setShowEndDate] = useState(false);
   const [editingInworldDate, setEditingInworldDate] = useState(false);
+  // Свёрнуто по умолчанию: нераскрытых тайн к середине кампании набирается
+  // несколько десятков, и развёрнутый список закрывал собой весь «Обзор».
+  // Открывают одно приключение — то, по которому сегодня играют.
+  const [openSecretGroups, setOpenSecretGroups] = useState<string[]>([]);
   const calendar = useSettingCalendar(campaign?.setting_id);
 
   const refresh = useCallback(() => {
@@ -100,11 +107,13 @@ export function SessionDetailPage() {
       api
         .get<SessionSummary[]>(`/campaigns/${s.campaign_id}/sessions`)
         .then(setCampaignSessions);
-      // Тайны кампании и тайны её приключений — один список: с тех пор как
-      // это одна модель, за игровым столом разделять их незачем.
+      // Ответ хранится как есть, разложенным по приключениям: за столом
+      // нераскрытая тайна почти всегда вспоминается вместе с приключением, из
+      // которого тянется, и плоский список на семь десятков строк не давал
+      // понять, где какая ветка.
       api
         .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${s.campaign_id}`)
-        .then((data) => setSecrets([...data.own, ...data.groups.flatMap((g) => g.items)]));
+        .then(setSecretData);
     });
     api.get<SessionReport>(`/sessions/${sessionId}/summary`).then(setReport).catch(() => setReport(null));
   }, [sessionId]);
@@ -115,10 +124,41 @@ export function SessionDetailPage() {
     api.get<Playlist[]>("/playlists").then(setBattles).catch(() => setBattles([]));
   }, []);
 
-  const unrevealedSecrets = useMemo(
-    () => secrets.filter((x) => x.state?.revealed !== 1),
-    [secrets]
+  // Общее число тайн кампании — только для счётчиков «столько-то из
+  // стольких-то»; сам список берётся из групп.
+  const secretsTotal = useMemo(
+    () => secretData.own.length + secretData.groups.reduce((n, g) => n + g.items.length, 0),
+    [secretData]
   );
+
+  // Нераскрытое, разложенное по приключениям. Пустые группы не показываются:
+  // приключение, в котором всё раскрыто, на этом экране уже не долг.
+  const unrevealedGroups = useMemo(() => {
+    const open = (items: StorySecret[]) => items.filter((x) => x.state?.revealed !== 1);
+    const out: { key: string; title: string; items: StorySecret[] }[] = [];
+    const own = open(secretData.own);
+    // Собственные тайны кампании идут первыми — тем же порядком, что в разделе
+    // «Тайны и зацепки» профиля кампании.
+    if (own.length > 0) out.push({ key: "own", title: "Тайны кампании", items: own });
+    for (const g of secretData.groups) {
+      const items = open(g.items);
+      if (items.length > 0) out.push({ key: `arc-${g.arc.id}`, title: g.arc.name, items });
+    }
+    return out;
+  }, [secretData]);
+
+  // Плоский список того же самого — для шпаргалок, которым группировка ни к
+  // чему, и для счётчика в шапке карточки.
+  const unrevealedSecrets = useMemo(
+    () => unrevealedGroups.flatMap((g) => g.items),
+    [unrevealedGroups]
+  );
+
+  function toggleSecretGroup(key: string) {
+    setOpenSecretGroups((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
 
   async function markSecretRevealed(secretId: number) {
     if (!session) return;
@@ -129,13 +169,22 @@ export function SessionDetailPage() {
       revealed: true,
       session_id: sessionId,
     });
-    setSecrets((prev) =>
-      prev.map((s) =>
-        s.id === secretId
-          ? { ...s, state: { revealed: 1, note: s.state?.note ?? "" } }
-          : s
-      )
-    );
+    // Правка на месте, без перечитывания раздела: списки, которых отметка не
+    // касается, сохраняют ссылку, и React перерисовывает одну группу.
+    const patch = (list: StorySecret[]) => {
+      const i = list.findIndex((x) => x.id === secretId);
+      if (i === -1) return list;
+      const next = list.slice();
+      next[i] = { ...list[i], state: { revealed: 1, note: list[i].state?.note ?? "" } };
+      return next;
+    };
+    setSecretData((prev) => ({
+      own: patch(prev.own),
+      groups: prev.groups.map((g) => {
+        const items = patch(g.items);
+        return items === g.items ? g : { ...g, items };
+      }),
+    }));
     api.get<SessionReport>(`/sessions/${sessionId}/summary`).then(setReport);
   }
 
@@ -446,7 +495,7 @@ export function SessionDetailPage() {
               </button>
             )}
             <button className="danger" onClick={archiveSession}>
-              Архивировать
+              <NavIcon name="archive" /> Архивировать
             </button>
           </div>
         </div>
@@ -488,47 +537,63 @@ export function SessionDetailPage() {
 
       {tab === "Обзор" && (
         <div className="stack">
+          {/* Три решения о вечере — тремя карточками в ряд, каждая подписана
+              капсом над значением (макет владельца, 2026-08-21). */}
           {!isPlayer && (
-            <div className="row">
-              <label>
-                Статус
-                <select
-                  value={session.status}
-                  onChange={(e) => setStatus(e.target.value as SessionStatus)}
-                >
-                  <option value="planned">Запланировано</option>
-                  <option value="held">Состоялась</option>
-                  <option value="cancelled">Отмена</option>
-                </select>
-              </label>
-              {!hideFinance && (
-                <label>
-                  Оплата
+            <div className="sp-deal">
+              <label className="sp-deal__cell">
+                <span className="sp-deal__label">Статус</span>
+                <span className="sp-deal__body">
                   <select
-                    value={session.payment_override ?? ""}
-                    onChange={(e) => setPaymentOverride(e.target.value as "" | PaymentType)}
+                    value={session.status}
+                    onChange={(e) => setStatus(e.target.value as SessionStatus)}
                   >
-                    <option value="">
-                      Как в кампании ({PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})
-                    </option>
-                    {PAYMENT_TYPE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
+                    {/* Подписи берутся из того же словаря, что и значок в
+                        шапке: раньше список говорил «Отмена», а значок —
+                        «Отменена». */}
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
                       </option>
                     ))}
                   </select>
+                  <i className="sp-deal__caret" />
+                </span>
+              </label>
+              {!hideFinance && (
+                <label className="sp-deal__cell">
+                  <span className="sp-deal__label">Оплата</span>
+                  <span className="sp-deal__body">
+                    <select
+                      value={session.payment_override ?? ""}
+                      onChange={(e) => setPaymentOverride(e.target.value as "" | PaymentType)}
+                    >
+                      <option value="">
+                        Как в кампании (
+                        {PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})
+                      </option>
+                      {PAYMENT_TYPE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <i className="sp-deal__caret" />
+                  </span>
                 </label>
               )}
               {!hideFinance && isPaidEffective && (
-                <label className="row">
-                  Ставка
-                  <input
-                    style={{ width: 90 }}
-                    value={stakeDraft}
-                    placeholder={String(campaign.session_rate)}
-                    onChange={(e) => setStakeDraft(e.target.value)}
-                    onBlur={saveStake}
-                  />
+                <label className="sp-deal__cell">
+                  <span className="sp-deal__label">Ставка</span>
+                  <span className="sp-deal__body">
+                    <input
+                      value={stakeDraft}
+                      placeholder={String(campaign.session_rate)}
+                      onChange={(e) => setStakeDraft(e.target.value)}
+                      onBlur={saveStake}
+                    />
+                    <span className="sp-deal__unit">{campaign.currency}</span>
+                  </span>
                 </label>
               )}
             </div>
@@ -706,25 +771,41 @@ export function SessionDetailPage() {
               <div className="sp-secrets__head">
                 <span className="sp-title">Нераскрытые тайны и зацепки</span>
                 <span className="sp-count">
-                  {unrevealedSecrets.length} из {secrets.length}
+                  {unrevealedSecrets.length} из {secretsTotal}
                 </span>
                 <span style={{ flex: 1 }} />
                 <span className="muted sp-note">перенесены с прошлых сессий кампании</span>
               </div>
-              <div className="stack sp-secrets__body">
-                {unrevealedSecrets.map((s) => (
-                  <label key={s.id} className="row" style={{ alignItems: "flex-start" }}>
-                    <input type="checkbox" onChange={() => markSecretRevealed(s.id)} />
-                    <span>
-                      <strong>{s.title}</strong>
-                      {s.content && (
-                        <div className="muted" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-                          <MentionText text={s.content} />
-                        </div>
-                      )}
-                    </span>
-                  </label>
-                ))}
+              <div className="sp-secrets__body">
+                {unrevealedGroups.map((g) => {
+                  const open = openSecretGroups.includes(g.key);
+                  return (
+                    <div key={g.key} className={`sp-secrets__group${open ? " is-open" : ""}`}>
+                      <button
+                        className="sp-secrets__group-head"
+                        onClick={() => toggleSecretGroup(g.key)}
+                      >
+                        <i className={`sp-turn is-small${open ? " is-open" : ""}`} />
+                        <span className="sp-secrets__group-name">{g.title}</span>
+                        <span className="sp-count">{g.items.length}</span>
+                      </button>
+                      {open &&
+                        g.items.map((s) => (
+                          <label key={s.id} className="sp-secret">
+                            <input type="checkbox" onChange={() => markSecretRevealed(s.id)} />
+                            <span>
+                              <strong>{s.title}</strong>
+                              {s.content && (
+                                <div className="muted" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                                  <MentionText text={s.content} />
+                                </div>
+                              )}
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -862,7 +943,7 @@ export function SessionDetailPage() {
               <div className="sp-stat">
                 <span className="sp-label">Раскрыто тайн</span>
                 <span className="sp-stat__value">{report.revealed.length}</span>
-                <span className="sp-stat__note">из {secrets.length} по кампании</span>
+                <span className="sp-stat__note">из {secretsTotal} по кампании</span>
               </div>
             </div>
           )}

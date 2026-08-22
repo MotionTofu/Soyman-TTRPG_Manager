@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
-import { formatMentionToken } from "../../mentions";
+import { buildMentionToken } from "../../mentions";
 import { FONT_OPTIONS, ensureFontLoaded } from "../../fonts";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { Modal } from "../Modal";
@@ -48,7 +48,7 @@ interface Props {
 
 // A plain <textarea> that opens the "продвинутое упоминание" modal
 // (MentionPickerModal) while typing "@" — replaces the old inline dropdown.
-// Picking (or creating) a result inserts a [[type:id|Label]] token —
+// Picking (or creating) a result inserts a [[type@ключ|код|Подпись]] token —
 // rendered as a clickable link by <MentionText> in view mode.
 export const MentionTextarea = memo(function MentionTextarea({
   value,
@@ -132,14 +132,19 @@ export const MentionTextarea = memo(function MentionTextarea({
     }
   }
 
-  function insertMention(result: SearchResult) {
+  // Токен собирается асинхронно: обычно ключ уже лежит в карте и ожидание
+  // нулевое, но только что созданную сущность (окно «создать новую») карта ещё
+  // не знает, и тогда токен приезжает с сервера. Вставить ссылку в никуда
+  // нельзя, поэтому без ключа не вставляется ничего — запрос «@» просто
+  // снимается, и текст остаётся тем, что человек набрал.
+  async function insertMention(result: SearchResult) {
     if (query === null) return;
     const before = value.slice(0, queryStart);
     const after = value.slice(queryStart + 1 + query.length);
-    const token = formatMentionToken(result.type, result.id, result.title);
-    const newText = `${before}${token}${after}`;
-    onChange(newText);
+    const token = await buildMentionToken(result.type, result.id, result.title);
     setQuery(null);
+    if (!token) return;
+    onChange(`${before}${token}${after}`);
     const newCursor = before.length + token.length;
     requestAnimationFrame(() => {
       const el = textareaRef.current;
@@ -159,12 +164,15 @@ export const MentionTextarea = memo(function MentionTextarea({
     if (!raw) return;
     e.preventDefault();
     const result: SearchResult = JSON.parse(raw);
-    const token = formatMentionToken(result.type, result.id, result.title);
-    // A spell dropped into free text (e.g. Снаряжение) isn't the spell
-    // itself — it's a scroll of it — so mark it as such.
-    const suffix = result.kind === "spell" ? " (свиток)" : "";
-    const needsSpace = value.length > 0 && !/\s$/.test(value);
-    onChange(`${value}${needsSpace ? " " : ""}${token}${suffix}`);
+    void (async () => {
+      const token = await buildMentionToken(result.type, result.id, result.title);
+      if (!token) return;
+      // A spell dropped into free text (e.g. Снаряжение) isn't the spell
+      // itself — it's a scroll of it — so mark it as such.
+      const suffix = result.kind === "spell" ? " (свиток)" : "";
+      const needsSpace = value.length > 0 && !/\s$/.test(value);
+      onChange(`${value}${needsSpace ? " " : ""}${token}${suffix}`);
+    })();
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {

@@ -1,0 +1,406 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    body { margin: 0; background: #EDE7D9; color: #12100E; font-family: 'Archivo', sans-serif; }
+    a { color: #D6321E; text-decoration: none; } a:hover { color: #12100E; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1920px; height: 1180px; background: #D9D2C2; display: flex; justify-content: center; align-items: flex-start; overflow: hidden;">
+<div style="width: {{ shellWidth }}px; height: 1180px; display: grid; grid-template-columns: 200px 1fr 320px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; overflow: hidden; position: relative;">
+
+  <!-- ============ NAV 200 (существующая оболочка, не предмет этого шага) ============ -->
+  <div style="background: #E5DFD1; border-right: 2px solid #12100E; padding: 16px 10px; display: flex; flex-direction: column; gap: 4px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 6px 14px 6px;">
+      <div style="width: 26px; height: 26px; background: #12100E; color: #EDE7D9; font-family: 'Anton', sans-serif; font-size: 15px; display: flex; align-items: center; justify-content: center;">S</div>
+      <div style="font-family: 'Anton', sans-serif; font-size: 17px; letter-spacing: -.01em; line-height: .92; text-transform: uppercase;">SoyMan</div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 9px; padding: 7px 8px; background: #D6321E; color: #ffffff; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; font-weight: 600;">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l7-6 7 6v8H3z"/><path d="M8 17v-5h4v5"/></svg>
+      Главная
+    </div>
+    <div style="display: flex; align-items: center; gap: 9px; padding: 7px 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; color: #4A4740;">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h14M3 10h14M3 14h9"/></svg>
+      Кампании
+    </div>
+    <div style="display: flex; align-items: center; gap: 9px; padding: 7px 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; color: #4A4740;">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M3 10h14M10 3c2.5 2.6 2.5 11.4 0 14M10 3c-2.5 2.6-2.5 11.4 0 14"/></svg>
+      Сеттинги
+    </div>
+    <div style="display: flex; align-items: center; gap: 9px; padding: 7px 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; color: #4A4740;">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="14" height="14"/><path d="M7 7h6M7 11h6"/></svg>
+      Системы
+    </div>
+    <div style="display: flex; align-items: center; gap: 9px; padding: 7px 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; color: #4A4740;">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="4" width="7" height="5"/><rect x="11" y="11" width="7" height="5"/><path d="M9 6.5h2.5v7H11"/></svg>
+      Полотно
+    </div>
+    <div style="display: flex; align-items: center; gap: 9px; padding: 7px 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; color: #4A4740;">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 16V5l6-2 6 2v11"/><path d="M4 16h12"/></svg>
+      Мастерение
+    </div>
+
+    <div style="flex-grow: 1;"></div>
+
+    <!-- Точка обновления вместо блока «Обновления» на главной -->
+    <div style="display: flex; align-items: center; gap: 9px; padding: 7px 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .10em; text-transform: uppercase; color: #4A4740; border-top: 2px solid #12100E; margin-top: 8px; padding-top: 12px;">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 6.5v4M10 13.4v.2"/></svg>
+      О программе
+      <span style="width: 7px; height: 7px; background: #D6321E; display: inline-block;"></span>
+    </div>
+  </div>
+
+  <!-- ============ CONTENT ============ -->
+  <div style="padding: 24px 32px; overflow: hidden; position: relative;">
+
+    <div style="display: grid; grid-template-columns: minmax(0, {{ mainWidth }}px) 320px; gap: 32px; align-items: start; justify-content: start;">
+
+      <!-- ---------- ОСНОВНАЯ КОЛОНКА ---------- -->
+      <div style="display: flex; flex-direction: column; gap: 32px;">
+
+        <!-- ГЕРОЙ. Заголовка «Главная» больше нет — герой представляет
+             страницу сам. Обложка проходит дуотон в чернила+бумагу;
+             халфтон-растр только в верхней трети, потому что снизу лежит
+             название. Ведёт в карточку сессии — готовить, а не в пульт. -->
+        <div style="position: relative; height: {{ heroHeight }}px; border: 2px solid #12100E; overflow: hidden; isolation: isolate;">
+          <div style="position: absolute; inset: 0; background-image: {{ coverImage }};"></div>
+          <sc-if value="{{ duotone }}" hint-placeholder-val="{{ true }}">
+            <div style="position: absolute; inset: 0 0 62% 0; background-image: radial-gradient(rgba(18,16,14,.55) 1.1px, transparent 1.2px); background-size: 5px 5px;"></div>
+          </sc-if>
+          <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 34%, rgba(18,16,14,.88) 100%);"></div>
+
+          <div style="position: absolute; left: 24px; right: 24px; bottom: 16px; display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #A39A88;">Ближайшая сессия</span>
+            <div style="font-family: 'Anton', sans-serif; font-size: 40px; line-height: .92; letter-spacing: -.01em; text-transform: uppercase; color: #EDE7D9;">Врата Балдура</div>
+            <div style="font-family: 'Archivo', sans-serif; font-size: 13px; font-style: italic; color: #D8D0C0; margin-top: 2px;">Приём у Кассалантеров</div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #A39A88; margin-top: 5px;">Сессия №14 · 30 августа · 19:00</div>
+          </div>
+        </div>
+
+        <!-- ПЛИТКИ КАМПАНИЙ -->
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 2px solid #12100E; padding-bottom: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h14M3 10h14M3 14h9"/></svg>
+              Кампании
+            </div>
+            <span style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #D6321E;">Все кампании →</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: {{ tileColumns }}; gap: 16px;">
+
+            <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="4">
+              <div style="border: 2px solid #12100E; background: #E5DFD1; display: flex; flex-direction: column;">
+                <div style="position: relative; height: 132px; overflow: hidden;">
+                  <div style="position: absolute; inset: 0; background-image: {{ t.cover }};"></div>
+                  <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(18,16,14,.86) 100%);"></div>
+                  <div style="position: absolute; left: 10px; right: 10px; bottom: 8px; font-family: 'Anton', sans-serif; font-size: 17px; line-height: .96; text-transform: uppercase; color: #EDE7D9;">{{ t.name }}</div>
+                </div>
+                <!-- Три факта, три голоса: система — проза, дата — моно.
+                     Сеттинг, счётчик игроков, счётчик сессий и бейдж оплаты
+                     ушли внутрь кампании. -->
+                <div style="border-top: 2px solid #12100E; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px;">
+                  <div style="font-family: 'Archivo', sans-serif; font-size: 12px; color: #403C35;">{{ t.system }}</div>
+                  <div style="display: flex; align-items: center; gap: 7px;">
+                    <span style="width: 7px; height: 7px; background: #12100E; display: inline-block; transform: rotate(45deg); flex-shrink: 0;"></span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6E675C;">{{ t.next }}</span>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+
+          </div>
+        </div>
+
+        <!-- «НАПОМНЮ!» — не карточка, а вырезка: чернильная плашка-шапка,
+             наклон, рваный низ, штамп выпуска. Единственный блок на экране,
+             который каждый раз другой, — и единственный, имеющий право
+             выглядеть вырванным из журнала. -->
+        <div style="transform: rotate(-1.2deg); margin: 4px 0 10px 0;">
+          <div style="border: 2px solid #12100E; background: #EDE7D9; clip-path: polygon(0% 0%, 100% 0%, 100% calc(100% - 5px), 90% 100%, 81% calc(100% - 7px), 72% calc(100% - 1px), 63% calc(100% - 6px), 54% 100%, 45% calc(100% - 8px), 36% calc(100% - 1px), 27% calc(100% - 5px), 18% 100%, 9% calc(100% - 6px), 0% calc(100% - 2px));">
+            <div style="background: #12100E; color: #EDE7D9; padding: 7px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+              <span style="font-family: 'Anton', sans-serif; font-size: 16px; letter-spacing: .01em; text-transform: uppercase;">Напомню!</span>
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #A39A88; letter-spacing: .08em;">ВЫПУСК 2026.34</span>
+            </div>
+            <div style="padding: 11px 12px 20px 12px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">D&amp;D 5.5 · Справочник · Состояния</div>
+              <div style="font-family: 'Anton', sans-serif; font-size: 22px; line-height: .96; text-transform: uppercase;">Испуг</div>
+              <!-- Мера строки: проза ограничена 62ch независимо от ширины
+                   колонки. Без этого на 2560 строка тянется на 1624 px. -->
+              <div style="font-family: 'Archivo', sans-serif; font-size: 12px; line-height: 1.4; color: #403C35; max-width: 62ch;">Испуганное существо совершает с помехой проверки характеристик и броски атаки, пока источник испуга находится в пределах линии обзора. Оно не может добровольно перемещаться ближе к источнику.</div>
+              <span style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #D6321E; margin-top: 2px;">Читать целиком →</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ---------- РЕЛЬС 320 ---------- -->
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+
+        <!-- СЧЁТЧИКИ. Заработок — одна крупная ЗАЛИТАЯ кость (единственный
+             акцентный объект рельса), под ней ряд из трёх контурных.
+             Залитые и контурные в одном ряду не смешиваются. -->
+        <div style="border: 2px solid #12100E; background: #E5DFD1; padding: 14px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; border-bottom: 1.5px solid rgba(18,16,14,.28); padding-bottom: 6px;">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 16V9M8 16V4M13 16v-5M18 16V7"/></svg>
+            Владения
+          </div>
+
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+            <div style="position: relative; width: 104px; height: 104px;">
+              <svg viewBox="0 0 100 100" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+                <rect x="8" y="8" width="84" height="84" fill="#D6321E" stroke="#12100E" stroke-width="3"/>
+                <circle cx="18" cy="18" r="3.5" fill="#ffffff"/><circle cx="82" cy="18" r="3.5" fill="#ffffff"/>
+                <circle cx="18" cy="82" r="3.5" fill="#ffffff"/><circle cx="82" cy="82" r="3.5" fill="#ffffff"/>
+              </svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;">
+                <span style="font-family: 'Anton', sans-serif; font-size: 32px; line-height: .92; color: #ffffff;">184К</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(255,255,255,.82);">₽</span>
+              </div>
+            </div>
+            <span style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">Заработано всего</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+            <sc-for list="{{ stats }}" as="s" hint-placeholder-count="3">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                <div style="position: relative; width: 62px; height: 62px;">
+                  <svg viewBox="0 0 100 100" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+                    <rect x="8" y="8" width="84" height="84" fill="none" stroke="#12100E" stroke-width="4"/>
+                    <circle cx="18" cy="18" r="3.5" fill="#12100E"/><circle cx="82" cy="18" r="3.5" fill="#12100E"/>
+                    <circle cx="18" cy="82" r="3.5" fill="#12100E"/><circle cx="82" cy="82" r="3.5" fill="#12100E"/>
+                  </svg>
+                  <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+                    <span style="font-family: 'Anton', sans-serif; font-size: 22px; line-height: .92;">{{ s.value }}</span>
+                  </div>
+                </div>
+                <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .10em; text-transform: uppercase; color: #6E675C; text-align: center; line-height: 1.25;">{{ s.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- КАЛЕНДАРЬ — два месяца подряд. Горизонт планирования игр
+             4–6 недель, и «конец месяца» иначе обрезает картину. -->
+        <div style="border: 2px solid #12100E; background: #E5DFD1; padding: 14px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; border-bottom: 1.5px solid rgba(18,16,14,.28); padding-bottom: 6px;">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+            Календарь
+          </div>
+
+          <sc-for list="{{ months }}" as="m" hint-placeholder-count="2">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #12100E;">{{ m.name }}</div>
+              <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px;">
+                <sc-for list="{{ m.head }}" as="w" hint-placeholder-count="7">
+                  <div style="font-family: 'Oswald', sans-serif; font-size: 8px; letter-spacing: .10em; text-transform: uppercase; color: #6E675C; text-align: center; padding-bottom: 2px;">{{ w }}</div>
+                </sc-for>
+                <sc-for list="{{ m.cells }}" as="c" hint-placeholder-count="35">
+                  <div style="{{ c.style }}">
+                    <span style="{{ c.numStyle }}">{{ c.day }}</span>
+                    <sc-if value="{{ c.count }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 8px; line-height: 1; color: #A39A88;">{{ c.count }}</span>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+
+          <div style="display: flex; flex-direction: column; gap: 5px; border-top: 1.5px solid rgba(18,16,14,.28); padding-top: 8px;">
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <span style="width: 15px; height: 15px; border: 2px solid #12100E; display: inline-block;"></span>
+              <span style="font-family: 'Archivo', sans-serif; font-size: 10px; color: #6E675C;">Одна игра — клик ведёт прямо в неё</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <span style="width: 15px; height: 15px; background: #12100E; display: inline-block;"></span>
+              <span style="font-family: 'Archivo', sans-serif; font-size: 10px; color: #6E675C;">Несколько — клик открывает список</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- НАВИГАЦИОННЫЙ ВИДЖЕТ — плавающая наклейка у верхнего края области
+         контента. Обводка 2 px чернилами, подписи Oswald капсом.
+         «Пульт сессии» отбит разделителем и залит акцентом. -->
+    <div style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; gap: 0; background: #E5DFD1; border: 2px solid #12100E; border-top: none;">
+      <sc-for list="{{ navButtons }}" as="b" hint-placeholder-count="3">
+        <div style="display: flex; align-items: center; gap: 6px; padding: 7px 11px; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #4A4740;">
+          <span style="{{ b.icon }}"></span>
+          {{ b.label }}
+        </div>
+      </sc-for>
+      <div style="width: 2px; background: #12100E;"></div>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; background: #D6321E; color: #ffffff; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600;">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="14" height="10"/><path d="M7 15v2M13 15v2M6 9h2M11 9h3"/></svg>
+        Пульт сессии
+      </div>
+      <div style="width: 2px; background: #12100E;"></div>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 7px 11px; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #4A4740;">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M5 16h10"/></svg>
+        Закрепить
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ ПАНЕЛЬ ПОИСКА 320 (существующая, не предмет шага) ============ -->
+  <div style="background: #E5DFD1; border-left: 2px solid #12100E; padding: 16px 14px; display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">Поиск</div>
+    <div style="border: 2px solid #12100E; background: #EDE7D9; padding: 8px 10px; font-family: 'Archivo', sans-serif; font-size: 12px; color: #6E675C;">Найти во всём мире…</div>
+    <div style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C; margin-top: 6px;">Закреплено</div>
+    <sc-for list="{{ pins }}" as="p" hint-placeholder-count="4">
+      <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1.5px solid rgba(18,16,14,.28); padding: 6px 0;">
+        <span style="width: 8px; height: 8px; background: #12100E; display: inline-block; transform: rotate(45deg); flex-shrink: 0;"></span>
+        <span style="font-family: 'Archivo', sans-serif; font-size: 12px; color: #403C35;">{{ p }}</span>
+      </div>
+    </sc-for>
+    <div style="flex-grow: 1;"></div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(18,16,14,.4); letter-spacing: .08em;">SOYMAN / ГЛАВНАЯ</div>
+  </div>
+
+</div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"duotone":{"editor":"boolean","default":true,"section":"Изображения"},"window":{"editor":"enum","options":["1920","1600","1440"],"default":"1920","section":"Окно"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const duo = this.props.duotone ?? true;
+
+    // Оболочка — grid 200 / 1fr / 320, .app-content padding 24/32,
+    // .home-layout — 1fr + рельс 320 с зазором 32. max-width в коде нет,
+    // поэтому основная колонка = окно − 200 − 320 − 64 − 320 − 32.
+    const shellWidth = Number(this.props.window ?? "1920");
+    const mainWidth = shellWidth - 200 - 320 - 64 - 320 - 32;
+    const heroHeight = Math.round(Math.min(300, Math.max(210, mainWidth * 0.30)));
+    const tileColumns =
+      mainWidth >= 800 ? "repeat(4, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))";
+
+    const heroColor = "radial-gradient(ellipse at 24% 22%, rgba(233,196,120,.85) 0%, transparent 52%), radial-gradient(ellipse at 78% 68%, rgba(120,58,44,.9) 0%, transparent 58%), linear-gradient(158deg, #2c3a55 0%, #6d4736 46%, #b8813f 100%)";
+    const heroInk = "radial-gradient(ellipse at 24% 22%, rgba(237,231,217,.92) 0%, transparent 52%), radial-gradient(ellipse at 78% 68%, rgba(18,16,14,.92) 0%, transparent 58%), linear-gradient(158deg, #1b1916 0%, #6a645a 46%, #cfc7b5 100%)";
+
+    const tileArt = [
+      ["linear-gradient(150deg, #35406b 0%, #7b4a63 100%)", "linear-gradient(150deg, #17150F 0%, #8d867a 100%)"],
+      ["linear-gradient(150deg, #3d5c3a 0%, #9a8c3f 100%)", "linear-gradient(150deg, #201E18 0%, #a9a294 100%)"],
+      ["linear-gradient(150deg, #5c3a3a 0%, #b06b3c 100%)", "linear-gradient(150deg, #14120E 0%, #b7af9d 100%)"],
+      ["linear-gradient(150deg, #2f4f56 0%, #6b8c94 100%)", "linear-gradient(150deg, #262319 0%, #c6bead 100%)"],
+    ];
+
+    const tileData = [
+      { name: "Врата Балдура", system: "D&D 5.5", next: "30 августа" },
+      { name: "Пепел Иннистрада", system: "Legend in the Mist", next: "6 сентября" },
+      { name: "Соляной тракт", system: "Blades in the Dark", next: "13 сентября" },
+      { name: "Тихий уговор", system: "Свой хак", next: "нет запланированных" },
+    ];
+
+    const tiles = tileData.map((t, i) => ({
+      name: t.name,
+      system: t.system,
+      next: t.next,
+      cover: duo ? tileArt[i][1] : tileArt[i][0],
+    }));
+
+    const stats = [
+      { value: "128", label: "Сессий проведено" },
+      { value: "96", label: "Сессий сыграно" },
+      { value: "4", label: "Кампании в работе" },
+    ];
+
+    const head = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+    const base =
+      "height: 30px; border: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;";
+    const numPlain =
+      "font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1; color: #403C35;";
+    const numToday =
+      "font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1; color: #D6321E; font-weight: 700;";
+    const numInk =
+      "font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1; color: #EDE7D9; font-weight: 700;";
+
+    // Состояния ячейки: пустая · одна игра (обводка чернилами) ·
+    // несколько (инверсия + счётчик) · сегодня (акцентное число).
+    function mk(spec) {
+      if (spec === null) return { day: "", style: "height: 30px;", numStyle: "", count: false };
+      const [day, kind, count] = spec;
+      if (kind === "many")
+        return {
+          day: String(day),
+          style: "height: 30px; background: #12100E; border: 1.5px solid #12100E; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; cursor: pointer;",
+          numStyle: numInk,
+          count: count,
+        };
+      if (kind === "one")
+        return {
+          day: String(day),
+          style: "height: 30px; border: 2px solid #12100E; background: #EDE7D9; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;",
+          numStyle: numPlain,
+          count: false,
+        };
+      if (kind === "today")
+        return { day: String(day), style: base, numStyle: numToday, count: false };
+      return { day: String(day), style: base, numStyle: numPlain, count: false };
+    }
+
+    const aug = [];
+    for (let i = 0; i < 4; i++) aug.push(mk(null)); // Август 2026 начинается с субботы
+    for (let d = 1; d <= 31; d++) {
+      if (d === 21) aug.push(mk([d, "today"]));
+      else if (d === 23 || d === 30) aug.push(mk([d, "one"]));
+      else if (d === 29) aug.push(mk([d, "many", "3"]));
+      else aug.push(mk([d, "plain"]));
+    }
+
+    const sep = [];
+    for (let i = 0; i < 1; i++) sep.push(mk(null));
+    for (let d = 1; d <= 30; d++) {
+      if (d === 6 || d === 20) sep.push(mk([d, "one"]));
+      else if (d === 13) sep.push(mk([d, "many", "2"]));
+      else sep.push(mk([d, "plain"]));
+    }
+
+    const arrowUp =
+      "width: 13px; height: 13px; display: inline-block; background: currentColor; -webkit-mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M10 16V5M5.5 9.5L10 5l4.5 4.5'/%3E%3C/svg%3E\") center/contain no-repeat; mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M10 16V5M5.5 9.5L10 5l4.5 4.5'/%3E%3C/svg%3E\") center/contain no-repeat;";
+    const arrowDown =
+      "width: 13px; height: 13px; display: inline-block; background: currentColor; -webkit-mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M10 4v11M5.5 10.5L10 15l4.5-4.5'/%3E%3C/svg%3E\") center/contain no-repeat; mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M10 4v11M5.5 10.5L10 15l4.5-4.5'/%3E%3C/svg%3E\") center/contain no-repeat;";
+    const arrowBack =
+      "width: 13px; height: 13px; display: inline-block; background: currentColor; -webkit-mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M16 10H5M9.5 5.5L5 10l4.5 4.5'/%3E%3C/svg%3E\") center/contain no-repeat; mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M16 10H5M9.5 5.5L5 10l4.5 4.5'/%3E%3C/svg%3E\") center/contain no-repeat;";
+
+    return {
+      duotone: duo,
+      shellWidth: shellWidth,
+      mainWidth: mainWidth,
+      heroHeight: heroHeight,
+      tileColumns: tileColumns,
+      coverImage: duo ? heroInk : heroColor,
+      tiles: tiles,
+      stats: stats,
+      months: [
+        { name: "Август 2026", head: head, cells: aug },
+        { name: "Сентябрь 2026", head: head, cells: sep },
+      ],
+      navButtons: [
+        { label: "Наверх", icon: arrowUp },
+        { label: "Вниз", icon: arrowDown },
+        { label: "Назад", icon: arrowBack },
+      ],
+      pins: ["Кассалантеры", "Аллея Черепа Тролля", "Амрит", "Сессия №13"],
+    };
+  }
+}
+</script>
+</body>
+</html>

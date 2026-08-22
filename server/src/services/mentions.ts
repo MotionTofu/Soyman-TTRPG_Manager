@@ -1,21 +1,38 @@
 // Ссылки внутри текста: разбор, перезапись и глобальные ключи.
 //
-// В тексте ссылка живёт двумя формами.
+// В тексте ссылка живёт **одной** формой:
 //
-// **Живая** — `[[being:412|Мирт]]`. Числовой id строки, верный ровно в
-// пределах одного файла базы. Рендерится ссылкой, кликается, ведёт на
-// страницу.
+//     [[being@8f3c1a2e|wdh|Мирт]]
 //
-// **Подвешенная** — `[[being@0f3a…|Вотердип|Мирт]]`. Глобальный uid цели плюс
-// имя модуля, откуда цель родом. Появляется там, где локального id назвать
-// нельзя: при импорте, когда цель не приехала вместе с файлом, и при
-// физическом удалении цели из Архива. Рендерится зачёркнутым текстом и
-// оживает сама, когда нужный модуль появится в базе.
+// Первое поле — тип, второе — начало глобального uid цели, третье — код (или
+// имя) модуля, откуда цель родом, четвёртое — подпись, которую читает человек.
 //
-// Обе формы разбирает один сканер, и вся работа с ссылками — экспорт, импорт,
-// слияние, исцеление, удаление — выражена через одну функцию `rewriteMentions`.
-// Это сделано намеренно: пока перезапись была размазана по маршрутам, экспорт
-// её просто не делал, и ссылки после переноса указывали на чужие сущности.
+// Локального id в тексте нет и не должно быть: он верен ровно в пределах
+// одного файла базы, и любой путь переноса данных обязан был бы отдельно
+// переписывать все id в текстах — а тот путь, который об этом забудет, молча
+// переклеит ссылки на чужие сущности.
+//
+// **Жива ли ссылка — не записано, а вычисляется.** Она жива ровно тогда, когда
+// её uid находится в базе. Поэтому здесь нет ни прохода подвешивания при
+// удалении, ни прохода исцеления после установки модуля: удалили цель — ссылка
+// зачёркнута сама, поставили модуль — ожила сама. Раньше состояние дублировалось
+// в текст, и два прохода существовали только затем, чтобы этот дубль не
+// разъезжался с базой.
+//
+// **Почему в тексте не полный uid.** Мастер редактирует в сыром `<textarea>` и
+// видит токен целиком. Полный UUID превращает абзац с тремя ссылками в кашу, а
+// платится эта цена при каждой правке — в отличие от переноса, который бывает
+// раз в полгода. Поэтому пишется минимальный однозначный префикс: не короче
+// восьми символов, длиннее — если внутри того же типа нашёлся двойник.
+//
+// **Наследство.** Старая форма `[[being:412|Мирт]]` ещё читается: разовая
+// миграция не заходит в `modules.source_json`, переписывать который нельзя, и
+// оттуда старый токен может всплыть. Но никогда не пишется.
+//
+// Вся работа со ссылками — экспорт, импорт, слияние, снятие — выражена через
+// одну функцию `rewriteMentions`. Это сделано намеренно: пока перезапись была
+// размазана по маршрутам, экспорт её просто не делал, и ссылки после переноса
+// указывали на чужие сущности.
 
 import crypto from "crypto";
 import { db } from "../db/db";
@@ -45,9 +62,10 @@ export const MENTIONABLE: Record<string, string> = {
 
 /**
  * Что вообще ездит между устройствами: содержимое сеттингов и систем. На
- * остальное (кампания, сессия, персонаж, игрок) ссылку подвешивать
+ * остальное (кампания, сессия, персонаж, игрок) ссылку выпускать наружу
  * бессмысленно — эти сущности не переносятся, и обещание «оживёт, когда
- * поставишь модуль» будет ложным. Такие ссылки схлопываются в обычный текст.
+ * поставишь модуль» будет ложным. Такие ссылки при экспорте схлопываются в
+ * обычный текст.
  */
 export const TRANSFERABLE = new Set([
   "setting",
@@ -82,15 +100,34 @@ const NEVER_REWRITE = new Set([
 
 // ─── Грамматика токена ───────────────────────────────────────────────────────
 
-// Живая форма — та же, что была всегда: тип, двоеточие, число.
-// Подвешенная — тип, собака, uid, и на одно поле больше (имя модуля перед
-// подписью). Модуль стоит раньше подписи, потому что подпись пишет человек и
-// в ней может оказаться «|», а имя модуля мы чистим при записи.
+// Рабочая форма стоит первой ветвью не случайно: обе начинаются с «[[», и если
+// первым пробовать наследство, его `(\d+)` не совпадёт, а разбор уедет в
+// следующий токен.
+//
+// Дефисы в uid принимаются, хотя мы их не пишем: файлы, выгруженные до
+// перехода на префиксы, несут полный UUID с дефисами, и читать их надо.
+//
+// Код модуля стоит раньше подписи, потому что подпись пишет человек и в ней
+// может оказаться «|», а код мы чистим при записи.
 const MENTION_RE =
-  /\[\[(\w+):(\d+)\|([^\]]*)\]\]|\[\[(\w+)@([0-9a-fA-F][0-9a-fA-F-]{7,})\|([^|\]]*)\|([^\]]*)\]\]/g;
+  /\[\[(\w+)@([0-9a-fA-F][0-9a-fA-F-]{7,})\|([^|\]]*)\|([^\]]*)\]\]|\[\[(\w+):(\d+)\|([^\]]*)\]\]/g;
 
-export interface LiveMention {
-  kind: "live";
+export interface RefMention {
+  kind: "ref";
+  type: string;
+  /** Как записано в тексте: префикс uid, возможно с дефисами. */
+  uid: string;
+  /** Код или имя модуля, откуда цель родом: его показывает окно «ссылка не работает». */
+  source: string;
+  label: string;
+  raw: string;
+  start: number;
+  end: number;
+}
+
+/** Наследство: локальный id. Только читается, никогда не пишется. */
+export interface LegacyMention {
+  kind: "legacy";
   type: string;
   id: number;
   label: string;
@@ -99,27 +136,16 @@ export interface LiveMention {
   end: number;
 }
 
-export interface DeadMention {
-  kind: "dead";
-  type: string;
-  uid: string;
-  /** Имя модуля, откуда цель родом: его и показывает окно «ссылка не работает». */
-  source: string;
-  label: string;
-  raw: string;
-  start: number;
-  end: number;
-}
+export type Mention = RefMention | LegacyMention;
 
-export type Mention = LiveMention | DeadMention;
-
-/** Имя модуля пишется в текст, поэтому в нём не должно быть разделителей. */
+/** Код модуля пишется в текст, поэтому в нём не должно быть разделителей. */
 const cleanSource = (s: string) => s.replace(/[|\]\[]/g, " ").trim();
 
-export const formatLive = (type: string, id: number, label: string) => `[[${type}:${id}|${label}]]`;
+/** uid без дефисов и в нижнем регистре — единственная форма, в которой их сравнивают. */
+export const normUid = (uid: string) => uid.replace(/-/g, "").toLowerCase();
 
-export const formatDead = (type: string, uid: string, source: string, label: string) =>
-  `[[${type}@${uid}|${cleanSource(source)}|${label}]]`;
+export const formatRef = (type: string, uid: string, source: string, label: string) =>
+  `[[${type}@${normUid(uid)}|${cleanSource(source)}|${label}]]`;
 
 /** Все ссылки в тексте, в порядке появления. */
 export function scanMentions(text: string): Mention[] {
@@ -128,24 +154,24 @@ export function scanMentions(text: string): Mention[] {
   MENTION_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = MENTION_RE.exec(text))) {
-    const [raw, liveType, liveId, liveLabel, deadType, uid, source, deadLabel] = m;
-    if (liveType) {
+    const [raw, refType, uid, source, refLabel, oldType, oldId, oldLabel] = m;
+    if (refType) {
       found.push({
-        kind: "live",
-        type: liveType,
-        id: Number(liveId),
-        label: liveLabel ?? "",
+        kind: "ref",
+        type: refType,
+        uid,
+        source: source ?? "",
+        label: refLabel ?? "",
         raw,
         start: m.index,
         end: m.index + raw.length,
       });
-    } else if (deadType) {
+    } else if (oldType) {
       found.push({
-        kind: "dead",
-        type: deadType,
-        uid,
-        source: source ?? "",
-        label: deadLabel ?? "",
+        kind: "legacy",
+        type: oldType,
+        id: Number(oldId),
+        label: oldLabel ?? "",
         raw,
         start: m.index,
         end: m.index + raw.length,
@@ -195,38 +221,75 @@ export function uidOf(type: string, id: number): string | null {
   return uid;
 }
 
-/** Обратный поиск: есть ли на этом устройстве сущность с таким глобальным ключом. */
-export function idOfUid(type: string, uid: string): number | null {
+/** Короче этого префикс в тексте не бывает. */
+export const MIN_PREFIX = 8;
+
+/**
+ * Все сущности типа, чей uid начинается с тех же восьми символов.
+ *
+ * Дефисы в UUID стоят на фиксированных местах, поэтому первые восемь
+ * шестнадцатеричных символов — это ровно `substr(uid, 1, 8)`, и отбор делает
+ * SQLite. Дальше сравнение идёт в JS по нормализованному виду: кандидатов
+ * почти всегда один.
+ */
+function siblings(type: string, prefix8: string): { id: number; uid: string }[] {
   const table = MENTIONABLE[type];
-  if (!table) return null;
-  const row = db.prepare(`SELECT id FROM ${table} WHERE uid = ?`).get(uid) as
-    | { id: number }
-    | undefined;
-  return row ? row.id : null;
+  if (!table) return [];
+  return db
+    .prepare(`SELECT id, uid FROM ${table} WHERE substr(lower(uid), 1, 8) = ?`)
+    .all(prefix8) as { id: number; uid: string }[];
 }
 
-/** Существует ли строка вообще — по ней отличается «удалена» от «в архиве». */
+/**
+ * То, что пишется в текст: минимальный префикс uid, однозначный **внутри
+ * своего типа**. Типов пятнадцать, и `[[being@…]]` с `[[location@…]]` друг
+ * другу не мешают, поэтому запас шире, чем кажется по длине.
+ */
+export function prefixOf(type: string, id: number): string | null {
+  const uid = uidOf(type, id);
+  if (!uid) return null;
+  const full = normUid(uid);
+  const rivals = siblings(type, full.slice(0, MIN_PREFIX))
+    .filter((r) => r.id !== id)
+    .map((r) => normUid(r.uid));
+  if (!rivals.length) return full.slice(0, MIN_PREFIX);
+  for (let len = MIN_PREFIX + 4; len < full.length; len += 4) {
+    const head = full.slice(0, len);
+    if (!rivals.some((r) => r.startsWith(head))) return head;
+  }
+  return full;
+}
+
+/**
+ * Обратный поиск: есть ли на этом устройстве сущность с таким глобальным
+ * ключом. Принимает и полный uid, и префикс — в тексте лежит префикс, а в
+ * файлах, выгруженных до перехода, полный UUID.
+ *
+ * Неоднозначный префикс (двойник появился после того, как ссылку написали) не
+ * резолвится ни во что: показать зачёркнутую ссылку честнее, чем угадать одну
+ * из двух сущностей.
+ */
+export function idOfUid(type: string, uid: string): number | null {
+  const want = normUid(uid);
+  const rows = siblings(type, want.slice(0, MIN_PREFIX));
+  const exact = rows.find((r) => normUid(r.uid) === want);
+  if (exact) return exact.id;
+  const matches = rows.filter((r) => normUid(r.uid).startsWith(want));
+  return matches.length === 1 ? matches[0].id : null;
+}
+
+/** Существует ли строка вообще. */
 export function exists(type: string, id: number): boolean {
   const table = MENTIONABLE[type];
   if (!table) return false;
   return !!db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(id);
 }
 
-/**
- * Чьё это, если смотреть глазами пользователя: имя сеттинга или системы, к
- * которым сущность принадлежит. Попадает в подвешенный токен и оттуда — в
- * окно «поставьте модуль такой-то», поэтому важно, чтобы это было имя,
- * которое человек увидит в списке модулей.
- */
-export function sourceNameOf(type: string, id: number): string {
+/** Сеттинг или система, которой сущность принадлежит. */
+function ownerOf(type: string, id: number): { table: string; id: number } | null {
   const table = MENTIONABLE[type];
-  if (!table) return "";
-  if (type === "setting") {
-    const row = db.prepare("SELECT name FROM settings WHERE id = ?").get(id) as
-      | { name: string }
-      | undefined;
-    return row?.name ?? "";
-  }
+  if (!table) return null;
+  if (type === "setting") return { table: "settings", id };
   const owner =
     type === "compendium_entry"
       ? { column: "system_id", table: "systems" }
@@ -234,47 +297,161 @@ export function sourceNameOf(type: string, id: number): string {
   const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
     (c) => c.name
   );
-  if (!cols.includes(owner.column)) return "";
-  const row = db
-    .prepare(
-      `SELECT o.name AS name FROM ${table} t
-         JOIN ${owner.table} o ON o.id = t.${owner.column}
-        WHERE t.id = ?`
-    )
-    .get(id) as { name: string } | undefined;
-  return row?.name ?? "";
+  if (!cols.includes(owner.column)) return null;
+  const row = db.prepare(`SELECT ${owner.column} AS owner FROM ${table} WHERE id = ?`).get(id) as
+    | { owner: number | null }
+    | undefined;
+  return row?.owner == null ? null : { table: owner.table, id: row.owner };
 }
 
-// ─── Политики: что делать со ссылкой в каждой из трёх ситуаций ───────────────
+/**
+ * Чьё это, глазами человека: короткий код модуля (`wdh`), если Мастер его
+ * назначил, иначе полное имя сеттинга или системы.
+ *
+ * Попадает в токен и оттуда — в окно «поставьте модуль такой-то». Код короче и
+ * потому не мешает читать сырой текст при правке; имя остаётся запасным
+ * вариантом, чтобы коды можно было не заводить вовсе.
+ */
+export function sourceCodeOf(type: string, id: number): string {
+  const owner = ownerOf(type, id);
+  if (!owner) return "";
+  const row = db.prepare(`SELECT code, name FROM ${owner.table} WHERE id = ?`).get(owner.id) as
+    | { code: string | null; name: string }
+    | undefined;
+  if (!row) return "";
+  return (row.code || "").trim() || row.name;
+}
+
+/** Код едет в текст ссылки, поэтому в нём нет ни разделителей, ни пробелов. */
+export const cleanCode = (s: string) =>
+  s.replace(/[^0-9a-zA-Zа-яёА-ЯЁ_-]/g, "").slice(0, 16).toLowerCase();
+
+const TRANSLIT: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i",
+  й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t",
+  у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "",
+  э: "e", ю: "yu", я: "ya",
+};
+
+const latin = (s: string) =>
+  s
+    .toLowerCase()
+    .split("")
+    .map((ch) => TRANSLIT[ch] ?? ch)
+    .join("");
 
 /**
- * **Экспорт.** В файле локальных id быть не должно — на чужом устройстве они
- * означают другие сущности. Живая ссылка переводится в глобальную форму,
- * ссылка на непереносимое (кампания, сессия, персонаж, игрок, ресурс,
- * мастерская заметка) схлопывается в подпись: обещать, что она оживёт, нечем.
- * Уже подвешенная едет как есть — она и так глобальная.
+ * Что подставить в поле кода при создании сеттинга или системы.
+ *
+ * Это предложение, а не решение: «Вотердип» даст `vtr`, хотя Мастер захочет
+ * `wdh` — потому что это аббревиатура книги, которую он знает наизусть, а не
+ * сокращение слова. Смысл автовыбора в другом: не превращать создание сеттинга
+ * в задачу «придумай код» ровно тогда, когда человек хотел просто завести
+ * сеттинг. Многословное имя сокращается по первым буквам («Legend in the Mist»
+ * → `litm`), однословное — по согласным.
+ */
+export function suggestCode(table: "settings" | "systems", name: string): string {
+  const words = latin(name)
+    .split(/[^0-9a-z]+/)
+    .filter(Boolean);
+  let base = "";
+  if (words.length > 1) {
+    base = words.map((w) => w[0]).join("").slice(0, 4);
+  } else if (words.length === 1) {
+    const w = words[0];
+    base = (w[0] + w.slice(1).replace(/[aeiouy]/g, "")).slice(0, 3) || w.slice(0, 3);
+  }
+  base = cleanCode(base);
+  if (!base) return "";
+  let candidate = base;
+  for (let n = 2; codeTakenBy(candidate, table, null) && n < 100; n++) {
+    candidate = `${base}${n}`;
+  }
+  return candidate;
+}
+
+/**
+ * Все модули с их кодами и именами.
+ *
+ * Читается целиком и сравнивается в JS, а не запросом с `lower()`: SQLite
+ * приводит регистр только у ASCII, и «Вотердип» там остаётся «Вотердип» — из-за
+ * чего поиск по имени молча не находил ничего. Строк здесь полтора десятка,
+ * так что читать их дешевле, чем городить регистронезависимое сравнение в SQL.
+ */
+function moduleOwners(): { table: string; id: number; code: string; name: string }[] {
+  const out: { table: string; id: number; code: string; name: string }[] = [];
+  for (const table of ["settings", "systems"]) {
+    const rows = db.prepare(`SELECT id, code, name FROM ${table}`).all() as {
+      id: number;
+      code: string | null;
+      name: string;
+    }[];
+    for (const r of rows) out.push({ table, id: r.id, code: r.code ?? "", name: r.name });
+  }
+  return out;
+}
+
+/** Кто уже носит такой код — имя владельца или null. Проверка, а не запрет. */
+export function codeTakenBy(
+  code: string,
+  table: "settings" | "systems",
+  exceptId: number | null
+): string | null {
+  const want = cleanCode(code);
+  if (!want) return null;
+  const hit = moduleOwners().find(
+    (o) =>
+      o.code.toLowerCase() === want && !(o.table === table && exceptId != null && o.id === exceptId)
+  );
+  return hit ? hit.name : null;
+}
+
+/**
+ * Обратное превращение для окна неработающей ссылки: код `wdh` → «Вотердип».
+ * Отвечает только про то, что известно этому устройству; каталог модулей
+ * спрашивает маршрут, который это зовёт.
+ */
+export function sourceNameByCode(code: string): string | null {
+  const want = code.trim().toLowerCase();
+  if (!want) return null;
+  const hit = moduleOwners().find(
+    (o) => o.code.toLowerCase() === want || o.name.toLowerCase() === want
+  );
+  return hit ? hit.name : null;
+}
+
+// ─── Политики: что делать со ссылкой в каждой из ситуаций ────────────────────
+
+/**
+ * **Экспорт.** Ссылка на непереносимое (кампания, сессия, персонаж, игрок,
+ * ресурс, мастерская заметка) схлопывается в подпись: на чужом устройстве она
+ * не оживёт никогда, и обещать модуль, которого не существует, — то самое
+ * враньё, ради недопущения которого глобальная форма и заводилась.
+ *
+ * Наследство переводится в глобальную форму по дороге: локальный id в файле на
+ * чужом устройстве означает другую сущность.
  */
 export function exportMention(m: Mention): string | null {
-  if (m.kind === "dead") return null;
   if (!TRANSFERABLE.has(m.type)) return m.label;
-  const uid = uidOf(m.type, m.id);
-  if (!uid) return m.label;
-  return formatDead(m.type, uid, sourceNameOf(m.type, m.id), m.label);
+  if (m.kind === "ref") return null;
+  const prefix = prefixOf(m.type, m.id);
+  if (!prefix) return m.label;
+  return formatRef(m.type, prefix, sourceCodeOf(m.type, m.id), m.label);
 }
 
 /**
- * **Импорт.** Собирает то, что импорт создал, и по окончании переводит ссылки
- * в его текстах на новые локальные id.
+ * **Импорт.** Собирает то, что импорт создал, и по окончании поправляет ссылки
+ * в его текстах.
  *
- * Ключевая тонкость — почему нельзя просто искать uid по всей базе. Модуль
- * можно поставить второй раз, не удаляя первый: тогда цель ссылки в базе уже
- * есть, но это **другая копия**, и глобальный поиск склеил бы новый сеттинг
- * со старым. Поэтому сначала смотрим на то, что создал этот же импорт, и
- * только потом — на остальную базу.
+ * Ключевая тонкость — почему нельзя просто оставить uid из файла как есть.
+ * Модуль можно поставить второй раз, не удаляя первый: тогда ключ уже занят,
+ * копия получает свежий, и тексты копии, приехавшие со старыми ключами,
+ * показывали бы на **первую** копию. Поэтому импорт помнит, какой ключ из
+ * файла во что превратился, и переписывает свои тексты на новые ключи.
  */
 export class ImportedEntities {
-  /** «тип:uid из файла» → новый локальный id. */
-  private byUid = new Map<string, number>();
+  /** тип → [uid из файла, новый локальный id]. Ищется по префиксу, как и в тексте. */
+  private byUid = new Map<string, { uid: string; id: number }[]>();
   /** Строки, созданные импортом: только их тексты и правим. */
   private rows: { table: string; id: number }[] = [];
 
@@ -282,10 +459,10 @@ export class ImportedEntities {
    * Закрепляет за новой строкой её глобальный ключ.
    *
    * uid из файла сохраняется как есть — благодаря этому удалённый и заново
-   * поставленный модуль опознаётся как тот же самый, и подвешенные ссылки на
-   * него оживают. Если ключ уже занят (тот же модуль ставят второй раз),
-   * копия получает свежий: уникальность важнее совпадения, иначе две копии
-   * стали бы одной сущностью.
+   * поставленный модуль опознаётся как тот же самый, и зачёркнутые ссылки на
+   * него оживают. Если ключ уже занят (тот же модуль ставят второй раз), копия
+   * получает свежий: уникальность важнее совпадения, иначе две копии стали бы
+   * одной сущностью.
    */
   claim(type: string, newId: number, wanted?: unknown): void {
     const table = MENTIONABLE[type];
@@ -296,7 +473,11 @@ export class ImportedEntities {
     const free = fromFile != null && (holder == null || holder === newId);
     const uid = free ? fromFile! : crypto.randomUUID();
     db.prepare(`UPDATE ${table} SET uid = ? WHERE id = ?`).run(uid, newId);
-    if (fromFile) this.byUid.set(`${type}:${fromFile}`, newId);
+    if (fromFile) {
+      const list = this.byUid.get(type) ?? [];
+      list.push({ uid: normUid(fromFile), id: newId });
+      this.byUid.set(type, list);
+    }
   }
 
   /** Строка без собственного uid — статблок, глава, — но с текстом под правку. */
@@ -304,101 +485,39 @@ export class ImportedEntities {
     this.rows.push({ table, id });
   }
 
+  /** Кого этот импорт создал под ключом, начинающимся так, как написано в тексте. */
+  private mine(type: string, uid: string): number | null {
+    const want = normUid(uid);
+    const list = this.byUid.get(type) ?? [];
+    const exact = list.find((e) => e.uid === want);
+    if (exact) return exact.id;
+    const hits = list.filter((e) => e.uid.startsWith(want) || want.startsWith(e.uid));
+    return hits.length === 1 ? hits[0].id : null;
+  }
+
   /**
-   * Второй проход: ссылки в созданных текстах становятся живыми.
+   * Второй проход: ссылки в созданных текстах приводятся к местным ключам.
    *
-   * Живая ссылка во входящем файле означает ровно одно — файл сделан до
-   * появления глобальных ключей. Опознать её цель нечем и никогда не будет
+   * Наследственная форма во входящем файле означает ровно одно — файл сделан
+   * до появления глобальных ключей. Опознать её цель нечем и никогда не будет
    * чем, а числу в ней верить нельзя: оно указывает на строку чужой базы.
-   * Такая схлопывается в подпись — проза читается как читалась, ложной
-   * ссылки не остаётся.
+   * Такая схлопывается в подпись — проза читается как читалась, ложной ссылки
+   * не остаётся.
+   *
+   * Ссылка на то, чего этот импорт не создавал, не трогается: либо цель уже
+   * есть в базе под тем же ключом и всё сойдётся само, либо её нет и ссылка
+   * честно останется зачёркнутой до установки нужного модуля.
    */
   resolve(): number {
     return rewriteRows(this.rows, (m) => {
-      if (m.kind === "live") return m.label;
-      const mine = this.byUid.get(`${m.type}:${m.uid}`);
-      if (mine != null) return formatLive(m.type, mine, m.label);
-      const elsewhere = idOfUid(m.type, m.uid);
-      return elsewhere == null ? null : formatLive(m.type, elsewhere, m.label);
+      if (m.kind === "legacy") return m.label;
+      const id = this.mine(m.type, m.uid);
+      if (id == null) return null;
+      const prefix = prefixOf(m.type, id);
+      if (!prefix) return null;
+      return formatRef(m.type, prefix, sourceCodeOf(m.type, id) || m.source, m.label);
     });
   }
-}
-
-/**
- * **Исцеление.** То же правило, но только в сторону оживления: чужие живые
- * ссылки, уже лежащие в базе, трогать нельзя — они верны.
- */
-export function healMention(m: Mention): string | null {
-  if (m.kind === "live") return null;
-  const id = idOfUid(m.type, m.uid);
-  return id == null ? null : formatLive(m.type, id, m.label);
-}
-
-/** Кто чем был до удаления: «тип:id» → его глобальный ключ и имя источника. */
-export type Identities = Map<string, { uid: string; source: string }>;
-
-/**
- * Снимок личностей всех ссылаемых сущностей.
- *
- * Нужен перед физическим удалением: после `DELETE` строки нет, а вместе с ней
- * нет и uid — подвесить ссылку будет уже нечем, останется только выбросить.
- * Снимок делается целиком, а не по удаляемой ветке, потому что каскад уносит
- * потомков на любую глубину (сеттинг → локации → главы), и предсказывать его
- * состав дороже, чем прочитать три тысячи строк.
- */
-export function identitySnapshot(): Identities {
-  const snap: Identities = new Map();
-  for (const [type, table] of Object.entries(MENTIONABLE)) {
-    const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
-      (c) => c.name
-    );
-    if (!cols.includes("uid")) continue;
-    const owner = cols.includes("system_id")
-      ? { column: "system_id", table: "systems" }
-      : cols.includes("setting_id")
-        ? { column: "setting_id", table: "settings" }
-        : null;
-    const rows = db
-      .prepare(
-        owner
-          ? `SELECT t.id, t.uid, o.name AS source FROM ${table} t
-               LEFT JOIN ${owner.table} o ON o.id = t.${owner.column}`
-          : `SELECT id, uid, '' AS source FROM ${table}`
-      )
-      .all() as { id: number; uid: string | null; source: string | null }[];
-    for (const r of rows) {
-      if (r.uid) snap.set(`${type}:${r.id}`, { uid: r.uid, source: r.source ?? "" });
-    }
-  }
-  return snap;
-}
-
-/**
- * **Удаление.** Проходит по всем текстам и подвешивает живые ссылки, чьи цели
- * исчезли. Ссылка не пропадает и не врёт: она зачёркнута, объясняет, какого
- * модуля не хватает, и оживёт сама, если сущность вернётся.
- *
- * Личность, которой нет в снимке, опознать нечем — такая ссылка схлопывается
- * в подпись.
- */
-export function dangleDeleted(snap: Identities): number {
-  return rewriteAllMentions((m) => {
-    if (m.kind === "dead") return null;
-    if (!MENTIONABLE[m.type] || exists(m.type, m.id)) return null;
-    const was = snap.get(`${m.type}:${m.id}`);
-    if (!was) return m.label;
-    return formatDead(m.type, was.uid, was.source, m.label);
-  });
-}
-
-/**
- * **Исцеление.** Подвешенные ссылки оживают, если их цели появились в базе.
- * Зовётся после каждой материализации модуля — установки из файла, установки
- * из каталога, включения и обновления, — и вручную кнопкой «Проверить
- * зависимости».
- */
-export function healAllMentions(): number {
-  return rewriteAllMentions(healMention);
 }
 
 /**
@@ -542,4 +661,61 @@ export function rewriteAllMentions(
   });
   run();
   return changed;
+}
+
+/**
+ * Карта для клиента: чем является каждый глобальный ключ на этом устройстве.
+ *
+ * Рендер ссылок синхронный — `MentionText` разбирает текст и сразу строит
+ * маршрут, без единого запроса, — поэтому знание «uid → тип:id» должно быть
+ * у клиента заранее. Одной картой закрываются сразу три нужды: куда ведёт
+ * ссылка, зачёркнута ли она (uid не нашёлся) и какой локальный id положить в
+ * граф связей.
+ *
+ * Владельцы вынесены отдельным словарём, а не повторены в каждой строке:
+ * сеттингов и систем полтора десятка на тысячи сущностей.
+ */
+export interface MentionIndex {
+  owners: Record<string, { code: string; name: string }>;
+  entities: Record<string, [number, string, string | null][]>;
+}
+
+export function mentionIndex(): MentionIndex {
+  const owners: MentionIndex["owners"] = {};
+  for (const [table, prefix] of [
+    ["settings", "s"],
+    ["systems", "y"],
+  ] as const) {
+    const rows = db.prepare(`SELECT id, code, name FROM ${table}`).all() as {
+      id: number;
+      code: string | null;
+      name: string;
+    }[];
+    for (const r of rows) owners[`${prefix}${r.id}`] = { code: r.code ?? "", name: r.name };
+  }
+
+  const entities: MentionIndex["entities"] = {};
+  for (const [type, table] of Object.entries(MENTIONABLE)) {
+    const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+      (c) => c.name
+    );
+    if (!cols.includes("uid")) continue;
+    const ownerCol = type === "setting" ? null : cols.includes("system_id") ? "system_id" : cols.includes("setting_id") ? "setting_id" : null;
+    const ownerPrefix = ownerCol === "system_id" ? "y" : "s";
+    const rows = db
+      .prepare(
+        `SELECT id, uid${ownerCol ? `, ${ownerCol} AS owner` : ""} FROM ${table} WHERE uid IS NOT NULL`
+      )
+      .all() as { id: number; uid: string; owner?: number | null }[];
+    entities[type] = rows.map((r) => [
+      r.id,
+      normUid(r.uid),
+      type === "setting"
+        ? `s${r.id}`
+        : r.owner == null
+          ? null
+          : `${ownerPrefix}${r.owner}`,
+    ]);
+  }
+  return { owners, entities };
 }

@@ -22,6 +22,7 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { TagChips } from "../components/TagChips";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import type { DateRecurrence, SearchResult, SettingCommunityDetail, SettingLocation } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 const TABS = [
   "Досье",
@@ -234,7 +235,7 @@ export function CommunityDetailPage() {
         <div className="entity-header-actions">
           {/* Имя правится карточкой «Основное» во вкладке «Досье». */}
           <button className="danger" onClick={archiveCommunity}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>

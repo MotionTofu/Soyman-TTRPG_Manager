@@ -2,6 +2,7 @@ import { Router } from "express";
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
+import { sourceNameByCode } from "../services/mentions";
 import { createSystemBackup, importSystemExport, updateSystemFromExport, type SystemExportData } from "./systems";
 import { createSettingBackup, importSettingExport, updateSettingFromExport, type SettingExportData } from "./settings";
 
@@ -40,6 +41,13 @@ interface CatalogManifestEntry {
    * работает начиная со следующей смены формата, а не задним числом.
    */
   minAppVersion?: string;
+  /**
+   * Короткое общее сокращение модуля — «wdh», «phb». Пишется третьим полем в
+   * каждую ссылку внутри текста, поэтому и должно быть общим: Мастер,
+   * получивший чужой модуль, узнаёт по нему, чего именно не хватает. Поле
+   * необязательное — без него в ссылку идёт полное имя.
+   */
+  code?: string;
 }
 
 /**
@@ -260,6 +268,7 @@ modulesRouter.get("/catalog", async (_req, res) => {
         remoteId: entry.id,
         type: entry.type,
         name: entry.name,
+        code: entry.code ?? null,
         description: entry.description,
         version: entry.version,
         installedModuleId: local?.id ?? null,
@@ -270,6 +279,35 @@ modulesRouter.get("/catalog", async (_req, res) => {
       };
     })
   );
+});
+
+/**
+ * Код модуля → имя, которое человек узнает: «wdh» → «Вотердип».
+ *
+ * Нужно окну неработающей ссылки. Код короток нарочно — чтобы не мешать читать
+ * сырой текст при правке, — но в единственном месте, где он показывается
+ * человеку, коротким быть незачем: там нужно имя, которое Мастер найдёт в
+ * списке модулей.
+ *
+ * Сначала спрашивается своё устройство (модуль мог стоять раньше), потом
+ * каталог. Каталог недоступен — отвечаем пустотой, и окно покажет сам код: это
+ * хуже имени, но лучше молчания.
+ */
+modulesRouter.get("/source-name", async (req, res) => {
+  const code = String(req.query.code || "").trim();
+  if (!code) return res.json({ name: null });
+  const local = sourceNameByCode(code);
+  if (local) return res.json({ name: local });
+  try {
+    const manifest = await fetchManifest();
+    const want = code.toLowerCase();
+    const hit = manifest.find(
+      (m) => (m.code || "").toLowerCase() === want || m.name.toLowerCase() === want
+    );
+    return res.json({ name: hit?.name ?? null });
+  } catch {
+    return res.json({ name: null });
+  }
 });
 
 // Installs a not-yet-installed catalog entry: fetches the module file and

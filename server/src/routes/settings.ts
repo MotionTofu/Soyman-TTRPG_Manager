@@ -25,9 +25,11 @@ import {
 } from "../services/calendarPresets";
 import {
   ImportedEntities,
+  cleanCode,
+  codeTakenBy,
   exportMention,
-  healAllMentions,
   idOfUid,
+  suggestCode,
   rewritePayload,
   uidOf,
 } from "../services/mentions";
@@ -98,9 +100,9 @@ settingsRouter.post("/", (req, res) => {
   const folder = settingFolder(name);
   const info = db
     .prepare(
-      "INSERT INTO settings (name, description, folder_path) VALUES (?, ?, ?)"
+      "INSERT INTO settings (name, description, folder_path, code) VALUES (?, ?, ?, ?)"
     )
-    .run(name, description || "", folder);
+    .run(name, description || "", folder, suggestCode("settings", name));
   const newId = info.lastInsertRowid as number;
   const preset = calendar ? resolvePreset(calendar) : null;
   if (preset) applyCalendarPreset(newId, preset, calendar?.withEra === true);
@@ -584,18 +586,25 @@ settingsRouter.put("/:id", (req, res) => {
     .prepare("SELECT * FROM settings WHERE id = ?")
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { name, description } = req.body as {
+  const { name, description, code } = req.body as {
     name?: string;
     description?: string;
+    code?: string;
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
   db.prepare(
-    "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ? WHERE id = ?"
-  ).run(name ?? null, description ?? null, folderPath, req.params.id);
-  res.json(db.prepare("SELECT * FROM settings WHERE id = ?").get(req.params.id));
+    "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code) WHERE id = ?"
+  ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), req.params.id);
+  // Двойник кода не запрещается, только называется: код — подсказка человеку в
+  // окне неработающей ссылки, а не ключ. Резолв идёт по uid цели, и совпадение
+  // кодов ни на что не влияет, кроме понятности фразы «поставьте модуль wdh».
+  res.json({
+    ...(db.prepare("SELECT * FROM settings WHERE id = ?").get(req.params.id) as object),
+    code_taken_by: code ? codeTakenBy(code, "settings", Number(req.params.id)) : null,
+  });
 });
 
 settingsRouter.delete("/:id", (req, res) => {
@@ -1224,6 +1233,9 @@ export interface ChapterData {
 export interface SettingExportData {
   setting: {
     uid?: string;
+    /** Короткое общее сокращение модуля — «wdh». Едет с файлом: без него
+        получатель увидит в неработающей ссылке код, которого нигде не найдёт. */
+    code?: string | null;
     name: string;
     description: string;
     calendar_era: string;
@@ -1392,6 +1404,12 @@ export async function importSettingExport(
     .run(body.setting.name, body.setting.description || "", folder, body.setting.calendar_era || "");
   const newSettingId = info.lastInsertRowid as number;
   imported.claim("setting", newSettingId, body.setting.uid);
+  if (body.setting.code) {
+    db.prepare("UPDATE settings SET code = ? WHERE id = ?").run(
+      cleanCode(body.setting.code),
+      newSettingId
+    );
+  }
   copyPlainFields("settings", newSettingId, body.setting as Record<string, unknown>);
 
   if (body.setting.background_data || body.setting.thumbnail_data) {
@@ -1636,9 +1654,8 @@ export async function importSettingExport(
   if (withImages) await insertGalleries(body, folder, maps);
 
   imported.resolve();
-  // Сеттинг принёс сущности — подвешенные ссылки на них в текстах других
-  // модулей могли ждать именно этого момента.
-  healAllMentions();
+  // Проходить по чужим текстам не нужно: зачёркнутые ссылки на то, что принёс
+  // этот сеттинг, оживают сами — их ключ теперь резолвится.
   return newSettingId;
 }
 
@@ -2053,7 +2070,6 @@ export async function updateSettingFromExport(
   linkRelationsAndCalendar(body, mergeMaps);
 
   imported.resolve();
-  healAllMentions();
   return summary;
 }
 

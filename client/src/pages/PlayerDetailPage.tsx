@@ -9,6 +9,7 @@ import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { useCurrentUser } from "../api/currentUser";
 import type { Campaign, PlayerDetail } from "../types";
+import { NavIcon } from "../components/NavIcons";
 
 export function PlayerDetailPage() {
   const { id } = useParams();
@@ -166,7 +167,7 @@ export function PlayerDetailPage() {
         <div className="entity-header-actions">
           <button onClick={() => setEditing(true)}>Редактировать</button>
           <button className="danger" onClick={archivePlayer}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>

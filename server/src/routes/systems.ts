@@ -5,7 +5,14 @@ import { db } from "../db/db";
 import { ensureDefaultMechanicsSection } from "../db/defaultSections";
 import { readFileAsBase64, systemFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
-import { ImportedEntities, exportMention, healAllMentions, rewritePayload } from "../services/mentions";
+import {
+  ImportedEntities,
+  cleanCode,
+  codeTakenBy,
+  exportMention,
+  rewritePayload,
+  suggestCode,
+} from "../services/mentions";
 import { backfillEntrySummary, writeDndCreatureSummary } from "../services/monsterSummary";
 
 export const systemsRouter = Router();
@@ -389,8 +396,8 @@ systemsRouter.post("/", (req, res) => {
   if (!name) return res.status(400).json({ error: "name is required" });
   const folder = systemFolder(name);
   const info = db
-    .prepare("INSERT INTO systems (name, description, folder_path) VALUES (?, ?, ?)")
-    .run(name, description || "", folder);
+    .prepare("INSERT INTO systems (name, description, folder_path, code) VALUES (?, ?, ?, ?)")
+    .run(name, description || "", folder, suggestCode("systems", name));
   ensureDefaultMechanicsSection(db, Number(info.lastInsertRowid));
   res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(info.lastInsertRowid));
 });
@@ -400,15 +407,23 @@ systemsRouter.put("/:id", (req, res) => {
     | { folder_path: string | null; name: string }
     | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { name, description } = req.body as { name?: string; description?: string };
+  const { name, description, code } = req.body as {
+    name?: string;
+    description?: string;
+    code?: string;
+  };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
   db.prepare(
-    "UPDATE systems SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ? WHERE id = ?"
-  ).run(name ?? null, description ?? null, folderPath, req.params.id);
-  res.json(db.prepare("SELECT * FROM systems WHERE id = ?").get(req.params.id));
+    "UPDATE systems SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code) WHERE id = ?"
+  ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), req.params.id);
+  // Двойник кода называется, но не запрещается — см. settingsRouter.put("/:id").
+  res.json({
+    ...(db.prepare("SELECT * FROM systems WHERE id = ?").get(req.params.id) as object),
+    code_taken_by: code ? codeTakenBy(code, "systems", Number(req.params.id)) : null,
+  });
 });
 
 systemsRouter.delete("/:id", (req, res) => {
@@ -500,6 +515,8 @@ export interface SystemExportData {
   system: {
     name: string;
     description: string;
+    /** Короткое общее сокращение модуля — «phb». Едет с файлом: см. SettingExportData. */
+    code?: string | null;
     thumbnail_data?: { filename: string; mime: string; base64: string } | null;
   };
   sections: { id: number; position: number; name: string; kind: string }[];
@@ -556,8 +573,15 @@ export async function importSystemExport(data: SystemExportData): Promise<number
   }
   const folder = systemFolder(importedName);
   const sysInfo = db
-    .prepare("INSERT INTO systems (name, description, folder_path, imported_at) VALUES (?, ?, ?, datetime('now'))")
-    .run(importedName, system.description || "", folder);
+    .prepare(
+      "INSERT INTO systems (name, description, folder_path, code, imported_at) VALUES (?, ?, ?, ?, datetime('now'))"
+    )
+    .run(
+      importedName,
+      system.description || "",
+      folder,
+      system.code ? cleanCode(system.code) : suggestCode("systems", importedName)
+    );
   const newSystemId = sysInfo.lastInsertRowid as number;
 
   if (system.thumbnail_data) {
@@ -657,8 +681,7 @@ export async function importSystemExport(data: SystemExportData): Promise<number
   }
 
   imported.resolve();
-  // См. importSettingExport: материализация модуля оживляет ссылки на него.
-  healAllMentions();
+  // См. importSettingExport: зачёркнутые ссылки на принесённое оживают сами.
   return newSystemId;
 }
 
@@ -905,7 +928,6 @@ export async function updateSystemFromExport(
   }
 
   imported.resolve();
-  healAllMentions();
   return summary;
 }
 

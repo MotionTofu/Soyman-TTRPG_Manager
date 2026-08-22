@@ -1,49 +1,48 @@
 import { Link } from "react-router-dom";
 import type { Campaign } from "../types";
-import { PAYMENT_TYPE_LABELS } from "../paymentTypes";
-import { loadHideFinance } from "../financePrivacy";
+import { formatNearestDate } from "../nearestDate";
 
-// Shared "плитка-обложка" card (design doc §6.3.1 / ticket 14): cover image
-// (or, absent an upload, ticket 07's themed grain+torn-edge band as a
-// stand-in) with a bottom scrim and the campaign name overlaid on it, and a
-// compact meta panel below. Used by both CampaignsListPage's grid view and
-// HomeCalendarPage's campaign tiles row so the two screens render the exact
-// same card instead of two near-identical hand-rolled versions.
+// Плитка-обложка (§6.3.1): обложка с подписью поверх и компактная мета под
+// ней. Общая для сетки на «Кампаниях» и ряда на главной — два экрана рисуют
+// одну и ту же карточку, а не две почти одинаковые.
+//
+// Дизайн-ревизия сократила мету с шести фактов до трёх и развела их по
+// голосам. Было: система, сеттинг, бейдж статуса, бейдж оплаты, «Игроков: N ·
+// Сессий состоялось: N», «Ближайшая сессия: 2026-08-30» — шесть строк одним
+// приглушённым голосом, при том что на плитку смотрят полсекунды.
+//
+// Правило, по которому выбрано, что осталось: сводка отвечает «которая это и
+// когда следующая», а не описывает объект. Сеттинг, счётчики и оплата никуда
+// не делись — они внутри кампании, куда плитка и ведёт.
 export function CampaignCoverTile({ campaign: c }: { campaign: Campaign }) {
   const imageUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
 
   return (
     <Link to={`/campaigns/${c.id}`} className="card campaign-tile">
-      <div
-        className={`campaign-tile-cover${imageUrl ? "" : " campaign-card-band zine-grain zine-torn-bottom"}`}
-        style={imageUrl ? { backgroundImage: `url("${imageUrl}")` } : undefined}
-      >
+      <div className="campaign-tile-cover cover-halftone">
+        {imageUrl ? (
+          // Обложка — изображение-ФОН, поэтому проходит дуотон (zine.css).
+          // Отдельный слой под картинкой нужен, чтобы grayscale-фильтр не
+          // достался подписи поверх неё.
+          <div className="cover-art cover-photo">
+            <div className="cover-art-image" style={{ backgroundImage: `url("${imageUrl}")` }} />
+          </div>
+        ) : (
+          <div className="cover-art cover-art-fallback zine-grain" />
+        )}
         <div className="campaign-tile-scrim" />
         <h3 className="campaign-tile-name">{c.name}</h3>
       </div>
       <div className="campaign-tile-meta">
-        <div className="muted">{c.system_name ?? "система не выбрана"}</div>
-        <div className="muted">{c.setting_name ?? "без сеттинга"}</div>
-        <div className="row">
-          <span className="badge tag">{c.status}</span>
-          {c.role === "player" ? (
-            <span className="badge role-player-badge">Я игрок</span>
-          ) : (
-            !loadHideFinance() && (
-              <span
-                className={`badge ${c.payment_type === "paid" ? "held" : c.payment_type === "negotiable" ? "rescheduled" : "planned"}`}
-              >
-                {PAYMENT_TYPE_LABELS[c.payment_type]}
-              </span>
-            )
-          )}
+        <div className="campaign-tile-system">{c.system_name ?? "система не выбрана"}</div>
+        <div className="campaign-tile-next">
+          {/* Ромб — «история/дальше» из словаря разъёмов референса: тип
+              кодируется формой, а не цветом (§1.7). */}
+          <span className="campaign-tile-next-mark" aria-hidden="true" />
+          <span>
+            {c.next_planned_date ? formatNearestDate(c.next_planned_date) : "нет запланированных"}
+          </span>
         </div>
-        <div className="muted">
-          Игроков: {c.player_count ?? 0} · Сессий состоялось: {c.held_sessions_count ?? 0}
-        </div>
-        {c.next_planned_date && (
-          <div className="muted">Ближайшая сессия: {c.next_planned_date}</div>
-        )}
       </div>
     </Link>
   );

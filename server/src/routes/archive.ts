@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { sweepOrphans } from "../services/orphans";
-import { dangleDeleted, identitySnapshot } from "../services/mentions";
 import { deleteVaultFolder } from "../services/filesystem";
 
 export const archiveRouter = Router();
@@ -320,16 +319,13 @@ archiveRouter.delete("/:type/:id", (req, res) => {
        WHERE setting_id = ? AND in_library = 1 AND archived_at IS NULL`
     ).run(req.params.id);
   }
-  // Кто чем был — снимается до удаления: после DELETE у исчезнувших строк
-  // уже не прочесть uid, и ссылки на них подвесить будет нечем.
-  const identities = identitySnapshot();
   db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(req.params.id);
   // The delete above (and any FK cascade it triggered) may have removed owners
   // of polymorphic statblocks/gallery/dates — reconcile those away too.
   sweepOrphans();
-  // Ссылки в текстах каскада не имеют: без этого прохода они остались бы
-  // указывать в никуда, выглядя при этом рабочими.
-  dangleDeleted(identities);
+  // Ссылки в текстах трогать не нужно: в них лежит глобальный ключ, а не
+  // локальный id, и ссылка на исчезнувшую строку зачёркивается сама — просто
+  // потому, что ключ больше ни во что не резолвится.
   // Finally, remove the entity's folder tree on disk (nested children's folders
   // live inside it, so this one recursive delete matches the DB cascade).
   deleteVaultFolder(folderPath);

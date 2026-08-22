@@ -23,6 +23,7 @@ import { LocationCascadePicker } from "../components/LocationCascadePicker";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { MonsterTemplatePicker } from "../components/MonsterTemplatePicker";
 import { loadThumbnailStyles } from "../thumbnailStyles";
+import { NavIcon } from "../components/NavIcons";
 import type {
   CompendiumLink,
   Campaign,
@@ -309,7 +310,7 @@ export function BeingDetailPage() {
           {/* Имя, категория и сообщества правятся карточкой «Основное» во
               вкладке «Досье». */}
           <button className="danger" onClick={archiveBeing}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>

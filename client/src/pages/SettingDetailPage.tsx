@@ -34,6 +34,7 @@ import { GraphTypeFilters, SETTING_SCOPED_TYPES } from "../components/GraphTypeF
 import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
 import type { GraphData } from "../graphTypes";
 import { NAMED_BEING_CATEGORIES } from "../beingCategories";
+import { NavIcon } from "../components/NavIcons";
 import type {
   Artifact,
   BeingCategory,
@@ -226,8 +227,16 @@ export function SettingDetailPage() {
     refresh();
   }
 
-  async function saveName(name: string) {
-    await api.put(`/settings/${settingId}`, { name });
+  async function saveName(name: string, code: string) {
+    // Двойник кода не запрещается, а называется: код — подсказка человеку в
+    // окне неработающей ссылки, а не ключ, по которому что-то ищется.
+    const saved = await api.put<{ code_taken_by: string | null }>(`/settings/${settingId}`, {
+      name,
+      code,
+    });
+    if (saved.code_taken_by) {
+      alert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
+    }
     refresh();
   }
 
@@ -470,7 +479,7 @@ export function SettingDetailPage() {
             />
           </label>
           <button className="danger" onClick={archiveSetting}>
-            Архивировать
+            <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>
@@ -507,8 +516,17 @@ export function SettingDetailPage() {
             entityType="setting"
             entityId={settingId}
             defaultSettingId={settingId}
-            fields={[{ key: "name", label: "Имя", value: setting.name, required: true }]}
-            onSaveFields={(v) => saveName(v.name)}
+            fields={[
+              { key: "name", label: "Имя", value: setting.name, required: true },
+              {
+                key: "code",
+                label: "Код",
+                value: setting.code ?? "",
+                placeholder: "wdh",
+                title: 'Короткое сокращение модуля — «wdh», «phb». Подставляется в ссылки внутри текстов вместо полного имени: токен Мастер видит при каждой правке, и короткий читается заметно легче. Его же увидит тот, у кого этого модуля нет.',
+              },
+            ]}
+            onSaveFields={(v) => saveName(v.name, v.code)}
           />
 
           <CrossLinksWizard

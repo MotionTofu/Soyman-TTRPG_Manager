@@ -4,7 +4,7 @@ import { resolveEntityLabel } from "../api/resolveEntity";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
-import { parseMentions } from "../mentions";
+import { parseMentions, resolveMention } from "../mentions";
 import type { SearchResult, SessionUnionRow } from "../types";
 import { ToInitiativeButton } from "./ToInitiativeButton";
 
@@ -116,7 +116,12 @@ export const SectionDropZone = memo(function SectionDropZone({
       return;
     }
     let cancelled = false;
-    const tokens = parseMentions(mentionText).filter((m) => mentionTypes.includes(m.type));
+    // Упоминание, чья цель на этом устройстве не установлена, сюда не попадает:
+    // показывать в списке связей строку, за которой ничего нет, незачем.
+    const tokens = parseMentions(mentionText)
+      .filter((m) => mentionTypes.includes(m.type))
+      .map((m) => ({ type: m.type, id: resolveMention(m.type, m.uid) }))
+      .filter((m): m is { type: string; id: number } => m.id != null);
     Promise.all(
       tokens.map(async (m) => ({
         linkId: null as number | null,

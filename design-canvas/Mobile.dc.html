@@ -1,0 +1,281 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    body { margin: 0; background: #EDE7D9; color: #12100E; font-family: 'Archivo', sans-serif; }
+    a { color: #D6321E; text-decoration: none; } a:hover { color: #12100E; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 1420px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+  <!-- Существующая мобильная шапка: меню · лого · поиск -->
+  <div style="flex-shrink: 0; height: 48px; border-bottom: 2px solid #12100E; background: #E5DFD1; display: flex; align-items: center; justify-content: space-between; padding: 0 12px;">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="2"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+    <div style="font-family: 'Anton', sans-serif; font-size: 17px; letter-spacing: -.01em; text-transform: uppercase;">SoyMan</div>
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#12100E" stroke-width="2"><circle cx="9" cy="9" r="5.5"/><path d="M13 13l4 4"/></svg>
+  </div>
+
+  <div style="flex-grow: 1; overflow: hidden; padding: 16px 16px 0 16px; display: flex; flex-direction: column; gap: 24px;">
+
+    <!-- 1. ГЕРОЙ -->
+    <div style="position: relative; height: 186px; border: 2px solid #12100E; overflow: hidden; flex-shrink: 0;">
+      <div style="position: absolute; inset: 0; background-image: {{ coverImage }};"></div>
+      <sc-if value="{{ duotone }}" hint-placeholder-val="{{ true }}">
+        <div style="position: absolute; inset: 0 0 64% 0; background-image: radial-gradient(rgba(18,16,14,.55) 1.1px, transparent 1.2px); background-size: 5px 5px;"></div>
+      </sc-if>
+      <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 32%, rgba(18,16,14,.88) 100%);"></div>
+      <div style="position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: #A39A88;">Ближайшая сессия</span>
+        <div style="font-family: 'Anton', sans-serif; font-size: 30px; line-height: .92; letter-spacing: -.01em; text-transform: uppercase; color: #EDE7D9;">Врата Балдура</div>
+        <div style="font-family: 'Archivo', sans-serif; font-size: 12px; font-style: italic; color: #D8D0C0;">Приём у Кассалантеров</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #A39A88; margin-top: 4px;">Сессия №14 · 30 августа · 19:00</div>
+      </div>
+    </div>
+
+    <!-- 2. КАЛЕНДАРЬ. На телефоне открывают не осматривать владения, а
+         свериться: когда следующая и что на неделе. Поэтому рельс
+         вклинивается сразу за героем, а витрина уезжает вниз.
+         Месяц один — две сетки в 390 px тесно; следующий по стрелке. -->
+    <div style="border: 2px solid #12100E; background: #E5DFD1; padding: 12px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1.5px solid rgba(18,16,14,.28); padding-bottom: 7px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+          Август 2026
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <span style="border: 2px solid #12100E; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px;">←</span>
+          <span style="border: 2px solid #12100E; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px;">→</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px;">
+        <sc-for list="{{ head }}" as="w" hint-placeholder-count="7">
+          <div style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .10em; text-transform: uppercase; color: #6E675C; text-align: center; padding-bottom: 2px;">{{ w }}</div>
+        </sc-for>
+        <sc-for list="{{ cells }}" as="c" hint-placeholder-count="35">
+          <div style="{{ c.style }}">
+            <span style="{{ c.numStyle }}">{{ c.day }}</span>
+            <sc-if value="{{ c.count }}" hint-placeholder-val="{{ false }}">
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; line-height: 1; color: #A39A88;">{{ c.count }}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- 3. ПЛИТКИ КАМПАНИЙ -->
+    <div style="display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 2px solid #12100E; padding-bottom: 6px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h14M3 10h14M3 14h9"/></svg>
+          Кампании
+        </div>
+        <span style="font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #D6321E;">Все →</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+        <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="4">
+          <div style="border: 2px solid #12100E; background: #E5DFD1; display: flex; flex-direction: column;">
+            <div style="position: relative; height: 104px; overflow: hidden;">
+              <div style="position: absolute; inset: 0; background-image: {{ t.cover }};"></div>
+              <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 38%, rgba(18,16,14,.86) 100%);"></div>
+              <div style="position: absolute; left: 8px; right: 8px; bottom: 6px; font-family: 'Anton', sans-serif; font-size: 15px; line-height: .96; text-transform: uppercase; color: #EDE7D9;">{{ t.name }}</div>
+            </div>
+            <div style="border-top: 2px solid #12100E; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px;">
+              <div style="font-family: 'Archivo', sans-serif; font-size: 11px; color: #403C35;">{{ t.system }}</div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 6px; height: 6px; background: #12100E; display: inline-block; transform: rotate(45deg); flex-shrink: 0;"></span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6E675C;">{{ t.next }}</span>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- 4. СЧЁТЧИКИ — в ряд, залитая кость заработка ведёт -->
+    <div style="border: 2px solid #12100E; background: #E5DFD1; padding: 12px; display: flex; flex-direction: column; gap: 12px; flex-shrink: 0;">
+      <div style="display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; border-bottom: 1.5px solid rgba(18,16,14,.28); padding-bottom: 7px;">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 16V9M8 16V4M13 16v-5M18 16V7"/></svg>
+        Владения
+      </div>
+      <div style="display: grid; grid-template-columns: 96px repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+          <div style="position: relative; width: 82px; height: 82px;">
+            <svg viewBox="0 0 100 100" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+              <rect x="8" y="8" width="84" height="84" fill="#D6321E" stroke="#12100E" stroke-width="3.5"/>
+              <circle cx="18" cy="18" r="3.5" fill="#ffffff"/><circle cx="82" cy="18" r="3.5" fill="#ffffff"/>
+              <circle cx="18" cy="82" r="3.5" fill="#ffffff"/><circle cx="82" cy="82" r="3.5" fill="#ffffff"/>
+            </svg>
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+              <span style="font-family: 'Anton', sans-serif; font-size: 26px; line-height: .92; color: #ffffff;">184К</span>
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(255,255,255,.82);">₽</span>
+            </div>
+          </div>
+          <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #6E675C; text-align: center;">Заработано</span>
+        </div>
+        <sc-for list="{{ stats }}" as="s" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; padding-top: 10px;">
+            <div style="position: relative; width: 56px; height: 56px;">
+              <svg viewBox="0 0 100 100" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+                <rect x="8" y="8" width="84" height="84" fill="none" stroke="#12100E" stroke-width="4.5"/>
+                <circle cx="18" cy="18" r="3.5" fill="#12100E"/><circle cx="82" cy="18" r="3.5" fill="#12100E"/>
+                <circle cx="18" cy="82" r="3.5" fill="#12100E"/><circle cx="82" cy="82" r="3.5" fill="#12100E"/>
+              </svg>
+              <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+                <span style="font-family: 'Anton', sans-serif; font-size: 20px; line-height: .92;">{{ s.value }}</span>
+              </div>
+            </div>
+            <span style="font-family: 'Oswald', sans-serif; font-size: 8px; letter-spacing: .10em; text-transform: uppercase; color: #6E675C; text-align: center; line-height: 1.3;">{{ s.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- 5. «НАПОМНЮ!» -->
+    <div style="transform: rotate(-1.2deg); flex-shrink: 0;">
+      <div style="border: 2px solid #12100E; background: #EDE7D9; clip-path: polygon(0% 0%, 100% 0%, 100% calc(100% - 5px), 90% 100%, 81% calc(100% - 7px), 72% calc(100% - 1px), 63% calc(100% - 6px), 54% 100%, 45% calc(100% - 8px), 36% calc(100% - 1px), 27% calc(100% - 5px), 18% 100%, 9% calc(100% - 6px), 0% calc(100% - 2px));">
+        <div style="background: #12100E; color: #EDE7D9; padding: 6px 11px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <span style="font-family: 'Anton', sans-serif; font-size: 15px; text-transform: uppercase;">Напомню!</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #A39A88; letter-spacing: .08em;">ВЫПУСК 2026.34</span>
+        </div>
+        <div style="padding: 10px 11px 18px 11px; display: flex; flex-direction: column; gap: 5px;">
+          <div style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #6E675C;">D&amp;D 5.5 · Справочник · Состояния</div>
+          <div style="font-family: 'Anton', sans-serif; font-size: 20px; line-height: .96; text-transform: uppercase;">Испуг</div>
+          <div style="font-family: 'Archivo', sans-serif; font-size: 12px; line-height: 1.4; color: #403C35;">Испуганное существо совершает с помехой проверки характеристик и броски атаки, пока источник испуга в пределах линии обзора.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Существующий нижний таб-бар: 5 слотов, центральная кнопка приподнята.
+       Навигационный виджет на мобильном скрыт — конфликта нет. -->
+  <div style="flex-shrink: 0; height: 64px; border-top: 2px solid #12100E; background: #E5DFD1; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; position: relative;">
+    <sc-for list="{{ tabsLeft }}" as="t" hint-placeholder-count="2">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: {{ t.color }};">
+        <span style="{{ t.icon }}"></span>
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .10em; text-transform: uppercase;">{{ t.label }}</span>
+      </div>
+    </sc-for>
+
+    <div style="position: relative; display: flex; justify-content: center;">
+      <div style="position: absolute; top: -34px; width: 58px; height: 58px; border-radius: 50%; background: #D6321E; border: 2px solid #12100E; display: flex; align-items: center; justify-content: center;">
+        <svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="#ffffff" stroke-width="1.8"><path d="M10 2l7 4v8l-7 4-7-4V6z"/><path d="M10 2v16M3 6l14 8M17 6L3 14"/></svg>
+      </div>
+    </div>
+
+    <sc-for list="{{ tabsRight }}" as="t" hint-placeholder-count="2">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: {{ t.color }};">
+        <span style="{{ t.icon }}"></span>
+        <span style="font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .10em; text-transform: uppercase;">{{ t.label }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"duotone":{"editor":"boolean","default":true,"section":"Изображения"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const duo = this.props.duotone ?? true;
+
+    const heroColor = "radial-gradient(ellipse at 24% 22%, rgba(233,196,120,.85) 0%, transparent 52%), radial-gradient(ellipse at 78% 68%, rgba(120,58,44,.9) 0%, transparent 58%), linear-gradient(158deg, #2c3a55 0%, #6d4736 46%, #b8813f 100%)";
+    const heroInk = "radial-gradient(ellipse at 24% 22%, rgba(237,231,217,.92) 0%, transparent 52%), radial-gradient(ellipse at 78% 68%, rgba(18,16,14,.92) 0%, transparent 58%), linear-gradient(158deg, #1b1916 0%, #6a645a 46%, #cfc7b5 100%)";
+
+    const tileArt = [
+      ["linear-gradient(150deg, #35406b 0%, #7b4a63 100%)", "linear-gradient(150deg, #17150F 0%, #8d867a 100%)"],
+      ["linear-gradient(150deg, #3d5c3a 0%, #9a8c3f 100%)", "linear-gradient(150deg, #201E18 0%, #a9a294 100%)"],
+      ["linear-gradient(150deg, #5c3a3a 0%, #b06b3c 100%)", "linear-gradient(150deg, #14120E 0%, #b7af9d 100%)"],
+      ["linear-gradient(150deg, #2f4f56 0%, #6b8c94 100%)", "linear-gradient(150deg, #262319 0%, #c6bead 100%)"],
+    ];
+    const tileData = [
+      { name: "Врата Балдура", system: "D&D 5.5", next: "30 августа" },
+      { name: "Пепел Иннистрада", system: "Legend in the Mist", next: "6 сентября" },
+      { name: "Соляной тракт", system: "Blades in the Dark", next: "13 сентября" },
+      { name: "Тихий уговор", system: "Свой хак", next: "нет игр" },
+    ];
+
+    const numPlain = "font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1; color: #403C35;";
+    const numToday = "font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1; color: #D6321E; font-weight: 700;";
+    const numInk = "font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1; color: #EDE7D9; font-weight: 700;";
+    const base = "height: 44px; border: 1.5px solid rgba(18,16,14,.28); display: flex; flex-direction: column; align-items: center; justify-content: center;";
+
+    function mk(day, kind, count) {
+      if (day === null) return { day: "", style: "height: 44px;", numStyle: "", count: false };
+      if (kind === "many")
+        return {
+          day: String(day),
+          style: "height: 44px; background: #12100E; border: 1.5px solid #12100E; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;",
+          numStyle: numInk,
+          count: count,
+        };
+      if (kind === "one")
+        return {
+          day: String(day),
+          style: "height: 44px; border: 2px solid #12100E; background: #EDE7D9; display: flex; flex-direction: column; align-items: center; justify-content: center;",
+          numStyle: numPlain,
+          count: false,
+        };
+      if (kind === "today") return { day: String(day), style: base, numStyle: numToday, count: false };
+      return { day: String(day), style: base, numStyle: numPlain, count: false };
+    }
+
+    const cells = [];
+    for (let i = 0; i < 4; i++) cells.push(mk(null));
+    for (let d = 1; d <= 31; d++) {
+      if (d === 21) cells.push(mk(d, "today"));
+      else if (d === 23 || d === 30) cells.push(mk(d, "one"));
+      else if (d === 29) cells.push(mk(d, "many", "3"));
+      else cells.push(mk(d, "plain"));
+    }
+
+    function icon(path) {
+      const svg =
+        "\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Cpath d='" +
+        path +
+        "'/%3E%3C/svg%3E\"";
+      return (
+        "width: 21px; height: 21px; display: inline-block; background: currentColor; -webkit-mask: url(" +
+        svg +
+        ") center/contain no-repeat; mask: url(" +
+        svg +
+        ") center/contain no-repeat;"
+      );
+    }
+
+    return {
+      duotone: duo,
+      coverImage: duo ? heroInk : heroColor,
+      tiles: tileData.map((t, i) => ({ name: t.name, system: t.system, next: t.next, cover: duo ? tileArt[i][1] : tileArt[i][0] })),
+      stats: [
+        { value: "128", label: "Проведено" },
+        { value: "96", label: "Сыграно" },
+        { value: "4", label: "В работе" },
+      ],
+      head: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+      cells: cells,
+      tabsLeft: [
+        { label: "Главная", color: "#D6321E", icon: icon("M10 3l7 6v8H3V9z") },
+        { label: "Кампании", color: "#6E675C", icon: icon("M3 6h14M3 10h14M3 14h9") },
+      ],
+      tabsRight: [
+        { label: "Мир", color: "#6E675C", icon: icon("M10 3a7 7 0 100 14 7 7 0 000-14M3 10h14") },
+        { label: "Ещё", color: "#6E675C", icon: icon("M4 10h.2M10 10h.2M15.8 10h.2") },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

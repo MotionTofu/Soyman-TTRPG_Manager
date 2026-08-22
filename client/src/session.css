@@ -104,6 +104,81 @@
   font-size: var(--fs-micro);
 }
 
+/* ------------------------------------------------------- договор о столе */
+
+/* Статус, оплата и ставка — три карточки в ряд, а не строка подписей с
+   выпадающими списками. Это три решения об одном вечере, и каждое подписано
+   капсом над своим значением — тем же приёмом, что полоса «Когда / В мире /
+   Номер» над ними. Раньше строка была единственным местом «Обзора» без рамки
+   и без моноширинных подписей и выпадала из страницы. */
+.sp-deal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.sp-deal__cell {
+  display: flex;
+  flex-direction: column;
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper);
+  min-width: 0;
+}
+.sp-deal__label {
+  padding: 6px 10px;
+  border-bottom: var(--card-border-width) solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.sp-deal__body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+/* Рамка и фон принадлежат карточке, а не полю внутри неё: иначе выходит
+   оправа в оправе, чего в системе нет ни у одной области. */
+.sp-deal__body select,
+.sp-deal__body input {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+/* «Как в кампании (Платная)» в узкой карточке не помещается — многоточие
+   вместо обрезки на полуслове. */
+.sp-deal__body select {
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+/* Своя стрелка вместо системной: appearance:none снимает родную, а рисовать
+   её надо треугольником из рамок — как у раскрытия приключений на заготовке. */
+.sp-deal__caret {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+}
+.sp-deal__unit {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
 /* --------------------------------------------------------- время и дата */
 
 /* Два времени, а не одно поле на четыре значения. Пунктир по центру
@@ -197,8 +272,58 @@
   border-bottom: var(--card-border-width) solid var(--line);
 }
 .sp-secrets__body {
-  padding: 10px 12px;
-  gap: 9px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Тайны сгруппированы по приключениям. Заголовок группы — та же мелкая
+   моноширинная плашка, что у «объединения» на заготовке сцен: это подпись к
+   пачке, а не ещё один заголовок карточки, и спорить с «НЕРАСКРЫТЫЕ ТАЙНЫ И
+   ЗАЦЕПКИ» в шапке ей нельзя. */
+.sp-secrets__group + .sp-secrets__group {
+  border-top: var(--card-border-width) solid var(--line);
+}
+/* Заголовок группы — кнопка на всю ширину: сворачивается щелчком по любому
+   месту строки, а не по одному треугольнику. */
+.sp-secrets__group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 0;
+  background: var(--paper-2);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.sp-secrets__group-head:hover {
+  background: var(--bg-elevated);
+}
+/* Черта под заголовком отделяет его от содержимого, поэтому она нужна только
+   у раскрытой группы: у свёрнутых разделителем работает рамка сверху, и две
+   линии подряд читались бы как двойная. */
+.sp-secrets__group.is-open .sp-secrets__group-head {
+  border-bottom: var(--card-border-width) solid var(--line);
+}
+.sp-secrets__group-name {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  flex: 1;
+  min-width: 0;
+}
+.sp-secret {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 12px;
+}
+.sp-secret + .sp-secret {
+  border-top: 1px dashed var(--line);
 }
 
 /* ------------------------------------------------------- сцены на вечер */

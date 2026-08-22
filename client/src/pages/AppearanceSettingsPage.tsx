@@ -11,6 +11,7 @@ import {
   type ThumbnailSectionKey, type ThumbnailStyle,
 } from "../thumbnailStyles";
 import { useNavWidgetPrefs, type NavWidgetPosition } from "../navWidgetPrefs";
+import { loadCoverDuotone, saveCoverDuotone } from "../imagePrefs";
 import { loadHideFinance, saveHideFinance } from "../financePrivacy";
 import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
@@ -29,6 +30,7 @@ const DEFAULT_RADIUS = 6;
 export function AppearanceSettingsPage() {
   const [prefs, setPrefs] = useState(loadThemePrefs());
   const [radius, setRadius] = useState(() => loadRadiusOverride() ?? DEFAULT_RADIUS);
+  const [duotone, setDuotone] = useState(loadCoverDuotone);
   const [thumbStyles, setThumbStyles] = useState(loadThumbnailStyles());
   const { prefs: navWidgetPrefs, update: updateNavWidgetPrefs } = useNavWidgetPrefs();
 
@@ -231,6 +233,26 @@ export function AppearanceSettingsPage() {
           />
           <span className="muted">
             Общее для всех тем, независимо от выбранной. По умолчанию — как в «Классической» ({DEFAULT_RADIUS}px).
+            Действует на внешний угол карточки; плашки, чипы и бейджи внутри остаются прямоугольными.
+          </span>
+        </label>
+
+        <label className="row" style={{ gap: 8, alignItems: "flex-start", maxWidth: 420 }}>
+          <input
+            type="checkbox"
+            checked={duotone}
+            onChange={(e) => {
+              setDuotone(e.target.checked);
+              saveCoverDuotone(e.target.checked);
+            }}
+          />
+          <span className="stack" style={{ gap: 2 }}>
+            Обрабатывать обложки под тему
+            <span className="muted">
+              Обложки кампаний и фон главной перекрашиваются в два цвета выбранной темы, чтобы разные
+              по стилю арты читались как один экран. Тоже общее для всех тем. Карт, портретов и галереи
+              не касается — там изображения всегда такие, как вы их загрузили.
+            </span>
           </span>
         </label>
 

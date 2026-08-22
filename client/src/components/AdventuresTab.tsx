@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { chapterWord, sceneWord } from "../sceneKinds";
 import type { StoryArc } from "../types";
+import { NavIcon } from "./NavIcons";
 
 // "Приключения" — the index of a setting's prepared story blocks. Everything
 // inside one (chapters, scenes, milestones, secrets) lives on the adventure's
@@ -103,7 +104,7 @@ export function AdventuresTab({
             {!campaignId && a.is_default !== 1 && (
               <span className="entity-row-actions">
                 <button className="danger" onClick={() => archive(a)}>
-                  Архивировать
+                  <NavIcon name="archive" /> Архивировать
                 </button>
               </span>
             )}

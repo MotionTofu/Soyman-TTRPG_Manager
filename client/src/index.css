@@ -46,6 +46,10 @@
   --muted: #787672;
   --surface: #1c1c1c;
   --on-surface: #e8e4da;
+  /* Muted text ON an inverted plate. --muted is derived against the page and
+     is unreadable on the plate, so header bands carry their own muted (see
+     themes.ts). Mirrors "Соевый нуар", like the rest of this pre-JS block. */
+  --on-surface-muted: #918d86;
   --line: #2a2a2a;
   --glow: none;
   /* --bg-elevated and --text-bright have no exact design-doc equivalent
@@ -94,6 +98,16 @@
   --pay-paid-soft: #b4530922;
   --pay-free: #15803d;
   --pay-free-soft: #15803d22;
+  /* Опасное действие («Архивировать», «Удалить») — одна заливка на все темы.
+     Цвет намеренно не выводится из --status-cancelled: та пастель означает
+     статус «отменена» в бейджах и на календаре, и, будучи надетой на кнопку
+     контуром, читалась как «кнопка недоступна». Здесь нужна плотная тёмно-
+     бордовая заливка, которая одинаково узнаётся на светлой бумаге зина и на
+     тёмных скинах, поэтому значение фиксированное, а не потемовое. */
+  --danger-bg: #7b1220;
+  --danger-bg-hover: #94182b;
+  --danger-text: #ffffff;
+
   /* Name/title size scale — same on every theme, this is about scale not
      color/shape, so it lives here rather than in themes.ts. */
   --text-name: 18px;
@@ -209,6 +223,29 @@ button.primary {
   color: var(--primary-text);
   font-weight: 600;
   text-transform: var(--name-transform);
+}
+
+/* Кнопка опасного действия — залитая, а не контурная. Раньше .danger либо
+   вовсе ничего не меняла (на большинстве страниц), либо перекрашивала контур
+   и текст в пастельный --status-cancelled — и «Архивировать» выглядела как
+   выключенная кнопка. Исключение — .comp-mini: это значок-крестик внутри
+   плотных списков, там заливка кричала бы на всю страницу. */
+button.danger:not(.comp-mini) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--danger-bg);
+  border-color: var(--danger-bg);
+  color: var(--danger-text);
+  font-weight: 600;
+}
+button.danger:not(.comp-mini):hover {
+  background: var(--danger-bg-hover);
+  border-color: var(--danger-bg-hover);
+}
+button.danger:not(.comp-mini):disabled {
+  opacity: 0.5;
 }
 
 input, select, textarea {
@@ -808,15 +845,45 @@ h4 { font-size: var(--fs-body); }
   left: var(--sp-3);
   right: var(--sp-3);
   bottom: var(--sp-2);
-  z-index: 1;
+  /* Над растром обложки (z-index 1 у .cover-halftone::before) — §5.2
+     запрещает халфтон под текстом. */
+  z-index: 2;
   margin: 0;
   color: var(--paper);
+  font-family: var(--font-display);
+  text-transform: var(--name-transform);
+  line-height: 0.96;
 }
+/* Мета плитки: три факта, три голоса (см. CampaignCoverTile.tsx). Панель
+   отбита от обложки той же чернильной линией, что и шапка карточки, —
+   плитка читается как один объект с швом, а не как две карточки подряд. */
 .campaign-tile-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: var(--sp-3) var(--sp-4);
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: var(--card-border-width, 1px) solid var(--line);
+}
+.campaign-tile-system {
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.campaign-tile-next {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  /* Дата — значение, значит моношрифт (§1.5). */
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.campaign-tile-next-mark {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  background: var(--ink);
+  transform: rotate(45deg);
 }
 
 /* App shell layout */
@@ -901,20 +968,20 @@ h4 { font-size: var(--fs-body); }
   height: 140px;
   overflow: hidden;
 }
-.particle-field-dot {
+/* Зинная россыпь (см. ParticleField.tsx). Ни радиуса, ни тени, ни анимации:
+   круглые пульсирующие точки со свечением нарушали §6.2, §3.2 и §9 разом.
+   Цвет — --muted, а не --accent: акцент дефицитен и на фоновую декорацию
+   не тратится (§3.2, бюджет 15 %). */
+.particle-field-mark {
   position: absolute;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 5px 1px var(--accent);
-  opacity: 0.3;
-  animation-name: particle-field-float;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
+  display: block;
+  color: var(--muted);
+  line-height: 0;
 }
-@keyframes particle-field-float {
-  0% { transform: translate(0, 0); opacity: 0.2; }
-  50% { transform: translate(var(--dx), var(--dy)); opacity: 0.65; }
-  100% { transform: translate(0, 0); opacity: 0.2; }
+.particle-field-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 /* Wraps a page's <h1> so a particle-field can float around/behind it
@@ -1307,7 +1374,7 @@ h4 { font-size: var(--fs-body); }
 .mini-calendar-widget {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .mini-calendar-nav {
   display: flex;
@@ -1319,9 +1386,18 @@ h4 { font-size: var(--fs-body); }
   font-size: 12px;
   line-height: 1.4;
 }
-.mini-calendar-month {
-  font-size: 12px;
-  color: var(--muted);
+.mini-calendar-month,
+.mini-calendar-subheading {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.mini-calendar-grid-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .mini-calendar {
   display: grid;
@@ -1329,20 +1405,36 @@ h4 { font-size: var(--fs-body); }
   gap: 3px;
 }
 .mini-calendar-weekday {
+  font-family: var(--font-ui);
   font-size: 9px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
   color: var(--muted);
   text-align: center;
 }
+
+/* Четыре состояния ячейки (см. MiniCalendar.tsx): пусто · одна игра ·
+   несколько · сегодня. Множественность показывается ИНВЕРСИЕЙ ячейки, а не
+   метками внутри неё: инверсия — фирменный приём системы (§3.2, глубина
+   через инверсию), читается с любого расстояния и оставляет одну цель для
+   мыши вместо трёх квадратиков по 6 px. */
+/* День БЕЗ игры рамки не имеет вовсе — только число на бумаге. Раньше он
+   нёс обводку в --line, а день с игрой — в --ink, и в «Соевом нуаре», где
+   line (#2a2a2a) и ink (#1c1c1c) почти совпадают, отличить их было нельзя.
+   Скачок «нет рамки → есть рамка» работает в любом режиме, потому что не
+   зависит от того, насколько разошлись два оттенка. */
 .mini-calendar-day {
   position: relative;
   aspect-ratio: 1;
   min-width: 0;
-  border: var(--card-border-width, 1px) solid var(--line);
+  border: 2px solid transparent;
   border-radius: var(--card-radius);
-  background: var(--paper-2);
+  background: transparent;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1px;
   padding: 1px;
   overflow: hidden;
 }
@@ -1350,61 +1442,142 @@ h4 { font-size: var(--fs-body); }
   background: transparent;
   border: none;
 }
-.mini-calendar-day.today {
-  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-2) 35%, transparent);
+/* Одна игра — ячейка обведена чернилами. НАЧЕРТАНИЕ рамки кодирует статус
+   (§1.7: тип кодируется формой, а не цветом) — иначе в нуаре, где акцента
+   как отдельного цвета нет, статусы слились бы в один вид. */
+.mini-calendar-day.has-one {
+  border-color: var(--ink);
+  background: var(--paper-2);
+  cursor: pointer;
 }
-/* Number sits on its own layer above the indicator (z-index below), with a
-   background chip so it stays legible no matter what the icon underneath
-   looks like at that spot. */
+/* Начертание рамки говорит про ОПРЕДЕЛЁННОСТЬ, а не про важность.
+   Запланирована — штриховая: игра пока вероятность, её могут перенести.
+   Состоялась — сплошная: это уже факт, он не изменится.
+
+   Важность при этом идёт отдельным каналом — цветом числа: предстоящая
+   игра держит полные чернила, прошедшая уходит в приглушённый. Так один
+   взгляд отвечает сразу на два вопроса, и ни один не отнимает у другого. */
+.mini-calendar-day.has-one.st-planned {
+  border-style: dashed;
+}
+.mini-calendar-day.has-one.st-held {
+  border-style: solid;
+}
+.mini-calendar-day.has-one.st-held .mini-calendar-num {
+  color: var(--muted);
+}
+/* Отменена — точечная: игры не будет вовсе, и рамка самая слабая из трёх. */
+.mini-calendar-day.has-one.st-cancelled {
+  border-style: dotted;
+}
+.mini-calendar-day.has-one.st-cancelled .mini-calendar-num {
+  color: var(--muted);
+}
+/* Несколько — инверсия плюс счётчик. */
+/* Несколько игр — инверсия и счётчик. Статус тут не показывается: он не
+   один, и любой выбранный «главный» соврал бы. Статусы видно в списке. */
+.mini-calendar-day.has-many {
+  background: var(--surface);
+  border-color: var(--surface);
+  border-style: solid;
+  cursor: pointer;
+}
+.mini-calendar-day.day-open {
+  outline: var(--card-border-width, 1px) solid var(--accent);
+  outline-offset: 1px;
+}
+/* «Сегодня» — координатная отметка, а не «горячий объект»: в бюджет
+   акцента она не входит (design_revision.md §1.8). Ни заливки, ни тени —
+   прежний вариант рисовал inset box-shadow, которых в системе нет. */
+/* «Сегодня» помечается ПОДЧЁРКИВАНИЕМ, а не только цветом. Цвета одного не
+   хватает в двух случаях сразу: на инвертированной ячейке (день с
+   несколькими играми) правило .has-many перекрашивает число в бумажное и
+   отметка пропадала бы совсем; а в «Соевом нуаре» акцент и есть чернила,
+   то есть цвет числа на обычной ячейке и так не меняется. Подчёркивание
+   работает в обоих случаях, потому что берёт цвет по контексту ячейки. */
+.mini-calendar-day.today .mini-calendar-num {
+  color: var(--accent);
+  font-weight: 700;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 1px;
+}
+.mini-calendar-day.today.has-many .mini-calendar-num {
+  color: var(--on-surface);
+  border-bottom-color: var(--on-surface);
+}
 .mini-calendar-num {
-  position: relative;
-  z-index: 2;
-  font-size: 13px;
-  font-weight: 600;
+  /* Число — значение, значит моношрифт (§1.5). Прежняя подложка-чипик под
+     ним больше не нужна: под числом нет иконки, от которой его надо было
+     отделять. */
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--ink);
   line-height: 1;
-  background: var(--paper-2);
-  border-radius: 3px;
-  padding: 1px 3px;
 }
-.mini-calendar-day.today .mini-calendar-num {
-  color: var(--accent-2);
-  background: transparent;
+.mini-calendar-day.has-many .mini-calendar-num {
+  color: var(--on-surface);
+  font-weight: 700;
 }
-/* Indicator icon, painted via mask-image so a single flat background-color
-   fills it per status (mask keeps the source SVG's own internal luminance
-   detail, giving a duotone stamp look rather than a flat silhouette). Sits
-   behind the date number, filling the whole cell edge-to-edge. Planned =
-   Aim.svg in red (a session is coming up); held/cancelled/rescheduled all
-   get Shot.svg in black — only planned/held have a distinct visual
-   treatment for now, the other two statuses aren't otherwise called out.
-   Temporary: only the first session of the day renders (see
-   MiniCalendar.tsx) — multi-session-per-day indicators are on hold until
-   this single-icon-per-cell layout is revisited, this isn't a real rule. */
-.mini-calendar-dot {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
+.mini-calendar-count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--on-surface-muted);
+}
+
+/* Список игр дня — раскрывается под сетками по клику на день с несколькими
+   играми. Именно здесь, а не в ячейке: в ячейке имена превратили бы
+   календарь в список, который надо читать. */
+.mini-calendar-daylist {
+  display: flex;
+  flex-direction: column;
+  border: var(--card-border-width, 1px) solid var(--ink);
+}
+.mini-calendar-daylist-head {
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 5px 9px;
+}
+.mini-calendar-daylist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  background: none;
+  border: none;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  border-radius: 0;
+  padding: 7px 9px;
   cursor: pointer;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-position: center;
-  mask-position: center;
+  text-align: left;
+  color: var(--ink);
 }
-.mini-calendar-dot.planned {
-  background: #d6321e;
-  -webkit-mask-image: url("/icons/Aim.svg");
-  mask-image: url("/icons/Aim.svg");
+.mini-calendar-daylist-row:first-of-type {
+  border-top: none;
 }
-.mini-calendar-dot.held,
-.mini-calendar-dot.cancelled,
-.mini-calendar-dot.rescheduled {
-  background: #12100e;
-  -webkit-mask-image: url("/icons/Shot.svg");
-  mask-image: url("/icons/Shot.svg");
+.mini-calendar-daylist-row:hover {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+.mini-calendar-daylist-name {
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mini-calendar-daylist-time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.mini-calendar-daylist-row:hover .mini-calendar-daylist-time {
+  color: var(--on-surface-muted);
 }
 
 .search-pins {
@@ -1521,15 +1694,22 @@ h4 { font-size: var(--fs-body); }
 }
 
 /* Floating nav widget — theme-aware via the same CSS vars as .card. */
+/* Плавающая наклейка, не полоса: виджет position:fixed и места в разметке
+   не занимает. Обводка — сплошные чернила той же толщины, что у карточек:
+   полупрозрачная --line читалась как недоделка на фоне интерфейса, где всё
+   обведено. Внутренних зазоров нет — кнопки состыкованы, как сегментный
+   переключатель в референсе; разделители рисуются отдельными полосками. */
 .nav-widget {
   position: fixed;
   z-index: 40;
   display: flex;
-  gap: 4px;
+  align-items: stretch;
+  gap: 0;
   background: var(--paper-2);
-  border: var(--card-border-width, 1px) solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--ink);
   border-radius: var(--card-radius);
-  padding: 6px;
+  padding: 0;
+  overflow: hidden;
 }
 .nav-widget-left {
   left: 0;
@@ -1571,30 +1751,68 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   background: none;
   border: none;
-  color: var(--ink);
-  padding: 8px 10px;
-  border-radius: var(--card-radius);
+  color: var(--ink-2);
+  padding: 8px 11px;
+  border-radius: 0;
   cursor: pointer;
-  font-size: 11px;
+  /* Капс-подпись — голос Label (§1.5), а не проза. */
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   line-height: 1.2;
 }
 .nav-widget-button:hover:not(:disabled) {
-  background: var(--bg-elevated);
-  color: var(--accent);
+  background: var(--ink);
+  color: var(--on-surface);
 }
 .nav-widget-button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 .nav-widget-button .nav-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 .nav-widget-compact .nav-widget-button {
   padding: 8px;
+}
+
+/* «Пульт сессии» — единственная кнопка-ПЕРЕХОД среди четырёх утилит
+   (наверх / вниз / назад / закрепить) и главное действие приложения. Без
+   выделения её приходилось искать чтением подписей каждый раз.
+
+   Заливка акцентом в постоянной обёртке тратит акцент на всех страницах —
+   это учтено: бюджет считается по содержимому страницы, а у сквозной
+   обёртки свой бюджет в один объект (design_revision.md §1.8). */
+.nav-widget-button-cockpit:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.nav-widget-button-cockpit:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--on-surface);
+}
+/* Отбивка перед пультом и после него: она отделяет переход от утилит даже
+   когда сессии нет и заливка погашена. */
+.nav-widget-divider {
+  flex-shrink: 0;
+  background: var(--ink);
+  align-self: stretch;
+}
+.nav-widget-left .nav-widget-divider,
+.nav-widget-right .nav-widget-divider {
+  height: var(--card-border-width, 1px);
+  width: auto;
+}
+.nav-widget-top .nav-widget-divider,
+.nav-widget-bottom .nav-widget-divider {
+  width: var(--card-border-width, 1px);
+  height: auto;
 }
 .search-result .type {
   font-size: 11px;
@@ -2111,7 +2329,9 @@ details.card[open] summary {
      buttons in this same row — those keep their text and just wrap, via
      flex-wrap below, rather than being misread as "edit"). Text stays in
      the DOM (just visually hidden via font-size:0) so screen readers still
-     get the real label. */
+     get the real label. The archive button carries a real <svg> archive icon
+     (the same one as the «Архив» nav item), so only the edit button needs a
+     drawn-in ::before glyph. */
   .entity-header-actions {
     flex-wrap: wrap;
   }
@@ -2124,10 +2344,6 @@ details.card[open] summary {
   .entity-header-actions button:first-child:not(.danger)::before {
     font-size: 15px;
     content: "✎";
-  }
-  .entity-header-actions button.danger::before {
-    font-size: 15px;
-    content: "✕";
   }
 
   /* The full desktop audio bar assumes the 3-column grid (left:200px/
@@ -3066,34 +3282,77 @@ details.card[open] summary {
   right: 8px;
 }
 
-.upcoming-notice-stack {
+/* Счётчики сводки. Кости как подложка под числа отвергнуты владельцем: на
+   главной они выбивались из строя — вокруг прямоугольные плашки с обводкой,
+   а тут силуэты. Число теперь лежит в такой же плашке, как всё остальное на
+   экране, и разница между «одним крупным» и «рядом среднего» держится
+   размером и инверсией, а не сменой формы.
+
+   Кости остаются там, где они на месте, — в характеристиках существ
+   (components/Dice.tsx, §6.5): там силуэт кости и означает бросок. */
+.finance-summary-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-3);
 }
-.upcoming-notice {
+.stat-plate {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--line);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: var(--card-border-width, 1px) solid var(--ink);
   border-radius: var(--card-radius);
-  padding: 5px 10px;
-  font-size: 13px;
+  background: var(--paper);
+  padding: var(--sp-2) var(--sp-3);
+  min-width: 0;
 }
-.upcoming-notice-close {
-  margin-left: auto;
-  border: none;
-  background: transparent;
-  padding: 2px 6px;
+.stat-plate-value {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1;
+  color: var(--ink);
+}
+.stat-plate-unit {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.stat-plate-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.25;
 }
 
-.finance-summary-card {
+/* Ведущее число — «одно крупное» из §10.5: инвертированная плашка во всю
+   ширину рельса и кегль вдвое больше. Единственный акцентный объект рельса. */
+.stat-plate-lead {
+  align-items: flex-start;
+  background: var(--accent);
+  border-color: var(--accent);
+  padding: var(--sp-3);
+}
+.stat-plate-lead .stat-plate-value {
+  font-size: var(--fs-stat);
+  color: var(--accent-text);
+}
+/* Подпись на акцентной плашке — полным --accent-text, без подмеса. При 78 %
+   в зине выходило 4.31:1 на красном, а это капс 10 px: для мелкого текста
+   норма 4.5. Полный цвет даёт 4.85 — столько же, сколько у самого числа. */
+.stat-plate-lead .stat-plate-unit,
+.stat-plate-lead .stat-plate-label {
+  color: var(--accent-text);
+}
+
+.finance-summary-row {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(48px, 1fr);
-  gap: var(--sp-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
 }
 
 /* Главная — "герой → плитки → плотный список" rhythm (design doc §6.1/
@@ -3134,15 +3393,15 @@ details.card[open] summary {
 .home-hero-cover {
   position: relative;
   width: 100%;
-  min-height: 220px;
-  background-size: cover;
-  background-position: center;
+  /* Пропорция от СВОЕЙ колонки, а не от ширины окна: vw не знает, что между
+     двумя боковыми панелями колонке достаётся вдвое меньше, и при свёрнутом
+     окне рисовал 300 px высоты на 489 px ширины — почти квадрат вместо
+     обложки. Границы держат её читаемой в обе стороны. */
+  aspect-ratio: 16 / 6;
+  min-height: 200px;
+  max-height: 300px;
   isolation: isolate;
-}
-.home-hero-cover.campaign-card-band {
-  height: auto;
-  margin-bottom: 0;
-  border-radius: 0;
+  overflow: hidden;
 }
 .home-hero-empty {
   min-height: 220px;
@@ -3164,57 +3423,178 @@ details.card[open] summary {
   left: var(--sp-5);
   right: var(--sp-5);
   bottom: var(--sp-4);
-  z-index: 1;
+  /* Над растром (z-index 1 у .cover-halftone::before): §5.2 запрещает
+     халфтон под текстом. */
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .home-hero-eyebrow {
   font-family: var(--font-ui);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: color-mix(in srgb, var(--paper) 80%, transparent);
+  letter-spacing: 0.16em;
+  /* Подпись лежит на инвертированной поверхности — значит свой muted, а не
+     тот, что выведен против бумаги. */
+  color: var(--on-surface-muted);
 }
 .home-hero-title {
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--fs-h1);
   font-weight: 400;
+  text-transform: var(--name-transform);
+  line-height: 0.92;
   color: var(--paper);
 }
+/* Название сессии, если задано: второй голос — проза курсивом, между
+   титульным и значением. Разрыв ×1.6 держится за счёт смены гарнитуры. */
+.home-hero-session {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-style: italic;
+  color: color-mix(in srgb, var(--paper) 82%, transparent);
+}
+/* Номер, дата и время — значения, значит моношрифт. Это то, чего герою не
+   хватало: он говорил куда идти, но не в каком состоянии то, куда идёшь. */
 .home-hero-date {
+  margin-top: var(--sp-1);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
-  color: color-mix(in srgb, var(--paper) 85%, transparent);
+  color: var(--on-surface-muted);
 }
 
+/* auto-FIT, а не auto-fill и не жёсткие repeat(4). auto-fill на колонке в
+   984 px раскладывался на пять мест, четыре плитки занимали четыре, и справа
+   оставалась дыра. Жёсткие четыре колонки, наоборот, ломали узкое окно: при
+   свёрнутом до 1440 приложении колонка всего 489 px, и плитка сжималась до
+   110 px. auto-fit схлопывает лишний трек — четыре в ряд там, где есть
+   место, две там, где нет, и обе всегда в полную ширину. */
 .home-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
   gap: var(--sp-4);
 }
 
 /* Блок «Напомню!» — случайная статья из справочника (HomeArticleCard).
    Карточка кликабельна целиком и открывает ту же модалку записи, что и
    ссылка-меншен в любом тексте, поэтому своей «кнопки» у неё нет. */
+/* «Напомню!» — вырезка, а не карточка (см. HomeArticleCard.tsx). Единственный
+   блок главной, который каждый раз другой, и единственный, имеющий право
+   выглядеть вырванным из журнала: чернильная плашка-шапка, рваный низ,
+   наклон, штамп выпуска. Ниже по экрану эта «разнузданность» никому не
+   мешает читать — потому блок и остался внизу основной колонки, а не поднят
+   под герой. */
 .home-article {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: 0;
   cursor: pointer;
+  /* Вырезка занимает всю ширину основной колонки. Ограничение в 68ch стояло
+     на самом блоке — мера строки соблюдалась, но на широкой раскладке (когда
+     рельс уходит под основную колонку) вырезка оставалась полосой в 544 px
+     посреди 816-пиксельной колонки, с пустым листом справа. Теперь меру
+     держит разворот внутри блока: узкая колонка шапки и колонка прозы.
+
+     Раскладка разворота решается container query, а не шириной окна:
+     ширина этого блока от окна не выводится — колонка контента в оболочке
+     фиксированная, а под 1280 px основная колонка, наоборот, расширяется. */
+  container-type: inline-size;
+  background: var(--paper);
+  border: var(--card-border-width, 1px) solid var(--ink);
+  /* Рваный низ. clip-path перекрывает --card-radius: пользовательская
+     настройка радиуса на этом блоке не действует, и это осознанно —
+     рванина и скругление взаимно исключаются (design_revision.md §4). */
+  clip-path: polygon(
+    0% 0%, 100% 0%, 100% calc(100% - 5px),
+    90% 100%, 81% calc(100% - 7px), 72% calc(100% - 1px), 63% calc(100% - 6px),
+    54% 100%, 45% calc(100% - 8px), 36% calc(100% - 1px), 27% calc(100% - 5px),
+    18% 100%, 9% calc(100% - 6px), 0% calc(100% - 2px)
+  );
 }
-.home-article:hover {
-  background-color: var(--bg-elevated);
+.home-article:hover .home-article-band {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 .home-article:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.home-article-path {
+/* Плашка-шапка называет блок изнутри — заголовка секции над вырезкой нет. */
+.home-article-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 7px var(--sp-3);
+}
+.home-article-band-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  text-transform: uppercase;
+  line-height: 1;
+}
+.home-article-issue {
   font-family: var(--font-mono);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  color: var(--on-surface-muted);
+}
+.home-article:hover .home-article-issue {
+  color: var(--accent-text);
+}
+.home-article-body-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-3) var(--sp-5);
+  /* Нижний отступ крупнее прочих: под ним рваный край, и без запаса он
+     отгрызал бы последнюю строку. */
+  padding: var(--sp-3) var(--sp-3) 20px var(--sp-3);
+}
+.home-article-head,
+.home-article-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+/* Верхняя граница меры строки. На обычном широком экране колонка прозы и
+   так выходит примерно в эти же 68ch по пропорции, а на очень широком —
+   упирается сюда, и лишнюю ширину забирает колонка шапки, а не строка. */
+.home-article-text {
+  max-width: 68ch;
+}
+/* Пока блок узкий — шапка и проза идут друг под другом, линия просто
+   отделяет одно от другого. */
+.home-article-head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--sp-2);
+}
+/* Разворот. Порог — 620 px: шапке нужно не меньше 240 px, чтобы название
+   в две-три строки не превращалось в столбик по слову, прозе — не меньше
+   340 px, чтобы строка оставалась строкой. */
+@container (min-width: 620px) {
+  .home-article-body-wrap {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr);
+  }
+  .home-article-head {
+    border-bottom: none;
+    border-right: 1px solid var(--line);
+    padding-bottom: 0;
+    padding-right: var(--sp-4);
+    height: 100%;
+  }
+}
+.home-article-path {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 .home-article-title {
@@ -3222,6 +3602,8 @@ details.card[open] summary {
   font-family: var(--font-display);
   font-size: var(--fs-h2);
   font-weight: 600;
+  text-transform: var(--name-transform);
+  line-height: 0.96;
   color: var(--text-bright, var(--ink));
 }
 /* Высота главной не должна зависеть от того, какая статья выпала: длинное
@@ -3270,11 +3652,64 @@ details.card[open] summary {
 }
 @media (max-width: 860px) {
   .home-hero-cover {
-    min-height: 160px;
+    height: 186px;
+  }
+  /* Второй месяц на телефоне убирается: две сетки в 375 px становятся тесными
+     и клетка перестаёт быть целью для пальца. Один месяц читается нормально,
+     следующий — по стрелке. Правило здесь, а не в компоненте: «не хватает
+     ширины» — это про экран, а не про то, сколько месяцев имеет смысл. */
+  .mini-calendar-grid-block + .mini-calendar-grid-block {
+    display: none;
+  }
+  /* Клетка — цель для пальца, а не для мыши: при обычном поле карточки в
+     14 px на 375-м экране выходило 42 px, на два ниже порога в 44. Поле
+     карточки календаря ужимается ровно настолько, чтобы клетка добрала. */
+  .home-rail-calendar {
+    padding: var(--sp-2);
+  }
+  .home-rail-calendar .mini-calendar {
+    gap: 2px;
   }
   .home-rail {
     flex-direction: column;
   }
+  /* Плитки на телефоне — 2×2. По одной в столбец четыре кампании дали бы
+     почти тысячу пикселей прокрутки ради витрины, которую на телефоне
+     листают мимо. */
+  .home-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-3);
+  }
+  /* Порядок в одну колонку: герой → календарь → плитки → счётчики →
+     «Напомню!». Рельс вклинивается сразу за героем — на телефоне мастер
+     открывает приложение не осматривать владения (для этого есть большой
+     экран), а свериться: когда следующая и что на неделе. Витрина уезжает
+     вниз, где ей на телефоне и место. */
+  .home-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+    /* Десктопная сетка несёт align-items: start; в колоночном флексе это
+       значит «по содержимому», и блоки переставали занимать ширину экрана —
+       клетка календаря ужималась до 20 px, вдвое ниже порога попадания
+       пальцем. */
+    align-items: stretch;
+  }
+  .home-main,
+  .home-rail {
+    display: contents;
+  }
+  /* display: contents не влияет на то, какие селекторы совпадают, поэтому
+     правило рельса с брейкпоинта 1280 продолжало действовать — а в колонке
+     flex-basis задаёт уже высоту, а не ширину, и прибивал блокам 260 px. */
+  .home-rail > * {
+    flex: 0 0 auto;
+  }
+  .home-hero { order: 1; }
+  .home-rail-calendar { order: 2; }
+  .home-section-campaigns { order: 3; }
+  .home-rail-stats { order: 4; }
+  .home-section-article { order: 5; }
 }
 
 .context-menu {
@@ -3287,6 +3722,19 @@ details.card[open] summary {
   min-width: 180px;
   z-index: 100;
 }
+/* Подпись меню, а не пункт: не кликается, не подсвечивается и отделена
+   линией — иначе первая строка читалась бы как ещё одно действие. */
+.context-menu-title {
+  padding: 6px 10px 7px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--muted);
+  max-width: 260px;
+}
 .context-menu button {
   background: transparent;
   border: none;
@@ -3298,8 +3746,18 @@ details.card[open] summary {
   background: var(--paper-2);
   border-color: transparent;
 }
+/* Пункт меню, а не кнопка: плотная бордовая заливка из общего правила
+   button.danger превратила бы строку выпадающего меню в кричащую плашку,
+   поэтому здесь остаётся только цвет текста. */
 .context-menu button.danger {
+  background: transparent;
+  border-color: transparent;
   color: var(--status-cancelled);
+  font-weight: inherit;
+}
+.context-menu button.danger:hover {
+  background: var(--paper-2);
+  border-color: transparent;
 }
 .context-menu-group {
   display: flex;
@@ -3320,6 +3778,17 @@ details.card[open] summary {
   display: flex;
   gap: 6px;
 }
+/* Кнопки шапки — flex внутри себя: у «Пульта сессии» рядом с текстом стоит
+   значок 18px, и на базовой линии он поднимал строку — надпись садилась на
+   13px от верха и 7px от низа, то есть заметно ниже центра. Выравнивание по
+   центру поперёк кнопки лечит это для любой кнопки со значком, а не только
+   для этой одной. */
+.entity-header-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
 
 /* Profile page titles (Campaign/Setting/System) that now double as the "back
    to Обзор" control, since the Обзор tab button was removed from the tab
@@ -3337,10 +3806,8 @@ details.card[open] summary {
 .entity-title-link:hover {
   text-decoration: underline;
 }
-.entity-header-actions button.danger {
-  border-color: var(--status-cancelled);
-  color: var(--status-cancelled);
-}
+/* Заливка задана общим правилом button.danger выше — здесь у кнопки в шапке
+   профиля нет своей палитры, только общий вид опасного действия. */
 
 .nav-bottom {
   position: relative;
@@ -6280,4 +6747,15 @@ body.printing-cheatsheet #root {
   font-weight: 700;
   letter-spacing: 0.03em;
   padding: 4px 8px 0;
+}
+
+/* Точка «доступно обновление» на пункте «Настройки» (см. updateAvailable.ts).
+   Квадрат, а не круг: кругов в системе нет (§6.2). Акцентом — это ровно то
+   «активное состояние», ради которого акцент и держат. */
+.nav-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  background: var(--accent);
 }

@@ -14,11 +14,15 @@ export interface ContextMenuItem {
 interface Props {
   x: number;
   y: number;
+  /** Первая строка меню — не пункт, а подпись: чему именно принадлежат
+   *  действия ниже. Нужна там, где по самой цели щелчка этого не видно —
+   *  например, клетка мини-календаря показывает только число. */
+  title?: string;
   items: ContextMenuItem[];
   onClose: () => void;
 }
 
-export function ContextMenu({ x, y, items, onClose }: Props) {
+export function ContextMenu({ x, y, title, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
 
@@ -43,6 +47,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       className="context-menu"
       style={{ position: "fixed", left: x, top: y }}
     >
+      {title && <div className="context-menu-title">{title}</div>}
       {items.map((item, i) =>
         item.children ? (
           <div key={i} className="context-menu-group">

@@ -1,34 +1,68 @@
 import { useState } from "react";
 
-// Small decorative field of slowly, randomly drifting dots — colored by the
-// active theme's --accent (so it reads as "thematic" per theme with zero
-// extra theme config), used behind the nav logo, section headings, and the
-// search panel title. Positions/timings are randomized once per mount (not
-// per render, and independently per instance) and animated with pure CSS
-// transforms/opacity, so this is cheap: no JS runs after mount besides
-// React's one-time render.
-interface Particle {
+// Зинная россыпь — декоративный слой позади заголовков, логотипа навигации и
+// заголовка панели поиска (§5.6: 2–3 зинных маркера на экран).
+//
+// Раньше это было поле круглых точек с box-shadow-свечением и бесконечной
+// пульсацией прозрачности 0.2 → 0.65 на 12–24 секунды. Дизайн-ревизия убрала
+// всё три: кругов в системе нет (§6.2 — круглые только аватары и центральная
+// кнопка таб-бара), теней и свечений нет вообще (§3.2 — глубина через
+// инверсию и обводку), «дышащие» свечения и плавные пульсации запрещены (§9).
+// Намерение — оживить заголовок — верное, поэтому слой остался; сменилась
+// только форма: рубленые метки в --muted, статично.
+//
+// Форма кодирует смысл ровно постольку, поскольку его тут нет: три вида
+// чередуются, чтобы россыпь не выглядела штампованной сеткой. Цвет один.
+type MarkKind = "square" | "cross" | "star";
+
+interface Mark {
   key: number;
   left: number;
   top: number;
   size: number;
-  dur: number;
-  delay: number;
-  dx: number;
-  dy: number;
+  angle: number;
+  opacity: number;
+  kind: MarkKind;
 }
 
-function generateParticles(count: number): Particle[] {
+const KINDS: MarkKind[] = ["square", "cross", "star"];
+
+function generateMarks(count: number): Mark[] {
   return Array.from({ length: count }, (_, i) => ({
     key: i,
-    left: Math.round(5 + Math.random() * 90),
-    top: Math.round(5 + Math.random() * 90),
-    size: Number((2 + Math.random() * 2.5).toFixed(1)),
-    dur: Number((12 + Math.random() * 12).toFixed(1)),
-    delay: Number((Math.random() * -20).toFixed(1)),
-    dx: Math.round(-35 + Math.random() * 70),
-    dy: Math.round(-35 + Math.random() * 70),
+    left: Math.round(4 + Math.random() * 92),
+    top: Math.round(6 + Math.random() * 88),
+    // Мельче прежних точек: маркер, а не элемент композиции.
+    size: Number((5 + Math.random() * 5).toFixed(1)),
+    // Наклон в пределах, разрешённых §5.5 для наклеек и бейджей.
+    angle: Math.round(-24 + Math.random() * 48),
+    // Потолок 0.4 — §5.6 держит зинные маркеры в --muted или на 40 %.
+    opacity: Number((0.22 + Math.random() * 0.18).toFixed(2)),
+    // Круговой перебор, а не случайный выбор: при 6 метках случайность
+    // регулярно выдаёт три одинаковых подряд, и россыпь читается как брак.
+    kind: KINDS[i % KINDS.length],
   }));
+}
+
+function MarkShape({ kind }: { kind: MarkKind }) {
+  switch (kind) {
+    case "cross":
+      return (
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <path d="M2 2l8 8M10 2l-8 8" />
+        </svg>
+      );
+    case "star":
+      // Звёздочка-анархия из §5.6 — пятиконечная, залитая.
+      return (
+        <svg viewBox="0 0 14 14" fill="currentColor">
+          <path d="M7 0l1.7 4.6L13.5 5l-3.6 3 1.3 4.7L7 10.2 2.8 12.7 4.1 8 .5 5l4.8-.4z" />
+        </svg>
+      );
+    case "square":
+    default:
+      return <svg viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="10" height="10" /></svg>;
+  }
 }
 
 interface Props {
@@ -40,26 +74,24 @@ export function ParticleField({ count = 8, className = "" }: Props) {
   // Lazy initializer runs exactly once per component instance (mount), not
   // on every render — equivalent to useMemo(() => ..., []) but without an
   // unused setter warning.
-  const [particles] = useState(() => generateParticles(count));
+  const [marks] = useState(() => generateMarks(count));
   return (
     <div className={`particle-field ${className}`} aria-hidden="true">
-      {particles.map((p) => (
+      {marks.map((m) => (
         <span
-          key={p.key}
-          className="particle-field-dot"
-          style={
-            {
-              left: `${p.left}%`,
-              top: `${p.top}%`,
-              width: `${p.size}px`,
-              height: `${p.size}px`,
-              animationDuration: `${p.dur}s`,
-              animationDelay: `${p.delay}s`,
-              "--dx": `${p.dx}px`,
-              "--dy": `${p.dy}px`,
-            } as React.CSSProperties
-          }
-        />
+          key={m.key}
+          className={`particle-field-mark particle-field-mark-${m.kind}`}
+          style={{
+            left: `${m.left}%`,
+            top: `${m.top}%`,
+            width: `${m.size}px`,
+            height: `${m.size}px`,
+            opacity: m.opacity,
+            transform: `rotate(${m.angle}deg)`,
+          }}
+        >
+          <MarkShape kind={m.kind} />
+        </span>
       ))}
     </div>
   );

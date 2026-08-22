@@ -7,6 +7,7 @@ import { NavWidget } from "./NavWidget";
 import { PreviewDock } from "./PreviewDock";
 import { MobileQuickAccess, type QuickAccessContextualAction } from "./MobileQuickAccess";
 import { NavIcon, type NavIconName } from "../components/NavIcons";
+import { useUpdateAvailable } from "../updateAvailable";
 import { ParticleField } from "../components/ParticleField";
 import { AudioPlayerBar, MiniPlayerBar } from "../audioPlayer";
 import { SoundEngineProvider } from "../sound/engine";
@@ -201,6 +202,7 @@ export function AppShell() {
   const isPlayer = user?.role === "player";
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
   const navBottomItems = isPlayer ? PLAYER_NAV_BOTTOM_ITEMS : GM_NAV_BOTTOM_ITEMS;
+  const updateAvailable = useUpdateAvailable();
 
   // Пульт сессии swaps the main nav sidebar for a drag-and-drop preview
   // dock (see PreviewDock) instead — a GM running a live session gets a
@@ -315,6 +317,12 @@ export function AppShell() {
               >
                 <NavIcon name={item.icon} />
                 {item.label}
+                {/* Блок «Обновления» ушёл с главной в настройки; точка — всё,
+                    что от него осталось снаружи. Появляется, только когда
+                    обновление действительно есть. */}
+                {item.to === "/storages" && updateAvailable && (
+                  <span className="nav-dot" title="Доступно обновление" aria-label="Доступно обновление" />
+                )}
               </NavLink>
             ))}
             {!isPlayer && <BackupButton />}
