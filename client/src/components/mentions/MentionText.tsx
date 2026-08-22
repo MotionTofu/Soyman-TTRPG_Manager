@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DETAIL_ROUTES } from "../../entityTypes";
-import { ANY_MENTION_RE, resolveMention, useMentionIndex } from "../../mentions";
+import { ANY_MENTION_RE, resolveMention } from "../../mentions";
 import { DeadMention } from "./DeadMention";
 
 // Inline markup recognized inside any text field, alongside the existing
