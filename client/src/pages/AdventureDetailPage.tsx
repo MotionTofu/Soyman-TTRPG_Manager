@@ -78,9 +78,18 @@ export function AdventureDetailPage() {
 
       <div className="entity-header">
         <div className="stack">
-          <h2>{arc.name}</h2>
-          <div className="row">
+          <div className="row" style={{ alignItems: "center" }}>
+            <h2>{arc.name}</h2>
             <EntityTypeChip type="adventure" />
+            <Link
+              to={`/canvas?setting=${arc.setting_id}&arc=${arc.id}`}
+              className="graph-neighbourhood-link"
+              title="Открыть схему на полотне"
+            >
+              <NavIcon name="canvas" /> На полотне
+            </Link>
+          </div>
+          <div className="row">
             {arc.is_default === 1 && <span className="badge tag">стандартное</span>}
             {arc.recommended_level && <span className="muted">{arc.recommended_level}</span>}
             {arc.duration && <span className="muted">{arc.duration}</span>}

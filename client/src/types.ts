@@ -1755,6 +1755,7 @@ export interface CanvasNode {
     id: number;
     name: string;
     kind: SceneKind;
+    summary: string;
     arc_id: number | null;
     is_override: boolean;
     campaign_only: boolean;
@@ -1907,12 +1908,92 @@ export interface CanvasBundleNode {
   };
 }
 
-export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode;
+/** Нода приключения на холсте сеттинга (Q2). */
+export interface CanvasAdventureNode {
+  key: string;
+  node_type: "adventure";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  adventure: { id: number; name: string };
+}
+
+/** Стикер — свободная заметка, 6 пастелей §5 */
+export interface CanvasStickerNode {
+  key: string;
+  node_type: "sticker";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  sticker: { id: number; text: string; name: string; note: string; color: string };
+}
+
+/** Изображение на полотне — png/webp/gif */
+export interface CanvasImageNode {
+  key: string;
+  node_type: "image";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  image: { id: number; file_url: string; w: number; h: number };
+}
+
+/** Рамка-группа на фриформ-доске */
+export interface CanvasFrameNode {
+  key: string;
+  node_type: "frame";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  frame: { id: number; name: string; color: string; w: number; h: number };
+}
+export interface CanvasSoundSetNode {
+  key: string;
+  node_type: "sound_set";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  sound_set: { id: number; name: string; battle_playlist_id: number | null };
+}
+export interface CanvasPlaylistNode {
+  key: string;
+  node_type: "playlist";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  playlist: { id: number; name: string };
+}
+
+/** Нода проверки сцены — справа от сцены, исходы — хендлы с чип-рамкой (Q2, Q7). */
+export interface CanvasCheckNode {
+  key: string;
+  node_type: "check";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  check: {
+    id: number;
+    scene_id: number;
+    what: string;
+    difficulty: string;
+    outcomes: { id: number; label: string; consequence: string; target_type: string | null; target_id: number | null }[];
+  };
+}
+
+export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode | CanvasCheckNode | CanvasAdventureNode | CanvasStickerNode | CanvasImageNode | CanvasFrameNode | CanvasSoundSetNode | CanvasPlaylistNode;
 
 /** Рамка главы на холсте приключения. */
 export interface CanvasGroup {
   arc_id: number;
   name: string;
+  color: string;
   x: number;
   y: number;
   w: number;
@@ -1921,9 +2002,12 @@ export interface CanvasGroup {
 
 export interface CanvasBoard {
   board_id: number;
-  arc: { id: number; name: string; setting_id: number };
+  arc?: { id: number; name: string; setting_id: number };
+  setting?: { id: number; name: string };
+  campaign?: { id: number; name: string; setting_id: number | null };
+  free?: { id: number; name: string };
   campaign_id: number | null;
-  nodes: CanvasAnyNode[];
+  nodes: (CanvasAnyNode & { z_index?: number })[];
   groups: CanvasGroup[];
   edges: CanvasEdge[];
 }

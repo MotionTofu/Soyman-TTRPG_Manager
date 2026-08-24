@@ -100,6 +100,7 @@ export function SystemDetailPage() {
           <button type="button" className="entity-title-link" onClick={() => selectTab("overview")} title="К обзору">
             {system.name}
           </button>
+          {system.code && <span className="sys-stamp">{system.code}</span>}
         </h1>
         <div className="entity-header-actions">
           {/* Название правится в карточке «Описание системы» на обзоре. */}
@@ -112,7 +113,7 @@ export function SystemDetailPage() {
         </div>
       </div>
 
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
+      <div className="row sys-tabs" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
         <div className="tabs" style={{ flexWrap: "wrap" }}>
           {sections.map((s) => (
             <button
@@ -140,27 +141,25 @@ export function SystemDetailPage() {
 
       {activeTab === "overview" && (
         <div className="stack">
-          <div className="card stack">
-            <h3>Тамбнейл</h3>
-            {system.thumbnail_image_url && (
-              <img
-                src={system.thumbnail_image_url}
-                alt=""
-                style={{ maxWidth: 300, borderRadius: "var(--card-radius)" }}
-              />
-            )}
-            <label>
-              {uploadingThumbnail ? "Загрузка…" : "Выбрать изображение"}
-              <input
-                type="file"
-                accept={IMAGE_ACCEPT}
-                style={{ display: "none" }}
-                onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {thumbnailCrop.modal}
-            <span className="muted image-hint">{IMAGE_HINT}</span>
-          </div>
+          <section className="sys-card">
+            <div className="sys-card-head">Тамбнейл</div>
+            <div className="sys-card-body">
+              {system.thumbnail_image_url && (
+                <img src={system.thumbnail_image_url} alt="" />
+              )}
+              <label>
+                {uploadingThumbnail ? "Загрузка…" : "Выбрать изображение"}
+                <input
+                  type="file"
+                  accept={IMAGE_ACCEPT}
+                  style={{ display: "none" }}
+                  onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              {thumbnailCrop.modal}
+              <span className="muted image-hint">{IMAGE_HINT}</span>
+            </div>
+          </section>
           <EditableTextCard
             key={`desc-${system.id}`}
             title="Описание системы"
@@ -182,16 +181,18 @@ export function SystemDetailPage() {
             ]}
             onSaveFields={(v) => saveName(v.name, v.code)}
           />
-          <details className="card">
-            <summary>Кампании с этой системой ({campaigns.length})</summary>
-            <div className="grid-cards" style={{ marginTop: 10 }}>
-              {campaigns.map((c) => (
-                <Link key={c.id} to={`/campaigns/${c.id}`} className="card">
-                  <h3>{c.name}</h3>
-                  <div className="muted">{c.setting_name ?? "Сеттинг не указан"}</div>
-                </Link>
-              ))}
-              {campaigns.length === 0 && <p className="muted">Пока нет кампаний с этой системой.</p>}
+          <details className="sys-card">
+            <summary className="sys-card-head">Кампании с этой системой ({campaigns.length})</summary>
+            <div className="sys-card-body">
+              <div className="grid-cards">
+                {campaigns.map((c) => (
+                  <Link key={c.id} to={`/campaigns/${c.id}`} className="card">
+                    <h3>{c.name}</h3>
+                    <div className="muted">{c.setting_name ?? "Сеттинг не указан"}</div>
+                  </Link>
+                ))}
+                {campaigns.length === 0 && <p className="muted">Пока нет кампаний с этой системой.</p>}
+              </div>
             </div>
           </details>
         </div>

@@ -22,6 +22,7 @@ import {
 import { normalizeDndCreature, DndCreatureEdit, DndCreatureView } from "./dnd/DndCreatureForm";
 import { emptyDndCharacter, normalizeDndCharacter, DndCharacterEdit, DndCharacterView } from "./dnd/DndCharacterForm";
 import { findDndSystemId } from "./dnd/dndCompendium";
+import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
 import { DndCharacterWizard } from "./dnd/DndCharacterWizard";
 import { DndCreatureWizard } from "./dnd/DndCreatureWizard";
 import { MentionTextarea } from "./mentions/MentionTextarea";
@@ -94,6 +95,8 @@ export function StatblockList({
   const [importError, setImportError] = useState("");
   const [showDndWizard, setShowDndWizard] = useState(false);
   const [showDndCreatureWizard, setShowDndCreatureWizard] = useState(false);
+  const [showLitmWizard, setShowLitmWizard] = useState(false);
+  const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
 
   const litmFormat: StatblockFormat = ownerType === "character" ? "litm_character" : "litm_challenge";
   const dndFormat: StatblockFormat = ownerType === "character" ? "dnd_character" : "dnd_creature";
@@ -138,6 +141,7 @@ export function StatblockList({
   async function addStatblock() {
     if (format === "litm_character") {
       const character = emptyCharacter();
+      character.characterName = ownerName ?? "";
       if (campaignId) {
         try {
           const campaign = await api.get<Campaign>(`/campaigns/${campaignId}`);
@@ -148,13 +152,16 @@ export function StatblockList({
           // no campaign group theme available — leave the empty default
         }
       }
-      await api.post("/statblocks", {
+      const res = await api.post<{ id: number }>("/statblocks", {
         owner_type: ownerType,
         owner_id: ownerId,
         format,
         kind: "full",
         content: JSON.stringify(character),
       });
+      setLitmWizardStatblockId(res.id);
+      setShowLitmWizard(true);
+      return;
     } else if (format === "litm_challenge") {
       await api.post("/statblocks", {
         owner_type: ownerType,
@@ -163,6 +170,7 @@ export function StatblockList({
         kind: "full",
         content: JSON.stringify(emptyChallenge()),
       });
+
     } else if (format === "dnd_character") {
       const character = emptyDndCharacter();
       character.characterName = ownerName ?? "";
@@ -302,6 +310,21 @@ export function StatblockList({
           }}
         />
       )}
+        {showLitmWizard && (
+          <LitMCharacterWizard
+            ownerName={ownerName}
+            ownerPlayerName={ownerPlayerName}
+            onComplete={(data) => {
+              setShowLitmWizard(false);
+              if (litmWizardStatblockId) {
+                api.put(`/statblocks/${litmWizardStatblockId}`, {
+                  content: JSON.stringify(data),
+                }).then(() => refresh());
+              }
+            }}
+            onCancel={() => setShowLitmWizard(false)}
+          />
+        )}
 
       {showDndCreatureWizard && (
         <DndCreatureWizard

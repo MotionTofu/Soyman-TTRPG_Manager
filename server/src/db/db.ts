@@ -421,6 +421,34 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "generic_links", "origin")) {
     database.exec("ALTER TABLE generic_links ADD COLUMN origin TEXT NOT NULL DEFAULT 'planned'");
   }
+  // Старый уникальный ключ был (from_type,from_id,to_type,to_id) без section — из-за
+  // него нельзя было воткнуть один и тот же sound_set в два разъёма (audio+battle).
+  // Схема уже поменялась на 5 полей, а живая база крутится на старой — ловим это
+  // и пересобираем таблицу, сохранив строки.
+  {
+    const ddl = (database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='generic_links'").get() as { sql: string } | undefined)?.sql ?? "";
+    if (ddl.includes("UNIQUE(from_type, from_id, to_type, to_id)") && !ddl.includes("UNIQUE(from_type, from_id, to_type, to_id, section)")) {
+      database.exec(`
+        PRAGMA foreign_keys=OFF;
+        CREATE TABLE generic_links_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          from_type TEXT NOT NULL,
+          from_id INTEGER NOT NULL,
+          to_type TEXT NOT NULL,
+          to_id INTEGER NOT NULL,
+          section TEXT,
+          origin TEXT NOT NULL DEFAULT 'planned',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(from_type, from_id, to_type, to_id, section)
+        );
+        INSERT INTO generic_links_new (id, from_type, from_id, to_type, to_id, section, origin, created_at)
+          SELECT id, from_type, from_id, to_type, to_id, section, origin, created_at FROM generic_links;
+        DROP TABLE generic_links;
+        ALTER TABLE generic_links_new RENAME TO generic_links;
+        PRAGMA foreign_keys=ON;
+      `);
+    }
+  }
   if (!columnExists(database, "character_chapters", "image_path")) {
     database.exec("ALTER TABLE character_chapters ADD COLUMN image_path TEXT");
   }
@@ -2342,10 +2370,25 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "initiative_entries", "kind")) {
     database.exec("ALTER TABLE initiative_entries ADD COLUMN kind TEXT NOT NULL DEFAULT 'creature'");
   }
+  // Старые секции сцены → новые: scene_participants → scene_plot_characters, scene_items → scene_loot
+  // Полотно уже пишет новыми именами, а профиль сцены читал старыми — из-за этого существа и предметы, воткнутые на полотне, не показывались в профиле.
+  const castMigrateDone = database.prepare("SELECT value FROM app_settings WHERE key = ?").get("cast_sections_migrated") as { value: string } | undefined;
+  if (!castMigrateDone) {
+    database.exec("UPDATE generic_links SET section = 'scene_plot_characters' WHERE from_type = 'scene' AND section = 'scene_participants'");
+    database.exec("UPDATE generic_links SET section = 'scene_loot' WHERE from_type = 'scene' AND section = 'scene_items'");
+    database.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('cast_sections_migrated', '1')").run();
+  }
 
   // «Справочник» стал базовым разделом системы — системам, заведённым раньше,
   // он добавляется один раз (см. defaultSections.ts).
   backfillDefaultMechanicsSections(database);
+
+  if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
+    database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
+  }
+  if (tableExists(database, "canvas_groups") && !columnExists(database, "canvas_groups", "color")) {
+    database.exec("ALTER TABLE canvas_groups ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
+  }
 
   compactIfBloated(database);
   return database;

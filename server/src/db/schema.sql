@@ -711,6 +711,16 @@ CREATE TABLE IF NOT EXISTS story_scene_transitions (
 );
 CREATE INDEX IF NOT EXISTS idx_story_scene_transitions_from ON story_scene_transitions(from_scene_id);
 
+CREATE TABLE IF NOT EXISTS story_arc_transitions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  to_arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+  label TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(from_arc_id, to_arc_id, label)
+);
+CREATE INDEX IF NOT EXISTS idx_story_arc_transitions_from ON story_arc_transitions(from_arc_id);
+
 -- Заготовка вечера: какие сцены Мастер набрал на эту сессию.
 --
 -- Хранятся именно СЦЕНЫ, а не отметки приключений и глав. Галочка главы в
@@ -1280,6 +1290,7 @@ CREATE TABLE IF NOT EXISTS canvas_boards (
   -- прицелом на холсты лора и сессии, поэтому FK нет (как у generic_links).
   scope_type TEXT NOT NULL,
   scope_id INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(scope_type, scope_id)
 );
@@ -1305,11 +1316,12 @@ CREATE TABLE IF NOT EXISTS canvas_boards (
 CREATE TABLE IF NOT EXISTS canvas_nodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
-  -- scene | being | location | artifact | community | compendium_entry | bundle
+  -- scene | being | location | artifact | community | compendium_entry | bundle | sticker | image | frame | check | adventure
   node_type TEXT NOT NULL,
   node_id INTEGER NOT NULL,
   x REAL NOT NULL DEFAULT 0,
   y REAL NOT NULL DEFAULT 0,
+  z_index INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(board_id, node_type, node_id)
 );
@@ -1425,3 +1437,37 @@ CREATE TABLE IF NOT EXISTS story_check_outcomes (
   position INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_story_check_outcomes_check ON story_check_outcomes(check_id);
+
+-- Стикеры — свободные заметки на полотне (Q5, §5 Полотно: 6 пастелей, спокойные)
+CREATE TABLE IF NOT EXISTS canvas_stickers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  text TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  color TEXT NOT NULL DEFAULT 'paper',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Изображения на полотне — png/webp/gif 5MB, drag-n-drop (Q6)
+CREATE TABLE IF NOT EXISTS canvas_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  w REAL NOT NULL DEFAULT 320,
+  h REAL NOT NULL DEFAULT 240,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Рамки-группы на фриформ-досках (Q4, выбор стикер+изображение → группа)
+CREATE TABLE IF NOT EXISTS canvas_frames (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT 'Группа',
+  color TEXT NOT NULL DEFAULT '#2C3E50',
+  x REAL NOT NULL DEFAULT 0,
+  y REAL NOT NULL DEFAULT 0,
+  w REAL NOT NULL DEFAULT 320,
+  h REAL NOT NULL DEFAULT 240,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

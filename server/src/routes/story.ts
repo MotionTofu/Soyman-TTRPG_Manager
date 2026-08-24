@@ -1599,18 +1599,30 @@ storyRouter.put("/checks/:checkId", (req, res) => {
   // Последствия сюда не принимаются: у них своя таблица и свои эндпоинты
   // (/checks/:id/outcomes, /outcomes/:id). Оставить приём on_success значило
   // бы держать путь записи в колонку, которую никто не читает.
-  const { what, difficulty } = req.body as Record<string, string | undefined>;
+  const { what, difficulty, scene_id } = req.body as Record<string, string | number | undefined>;
   db.prepare(
     `UPDATE story_scene_checks SET
-       what = COALESCE(?, what), difficulty = COALESCE(?, difficulty)
+       what = COALESCE(?, what), difficulty = COALESCE(?, difficulty), scene_id = COALESCE(?, scene_id)
      WHERE id = ?`
-  ).run(what ?? null, difficulty ?? null, req.params.checkId);
+  ).run(what ?? null, difficulty ?? null, scene_id != null ? Number(scene_id) : null, req.params.checkId);
   res.json(db.prepare("SELECT * FROM story_scene_checks WHERE id = ?").get(req.params.checkId));
 });
 
 storyRouter.delete("/checks/:checkId", (req, res) => {
   db.prepare("DELETE FROM story_scene_checks WHERE id = ?").run(req.params.checkId);
   res.json({ ok: true });
+});
+
+storyRouter.get("/checks/:checkId", (req, res) => {
+  const row = db.prepare("SELECT * FROM story_scene_checks WHERE id = ?").get(req.params.checkId);
+  if (!row) return res.status(404).json({ error: "not found" });
+  res.json(row);
+});
+
+storyRouter.get("/checks/:checkId/outcomes", (req, res) => {
+  const exists = db.prepare("SELECT id FROM story_scene_checks WHERE id = ?").get(req.params.checkId);
+  if (!exists) return res.status(404).json({ error: "not found" });
+  res.json(outcomesFor(Number(req.params.checkId)));
 });
 
 // ------------------------------------------------- исходы проверки
@@ -1730,6 +1742,18 @@ storyRouter.post("/scenes/:id/transitions", (req, res) => {
 
 storyRouter.delete("/transitions/:transitionId", (req, res) => {
   db.prepare("DELETE FROM story_scene_transitions WHERE id = ?").run(req.params.transitionId);
+  res.json({ ok: true });
+});
+
+storyRouter.post("/arcs/:id/transitions", (req, res) => {
+  const { to_arc_id, label } = req.body as { to_arc_id: number; label?: string };
+  if (!to_arc_id) return res.status(400).json({ error: "to_arc_id is required" });
+  db.prepare("INSERT OR IGNORE INTO story_arc_transitions (from_arc_id, to_arc_id, label) VALUES (?, ?, ?)").run(Number(req.params.id), to_arc_id, label ?? "");
+  res.status(201).json({ ok: true });
+});
+
+storyRouter.delete("/arc-transitions/:transitionId", (req, res) => {
+  db.prepare("DELETE FROM story_arc_transitions WHERE id = ?").run(req.params.transitionId);
   res.json({ ok: true });
 });
 

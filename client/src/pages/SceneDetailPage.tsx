@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { Breadcrumbs } from "../components/Breadcrumbs";
@@ -13,8 +13,9 @@ import { NavIcon } from "../components/NavIcons";
 // Stable references — SectionDropZone is memoized and would re-render on
 // every parent render if these were inline literals.
 const LOCATION_TYPES = ["location"];
-const PARTICIPANT_TYPES = ["being", "character", "community"];
-const ITEM_TYPES = ["artifact", "resource", "compendium_entry"];
+const PLOT_TYPES = ["being", "character", "community"];
+const OBSTACLE_TYPES = ["being", "character", "community", "location", "artifact"];
+const LOOT_TYPES = ["artifact", "resource", "compendium_entry"];
 
 // A single prepared scene. Opened either from a setting (the original) or
 // from a campaign (?campaign=<id>) — in the latter case every edit is routed
@@ -156,11 +157,20 @@ export function SceneDetailPage() {
         <div className="stack">
           {/* Имя и вид сцены правятся в карточке «Описание для мастера». */}
           <div className="stack">
-              <h2>{scene.name}</h2>
-              <div className="row">
+              <div className="row" style={{ alignItems: "center" }}>
+                <h2>{scene.name}</h2>
                 <EntityTypeChip type="scene" />
+                <Link
+                  to={`/canvas?setting=${scene.setting_id}&arc=${scene.arc_id ?? ""}&focus=scene:${scene.id}`}
+                  className="graph-neighbourhood-link"
+                  title="Показать на полотне"
+                >
+                  <NavIcon name="canvas" /> На полотне
+                </Link>
+              </div>
+              <div className="row">
                 {/* The chip already reads "Сцена" — only a non-default kind
-                    adds information worth a second badge. */}
+                     adds information worth a second badge. */}
                 {scene.kind !== "scene" && (
                   <span className="badge tag">
                     {SCENE_KINDS.find((k) => k.key === scene.kind)?.label}
@@ -409,18 +419,40 @@ export function SceneDetailPage() {
         <SectionDropZone
           entityType="scene"
           entityId={sceneId}
-          section="scene_participants"
-          acceptTypes={PARTICIPANT_TYPES}
-          placeholder="Перетащите участников: личностей, сообщества, персонажей"
+          section="scene_plot_characters"
+          acceptTypes={PLOT_TYPES}
+          placeholder="Перетащите сюжетных персонажей"
         />
         <SectionDropZone
           entityType="scene"
           entityId={sceneId}
-          section="scene_items"
-          acceptTypes={ITEM_TYPES}
-          placeholder="Перетащите предметы и материалы сцены"
+          section="scene_obstacles"
+          acceptTypes={OBSTACLE_TYPES}
+          placeholder="Перетащите препятствия"
+        />
+        <SectionDropZone
+          entityType="scene"
+          entityId={sceneId}
+          section="scene_loot"
+          acceptTypes={LOOT_TYPES}
+          placeholder="Перетащите предметы и материалы сцены (лут)"
+        />
+        <SectionDropZone
+          entityType="scene"
+          entityId={sceneId}
+          section="scene_audio"
+          acceptTypes={["sound_set"]}
+          placeholder="Перетащите аудионабор"
+        />
+        <SectionDropZone
+          entityType="scene"
+          entityId={sceneId}
+          section="scene_battle"
+          acceptTypes={["playlist"]}
+          placeholder="Перетащите боевой плейлист"
         />
       </div>
+      <SceneAudioCard sceneId={sceneId} />
 
       <details className="card" open>
         <summary className="sb-section" style={{ margin: 0 }}>
@@ -471,5 +503,36 @@ export function SceneDetailPage() {
         </div>
       </details>
     </div>
+  );
+}
+
+function SceneAudioCard({ sceneId }: { sceneId: number }) {
+  const [sets, setSets] = useState<{ id: number; name: string }[]>([]);
+  const [current, setCurrent] = useState<{ id: number; name: string } | null>(null);
+  useEffect(() => {
+    api.get<{ id: number; name: string }[]>("/sound-sets").then(setSets).catch(() => setSets([]));
+    api.get<{ id: number; name: string } | null>(`/story/scenes/${sceneId}/sound-set`).then(setCurrent).catch(() => setCurrent(null));
+  }, [sceneId]);
+  async function setSound(id: number | null) {
+    await api.put(`/story/scenes/${sceneId}/sound-set`, { sound_set_id: id });
+    const updated = await api.get<{ id: number; name: string } | null>(`/story/scenes/${sceneId}/sound-set`).catch(() => null);
+    setCurrent(updated);
+  }
+  return (
+    <details className="card" open>
+      <summary className="sb-section" style={{ margin: 0 }}>Аудионабор</summary>
+      <div className="stack" style={{ marginTop: 8 }}>
+        <div className="row" style={{ alignItems: "center", gap: 8 }}>
+          <select value={current?.id ?? ""} onChange={(e) => setSound(e.target.value ? Number(e.target.value) : null)} style={{ flex: 1 }}>
+            <option value="">— без звука —</option>
+            {sets.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          {current && <span className="muted">{current.name}</span>}
+        </div>
+        <p className="muted" style={{ fontSize: "var(--fs-meta)" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
+      </div>
+    </details>
   );
 }

@@ -3750,6 +3750,9 @@ details.card[open] summary {
    button.danger превратила бы строку выпадающего меню в кричащую плашку,
    поэтому здесь остаётся только цвет текста. */
 .context-menu button.danger {
+  display: flex;
+  justify-content: flex-start;
+  text-align: left;
   background: transparent;
   border-color: transparent;
   color: var(--status-cancelled);
@@ -6758,4 +6761,86 @@ body.printing-cheatsheet #root {
   flex: 0 0 auto;
   margin-left: auto;
   background: var(--accent);
+}
+
+
+/* === Шаг 2 ревизии: страница системы (инвариант панк-зина) === */
+.sys-card {
+  border: var(--card-border-width, 2px) solid var(--ink);
+  border-radius: var(--card-radius);
+}
+.sys-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.sys-card-body {
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+}
+.sys-card-body img {
+  border: var(--card-border-width, 2px) solid var(--ink);
+  max-width: 300px;
+  width: 100%;
+  height: auto;
+}
+.sys-stamp {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  border: 1.5px solid var(--ink);
+  padding: 2px 6px;
+  display: inline-block;
+}
+.sys-tabs button {
+  border-radius: 0;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+}
+
+.litm-power-chip {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  padding: 1px 6px;
+  border-radius: 0;
+}
+
+.litm-section-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.litm-q { margin-bottom: 4px; font-size: 15px; line-height: 1.4; }
+.litm-ideas { list-style: none; padding-left: 0; }
+.litm-ideas li {
+  padding-left: 18px;
+  position: relative;
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+.litm-ideas li::before {
+  content: "❧";
+  position: absolute;
+  left: 0;
+  color: var(--gold, #a07d3f);
 }

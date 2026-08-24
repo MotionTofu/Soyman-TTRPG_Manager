@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "re
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionTextarea } from "./mentions/MentionTextarea";
+import { LitmThemeBookBody, LitmTreasureBody, LitmMagicWayBody } from "./litm/LitmCompendiumBodies";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
@@ -1261,6 +1262,9 @@ function SortableRow({
 
 function EntryNode(props: NodeProps) {
   const { entry, expanded, editing, childrenOf, mechanicsOptions, classOptions, originFeatOptions } = props;
+  // LitM: ступень Могущества темы — красит строку и даёт подпись-чип.
+  const litmMight =
+    typeof entry.data?.might === "string" ? (entry.data.might as string) : "";
   const [linkCopied, setLinkCopied] = useState(false);
   async function copyLink() {
     const url = `${window.location.origin}/systems/${entry.system_id}?section=${entry.section_id}&entry=${entry.id}`;
@@ -1377,7 +1381,7 @@ function EntryNode(props: NodeProps) {
     EFFECT_KINDS.has(entry.kind) &&
     (viewChecks.length > 0 || viewEffects.length > 0 || viewCost.kind !== "none");
   const hasBody =
-    !!entry.description ||
+    entry.kind === 'themebook' || entry.kind === 'treasure' || entry.kind === 'magic_way' || !!entry.description ||
     filledFields.length > 0 ||
     kids.length > 0 ||
     !!def?.childKinds ||
@@ -1399,7 +1403,7 @@ function EntryNode(props: NodeProps) {
   return (
     <div className="comp-node" id={`comp-entry-${entry.id}`}>
       <div
-        className={`comp-row${props.focusEntryId === entry.id ? " comp-row-focus" : ""}`}
+        className={`comp-row${props.focusEntryId === entry.id ? " comp-row-focus" : ""}${litmMight ? ` litm-power-${litmMight}` : ""}`}
         onClick={() => canToggle && props.onToggle(entry.id)}
         style={{ cursor: canToggle ? "pointer" : "default" }}
       >
@@ -1422,6 +1426,11 @@ function EntryNode(props: NodeProps) {
           </span>
         )}
         <span className="comp-name">{entry.name || <em className="muted">Без названия</em>}</span>
+        {litmMight && (
+          <span className="comp-badge litm-power-chip">
+            {litmMight === "origin" ? "Происх." : litmMight === "adventure" ? "Приключ." : litmMight === "greatness" ? "Величие" : "Перем."}
+          </span>
+        )}
         {isMonster && (entry.statblock_count ?? 0) > 0 && (
           <span className="comp-badge" title={statblockBadgeTitle(entry.statblock_count ?? 0)}>
             <StatblockIcon />
@@ -2126,9 +2135,25 @@ function EntryNode(props: NodeProps) {
             </div>
           </div>
         </div>
-      )}
+        )}
 
-      {isOpen && !isEditing && (
+
+      {isOpen && !isEditing && entry.kind === 'themebook' && (
+          <div className="comp-body">
+            <LitmThemeBookBody data={entry.data} />
+          </div>
+        )}
+        {isOpen && !isEditing && entry.kind === 'treasure' && (
+          <div className="comp-body">
+            <LitmTreasureBody data={entry.data} />
+          </div>
+        )}
+        {isOpen && !isEditing && entry.kind === 'magic_way' && (
+          <div className="comp-body">
+            <LitmMagicWayBody entry={entry} />
+          </div>
+        )}
+        {isOpen && !isEditing && !(entry.kind === 'themebook' || entry.kind === 'treasure' || entry.kind === 'magic_way') && (
         <div className="comp-body">
           {isMonster && (
             <StatblockList

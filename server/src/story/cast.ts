@@ -25,6 +25,13 @@ export const CAST_SECTIONS: Record<string, string> = {
   plot_characters: "scene_plot_characters",
   obstacles: "scene_obstacles",
   loot: "scene_loot",
+  audio: "scene_audio",
+  battle: "scene_battle",
+};
+// legacy sections — читаем старые данные до миграции
+export const LEGACY_CAST_SECTIONS: Record<string, string> = {
+  participants: "scene_participants",
+  items: "scene_items",
 };
 
 /**
@@ -81,6 +88,7 @@ const TARGET_TABLES: Record<string, { table: string; nameCol: string }> = {
   compendium_entry: { table: "compendium_entries", nameCol: "name" },
   bundle: { table: "canvas_bundles", nameCol: "name" },
   sound_set: { table: "sound_sets", nameCol: "name" },
+  playlist: { table: "playlists", nameCol: "name" },
   setting_event: { table: "setting_calendar_events", nameCol: "title" },
   campaign_event: { table: "campaign_calendar_events", nameCol: "title" },
 };
