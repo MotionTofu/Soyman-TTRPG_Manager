@@ -53,6 +53,7 @@ async function backfillFile(
       return { status: "skipped", before, after: before };
     }
     const resized = await resizeImageBuffer(buffer, preset);
+    fs.unlinkSync(filePath);
     fs.writeFileSync(filePath, resized);
     return { status: "resized", before, after: fs.statSync(filePath).size };
   } catch (err) {

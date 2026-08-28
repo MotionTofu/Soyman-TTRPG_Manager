@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Background,
-  Controls,
+  ControlButton,
   Handle,
   MarkerType,
   MiniMap,
@@ -11,6 +11,7 @@ import {
   ReactFlow,
   applyNodeChanges,
   useEdgesState,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -4470,7 +4471,7 @@ export function CanvasPage() {
           elevateEdgesOnSelect={false}
         >
           <Background gap={GRID} size={1.4} color="var(--line)" />
-          <Controls showInteractive={false} />
+          <ControlsButtons />
           {/* Вид и цвета — в canvas.css (.react-flow__minimap), там же её
               прячет @container ниже порога узкого экрана. */}
           <MiniMap pannable zoomable />
@@ -7240,5 +7241,18 @@ function CheckCard({
         </button>
       </div>
     </details>
+  );
+}
+
+function ControlsButtons() {
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
+  return (
+    <div className="react-flow__panel bottom left react-flow__controls">
+      <ControlButton title="Масштаб +" onClick={(e) => { e.preventDefault(); zoomIn(); }} aria-label="Масштаб +">+</ControlButton>
+      <ControlButton title="Масштаб −" onClick={(e) => { e.preventDefault(); zoomOut(); }} aria-label="Масштаб −">−</ControlButton>
+      <ControlButton title="По размеру" onClick={(e) => { e.preventDefault(); fitView(); }} aria-label="По размеру">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 4V2H10V4H6V6H4V10H2V12H4V14H6V18H10V20H12V18H16V20H20V16H22V14H20V12H22V10H20V6H18V4H14V2H12ZM12 16V14H8V12H6V16H12ZM18 8H16V6H12V4H8V6H6V10H8V12H6V16H10V14H12V18H16V16H18V12H20V10H18V8Z" /></svg>
+      </ControlButton>
+    </div>
   );
 }

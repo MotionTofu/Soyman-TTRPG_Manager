@@ -192,9 +192,9 @@ export function TemplatesTab({ systemId }: Props) {
             ) : r.template_format === "dnd_creature" ? (
               <DndCreatureView value={normalizeDndCreature(JSON.parse(r.notes || "{}"))} />
             ) : (
-              <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={r.notes} />
-              </p>
+              </div>
             )}
           </div>
         ))}

@@ -14,6 +14,7 @@ import { CampaignSecrets } from "../components/CampaignSecrets";
 import { CampaignMilestones } from "../components/CampaignMilestones";
 import { CampaignChaptersScenes } from "../components/CampaignChaptersScenes";
 import { CampaignAdventuresCard } from "../components/CampaignAdventuresCard";
+import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { ResourceCard } from "../components/ResourceCard";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { NavIcon } from "../components/NavIcons";
@@ -589,9 +590,16 @@ export function CampaignDetailPage() {
         <CampaignSecrets campaignId={campaignId} settingId={campaign.setting_id} />
       )}
 
-      {tab === "Обзор" && (
-        <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} />
-      )}
+       {tab === "Обзор" && (
+         <>
+           <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} />
+           <CrossLinksWizard
+             ownerKind="campaign"
+             ownerId={campaignId}
+             help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+           />
+         </>
+       )}
 
       {tab === "Для игроков" && (
         <CampaignPlayerSectionsTab

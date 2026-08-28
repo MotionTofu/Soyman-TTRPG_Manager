@@ -153,17 +153,14 @@ export function canvasPaletteVars(): Record<string, string> {
   return vars;
 }
 
-let applied = false;
-/** Прописать палитру в `:root`. Вызывается один раз при загрузке страницы. */
 export function applyCanvasPaletteVars(): void {
-  if (applied || typeof document === "undefined") return;
-  applied = true;
+  if (typeof document === "undefined") return;
   const root = document.documentElement;
   for (const [name, value] of Object.entries(canvasPaletteVars())) {
     root.style.setProperty(name, value);
   }
 }
 
-// Прописываем сразу при импорте: `canvas.css` рассчитывает на эти переменные
-// и без них покажет ноды без цвета.
-applyCanvasPaletteVars();
+// Прописываем после applyTheme() — `canvas.css` рассчитывает на эти
+// переменные и без них покажет ноды без цвета. Вызов делается
+// в `main.tsx`, чтобы палитра Полотна не перезатиралась темой.
