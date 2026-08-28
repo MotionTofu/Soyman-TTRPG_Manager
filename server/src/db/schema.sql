@@ -394,6 +394,11 @@ CREATE TABLE IF NOT EXISTS setting_beings (
   base_monster_id INTEGER REFERENCES compendium_entries(id) ON DELETE SET NULL, -- template this personality was cloned from, if any
   statblock_short TEXT DEFAULT '',
   statblock_full TEXT DEFAULT '',
+  -- Карточка существа: роль в бою (JSON-массив, не больше двух), тактика
+  -- (JSON-массив коротких строк) и секрет. Проза карточки — description ниже.
+  combat_roles TEXT NOT NULL DEFAULT '[]',
+  tactics TEXT NOT NULL DEFAULT '[]',
+  secret TEXT NOT NULL DEFAULT '',
   history TEXT DEFAULT '',
   behavior TEXT DEFAULT '',
   avatar_image_path TEXT,
@@ -640,6 +645,58 @@ CREATE TABLE IF NOT EXISTS story_scene_rewards (
 CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_scene ON story_scene_rewards(scene_id);
 CREATE INDEX IF NOT EXISTS idx_story_scene_rewards_arc ON story_scene_rewards(arc_id);
 
+-- Заглушки тихих подсказок холста (блок G1): «это не оно».
+--
+-- Подсказка «упомянут, но не в составе» ищет имена сущностей сеттинга по
+-- текстам сцены. На общих словах — «Стража», «Река» — она находит оборот
+-- речи, а не сообщество, и без заглушки такой чип горел бы вечно: несгораемый
+-- остаток в счётчике обесценил бы счётчик целиком, а с ним и всю ветку
+-- доводки импорта.
+--
+-- Гасится ТОЧЕЧНО, пара сцена+сущность, а не проверка на сцене целиком:
+-- заглушив сцену из-за «Стражи», Мастер перестал бы видеть в ней и настоящие
+-- пропуски.
+--
+-- scene_id — всегда ОРИГИНАЛ сеттинга, а не копия кампании: оборот речи
+-- одинаков во всех кампаниях, и глушить его по разу на кампанию — издевательство.
+-- Копия со своим текстом, которого в оригинале нет, глушится сама на себя.
+--
+-- FK на сущность нет по той же причине, что у generic_links: тип полиморфный.
+-- Осиротевшая запись после удаления сущности никому не мешает — подсказка про
+-- неё всё равно больше не появится.
+CREATE TABLE IF NOT EXISTS scene_hint_dismissals (
+  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (scene_id, entity_type, entity_id)
+);
+
+-- Заглушка на сущность ЦЕЛИКОМ, в пределах сеттинга (находка Н13).
+--
+-- Точечной заглушки выше не хватило, и это выяснилось замером, а не
+-- рассуждением: на холсте «Глубоководье: Ограбить Дракона» 47 из 143
+-- упоминаний — слово «Вотердип», город, в котором идёт всё приключение. Оно
+-- есть почти в каждой сцене и в состав не встанет никогда, а точечная заглушка
+-- требовала бы 47 нажатий на одно название.
+--
+-- Охват — СЕТТИНГ, а не доска (решение владельца 2026-08-27): город
+-- принадлежит сеттингу, и если его имя оборот речи в одном приключении, то и в
+-- остальных семи тоже. Цена решения: заглушив «Занатара», Мастер не увидит
+-- настоящий пропуск в соседнем приключении — поэтому заглушка обязана
+-- сниматься, см. «Полотно ▾ → Заглушённые подсказки».
+--
+-- Отдельной таблицей, а не `scene_id IS NULL` в таблице выше: там `scene_id`
+-- входит в первичный ключ, и NULL в ключе SQLite не считает совпадением —
+-- одну и ту же сущность можно было бы заглушить дважды.
+CREATE TABLE IF NOT EXISTS setting_hint_mutes (
+  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (setting_id, entity_type, entity_id)
+);
+
 -- "Вехи" — ordered story checkpoints of an adventure, optionally tied to the
 -- scene that delivers them. Defined once in the setting; whether a campaign
 -- has reached one lives in campaign_milestone_state, same split as scenes and
@@ -717,8 +774,20 @@ CREATE TABLE IF NOT EXISTS story_arc_transitions (
   to_arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
   label TEXT NOT NULL DEFAULT '',
   position INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(from_arc_id, to_arc_id, label)
+  -- Чья это связь: NULL — заготовка сеттинга, число — свой набор кампании
+  -- (блок D4). Кампания не наследует связи построчно: первая же правка внутри
+  -- кампании копирует ВЕСЬ набор сеттинга (решение D0 §12), и дальше кампания
+  -- ведёт свой. Построчное наследование дало бы картину, где часть стрелок
+  -- твои, часть чужие, а отсутствие связи стало бы невидимой сущностью.
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE
 );
+-- Уникальность — отдельным индексом, а не ограничением таблицы: в ограничении
+-- нельзя написать IFNULL, а без него две одинаковые связи сеттинга (обе с
+-- campaign_id = NULL) считались бы разными — в SQLite NULL не равен NULL.
+-- Сами индексы заводятся в db.ts, а не здесь: этот файл выполняется ДО
+-- миграций, и на базе, заведённой раньше колонки campaign_id, CREATE INDEX
+-- здесь падает «no such column» и не даёт серверу подняться вовсе. Ровно на
+-- эти же грабли наступили колонкой owner_type у canvas_boards.
 CREATE INDEX IF NOT EXISTS idx_story_arc_transitions_from ON story_arc_transitions(from_arc_id);
 
 -- Заготовка вечера: какие сцены Мастер набрал на эту сессию.
@@ -1049,6 +1118,11 @@ CREATE TABLE IF NOT EXISTS compendium_entries (
   aliases TEXT NOT NULL DEFAULT '[]',
   name_original TEXT NOT NULL DEFAULT '',
   short_name TEXT,
+  -- Карточка существа, как у setting_beings: личность наследует эти три поля
+  -- у своего шаблона на лету, пока не заполнит свои (секрет не наследуется).
+  combat_roles TEXT NOT NULL DEFAULT '[]',
+  tactics TEXT NOT NULL DEFAULT '[]',
+  secret TEXT NOT NULL DEFAULT '',
   position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -1291,9 +1365,23 @@ CREATE TABLE IF NOT EXISTS canvas_boards (
   scope_type TEXT NOT NULL,
   scope_id INTEGER NOT NULL,
   name TEXT NOT NULL DEFAULT '',
+  -- Владелец свободной доски (блок D1): 'setting' | 'campaign' | NULL (ничья).
+  -- Намеренно НЕ через scope_type: досок у одного сеттинга может быть много, а
+  -- UNIQUE(scope_type, scope_id) разрешает ровно одну — эта уникальность нужна
+  -- схеме сеттинга (scope_type='setting'), где вторая схема и должна быть
+  -- запрещена. Два разных отношения — две разные механики. FK нет, как у
+  -- scope_* и generic_links: тип полиморфный.
+  owner_type TEXT,
+  owner_id INTEGER,
+  -- Архивация доски: «Удалить» на Полотне означает «в архив», как у
+  -- приключений и сцен. Добивание насовсем — из общего Архива приложения.
+  archived_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(scope_type, scope_id)
 );
+-- Индекс по владельцу заводится в db.ts, а не здесь: этот файл выполняется ДО
+-- миграций, и на базе, заведённой раньше колонок owner_*, CREATE INDEX здесь
+-- падает «no such column» ещё до того, как миграция успеет их добавить.
 
 -- Нода на холсте — это ссылка на реальную запись плюс её место.
 --
@@ -1322,6 +1410,12 @@ CREATE TABLE IF NOT EXISTS canvas_nodes (
   x REAL NOT NULL DEFAULT 0,
   y REAL NOT NULL DEFAULT 0,
   z_index INTEGER NOT NULL DEFAULT 0,
+  -- Рамка, на которую ноду бросили. Только у тех, у кого своей главы нет:
+  -- сущность, стикер, картинка, пин. У сцены и проверки родитель выводится
+  -- из данных (arc_id сцены) и сюда не пишется. Геометрия решает один раз —
+  -- в момент броска на рамку. Ключ строкой (`chapter:26` / `frame:4`), а не
+  -- числом: рамок два вида, и числом их не различить.
+  parent_key TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(board_id, node_type, node_id)
 );
@@ -1343,6 +1437,11 @@ CREATE TABLE IF NOT EXISTS canvas_groups (
   y REAL NOT NULL DEFAULT 0,
   w REAL NOT NULL DEFAULT 320,
   h REAL NOT NULL DEFAULT 240,
+  color TEXT NOT NULL DEFAULT '#2C3E50',
+  -- Свёрнутость — часть раскладки, поэтому здесь, а не в localStorage. По
+  -- умолчанию 1: приключение встречает карточками глав, а не грудой сцен.
+  -- Действует один раз — развернули, и выбор запомнен навсегда.
+  collapsed INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(board_id, arc_id)
 );
@@ -1469,5 +1568,46 @@ CREATE TABLE IF NOT EXISTS canvas_frames (
   y REAL NOT NULL DEFAULT 0,
   w REAL NOT NULL DEFAULT 320,
   h REAL NOT NULL DEFAULT 240,
+  -- Свёрнутость рамки (блок G6.3). Механизм переехал сюда с главы, когда та
+  -- стала узлом-контейнером. В базе, а не в localStorage: иначе разойдётся с
+  -- раскладкой, которая уже в базе.
+  --
+  -- По умолчанию 0, в отличие от главы. Главу сворачивали при первом открытии
+  -- потому, что глав много и они пришли импортом; рамку Мастер только что
+  -- нарисовал руками вокруг чего-то — свернуть её в тот же миг значит спрятать
+  -- то, ради чего он её рисовал.
+  --
+  -- Хранимые w/h относятся к РАЗВЁРНУТОМУ виду и свёртку переживают
+  -- нетронутыми: у рамки их задаёт рука через ручки растягивания.
+  collapsed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Пины — векторные точки, верхний слой (Q13-Q15, Pin)
+CREATE TABLE IF NOT EXISTS canvas_pins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT 'Пин',
+  x REAL NOT NULL DEFAULT 0,
+  y REAL NOT NULL DEFAULT 0,
+  size TEXT NOT NULL DEFAULT 'M',
+  color TEXT NOT NULL DEFAULT '#2C3E50',
+  shape TEXT NOT NULL DEFAULT 'circle',
+  z_index INTEGER NOT NULL DEFAULT 1000,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_pins_board ON canvas_pins(board_id);
+
+-- Нити — прямые линии между пинами, векторные (Q5, Q9, Pin)
+CREATE TABLE IF NOT EXISTS canvas_threads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  from_pin_id INTEGER NOT NULL REFERENCES canvas_pins(id) ON DELETE CASCADE,
+  to_pin_id INTEGER NOT NULL REFERENCES canvas_pins(id) ON DELETE CASCADE,
+  width REAL NOT NULL DEFAULT 2,
+  color TEXT NOT NULL DEFAULT '#2C3E50',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(board_id, from_pin_id, to_pin_id)
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_threads_board ON canvas_threads(board_id);
+CREATE INDEX IF NOT EXISTS idx_canvas_threads_pins ON canvas_threads(from_pin_id, to_pin_id);

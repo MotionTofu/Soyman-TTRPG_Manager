@@ -9,6 +9,9 @@ import {
   setLinkQty,
 } from "../story/cast";
 import { SCENE_SOUND_SECTION } from "../story/stage";
+import { HINT_SCENE_COLUMNS, sceneHints } from "../story/hints";
+import { firstSceneOf, rehearsalStep } from "../story/rehearsal";
+import { CANVAS_PRESETS, isPresetKey } from "../story/presets";
 import multer from "multer";
 import path from "path";
 import { ensureSubfolder, toFileUrl, VAULT_ROOT, writeReplacingOldFile } from "../services/filesystem";
@@ -24,16 +27,50 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 // только раскладка (canvas_boards/canvas_nodes) и один сводный ответ, чтобы
 // открытие холста не превращалось в пять запросов подряд.
 
-type ScopeType = "arc" | "setting" | "campaign";
+/** Виды доски: холст приключения, свободная доска и схема сеттинга.
+ *  Схема вернулась блоком D3 — но не как обязательный средний шаг, каким её
+ *  убирали в Q17, а как второй вид рядом со списком. `campaign` вернулся
+ *  блоком D4 — но это НЕ прежняя «сборка сессии» из Q25, которую выбросили
+ *  пустой заглушкой: это карта кампании, где лежат её приключения, покрашенные
+ *  прохождением. Кампания как ПАРАМЕТР входа на холст приключения при этом
+ *  осталась и означает прежнее (Q26). */
+type ScopeType = "arc" | "free" | "setting" | "campaign";
 
 /** Ребро холста в том виде, в каком его ждёт клиент. */
 interface EdgeOut {
   id: string;
-  kind: "transition" | "outcome" | "cast" | "member" | "check";
+  /** `story` — связь между главами приключения (блок G6.2). Тем же именем,
+   *  что у связи между приключениями на схеме сеттинга: это одна таблица и
+   *  одно утверждение, только на другом уровне. */
+  kind: "transition" | "outcome" | "cast" | "member" | "check" | "thread" | "story";
   source: string;
   target: string;
   target_handle: string;
   label: string;
+  width?: number;
+  color?: string;
+}
+
+/**
+ * Переход, второй конец которого лежит на другом холсте (решение Q17).
+ *
+ * Не ребро: рисовать его стрелкой некуда — цели на этом холсте нет. Это
+ * висящий разъём на ноде сцены, называющий чужую сцену и знающий адрес её
+ * холста. Скрыть его нельзя (холст не должен врать), шагнуть по нему —
+ * значит уехать на другой холст, и делает это Мастер щелчком, а не стрелка.
+ */
+interface OutsideLink {
+  /** `out` — отсюда туда, `in` — оттуда сюда. Направление видно на разъёме:
+   *  входящий стоит слева, исходящий справа, как и обычные переходы. */
+  dir: "out" | "in";
+  label: string;
+  scene_id: number;
+  scene_name: string;
+  arc_id: number;
+  arc_name: string;
+  setting_id: number;
+  /** Холст, на который ведёт щелчок. */
+  board_arc_id: number;
 }
 
 /** Ключ ноды сцены, или null если сцены на холсте нет. */
@@ -130,6 +167,14 @@ const ENTITY_NODES: Record<string, { table: string; nameCol: string; thumbCol?: 
   artifact: { table: "artifacts", nameCol: "name", thumbCol: "avatar_image_path" },
   community: { table: "setting_communities", nameCol: "name", thumbCol: "thumbnail_image_path" },
   compendium_entry: { table: "compendium_entries", nameCol: "name", kindCol: "kind" },
+  // Персонаж игрока (блок G7). Единственный кампанийный вид на холсте: он и
+  // есть то, вокруг чего Мастер тянет нити на доске кампании. Портрет берём
+  // уменьшенный — на холсте нода опознаётся, а не рассматривается.
+  character: {
+    table: "characters",
+    nameCol: "character_name",
+    thumbCol: "thumbnail_image_path",
+  },
   // События хроники мира и расписания кампании — тоже ноды: связь «эта сцена
   // сдвигает это событие» рисуется стрелкой, а не отдельным полем, и потому
   // переживает переименование.
@@ -145,6 +190,12 @@ interface PlacedNode {
   node_id: number;
   x: number;
   y: number;
+  /** Слой. Раньше его писали, но не отдавали — и раскладка по слоям
+   *  затиралась нулём на следующем же перетаскивании (см. «Находки»). */
+  z_index?: number;
+  /** Рамка, на которую ноду бросили — ключ `chapter:26` / `frame:4`.
+   *  Только у тех, у кого своей главы нет: сущность, стикер, картинка, пин (Q11). */
+  parent_key?: string | null;
 }
 
 /**
@@ -153,6 +204,130 @@ interface PlacedNode {
  * локаций, и показывать всех значит заставить Мастера расчищать схему вместо
  * того, чтобы её рисовать.
  */
+/**
+ * Стикеры, картинки, свободные рамки, пины и нити доски.
+ *
+ * Одно и то же нужно и фриформ-доске, и холсту приключения — раньше это
+ * стояло двумя копиями, и копии успели разойтись: авто-расширение рамки под
+ * своё содержимое было только у фриформа, а на приключении рамка так и
+ * оставалась той величины, какую ей задали, сколько бы узлов в неё ни
+ * положили.
+ *
+ * Расширение считается только в ответе. Свою величину рамке задаёт Мастер
+ * через `PUT /canvas/frames/:id`; расширение выводится из тех же узлов при
+ * каждом запросе и потому в хранении не нуждается.
+ */
+function boardDecor(boardId: number, saved: PlacedNode[]) {
+  const posOfKey = new Map(saved.map((p) => [`${p.node_type}:${p.node_id}`, p]));
+  const at = (type: string, id: number) => posOfKey.get(`${type}:${id}`);
+
+  const stickers = db
+    .prepare("SELECT id, text, name, note, color FROM canvas_stickers WHERE board_id=?")
+    .all(boardId) as { id: number; text: string; name: string; note: string; color: string }[];
+  const stickerNodes = stickers.map((s) => {
+    const pos = at("sticker", s.id);
+    return {
+      key: `sticker:${s.id}`,
+      node_type: "sticker" as const,
+      node_id: s.id,
+      x: pos?.x ?? 0,
+      y: pos?.y ?? 0,
+      z_index: pos?.z_index ?? 0,
+      parent_key: pos?.parent_key ?? null,
+      placed: !!pos,
+      sticker: { id: s.id, text: s.text, name: s.name || s.text, note: s.note, color: s.color },
+    };
+  });
+
+  const images = db
+    .prepare("SELECT id, file_path, w, h FROM canvas_images WHERE board_id=?")
+    .all(boardId) as { id: number; file_path: string; w: number; h: number }[];
+  const imageNodes = images.map((im) => {
+    const pos = at("image", im.id);
+    return {
+      key: `image:${im.id}`,
+      node_type: "image" as const,
+      node_id: im.id,
+      x: pos?.x ?? 0,
+      y: pos?.y ?? 0,
+      z_index: pos?.z_index ?? 0,
+      parent_key: pos?.parent_key ?? null,
+      placed: !!pos,
+      image: { id: im.id, file_url: toFileUrl(im.file_path), w: im.w, h: im.h },
+    };
+  });
+
+  const frames = db
+    .prepare("SELECT id, name, color, x, y, w, h, collapsed FROM canvas_frames WHERE board_id=?")
+    .all(boardId) as { id: number; name: string; color: string; x: number; y: number; w: number; h: number; collapsed: number }[];
+  const frameNodes = frames.map((f) => {
+    const pos = at("frame", f.id);
+    return {
+      key: `frame:${f.id}`,
+      node_type: "frame" as const,
+      node_id: f.id,
+      x: pos?.x ?? f.x,
+      y: pos?.y ?? f.y,
+      z_index: pos?.z_index ?? 0,
+      placed: true,
+      frame: { id: f.id, name: f.name, color: f.color, w: f.w, h: f.h, collapsed: f.collapsed === 1 },
+    };
+  });
+
+  // Разрешение сущностей — ОДИН раз, а не заново на каждую рамку: раньше на
+  // семи рамках база опрашивалась семь раз подряд об одном и том же.
+  const entities = entityNodes(boardId, saved);
+  const inFrames = [...stickerNodes, ...imageNodes, ...entities] as {
+    node_type: string;
+    node_id: number;
+    x: number;
+    y: number;
+  }[];
+  const NODE_W: Record<string, number> = { sticker: 320, image: 320 };
+  const NODE_H: Record<string, number> = { sticker: 120, image: 240 };
+  for (const fn of frameNodes) {
+    // Свёрнутую рамку под содержимое не растягиваем: её размера сейчас нет
+    // вовсе, а хранимые w/h относятся к развёрнутому виду (блок G6.3).
+    if (fn.frame.collapsed) continue;
+    const fx = fn.x;
+    const fy = fn.y;
+    const { w, h } = fn.frame;
+    // Внутри — те, чей левый-верхний угол в рамке; так же считает и клиент.
+    const inside = inFrames.filter((nn) => nn.x >= fx && nn.y >= fy && nn.x <= fx + w && nn.y <= fy + h);
+    if (inside.length === 0) continue;
+    const maxX = Math.max(...inside.map((nn) => nn.x + (NODE_W[nn.node_type] ?? 200)));
+    const maxY = Math.max(...inside.map((nn) => nn.y + (NODE_H[nn.node_type] ?? 124)));
+    fn.frame.w = Math.max(w, maxX - fx + 16);
+    fn.frame.h = Math.max(h, maxY - fy + 16);
+  }
+
+  const pins = db
+    .prepare("SELECT id, name, x, y, size, color, shape, z_index FROM canvas_pins WHERE board_id=?")
+    .all(boardId) as { id: number; name: string; x: number; y: number; size: string; color: string; shape: string; z_index: number }[];
+  const pinNodes = pins.map((p) => {
+    const pos = at("pin", p.id);
+    return {
+      key: `pin:${p.id}`,
+      node_type: "pin" as const,
+      node_id: p.id,
+      x: pos?.x ?? p.x,
+      y: pos?.y ?? p.y,
+      z_index: pos?.z_index ?? p.z_index,
+      // Пин — такой же житель рамки, как стикер и картинка (Q11). Раньше
+      // родство хранилось, но не отдавалось, и рамка уезжала без него.
+      parent_key: pos?.parent_key ?? null,
+      placed: true,
+      pin: { id: p.id, name: p.name, color: p.color, shape: p.shape, size: p.size, z_index: p.z_index },
+    };
+  });
+
+  const threads = db
+    .prepare("SELECT id, from_pin_id, to_pin_id, width, color FROM canvas_threads WHERE board_id=?")
+    .all(boardId) as { id: number; from_pin_id: number; to_pin_id: number; width: number; color: string }[];
+
+  return { nodes: [...stickerNodes, ...imageNodes, ...frameNodes, ...pinNodes, ...entities], threads };
+}
+
 function entityNodes(boardId: number, placed: PlacedNode[]) {
   return placed
     .filter((p) => p.node_type !== "scene")
@@ -198,6 +373,8 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
           node_id: p.node_id,
           x: p.x,
           y: p.y,
+          z_index: p.z_index ?? 0,
+          parent_key: p.parent_key ?? null,
           placed: true,
           bundle: {
             id: bundle.id,
@@ -210,6 +387,45 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
               name: entityName(m.to_type, m.to_id),
             })),
           },
+        };
+      }
+
+      /**
+       * Приключение — ярлык на доске (Q20, Q22).
+       *
+       * Ни имени, ни счётчиков нода не хранит: она указывает на `story_arcs`,
+       * и переименованное приключение обязано переименоваться на всех досках,
+       * куда его положили. Разъёмов у ярлыка нет — связи между приключениями
+       * на свободной доске рисуются нитями, в `story_arcs` при этом ничего не
+       * пишется.
+       */
+      if (p.node_type === "adventure") {
+        const arc = db
+          .prepare(
+            `SELECT a.id, a.name, a.setting_id,
+                    (SELECT COUNT(*) FROM story_arcs c
+                      WHERE c.parent_id = a.id AND c.archived_at IS NULL AND c.campaign_id IS NULL) AS chapter_count,
+                    (SELECT COUNT(*) FROM story_scenes s
+                       JOIN story_arcs sc ON sc.id = s.arc_id
+                      WHERE (sc.id = a.id OR sc.parent_id = a.id)
+                        AND sc.archived_at IS NULL AND sc.campaign_id IS NULL
+                        AND s.campaign_id IS NULL AND s.archived_at IS NULL) AS scene_count
+               FROM story_arcs a WHERE a.id = ? AND a.archived_at IS NULL`
+          )
+          .get(p.node_id) as
+          | { id: number; name: string; setting_id: number; chapter_count: number; scene_count: number }
+          | undefined;
+        if (!arc) return null;
+        return {
+          key: `adventure:${p.node_id}`,
+          node_type: "adventure" as const,
+          node_id: p.node_id,
+          x: p.x,
+          y: p.y,
+          z_index: p.z_index ?? 0,
+          parent_key: p.parent_key ?? null,
+          placed: true,
+          adventure: arc,
         };
       }
 
@@ -239,6 +455,8 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
           node_id: p.node_id,
           x: p.x,
           y: p.y,
+          z_index: p.z_index ?? 0,
+          parent_key: p.parent_key ?? null,
           placed: true,
           // Дата отдаётся полями, а не строкой: собрать её по-человечески
           // может только клиент — месяцы и эра живут в календаре сеттинга.
@@ -264,6 +482,8 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
           node_id: p.node_id,
           x: p.x,
           y: p.y,
+          z_index: p.z_index ?? 0,
+          parent_key: p.parent_key ?? null,
           placed: true,
           sound_set: { id: p.node_id, name: row.name, battle_playlist_id: row.battle_playlist_id },
         };
@@ -277,6 +497,8 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
           node_id: p.node_id,
           x: p.x,
           y: p.y,
+          z_index: p.z_index ?? 0,
+          parent_key: p.parent_key ?? null,
           placed: true,
           playlist: { id: p.node_id, name: row.name },
         };
@@ -297,6 +519,8 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
         node_id: p.node_id,
         x: p.x,
         y: p.y,
+        z_index: p.z_index ?? 0,
+        parent_key: p.parent_key ?? null,
         placed: true,
         entity: {
           id: p.node_id,
@@ -397,114 +621,440 @@ canvasRouter.get("/board", (req, res) => {
     const freeId = Number(free_id);
     const board = db.prepare("SELECT id, name FROM canvas_boards WHERE scope_type='free' AND scope_id=?").get(freeId) as { id: number; name: string } | undefined;
     if (!board) return res.status(404).json({ error: "not found" });
-    const saved = db.prepare("SELECT node_type, node_id, x, y, z_index FROM canvas_nodes WHERE board_id=?").all(board.id) as { node_type: string; node_id: number; x: number; y: number; z_index: number }[];
-    // стикеры и картинки — отдельные таблицы, но на клиенте как ноды
-    const stickers = db.prepare("SELECT id, text, name, note, color FROM canvas_stickers WHERE board_id=?").all(board.id) as { id: number; text: string; name: string; note: string; color: string }[];
-    const images = db.prepare("SELECT id, file_path, w, h FROM canvas_images WHERE board_id=?").all(board.id) as { id: number; file_path: string; w: number; h: number }[];
-    const frames = db.prepare("SELECT id, name, color, x, y, w, h FROM canvas_frames WHERE board_id=?").all(board.id) as { id: number; name: string; color: string; x: number; y: number; w: number; h: number }[];
-    const stickerNodes = stickers.map((s) => {
-      const pos = saved.find((p) => p.node_type === "sticker" && p.node_id === s.id) ?? { x: 0, y: 0, z_index: 0 };
-      return { key: `sticker:${s.id}`, node_type: "sticker" as const, node_id: s.id, x: pos.x, y: pos.y, z_index: pos.z_index, placed: !!saved.find((p) => p.node_type === "sticker" && p.node_id === s.id), sticker: { id: s.id, text: s.text, name: s.name || s.text, note: s.note, color: s.color } };
+    const saved = db.prepare("SELECT id, node_type, node_id, x, y, z_index, parent_key FROM canvas_nodes WHERE board_id=?").all(board.id) as { id: number; node_type: string; node_id: number; x: number; y: number; z_index: number; parent_key: string | null }[];
+    const decor = boardDecor(board.id, saved);
+    return res.json({
+      board_id: board.id,
+      free: { id: freeId, name: board.name },
+      campaign_id: null,
+      nodes: decor.nodes,
+      groups: [],
+      edges: [],
+      threads: decor.threads,
     });
-    const imageNodes = images.map((im) => {
-      const pos = saved.find((p) => p.node_type === "image" && p.node_id === im.id) ?? { x: 0, y: 0, z_index: 0 };
-      return { key: `image:${im.id}`, node_type: "image" as const, node_id: im.id, x: pos.x, y: pos.y, z_index: pos.z_index, placed: !!saved.find((p) => p.node_type === "image" && p.node_id === im.id), image: { id: im.id, file_url: toFileUrl(im.file_path), w: im.w, h: im.h } };
-    });
-    const frameNodes = frames.map((f) => {
-      const pos = saved.find((p) => p.node_type === "frame" && p.node_id === f.id) ?? { x: f.x, y: f.y, z_index: 0 };
-      return { key: `frame:${f.id}`, node_type: "frame" as const, node_id: f.id, x: pos.x ?? f.x, y: pos.y ?? f.y, z_index: pos.z_index, placed: true, frame: { id: f.id, name: f.name, color: f.color, w: f.w, h: f.h } };
-    });
-    // авто-расширение фриформ рамок: если внутри есть узлы, выходящие за границу — растягиваем
-    for (const f of frames) {
-      const pos = saved.find((p) => p.node_type === "frame" && p.node_id === f.id) ?? { x: f.x, y: f.y };
-      const fx = pos.x ?? f.x;
-      const fy = pos.y ?? f.y;
-      const allNodesForFrame = [...stickerNodes, ...imageNodes, ...entityNodes(board.id, saved as never)];
-      // находим узлы, чей левый-верхний угол внутри рамки (как в клиенте)
-      const inside = allNodesForFrame.filter((nn) => {
-        const p = saved.find((s) => s.node_type === (nn as unknown as { node_type: string }).node_type && s.node_id === (nn as unknown as { node_id: number }).node_id) ?? nn as unknown as { x: number; y: number };
-        const x = (p as unknown as { x: number }).x ?? (nn as unknown as { x: number }).x;
-        const y = (p as unknown as { y: number }).y ?? (nn as unknown as { y: number }).y;
-        return x >= fx && y >= fy && x <= fx + f.w && y <= fy + f.h;
-      });
-      if (inside.length === 0) continue;
-      // размеры узлов для расчёта правой/нижней границы
-      const getW = (nn: unknown) => {
-        const t = (nn as { node_type?: string }).node_type;
-        if (t === "sticker") return 320;
-        if (t === "image") return 320;
-        return 200;
-      };
-      const getH = (nn: unknown) => {
-        const t = (nn as { node_type?: string }).node_type;
-        if (t === "sticker") return 120;
-        if (t === "image") return 240;
-        return 124;
-      };
-      const maxX = Math.max(...inside.map((nn) => {
-        const p = saved.find((s) => s.node_type === (nn as unknown as { node_type: string }).node_type && s.node_id === (nn as unknown as { node_id: number }).node_id) ?? nn as unknown as { x: number };
-        const x = (p as unknown as { x: number }).x ?? (nn as unknown as { x: number }).x;
-        return x + getW(nn);
-      }));
-      const maxY = Math.max(...inside.map((nn) => {
-        const p = saved.find((s) => s.node_type === (nn as unknown as { node_type: string }).node_type && s.node_id === (nn as unknown as { node_id: number }).node_id) ?? nn as unknown as { y: number };
-        const y = (p as unknown as { y: number }).y ?? (nn as unknown as { y: number }).y;
-        return y + getH(nn);
-      }));
-      const needW = Math.max(f.w, maxX - fx + 16);
-      const needH = Math.max(f.h, maxY - fy + 16);
-      if (needW !== f.w || needH !== f.h) {
-        db.prepare("UPDATE canvas_frames SET w = ?, h = ? WHERE id = ?").run(needW, needH, f.id);
-        f.w = needW;
-        f.h = needH;
-        // также обновляем frameNodes для ответа
-        const fn = frameNodes.find((n) => n.node_id === f.id);
-        if (fn) fn.frame.w = needW, fn.frame.h = needH;
-      }
-    }
-    return res.json({ board_id: board.id, free: { id: freeId, name: board.name }, campaign_id: null, nodes: [...stickerNodes, ...imageNodes, ...frameNodes, ...entityNodes(board.id, saved as never)], groups: [], edges: [] });
   }
 
-  // Сеттинг-холст: приключения как ноды (Q2, Q5 б, Q6)
-  if (setting_id && !arc_id && !campaign_id) {
+  /**
+   * Схема сеттинга (блок D3, решение D0 §5).
+   *
+   * Циклом 6 холст сеттинга убирали не за то, что он холст, а за то, что он
+   * был ОБЯЗАТЕЛЬНЫМ средним шагом на пути к сценам. Здесь он — второй вид
+   * рядом со списком, и список остаётся дорогой по умолчанию.
+   *
+   * Читает и только читает: строки доски может не быть вовсе, и заводится она
+   * при первом сохранении раскладки (`PUT /board/nodes` с `setting_id`).
+   * Приключение, у которого сохранённого места ещё нет, получает вычисленное
+   * и помечается `placed: false` — клиент закрепляет такую раскладку одним
+   * сохранением, но решает это он, а не чтение.
+   *
+   * Сборка кампании (`scope_type='campaign'`) остаётся убранной (Q25): она
+   * была пустой заглушкой, а кампания приходит на холст приключения путём
+   * входа — параметром `campaign_id`. Своя доска у кампании появится блоком
+   * D4 и будет означать другое.
+   */
+  if (setting_id) {
     const settingId = Number(setting_id);
-    const setting = db.prepare("SELECT id, name FROM settings WHERE id = ?").get(settingId) as { id: number; name: string } | undefined;
+    const setting = db
+      .prepare("SELECT id, name FROM settings WHERE id = ? AND archived_at IS NULL")
+      .get(settingId) as { id: number; name: string } | undefined;
     if (!setting) return res.status(404).json({ error: "not found" });
-    const boardId = ensureBoard("setting", settingId);
-    const saved = db.prepare("SELECT node_type, node_id, x, y FROM canvas_nodes WHERE board_id = ?").all(boardId) as { node_type: string; node_id: number; x: number; y: number }[];
-    const savedByKey = new Map(saved.map((n) => [`${n.node_type}:${n.node_id}`, n]));
-    const adventures = db.prepare(`SELECT id, name, setting_id, position FROM story_arcs WHERE setting_id = ? AND parent_id IS NULL AND archived_at IS NULL AND is_default = 0 ORDER BY position, id`).all(settingId) as { id: number; name: string; setting_id: number; position: number }[];
-    const nodes = adventures.map((a, i) => {
-      const placed = savedByKey.get(`adventure:${a.id}`);
-      const pos = placed ?? defaultPosition(i, 0);
-      return { key: `adventure:${a.id}`, node_type: "adventure" as const, node_id: a.id, x: pos.x, y: pos.y, placed: !!placed, adventure: { id: a.id, name: a.name } };
-    });
-    const arcIds = adventures.map((a) => a.id);
-    const arcTransitions = arcIds.length
+
+    const board = db
+      .prepare("SELECT id FROM canvas_boards WHERE scope_type='setting' AND scope_id=?")
+      .get(settingId) as { id: number } | undefined;
+    const saved = board
       ? (db
-          .prepare(`SELECT id, from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE from_arc_id IN (${arcIds.map(() => "?").join(",")}) AND to_arc_id IN (${arcIds.map(() => "?").join(",")})`)
-          .all(...arcIds, ...arcIds) as { id: number; from_arc_id: number; to_arc_id: number; label: string }[])
+          .prepare(
+            "SELECT id, node_type, node_id, x, y, z_index, parent_key FROM canvas_nodes WHERE board_id=?"
+          )
+          .all(board.id) as PlacedNode[])
       : [];
-    const edges: EdgeOut[] = arcTransitions.map((t) => ({
-      id: `arc_transition:${t.id}`,
-      kind: "transition" as const,
+
+    // Приключения сеттинга — верхнего уровня, без глав (у них parent_id) и без
+    // кампанийных копий: схема показывает заготовку, а не прохождение.
+    const allArcs = db
+      .prepare(
+        `SELECT a.id, a.name, a.position, a.is_default,
+                (SELECT COUNT(*) FROM story_arcs c
+                  WHERE c.parent_id = a.id AND c.archived_at IS NULL AND c.campaign_id IS NULL) AS chapter_count,
+                (SELECT COUNT(*) FROM story_scenes s
+                   JOIN story_arcs sc ON sc.id = s.arc_id
+                  WHERE (sc.id = a.id OR sc.parent_id = a.id)
+                    AND sc.archived_at IS NULL AND sc.campaign_id IS NULL
+                    AND s.campaign_id IS NULL AND s.archived_at IS NULL) AS scene_count
+           FROM story_arcs a
+          WHERE a.setting_id = ? AND a.parent_id IS NULL
+            AND a.archived_at IS NULL AND a.campaign_id IS NULL
+          ORDER BY a.position, a.id`
+      )
+      .all(settingId) as {
+      id: number;
+      name: string;
+      position: number;
+      is_default: number;
+      chapter_count: number;
+      scene_count: number;
+    }[];
+
+    // Пустое «Сцены вне приключений» на схеме не показываем — ровно то же
+    // правило, что и в списке (`GET /canvas/index`): иначе у каждого сеттинга
+    // появляется узел, за которым ничего нет. Непустое показываем: иначе его
+    // не открыть ничем, кроме прямой ссылки.
+    const arcs = allArcs.filter((a) => !(a.is_default === 1 && a.scene_count === 0));
+
+    const shownIds = new Set(arcs.map((a) => a.id));
+    // Только связи заготовки: `campaign_id IS NULL`. Схема сеттинга и есть
+    // заготовка, и своим набором кампании (блок D4) ей делать нечего — без
+    // этого условия связи всех кампаний по сеттингу валились на его схему
+    // вперемешку с его собственными.
+    const links = (
+      db
+        .prepare("SELECT from_arc_id, to_arc_id FROM story_arc_transitions WHERE campaign_id IS NULL")
+        .all() as { from_arc_id: number; to_arc_id: number }[]
+    ).filter((t) => shownIds.has(t.from_arc_id) && shownIds.has(t.to_arc_id));
+
+    /**
+     * Автораскладка: колонка — длина цепочки переходов до приключения.
+     *
+     * Первым правилом были колонки по `position` (решение D0 §7). На живой
+     * базе оно дало картину шириной 2240 px: восемь приключений Вотердипа
+     * стоят на восьми разных позициях, и в окно такая лента не влезает даже
+     * при наименьшем масштабе React Flow. Позиция к тому же говорит о порядке
+     * внутри своего импортированного модуля, а не о том, что за чем идёт в
+     * мире, — то есть колонка по ней выражала не то, ради чего схему открыли.
+     *
+     * Здесь колонка — глубина по связям: цепочка Вотердипа
+     * «Карта без названий → Под Городом Мертвых → Портовый Район → Складка в
+     * Плетении» ложится слева направо, а всё, что ни с чем не связано,
+     * собирается в первой колонке столбиком. `position` остаётся порядком
+     * внутри колонки, поэтому картина по-прежнему одна и та же при каждом
+     * открытии, пока Мастер не подвинул сам.
+     */
+    const depth = new Map<number, number>(arcs.map((a) => [a.id, 0]));
+    // Проходов не больше, чем приключений: этого хватает для любой цепочки, а
+    // на кольце (A → B → A, завести такое ничто не мешает) расчёт
+    // останавливается вместо того, чтобы крутиться вечно.
+    for (let pass = 0; pass < arcs.length; pass++) {
+      let moved = false;
+      for (const l of links) {
+        const next = (depth.get(l.from_arc_id) ?? 0) + 1;
+        if (next > (depth.get(l.to_arc_id) ?? 0)) {
+          depth.set(l.to_arc_id, next);
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+
+    const savedArc = new Map(
+      saved.filter((p) => p.node_type === "adventure").map((p) => [p.node_id, p])
+    );
+    const column = new Map<number, number>();
+    const arcNodes = arcs.map((a) => {
+      const placed = savedArc.get(a.id);
+      const col = depth.get(a.id) ?? 0;
+      const row = column.get(col) ?? 0;
+      column.set(col, row + 1);
+      return {
+        key: `adventure:${a.id}`,
+        node_type: "adventure" as const,
+        node_id: a.id,
+        x: placed ? placed.x : col * 280,
+        y: placed ? placed.y : row * 140,
+        z_index: placed?.z_index ?? 0,
+        parent_key: placed?.parent_key ?? null,
+        placed: !!placed,
+        adventure: {
+          id: a.id,
+          name: a.name,
+          setting_id: settingId,
+          chapter_count: a.chapter_count,
+          scene_count: a.scene_count,
+        },
+      };
+    });
+
+    // «Что за чем идёт» — рёбрами, а не селектом на плитке. Ради этого места
+    // связи и сохранили (решение D0 §4).
+    const edges = (
+      db
+        .prepare(
+          "SELECT id, from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id IS NULL"
+        )
+        .all() as { id: number; from_arc_id: number; to_arc_id: number; label: string }[]
+    )
+      .filter((t) => shownIds.has(t.from_arc_id) && shownIds.has(t.to_arc_id))
+      .map((t) => ({
+        id: `arc-transition:${t.id}`,
+        kind: "story" as const,
+        source: `adventure:${t.from_arc_id}`,
+        target: `adventure:${t.to_arc_id}`,
+        label: t.label ?? "",
+      }));
+
+    // Приключения из `saved` сюда НЕ отдаём: их уже собрал `arcNodes` выше,
+    // вместе со счётчиками и автораскладкой. Общий сборщик тоже умеет ярлык
+    // приключения (он нужен на свободной доске), и без этого фильтра каждое
+    // приключение приезжало на схему дважды — сразу после первого сохранения
+    // раскладки, когда у него появляется строка в `canvas_nodes`.
+    const decor = board
+      ? boardDecor(
+          board.id,
+          saved.filter((p) => p.node_type !== "adventure")
+        )
+      : { nodes: [], threads: [] };
+    return res.json({
+      board_id: board?.id ?? null,
+      setting: { id: setting.id, name: setting.name },
+      campaign_id: null,
+      nodes: [...arcNodes, ...decor.nodes],
+      groups: [],
+      edges,
+      threads: decor.threads,
+    });
+  }
+
+  /**
+   * Карта кампании (блок D4).
+   *
+   * Тот же холст, что схема сеттинга, но отвечает на другой вопрос — «где мы
+   * сейчас», а не «как устроена история, которую я написал». Отсюда три
+   * отличия: узлы покрашены прохождением, у переписанных под кампанию стоят
+   * метки расхождения, а состав — приключения КАМПАНИИ (`campaign_adventures`),
+   * а не всего сеттинга.
+   *
+   * Состав важен: на живой базе кампания «Вотердип» играет 6 приключений из 8
+   * своего сеттинга. Показывать ей остальные — значит наполнять карту тем, к
+   * чему кампания отношения не имеет, и делать это на каждое новое приключение
+   * сеттинга. Решение владельца от 2026-08-27; на разборе D0 таблицы
+   * `campaign_adventures` не нашли, и там было записано обратное.
+   *
+   * Читает и только читает, как и схема сеттинга: доска заводится первым
+   * сохранением раскладки.
+   */
+  if (campaign_id && !arc_id) {
+    const campaignId = Number(campaign_id);
+    const campaign = db
+      .prepare(
+        "SELECT id, name, setting_id, own_arc_transitions FROM campaigns WHERE id = ? AND archived_at IS NULL"
+      )
+      .get(campaignId) as
+      | { id: number; name: string; setting_id: number | null; own_arc_transitions: number }
+      | undefined;
+    if (!campaign) return res.status(404).json({ error: "not found" });
+
+    const board = db
+      .prepare("SELECT id FROM canvas_boards WHERE scope_type='campaign' AND scope_id=?")
+      .get(campaignId) as { id: number } | undefined;
+    const saved = board
+      ? (db
+          .prepare(
+            "SELECT id, node_type, node_id, x, y, z_index, parent_key FROM canvas_nodes WHERE board_id=?"
+          )
+          .all(board.id) as PlacedNode[])
+      : [];
+
+    // Приключения кампании. Узлом остаётся ОРИГИНАЛ сеттинга: кампанийная
+    // копия — это его версия текстов, а не другое приключение. Имя при этом
+    // берётся у копии, если она есть.
+    const arcs = db
+      .prepare(
+        `SELECT a.id, a.name, a.position, a.updated_at,
+                (SELECT COUNT(*) FROM story_arcs c
+                  WHERE c.parent_id = a.id AND c.archived_at IS NULL AND c.campaign_id IS NULL) AS chapter_count,
+                (SELECT COUNT(*) FROM story_scenes s
+                   JOIN story_arcs sc ON sc.id = s.arc_id
+                  WHERE (sc.id = a.id OR sc.parent_id = a.id)
+                    AND sc.archived_at IS NULL AND sc.campaign_id IS NULL
+                    AND s.campaign_id IS NULL AND s.archived_at IS NULL) AS scene_count
+           FROM campaign_adventures ca
+           JOIN story_arcs a ON a.id = ca.arc_id
+          WHERE ca.campaign_id = ? AND a.archived_at IS NULL AND a.campaign_id IS NULL
+          ORDER BY ca.position, a.id`
+      )
+      .all(campaignId) as {
+      id: number;
+      name: string;
+      position: number;
+      updated_at: string | null;
+      chapter_count: number;
+      scene_count: number;
+    }[];
+
+    // Приключения, заведённые прямо в кампании: `campaign_id` есть, а
+    // `source_arc_id` нет — это не версия чужого текста, а своя вещь, и в
+    // `campaign_adventures` она не значится.
+    const ownArcs = db
+      .prepare(
+        `SELECT a.id, a.name, a.position, a.updated_at,
+                0 AS chapter_count,
+                (SELECT COUNT(*) FROM story_scenes s
+                  WHERE s.arc_id = a.id AND s.archived_at IS NULL) AS scene_count
+           FROM story_arcs a
+          WHERE a.campaign_id = ? AND a.source_arc_id IS NULL AND a.archived_at IS NULL
+          ORDER BY a.position, a.id`
+      )
+      .all(campaignId) as typeof arcs;
+    const allArcs = [...arcs, ...ownArcs];
+
+    // Кампанийные копии: имя, метка «изменено в кампании» и то, разошёлся ли с
+    // копией оригинал в сеттинге.
+    const overrides = new Map(
+      (
+        db
+          .prepare(
+            "SELECT source_arc_id, name, created_at FROM story_arcs WHERE campaign_id = ? AND source_arc_id IS NOT NULL AND archived_at IS NULL"
+          )
+          .all(campaignId) as { source_arc_id: number; name: string; created_at: string }[]
+      ).map((o) => [o.source_arc_id, o] as const)
+    );
+
+    // Прохождение: приключение «сыграно», когда сыграны все его сцены, «идёт» —
+    // когда тронута хоть одна, иначе «не дошли». Считается по
+    // `campaign_scene_state` — тем самым отметкам, что Мастер уже ставит.
+    // Сцены глав засчитываются приключению: глава — его часть, а не сосед.
+    const progressRows = db
+      .prepare(
+        `SELECT IFNULL(sc.parent_id, sc.id) AS root,
+                COUNT(*) AS total,
+                SUM(CASE WHEN st.status = 'done' THEN 1 ELSE 0 END) AS done,
+                SUM(CASE WHEN st.status IS NOT NULL THEN 1 ELSE 0 END) AS touched
+           FROM story_scenes s
+           JOIN story_arcs sc ON sc.id = s.arc_id
+           LEFT JOIN campaign_scene_state st ON st.scene_id = s.id AND st.campaign_id = ?
+          WHERE s.archived_at IS NULL AND s.campaign_id IS NULL AND sc.archived_at IS NULL
+          GROUP BY root`
+      )
+      .all(campaignId) as { root: number; total: number; done: number; touched: number }[];
+    const progressByArc = new Map(progressRows.map((r) => [r.root, r] as const));
+
+    const shownIds = new Set(allArcs.map((a) => a.id));
+    const ownTransitions = campaign.own_arc_transitions === 1;
+    const transitionRows = (
+      db
+        .prepare(
+          "SELECT id, from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id IS ?"
+        )
+        .all(ownTransitions ? campaignId : null) as {
+        id: number;
+        from_arc_id: number;
+        to_arc_id: number;
+        label: string;
+      }[]
+    ).filter((t) => shownIds.has(t.from_arc_id) && shownIds.has(t.to_arc_id));
+
+    // Место наследуется со схемы сеттинга: если приключение там разложено
+    // руками, на карте кампании оно встаёт туда же. Рамки и стикеры кампания
+    // рисует свои — копировать чужие, часть которых обнимает приключения не из
+    // кампании, владелец отменил 2026-08-27 (D0 §15 в этой части снят).
+    const settingBoard = campaign.setting_id
+      ? (db
+          .prepare("SELECT id FROM canvas_boards WHERE scope_type='setting' AND scope_id=?")
+          .get(campaign.setting_id) as { id: number } | undefined)
+      : undefined;
+    const fromSetting = new Map<number, { x: number; y: number }>(
+      settingBoard
+        ? (
+            db
+              .prepare(
+                "SELECT node_id, x, y FROM canvas_nodes WHERE board_id = ? AND node_type = 'adventure'"
+              )
+              .all(settingBoard.id) as { node_id: number; x: number; y: number }[]
+          ).map((n) => [n.node_id, { x: n.x, y: n.y }] as const)
+        : []
+    );
+
+    // Автораскладка — то же правило, что у схемы сеттинга: колонка есть длина
+    // цепочки переходов.
+    const depth = new Map<number, number>(allArcs.map((a) => [a.id, 0]));
+    for (let pass = 0; pass < allArcs.length; pass++) {
+      let moved = false;
+      for (const l of transitionRows) {
+        const next = (depth.get(l.from_arc_id) ?? 0) + 1;
+        if (next > (depth.get(l.to_arc_id) ?? 0)) {
+          depth.set(l.to_arc_id, next);
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+
+    const savedArc = new Map(
+      saved.filter((p) => p.node_type === "adventure").map((p) => [p.node_id, p] as const)
+    );
+    const column = new Map<number, number>();
+    const arcNodes = allArcs.map((a) => {
+      const placed = savedArc.get(a.id);
+      const seeded = fromSetting.get(a.id);
+      const col = depth.get(a.id) ?? 0;
+      const row = column.get(col) ?? 0;
+      column.set(col, row + 1);
+      const at = placed ?? seeded ?? { x: col * 280, y: row * 140 };
+      const ov = overrides.get(a.id);
+      const st = progressByArc.get(a.id);
+      return {
+        key: `adventure:${a.id}`,
+        node_type: "adventure" as const,
+        node_id: a.id,
+        x: at.x,
+        y: at.y,
+        z_index: placed?.z_index ?? 0,
+        parent_key: placed?.parent_key ?? null,
+        placed: !!placed,
+        adventure: {
+          id: a.id,
+          name: ov?.name ?? a.name,
+          setting_id: campaign.setting_id ?? 0,
+          chapter_count: a.chapter_count,
+          scene_count: a.scene_count,
+          /** done | active | untouched — раскраска узла по прохождению. */
+          progress:
+            st && st.total > 0 && st.done >= st.total
+              ? "done"
+              : st && st.touched > 0
+                ? "active"
+                : "untouched",
+          is_override: !!ov,
+          /** Оригинал в сеттинге правили после того, как кампания сняла копию. */
+          setting_changed_at:
+            ov && a.updated_at && a.updated_at > ov.created_at ? a.updated_at : null,
+          /** Добавлено в кампанию ПОСЛЕ того, как карту разложили: у карты
+           *  есть своя доска, а у этого узла на ней места нет. До первого
+           *  сохранения новых нет вовсе — новых относительно чего? */
+          is_new: !!board && !placed && !seeded,
+        },
+      };
+    });
+
+    const edges = transitionRows.map((t) => ({
+      id: `arc-transition:${t.id}`,
+      kind: "story" as const,
       source: `adventure:${t.from_arc_id}`,
       target: `adventure:${t.to_arc_id}`,
-      target_handle: "story",
-      label: t.label,
+      label: t.label ?? "",
     }));
-    return res.json({ board_id: boardId, setting: { id: setting.id, name: setting.name }, campaign_id: null, nodes: [...nodes, ...entityNodes(boardId, saved as never)], groups: [], edges });
-  }
 
-  // Сборка кампании: сцены всех приключений кампании (Q3) — пока заглушка, живёт в том же скопе
-  if (campaign_id && !arc_id) {
-    const campId = Number(campaign_id);
-    const camp = db.prepare("SELECT id, setting_id, name FROM campaigns WHERE id = ?").get(campId) as { id: number; setting_id: number | null; name: string } | undefined;
-    if (!camp) return res.status(404).json({ error: "not found" });
-    const boardId = ensureBoard("campaign", campId);
-    const saved = db.prepare("SELECT node_type, node_id, x, y FROM canvas_nodes WHERE board_id = ?").all(boardId) as { node_type: string; node_id: number; x: number; y: number }[];
-    // пока пустой — сборка заполнится сценами через палитру, как и арк-холст, но без arc-рамок
-    return res.json({ board_id: boardId, campaign: { id: camp.id, name: camp.name, setting_id: camp.setting_id }, campaign_id: campId, nodes: [...entityNodes(boardId, saved as never)], groups: [], edges: [] });
+    const decor = board
+      ? boardDecor(
+          board.id,
+          saved.filter((p) => p.node_type !== "adventure")
+        )
+      : { nodes: [], threads: [] };
+
+    return res.json({
+      board_id: board?.id ?? null,
+      campaign_map: {
+        id: campaign.id,
+        name: campaign.name,
+        setting_id: campaign.setting_id,
+        own_transitions: ownTransitions,
+      },
+      campaign_id: campaignId,
+      nodes: [...arcNodes, ...decor.nodes],
+      groups: [],
+      edges,
+      threads: decor.threads,
+    });
   }
 
   if (!arc_id) return res.status(400).json({ error: "arc_id is required" });
@@ -513,24 +1063,32 @@ canvasRouter.get("/board", (req, res) => {
   const campaignId = campaign_id ? Number(campaign_id) : null;
 
   const arc = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(arcId) as
-    | { id: number; setting_id: number; name: string; campaign_id: number | null }
+    | { id: number; setting_id: number; name: string; campaign_id: number | null; parent_id: number | null }
     | undefined;
   if (!arc) return res.status(404).json({ error: "not found" });
 
-  // Приключение показывает сцены ВСЕХ своих глав, а не только свои.
-  //
-  // 183 сцены из 194 на живой базе лежат в главах, так что вид «по одной
-  // главе» показывал бы обрезки. Главное — 13 переходов ходят через границу
-  // главы внутри одного приключения: разрежь граф по главам, и разрежешь
-  // ровно те рёбра, ради которых полотно открывают.
-  const arcIds = [
-    arcId,
-    ...(
-      db
-        .prepare("SELECT id FROM story_arcs WHERE parent_id = ? AND archived_at IS NULL ORDER BY position, id")
-        .all(arcId) as { id: number }[]
-    ).map((r) => r.id),
-  ];
+  // Холст главы отличается от холста приключения только тем, что у главы есть
+  // родитель. Отдельного вида доски у неё нет: глава — такой же `arc`, и пара
+  // `(scope_type='arc', scope_id)` покрывает оба уровня (блок G6.2).
+  const parentArc = arc.parent_id
+    ? ((db.prepare("SELECT id, name FROM story_arcs WHERE id = ?").get(arc.parent_id) as
+        | { id: number; name: string }
+        | undefined) ?? null)
+    : null;
+
+  /**
+   * Доска показывает сцены СВОЕГО арка и только их (блок G6.2).
+   *
+   * До этого блока холст приключения тащил сцены всех своих глав — 184 из 201
+   * на живой базе, — и держались они видимыми только свёрткой. Теперь глава —
+   * узел, в который входят, и её сцены лежат на её собственной доске.
+   *
+   * Цена решения названа отдельно и закрыта ниже: 13 переходов из 81 ходят
+   * через границу главы, и оба их конца больше не лежат на одном холсте. Они
+   * не пропадают, а показываются висящим разъёмом со ссылкой — тем же
+   * приёмом, каким прогон показывает цель в другом приключении.
+   */
+  const arcIds = [arcId];
   const arcPlaceholders = arcIds.map(() => "?").join(",");
 
   // Сцены приключения ровно так же, как их отдаёт список: оригиналы сеттинга,
@@ -562,8 +1120,8 @@ canvasRouter.get("/board", (req, res) => {
 
   const boardId = ensureBoard("arc", arcId);
   const saved = db
-    .prepare("SELECT id, node_type, node_id, x, y, z_index FROM canvas_nodes WHERE board_id = ?")
-    .all(boardId) as { id: number; node_type: string; node_id: number; x: number; y: number; z_index: number }[];
+    .prepare("SELECT id, node_type, node_id, x, y, z_index, parent_key FROM canvas_nodes WHERE board_id = ?")
+    .all(boardId) as { id: number; node_type: string; node_id: number; x: number; y: number; z_index: number; parent_key: string | null }[];
   const savedByKey = new Map(saved.map((n) => [`${n.node_type}:${n.node_id}`, n]));
 
   // Позиция ноды ищется и по показанной сцене, и по её оригиналу: копия
@@ -575,82 +1133,115 @@ canvasRouter.get("/board", (req, res) => {
     return own ?? inherited;
   });
 
-  // Рамки глав считаются ДО раскладки: неразложенная сцена ложится внутрь
-  // рамки своей главы, а не в общую кучу под холстом. Иначе Мастер открывает
-  // приключение и видит восемь пустых рамок, а все их сцены — отдельной
-  // грудой сбоку.
-  const chapters = db
-    .prepare(
-      "SELECT id, name FROM story_arcs WHERE parent_id = ? AND archived_at IS NULL ORDER BY position, id"
-    )
-    .all(arcId) as { id: number; name: string }[];
-  const savedGroups = new Map(
-    (
-      db
-        .prepare("SELECT arc_id, color, x, y, w, h FROM canvas_groups WHERE board_id = ?")
-        .all(boardId) as { arc_id: number; color: string; x: number; y: number; w: number; h: number }[]
-    ).map((g) => [g.arc_id, g])
-  );
-  const newGroup = db.prepare(
-    "INSERT OR IGNORE INTO canvas_groups (board_id, arc_id, color, x, y, w, h) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  );
-  const fitGroup = db.prepare(
-    "UPDATE canvas_groups SET x = ?, y = ?, w = ?, h = ? WHERE board_id = ? AND arc_id = ?"
-  );
+  /**
+   * Главы — узлы-контейнеры, а не рамки (блок G6.2).
+   *
+   * Глава уже есть строка `story_arcs` с `kind='chapter'`, поэтому нового вида
+   * доски ей не нужно, а место узла лежит там же, где у ярлыка приключения, —
+   * в `canvas_nodes`. Прежняя `canvas_groups` больше не читается: рамки нет.
+   *
+   * На холсте главы глав не бывает — третьего уровня вложенности в модели нет
+   * (замер: таких строк 0).
+   */
+  const chapters = arc.parent_id
+    ? []
+    : (db
+        .prepare(
+          `SELECT c.id, c.name,
+                  (SELECT COUNT(*) FROM story_scenes s
+                    WHERE s.arc_id = c.id AND s.archived_at IS NULL AND s.campaign_id IS NULL) AS scene_count
+             FROM story_arcs c
+            WHERE c.parent_id = ? AND c.archived_at IS NULL AND c.campaign_id IS NULL
+            ORDER BY c.position, c.id`
+        )
+        .all(arcId) as { id: number; name: string; scene_count: number }[]);
+  const shownChapterIds = new Set(chapters.map((c) => c.id));
 
-  // Нижняя кромка всего, что уже занято: новая рамка встаёт под этим, а не
-  // поверх соседки.
-  const GAP = 40;
-  let frontier = placedFor.reduce((acc, p) => (p ? Math.max(acc, p.y + ROW_H) : acc), 0);
-  for (const g of savedGroups.values()) frontier = Math.max(frontier, g.y + g.h + GAP);
+  /**
+   * Связи между главами — та же `story_arc_transitions`, что у приключений
+   * (решение Q18). Уровень выводится из `kind` концов и отдельно не хранится:
+   * этот холст показывает связи только своих глав, схема сеттинга — только
+   * приключений, и смешаться им негде.
+   *
+   * Чей набор — решается тем же правилом, что на карте кампании: кампания
+   * либо смотрит на заготовку сеттинга, либо ведёт свой набор целиком.
+   */
+  const entryCampaignRow =
+    campaignId == null
+      ? null
+      : ((db
+          .prepare("SELECT id, name, own_arc_transitions FROM campaigns WHERE id = ?")
+          .get(campaignId) as { id: number; name: string; own_arc_transitions: number } | undefined) ?? null);
+  const ownChapterLinks = entryCampaignRow?.own_arc_transitions === 1;
+  const chapterLinks = chapters.length
+    ? (
+        db
+          .prepare(
+            "SELECT id, from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id IS ?"
+          )
+          .all(ownChapterLinks ? campaignId : null) as {
+          id: number;
+          from_arc_id: number;
+          to_arc_id: number;
+          label: string;
+        }[]
+      ).filter((t) => shownChapterIds.has(t.from_arc_id) && shownChapterIds.has(t.to_arc_id))
+    : [];
 
-  // Свежая рамка сразу заводится по размеру своей главы. Ставить её
-  // «стандартной» и растить потом нельзя: соседка успела бы встать вплотную
-  // под стандартную высоту, и после роста главы наехали бы друг на друга.
-  const unplacedByArc = new Map<number, number>();
-  scenes.forEach((s, i) => {
-    if (placedFor[i] || s.arc_id == null) return;
-    unplacedByArc.set(s.arc_id, (unplacedByArc.get(s.arc_id) ?? 0) + 1);
-  });
-
-  const groups = chapters.map((ch) => {
-    const kept = savedGroups.get(ch.id);
-    if (kept) return { arc_id: ch.id, name: ch.name, color: kept.color, x: kept.x, y: kept.y, w: kept.w, h: kept.h };
-    const rows = Math.max(1, Math.ceil((unplacedByArc.get(ch.id) ?? 0) / COLS));
-    const fresh = {
-      x: 0,
-      y: frontier,
-      w: COL_W * COLS + FRAME_PAD * 2,
-      h: FRAME_HEAD + rows * ROW_H + FRAME_PAD,
+  // Автораскладка глав — то же правило, что у приключений на схеме сеттинга:
+  // колонка есть длина цепочки связей. Считается только для тех, кого ещё не
+  // двигали рукой: раскладка руками выше любой автоматической.
+  const chapterDepth = new Map<number, number>(chapters.map((c) => [c.id, 0]));
+  for (let pass = 0; pass < chapters.length; pass++) {
+    let moved = false;
+    for (const l of chapterLinks) {
+      const next = (chapterDepth.get(l.from_arc_id) ?? 0) + 1;
+      if (next > (chapterDepth.get(l.to_arc_id) ?? 0)) {
+        chapterDepth.set(l.to_arc_id, next);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  const chapterColumn = new Map<number, number>();
+  const chapterNodes = chapters.map((ch) => {
+    const placed = savedByKey.get(`chapter:${ch.id}`);
+    const col = chapterDepth.get(ch.id) ?? 0;
+    const row = chapterColumn.get(col) ?? 0;
+    chapterColumn.set(col, row + 1);
+    return {
+      key: `chapter:${ch.id}`,
+      node_type: "chapter" as const,
+      node_id: ch.id,
+      x: placed ? placed.x : col * 280,
+      y: placed ? placed.y : row * 140,
+      z_index: placed?.z_index ?? 0,
+      parent_key: placed?.parent_key ?? null,
+      placed: !!placed,
+      chapter: {
+        id: ch.id,
+        name: ch.name,
+        arc_id: arcId,
+        setting_id: arc.setting_id,
+        scene_count: ch.scene_count,
+      },
     };
-    frontier += fresh.h + GAP;
-    newGroup.run(boardId, ch.id, "#2C3E50", fresh.x, fresh.y, fresh.w, fresh.h);
-    return { arc_id: ch.id, name: ch.name, color: "#2C3E50", ...fresh };
   });
-  const groupByArc = new Map(groups.map((g) => [g.arc_id, g]));
 
-  // Сцены, добавленные после того, как Мастер разложил холст, кладутся внутрь
-  // рамки своей главы, а собственные сцены приключения — ПОД разложенным:
-  // индекс в общем списке уже занят закреплённой нодой, и новая сцена легла бы
-  // ровно поверх неё — выглядит как пропавшая сцена, а не как новая.
+  // Сцены, добавленные после того, как Мастер разложил холст, кладутся ПОД
+  // разложенным: индекс в общем списке уже занят закреплённой нодой, и новая
+  // сцена легла бы ровно поверх неё — выглядит как пропавшая сцена, а не как
+  // новая. Рамок здесь больше нет, и сажать сцену внутрь рамки своей главы
+  // не нужно: на этом холсте лежат только сцены своего арка.
   const lowest = placedFor.reduce((acc, p) => (p ? Math.max(acc, p.y) : acc), Number.NEGATIVE_INFINITY);
   const freshStartY = lowest === Number.NEGATIVE_INFINITY ? 0 : lowest + ROW_H;
   let freshIndex = 0;
-  const freshInGroup = new Map<number, number>();
 
   const nodes = scenes.map((s, i) => {
     const placed = placedFor[i];
-    const frame = s.arc_id == null ? undefined : groupByArc.get(s.arc_id);
-    let pos: { x: number; y: number };
-    if (placed) {
-      pos = placed;
-    } else if (frame) {
-      const seat = freshInGroup.get(frame.arc_id) ?? 0;
-      freshInGroup.set(frame.arc_id, seat + 1);
-      pos = seatInFrame(frame, seat);
-    } else {
-      pos = defaultPosition(lowest === Number.NEGATIVE_INFINITY ? i : freshIndex++, freshStartY);
-    }
+    const pos = placed
+      ? placed
+      : defaultPosition(lowest === Number.NEGATIVE_INFINITY ? i : freshIndex++, freshStartY);
     // Нетронутая вставка своих имени и вида не хранит — читает с заготовки.
     const shown = withLibraryContent(s);
     return {
@@ -662,6 +1253,7 @@ canvasRouter.get("/board", (req, res) => {
       node_id: s.id,
       x: pos.x,
       y: pos.y,
+      z_index: placed?.z_index ?? 0,
       placed: !!placed,
       scene: {
         id: s.id,
@@ -678,6 +1270,10 @@ canvasRouter.get("/board", (req, res) => {
         // из другого мира работает и молчит, и узнать о ней надо, глядя на
         // схему, а не открыв наугад нужную ноду.
         foreign_links: foreignLinkCount(s.id),
+        // Заполняется ниже, когда посчитаны переходы: сквозные связи знать
+        // раньше нельзя, а заводить второй проход по сценам ради одного поля
+        // дороже, чем объявить его пустым.
+        outside: [] as OutsideLink[],
       },
     };
   });
@@ -751,6 +1347,7 @@ canvasRouter.get("/board", (req, res) => {
       node_id: ch.id,
       x: pos.x,
       y: pos.y,
+      z_index: savedPos?.z_index ?? 0,
       placed,
       check: {
         id: ch.id,
@@ -929,92 +1526,427 @@ canvasRouter.get("/board", (req, res) => {
     ];
   });
 
-  const edges = [...storyEdges, ...castEdges, ...memberEdges];
+  // «Что за чем идёт» между главами — рёбрами между узлами глав (Q18).
+  const chapterEdges: EdgeOut[] = chapterLinks.map((t) => ({
+    id: `arc-transition:${t.id}`,
+    kind: "story" as const,
+    source: `chapter:${t.from_arc_id}`,
+    target: `chapter:${t.to_arc_id}`,
+    target_handle: "story",
+    label: t.label ?? "",
+  }));
+
+  const edges = [...storyEdges, ...castEdges, ...memberEdges, ...chapterEdges];
+
+  /**
+   * Переходы, второй конец которых лежит на ДРУГОМ холсте (решение Q17).
+   *
+   * Замер: из 81 перехода между сценами 13 пересекают границу главы. Пока
+   * приключение тащило сцены всех глав, оба конца лежали рядом; теперь один
+   * из них уехал на холст своей главы, и стрелке некуда прийти.
+   *
+   * Скрывать их нельзя — холст не должен врать; рисовать стрелку между узлами
+   * глав тоже нельзя — это другое утверждение. Поэтому у сцены остаётся
+   * висящий разъём с именем чужой сцены и адресом её холста: видно, что
+   * переход есть, и одним щелчком видно куда. Тот же приём, каким режим
+   * репетиции показывает цель в другом приключении.
+   */
+  const outsideOut = transitions.filter((t) => !shownBySource.has(t.to_scene_id));
+  const incoming = lookup.length
+    ? (db
+        .prepare(
+          `SELECT id, from_scene_id, to_scene_id, label FROM story_scene_transitions
+            WHERE to_scene_id IN (${lookup.map(() => "?").join(",")})
+            ORDER BY position, id`
+        )
+        .all(...lookup) as { id: number; from_scene_id: number; to_scene_id: number; label: string }[])
+    : [];
+  const outsideIn = incoming.filter((t) => !shownByContent.has(t.from_scene_id));
+
+  const outsideIds = [
+    ...new Set([...outsideOut.map((t) => t.to_scene_id), ...outsideIn.map((t) => t.from_scene_id)]),
+  ];
+  const outsideScenes = new Map(
+    (outsideIds.length
+      ? (db
+          .prepare(
+            `SELECT s.id, s.name, s.arc_id, a.name AS arc_name, a.parent_id, a.setting_id
+               FROM story_scenes s JOIN story_arcs a ON a.id = s.arc_id
+              WHERE s.id IN (${outsideIds.map(() => "?").join(",")}) AND s.archived_at IS NULL`
+          )
+          .all(...outsideIds) as {
+          id: number;
+          name: string;
+          arc_id: number;
+          arc_name: string;
+          parent_id: number | null;
+          setting_id: number;
+        }[])
+      : []
+    ).map((r) => [r.id, r] as const)
+  );
+
+  const outsideByScene = new Map<number, OutsideLink[]>();
+  const addOutside = (sceneId: number, link: OutsideLink) =>
+    outsideByScene.set(sceneId, [...(outsideByScene.get(sceneId) ?? []), link]);
+  for (const t of outsideOut) {
+    const far = outsideScenes.get(t.to_scene_id);
+    if (!far) continue;
+    for (const fromId of shownByContent.get(t.from_scene_id) ?? [])
+      addOutside(fromId, {
+        dir: "out",
+        label: t.label ?? "",
+        scene_id: far.id,
+        scene_name: far.name,
+        arc_id: far.arc_id,
+        arc_name: far.arc_name,
+        setting_id: far.setting_id,
+        // Адрес холста, на котором эта сцена лежит: у сцены главы это доска
+        // главы, у сцены приключения — доска приключения.
+        board_arc_id: far.arc_id,
+      });
+  }
+  for (const t of outsideIn) {
+    const far = outsideScenes.get(t.from_scene_id);
+    const here = shownBySource.get(t.to_scene_id);
+    if (!far || here == null) continue;
+    addOutside(here, {
+      dir: "in",
+      label: t.label ?? "",
+      scene_id: far.id,
+      scene_name: far.name,
+      arc_id: far.arc_id,
+      arc_name: far.arc_name,
+      setting_id: far.setting_id,
+      board_arc_id: far.arc_id,
+    });
+  }
+  for (const n of nodes) {
+    const links = outsideByScene.get(n.node_id);
+    if (links) n.scene.outside = links;
+  }
 
   const scenesById = new Map(scenes.map((s) => [s.id, s]));
 
-  // Рамка непустой главы ОБНИМАЕТ свои сцены — каждый раз заново, а не
-  // подтягивается по мере надобности. Отсюда у неё нет ручек растягивания:
-  // границы главы это то, где лежат её сцены, и вручную их не назначают.
-  // Мастер двигает рамку (сцены едут с ней) и двигает сцены — размер
-  // получается сам, и разъехаться им негде.
-  for (const g of groups) {
-    const mine = nodes.filter((n) => scenesById.get(n.node_id)?.arc_id === g.arc_id);
-    if (mine.length === 0) continue;
-    const x = Math.min(...mine.map((n) => n.x)) - FRAME_PAD;
-    const y = Math.min(...mine.map((n) => n.y)) - FRAME_HEAD;
-    const w = Math.max(...mine.map((n) => n.x)) + COL_W + FRAME_PAD - x;
-    const h = Math.max(...mine.map((n) => n.y)) + ROW_H + FRAME_PAD - y;
-    if (x !== g.x || y !== g.y || w !== g.w || h !== g.h) {
-      fitGroup.run(x, y, w, h, boardId, g.arc_id);
-      g.x = x;
-      g.y = y;
-      g.w = w;
-      g.h = h;
-    }
-  }
+  // Подгонка рамки главы под её сцены ушла вместе с рамкой (блок G6.2): у
+  // узла главы размера нет, его задаёт содержимое карточки.
 
-  // стикеры/картинки и на приключенческом холсте (Q5, Q6)
-  const stickersArc = db.prepare("SELECT id, text, name, note, color FROM canvas_stickers WHERE board_id=?").all(boardId) as { id: number; text: string; name: string; note: string; color: string }[];
-  const imagesArc = db.prepare("SELECT id, file_path, w, h FROM canvas_images WHERE board_id=?").all(boardId) as { id: number; file_path: string; w: number; h: number }[];
-  const stickerNodesArc = stickersArc.map((s) => {
-    const pos = saved.find((p) => p.node_type === "sticker" && p.node_id === s.id) ?? { x: 0, y: 0 };
-    return { key: `sticker:${s.id}`, node_type: "sticker" as const, node_id: s.id, x: pos.x, y: pos.y, placed: !!saved.find((p) => p.node_type === "sticker" && p.node_id === s.id), sticker: { id: s.id, text: s.text, name: s.name || s.text, note: s.note, color: s.color } };
-  });
-  const imageNodesArc = imagesArc.map((im) => {
-    const pos = saved.find((p) => p.node_type === "image" && p.node_id === im.id) ?? { x: 0, y: 0 };
-    return { key: `image:${im.id}`, node_type: "image" as const, node_id: im.id, x: pos.x, y: pos.y, placed: !!saved.find((p) => p.node_type === "image" && p.node_id === im.id), image: { id: im.id, file_url: toFileUrl(im.file_path), w: im.w, h: im.h } };
-  });
-  const framesArc = db.prepare("SELECT id, name, color, x, y, w, h FROM canvas_frames WHERE board_id=?").all(boardId) as { id: number; name: string; color: string; x: number; y: number; w: number; h: number }[];
-  const frameNodesArc = framesArc.map((f) => {
-    const pos = saved.find((p) => p.node_type === "frame" && p.node_id === f.id) ?? { x: f.x, y: f.y };
-    return { key: `frame:${f.id}`, node_type: "frame" as const, node_id: f.id, x: pos.x ?? f.x, y: pos.y ?? f.y, placed: true, frame: { id: f.id, name: f.name, color: f.color, w: f.w, h: f.h } };
-  });
+  // Стикеры, картинки, рамки, пины и нити — тем же расчётом, что и на
+  // фриформ-доске (Q5, Q6).
+  const decorArc = boardDecor(boardId, saved);
+  const threadEdgesArc: EdgeOut[] = decorArc.threads.map((t) => ({ id: `thread:${t.id}`, kind: "thread" as const, source: `pin:${t.from_pin_id}`, target: `pin:${t.to_pin_id}`, target_handle: "pin", label: "", width: t.width, color: t.color }));
+
+  // Имя кампании входа — ради крошек (Q26, блок E1). Читается там же, где
+  // берётся её правило на связи глав: отдельным запросом с клиента это стоило
+  // бы второго круга на каждое открытие холста.
+  const entryCampaign = entryCampaignRow ? { id: entryCampaignRow.id, name: entryCampaignRow.name } : null;
 
   res.json({
     board_id: boardId,
-    arc: { id: arc.id, name: arc.name, setting_id: arc.setting_id },
+    // `parent` — ступень крошек и адрес выхода наверх: у холста главы это её
+    // приключение, у холста приключения — ничего (блок G6.2).
+    arc: { id: arc.id, name: arc.name, setting_id: arc.setting_id, parent: parentArc },
     campaign_id: campaignId,
-    nodes: [...nodes, ...checkNodes, ...stickerNodesArc, ...imageNodesArc, ...frameNodesArc, ...entityNodes(boardId, saved)],
-    groups,
+    campaign: entryCampaign,
+    nodes: [...nodes, ...chapterNodes, ...checkNodes, ...decorArc.nodes],
+    // Рамок глав больше нет. Поле остаётся ради формы ответа, общей со
+    // схемой сеттинга и свободной доской, и всегда пусто.
+    groups: [],
     edges,
+    threads: decorArc.threads,
   });
 });
 
 // Фриформ-доски вне сеттингов (Q1 а, §5)
+/**
+ * Всё, что нужно экрану выбора полотна, — одним запросом.
+ *
+ * Экран показывает свои доски и приключения, сгруппированные по сеттингу
+ * (Q21). Читать это девятью запросами `/story/arcs?setting_id=` — по одному
+ * на сеттинг — значит платить девять кругов за экран, который открывают
+ * первым.
+ *
+ * Сеттинги без приключений не показываются вовсе: открывать в них нечего, а
+ * промежуточный экран из девяти плиток, семь из которых пустые, — ровно то,
+ * от чего избавлялись.
+ */
+canvasRouter.get("/index", (_req, res) => {
+  const free = db
+    .prepare(
+      // Стикер, картинка, рамка и пин живут в своих таблицах и ЗАОДНО имеют
+      // строку в canvas_nodes с местом на доске — считать по обеим значит
+      // удвоить счётчик.
+      `SELECT id, scope_id, name, created_at, owner_type, owner_id,
+              (SELECT count(*) FROM canvas_stickers WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_images WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_frames WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_pins WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_nodes WHERE board_id = canvas_boards.id
+                 AND node_type NOT IN ('sticker','image','frame','pin')) AS nodes
+         FROM canvas_boards
+        WHERE scope_type='free' AND archived_at IS NULL
+        ORDER BY created_at DESC`
+    )
+    .all() as {
+      id: number;
+      scope_id: number;
+      name: string;
+      created_at: string;
+      owner_type: string | null;
+      owner_id: number | null;
+      nodes: number;
+    }[];
+
+  // Пустое приключение по умолчанию («Сцены без приключения») показываем
+  // только когда в нём что-то лежит: иначе это девять пустых строк, зато
+  // непустое иначе не открыть ничем, кроме прямой ссылки.
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.name, a.setting_id, a.is_default, st.name AS setting_name,
+              (SELECT COUNT(*) FROM story_arcs c
+                WHERE c.parent_id = a.id AND c.archived_at IS NULL AND c.campaign_id IS NULL) AS chapter_count,
+              (SELECT COUNT(*) FROM story_scenes s
+                 JOIN story_arcs sc ON sc.id = s.arc_id
+                WHERE (sc.id = a.id OR sc.parent_id = a.id)
+                  AND sc.archived_at IS NULL AND sc.campaign_id IS NULL
+                  AND s.campaign_id IS NULL AND s.archived_at IS NULL) AS scene_count
+         FROM story_arcs a
+         JOIN settings st ON st.id = a.setting_id
+        WHERE a.parent_id IS NULL AND a.archived_at IS NULL AND a.campaign_id IS NULL
+        ORDER BY st.name, a.position, a.id`
+    )
+    .all() as {
+    id: number;
+    name: string;
+    setting_id: number;
+    is_default: number;
+    setting_name: string;
+    chapter_count: number;
+    scene_count: number;
+  }[];
+
+  // «Что за чем идёт» между приключениями. Раньше это рисовалось разъёмами на
+  // холсте сеттинга; теперь оно снова там (блок D3), а список о связях больше
+  // не рассказывает — поле `next` осталось ради совместимости ответа.
+  // `campaign_id IS NULL`: список — про заготовку сеттинга, свой набор
+  // кампании (блок D4) сюда не относится.
+  const links = db
+    .prepare(
+      `SELECT t.id, t.from_arc_id, t.to_arc_id, t.label, a.name AS to_name
+         FROM story_arc_transitions t
+         JOIN story_arcs a ON a.id = t.to_arc_id
+        WHERE a.archived_at IS NULL AND t.campaign_id IS NULL`
+    )
+    .all() as { id: number; from_arc_id: number; to_arc_id: number; label: string; to_name: string }[];
+  const nextByArc = new Map<number, { id: number; to_arc_id: number; to_name: string; label: string }[]>();
+  for (const l of links) {
+    const list = nextByArc.get(l.from_arc_id) ?? [];
+    list.push({ id: l.id, to_arc_id: l.to_arc_id, to_name: l.to_name, label: l.label });
+    nextByArc.set(l.from_arc_id, list);
+  }
+
+  const bySetting = new Map<number, { id: number; name: string; adventures: typeof rows }>();
+  for (const r of rows) {
+    if (r.is_default === 1 && r.scene_count === 0) continue;
+    let group = bySetting.get(r.setting_id);
+    if (!group) {
+      group = { id: r.setting_id, name: r.setting_name, adventures: [] };
+      bySetting.set(r.setting_id, group);
+    }
+    group.adventures.push({ ...r, next: nextByArc.get(r.id) ?? [] } as (typeof rows)[number]);
+  }
+
+  // Сеттинг, у которого приключений нет, но есть своя доска, обязан показаться:
+  // иначе доска, только что привязанная к нему, пропадает с экрана целиком.
+  // Группы строятся по приключениям, поэтому такие сеттинги добираются здесь.
+  const settingNames = db
+    .prepare("SELECT id, name FROM settings WHERE archived_at IS NULL ORDER BY name")
+    .all() as { id: number; name: string }[];
+  for (const b of free) {
+    if (b.owner_type !== "setting" || b.owner_id == null || bySetting.has(b.owner_id)) continue;
+    const st = settingNames.find((s) => s.id === b.owner_id);
+    if (st) bySetting.set(st.id, { id: st.id, name: st.name, adventures: [] });
+  }
+
+  // Куда доску можно переместить. Списки полные, а не только то, что уже
+  // показано на экране: привязать доску можно и к сеттингу, в котором ещё нет
+  // ни одного приключения, — иначе «Переместить» умеет меньше, чем модель.
+  // Кампании идут списком целиком: с блока D4 у каждой есть своя карта, и
+  // плитка кампании ведёт туда даже тогда, когда досок у неё нет.
+  // `setting_id` нужен экрану выбора: «+ Приключение» у кампании заводит
+  // приключение в её сеттинге (блок D5), и спрашивать сеттинг отдельным
+  // запросом ради одного числа незачем.
+  const campaigns = db
+    .prepare("SELECT id, name, setting_id FROM campaigns WHERE archived_at IS NULL ORDER BY name")
+    .all() as { id: number; name: string; setting_id: number | null }[];
+
+  res.json({
+    free,
+    settings: [...bySetting.values()],
+    campaigns,
+    all_settings: settingNames,
+  });
+});
+
 canvasRouter.get("/free-boards", (_req, res) => {
-  // чистим битые ноды (стикер/картинку удалили, а canvas_nodes остался) — иначе счётчик врёт
-  db.prepare("DELETE FROM canvas_nodes WHERE node_type='sticker' AND node_id NOT IN (SELECT id FROM canvas_stickers)").run();
-  db.prepare("DELETE FROM canvas_nodes WHERE node_type='image' AND node_id NOT IN (SELECT id FROM canvas_images)").run();
-  db.prepare("DELETE FROM canvas_nodes WHERE node_type='frame' AND node_id NOT IN (SELECT id FROM canvas_frames)").run();
+  // Список для мастера «Открыть холст…». Раньше он на каждом чтении удалял
+  // осиротевшие строки `canvas_nodes` — то есть чтение, которое пишет. Битая
+  // строка теперь просто не попадает в счётчик: считаем по живым записям, а
+  // не по ссылкам на них.
   const rows = db.prepare(
-    `SELECT id, scope_id, name, created_at,
+    `SELECT id, scope_id, name, created_at, owner_type, owner_id,
       (
         (SELECT count(*) FROM canvas_stickers WHERE board_id=canvas_boards.id) +
         (SELECT count(*) FROM canvas_images WHERE board_id=canvas_boards.id) +
         (SELECT count(*) FROM canvas_frames WHERE board_id=canvas_boards.id) +
-        (SELECT count(*) FROM canvas_nodes WHERE board_id=canvas_boards.id AND node_type NOT IN ('sticker','image','frame'))
+        (SELECT count(*) FROM canvas_pins WHERE board_id=canvas_boards.id) +
+        (SELECT count(*) FROM canvas_nodes WHERE board_id=canvas_boards.id
+           AND node_type NOT IN ('sticker','image','frame','pin'))
       ) as nodes
-     FROM canvas_boards WHERE scope_type='free' ORDER BY created_at DESC`
+     FROM canvas_boards
+    WHERE scope_type='free' AND archived_at IS NULL
+    ORDER BY created_at DESC`
   ).all();
   res.json(rows);
 });
+
+// Владелец свободной доски (блок D1). Тип проверяется по белому списку, а не
+// берётся из тела как есть: строка отсюда попадает в запросы и в интерфейс.
+// Пустой владелец (`null`) — доска ничья, это законное состояние, а не ошибка.
+const BOARD_OWNERS: Record<string, string> = { setting: "settings", campaign: "campaigns" };
+
+function readOwner(body: unknown): { type: string | null; id: number | null } | "bad" {
+  const b = (body ?? {}) as { owner_type?: unknown; owner_id?: unknown };
+  if (b.owner_type == null || b.owner_type === "") return { type: null, id: null };
+  const type = String(b.owner_type);
+  const table = BOARD_OWNERS[type];
+  if (!table) return "bad";
+  const id = Number(b.owner_id);
+  if (!Number.isInteger(id) || id <= 0) return "bad";
+  // Владельца проверяем на существование: доска, привязанная к удалённому
+  // сеттингу, не покажется нигде и найдётся только в базе.
+  const owner = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(id);
+  if (!owner) return "bad";
+  return { type, id };
+}
+
 canvasRouter.post("/free-boards", (req, res) => {
   const name = String(req.body?.name ?? "Доска").trim() || "Доска";
-  const info = db.prepare("INSERT INTO canvas_boards (scope_type, scope_id, name) VALUES ('free', 0, ?)").run(name);
+  const owner = readOwner(req.body);
+  if (owner === "bad") return res.status(400).json({ error: "unknown owner" });
+  const info = db
+    .prepare(
+      "INSERT INTO canvas_boards (scope_type, scope_id, name, owner_type, owner_id) VALUES ('free', 0, ?, ?, ?)"
+    )
+    .run(name, owner.type, owner.id);
   const id = Number(info.lastInsertRowid);
   db.prepare("UPDATE canvas_boards SET scope_id=? WHERE id=?").run(id, id);
-  res.status(201).json({ id, scope_id: id, name });
+  res.status(201).json({ id, scope_id: id, name, owner_type: owner.type, owner_id: owner.id });
 });
+
 canvasRouter.put("/free-boards/:id", (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   if (!name) return res.status(400).json({ error: "name required" });
   db.prepare("UPDATE canvas_boards SET name=? WHERE scope_type='free' AND scope_id=?").run(name, Number(req.params.id));
   res.json({ ok: true });
 });
+
+// Переместить доску к другому владельцу или отвязать (тело без `owner_type`).
+canvasRouter.put("/free-boards/:id/owner", (req, res) => {
+  const owner = readOwner(req.body);
+  if (owner === "bad") return res.status(400).json({ error: "unknown owner" });
+  const info = db
+    .prepare("UPDATE canvas_boards SET owner_type=?, owner_id=? WHERE scope_type='free' AND scope_id=?")
+    .run(owner.type, owner.id, Number(req.params.id));
+  if (info.changes === 0) return res.status(404).json({ error: "not found" });
+  res.json({ ok: true, owner_type: owner.type, owner_id: owner.id });
+});
+
+// «Удалить» доску означает «в архив» — как у приключений и сцен. Содержимое
+// остаётся на месте; добивание насовсем живёт в общем Архиве приложения
+// (`DELETE /archive/canvas_board/:id`), и только для уже архивированной доски.
 canvasRouter.delete("/free-boards/:id", (req, res) => {
-  db.prepare("DELETE FROM canvas_boards WHERE scope_type='free' AND scope_id=?").run(Number(req.params.id));
+  const info = db
+    .prepare(
+      "UPDATE canvas_boards SET archived_at = datetime('now') WHERE scope_type='free' AND scope_id=? AND archived_at IS NULL"
+    )
+    .run(Number(req.params.id));
+  if (info.changes === 0) return res.status(404).json({ error: "not found" });
   res.json({ ok: true });
+});
+
+// Возврат из архива. Имя маршрута — общее для всех архивируемых сущностей
+// (`PUT /<раздел>/:id/restore`), чтобы страница Архива не знала про Полотно
+// ничего особенного.
+canvasRouter.put("/free-boards/:id/restore", (req, res) => {
+  const info = db
+    .prepare("UPDATE canvas_boards SET archived_at = NULL WHERE scope_type='free' AND scope_id=?")
+    .run(Number(req.params.id));
+  if (info.changes === 0) return res.status(404).json({ error: "not found" });
+  res.json({ ok: true });
+});
+
+// Список стартовых наборов — ключ и подпись на кнопке.
+//
+// Отдельным запросом, а не константой на клиенте: подпись и содержимое набора
+// обязаны лежать в одном месте. Список из семи цветов, разошедшийся по трём
+// местам, — это уже пройденный блок B1, и повторять его на трёх наборах
+// незачем. Запрос уходит только с пустой доски, где и показываются кнопки.
+canvasRouter.get("/presets", (_req, res) => {
+  res.json(Object.entries(CANVAS_PRESETS).map(([key, p]) => ({ key, label: p.label })));
+});
+
+/**
+ * Стартовый набор на пустую свободную доску (блок G5).
+ *
+ * Заводится ОДНОЙ транзакцией: нить ссылается на пины, и набор, доехавший до
+ * половины, оставил бы Мастеру три кружка без связей и без объяснения, почему
+ * их три.
+ *
+ * Ставится только на ПУСТУЮ доску, и это не придирка: набор кладётся в
+ * фиксированные координаты, и на доске с работой Мастера три пина легли бы
+ * поверх неё. Отказ здесь дешевле уборки за нами.
+ */
+canvasRouter.post("/free-boards/:id/preset", (req, res) => {
+  const preset = (req.body ?? {}).preset;
+  if (!isPresetKey(preset)) return res.status(400).json({ error: "unknown preset" });
+  const board = db
+    .prepare(
+      "SELECT id FROM canvas_boards WHERE scope_type='free' AND scope_id=? AND archived_at IS NULL"
+    )
+    .get(Number(req.params.id)) as { id: number } | undefined;
+  if (!board) return res.status(404).json({ error: "not found" });
+
+  const count = (table: string) =>
+    (db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE board_id=?`).get(board.id) as { n: number })
+      .n;
+  if (count("canvas_nodes") + count("canvas_frames") + count("canvas_pins") > 0) {
+    return res.status(409).json({ error: "board is not empty" });
+  }
+
+  const spec = CANVAS_PRESETS[preset];
+  const seed = db.transaction(() => {
+    const ids = spec.pins.map((p, i) => {
+      const z = 1000 + i;
+      // Пин заводится теми же дефолтами, что и поставленный рукой: цвет и
+      // форма живут в палитре клиента (блок B1), второго места им не заводим.
+      const info = db
+        .prepare("INSERT INTO canvas_pins (board_id, name, x, y, z_index) VALUES (?,?,?,?,?)")
+        .run(board.id, p.name, p.x, p.y, z);
+      const pid = Number(info.lastInsertRowid);
+      db.prepare(
+        "INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index) VALUES (?,?,?,?,?,?)"
+      ).run(board.id, "pin", pid, p.x, p.y, z);
+      return pid;
+    });
+    for (const [a, b] of spec.threads) {
+      db.prepare(
+        "INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id) VALUES (?,?,?)"
+      ).run(board.id, Math.min(ids[a], ids[b]), Math.max(ids[a], ids[b]));
+    }
+    return ids.length;
+  });
+  res.status(201).json({ ok: true, pins: seed(), threads: spec.threads.length });
 });
 
 // Стикеры (Q5) — name + note с MentionTextarea
@@ -1057,15 +1989,18 @@ canvasRouter.post("/frames", (req, res) => {
   res.status(201).json({ id: fid });
 });
 canvasRouter.put("/frames/:id", (req, res) => {
-  const { name, color, x, y, w, h } = req.body as { name?: string; color?: string; x?: number; y?: number; w?: number; h?: number };
+  const { name, color, x, y, w, h, collapsed } = req.body as { name?: string; color?: string; x?: number; y?: number; w?: number; h?: number; collapsed?: boolean };
   const sets: string[] = [];
   const vals: unknown[] = [];
   if (name !== undefined) { sets.push("name = ?"); vals.push(String(name).trim() || "Группа"); }
   if (color !== undefined) { sets.push("color = ?"); vals.push(String(color)); }
   if (x !== undefined) { sets.push("x = ?"); vals.push(Number(x)); }
   if (y !== undefined) { sets.push("y = ?"); vals.push(Number(y)); }
+  // w/h пишутся только когда их прислали: свёртка их не трогает вовсе, они
+  // относятся к развёрнутому виду и должны пережить её нетронутыми (G6.3).
   if (w !== undefined) { sets.push("w = ?"); vals.push(Number(w)); }
   if (h !== undefined) { sets.push("h = ?"); vals.push(Number(h)); }
+  if (collapsed !== undefined) { sets.push("collapsed = ?"); vals.push(collapsed ? 1 : 0); }
   if (sets.length) {
     vals.push(Number(req.params.id));
     db.prepare(`UPDATE canvas_frames SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
@@ -1086,6 +2021,102 @@ canvasRouter.get("/frames", (req, res) => {
   const board_id = req.query.board_id ? Number(req.query.board_id) : null;
   if (!board_id) return res.status(400).json({ error: "board_id required" });
   res.json(db.prepare("SELECT * FROM canvas_frames WHERE board_id=?").all(board_id));
+});
+
+// Пины — векторные точки, верхний слой (Pin)
+canvasRouter.post("/pins", (req, res) => {
+  const { board_id, name, x, y, size, color, shape } = req.body as { board_id?: number; name?: string; x?: number; y?: number; size?: string; color?: string; shape?: string };
+  if (!board_id) return res.status(400).json({ error: "board_id required" });
+  const maxZ = (db.prepare("SELECT MAX(z_index) as m FROM canvas_pins WHERE board_id=?").get(board_id) as { m: number | null }).m ?? 1000;
+  const info = db.prepare("INSERT INTO canvas_pins (board_id, name, x, y, size, color, shape, z_index) VALUES (?,?,?,?,?,?,?,?)").run(board_id, name ?? "Пин", Number(x) || 0, Number(y) || 0, size ?? "M", color ?? "#2C3E50", shape ?? "circle", maxZ + 1);
+  const pid = Number(info.lastInsertRowid);
+  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index) VALUES (?,?,?,?,?,?)").run(board_id, "pin", pid, Number(x) || 0, Number(y) || 0, maxZ + 1);
+  res.status(201).json(db.prepare("SELECT * FROM canvas_pins WHERE id=?").get(pid));
+});
+canvasRouter.put("/pins/:id", (req, res) => {
+  const { name, x, y, size, color, shape, z_index, parent_key } = req.body as { name?: string; x?: number; y?: number; size?: string; color?: string; shape?: string; z_index?: number; parent_key?: string | null };
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (name !== undefined) { sets.push("name = ?"); vals.push(String(name).trim() || "Пин"); }
+  if (x !== undefined) { sets.push("x = ?"); vals.push(Number(x)); }
+  if (y !== undefined) { sets.push("y = ?"); vals.push(Number(y)); }
+  if (size !== undefined) { sets.push("size = ?"); vals.push(String(size)); }
+  if (color !== undefined) { sets.push("color = ?"); vals.push(String(color)); }
+  if (shape !== undefined) { sets.push("shape = ?"); vals.push(String(shape)); }
+  if (z_index !== undefined) { sets.push("z_index = ?"); vals.push(Number(z_index)); }
+  if (sets.length) {
+    vals.push(Number(req.params.id));
+    db.prepare(`UPDATE canvas_pins SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+  }
+  if (x !== undefined || y !== undefined) {
+    const row = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(Number(req.params.id)) as { board_id: number } | undefined;
+    if (row) {
+      const cur = db.prepare("SELECT x, y FROM canvas_nodes WHERE node_type='pin' AND node_id=?").get(Number(req.params.id)) as { x: number; y: number } | undefined;
+      const nx = x !== undefined ? Number(x) : cur?.x ?? 0;
+      const ny = y !== undefined ? Number(y) : cur?.y ?? 0;
+      db.prepare("UPDATE canvas_nodes SET x = ?, y = ? WHERE node_type='pin' AND node_id=?").run(nx, ny, Number(req.params.id));
+      if (x !== undefined || y !== undefined) db.prepare("UPDATE canvas_pins SET x = ?, y = ? WHERE id=?").run(nx, ny, Number(req.params.id));
+    }
+  }
+  // Рамка, в которой пин лежит. Пишется только когда клиент прислал поле:
+  // правка имени или цвета родство трогать не должна — как и в
+  // `PUT /board/nodes`.
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "parent_key")) {
+    db.prepare("UPDATE canvas_nodes SET parent_key = ? WHERE node_type='pin' AND node_id=?").run(parent_key ?? null, Number(req.params.id));
+  }
+  res.json(db.prepare("SELECT * FROM canvas_pins WHERE id=?").get(Number(req.params.id)));
+});
+canvasRouter.delete("/pins/:id", (req, res) => {
+  const row = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(Number(req.params.id)) as { board_id: number } | undefined;
+  db.prepare("DELETE FROM canvas_pins WHERE id=?").run(Number(req.params.id));
+  db.prepare("DELETE FROM canvas_nodes WHERE node_type='pin' AND node_id=?").run(Number(req.params.id));
+  res.json({ ok: true, board_id: row?.board_id });
+});
+canvasRouter.get("/pins", (req, res) => {
+  const board_id = req.query.board_id ? Number(req.query.board_id) : null;
+  if (!board_id) return res.status(400).json({ error: "board_id required" });
+  res.json(db.prepare("SELECT * FROM canvas_pins WHERE board_id=?").all(board_id));
+});
+// Нити — прямые линии между пинами
+canvasRouter.post("/threads", (req, res) => {
+  const { board_id, from_pin_id, to_pin_id, width, color } = req.body as { board_id?: number; from_pin_id?: number; to_pin_id?: number; width?: number; color?: string };
+  if (!board_id || !from_pin_id || !to_pin_id) return res.status(400).json({ error: "board_id, from_pin_id, to_pin_id required" });
+  if (from_pin_id === to_pin_id) return res.status(400).json({ error: "self link not allowed" });
+  const a = Math.min(Number(from_pin_id), Number(to_pin_id));
+  const b = Math.max(Number(from_pin_id), Number(to_pin_id));
+  // проверка что оба пина на той же доске
+  const fromRow = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(a) as { board_id: number } | undefined;
+  const toRow = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(b) as { board_id: number } | undefined;
+  if (!fromRow || !toRow || fromRow.board_id !== board_id || toRow.board_id !== board_id) return res.status(400).json({ error: "pins not on board" });
+  try {
+    const info = db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color) VALUES (?,?,?,?,?)").run(board_id, a, b, Number(width) || 2, color ?? "#2C3E50");
+    res.status(201).json(db.prepare("SELECT * FROM canvas_threads WHERE id=?").get(info.lastInsertRowid));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("UNIQUE")) return res.status(409).json({ error: "thread already exists" });
+    throw e;
+  }
+});
+canvasRouter.put("/threads/:id", (req, res) => {
+  const { width, color } = req.body as { width?: number; color?: string };
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (width !== undefined) { sets.push("width = ?"); vals.push(Number(width)); }
+  if (color !== undefined) { sets.push("color = ?"); vals.push(String(color)); }
+  if (sets.length) {
+    vals.push(Number(req.params.id));
+    db.prepare(`UPDATE canvas_threads SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+  }
+  res.json(db.prepare("SELECT * FROM canvas_threads WHERE id=?").get(Number(req.params.id)));
+});
+canvasRouter.delete("/threads/:id", (req, res) => {
+  db.prepare("DELETE FROM canvas_threads WHERE id=?").run(Number(req.params.id));
+  res.json({ ok: true });
+});
+canvasRouter.get("/threads", (req, res) => {
+  const board_id = req.query.board_id ? Number(req.query.board_id) : null;
+  if (!board_id) return res.status(400).json({ error: "board_id required" });
+  res.json(db.prepare("SELECT * FROM canvas_threads WHERE board_id=?").all(board_id));
 });
 
 // Изображения (Q6) — загрузка файла уже через /filesystem, здесь только привязка
@@ -1135,7 +2166,7 @@ canvasRouter.get("/export", (req, res) => {
   const board = db.prepare("SELECT id FROM canvas_boards WHERE scope_type = 'arc' AND scope_id = ?").get(arcId) as { id: number } | undefined;
   let canvas: unknown = null;
   if (board) {
-    const nodes = db.prepare("SELECT node_type, node_id, x, y FROM canvas_nodes WHERE board_id = ?").all(board.id);
+    const nodes = db.prepare("SELECT id, node_type, node_id, x, y, z_index, parent_key FROM canvas_nodes WHERE board_id = ?").all(board.id);
     const groups = db.prepare("SELECT arc_id, x, y, w, h FROM canvas_groups WHERE board_id = ?").all(board.id);
     const bundleIds = (nodes as { node_type: string; node_id: number }[]).filter((n) => n.node_type === "bundle").map((n) => n.node_id);
     const bundles = bundleIds.length ? db.prepare(`SELECT * FROM canvas_bundles WHERE id IN (${bundleIds.map(() => "?").join(",")})`).all(...bundleIds) : [];
@@ -1154,7 +2185,7 @@ canvasRouter.get("/export", (req, res) => {
  * Мастера, попала ли в рамку сцена соседней главы.
  */
 canvasRouter.put("/groups/:arcId", (req, res) => {
-  const { board_id, x, y, w, h, color, name } = req.body as {
+  const { board_id, x, y, w, h, color, name, collapsed } = req.body as {
     board_id?: number;
     x?: number;
     y?: number;
@@ -1162,19 +2193,41 @@ canvasRouter.put("/groups/:arcId", (req, res) => {
     h?: number;
     color?: string;
     name?: string;
+    collapsed?: boolean;
   };
   if (!board_id) return res.status(400).json({ error: "board_id is required" });
   if (name !== undefined) {
     db.prepare("UPDATE story_arcs SET name = ? WHERE id = ?").run(String(name).trim() || "Глава", req.params.arcId);
   }
+  // Заводит строку, если её ещё нет. Раньше рамку создавал GET, и простого
+  // UPDATE хватало; теперь GET не пишет, и первый же сдвиг рамки главы
+  // пришёлся бы в ноль строк — то есть молча пропал бы.
+  // Именованные параметры, а не excluded: при частичной правке (ресайз шлёт
+  // только w/h) excluded уже подставил бы дефолт и обнулил x/y.
   db.prepare(
-    `UPDATE canvas_groups SET
-       x = COALESCE(?, x), y = COALESCE(?, y),
-       w = COALESCE(?, w), h = COALESCE(?, h),
-       color = COALESCE(?, color),
-       updated_at = datetime('now')
-     WHERE board_id = ? AND arc_id = ?`
-  ).run(x ?? null, y ?? null, w ?? null, h ?? null, color ?? null, board_id, req.params.arcId);
+    `INSERT INTO canvas_groups (board_id, arc_id, x, y, w, h, color, collapsed, updated_at)
+     VALUES (@board, @arc, COALESCE(@x, 0), COALESCE(@y, 0), COALESCE(@w, @defW), COALESCE(@h, @defH), COALESCE(@color, '#2C3E50'), COALESCE(@collapsed, 1), datetime('now'))
+     ON CONFLICT(board_id, arc_id) DO UPDATE SET
+       x = COALESCE(@x, canvas_groups.x), y = COALESCE(@y, canvas_groups.y),
+       w = COALESCE(@w, canvas_groups.w), h = COALESCE(@h, canvas_groups.h),
+       color = COALESCE(@color, canvas_groups.color),
+       collapsed = COALESCE(@collapsed, canvas_groups.collapsed),
+       updated_at = datetime('now')`
+  ).run({
+    board: Number(board_id),
+    arc: Number(req.params.arcId),
+    x: x ?? null,
+    y: y ?? null,
+    w: w ?? null,
+    h: h ?? null,
+    color: color ?? null,
+    collapsed: collapsed === undefined ? null : collapsed ? 1 : 0,
+    // Размер новой строки — размер пустой главы по Q14: одна колонка сцен
+    // плюс шапка. Для непустой он всё равно пересчитывается охватом при
+    // каждой отдаче доски, так что важен только для главы без сцен.
+    defW: COL_W + FRAME_PAD * 2,
+    defH: FRAME_HEAD + ROW_H + FRAME_PAD,
+  });
   res.json({ ok: true });
 });
 
@@ -1186,25 +2239,56 @@ canvasRouter.put("/groups/:arcId", (req, res) => {
 canvasRouter.put("/board/nodes", (req, res) => {
   const body = req.body as {
     arc_id?: number;
+    setting_id?: number;
+    campaign_id?: number;
     board_id?: number;
-    nodes?: { node_type?: string; node_id?: number; x?: number; y?: number; z_index?: number }[];
+    nodes?: { node_type?: string; node_id?: number; x?: number; y?: number; z_index?: number; parent_key?: string | null }[];
   };
   if (!Array.isArray(body.nodes)) return res.status(400).json({ error: "nodes must be an array" });
   let boardId: number;
   if (body.board_id) boardId = Number(body.board_id);
   else if (body.arc_id) boardId = ensureBoard("arc", Number(body.arc_id));
-  else return res.status(400).json({ error: "arc_id or board_id required" });
+  // Доска схемы сеттинга заводится здесь, при первом сохранении раскладки, а
+  // не на чтении: `GET /canvas/board` в базу не пишет (блок D3).
+  else if (body.setting_id) boardId = ensureBoard("setting", Number(body.setting_id));
+  // Доска карты кампании — тем же путём (блок D4).
+  else if (body.campaign_id) boardId = ensureBoard("campaign", Number(body.campaign_id));
+  else return res.status(400).json({ error: "arc_id, setting_id, campaign_id or board_id required" });
+  // parent_key пишется только когда клиент его прислал: раскладка шлётся
+  // пачкой на каждое перетаскивание, и подставлять там NULL значило бы
+  // срывать ноду с рамки при любом сдвиге соседа.
   const upsert = db.prepare(
-    `INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index, parent_key, updated_at)
+     VALUES (@board, @type, @id, @x, @y, @z, @parent, datetime('now'))
      ON CONFLICT(board_id, node_type, node_id)
-     DO UPDATE SET x = excluded.x, y = excluded.y, z_index = excluded.z_index, updated_at = excluded.updated_at`
+     DO UPDATE SET x = @x, y = @y, z_index = @z,
+       parent_key = CASE WHEN @parentGiven = 1 THEN @parent ELSE canvas_nodes.parent_key END,
+       updated_at = datetime('now')`
   );
+
+  // Место пина хранится дважды: в раскладке и в своей таблице. Второе —
+  // запасной вариант на случай, когда строки раскладки нет; расходиться им
+  // нельзя, иначе пин, уехавший вместе с рамкой, помнит в `canvas_pins`
+  // старое место.
+  const syncPin = db.prepare("UPDATE canvas_pins SET x = ?, y = ? WHERE id = ? AND board_id = ?");
 
   const write = db.transaction((rows: typeof body.nodes) => {
     (rows ?? []).forEach((n) => {
       if (!n.node_type || !n.node_id) return;
-      upsert.run(boardId, n.node_type, Number(n.node_id), Number(n.x) || 0, Number(n.y) || 0, Number((n as { z_index?: number }).z_index) || 0);
+      const parentGiven = Object.prototype.hasOwnProperty.call(n, "parent_key");
+      const x = Number(n.x) || 0;
+      const y = Number(n.y) || 0;
+      upsert.run({
+        board: boardId,
+        type: n.node_type,
+        id: Number(n.node_id),
+        x,
+        y,
+        z: Number(n.z_index) || 0,
+        parent: parentGiven ? (n.parent_key ?? null) : null,
+        parentGiven: parentGiven ? 1 : 0,
+      });
+      if (n.node_type === "pin") syncPin.run(x, y, Number(n.node_id), boardId);
     });
   });
   write(body.nodes);
@@ -1219,21 +2303,36 @@ canvasRouter.put("/board/nodes", (req, res) => {
  * Существо же оказывается на схеме только потому, что его сюда положили.
  */
 canvasRouter.post("/board/node", (req, res) => {
-  const { arc_id, board_id, node_type, node_id, x, y } = req.body as {
+  const { arc_id, setting_id, campaign_id, board_id, node_type, node_id, x, y } = req.body as {
     arc_id?: number;
+    setting_id?: number;
+    campaign_id?: number;
     board_id?: number;
     node_type?: string;
     node_id?: number;
     x?: number;
     y?: number;
   };
-  if ((!arc_id && !board_id) || !node_type || !node_id) {
-    return res.status(400).json({ error: "arc_id or board_id, node_type and node_id are required" });
+  if ((!arc_id && !setting_id && !campaign_id && !board_id) || !node_type || !node_id) {
+    return res
+      .status(400)
+      .json({ error: "arc_id, setting_id, campaign_id or board_id, node_type and node_id are required" });
   }
   if (node_type === "scene") {
     return res.status(400).json({ error: "сцены выводятся из приключения, класть их не нужно" });
   }
-  const boardId = board_id ? Number(board_id) : ensureBoard("arc", Number(arc_id));
+  // Тот же набор владельцев, что у `PUT /board/nodes`. Схема сеттинга и карта
+  // кампании доски на чтении не заводят (блоки D3, D4), и до первого
+  // сохранения раскладки `board_id` у них null — а класть узел рукой Мастер
+  // может и на нетронутую карту. Без этой ветки палитра там молчала: 400 на
+  // щелчок и мёртвый бросок (найдено в блоке G7).
+  const boardId = board_id
+    ? Number(board_id)
+    : arc_id
+      ? ensureBoard("arc", Number(arc_id))
+      : setting_id
+        ? ensureBoard("setting", Number(setting_id))
+        : ensureBoard("campaign", Number(campaign_id));
   db.prepare(
     `INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, updated_at)
      VALUES (?, ?, ?, ?, ?, datetime('now'))
@@ -1481,4 +2580,269 @@ canvasRouter.post("/board/pull-cast", (req, res) => {
   })();
 
   res.json({ ok: true, added, total: targets.length });
+});
+
+/**
+ * Тихие подсказки на нодах (блок G1).
+ *
+ * ОТДЕЛЬНЫМ запросом, а не внутри `GET /board`. Замер на сеттинге владельца
+ * (388 сущностей, 190 сцен): поиск упоминаний — 142 мс проходом по словам
+ * (1616 мс, если регуляркой на каждое имя). Весь `GET /board` на тяжёлой доске
+ * — 54–91 мс, то есть подсказки втрое тяжелее всей загрузки. Холст приходит и
+ * рисуется как раньше, чипы проявляются долей секунды позже: для ТИХОЙ
+ * подсказки задержка не порок.
+ *
+ * Список сцен приходит от клиента, а не выводится из доски: ноды сцен бывают и
+ * на свободной доске, а разрешение copy-on-write слоя кампании уже сделано в
+ * `GET /board` — повторять его здесь значило бы держать две правды об одном.
+ *
+ * Ничего не пишет в базу.
+ */
+canvasRouter.get("/hints", (req, res) => {
+  const q = req.query as { ids?: string; chapters_of?: string };
+  const raw = String(q.ids ?? "");
+  const ids = raw
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+  /**
+   * Счётчик подсказок на узле главы (решение Q22, блок G6.2).
+   *
+   * Сцены главы на холст приключения больше не приезжают, а «что я забыл» с
+   * ними уезжать не должно: спрятав сцены, нельзя спрятать вместе с ними
+   * повод открыть холст утром. Считается здесь, а не в `GET /board`, по той же
+   * причине, по какой сюда вынесены и сами подсказки: поиск упоминаний стоит
+   * дороже всей загрузки доски, а задержка тихой подсказке не порок.
+   */
+  const chaptersOf = Number(q.chapters_of ?? 0);
+  const chapters: { arc_id: number; count: number }[] = [];
+  if (Number.isInteger(chaptersOf) && chaptersOf > 0) {
+    const rows = db
+      .prepare(
+        // Без JOIN: `HINT_SCENE_COLUMNS` перечисляет колонки без префикса
+        // таблицы, а у `story_arcs` есть свои `id` и `name` — соединение
+        // сделало бы их неоднозначными.
+        `SELECT ${HINT_SCENE_COLUMNS}, setting_id, arc_id FROM story_scenes
+          WHERE arc_id IN (SELECT id FROM story_arcs
+                            WHERE parent_id = ? AND archived_at IS NULL AND campaign_id IS NULL)
+            AND archived_at IS NULL AND campaign_id IS NULL`
+      )
+      .all(chaptersOf) as (Parameters<typeof sceneHints>[0][number] & {
+      setting_id: number | null;
+      arc_id: number;
+    })[];
+    const arcOfScene = new Map(rows.map((r) => [r.id, r.arc_id] as const));
+    const bySetting = new Map<number | null, typeof rows>();
+    rows.forEach((r) => {
+      const list = bySetting.get(r.setting_id);
+      if (list) list.push(r);
+      else bySetting.set(r.setting_id, [r]);
+    });
+    const counts = new Map<number, number>();
+    for (const [settingId, list] of bySetting)
+      for (const sc of sceneHints(list, settingId)) {
+        const arc = arcOfScene.get(sc.scene_id);
+        if (arc == null) continue;
+        counts.set(arc, (counts.get(arc) ?? 0) + sc.hints.length);
+      }
+    for (const [arc_id, count] of counts) chapters.push({ arc_id, count });
+  }
+
+  if (ids.length === 0) return res.json({ scenes: [], chapters });
+
+  const rows = db
+    .prepare(
+      `SELECT ${HINT_SCENE_COLUMNS}, setting_id FROM story_scenes
+       WHERE id IN (${ids.map(() => "?").join(",")}) AND archived_at IS NULL`
+    )
+    .all(...ids) as (Parameters<typeof sceneHints>[0][number] & { setting_id: number | null })[];
+
+  // Словарь имён строится на сеттинг, поэтому сцены разных сеттингов считаются
+  // отдельно: на холсте приключения он один, на свободной доске может быть
+  // несколько.
+  const bySetting = new Map<number | null, typeof rows>();
+  rows.forEach((r) => {
+    const list = bySetting.get(r.setting_id);
+    if (list) list.push(r);
+    else bySetting.set(r.setting_id, [r]);
+  });
+
+  const scenes = [...bySetting.entries()].flatMap(([settingId, list]) => sceneHints(list, settingId));
+  res.json({ scenes, chapters });
+});
+
+/**
+ * Заглушка подсказки об упоминании. Два охвата:
+ *
+ * - `scope: "scene"` — «это не оно» здесь. Ставится на ОРИГИНАЛ сеттинга: см.
+ *   комментарий у таблицы в schema.sql.
+ * - `scope: "setting"` — не подсказывать про эту сущность нигде в сеттинге
+ *   (находка Н13). Нужен потому, что 47 из 143 упоминаний на одной доске — имя
+ *   города, в котором идёт всё приключение; точечно его пришлось бы гасить
+ *   47 раз.
+ */
+canvasRouter.post("/hints/dismiss", (req, res) => {
+  const { scene_id, setting_id, entity_type, entity_id, scope } = req.body as {
+    scene_id?: number;
+    setting_id?: number;
+    entity_type?: string;
+    entity_id?: number;
+    scope?: "scene" | "setting";
+  };
+  if (!entity_type || !entity_id) return res.status(400).json({ error: "entity_type, entity_id are required" });
+
+  if (scope === "setting") {
+    if (!setting_id) return res.status(400).json({ error: "setting_id is required for scope=setting" });
+    db.prepare(
+      `INSERT INTO setting_hint_mutes (setting_id, entity_type, entity_id) VALUES (?, ?, ?)
+       ON CONFLICT(setting_id, entity_type, entity_id) DO NOTHING`
+    ).run(setting_id, entity_type, entity_id);
+    return res.json({ ok: true });
+  }
+
+  if (!scene_id) return res.status(400).json({ error: "scene_id is required" });
+  const scene = db.prepare("SELECT id, source_scene_id FROM story_scenes WHERE id = ?").get(scene_id) as
+    | { id: number; source_scene_id: number | null }
+    | undefined;
+  if (!scene) return res.status(404).json({ error: "not found" });
+  db.prepare(
+    `INSERT INTO scene_hint_dismissals (scene_id, entity_type, entity_id) VALUES (?, ?, ?)
+     ON CONFLICT(scene_id, entity_type, entity_id) DO NOTHING`
+  ).run(scene.source_scene_id ?? scene.id, entity_type, entity_id);
+  res.json({ ok: true });
+});
+
+/**
+ * Снять заглушку (находка Н14).
+ *
+ * Заводится вместе с самой заглушкой, а не «когда-нибудь»: ошибочное нажатие
+ * «Это не оно» иначе необратимо — подсказка пропадает и из чипа, и из
+ * счётчика, и вернуть её из интерфейса нечем. У заглушки на весь сеттинг цена
+ * ошибки ещё выше: одно нажатие гасит имя разом во всех приключениях.
+ */
+canvasRouter.delete("/hints/dismiss", (req, res) => {
+  // Параметры в строке запроса, а не в теле: `api.del` на клиенте тела не
+  // шлёт, и ради одного маршрута менять общий слой API незачем. Личных данных
+  // здесь нет — только номера сущностей.
+  const q = req.query as { scene_id?: string; setting_id?: string; entity_type?: string; entity_id?: string; scope?: string };
+  const scene_id = q.scene_id ? Number(q.scene_id) : undefined;
+  const setting_id = q.setting_id ? Number(q.setting_id) : undefined;
+  const entity_type = q.entity_type;
+  const entity_id = q.entity_id ? Number(q.entity_id) : undefined;
+  const scope = q.scope;
+  if (!entity_type || !entity_id) return res.status(400).json({ error: "entity_type, entity_id are required" });
+  if (scope === "setting") {
+    if (!setting_id) return res.status(400).json({ error: "setting_id is required for scope=setting" });
+    db.prepare("DELETE FROM setting_hint_mutes WHERE setting_id = ? AND entity_type = ? AND entity_id = ?").run(
+      setting_id,
+      entity_type,
+      entity_id
+    );
+    return res.json({ ok: true });
+  }
+  if (!scene_id) return res.status(400).json({ error: "scene_id is required" });
+  const scene = db.prepare("SELECT id, source_scene_id FROM story_scenes WHERE id = ?").get(scene_id) as
+    | { id: number; source_scene_id: number | null }
+    | undefined;
+  if (!scene) return res.status(404).json({ error: "not found" });
+  db.prepare("DELETE FROM scene_hint_dismissals WHERE scene_id = ? AND entity_type = ? AND entity_id = ?").run(
+    scene.source_scene_id ?? scene.id,
+    entity_type,
+    entity_id
+  );
+  res.json({ ok: true });
+});
+
+/**
+ * Что заглушено — с именами, чтобы отмена была осмысленной.
+ *
+ * Отдаётся по сеттингу целиком (заглушки на сеттинг) плюс по сценам этой доски
+ * (точечные): список нужен ровно для одного меню и должен быть коротким.
+ * Пустой ответ означает, что пункт меню не показывается вовсе — правило
+ * «блок, которому нечего показать, не показывается».
+ */
+canvasRouter.get("/hints/dismissed", (req, res) => {
+  const { setting_id, ids } = req.query as { setting_id?: string; ids?: string };
+  const settingId = setting_id ? Number(setting_id) : null;
+  const sceneIds = String(ids ?? "")
+    .split(",")
+    .map((x) => Number(x.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+  const named = (type: string, id: number): string => {
+    const spec = ENTITY_NODES[type];
+    if (!spec) return `${type} ${id}`;
+    const row = db.prepare(`SELECT ${spec.nameCol} AS name FROM ${spec.table} WHERE id = ?`).get(id) as
+      | { name: string }
+      | undefined;
+    return row?.name ?? `${type} ${id}`;
+  };
+
+  const setting =
+    settingId == null
+      ? []
+      : (
+          db
+            .prepare("SELECT entity_type, entity_id FROM setting_hint_mutes WHERE setting_id = ? ORDER BY created_at")
+            .all(settingId) as { entity_type: string; entity_id: number }[]
+        ).map((r) => ({ ...r, name: named(r.entity_type, r.entity_id) }));
+
+  // Точечные ищутся и по показанной сцене, и по её оригиналу: копия кампании —
+  // другая строка, а заглушка лежит на оригинале.
+  const scenes =
+    sceneIds.length === 0
+      ? []
+      : (() => {
+          const rows = db
+            .prepare(
+              `SELECT id, source_scene_id, name FROM story_scenes WHERE id IN (${sceneIds.map(() => "?").join(",")})`
+            )
+            .all(...sceneIds) as { id: number; source_scene_id: number | null; name: string }[];
+          const keys = [...new Set(rows.map((r) => r.source_scene_id ?? r.id))];
+          if (keys.length === 0) return [];
+          const nameByKey = new Map(rows.map((r) => [r.source_scene_id ?? r.id, r.name]));
+          const shownByKey = new Map(rows.map((r) => [r.source_scene_id ?? r.id, r.id]));
+          return (
+            db
+              .prepare(
+                `SELECT scene_id, entity_type, entity_id FROM scene_hint_dismissals
+                 WHERE scene_id IN (${keys.map(() => "?").join(",")}) ORDER BY created_at`
+              )
+              .all(...keys) as { scene_id: number; entity_type: string; entity_id: number }[]
+          ).map((r) => ({
+            ...r,
+            scene_id: shownByKey.get(r.scene_id) ?? r.scene_id,
+            scene_name: nameByKey.get(r.scene_id) ?? "",
+            name: named(r.entity_type, r.entity_id),
+          }));
+        })();
+
+  res.json({ setting, scenes });
+});
+
+/**
+ * Шаг режима репетиции (блок G3). Ничего не пишет в базу — как и `GET /board`.
+ *
+ * Без `scene_id` отвечает первой сценой приключения по порядку: с чего начать
+ * прогон, знает сервер, потому что `position` на холст не приезжает вовсе.
+ * `campaign_id` означает то же, что и у холста: показать слой кампании.
+ */
+canvasRouter.get("/rehearsal", (req, res) => {
+  const q = req.query as { scene_id?: string; arc_id?: string; campaign_id?: string };
+  const campaignId = q.campaign_id ? Number(q.campaign_id) : null;
+  const arcId = q.arc_id ? Number(q.arc_id) : null;
+
+  let sceneId = q.scene_id ? Number(q.scene_id) : null;
+  if (!sceneId) {
+    if (!arcId) return res.status(400).json({ error: "scene_id or arc_id is required" });
+    sceneId = firstSceneOf(arcId, campaignId);
+    // Приключение без единой сцены — не ошибка: кнопки прогона на таком
+    // холсте нет вовсе, но запрос мог прийти от вкладки, открытой раньше.
+    if (!sceneId) return res.json(null);
+  }
+
+  const step = rehearsalStep(sceneId, campaignId);
+  if (!step) return res.status(404).json({ error: "not found" });
+  res.json(step);
 });

@@ -6,6 +6,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCard";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { CreatureCardEditor } from "../components/CreatureCardEditor";
 import { useTabState } from "../hooks/useTabState";
 import { api } from "../api/client";
 import {
@@ -252,12 +253,7 @@ export function MonsterDetailPage({
       )}
 
       {tab === "Карточка существа" && (
-        <div className="card stack">
-          <p className="muted">
-            Карточка существа — скоро здесь появится компактная витрина для показа игрокам (пульт
-            управления сессией и другие места).
-          </p>
-        </div>
+        <CreatureCardEditor type="compendium_entry" id={entryId} onChange={onChange} />
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="compendium_entry" entityId={entryId} />}

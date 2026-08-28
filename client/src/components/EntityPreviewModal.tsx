@@ -7,6 +7,7 @@ import { Modal } from "./Modal";
 import { EntityTypeChip } from "./EntityTypeChip";
 import { MentionText } from "./mentions/MentionText";
 import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
+import { CreatureCardLoader, type CreatureCardPayload } from "./CreatureCard";
 import { normalizeDndCharacter, DndCharacterView } from "./dnd/DndCharacterForm";
 import type { DndCharacterData, DndCreatureData, Statblock } from "../types";
 
@@ -33,14 +34,118 @@ export function parseDndStatblock(statblock: Statblock): DndCharacterData | DndC
 // Shared by the modal below and PreviewDock (the session-pult docking
 // panel) — same fetch + body rendering, just without the Modal chrome so
 // the caller can place it inline in a card instead of an overlay.
+//
+// Существо и запись бестиария показываются карточкой существа (шаг 4
+// ревизии) — единым быстрым взглядом вместо прежнего мини-статблока,
+// который печатал все черты, действия и легендарные подряд.
 export function EntityPreviewContent({
   type,
   id,
   onClose,
+  profileInNewWindow,
+  statblockInline,
+  collapsed,
+  onToggleCollapse,
 }: {
   type: string;
   id: number;
   onClose?: () => void;
+  // Док пульта уводит из живой сессии — профиль оттуда открывается новым окном.
+  profileInNewWindow?: boolean;
+  // Модалка меншена подменяет своё содержимое статблоком вместо второй
+  // модалки поверх первой.
+  statblockInline?: boolean;
+  // Свёрнутость карточки в докстанции: там их несколько в одной колонке.
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
+  if (type === "being" || type === "compendium_entry") {
+    return (
+      <CreatureCardPreview
+        type={type}
+        id={id}
+        onClose={onClose}
+        profileInNewWindow={profileInNewWindow}
+        statblockInline={statblockInline}
+        collapsed={collapsed}
+        onToggleCollapse={onToggleCollapse}
+      />
+    );
+  }
+  return (
+    <OtherEntityPreview
+      type={type}
+      id={id}
+      onClose={onClose}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+    />
+  );
+}
+
+function CreatureCardPreview({
+  type,
+  id,
+  onClose,
+  profileInNewWindow,
+  statblockInline,
+  collapsed,
+  onToggleCollapse,
+}: {
+  type: string;
+  id: number;
+  onClose?: () => void;
+  profileInNewWindow?: boolean;
+  statblockInline?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
+  const [shown, setShown] = useState<CreatureCardPayload | null>(null);
+  if (shown?.statblock) {
+    let parsed: unknown = {};
+    try {
+      parsed = JSON.parse(shown.statblock.content || "{}");
+    } catch {
+      parsed = {};
+    }
+    return (
+      <div className="stack">
+        <button type="button" className="comp-mini" onClick={() => setShown(null)}>
+          ← Карточка
+        </button>
+        <DndCreatureView
+          value={normalizeDndCreature(parsed)}
+          theme={shown.statblock.theme}
+          density={shown.statblock.density}
+        />
+      </div>
+    );
+  }
+  return (
+    <CreatureCardLoader
+      type={type}
+      id={id}
+      onClose={onClose}
+      profileInNewWindow={profileInNewWindow}
+      onShowStatblock={statblockInline ? setShown : undefined}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+    />
+  );
+}
+
+function OtherEntityPreview({
+  type,
+  id,
+  onClose,
+  collapsed,
+  onToggleCollapse,
+}: {
+  type: string;
+  id: number;
+  onClose?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const [detail, setDetail] = useState<Record<string, unknown> | null | undefined>(undefined);
   const [statblock, setStatblock] = useState<Statblock | null>(null);
@@ -52,7 +157,7 @@ export function EntityPreviewContent({
     fetchEntityDetail(type, id).then((d) => {
       if (!cancelled) setDetail(d);
     });
-    if (type === "character" || type === "being" || type === "compendium_entry") {
+    if (type === "character") {
       api
         .get<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`)
         .then((rows) => {
@@ -72,22 +177,40 @@ export function EntityPreviewContent({
 
   return (
     <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+      {/* Шапка сама и есть переключатель: в докстанции Мастер сворачивает
+          карточку на ходу, и цель в 20 px рядом с крестиком — не то, во что
+          попадают за столом. */}
+      <div
+        className={`row${onToggleCollapse ? " preview-head-clickable" : ""}`}
+        style={{ justifyContent: "space-between", alignItems: "flex-start" }}
+        onClick={onToggleCollapse}
+        title={onToggleCollapse ? (collapsed ? "Развернуть" : "Свернуть") : undefined}
+      >
         <div className="row" style={{ alignItems: "center", gap: 8 }}>
           <EntityTypeChip type={type} />
           <strong>{name}</strong>
         </div>
-        {onClose && (
-          <button type="button" className="comp-mini" onClick={onClose}>
-            ✕
-          </button>
-        )}
+        <div className="row" style={{ gap: 4 }}>
+          {onToggleCollapse && <span className="muted">{collapsed ? "+" : "−"}</span>}
+          {onClose && (
+            <button
+              type="button"
+              className="comp-mini"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
-      {detail === undefined && <span className="muted">Загрузка…</span>}
-      {detail === null && <span className="muted">Не найдено.</span>}
+      {!collapsed && detail === undefined && <span className="muted">Загрузка…</span>}
+      {!collapsed && detail === null && <span className="muted">Не найдено.</span>}
 
-      {detail && (
+      {!collapsed && detail && (
         <div className="stack">
           {avatar && (
             <img src={avatar} alt="" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: "var(--card-radius)" }} />
@@ -99,21 +222,6 @@ export function EntityPreviewContent({
               <MentionText text={String(detail.description ?? "")} />
             </>
           )}
-
-          {type === "being" &&
-            (statblock ? (
-              <DndCreatureView
-                value={parseDndStatblock(statblock) as DndCreatureData}
-                compact
-                theme={statblock.theme}
-                density={statblock.density}
-              />
-            ) : (
-              <>
-                {!!detail.category && <span className="muted">{String(detail.category)}</span>}
-                <MentionText text={String(detail.statblock_short ?? "")} />
-              </>
-            ))}
 
           {type === "character" &&
             (statblock ? (
@@ -127,21 +235,6 @@ export function EntityPreviewContent({
               <>
                 <MentionText text={String(detail.current_situation ?? "")} />
                 <MentionText text={String(detail.backstory ?? "")} />
-              </>
-            ))}
-
-          {type === "compendium_entry" &&
-            (statblock ? (
-              <DndCreatureView
-                value={parseDndStatblock(statblock) as DndCreatureData}
-                compact
-                theme={statblock.theme}
-                density={statblock.density}
-              />
-            ) : (
-              <>
-                {!!detail.kind && <span className="muted">{String(detail.kind)}</span>}
-                <MentionText text={String(detail.description ?? "")} />
               </>
             ))}
 
@@ -178,7 +271,7 @@ export function EntityPreviewContent({
         </div>
       )}
 
-      {DETAIL_ROUTES[type] && (
+      {!collapsed && DETAIL_ROUTES[type] && (
         <Link to={`${DETAIL_ROUTES[type]}/${id}`} onClick={onClose}>
           Открыть полностью →
         </Link>
@@ -196,7 +289,7 @@ export function EntityPreviewContent({
 export function EntityPreviewModal({ type, id, onClose }: Props) {
   return (
     <Modal onClose={onClose}>
-      <EntityPreviewContent type={type} id={id} onClose={onClose} />
+      <EntityPreviewContent type={type} id={id} onClose={onClose} statblockInline />
     </Modal>
   );
 }

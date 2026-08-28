@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, type DragEvent } from "react";
+import { memo, useCallback, useMemo, useRef, type DragEvent, useState } from "react";
 import type { LitMCharacterData, LitMThemeCard, LitMImprovement } from "../../types";
 import type { SearchResult } from "../../types";
 import { emptyTheme, ThemeCardEdit, ThemeCardView } from "./ThemeCard";
@@ -9,6 +9,11 @@ import { MentionText } from "../mentions/MentionText";
 import { api } from "../../api/client";
 import { statblockScopeClass } from "../../statblockThemes";
 import { NavIcon } from "../NavIcons";
+import {
+  findLitmSystemId,
+  loadLitmThemeKits,
+} from "./litmCompendium";
+import { TropePickerModal } from "./TropePickerModal";
 
 async function applyGroupTheme(campaignId: number | undefined, theme: LitMThemeCard) {
   if (!campaignId) return;
@@ -52,7 +57,7 @@ export function normalizeTheme(raw: unknown): LitMThemeCard {
       : [];
   const power = t.power;
   return {
-    power: power === "origin" || power === "adventure" || power === "greatness" ? power : "",
+    power: power === "origin" || power === "adventure" || power === "greatness" || power === "variable" ? power : "",
     themeType: (t.themeType as string) ?? (t.type as string) ?? "",
     name: (t.name as string) ?? "",
     powerTags: Array.isArray(t.powerTags) ? (t.powerTags as string[]) : splitLines(t.powerTags),
@@ -214,6 +219,8 @@ export function LitMCharacterEdit({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+const [showTropePicker, setShowTropePicker] = useState(false);
+
   const setField = useCallback(
     <K extends keyof LitMCharacterData>(key: K, v: LitMCharacterData[K]) => {
       onChangeRef.current({ ...valueRef.current, [key]: v });
@@ -351,6 +358,16 @@ export function LitMCharacterEdit({
       </label>
 
       <strong>Карты Тем (Theme Cards)</strong>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span></span>
+        <button
+          type="button"
+          onClick={() => setShowTropePicker(true)}
+          style={{ padding: "4px 10px", border: "1.5px solid var(--ink)", background: "transparent", cursor: "pointer" }}
+        >
+          ⚡ Выбрать троп
+        </button>
+      </div>
       <div className="litm-theme-row">
         {value.themes.map((t, i) => (
           <ThemeCardEdit
@@ -394,6 +411,49 @@ export function LitMCharacterEdit({
       <button onClick={addStoryTheme} style={{ alignSelf: "flex-start" }}>
         + Добавить тему истории
       </button>
+
+      <TropePickerModal
+        isOpen={showTropePicker}
+        onClose={() => setShowTropePicker(false)}
+        onPick={async (trope) => {
+          try {
+            const sysId = await findLitmSystemId();
+            if (!sysId) return;
+            const kits = await loadLitmThemeKits(sysId);
+            
+            const kitsByThemebook = new Map<string, any[]>();
+            for (const kit of kits) {
+              const arr = kitsByThemebook.get(kit.themebookEn) ?? [];
+              arr.push(kit);
+              kitsByThemebook.set(kit.themebookEn, arr);
+            }
+
+            const allTypes = [...trope.data.themes_fixed];
+            const newThemes = allTypes.map((themebookEn: string) => {
+              const themebookKits = kitsByThemebook.get(themebookEn) ?? [];
+              const kit = themebookKits[0];
+              return {
+                ...emptyTheme(),
+                themeType: themebookEn,
+                power: kit?.data.might ?? "",
+                name: kit ? `${kit.name.split(" [")[0]} [${themebookEn}]` : themebookEn,
+                powerTags: kit?.data.powerTags ?? [],
+                weaknessTags: kit?.data.weaknessTags ?? [],
+                quest: kit?.data.quest ?? "",
+              };
+            });
+
+            const themes = value.themes.slice();
+            for (let i = 0; i < 4; i++) {
+              themes[i] = newThemes[i] ?? emptyTheme();
+            }
+            onChange({ ...value, themes });
+          } catch (e) {
+            console.error(e);
+          }
+          setShowTropePicker(false);
+        }}
+      />
     </div>
   );
 }

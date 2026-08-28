@@ -17,6 +17,27 @@ const RESTORE_ENDPOINTS: Record<string, string> = {
   being: "/setting-beings",
   artifact: "/artifacts",
   community: "/setting-communities",
+  canvas_board: "/canvas/free-boards",
+};
+
+// Тип в строке архива подписан по-русски. До этого печатался идентификатор
+// (`setting`, `mastering`), и добавление доски дало бы в этом столбце ещё одну
+// английскую строку — `canvas_board`. Запасной вариант — сам идентификатор:
+// новый тип лучше показать сырым, чем не показать вовсе.
+const TYPE_LABELS: Record<string, string> = {
+  campaign: "кампания",
+  system: "система",
+  setting: "сеттинг",
+  player: "игрок",
+  character: "персонаж",
+  session: "сессия",
+  resource: "ресурс",
+  mastering: "мастерение",
+  location: "локация",
+  being: "существо",
+  artifact: "артефакт",
+  community: "сообщество",
+  canvas_board: "доска",
 };
 
 const TABS = ["Сущности", "Файлы"] as const;
@@ -154,7 +175,7 @@ export function ArchivePage() {
         <div className="stack">
           {items.map((item) => (
             <div key={`${item.type}-${item.id}`} className="archive-row">
-              <span>{item.type}</span>
+              <span>{TYPE_LABELS[item.type] ?? item.type}</span>
               <span>
                 {item.title}
                 {item.subtitle && ` · ${item.subtitle}`}

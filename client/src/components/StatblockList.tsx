@@ -20,6 +20,7 @@ import {
   normalizeTheme,
 } from "./litm/LitMCharacterForm";
 import { normalizeDndCreature, DndCreatureEdit, DndCreatureView } from "./dnd/DndCreatureForm";
+import { CreatureCardLoader } from "./CreatureCard";
 import { emptyDndCharacter, normalizeDndCharacter, DndCharacterEdit, DndCharacterView } from "./dnd/DndCharacterForm";
 import { findDndSystemId } from "./dnd/dndCompendium";
 import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
@@ -227,6 +228,8 @@ export function StatblockList({
         <StatblockCard
           key={sb.id}
           statblock={sb}
+          ownerType={ownerType}
+          ownerId={ownerId}
           onChange={refresh}
           onRemove={removeStatblock}
           campaignId={campaignId}
@@ -348,12 +351,16 @@ export function StatblockList({
 
 function StatblockCard({
   statblock,
+  ownerType,
+  ownerId,
   onChange,
   onRemove,
   campaignId,
   settingId,
 }: {
   statblock: Statblock;
+  ownerType: "character" | "being" | "compendium_entry";
+  ownerId: number;
   onChange: () => void;
   onRemove: (id: number) => void;
   campaignId?: number;
@@ -559,6 +566,29 @@ function StatblockCard({
       );
     }
 
+    // Краткий статблок существа — это и есть быстрый взгляд, просто в
+    // четвёртом месте: рисуется карточкой существа (design_revision.md, шаг
+    // 4). Прежний compact-вид печатал все черты, действия и легендарные
+    // подряд, то есть был плохим полным статблоком.
+    if (kind === "short" && statblock.format === "dnd_creature" && ownerType !== "character") {
+      return (
+        <div className="stack">
+          {headerExtra && (
+            <div className="sb-short-card-controls">
+              <span className="sb-short-card-caption">Краткий статблок</span>
+              <span className="row">{headerExtra}</span>
+            </div>
+          )}
+          <CreatureCardLoader
+            type={ownerType}
+            id={ownerId}
+            statblockId={statblock.id}
+            hideProfileButton
+          />
+        </div>
+      );
+    }
+
     return dndValue ? (
       // On a phone, an expanded creature statblock is squeezed into the same
       // narrow inline column as everything else on the owning page — the
@@ -571,7 +601,6 @@ function StatblockCard({
           value={dndValue as DndCreatureData}
           theme={theme}
           density={density}
-          compact={kind === "short"}
           onQuickUpdate={quickSaveDndCreature}
           collapsed={collapsed}
           headerExtra={headerExtra}

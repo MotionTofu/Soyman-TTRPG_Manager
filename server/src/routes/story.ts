@@ -533,14 +533,32 @@ const NODE_NAME_TABLES: Record<string, { table: string; nameCol: string }> = {
 };
 
 storyRouter.post("/arcs", (req, res) => {
-  const { setting_id, parent_id, name, description } = req.body as {
+  const { setting_id, parent_id, name, description, campaign_id } = req.body as {
     setting_id: number;
     parent_id?: number | null;
     name: string;
     description?: string;
+    campaign_id?: number | null;
   };
   if (!setting_id || !name?.trim()) {
     return res.status(400).json({ error: "setting_id and name are required" });
+  }
+  // Приключение, заведённое ИЗ кампании, живёт только в ней и в заготовку
+  // сеттинга не попадает (решение D0 §16). Без `source_arc_id` — это не версия
+  // чужого текста, а своя вещь; ровно по этой паре его и находит карта
+  // кампании (`GET /canvas/board?campaign_id=`).
+  //
+  // Поле принималось не всегда: кнопка «+ Приключение кампании» появилась в
+  // блоке D4, а этот обработчик `campaign_id` молча выбрасывал — приключение
+  // уходило в сеттинг и попадало во все его кампании разом. Найдено проверкой
+  // блока D5.
+  let campaignId: number | null = null;
+  if (campaign_id != null) {
+    const owner = db
+      .prepare("SELECT id FROM campaigns WHERE id = ? AND archived_at IS NULL")
+      .get(Number(campaign_id));
+    if (!owner) return res.status(400).json({ error: "unknown campaign" });
+    campaignId = Number(campaign_id);
   }
   const position =
     (db
@@ -550,9 +568,9 @@ storyRouter.post("/arcs", (req, res) => {
       .get(setting_id, parent_id ?? null) as { m: number | null }).m ?? -1;
   const info = db
     .prepare(
-      "INSERT INTO story_arcs (setting_id, parent_id, name, description, position) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO story_arcs (setting_id, parent_id, name, description, position, campaign_id) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .run(setting_id, parent_id ?? null, name.trim(), description ?? "", position + 1);
+    .run(setting_id, parent_id ?? null, name.trim(), description ?? "", position + 1, campaignId);
   res.status(201).json(db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(info.lastInsertRowid));
 });
 
@@ -598,7 +616,13 @@ storyRouter.put("/arcs/:id", (req, res) => {
     values.push(req.body[field]);
   }
   if (sets.length > 0) {
-    db.prepare(`UPDATE story_arcs SET ${sets.join(", ")} WHERE id = ?`).run(...values, target.id);
+    // `updated_at` — ради одного: сказать Мастеру, что оригинал в сеттинге
+    // изменился ПОСЛЕ того, как кампания сняла с него свою копию (блок D4).
+    // Сравнивается с `created_at` копии.
+    db.prepare(`UPDATE story_arcs SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ?`).run(
+      ...values,
+      target.id
+    );
   }
   const saved = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(target.id) as Record<string, unknown>;
   if (campaignId == null) return res.json(saved);
@@ -1223,6 +1247,24 @@ storyRouter.put("/scenes/:id", (req, res) => {
   const target = resolveWritableScene(Number(req.params.id), campaignId);
   if (!target) return res.status(404).json({ error: "not found" });
 
+  /**
+   * Смена главы переносит МЕСТО сцены на холст новой главы (блок G6.2).
+   *
+   * До этого блока сцены приключения и всех его глав лежали на одной доске, и
+   * смена главы места не касалась. Теперь у каждой главы холст свой, и строка
+   * `canvas_nodes`, оставшаяся на прежней доске, стала бы двумя бедами разом:
+   * на старом холсте — местом сцены, которой там нет, на новом — сценой без
+   * места, которую сервер положит в первый свободный слот поверх чужой.
+   *
+   * Переносится вместе с проверками сцены: проверка — ребёнок своей сцены, и
+   * порознь они попадут на разные холсты. Координаты не пересчитываются: у
+   * досок общее начало отсчёта, и сцена встаёт там же, где стояла.
+   */
+  const arcBefore = (db.prepare("SELECT arc_id FROM story_scenes WHERE id = ?").get(target.id) as
+    | { arc_id: number | null }
+    | undefined)?.arc_id ?? null;
+  const arcAfter = req.body.arc_id === undefined ? arcBefore : req.body.arc_id == null ? null : Number(req.body.arc_id);
+
   const sets: string[] = [];
   const values: unknown[] = [];
   for (const field of SCENE_FIELDS) {
@@ -1233,6 +1275,47 @@ storyRouter.put("/scenes/:id", (req, res) => {
   if (sets.length > 0) {
     db.prepare(`UPDATE story_scenes SET ${sets.join(", ")} WHERE id = ?`).run(...values, target.id);
   }
+
+  if (arcAfter !== arcBefore && arcAfter != null) {
+    const toBoard = db
+      .prepare("SELECT id FROM canvas_boards WHERE scope_type = 'arc' AND scope_id = ?")
+      .get(arcAfter) as { id: number } | undefined;
+    // Доски у новой главы может ещё не быть: она заводится первым открытием
+    // холста. Тогда переносить некуда — старую строку просто убираем, и при
+    // первом открытии сцена ляжет автораскладкой. Оставить её нельзя: это
+    // место сцены, которой на той доске больше нет.
+    const checkIds = (
+      db.prepare("SELECT id FROM story_scene_checks WHERE scene_id = ?").all(target.id) as { id: number }[]
+    ).map((c) => c.id);
+    const moveRows = db.transaction(() => {
+      // Удаляется УСТАРЕВШАЯ строка на доске-получателе, а не исходная:
+      // уникальный индекс (board_id, node_type, node_id) не пустит вторую, а
+      // двигать надо ту, что лежит на прежней доске. Порядок наоборот стирал
+      // как раз переносимое, и место сцены пропадало совсем.
+      const drop = db.prepare(
+        "DELETE FROM canvas_nodes WHERE board_id = ? AND node_type = ? AND node_id = ?"
+      );
+      const move = db.prepare(
+        "UPDATE canvas_nodes SET board_id = @board, parent_key = NULL WHERE node_type = @type AND node_id = @id"
+      );
+      if (toBoard) {
+        // Родство сбрасывается: `parent_key` называет рамку ПРЕЖНЕЙ доски, и
+        // на новой этот ключ означал бы чужую рамку или ничью.
+        drop.run(toBoard.id, "scene", target.id);
+        move.run({ board: toBoard.id, type: "scene", id: target.id });
+        for (const cid of checkIds) {
+          drop.run(toBoard.id, "check", cid);
+          move.run({ board: toBoard.id, type: "check", id: cid });
+        }
+      } else {
+        db.prepare("DELETE FROM canvas_nodes WHERE node_type = 'scene' AND node_id = ?").run(target.id);
+        for (const cid of checkIds)
+          db.prepare("DELETE FROM canvas_nodes WHERE node_type = 'check' AND node_id = ?").run(cid);
+      }
+    });
+    moveRows();
+  }
+
   res.json(db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(target.id));
 });
 
@@ -1745,16 +1828,93 @@ storyRouter.delete("/transitions/:transitionId", (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * Кампания берёт связи сеттинга себе — целиком и один раз (решение D0 §12).
+ *
+ * Построчного наследования нет намеренно: правка связи обычно означает «этой
+ * стрелки здесь больше нет», а удалить чужую (сеттинговую) строку нельзя, и
+ * пришлось бы заводить невидимую запись «связи нет» — сущность, которую за
+ * столом нельзя ни увидеть, ни отменить, не зная про неё. Поэтому первая же
+ * правка внутри кампании копирует весь набор, и дальше кампания ведёт свой.
+ *
+ * Флаг `own_arc_transitions` нужен отдельно от «есть ли строки»: Мастер может
+ * стереть в кампании все связи до единой, и без флага это было бы неотличимо
+ * от «своих связей нет» — связи сеттинга вернулись бы сами.
+ */
+function ensureCampaignOwnsTransitions(campaignId: number): void {
+  const row = db
+    .prepare("SELECT own_arc_transitions FROM campaigns WHERE id = ?")
+    .get(campaignId) as { own_arc_transitions: number } | undefined;
+  if (!row || row.own_arc_transitions === 1) return;
+  db.transaction(() => {
+    db.prepare(
+      `INSERT OR IGNORE INTO story_arc_transitions (from_arc_id, to_arc_id, label, position, campaign_id)
+       SELECT from_arc_id, to_arc_id, label, position, ?
+         FROM story_arc_transitions WHERE campaign_id IS NULL`
+    ).run(campaignId);
+    db.prepare("UPDATE campaigns SET own_arc_transitions = 1 WHERE id = ?").run(campaignId);
+  })();
+}
+
 storyRouter.post("/arcs/:id/transitions", (req, res) => {
-  const { to_arc_id, label } = req.body as { to_arc_id: number; label?: string };
+  const { to_arc_id, label, campaign_id } = req.body as {
+    to_arc_id: number;
+    label?: string;
+    campaign_id?: number;
+  };
   if (!to_arc_id) return res.status(400).json({ error: "to_arc_id is required" });
-  db.prepare("INSERT OR IGNORE INTO story_arc_transitions (from_arc_id, to_arc_id, label) VALUES (?, ?, ?)").run(Number(req.params.id), to_arc_id, label ?? "");
+  const campaignId = campaign_id ? Number(campaign_id) : null;
+  if (campaignId) ensureCampaignOwnsTransitions(campaignId);
+  db.prepare(
+    "INSERT OR IGNORE INTO story_arc_transitions (from_arc_id, to_arc_id, label, campaign_id) VALUES (?, ?, ?, ?)"
+  ).run(Number(req.params.id), to_arc_id, label ?? "", campaignId);
   res.status(201).json({ ok: true });
 });
 
 storyRouter.delete("/arc-transitions/:transitionId", (req, res) => {
+  // Удаление изнутри кампании: если кампания ещё смотрит на заготовку
+  // сеттинга, сначала снимаем с неё копию целиком, а стираем уже СВОЮ строку —
+  // связь сеттинга при этом остаётся нетронутой.
+  const campaignId = req.query.campaign_id ? Number(req.query.campaign_id) : null;
+  const row = db
+    .prepare("SELECT from_arc_id, to_arc_id, label, campaign_id FROM story_arc_transitions WHERE id = ?")
+    .get(req.params.transitionId) as
+    | { from_arc_id: number; to_arc_id: number; label: string; campaign_id: number | null }
+    | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+
+  if (campaignId && row.campaign_id == null) {
+    ensureCampaignOwnsTransitions(campaignId);
+    db.prepare(
+      "DELETE FROM story_arc_transitions WHERE campaign_id = ? AND from_arc_id = ? AND to_arc_id = ? AND label = ?"
+    ).run(campaignId, row.from_arc_id, row.to_arc_id, row.label);
+    return res.json({ ok: true });
+  }
   db.prepare("DELETE FROM story_arc_transitions WHERE id = ?").run(req.params.transitionId);
   res.json({ ok: true });
+});
+
+// Вернуть связи сеттинга: свой набор кампании стирается целиком, флаг
+// снимается, и карта снова показывает заготовку.
+storyRouter.delete("/campaigns/:id/arc-transitions", (req, res) => {
+  const campaignId = Number(req.params.id);
+  db.transaction(() => {
+    db.prepare("DELETE FROM story_arc_transitions WHERE campaign_id = ?").run(campaignId);
+    db.prepare("UPDATE campaigns SET own_arc_transitions = 0 WHERE id = ?").run(campaignId);
+  })();
+  res.json({ ok: true });
+});
+
+// Отказаться от кампанийной версии приключения и вернуться к версии сеттинга.
+// Стирается только копия (`campaign_id` + `source_arc_id`); оригинал и
+// прогресс кампании не трогаются.
+storyRouter.delete("/arcs/:id/campaign-override", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  const info = db
+    .prepare("DELETE FROM story_arcs WHERE campaign_id = ? AND source_arc_id = ?")
+    .run(campaignId, Number(req.params.id));
+  res.json({ ok: true, removed: info.changes });
 });
 
 // --------------------------------------------------- набор звука у сцены

@@ -361,7 +361,7 @@ export interface Statblock {
   created_at: string;
 }
 
-export type LitMPower = "" | "origin" | "adventure" | "greatness";
+export type LitMPower = "" | "origin" | "adventure" | "greatness" | "variable";
 
 export interface LitMImprovement {
   text: string;
@@ -403,6 +403,7 @@ export interface LitMCharacterData {
 export interface LitMChallengeData {
   title: string;
   role: string;
+  mightLevel: "origin" | "adventure" | "greatness" | "variable";
   might: number;
   tagsAndStatuses: string;
   limits: string;
@@ -1741,6 +1742,27 @@ export interface PartyMember {
 
 // ------------------------------------------------------------------ полотно
 
+/**
+ * Переход, второй конец которого лежит на другом холсте (блок G6.2, Q17).
+ *
+ * После того как глава стала узлом-контейнером, 13 переходов из 81 разошлись
+ * по двум холстам. Стрелке прийти некуда, но и молчать нельзя — холст не
+ * должен врать. Поэтому у сцены остаётся висящий разъём: он называет чужую
+ * сцену и знает адрес её холста, а шагает по нему Мастер щелчком.
+ */
+export interface OutsideLink {
+  /** `out` — отсюда туда (разъём справа), `in` — оттуда сюда (слева). */
+  dir: "out" | "in";
+  label: string;
+  scene_id: number;
+  scene_name: string;
+  arc_id: number;
+  arc_name: string;
+  setting_id: number;
+  /** Холст, на который ведёт щелчок. */
+  board_arc_id: number;
+}
+
 /** Нода на холсте: ссылка на реальную запись плюс её место. */
 export interface CanvasNode {
   /** Ключ ноды «вид:номер»: сцена 41 и существо 41 — разные ноды. */
@@ -1766,6 +1788,8 @@ export interface CanvasNode {
     library_name: string | null;
     /** Сколько ссылок сцены ведёт в другой сеттинг. */
     foreign_links: number;
+    /** Переходы, чей второй конец на другом холсте (блок G6.2). */
+    outside?: OutsideLink[];
   };
 }
 
@@ -1841,21 +1865,30 @@ export interface CanvasEdge {
   id: string;
   /**
    * transition — переход между сценами, outcome — исход проверки,
-   * cast — сущность втекает в сцену, member — член набора.
+   * cast — сущность втекает в сцену, member — член набора, thread — нить между пинами.
    */
-  kind: "transition" | "outcome" | "cast" | "member";
+  kind: "transition" | "outcome" | "cast" | "member" | "thread";
   /** Ключи нод, а не номера: на холсте рядом со сценами стоят сущности. */
   source: string;
   target: string;
   /** В какой разъём воткнуто: story | location | participants | items | members. */
   target_handle: string;
   label: string;
+  width?: number;
+  color?: string;
 }
 
-/** Нода сущности на холсте — существо, локация, предмет, запись компендиума. */
+/** Нода сущности на холсте — существо, локация, предмет, запись компендиума,
+ *  персонаж игрока. */
 export interface CanvasEntityNode {
   key: string;
-  node_type: "being" | "location" | "artifact" | "community" | "compendium_entry";
+  node_type:
+    | "being"
+    | "location"
+    | "artifact"
+    | "community"
+    | "compendium_entry"
+    | "character";
   node_id: number;
   x: number;
   y: number;
@@ -1916,7 +1949,46 @@ export interface CanvasAdventureNode {
   x: number;
   y: number;
   placed: boolean;
-  adventure: { id: number; name: string };
+  adventure: {
+    id: number;
+    name: string;
+    setting_id: number;
+    chapter_count: number;
+    scene_count: number;
+    /** Только на карте кампании (блок D4). */
+    progress?: "done" | "active" | "untouched";
+    /** Приключение переписано под эту кампанию. */
+    is_override?: boolean;
+    /** Оригинал в сеттинге правили после того, как кампания сняла копию. */
+    setting_changed_at?: string | null;
+    /** Добавлено в кампанию после того, как карту разложили. */
+    is_new?: boolean;
+  };
+}
+
+/**
+ * Узел главы на холсте приключения (блок G6.2).
+ *
+ * До этого блока глава была рамкой, обнимавшей свои сцены. Рамок стало много,
+ * а вместе с ними на холст приезжали 184 сцены из 201 — и держались видимыми
+ * только свёрткой. Теперь глава — такой же контейнер, как приключение: в неё
+ * входят, и её сцены лежат на её собственном холсте.
+ */
+export interface CanvasChapterNode {
+  key: string;
+  node_type: "chapter";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  chapter: {
+    id: number;
+    name: string;
+    /** Приключение, которому глава принадлежит, — ради адреса «Войти». */
+    arc_id: number;
+    setting_id: number;
+    scene_count: number;
+  };
 }
 
 /** Стикер — свободная заметка, 6 пастелей §5 */
@@ -1949,7 +2021,27 @@ export interface CanvasFrameNode {
   x: number;
   y: number;
   placed: boolean;
-  frame: { id: number; name: string; color: string; w: number; h: number };
+  frame: {
+    id: number;
+    name: string;
+    color: string;
+    w: number;
+    h: number;
+    /** Свёрнута ли рамка (блок G6.3). Механизм переехал сюда с главы, когда
+     *  та стала узлом-контейнером. Хранимые `w/h` относятся к развёрнутому
+     *  виду и свёртку переживают нетронутыми. */
+    collapsed?: boolean;
+  };
+}
+export interface CanvasPinNode {
+  key: string;
+  node_type: "pin";
+  node_id: number;
+  x: number;
+  y: number;
+  z_index?: number;
+  placed: boolean;
+  pin: { id: number; name: string; color: string; shape: string; size: string; z_index: number };
 }
 export interface CanvasSoundSetNode {
   key: string;
@@ -1987,9 +2079,15 @@ export interface CanvasCheckNode {
   };
 }
 
-export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode | CanvasCheckNode | CanvasAdventureNode | CanvasStickerNode | CanvasImageNode | CanvasFrameNode | CanvasSoundSetNode | CanvasPlaylistNode;
+export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode | CanvasCheckNode | CanvasAdventureNode | CanvasChapterNode | CanvasStickerNode | CanvasImageNode | CanvasFrameNode | CanvasPinNode | CanvasSoundSetNode | CanvasPlaylistNode;
 
-/** Рамка главы на холсте приключения. */
+/**
+ * Рамка главы на холсте приключения — ОТМЕНЕНА блоком G6.2.
+ *
+ * Глава стала узлом-контейнером (`CanvasChapterNode`), и `groups` в ответе
+ * доски теперь всегда пуст. Тип оставлен, пока с ним не разошлись все места
+ * чтения; заводить по нему новое не нужно.
+ */
 export interface CanvasGroup {
   arc_id: number;
   name: string;
@@ -1998,18 +2096,95 @@ export interface CanvasGroup {
   y: number;
   w: number;
   h: number;
+  /** Свёрнута ли глава. Хранится в базе рядом с раскладкой, а не в
+   *  localStorage: иначе на другой машине раскладка приехала бы, а свёртка
+   *  нет. Свежая глава приходит свёрнутой. */
+  collapsed?: boolean;
+}
+
+/** Нить между двумя пинами на свободной доске. */
+export interface CanvasThread {
+  id: number;
+  from_pin_id: number;
+  to_pin_id: number;
+  width: number;
+  color: string;
+}
+
+/**
+ * Нода в составе доски: сама нода плюс то, что о её месте знает доска, а не
+ * сущность. Отдельным именем — чтобы это можно было назвать в сигнатуре
+ * функции, а не описывать пересечением на каждом вызове.
+ */
+export type CanvasBoardNode = CanvasAnyNode & {
+  z_index?: number;
+  /** Рамка, на которую ноду бросили: `chapter:26` или `frame:4`. Только у
+   *  тех, у кого своей главы нет — сущность, стикер, картинка, пин. У сцены
+   *  и проверки родитель выводится из данных (`scene.arc_id`). */
+  parent_key?: string | null;
+};
+
+/**
+ * Тихая подсказка на ноде сцены (блок G1): «нет места», «упомянут, но не в
+ * составе», «развилка никуда не ведёт», «у исхода проверки нет цели».
+ *
+ * Приходит отдельным запросом после доски, а не в её составе: поиск упоминаний
+ * стоит 142 мс против 54–91 мс на всю загрузку холста.
+ */
+export interface SceneHint {
+  kind: "no_place" | "branch_dead_end" | "outcome_no_target" | "mentioned_not_cast";
+  text: string;
+  /** Только у `mentioned_not_cast` — то, что можно заглушить «это не оно». */
+  entity_type?: string;
+  entity_id?: number;
+}
+
+/**
+ * Что заглушено — для меню «Заглушённые подсказки» (находки Н13, Н14).
+ * Пустой ответ означает, что пункта меню нет вовсе.
+ */
+export interface DismissedHints {
+  /** Заглушено на весь сеттинг: имя не подсказывается нигде. */
+  setting: { entity_type: string; entity_id: number; name: string }[];
+  /** Точечно, «это не оно здесь». */
+  scenes: { scene_id: number; scene_name: string; entity_type: string; entity_id: number; name: string }[];
+}
+
+export interface SceneHintsResponse {
+  scenes: { scene_id: number; hints: SceneHint[] }[];
+  /** Сколько подсказок внутри каждой главы приключения (блок G6.2, Q22).
+   *  Приходит по запросу `chapters_of=<приключение>`: сцены главы на холст
+   *  не приезжают, а «что я забыл» с ними уезжать не должно. */
+  chapters?: { arc_id: number; count: number }[];
 }
 
 export interface CanvasBoard {
-  board_id: number;
-  arc?: { id: number; name: string; setting_id: number };
-  setting?: { id: number; name: string };
-  campaign?: { id: number; name: string; setting_id: number | null };
+  /** null у схемы сеттинга, которую ещё ни разу не сохраняли: строка доски
+   *  заводится первым сохранением раскладки, а не чтением (блок D3). */
+  board_id: number | null;
+  /** `parent` есть только у холста главы: это её приключение, ступень крошек
+   *  и адрес выхода наверх (блок G6.2). */
+  arc?: { id: number; name: string; setting_id: number; parent?: { id: number; name: string } | null };
   free?: { id: number; name: string };
+  /** Схема сеттинга — приключения узлами, связи рёбрами (блок D3). */
+  setting?: { id: number; name: string };
+  /** Карта кампании — её приключения, покрашенные прохождением (блок D4). */
+  campaign_map?: {
+    id: number;
+    name: string;
+    setting_id: number | null;
+    /** Кампания ведёт свой набор связей, а не смотрит на заготовку сеттинга. */
+    own_transitions: boolean;
+  };
   campaign_id: number | null;
-  nodes: (CanvasAnyNode & { z_index?: number })[];
+  /** Кампания, через которую вошли на холст приключения (Q26, блок E1):
+   *  своей доски у неё здесь нет — это путь входа, и в крошках он назван по
+   *  имени, а не номером из адреса. */
+  campaign?: { id: number; name: string } | null;
+  nodes: CanvasBoardNode[];
   groups: CanvasGroup[];
   edges: CanvasEdge[];
+  threads?: CanvasThread[];
 }
 
 
@@ -2103,6 +2278,28 @@ export interface SessionUnionRow {
 }
 
 /** Карточка предпросмотра сцены на пульте — GET /sessions/:id/preview/:sceneId. */
+/**
+ * Режим репетиции на холсте приключения (блок G3): тихий прогон истории
+ * глазами. Карточка — та же `ScenePreview`, что у пульта; своего здесь два
+ * поля, которых пульту не нужно.
+ */
+export interface RehearsalExit {
+  scene: StageScene;
+  label: string;
+  /** Цель в другом приключении: видна и кликабельна, но шагом не является. */
+  outside: boolean;
+  /** Имя того приключения — заполнено только у `outside`. */
+  adventure_name: string;
+}
+
+export interface RehearsalStep {
+  preview: ScenePreview;
+  exits: RehearsalExit[];
+  /** Куда идти, когда стрелок нет вовсе: порядок держится на `position`. */
+  next_in_order: StageScene | null;
+  adventure_id: number | null;
+}
+
 export interface ScenePreview {
   scene: StageScene;
   readAloud: string;

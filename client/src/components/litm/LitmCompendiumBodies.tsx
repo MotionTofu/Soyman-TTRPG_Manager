@@ -5,8 +5,57 @@ const MIGHT_RU: Record<string, string> = {
   origin: "Происхождение",
   adventure: "Приключение",
   greatness: "Величие",
-  variable: "Переменное",
+  variable: "Переменная",
 };
+
+/** Тело записи kind='theme_kit': набор тегов (9 силовых + 4 слабостей) и квест. */
+export const LitmThemeKitBody = memo(function LitmThemeKitBody({
+  data,
+}: {
+  data: Record<string, unknown>;
+}) {
+  const powerTags = (data.powerTags as string[] | undefined) ?? [];
+  const weaknessTags = (data.weaknessTags as string[] | undefined) ?? [];
+  const quest = (data.quest as string | undefined) ?? "";
+  const might = (data.might as string) || "";
+
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      {might && (
+        <span className="comp-badge litm-power-chip">{MIGHT_RU[might] ?? might}</span>
+      )}
+
+      {powerTags.length > 0 && (
+        <div>
+          <div className="litm-section-label">Ключи силы</div>
+          <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
+            {powerTags.map((t, i) => (
+              <span key={i} className="tg tg-pow">{t}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {weaknessTags.length > 0 && (
+        <div>
+          <div className="litm-section-label">Тэги слабости</div>
+          <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
+            {weaknessTags.map((t, i) => (
+              <span key={i} className="tg tg-weak">{t}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {quest && (
+        <div>
+          <div className="litm-section-label">Квест</div>
+          <p className="litm-q">{quest}</p>
+        </div>
+      )}
+    </div>
+  );
+});
 
 /** Тело записи kind='themebook': вопросы, идеи квестов, особые улучшения. */
 export const LitmThemeBookBody = memo(function LitmThemeBookBody({

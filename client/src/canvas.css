@@ -8,16 +8,47 @@
 .canvas-page {
   display: flex;
   flex-direction: column;
-  /* Холст должен занимать окно целиком: узловой редактор в колодце страницы
-     со скроллом бесполезен — панорама и зум конфликтуют со скроллом
-     документа. */
-  height: calc(100vh - 96px);
-  min-height: 420px;
+  /* Высоту берёт только режим холста (.canvas-page--board ниже): список
+     полотен — обычная страница со скроллом, и фиксированная высота ему
+     мешала. */
   /* Считаем по ширине САМОГО холста, а не окна: слева навигация, справа
      рельс быстрого доступа, и при окне в 1000 px полотну достаётся меньше
      500 — на медиазапросе по окну панель свойств в 320 px душила холст до
      сорока пикселей. */
   container-type: inline-size;
+}
+
+/* Открытая доска: узловой редактор в колодце страницы со скроллом бесполезен —
+   панорама и зум конфликтуют со скроллом документа, поэтому холст занимает всё
+   окно.
+
+   Не calc(100vh - 96px), как было: магическое число не знало про набивку
+   .app-content.has-player (72px под панель звука) и считало высоту мимо неё.
+   flex: 1 в колонке .app-content отмеряет ровно остаток — и верх, и низ
+   учтены сами собой. */
+.canvas-page--board {
+  flex: 1;
+  min-height: 420px;
+}
+
+/* Список полотен. Заголовок группы: название слева, действия — единой колонкой
+   справа. Пока кнопки стояли встык за названием, их положение зависело от
+   длины имени сеттинга, и одинаковые кнопки в соседних строках не совпадали
+   друг с другом. */
+.canvas-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+}
+.canvas-group-head__actions {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .canvas-body {
@@ -151,6 +182,24 @@
   border-color: var(--surface);
 }
 
+/* Тихая подсказка (блок G1). Отличима от соседних меток ФОРМОЙ — пунктирной
+   рамкой, — а не цветом: в палитре ровно три цвета, и четвёртый под типизацию
+   заводить нельзя (docs/design-system-punk-zine.md §3.2). Яркая метка на двух
+   десятках нод превратила бы холст в предупреждение о самом себе, отсюда и
+   слово «тихие» в названии блока.
+
+   Текст при этом обычный, не приглушённый: `var(--muted)` на бумаге даёт
+   3,6:1 при требуемых 4,5:1, а чип на 10 px читают взглядом мимоходом.
+   Тишина здесь — дело рамки, а не бледности. */
+.canvas-node__chip.is-hint {
+  border-style: dashed;
+  border-color: var(--muted);
+  cursor: pointer;
+}
+.canvas-node__chip.is-hint:hover {
+  border-color: var(--ink);
+}
+
 /* Разъёмы. Тип передан ФОРМОЙ, а не цветом — в палитре ровно три цвета, и
    четвёртый под типизацию заводить нельзя; заодно форма переживает
    чёрно-белую печать. Ромб — история («дальше»), квадрат — сущности. */
@@ -163,7 +212,7 @@
 }
 .canvas-flow .react-flow__handle.canvas-handle--story {
   transform: rotate(45deg);
-  background: #F0DDE8;
+  background: var(--cv-story);
   border: 1px solid var(--ink);
 }
 .canvas-flow .react-flow__handle.canvas-handle--story.react-flow__handle-left {
@@ -220,6 +269,25 @@
   flex-direction: column;
   gap: 4px;
 }
+/* Свотчи выбора цвета — одни на стикер, рамку, главу и пин (блок C1).
+   Значения цветов сюда не попадают: их ставит инлайном компонент
+   ColorSwatches из палитры (блок B1). Обводка по инварианту: внутренний
+   элемент — 1.5 px, выбранный поднимается до 2 px по --ink. */
+.canvas-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.canvas-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1.5px solid var(--line);
+}
+.canvas-swatch.is-active {
+  border: 2px solid var(--ink);
+}
+
 .canvas-props__empty {
   padding: 24px 16px;
   color: var(--muted);
@@ -230,7 +298,11 @@
 /* Тесно: панель свойств уходит вниз, холст остаётся сверху. Полотно —
    инструмент подготовки за большим экраном, но открыть и посмотреть с
    телефона должно быть можно.
-   Порог — 700: 360 под холст плюс 320 под панель плюс рамки. */
+   Порог — 700: 360 под холст плюс 320 под панель плюс рамки.
+   Это порог по РАЗДЕЛУ. У палитры и поиска свой, по ширине самого холста —
+   CANVAS_OVERLAYS_MIN_PX в CanvasPage.tsx: он срабатывает раньше, потому что
+   разделу до холста ещё вычесть панель свойств. Числа разные не по недосмотру
+   и синхронизировать их не надо. */
 @container (max-width: 700px) {
   .canvas-body {
     flex-direction: column;
@@ -244,6 +316,15 @@
     border-left: none;
     border-top: var(--card-border-width) solid var(--line);
     max-height: 45%;
+  }
+  /* Ниже порога холсту остаётся 360 px в ширину и 320 в высоту. MiniMap
+     (204 px) и легенда занимали бы больше половины нижней полосы, а нужны
+     обе для обзора, которого на такой ширине всё равно нет: MiniMap
+     показывает схему в масштабе, где нода — пиксель, легенда объясняет
+     разъёмы, которые здесь не соединяют. Остаются только органы управления. */
+  .canvas-flow .react-flow__minimap,
+  .canvas-flow .canvas-legend {
+    display: none;
   }
 }
 
@@ -417,46 +498,49 @@
   right: 0;
   transform: translate(50%, -50%);
 }
-/* Цвета квадратов по ролям сцены + узлы в тон */
+/* Цвета квадратов по ролям сцены + узлы в тон.
+   Значения переменных `--cv-*` заданы в `client/src/canvasPalette.ts` и
+   прописываются в `:root` при загрузке страницы. Хардкодить hex здесь нельзя:
+   те же цвета нужны компонентам нод и легенде. */
 .canvas-flow .react-flow__handle.canvas-handle--location {
-  background: #2E86C1;
-  border-color: #2E86C1;
+  background: var(--cv-handle-location);
+  border-color: var(--cv-handle-location);
 }
 .canvas-flow .react-flow__handle.canvas-handle--plot_characters {
-  background: #C0392B;
-  border-color: #C0392B;
+  background: var(--cv-handle-plot_characters);
+  border-color: var(--cv-handle-plot_characters);
 }
 .canvas-flow .react-flow__handle.canvas-handle--obstacles {
-  background: #6C3483;
-  border-color: #6C3483;
+  background: var(--cv-handle-obstacles);
+  border-color: var(--cv-handle-obstacles);
 }
 .canvas-flow .react-flow__handle.canvas-handle--loot {
-  background: #B7950B;
-  border-color: #B7950B;
+  background: var(--cv-handle-loot);
+  border-color: var(--cv-handle-loot);
 }
 .canvas-flow .react-flow__handle.canvas-handle--consequences {
-  background: #1ABC9C;
-  border-color: #1ABC9C;
+  background: var(--cv-handle-consequences);
+  border-color: var(--cv-handle-consequences);
 }
 .canvas-flow .react-flow__handle.canvas-handle--being {
-  background: #C0392B;
-  border-color: #C0392B;
+  background: var(--cv-handle-being);
+  border-color: var(--cv-handle-being);
 }
 .canvas-flow .react-flow__handle.canvas-handle--artifact {
-  background: #B7950B;
-  border-color: #B7950B;
+  background: var(--cv-handle-artifact);
+  border-color: var(--cv-handle-artifact);
 }
 .canvas-flow .react-flow__handle.canvas-handle--members {
-  background: #1ABC9C;
-  border-color: #1ABC9C;
+  background: var(--cv-handle-members);
+  border-color: var(--cv-handle-members);
 }
 .canvas-flow .react-flow__handle.canvas-handle--in {
-  background: #117A65;
-  border-color: #117A65;
+  background: var(--cv-handle-in);
+  border-color: var(--cv-handle-in);
 }
 .canvas-flow .react-flow__handle.canvas-handle--audio {
-  background: #145A32;
-  border-color: #145A32;
+  background: var(--cv-handle-audio);
+  border-color: var(--cv-handle-audio);
   border-radius: 50%;
 }
 .canvas-flow .react-flow__handle.canvas-handle--audio::after {
@@ -471,8 +555,8 @@
   transform: translate(-50%, -50%);
 }
 .canvas-flow .react-flow__handle.canvas-handle--battle {
-  background: #E74C3C;
-  border-color: #E74C3C;
+  background: var(--cv-handle-battle);
+  border-color: var(--cv-handle-battle);
   border-radius: 50%;
 }
 .canvas-flow .react-flow__handle.canvas-handle--battle::after {
@@ -487,53 +571,60 @@
   transform: translate(-50%, -50%);
 }
 .canvas-node--being {
-  border-color: #C0392B;
+  border-color: var(--cv-node-being);
 }
 .canvas-node--being .canvas-node__band {
-  background: #C0392B;
-  color: #F8F6F1;
+  background: var(--cv-node-being);
+  color: var(--cv-node-being-ink);
 }
 .canvas-node--location {
-  border-color: #2E86C1;
+  border-color: var(--cv-node-location);
 }
 .canvas-node--location .canvas-node__band {
-  background: #2E86C1;
-  color: #F8F6F1;
+  background: var(--cv-node-location);
+  color: var(--cv-node-location-ink);
 }
 .canvas-node--artifact {
-  border-color: #B7950B;
+  border-color: var(--cv-node-artifact);
 }
 .canvas-node--artifact .canvas-node__band {
-  background: #B7950B;
-  color: #1A1A1A;
+  background: var(--cv-node-artifact);
+  color: var(--cv-node-artifact-ink);
 }
 .canvas-node--community {
-  border-color: #1ABC9C;
+  border-color: var(--cv-node-community);
 }
 .canvas-node--community .canvas-node__band {
-  background: #1ABC9C;
-  color: #1A1A1A;
+  background: var(--cv-node-community);
+  color: var(--cv-node-community-ink);
 }
 .canvas-node--compendium_entry {
-  border-color: #7D3C98;
+  border-color: var(--cv-node-compendium_entry);
 }
 .canvas-node--compendium_entry .canvas-node__band {
-  background: #7D3C98;
-  color: #F8F6F1;
+  background: var(--cv-node-compendium_entry);
+  color: var(--cv-node-compendium_entry-ink);
+}
+.canvas-node--character {
+  border-color: var(--cv-node-character);
+}
+.canvas-node--character .canvas-node__band {
+  background: var(--cv-node-character);
+  color: var(--cv-node-character-ink);
 }
 .canvas-node--sound_set {
-  border-color: #145A32;
+  border-color: var(--cv-node-sound_set);
 }
 .canvas-node--sound_set .canvas-node__band {
-  background: #145A32;
-  color: #F8F6F1;
+  background: var(--cv-node-sound_set);
+  color: var(--cv-node-sound_set-ink);
 }
 .canvas-node--playlist {
-  border-color: #E74C3C;
+  border-color: var(--cv-node-playlist);
 }
 .canvas-node--playlist .canvas-node__band {
-  background: #E74C3C;
-  color: #F8F6F1;
+  background: var(--cv-node-playlist);
+  color: var(--cv-node-playlist-ink);
 }
 
 /* Состав — тонкой линией: это не ход истории, а из чего сцена собрана.
@@ -579,27 +670,15 @@
   background: none;
   pointer-events: none;
 }
-.canvas-frame.is-highlighted {
-  border-color: var(--accent) !important;
-  border-style: solid !important;
-  box-shadow: 0 0 0 3px rgba(214, 50, 30, 0.18);
-  animation: canvas-frame-pulse 1.1s ease-in-out infinite alternate;
-}
-.canvas-frame.is-highlighted .canvas-frame__title {
-  background: var(--accent) !important;
-  color: var(--accent-text) !important;
-}
-@keyframes canvas-frame-pulse {
-  from { box-shadow: 0 0 0 2px rgba(214, 50, 30, 0.14); }
-  to { box-shadow: 0 0 0 6px rgba(214, 50, 30, 0.08); }
-}
 
 /* Заголовок — единственная зацепка рамки: за него её тащат и им же
    выделяют. Поэтому он крупнее подписей на нодах: холст смотрят на отдалении,
    и десятипиксельная плашка на зуме 0.5 превращается в трёхпиксельную полоску,
    в которую не попасть. */
 .canvas-frame__title {
-  display: inline-block;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
   margin: -2px 0 0 -2px;
   padding: 7px 14px;
   background: var(--surface);
@@ -614,6 +693,148 @@
 }
 .canvas-frame__title:active {
   cursor: grabbing;
+}
+
+/* Ручки растягивания рамки лежат внутри `.canvas-frame`, а у той указатель
+   выключен — без этого правила выделенную рамку нельзя было бы растянуть.
+   Видны они только у выделенной рамки (`isVisible` у NodeResizer), так что
+   по холсту они не разбросаны. */
+.canvas-frame .react-flow__resize-control {
+  pointer-events: all;
+}
+
+/* Куда упадёт сцена, если отпустить сейчас (Q5). Сплошная акцентная обводка
+   против пунктирной границы рамки: разница читается боковым зрением, а рука
+   в этот момент занята сценой. */
+.canvas-frame.is-drop-target,
+.canvas-node--chapter.is-drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+/* Только что созданное (блок G2). Рамка создаётся за спинами нод или вовсе
+   за краем экрана, и без отметки Мастер не видит, что жест сработал.
+
+   Обводка акцентом, как у цели переноса, но мигающая: ровная обводка на
+   выделенной ноде уже есть, и статичная вторая была бы от неё неотличима.
+   Различие движением, а не свечением — теней и glow на Полотне нет.
+   Гаснет сама через 2,2 с, снимать её Мастеру не нужно. */
+.canvas-frame.is-fresh,
+.canvas-node--chapter.is-fresh,
+.canvas-chapter-card.is-fresh {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  animation: canvas-fresh 0.55s steps(1, end) 4;
+}
+@keyframes canvas-fresh {
+  0%, 50% { outline-color: var(--accent); }
+  50.01%, 100% { outline-color: transparent; }
+}
+/* Кому мигание мешает — тому одна ровная обводка на те же 2,2 с. */
+@media (prefers-reduced-motion: reduce) {
+  .canvas-frame.is-fresh,
+  .canvas-node--chapter.is-fresh,
+  .canvas-chapter-card.is-fresh {
+    animation: none;
+  }
+}
+
+/* Поле имени на месте (блок G2). У `.canvas-frame` указатель выключен, и без
+   этой строки в поле нельзя было бы даже поставить курсор щелчком — только
+   печатать в него сразу после автофокуса. */
+.canvas-frame__title-input {
+  pointer-events: all;
+}
+
+/* Треугольник свёртки виден всегда, а не по наведению (Q23): на холсте
+   с десятком глав Мастер должен видеть, что свёрнуто, не водя мышью. */
+.canvas-frame__fold {
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.75;
+  cursor: pointer;
+  user-select: none;
+  /* Глиф маленький, а на общем виде холст ещё и отмасштабирован вдвое —
+     без запаса по нему не попасть. Поля растягивают только зону попадания,
+     отрицательные отступы возвращают разметку на место. */
+  padding: 6px;
+  margin: -6px -6px -6px -4px;
+}
+.canvas-frame__fold:hover {
+  opacity: 1;
+}
+.canvas-frame__name {
+  white-space: nowrap;
+}
+/* Число сцен — моношрифтом: цифра читается как величина, а не как часть
+   названия, и главы с разными именами сравнимы столбиком. */
+.canvas-frame__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+
+/* Сводка недоделок на шапке главы: главы по умолчанию свёрнуты, и без неё
+   подсказки видны только в развёрнутом виде — а он на 91-сценной доске не
+   рабочий режим. Пунктир тот же, что у чипа на сцене: одна и та же вещь. */
+.canvas-frame__hints {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  border: 1.5px dashed currentColor;
+  padding: 0 4px;
+  margin-left: 4px;
+}
+
+/* Узел главы (блок G6.2) — карточка того же роста, что ярлык приключения:
+   это один и тот же жест на двух уровнях, и разная высота карточек читалась
+   бы как разница по сути. Своей высоты у неё нет — только нижняя граница,
+   потому что имя главы бывает в две строки. */
+.canvas-node--chapter {
+  min-height: 0;
+}
+
+/* Висящий разъём: переход есть, второго конца на этом холсте нет (Q17).
+
+   Пунктир — то же различие ФОРМОЙ, а не цветом, что у чипа подсказки: связь
+   уходит за край холста. Цветом сказать это нельзя — в палитре три цвета, и
+   четвёртый под типизацию заводить запрещено (§3.2). */
+.canvas-node__outside {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.canvas-node__outlink {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  border: 1.5px dashed var(--ink);
+  background: transparent;
+  color: var(--ink);
+  padding: 0 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.canvas-node__outlink:hover {
+  border-style: solid;
+}
+
+/* Свёрнутая глава — одна шапка без тела. Размер задаёт содержимое,
+   поэтому здесь нет ни width, ни height в 100%, как у развёрнутой рамки. */
+.canvas-chapter-card {
+  display: inline-block;
+  border: 2px solid var(--line);
+  background: var(--paper);
+}
+.canvas-chapter-card .canvas-frame__title {
+  margin: 0;
+}
+.canvas-chapter-card.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .canvas-frame__resize {
   position: absolute;
@@ -655,6 +876,265 @@
   color: var(--ink);
 }
 
+/* ------------------------------------------------------------- легенда */
+
+/* Легенда — самый крупный постоянный объект на схеме, а нужна она редко: раз
+   при знакомстве с разъёмами и потом почти никогда. Поэтому по умолчанию от
+   неё остаётся чип рядом с Controls, а разворот запоминается в localStorage —
+   тем же приёмом, что палитра и панель свойств.
+   column-reverse: чип стоит в разметке первым и остаётся внизу на своём
+   месте, а раскрытая легенда растёт вверх и ничего не сдвигает. */
+.canvas-legend {
+  position: absolute;
+  /* По линии Controls, вплотную к ним: 15 (их отступ) + 26 (их ширина) + 8.
+     Оверлеи Полотна стоят на трёх разных отступах — это разбирает блок B3;
+     здесь чип просто встаёт рядом со своим соседом. */
+  bottom: 15px;
+  left: 49px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - 61px);
+}
+.canvas-legend__chip {
+  padding: 5px 10px;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  cursor: pointer;
+}
+.canvas-legend__chip:hover {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
+}
+.canvas-legend__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  max-width: 260px;
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+}
+.canvas-legend__cols {
+  display: flex;
+  gap: 12px;
+}
+.canvas-legend__col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Подпись колонки — «Сцена ←» / «→ Сцена»: тише строк, но не серая заливка. */
+.canvas-legend__col-title {
+  opacity: 0.6;
+}
+.canvas-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Значок строки. Форма задаётся модификатором, цвет приходит инлайном одной
+   переменной `--mark` из canvasPalette.ts — он свой у каждого разъёма. */
+.canvas-legend__mark {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  position: relative;
+  background: var(--mark);
+  border: 2px solid var(--mark);
+  flex-shrink: 0;
+}
+.canvas-legend__mark--diamond {
+  border: 1px solid var(--ink);
+  transform: rotate(45deg);
+}
+.canvas-legend__mark--dot {
+  border-radius: 50%;
+}
+/* Дырка в кружке — тем же приёмом, что у разъёмов аудио и боя выше. */
+.canvas-legend__mark--dot::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: var(--paper);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* ------------------------------------------- кнопки-оверлеи на холсте */
+
+/* Два переключателя в верхних углах холста: палитра слева, свёртка панели
+   свойств справа. 1.5px обводка — это внутренний орган, не карточка. */
+.canvas-overlay-toggle {
+  position: absolute;
+  top: 12px;
+  z-index: 5;
+  /* 2px обводка — решение цикла 5, Q9: это внешний контур плавающего органа,
+     а не внутренняя плашка. Размер 32, а не предложенные там же 48: на 375
+     ряд «палитра 260 + её кнопка + зазор + кнопка свёртки» не помещается в
+     холст (388 против 360), и две кнопки налезают друг на друга; на 32
+     ряд укладывается в 356. Обе кнопки одного размера — они стоят в
+     зеркальных углах и читаются как пара. */
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  color: var(--ink);
+  font-size: 16px;
+  cursor: pointer;
+}
+.canvas-overlay-toggle__icon {
+  width: 20px;
+  height: 20px;
+  /* Кнопка — flex-контейнер, и без этого svg сжимается по ширине до 4px. */
+  flex: none;
+}
+.canvas-overlay-toggle:hover {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
+}
+.canvas-overlay-toggle--palette {
+  left: 12px;
+  /* Решение цикла 5, Q9. Палитра — 260px от левых 12, её правый край на 272;
+     туда и уезжает кнопка, пока палитра открыта. */
+  transition: left 160ms ease;
+}
+.canvas-overlay-toggle--palette.is-shifted {
+  /* min — страховка от совсем узкого холста (уже 284px палитра упирается в
+     свой max-width): кнопка в любом случае остаётся на экране. Что делать с
+     оверлеями на такой ширине по существу — блок B5. */
+  left: min(272px, calc(100% - 44px));
+}
+/* Мастеру, который выключил анимацию в системе, кнопка просто переставляется. */
+@media (prefers-reduced-motion: reduce) {
+  .canvas-overlay-toggle--palette {
+    transition: none;
+  }
+}
+.canvas-overlay-toggle--panel {
+  right: 12px;
+}
+
+/* Подпись пина (блок G5) — под точкой, по центру. Кегль микро: пин мелкий, и
+   подпись не должна становиться крупнее того, что подписывает. Цвет
+   чернильный, а не приглушённый: --muted не проходит по контрасту (Н17). */
+.canvas-pin__label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 4px;
+  /* Ширина по содержимому, а не по родителю: пин шириной 24 px ужал бы
+     абсолютную подпись до столбика в одну букву. */
+  width: max-content;
+  max-width: 160px;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  line-height: 1.25;
+  color: var(--ink);
+  /* Фон — бумага под текстом, иначе подпись ложится на сетку и на нити и
+     перестаёт читаться. Обводки нет: это подпись, а не плашка. */
+  background: var(--paper);
+  padding: 0 3px;
+  pointer-events: none;
+  white-space: normal;
+}
+
+/* ------------------------------------------------ пустая свободная доска */
+
+/* Блок G5. Стоит по центру холста, потому что объясняет холст целиком, а не
+   угол его. Радиусов нет, обводка 2px, тени нет — инвариант; акцентом не
+   красится: это не «горячий» объект, а объяснение. */
+.canvas-blank {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  width: min(440px, calc(100% - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--paper);
+  border: 2px solid var(--line);
+}
+
+/* Капс-подпись — один из четырёх голосов, не длиннее строки. */
+.canvas-blank__label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* Проза — прозой, не моноширинным. */
+.canvas-blank__lead {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.canvas-blank__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Три кнопки одного веса: набор не рекомендуется, он предлагается. Главной
+   среди них нет — иначе «Таверна» стала бы ответом по умолчанию на вопрос,
+   которого никто не задавал. */
+.canvas-blank__btn {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  border: 1.5px solid var(--line);
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+}
+.canvas-blank__btn:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
+}
+.canvas-blank__btn:disabled {
+  opacity: 0.6;
+}
+
+/* Обещание «это легко стереть» — то, ради чего набор вообще предлагается.
+   Кегль ниже прозы, но цвет чернильный: на --muted подпись не проходит по
+   контрасту (см. находку Н17). */
+.canvas-blank__note {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: var(--ink);
+}
+
 /* -------------------------------------------------------- поиск + minimap */
 
 /* Поиск — оверлей в правом верхнем углу холста, как палитра слева.
@@ -662,7 +1142,10 @@
 .canvas-search {
   position: absolute;
   top: 12px;
-  right: 12px;
+  /* 12 + 32 (кнопка свёртки панели) + 8: поиск не накрывает чужой орган
+     управления. Своей кнопке панель отойти в сторону может (см.
+     .canvas-overlay-toggle--palette), чужой — нет. */
+  right: 52px;
   z-index: 5;
   width: 260px;
   display: flex;
@@ -715,4 +1198,267 @@
   stroke: var(--ink);
   stroke-width: 1.5;
 }
+.canvas-threads {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+}
 
+/* Счётчик на ярлыке приключения — моношрифтом, как и на свёрнутой главе:
+   цифра читается как величина, а не как часть названия. */
+.canvas-node__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* Экран выбора полотна. Карточка приключения — не кнопка целиком: внутри
+   живёт выбор «дальше», а select внутри button не кликается. Открывающая
+   кнопка выглядит как заголовок карточки и ведёт себя как ссылка. */
+.canvas-index__open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  color: var(--ink);
+  cursor: pointer;
+}
+.canvas-index__open:hover {
+  text-decoration: underline;
+}
+/* «дальше…» — служебный выбор, а не главное на карточке: держится мелким и
+   не спорит с именем приключения за внимание. */
+.canvas-index__next {
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+  /* Ширину select берёт от самого длинного пункта, а пункты здесь — имена
+     приключений («Глубоководье: Ограбить Дракона»). Без ограничения плитка
+     разъезжается по ширине этого имени. Ширина карточки задаётся сеткой, и
+     служебный выбор в неё вписывается, а не наоборот. */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-index__unlink {
+  padding: 0 6px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+/* Плитка свободной доски на экране выбора (блок D2). Отступ тот же, что у
+   карточки приключения (`padding: 12` инлайном), но текст слева, а не по
+   центру карточки. */
+.canvas-index__board {
+  padding: 12px;
+  text-align: left;
+}
+/* «⋯» — основной путь к действиям с доской: правой кнопки нет на тач-экране.
+   Держится тихим, пока на плитку не навели: имя доски важнее её меню.
+   `--muted` на фоне карточки даёт 3.31:1 — это глиф органа управления, а не
+   текст, и порог для него 3:1. Наведение и фокус добавляют обводку. */
+.canvas-index__more {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1.5px solid transparent;
+  background: none;
+  color: var(--muted);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.canvas-index__board:hover .canvas-index__more,
+.canvas-index__more:focus-visible {
+  border-color: var(--line);
+  background: var(--paper);
+}
+
+/* «Схема» у заголовка сеттинга (блок D3). Второй взгляд, а не главное
+   действие: список — дорога по умолчанию, и кнопка не должна с ним спорить. */
+.canvas-index__map {
+  padding: 1px 8px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+/* ------------------------------------------- карта кампании (блок D4) */
+
+/* Прохождение кодируется И цветом обводки, И словом в теле узла. Одним
+   цветом нельзя: цвет на холсте уже занят типом узла (инвариант 7), и
+   второй смысл того же канала за столом не различить. Цвет — подсказка
+   боковым зрением, слово — ответ. */
+.canvas-node--progress-done {
+  border-color: var(--cv-done, #0F6E56);
+}
+.canvas-node--progress-active {
+  border-color: var(--accent);
+}
+.canvas-node--progress-untouched {
+  border-color: var(--line);
+}
+/* Добавлено в кампанию, но ещё не разложено: пунктир, а не цвет — узел
+   ждёт места, а не сообщает о состоянии прохождения. */
+.canvas-node--new {
+  border-style: dashed;
+}
+.canvas-node__progress {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.canvas-node__progress.is-done {
+  color: var(--cv-done, #0F6E56);
+}
+.canvas-node__progress.is-active {
+  color: var(--accent);
+}
+/* Метки расхождения — плашка-инверсия, как шапка карточки: это состояние
+   узла, а не ещё одна строка данных. */
+.canvas-node__mark {
+  align-self: flex-start;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 1px 5px;
+}
+
+/* --------------------------------------------------- режим репетиции (G3) */
+
+/* Текущая сцена прогона. Отдельное кольцо, а не перекраска: выделение уже
+   занимает обводку и внутренний контур, а прогон и выделение живут на холсте
+   одновременно — они не одно и то же и не должны выглядеть одинаково.
+   Толщина та же 2 px, что и везде: промежуточных толщин в системе нет.
+
+   Остальные ноды НЕ гасятся: прогон показывает сцену в окружении соседних,
+   и «куда это ведёт» видно только вместе с ними. */
+.canvas-node.is-rehearsing {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+
+.canvas-rehearse {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.canvas-rehearse__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Имя сцены — заголовочный голос: это единственный крупный кегль карточки,
+   от него и считается скачок к подписям блоков. */
+.canvas-rehearse__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  line-height: 1.15;
+  color: var(--ink);
+}
+.canvas-rehearse__block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.canvas-rehearse__text {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+/* Зачитка отбита плашкой слева: за столом её читают вслух, и найти её глазами
+   надо быстрее, чем прочитать подпись блока. */
+.canvas-rehearse__text--aloud {
+  border-left: var(--card-border-width) solid var(--line);
+  padding-left: 10px;
+}
+.canvas-rehearse__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.4;
+}
+.canvas-rehearse__role {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Количество и сложность — значения, поэтому моноширинный. Проза им не
+   набирается никогда. */
+.canvas-rehearse__qty {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.canvas-rehearse__outcomes {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  line-height: 1.4;
+}
+/* «Дальше» — единственный орган управления карточки, поэтому он отбит линией
+   и стоит последним всегда, даже когда всё выше пусто. */
+.canvas-rehearse__next {
+  border-top: var(--card-border-width) solid var(--line);
+  padding-top: 12px;
+  gap: 8px;
+}
+.canvas-rehearse__exit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+}
+.canvas-rehearse__exit-name {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+}
+.canvas-rehearse__exit-label {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+/* Цель в другом приключении: шагом не является — отсюда пунктир. Различие
+   формой, а не бледностью: бледный текст не проходит по контрасту. */
+.canvas-rehearse__exit.is-outside {
+  border: var(--card-border-width) dashed var(--line);
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+}
+.canvas-rehearse__back {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.canvas-rehearse__cast {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.canvas-rehearse__cast + .canvas-rehearse__cast {
+  margin-top: 8px;
+}

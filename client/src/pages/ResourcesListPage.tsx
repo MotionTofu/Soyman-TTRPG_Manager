@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { ResourceCard } from "../components/ResourceCard";
-import { SettingLinksPopover } from "../components/SettingLinksPopover";
+import { ResourceRow } from "../components/ResourceRow";
 import { TemplatesTab } from "../components/TemplatesTab";
 import { SoundLibraryTab } from "../components/SoundLibraryTab";
 import { SoundSetsTab } from "../components/SoundSetsTab";
@@ -36,6 +35,11 @@ export function ResourcesListPage() {
   const [sortMode, setSortMode] = useState<SortMode>("az");
   const [campaignFilter, setCampaignFilter] = useState<number | null>(null);
   const [settingFilter, setSettingFilter] = useState<number | null>(null);
+  // Форма добавления свёрнута: она нужна раз в сессию, а места занимала
+  // целую карточку в шапке постоянно. Фильтры на узком экране прячутся за
+  // одну кнопку — там весь ряд управления в строку не помещается.
+  const [addOpen, setAddOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [name, setName] = useState("");
   const [type, setType] = useState("note");
@@ -71,6 +75,7 @@ export function ResourcesListPage() {
     if (file) form.append("file", file);
     if (linkUrl) form.append("link_url", linkUrl);
     await api.post("/resources", form);
+    setAddOpen(false);
     setName("");
     setTags("");
     setFile(null);
@@ -101,13 +106,11 @@ export function ResourcesListPage() {
     ),
   })).filter((g) => g.items.length > 0);
 
+  const activeFilters = (campaignFilter ? 1 : 0) + (settingFilter ? 1 : 0);
+
   return (
     <div className="stack">
       <SectionHeading section="resources">Ресурсы</SectionHeading>
-      <p className="muted">
-        Библиотека всего, что есть в приложении — статблоки, лут, справочные материалы. Звук живёт
-        в своих вкладках.
-      </p>
 
       <div className="tabs">
         <button className={section === "all" ? "active" : ""} onClick={() => setSection("all")}>
@@ -129,78 +132,117 @@ export function ResourcesListPage() {
 
       {section === "all" ? (
         <>
-          <div className="card row">
-            <input placeholder="Название" value={name} onChange={(e) => setName(e.target.value)} />
-            <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="note">Заметка</option>
-              <option value="item">Предмет</option>
-              <option value="map">Карта</option>
-            </select>
+          {/* Одна полоса вместо четырёх ярусов: поиск, сортировка, фильтры и
+              добавление — это один инструмент вкладки, а стояли они друг под
+              другом и съедали пол-экрана до первого ресурса. */}
+          <div className="res-toolbar">
             <input
-              placeholder="Теги через запятую"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
+              className="res-toolbar__search"
+              placeholder="Поиск по названию…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
             />
-            <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            <input
-              placeholder="…или ссылка (вместо файла)"
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-            />
-            <button className="primary" onClick={create}>
-              Добавить
-            </button>
-          </div>
 
-          <input
-            placeholder="Поиск по названию…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-
-          <div className="row sort-toggle" style={{ gap: 4 }}>
-            <span className="muted">Сортировка:</span>
-            <button className={sortMode === "az" ? "active-sort" : ""} onClick={() => setSortMode("az")}>
-              А-Я
-            </button>
-            <button className={sortMode === "size" ? "active-sort" : ""} onClick={() => setSortMode("size")}>
-              Размер
-            </button>
-            <button className={sortMode === "date" ? "active-sort" : ""} onClick={() => setSortMode("date")}>
-              Дата добавления
-            </button>
-          </div>
-
-          <div className="row" style={{ gap: 12 }}>
-            <label className="row" style={{ gap: 4 }}>
-              Кампания:
-              <select
-                value={campaignFilter ?? ""}
-                onChange={(e) => setCampaignFilter(e.target.value ? Number(e.target.value) : null)}
+            <div className="seg res-toolbar__sort" role="group" aria-label="Сортировка">
+              <button
+                type="button"
+                className={sortMode === "az" ? "is-active" : ""}
+                onClick={() => setSortMode("az")}
               >
-                <option value="">Все</option>
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="row" style={{ gap: 4 }}>
-              Сеттинг:
-              <select
-                value={settingFilter ?? ""}
-                onChange={(e) => setSettingFilter(e.target.value ? Number(e.target.value) : null)}
+                А-Я
+              </button>
+              <button
+                type="button"
+                className={sortMode === "size" ? "is-active" : ""}
+                onClick={() => setSortMode("size")}
               >
-                <option value="">Все</option>
-                {settings.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                Размер
+              </button>
+              <button
+                type="button"
+                className={sortMode === "date" ? "is-active" : ""}
+                onClick={() => setSortMode("date")}
+              >
+                Дата
+              </button>
+            </div>
+
+            {/* Кнопка видна только на узком экране — на широком фильтры стоят
+                в полосе сами. Счётчик показывает, сколько их включено, чтобы
+                свёрнутый фильтр не врал пустотой. */}
+            <button
+              type="button"
+              className={`res-toolbar__filters-toggle${filtersOpen ? " is-active" : ""}`}
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              Фильтры
+              {activeFilters > 0 && <span className="res-toolbar__filters-count">{activeFilters}</span>}
+            </button>
+
+            <div className={`res-toolbar__filters${filtersOpen ? " is-open" : ""}`}>
+              <label>
+                <span className="res-toolbar__filter-label">Кампания</span>
+                <select
+                  value={campaignFilter ?? ""}
+                  onChange={(e) => setCampaignFilter(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Все</option>
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="res-toolbar__filter-label">Сеттинг</span>
+                <select
+                  value={settingFilter ?? ""}
+                  onChange={(e) => setSettingFilter(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Все</option>
+                  {settings.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <button
+              type="button"
+              className={`primary res-toolbar__add${addOpen ? " is-active" : ""}`}
+              onClick={() => setAddOpen((v) => !v)}
+            >
+              {addOpen ? "Отмена" : "+ Добавить"}
+            </button>
           </div>
+
+          {addOpen && (
+            <div className="card res-add">
+              <input placeholder="Название" value={name} onChange={(e) => setName(e.target.value)} />
+              <select value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="note">Заметка</option>
+                <option value="item">Предмет</option>
+                <option value="map">Карта</option>
+              </select>
+              <input
+                placeholder="Теги через запятую"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+              />
+              <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+              <input
+                placeholder="…или ссылка (вместо файла)"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+              />
+              <button className="primary" onClick={create}>
+                Добавить
+              </button>
+            </div>
+          )}
 
           {groups.length === 0 && (
             <EmptyState
@@ -228,31 +270,21 @@ export function ResourcesListPage() {
           )}
 
           {groups.map((g) => (
-            <details key={g.key} className="card stack">
-              <summary className="chevron-summary">
+            <details key={g.key} className="card res-group">
+              <summary className="res-group__band">
                 <NavIcon name="chevron" className="chevron-icon" />
-                <strong className="entry-title">
-                  <NavIcon name={g.icon} /> {g.label}
-                </strong>{" "}
-                <span className="muted">({g.items.length})</span>
+                <NavIcon name={g.icon} className="res-group__icon" />
+                <span className="res-group__title">{g.label}</span>
+                <span className="res-group__count">{g.items.length}</span>
               </summary>
-              <div className="grid-cards mode-list">
+              <div className="res-group__body">
                 {g.items.map((r) => (
-                  <ResourceCard
+                  <ResourceRow
                     key={r.id}
                     resource={r}
                     onChange={refresh}
                     onArchive={archiveResource}
-                    extraActions={
-                      <SettingLinksPopover
-                        ownerType="resource"
-                        ownerId={r.id}
-                        homeSettingId={r.setting_id}
-                        linkedSettingIds={r.also_in_settings ?? []}
-                        allSettings={settings}
-                        onChange={refresh}
-                      />
-                    }
+                    allSettings={settings}
                   />
                 ))}
               </div>

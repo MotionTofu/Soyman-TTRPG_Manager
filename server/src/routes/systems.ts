@@ -256,18 +256,35 @@ systemsRouter.get("/entries/:entryId", (req, res) => {
 });
 
 systemsRouter.put("/entries/:entryId", (req, res) => {
-  const { name, kind, level, data, description, position, aliases, name_original, short_name } =
-    req.body as {
-      name?: string;
-      kind?: string;
-      level?: number | null;
-      data?: unknown;
-      description?: string;
-      position?: number;
-      aliases?: string[];
-      name_original?: string;
-      short_name?: string | null;
-    };
+  const {
+    name,
+    kind,
+    level,
+    data,
+    description,
+    position,
+    aliases,
+    name_original,
+    short_name,
+    combat_roles,
+    tactics,
+    secret,
+  } = req.body as {
+    name?: string;
+    kind?: string;
+    level?: number | null;
+    data?: unknown;
+    description?: string;
+    position?: number;
+    aliases?: string[];
+    name_original?: string;
+    short_name?: string | null;
+    // Карточка существа (шаг 4): её же поля есть у setting_beings, личность
+    // наследует их отсюда на лету, пока не заполнит свои.
+    combat_roles?: string[];
+    tactics?: string[];
+    secret?: string;
+  };
   db.prepare(
     `UPDATE compendium_entries SET
        name = COALESCE(?, name),
@@ -278,7 +295,10 @@ systemsRouter.put("/entries/:entryId", (req, res) => {
        position = COALESCE(?, position),
        aliases = COALESCE(?, aliases),
        name_original = COALESCE(?, name_original),
-       short_name = CASE WHEN ? THEN ? ELSE short_name END
+       short_name = CASE WHEN ? THEN ? ELSE short_name END,
+       combat_roles = COALESCE(?, combat_roles),
+       tactics = COALESCE(?, tactics),
+       secret = COALESCE(?, secret)
      WHERE id = ?`
   ).run(
     name ?? null,
@@ -291,6 +311,9 @@ systemsRouter.put("/entries/:entryId", (req, res) => {
     name_original ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
+    combat_roles ? JSON.stringify(combat_roles.slice(0, 2)) : null,
+    tactics ? JSON.stringify(tactics) : null,
+    secret ?? null,
     req.params.entryId
   );
 

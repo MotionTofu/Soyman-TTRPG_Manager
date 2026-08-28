@@ -12,6 +12,10 @@ interface Props {
   linkedSettingIds: number[];
   allSettings: { id: number; name: string }[];
   onChange: () => void;
+  // Квадратная кнопка одного размера с соседями: счётчик сеттингов уходит
+  // из подписи в угловой значок, иначе кнопка меняет ширину от числа
+  // связей и колонка действий перестаёт стоять на одной вертикали.
+  compact?: boolean;
 }
 
 // Small popover for the global Ресурсы library's "present in multiple
@@ -20,7 +24,7 @@ interface Props {
 // doesn't need to know that; it just calls the same two endpoint shapes for
 // both owner types. Same absolute-positioned popover pattern as
 // SoundSetNavMenu.tsx (.playlist-nav-menu), styled via .setting-links-popover.
-export function SettingLinksPopover({ ownerType, ownerId, homeSettingId, linkedSettingIds, allSettings, onChange }: Props) {
+export function SettingLinksPopover({ ownerType, ownerId, homeSettingId, linkedSettingIds, allSettings, onChange, compact = false }: Props) {
   const [open, setOpen] = useState(false);
   const linked = new Set(linkedSettingIds);
 
@@ -37,11 +41,17 @@ export function SettingLinksPopover({ ownerType, ownerId, homeSettingId, linkedS
     <span style={{ position: "relative" }}>
       <button
         type="button"
-        className="comp-mini"
+        className={compact ? "res-row__act" : "comp-mini"}
         onClick={() => setOpen((o) => !o)}
         title="Присутствие в сеттингах"
       >
-        <NavIcon name="link" />{linkedSettingIds.length > 0 ? ` ${linkedSettingIds.length}` : ""}
+        <NavIcon name="link" />
+        {linkedSettingIds.length > 0 &&
+          (compact ? (
+            <span className="res-row__act-count">{linkedSettingIds.length}</span>
+          ) : (
+            ` ${linkedSettingIds.length}`
+          ))}
       </button>
       {open && (
         <div className="setting-links-popover">

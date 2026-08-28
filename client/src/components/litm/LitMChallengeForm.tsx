@@ -1,13 +1,19 @@
 import type { LitMChallengeData } from "../../types";
+import { useEffect, useState } from "react";
 import { PipTrack } from "./PipTrack";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { statblockScopeClass } from "../../statblockThemes";
+import {
+  findLitmSystemId,
+  loadLitmRefItemsByGroup,
+} from "./litmCompendium";
 
 export function emptyChallenge(): LitMChallengeData {
   return {
     title: "",
     role: "",
+    mightLevel: "origin",
     might: 0,
     tagsAndStatuses: "",
     limits: "",
@@ -23,6 +29,21 @@ export function LitMChallengeEdit({
   value: LitMChallengeData;
   onChange: (v: LitMChallengeData) => void;
 }) {
+  const [roles, setRoles] = useState<string[]>([]);
+  const [mightLevels, setMightLevels] = useState<{ value: string; label: string }[]>([]);
+
+  useEffect(() => {
+    findLitmSystemId().then(async (sysId) => {
+      if (!sysId) return;
+      const [roleItems, mightItems] = await Promise.all([
+        loadLitmRefItemsByGroup(sysId, "Роли угроз"),
+        loadLitmRefItemsByGroup(sysId, "Могущество и Темы"),
+      ]);
+      setRoles(roleItems.map(r => r.name).sort());
+      setMightLevels(mightItems.map(m => ({ value: String(m.data.level ?? m.data.might ?? ""), label: m.name })).filter(m => m.value));
+    });
+  }, []);
+
   return (
     <div className="stack">
       <label>
@@ -31,7 +52,16 @@ export function LitMChallengeEdit({
       </label>
       <label>
         Роль (Role)
-        <input value={value.role} onChange={(e) => onChange({ ...value, role: e.target.value })} />
+        <select value={value.role} onChange={(e) => onChange({ ...value, role: e.target.value })}>
+          <option value="">— выберите роль —</option>
+          {roles.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </label>
+      <label className="row">
+        Ступень могущества (Might Level)
+        <select value={value.mightLevel} onChange={(e) => onChange({ ...value, mightLevel: e.target.value as "origin" | "adventure" | "greatness" | "variable" })}>
+          {mightLevels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
       </label>
       <label className="row">
         Мощь (Might)
@@ -50,7 +80,7 @@ export function LitMChallengeEdit({
         <MentionTextarea value={value.limits} onChange={(v) => onChange({ ...value, limits: v })} rows={3} />
       </label>
       <label>
-        Угрозы и последствия (Threats &amp; Consequences)
+        Угрозы и последствия (Threats & Consequences)
         <MentionTextarea
           value={value.threatsConsequences}
           onChange={(v) => onChange({ ...value, threatsConsequences: v })}

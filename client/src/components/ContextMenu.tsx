@@ -25,6 +25,20 @@ interface Props {
 export function ContextMenu({ x, y, title, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
+  // Меню открывается там, где щёлкнули, и у правого-нижнего края уезжало за
+  // экран: на 375 px меню плитки доски (180 px) от кнопки «⋯» на 304 px просто
+  // обрезалось. Замер после монтирования, а не расчёт по числу пунктов: высота
+  // меняется и от раскрытого подменю тоже.
+  const [at, setAt] = useState({ x, y });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const pad = 8;
+    const nx = Math.max(pad, Math.min(x, window.innerWidth - r.width - pad));
+    const ny = Math.max(pad, Math.min(y, window.innerHeight - r.height - pad));
+    setAt((prev) => (prev.x === nx && prev.y === ny ? prev : { x: nx, y: ny }));
+  }, [x, y, expanded, items]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -45,7 +59,7 @@ export function ContextMenu({ x, y, title, items, onClose }: Props) {
     <div
       ref={ref}
       className="context-menu"
-      style={{ position: "fixed", left: x, top: y }}
+      style={{ position: "fixed", left: at.x, top: at.y }}
     >
       {title && <div className="context-menu-title">{title}</div>}
       {items.map((item, i) =>

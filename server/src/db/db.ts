@@ -2386,8 +2386,165 @@ export function openDatabase(dbDir: string): Database.Database {
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
   }
+  // Свёртка переехала с главы на свободную рамку (блок G6.3). Умолчание 0, а
+  // не 1: рамки, уже нарисованные Мастером, не должны схлопнуться от одного
+  // обновления — он рисовал их вокруг того, что хотел видеть.
+  if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "collapsed")) {
+    database.exec("ALTER TABLE canvas_frames ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0");
+  }
   if (tableExists(database, "canvas_groups") && !columnExists(database, "canvas_groups", "color")) {
     database.exec("ALTER TABLE canvas_groups ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
+  }
+  // Свёрнутость главы — часть раскладки, поэтому живёт рядом с ней, а не в
+  // localStorage: иначе на другой машине раскладка приехала бы, а свёртка нет.
+  // По умолчанию 1 — приключение встречает карточками глав, а не грудой из
+  // девяноста сцен. Действует ровно один раз: как только главу развернули,
+  // выбор запоминается здесь навсегда.
+  if (tableExists(database, "canvas_groups") && !columnExists(database, "canvas_groups", "collapsed")) {
+    database.exec("ALTER TABLE canvas_groups ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 1");
+  }
+  // Родитель для нод, у которых своей главы нет: сущности, стикера, картинки,
+  // пина. У сцены и проверки родитель выводится из данных (arc_id сцены), и
+  // сюда не пишется. Геометрия решает один раз — в момент броска на рамку;
+  // дальше это данные, а не перекрытие прямоугольников.
+  //
+  // Ключ строкой, а не числом: рамок два вида — глава (`canvas_groups`, ключ
+  // по arc_id, своей строки в canvas_nodes не имеет) и свободная рамка
+  // (`canvas_frames`). Числом их не различить, поэтому `chapter:26`/`frame:4`.
+  if (tableExists(database, "canvas_nodes") && columnExists(database, "canvas_nodes", "parent_node_id")) {
+    // Колонка прожила меньше часа и всегда была пустой — заменяется целиком.
+    database.exec("ALTER TABLE canvas_nodes DROP COLUMN parent_node_id");
+  }
+  if (tableExists(database, "canvas_nodes") && !columnExists(database, "canvas_nodes", "parent_key")) {
+    database.exec("ALTER TABLE canvas_nodes ADD COLUMN parent_key TEXT");
+  }
+  // Владелец свободной доски и её архивация (блок D1). Обе колонки пустые для
+  // всех существующих досок: заведённые до этого остаются ничьими и активными,
+  // то есть открываются ровно как раньше. Владение сделано колонками, а не
+  // новым scope_type: см. комментарий в schema.sql.
+  if (tableExists(database, "canvas_boards") && !columnExists(database, "canvas_boards", "owner_type")) {
+    database.exec("ALTER TABLE canvas_boards ADD COLUMN owner_type TEXT");
+    database.exec("ALTER TABLE canvas_boards ADD COLUMN owner_id INTEGER");
+  }
+  if (tableExists(database, "canvas_boards") && !columnExists(database, "canvas_boards", "archived_at")) {
+    database.exec("ALTER TABLE canvas_boards ADD COLUMN archived_at TEXT");
+  }
+  // Индекс — отдельно и без условия на колонку: он нужен и свежей базе (где
+  // колонки пришли из schema.sql, и ветка выше не сработала), и старой.
+  if (tableExists(database, "canvas_boards") && columnExists(database, "canvas_boards", "owner_type")) {
+    database.exec(
+      "CREATE INDEX IF NOT EXISTS idx_canvas_boards_owner ON canvas_boards(owner_type, owner_id)"
+    );
+  }
+
+  // Свой набор связей у кампании (блок D4). Таблица пересобирается целиком:
+  // уникальность была ограничением таблицы `UNIQUE(from, to, label)`, а
+  // изменить ограничение ALTER'ом SQLite не умеет — и без изменения кампания
+  // не смогла бы завести копию той же связи. Новая уникальность считает
+  // NULL-владельца нулём (IFNULL), иначе две одинаковые связи сеттинга
+  // прошли бы как разные.
+  if (
+    tableExists(database, "story_arc_transitions") &&
+    !columnExists(database, "story_arc_transitions", "campaign_id")
+  ) {
+    database.exec(`
+      CREATE TABLE story_arc_transitions_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+        to_arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
+        label TEXT NOT NULL DEFAULT '',
+        position INTEGER NOT NULL DEFAULT 0,
+        campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE
+      );
+      INSERT INTO story_arc_transitions_new (id, from_arc_id, to_arc_id, label, position, campaign_id)
+        SELECT id, from_arc_id, to_arc_id, label, position, NULL FROM story_arc_transitions;
+      DROP TABLE story_arc_transitions;
+      ALTER TABLE story_arc_transitions_new RENAME TO story_arc_transitions;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_arc_transitions_unique
+        ON story_arc_transitions(from_arc_id, to_arc_id, label, IFNULL(campaign_id, 0));
+      CREATE INDEX IF NOT EXISTS idx_arc_transitions_campaign
+        ON story_arc_transitions(campaign_id);
+    `);
+  }
+
+  // Индексы связей — отдельно и без условия на пересборку выше: они нужны и
+  // свежей базе (где колонка пришла из schema.sql, и ветка выше не сработала),
+  // и старой. В самом schema.sql их держать нельзя: он выполняется до миграций.
+  if (
+    tableExists(database, "story_arc_transitions") &&
+    columnExists(database, "story_arc_transitions", "campaign_id")
+  ) {
+    database.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_arc_transitions_unique
+         ON story_arc_transitions(from_arc_id, to_arc_id, label, IFNULL(campaign_id, 0));
+       CREATE INDEX IF NOT EXISTS idx_arc_transitions_campaign
+         ON story_arc_transitions(campaign_id);`
+    );
+  }
+
+  // Ведёт ли кампания свои связи (блок D4). Отдельный флаг, а не «есть ли
+  // строки с её campaign_id»: Мастер может стереть в кампании все связи до
+  // единой, и без флага это было бы неотличимо от «своих связей нет», то есть
+  // связи сеттинга вернулись бы сами.
+  if (tableExists(database, "campaigns") && !columnExists(database, "campaigns", "own_arc_transitions")) {
+    database.exec("ALTER TABLE campaigns ADD COLUMN own_arc_transitions INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Когда приключение правили в последний раз (блок D4). Нужно ровно для
+  // одного: сказать Мастеру, что оригинал в сеттинге изменился ПОСЛЕ того, как
+  // кампания сняла с него свою копию (у копии для этого есть `created_at`).
+  // Существующим строкам проставляется их `created_at` — честнее, чем `now`:
+  // когда их правили на самом деле, база не помнит.
+  if (tableExists(database, "story_arcs") && !columnExists(database, "story_arcs", "updated_at")) {
+    database.exec("ALTER TABLE story_arcs ADD COLUMN updated_at TEXT");
+    database.exec("UPDATE story_arcs SET updated_at = created_at WHERE updated_at IS NULL");
+  }
+  if (!tableExists(database, "canvas_pins")) {
+    database.exec(`CREATE TABLE canvas_pins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT 'Пин',
+      x REAL NOT NULL DEFAULT 0,
+      y REAL NOT NULL DEFAULT 0,
+      size TEXT NOT NULL DEFAULT 'M',
+      color TEXT NOT NULL DEFAULT '#2C3E50',
+      shape TEXT NOT NULL DEFAULT 'circle',
+      z_index INTEGER NOT NULL DEFAULT 1000,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_canvas_pins_board ON canvas_pins(board_id)`);
+  }
+  if (!tableExists(database, "canvas_threads")) {
+    database.exec(`CREATE TABLE canvas_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+      from_pin_id INTEGER NOT NULL REFERENCES canvas_pins(id) ON DELETE CASCADE,
+      to_pin_id INTEGER NOT NULL REFERENCES canvas_pins(id) ON DELETE CASCADE,
+      width REAL NOT NULL DEFAULT 2,
+      color TEXT NOT NULL DEFAULT '#2C3E50',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(board_id, from_pin_id, to_pin_id)
+    )`);
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_canvas_threads_board ON canvas_threads(board_id)`);
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_canvas_threads_pins ON canvas_threads(from_pin_id, to_pin_id)`);
+  }
+
+  // Карточка существа (шаг 4 ревизии): мастерская обвязка вокруг статблока —
+  // роль в бою, тактика и секрет. Лежит колонками в ОБЕИХ таблицах, а не в
+  // свободном `data` записи компендиума: одно и то же поле, лежащее JSON'ом в
+  // одном месте и колонкой в другом, нельзя ни искать одним запросом, ни
+  // наследовать одним кодом (личность берёт роль/тактику/прозу вида по
+  // base_monster_id, пока своё пусто). Проза — уже существующая description.
+  for (const table of ["compendium_entries", "setting_beings"]) {
+    if (!columnExists(database, table, "combat_roles")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN combat_roles TEXT NOT NULL DEFAULT '[]'`);
+    }
+    if (!columnExists(database, table, "tactics")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN tactics TEXT NOT NULL DEFAULT '[]'`);
+    }
+    if (!columnExists(database, table, "secret")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN secret TEXT NOT NULL DEFAULT ''`);
+    }
   }
 
   compactIfBloated(database);

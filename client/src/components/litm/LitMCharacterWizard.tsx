@@ -3,8 +3,10 @@ import {
   findLitmSystemId,
   loadLitmTropes,
   loadLitmThemeBooks,
+  loadLitmThemeKits,
   type LitmTrope,
   type LitmThemeBook,
+  type LitmThemeKit,
 } from "./litmCompendium";
 import type { LitMCharacterData, LitMThemeCard, LitMPower } from "../../types";
 
@@ -21,11 +23,20 @@ function emptyTheme(): LitMThemeCard {
   return { power: "", themeType: "", name: "", powerTags: [], weaknessTags: [], quest: "", improve: 0, abandon: 0, milestone: 0, specialImprovements: [] };
 }
 
-/** Чип темы: название → тип → могущество, фон = цвет Могущества. */
-function ThemeChip({ en, books }: { en: string; books: LitmThemeBook[] }) {
-  const book = books.find(b => b.enName === en);
+/** Чип темы: название кита → тип тембука → могущество, фон = цвет Могущества. */
+function ThemeChip({ kit, themebookEn, kits, books }: { 
+  kit?: LitmThemeKit; 
+  themebookEn: string; 
+  kits: LitmThemeKit[]; 
+  books: LitmThemeBook[] 
+}) {
+  const themebookKits = kits.filter(k => k.themebookEn === themebookEn);
+  const displayKit = kit ?? themebookKits[0];
+  const book = books.find(b => b.enName === themebookEn);
   const might = book?.data.might ?? "";
-  const ruName = book?.ruName ?? en;
+  const ruName = displayKit?.name.split(" [")[0] ?? book?.ruName ?? themebookEn;
+  const typeRu = book?.ruName ?? themebookEn;
+  
   return (
     <span
       className={`litm-power-${might}`}
@@ -41,7 +52,7 @@ function ThemeChip({ en, books }: { en: string; books: LitmThemeBook[] }) {
         {ruName}
       </span>
       <span style={{ fontSize: 11, color: "var(--ink-soft, #5c4a38)", lineHeight: 1.2 }}>
-        {ruName} [{en}]
+        {typeRu}
       </span>
       <span style={{ fontSize: 9, letterSpacing: ".08em", textTransform: "uppercase", opacity: .7, lineHeight: 1.3 }}>
         {MIGHT_RU[might] ?? ""}
@@ -68,6 +79,7 @@ export function LitMCharacterWizard({
   const [, setSystemId] = useState<number | null>(null);
   const [tropes, setTropes] = useState<LitmTrope[]>([]);
   const [books, setBooks] = useState<LitmThemeBook[]>([]);
+  const [kits, setKits] = useState<LitmThemeKit[]>([]);
   const [selectedTrope, setSelectedTrope] = useState<LitmTrope | null>(null);
   const [chooseIdx, setChooseIdx] = useState<number | null>(null);
   const [groupFilter, setGroupFilter] = useState("");
@@ -84,20 +96,35 @@ export function LitMCharacterWizard({
       setSystemId(id);
       loadLitmTropes(id).then(setTropes);
       loadLitmThemeBooks(id).then(setBooks);
+      loadLitmThemeKits(id).then(setKits);
     });
   }, []);
 
   function assembleFromTrope(): LitMCharacterData["themes"] {
     if (!selectedTrope || chooseIdx === null) return [emptyTheme(), emptyTheme(), emptyTheme(), emptyTheme()];
-    const bookByEn = new Map(books.map((b) => [b.enName, b]));
+    
+    // Build map: themebookEn -> first kit (for auto-pick)
+    const kitsByThemebook = new Map<string, LitmThemeKit[]>();
+    for (const kit of kits) {
+      const arr = kitsByThemebook.get(kit.themebookEn) ?? [];
+      arr.push(kit);
+      kitsByThemebook.set(kit.themebookEn, arr);
+    }
+    
     const allTypes = [...selectedTrope.data.themes_fixed, selectedTrope.data.themes_choose_one[chooseIdx]];
-    return allTypes.map((en) => {
-      const book = bookByEn.get(en);
+    return allTypes.map((themebookEn) => {
+      const themebookKits = kitsByThemebook.get(themebookEn) ?? [];
+      const kit = themebookKits[0]; // auto-pick first kit
+      const book = books.find(b => b.enName === themebookEn);
+      const might = book?.data.might ?? "";
       return {
         ...emptyTheme(),
-        themeType: en,
-        power: (book?.data.might ?? "") as LitMPower,
-        name: book ? `${book.ruName} [${en}]` : en,
+        themeType: themebookEn,
+        power: might as LitMPower,
+        name: kit ? `${kit.name.split(" [")[0]} [${themebookEn}]` : themebookEn,
+        powerTags: kit?.data.powerTags ?? [],
+        weaknessTags: kit?.data.weaknessTags ?? [],
+        quest: kit?.data.quest ?? "",
         specialImprovements: (book?.data.improvements ?? []).map(i => ({ text: `${i.name} — ${i.text}`, active: false })),
       };
     });
@@ -242,7 +269,9 @@ export function LitMCharacterWizard({
                   display: "flex", flexWrap: "wrap", gap: 4,
                   padding: "0 12px 12px", alignItems: "stretch",
                 }}>
-                  {t.data.themes_fixed.map(f => <ThemeChip key={f} en={f} books={books} />)}
+                  {t.data.themes_fixed.map((themebookEn) => (
+                    <ThemeChip key={themebookEn} themebookEn={themebookEn} kits={kits} books={books} />
+                  ))}
                 </div>
               </button>
             );
@@ -259,7 +288,7 @@ export function LitMCharacterWizard({
               Четвёртая тема — на выбор
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {selectedTrope.data.themes_choose_one.map((en, i) => (
+              {selectedTrope.data.themes_choose_one.map((themebookEn, i) => (
                 <button
                   key={i}
                   onClick={() => setChooseIdx(i)}
@@ -269,7 +298,7 @@ export function LitMCharacterWizard({
                     background: "transparent", padding: "6px 12px", borderRadius: 0,
                   }}
                 >
-                  <ThemeChip en={en} books={books} />
+                  <ThemeChip themebookEn={themebookEn} kits={kits} books={books} />
                 </button>
               ))}
             </div>

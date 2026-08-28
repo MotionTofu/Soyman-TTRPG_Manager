@@ -178,6 +178,33 @@ archiveRouter.get("/", (_req, res) => {
     }))
   );
 
+  // Свободные доски Полотна (блок D1). `id` — это `scope_id`, а не `id` строки:
+  // все маршруты свободных досок ключуются по нему, и архив не должен вводить
+  // второй способ адресовать ту же доску. Подпись — что на доске лежит, иначе
+  // «Новая доска» в архиве неотличима от второй «Новой доски».
+  const boards = db
+    .prepare(
+      `SELECT scope_id, name, archived_at,
+              (SELECT count(*) FROM canvas_stickers WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_images WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_frames WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_pins WHERE board_id = canvas_boards.id) +
+              (SELECT count(*) FROM canvas_nodes WHERE board_id = canvas_boards.id
+                 AND node_type NOT IN ('sticker','image','frame','pin')) AS nodes
+         FROM canvas_boards
+        WHERE scope_type = 'free' AND archived_at IS NOT NULL`
+    )
+    .all() as { scope_id: number; name: string; archived_at: string; nodes: number }[];
+  items.push(
+    ...boards.map((r) => ({
+      type: "canvas_board",
+      id: r.scope_id,
+      title: r.name || "Без имени",
+      subtitle: `${r.nodes} об.`,
+      archived_at: r.archived_at,
+    }))
+  );
+
   items.sort((a, b) => (a.archived_at < b.archived_at ? 1 : -1));
   res.json(items);
 });
@@ -267,14 +294,22 @@ const ARCHIVE_TABLES: Record<string, string> = {
   being: "setting_beings",
   artifact: "artifacts",
   community: "setting_communities",
+  canvas_board: "canvas_boards",
 };
+
+// Столбец, по которому тип адресуется, когда это не `id`. Свободная доска
+// везде — и в маршрутах Полотна, и в ссылке `?free_id=` — адресуется своим
+// `scope_id`; заводить в архиве второй способ назвать ту же доску значит
+// гарантировать путаницу. Как и имена таблиц, берётся из белого списка.
+const ARCHIVE_KEYS: Record<string, string> = { canvas_board: "scope_id" };
 
 archiveRouter.delete("/:type/:id", (req, res) => {
   const table = ARCHIVE_TABLES[req.params.type];
   if (!table) return res.status(400).json({ error: "unknown type" });
+  const key = ARCHIVE_KEYS[req.params.type] ?? "id";
 
   const row = db
-    .prepare(`SELECT archived_at FROM ${table} WHERE id = ?`)
+    .prepare(`SELECT archived_at FROM ${table} WHERE ${key} = ?`)
     .get(req.params.id) as { archived_at: string | null } | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
   if (row.archived_at == null) {
@@ -286,7 +321,7 @@ archiveRouter.delete("/:type/:id", (req, res) => {
   let folderPath: string | null = null;
   if (FOLDER_OWNED_TYPES.has(req.params.type)) {
     const withFolder = db
-      .prepare(`SELECT folder_path FROM ${table} WHERE id = ?`)
+      .prepare(`SELECT folder_path FROM ${table} WHERE ${key} = ?`)
       .get(req.params.id) as { folder_path: string | null } | undefined;
     folderPath = withFolder?.folder_path ?? null;
   }
@@ -319,7 +354,7 @@ archiveRouter.delete("/:type/:id", (req, res) => {
        WHERE setting_id = ? AND in_library = 1 AND archived_at IS NULL`
     ).run(req.params.id);
   }
-  db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(req.params.id);
+  db.prepare(`DELETE FROM ${table} WHERE ${key} = ?`).run(req.params.id);
   // The delete above (and any FK cascade it triggered) may have removed owners
   // of polymorphic statblocks/gallery/dates — reconcile those away too.
   sweepOrphans();

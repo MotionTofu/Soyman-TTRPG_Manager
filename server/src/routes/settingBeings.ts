@@ -553,6 +553,9 @@ settingBeingsRouter.put("/:id", (req, res) => {
     short_name,
     aliases,
     name_original,
+    combat_roles,
+    tactics,
+    secret,
   } = req.body as {
     name?: string;
     category?: string;
@@ -566,6 +569,11 @@ settingBeingsRouter.put("/:id", (req, res) => {
     short_name?: string;
     aliases?: string[];
     name_original?: string;
+    // Карточка существа: роль в бою (не больше двух), тактика списком строк,
+    // секрет. Проза карточки — description выше.
+    combat_roles?: string[];
+    tactics?: string[];
+    secret?: string;
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
@@ -583,6 +591,9 @@ settingBeingsRouter.put("/:id", (req, res) => {
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
        aliases = COALESCE(?, aliases),
        name_original = COALESCE(?, name_original),
+       combat_roles = COALESCE(?, combat_roles),
+       tactics = COALESCE(?, tactics),
+       secret = COALESCE(?, secret),
        folder_path = ?
      WHERE id = ?`
   ).run(
@@ -600,6 +611,9 @@ settingBeingsRouter.put("/:id", (req, res) => {
     short_name ?? null,
     aliases ? JSON.stringify(aliases) : null,
     name_original ?? null,
+    combat_roles ? JSON.stringify(combat_roles.slice(0, 2)) : null,
+    tactics ? JSON.stringify(tactics) : null,
+    secret ?? null,
     folderPath,
     req.params.id
   );

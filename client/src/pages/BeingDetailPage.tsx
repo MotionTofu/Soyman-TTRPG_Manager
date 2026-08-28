@@ -7,6 +7,7 @@ import { StatblockList } from "../components/StatblockList";
 import { GalleryTab } from "../components/GalleryTab";
 import { MentionsTab } from "../components/MentionsTab";
 import { ChapterList } from "../components/ChapterList";
+import { CreatureCardEditor } from "../components/CreatureCardEditor";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
@@ -493,12 +494,7 @@ export function BeingDetailPage() {
       )}
 
       {tab === "Карточка существа" && (
-        <div className="card stack">
-          <p className="muted">
-            Карточка существа — скоро здесь появится компактная витрина для показа игрокам (пульт
-            управления сессией и другие места).
-          </p>
-        </div>
+        <CreatureCardEditor type="being" id={beingId} onChange={refresh} />
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="being" entityId={beingId} />}

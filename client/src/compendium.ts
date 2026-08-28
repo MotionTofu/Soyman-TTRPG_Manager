@@ -287,10 +287,72 @@ export const KIND_DEFS: Record<string, KindDef> = {
       { key: "weight", label: "Вес", type: "text" },
     ],
   },
-  mechanic_group: {
+mechanic_group: {
     label: "Список",
     fields: [],
     childKinds: [{ kind: "mechanic_item", label: "пункт" }],
+  },
+  mechanic_might_item: {
+    label: "Ступень могущества",
+    fields: [
+      { key: "description_ru", label: "Описание", type: "textarea" },
+      { key: "default_theme_types", label: "Типы тем по умолчанию", type: "textarea" },
+      { key: "scale_tags", label: "Теги соответствуют масштабу", type: "textarea" },
+      { key: "level", label: "Уровень/ступень", type: "select", options: ["origin", "adventure", "greatness", "variable"] },
+    ],
+    childKinds: [{ kind: "mechanic_might_item", label: "подпункт" }],
+  },
+  mechanic_theme_type_item: {
+    label: "Тип темы",
+    fields: [
+      { key: "description_ru", label: "Описание", type: "textarea" },
+      { key: "might", label: "Могущество", type: "select", options: ["origin", "adventure", "greatness", "variable"] },
+      { key: "themebook_ids", label: "ID тембуков", type: "text" },
+      { key: "example_power_tags", label: "Пример ключей силы", type: "textarea" },
+      { key: "example_weakness_tags", label: "Пример ключей слабости", type: "textarea" },
+      { key: "special_improvements", label: "Особые улучшения", type: "textarea" },
+    ],
+    childKinds: [{ kind: "mechanic_theme_type_item", label: "подпункт" }],
+  },
+  mechanic_role_item: {
+    label: "Роль угрозы",
+    fields: [
+      { key: "description_ru", label: "Описание", type: "textarea" },
+    ],
+    childKinds: [{ kind: "mechanic_role_item", label: "подпункт" }],
+  },
+  mechanic_status_category_item: {
+    label: "Категория статуса",
+    fields: [
+      { key: "description_ru", label: "Описание", type: "textarea" },
+      { key: "category_key", label: "Ключ категории", type: "text" },
+    ],
+    childKinds: [{ kind: "mechanic_status_category_item", label: "подпункт" }],
+  },
+  mechanic_consequence_item: {
+    label: "Тип последствия",
+    fields: [
+      { key: "description_ru", label: "Описание", type: "textarea" },
+      { key: "consequence_key", label: "Ключ типа", type: "text" },
+    ],
+    childKinds: [{ kind: "mechanic_consequence_item", label: "подпункт" }],
+  },
+  mechanic_backpack_category_item: {
+    label: "Категория рюкзака",
+    fields: [
+      { key: "description_ru", label: "Описание", type: "textarea" },
+      { key: "category_key", label: "Ключ категории", type: "text" },
+      { key: "examples", label: "Примеры", type: "textarea" },
+    ],
+    childKinds: [{ kind: "mechanic_backpack_category_item", label: "подпункт" }],
+  },
+  mechanic_economy_item: {
+    label: "Экономический ресурс",
+    fields: [
+      { key: "description_ru", label: "Описание", type: "textarea" },
+      { key: "resource_type", label: "Тип ресурса", type: "text" },
+    ],
+    childKinds: [{ kind: "mechanic_economy_item", label: "подпункт" }],
   },
   mechanic_item: {
     label: "Пункт",

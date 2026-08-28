@@ -109,6 +109,133 @@ settingsRouter.post("/", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM settings WHERE id = ?").get(newId));
 });
 
+// Пакетное создание сеттинга визардом: сам сеттинг, дерево локаций,
+// сообщества и НПЦ со связями — одной транзакцией. Полусозданный мир хуже
+// несозданного: повторить оборвавшийся визард нечем, а руками разбирать, что
+// успело записаться, а что нет, Мастер не должен.
+//
+// Ссылки между черновыми записями идут по временным ключам (`key`), которые
+// присвоил клиент: настоящих id до вставки не существует.
+//
+// Оговорка: папки в хранилище создаются по ходу и откатом транзакции не
+// убираются — при обрыве в хранилище остаются пустые каталоги. Это дешевле,
+// чем удалять их вручную в catch, рискуя снести чужое.
+settingsRouter.post("/wizard", (req, res) => {
+  const body = req.body as {
+    name: string;
+    description?: string;
+    calendar?: {
+      preset?: string;
+      withEra?: boolean;
+      months?: number;
+      daysPerMonth?: number;
+      weekdays?: number;
+    };
+    locations?: { key: number; parent_key: number | null; name: string }[];
+    communities?: { key: number; name: string }[];
+    beings?: {
+      name: string;
+      category?: string;
+      location_key?: number | null;
+      community_keys?: number[];
+    }[];
+  };
+  if (!body?.name?.trim()) return res.status(400).json({ error: "name is required" });
+
+  const locations = (body.locations ?? []).filter((l) => l.name.trim());
+  const communities = (body.communities ?? []).filter((c) => c.name.trim());
+  const beings = (body.beings ?? []).filter((b) => b.name.trim());
+
+  try {
+    const settingId = db.transaction(() => {
+      const settingName = body.name.trim();
+      const folder = settingFolder(settingName);
+      const info = db
+        .prepare("INSERT INTO settings (name, description, folder_path, code) VALUES (?, ?, ?, ?)")
+        .run(settingName, body.description || "", folder, suggestCode("settings", settingName));
+      const newId = info.lastInsertRowid as number;
+
+      const preset = body.calendar ? resolvePreset(body.calendar) : null;
+      if (preset) applyCalendarPreset(newId, preset, body.calendar?.withEra === true);
+
+      // Локации: родитель обязан быть вставлен раньше ребёнка — от него
+      // берётся папка. Клиент присылает список в порядке обхода дерева
+      // сверху вниз, но полагаться на это нельзя, поэтому вставляем
+      // уровнями, пока список не иссякнет.
+      const locationIds = new Map<number, number>();
+      const geographyRoot = settingGeographyRoot(folder);
+      let pending = locations;
+      while (pending.length > 0) {
+        const next: typeof pending = [];
+        for (const loc of pending) {
+          const parentId = loc.parent_key === null ? null : locationIds.get(loc.parent_key);
+          if (loc.parent_key !== null && parentId === undefined) {
+            next.push(loc);
+            continue;
+          }
+          const base = parentId
+            ? (db
+                .prepare("SELECT folder_path FROM setting_locations WHERE id = ?")
+                .get(parentId) as { folder_path: string }).folder_path
+            : geographyRoot;
+          const created = db
+            .prepare(
+              "INSERT INTO setting_locations (setting_id, parent_id, name, folder_path) VALUES (?, ?, ?, ?)"
+            )
+            .run(newId, parentId ?? null, loc.name.trim(), locationFolder(base, loc.name.trim()));
+          locationIds.set(loc.key, created.lastInsertRowid as number);
+        }
+        // Ни одна строка не разрешилась — остались ссылки на выброшенных
+        // родителей; такие локации поднимаются в корень, а не теряются.
+        if (next.length === pending.length) {
+          for (const loc of next) loc.parent_key = null;
+        }
+        pending = next;
+      }
+
+      const communityIds = new Map<number, number>();
+      for (const community of communities) {
+        const communityName = community.name.trim();
+        const created = db
+          .prepare(
+            "INSERT INTO setting_communities (setting_id, name, folder_path) VALUES (?, ?, ?)"
+          )
+          .run(newId, communityName, communityFolder(folder, communityName));
+        communityIds.set(community.key, created.lastInsertRowid as number);
+      }
+
+      const insertBeingCommunity = db.prepare(
+        "INSERT OR IGNORE INTO being_communities (being_id, community_id) VALUES (?, ?)"
+      );
+      const insertBeingLocation = db.prepare(
+        "INSERT OR IGNORE INTO being_locations (being_id, location_id) VALUES (?, ?)"
+      );
+      for (const being of beings) {
+        const beingName = being.name.trim();
+        const locationId =
+          being.location_key == null ? null : locationIds.get(being.location_key) ?? null;
+        const created = db
+          .prepare(
+            `INSERT INTO setting_beings (setting_id, name, category, location_id, folder_path)
+             VALUES (?, ?, ?, ?, ?)`
+          )
+          .run(newId, beingName, being.category || "key_figure", locationId, beingFolder(folder, beingName));
+        const beingId = created.lastInsertRowid as number;
+        if (locationId) insertBeingLocation.run(beingId, locationId);
+        for (const key of being.community_keys ?? []) {
+          const communityId = communityIds.get(key);
+          if (communityId) insertBeingCommunity.run(beingId, communityId);
+        }
+      }
+
+      return newId;
+    })();
+    res.status(201).json(db.prepare("SELECT * FROM settings WHERE id = ?").get(settingId));
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 function getCalendar(settingId: string | number) {
   const months = db
     .prepare("SELECT * FROM setting_calendar_months WHERE setting_id = ? ORDER BY position")

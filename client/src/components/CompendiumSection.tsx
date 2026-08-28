@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "re
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionTextarea } from "./mentions/MentionTextarea";
-import { LitmThemeBookBody, LitmTreasureBody, LitmMagicWayBody } from "./litm/LitmCompendiumBodies";
+import { LitmThemeBookBody, LitmTreasureBody, LitmMagicWayBody, LitmThemeKitBody } from "./litm/LitmCompendiumBodies";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
@@ -265,6 +265,15 @@ const AC_BONUS_FIELD: FieldDef = { key: "ac_bonus", label: "Бонус к КЗ",
 
 function getExtraFields(entry: CompendiumEntry, parentGroupName?: string): FieldDef[] {
   if (entry.kind === "mechanic_item") {
+    if (parentGroupName === "Могущество и Темы") {
+      if (!entry.data?.level) return [];
+      return [
+        { key: "default_theme_types", label: "Типы тем (через запятую)", type: "textarea" },
+        { key: "scale_tags", label: "Примеры ключей силы (через запятую)", type: "textarea" },
+        { key: "weight", label: "Вес ступени (1/2/3)", type: "text" },
+        { key: "level", label: "ключ:", type: "select", options: ["origin", "adventure", "greatness", "variable"] },
+      ];
+    }
     return parentGroupName === MECHANICS_TOOL_GROUP ? [TOOL_ABILITY_FIELD] : [];
   }
   const category =
@@ -1263,8 +1272,7 @@ function SortableRow({
 function EntryNode(props: NodeProps) {
   const { entry, expanded, editing, childrenOf, mechanicsOptions, classOptions, originFeatOptions } = props;
   // LitM: ступень Могущества темы — красит строку и даёт подпись-чип.
-  const litmMight =
-    typeof entry.data?.might === "string" ? (entry.data.might as string) : "";
+  const litmMight = (entry.data?.might ?? entry.data?.level ?? "") as string;
   const [linkCopied, setLinkCopied] = useState(false);
   async function copyLink() {
     const url = `${window.location.origin}/systems/${entry.system_id}?section=${entry.section_id}&entry=${entry.id}`;
@@ -1381,7 +1389,7 @@ function EntryNode(props: NodeProps) {
     EFFECT_KINDS.has(entry.kind) &&
     (viewChecks.length > 0 || viewEffects.length > 0 || viewCost.kind !== "none");
   const hasBody =
-    entry.kind === 'themebook' || entry.kind === 'treasure' || entry.kind === 'magic_way' || !!entry.description ||
+    entry.kind === 'themebook' || entry.kind === 'theme_kit' || entry.kind === 'treasure' || entry.kind === 'magic_way' || !!entry.description ||
     filledFields.length > 0 ||
     kids.length > 0 ||
     !!def?.childKinds ||
@@ -2143,6 +2151,11 @@ function EntryNode(props: NodeProps) {
             <LitmThemeBookBody data={entry.data} />
           </div>
         )}
+        {isOpen && !isEditing && entry.kind === 'theme_kit' && (
+          <div className="comp-body">
+            <LitmThemeKitBody data={entry.data} />
+          </div>
+        )}
         {isOpen && !isEditing && entry.kind === 'treasure' && (
           <div className="comp-body">
             <LitmTreasureBody data={entry.data} />
@@ -2153,7 +2166,7 @@ function EntryNode(props: NodeProps) {
             <LitmMagicWayBody entry={entry} />
           </div>
         )}
-        {isOpen && !isEditing && !(entry.kind === 'themebook' || entry.kind === 'treasure' || entry.kind === 'magic_way') && (
+        {isOpen && !isEditing && !(entry.kind === 'themebook' || entry.kind === 'theme_kit' || entry.kind === 'treasure' || entry.kind === 'magic_way') && (
         <div className="comp-body">
           {isMonster && (
             <StatblockList
@@ -2781,7 +2794,6 @@ function ChildGroups(props: NodeProps) {
   const isClassParent = props.entry.kind === "class";
   const featuresBlock = levelGrouped(features);
   const sortedOthers = props.sortForDisplay(others);
-  const isToolsGroup = props.entry.kind === "mechanic_group" && props.entry.name === MECHANICS_TOOL_GROUP;
   const othersBlock = sortedOthers.length > 0 && (
     <div>
       {sortedOthers.map((o) => (
@@ -2790,7 +2802,7 @@ function ChildGroups(props: NodeProps) {
             {...props}
             entry={o}
             depth={props.depth + 1}
-            parentGroupName={isToolsGroup ? MECHANICS_TOOL_GROUP : undefined}
+            parentGroupName={props.entry.kind === "mechanic_group" ? props.entry.name : undefined}
           />
         </SortableRow>
       ))}

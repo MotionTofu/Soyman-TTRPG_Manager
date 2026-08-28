@@ -917,6 +917,10 @@ h4 { font-size: var(--fs-body); }
   outline-offset: -4px;
 }
 .preview-dock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   font-weight: 600;
@@ -925,6 +929,14 @@ h4 { font-size: var(--fs-body); }
   padding: 4px 6px 8px;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
   margin-bottom: 8px;
+}
+.preview-dock-header button {
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 400;
 }
 .preview-dock-placeholder {
   padding: 8px 6px;
@@ -3721,6 +3733,14 @@ details.card[open] summary {
   flex-direction: column;
   min-width: 180px;
   z-index: 100;
+  /* Меню не может быть шире и выше экрана. Раскрытое «Переместить» на Полотне
+     перечисляет все сеттинги и кампании — на 375 px это 670 px высоты, и без
+     ограничения нижние пункты оказывались за краем без возможности до них
+     добраться. Прижатие меню к экрану считает `ContextMenu` по этому же
+     замеру, поэтому предел нужен здесь, а не там. */
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 /* Подпись меню, а не пункт: не кликается, не подсвечивается и отделена
    линией — иначе первая строка читалась бы как ещё одно действие. */
@@ -3918,6 +3938,7 @@ details.card[open] summary {
 .litm-theme-header.litm-power-origin { background: rgba(76, 175, 80, 0.28); }
 .litm-theme-header.litm-power-adventure { background: rgba(229, 57, 53, 0.28); }
 .litm-theme-header.litm-power-greatness { background: rgba(156, 39, 176, 0.28); }
+.litm-theme-header.litm-power-variable { background: rgba(3, 169, 244, 0.30); }
 .litm-theme-header.litm-header-backpack { background: rgba(160, 110, 70, 0.32); }
 .litm-theme-header.litm-header-fellowship { background: rgba(64, 176, 166, 0.28); }
 .litm-theme-header.litm-header-story { background: rgba(196, 178, 94, 0.22); }
@@ -6843,4 +6864,647 @@ body.printing-cheatsheet #root {
   position: absolute;
   left: 0;
   color: var(--gold, #a07d3f);
+}
+
+/* ============================================================
+   Ресурсы → вкладка «Все» (ResourcesListPage, ResourceRow).
+   Шаг ревизии: шапка вкладки шла четырьмя ярусами (описание, форма
+   добавления во всю карточку, поиск, сортировка, фильтры) — до первого
+   ресурса уходило пол-экрана; а сами строки лежали одним flex-потоком с
+   flex-wrap, из-за чего колонка кнопок ехала за длиной названия и в
+   каждом подразделе стояла на своём месте. Теперь: одна полоса
+   управления, плашка-инверсия в шапке подраздела (инвариант §1.4) и
+   строка с тремя жёсткими зонами.
+   ============================================================ */
+
+/* --- Полоса управления --------------------------------------------- */
+.res-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.res-toolbar__search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+/* Сегментный переключатель: кнопки состыкованы, разделяет их граница
+   соседа, а не зазор (тот же приём, что в .nav-widget). */
+.seg {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+}
+.seg button {
+  border: none;
+  border-left: var(--card-border-width, 1px) solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.seg button:first-child {
+  border-left: none;
+}
+.seg button.is-active {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+.res-toolbar__filters {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.res-toolbar__filters label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  min-width: 0;
+}
+.res-toolbar__filters select {
+  max-width: 160px;
+}
+.res-toolbar__filter-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+/* Свёрнутые фильтры — только узкий экран (см. медиазапрос ниже). */
+.res-toolbar__filters-toggle {
+  display: none;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.res-toolbar__filters-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 0 4px;
+}
+.res-toolbar__add {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+/* Форма добавления раскрывается под полосой — те же поля, что были, но
+   не занимают шапку постоянно. */
+.res-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* --- Подраздел ------------------------------------------------------- */
+.res-group {
+  padding: 0;
+  overflow: hidden;
+}
+.res-group__band {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 7px var(--sp-3);
+  cursor: pointer;
+}
+.res-group__band::-webkit-details-marker {
+  display: none;
+}
+/* Общее правило details.card summary тянет свои отрицательные поля, радиус
+   и фон при наведении — плашка от них разъезжалась и на hover светлела в
+   бумагу. Плашке они не нужны: она и есть шапка карточки. */
+details.card summary.res-group__band {
+  margin: 0;
+  padding: 7px var(--sp-3);
+  border-radius: 0;
+  font-weight: inherit;
+}
+details.card summary.res-group__band:hover {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+details.card summary.res-group__band:hover .res-group__count {
+  color: var(--accent-text);
+}
+details[open] > .res-group__band .chevron-icon {
+  transform: rotate(90deg);
+}
+.res-group__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.res-group__title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+.res-group__count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  color: var(--on-surface-muted);
+}
+.res-group__body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Строка ресурса --------------------------------------------------- */
+.res-row {
+  border-top: var(--card-border-width, 1px) solid var(--line);
+}
+.res-row:first-child {
+  border-top: none;
+}
+.res-row__line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-3);
+  min-height: 34px;
+}
+.res-row:hover {
+  background: var(--bg-elevated);
+}
+.res-row__mark {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+}
+.res-row__mark .nav-icon {
+  width: 16px;
+  height: 16px;
+}
+.res-row__thumb {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border: var(--card-border-width, 1px) solid var(--line);
+}
+/* Превью подчиняется общему тумблеру «не перекрашивай мои арты» (§3): в
+   28 px полный дуотон не читается, поэтому только обесцвечивание. */
+[data-cover-duotone] .res-row__thumb {
+  filter: grayscale(0.3) contrast(1.01);
+}
+/* Имя — само действие «открыть»: у ресурса это главное, и отдельной
+   строкой-ссылкой «Открыть файл» под каждым названием оно разрывало
+   список надвое. */
+.res-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  color: var(--ink);
+  text-decoration: none;
+}
+.res-row__name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+.res-row__name--plain {
+  color: var(--text);
+}
+.res-row__tags {
+  flex: 0 1 auto;
+  display: flex;
+  gap: var(--sp-1);
+  overflow: hidden;
+}
+.res-row__tag {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  padding: 0 5px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* Колонка значений: постоянной ширины и всегда на месте — колонка,
+   которая появлялась бы от режима сортировки, снова двигала бы кнопки. */
+.res-row__meta {
+  flex: 0 0 auto;
+  width: 112px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.res-row__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+/* Все действия — один квадрат: счётчик сеттингов ушёл в угол, иначе
+   кнопка меняла ширину и ломала вертикаль колонки. */
+.res-row__act {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  flex: 0 0 auto;
+  background: transparent;
+}
+.res-row__act .nav-icon {
+  width: 14px;
+  height: 14px;
+}
+.res-row__act-count {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 11px;
+  height: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1;
+}
+/* Правка раскрывается под строкой, соседние строки не двигаются. */
+.res-row__form {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3) 48px;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+}
+.res-row.is-editing {
+  background: var(--bg-elevated);
+}
+
+@media (max-width: 760px) {
+  .res-toolbar__search {
+    flex: 1 1 100%;
+  }
+  .res-toolbar__filters-toggle {
+    display: inline-flex;
+  }
+  .res-toolbar__filters {
+    display: none;
+    flex: 1 1 100%;
+  }
+  .res-toolbar__filters.is-open {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  /* На телефоне колонка значений уступает место названию — размер и дата
+     там не то, чем ищут глазами. */
+  .res-row__meta,
+  .res-row__tags {
+    display: none;
+  }
+}
+
+
+/* --- Карточка существа (design_revision.md, шаг 4) ---------------------
+   Быстрый взгляд: то, чем существо отличается от других. Одна колоночная
+   вёрстка на все места — докстанция ~280, модалка меншена ~380, поповер
+   полотна 300. Акцент карточка не тратит вообще (§1.8): она стоит внутри
+   чужих экранов, где бюджет уже потрачен хозяином экрана. */
+.creature-card {
+  border: 2px solid var(--ink);
+  border-radius: var(--card-radius);
+  background: var(--paper);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+.creature-card--page {
+  max-width: 420px;
+}
+/* Шапка — плашка-инверсия (§1.4), а не жирный текст. */
+.creature-card__band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
+}
+.creature-card__portrait {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border: 1.5px solid var(--on-surface);
+  border-radius: 0;
+}
+.creature-card__portrait--empty {
+  display: block;
+  background: transparent;
+}
+.creature-card__title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.creature-card__name {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 0.94;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.creature-card__cr {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--on-surface-muted);
+  margin-top: 3px;
+}
+/* Плашка целиком — переключатель свёрнутости там, где сворачивание есть
+   (докстанция). Цель размером с шапку, а не значок рядом с крестиком. */
+.creature-card__band.is-clickable {
+  cursor: pointer;
+}
+.creature-card__mark {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--on-surface-muted);
+  align-self: flex-start;
+}
+.preview-head-clickable {
+  cursor: pointer;
+}
+.creature-card__close {
+  background: none;
+  border: 0;
+  color: var(--on-surface-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  align-self: flex-start;
+}
+/* Тип / роль / размер кодируются НАЧЕРТАНИЕМ, а не цветом и не эмодзи
+   (§1.7): цветной глиф не печатается в ч/б и выглядит наклейкой из другого
+   приложения. */
+.creature-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 0;
+}
+.creature-card__chip {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  line-height: 1.6;
+  padding: 1px 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.creature-card__chip.is-type {
+  background: var(--ink);
+  color: var(--paper);
+}
+.creature-card__chip.is-size {
+  border: 0;
+  padding: 1px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+.creature-card__inherited {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 9px;
+  color: var(--muted);
+  padding: 4px 10px 0;
+}
+.creature-card__section-body .creature-card__inherited {
+  padding: 0;
+}
+.creature-card__empty {
+  padding: 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* Подписи блоков — капс на разделителе 1.5px, не вторая плашка: плашка-
+   инверсия в системе называет карточку, вторая внутри неё сломала бы
+   иерархию. */
+.creature-card__section-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  background: none;
+  border: 0;
+  border-top: 1.5px solid var(--line);
+  border-radius: 0;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.creature-card__section-mark {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.creature-card__section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+.creature-card__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.creature-card__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.creature-card__label,
+.creature-card__sublabel {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+.creature-card__label {
+  flex: 0 0 74px;
+}
+/* КД и хиты пополам: две пары «подпись — значение» в одной строке. */
+.creature-card__row--pair {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  column-gap: 8px;
+}
+.creature-card__row--pair .creature-card__label {
+  flex: none;
+}
+/* Моноширинный — только под значения (§1.5). */
+.creature-card__value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.creature-card__tactics ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+.creature-card__tactics li,
+.creature-card__prose,
+.creature-card__secret {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 62ch;
+}
+.creature-card__secret > .creature-card__sublabel,
+.creature-card__tactics > .creature-card__sublabel {
+  display: block;
+  margin-bottom: 2px;
+}
+.creature-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding: 8px 10px;
+  border-top: 1.5px solid var(--line);
+}
+/* Одна кнопка — ссылка, вторая — <button>, и без явных правил они расходились:
+   выравнивание бралось из умолчаний браузера, а в докстанции пульта ссылку
+   догоняло ещё и `.app-nav a` (док — это тот же <nav class="app-nav">) со
+   шрифтом навигации. Селектор с двумя классами перебивает его. */
+.creature-card .creature-card__button,
+.creature-card__button {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+  padding: 6px 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.creature-card .creature-card__button:hover,
+.creature-card__button:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Вкладка «Карточка существа»: форма и живой вид рядом. */
+/* Две колонки — только когда обе помещаются целиком. Порог по КОНТЕЙНЕРУ, а
+   не по окну: на 1100 колонка контента здесь 501 px, и жёсткая пара
+   «форма + карточка 340» ужимала форму до 145 px — при том что окно широкое и
+   медиазапрос по ширине окна ничего бы не заметил. */
+.creature-card-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.creature-card-editor__roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.creature-card-editor__roles .creature-card__chip {
+  cursor: pointer;
+}
+.creature-card-editor__roles .creature-card__chip.is-picked {
+  background: var(--ink);
+  color: var(--paper);
+}
+.creature-card-editor__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+/* Поповер карточки на полотне: в ЭКРАННЫХ координатах, зумом не
+   масштабируется — на 40% масштаба именно в неё и лезут. */
+.creature-card-popover {
+  position: fixed;
+  /* Ниже .modal-backdrop (50): «Статблок» из поповера открывает модалку, и
+     карточка не должна лежать поверх неё. */
+  z-index: 48;
+  width: 300px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.creature-card-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 47;
+}
+
+/* Полоса управления над краткой карточкой: без подписи ряд из селектора темы
+   и двух иконок висел в воздухе — карточка рисует свою шапку сама, и вторая
+   шапка ей не нужна. */
+.sb-short-card-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sb-short-card-caption {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--muted);
 }
