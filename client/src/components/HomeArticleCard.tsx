@@ -65,7 +65,9 @@ export function HomeArticleCard() {
   return (
     <div className="home-section">
       <div
-        className="home-article"
+        // Затухание обрезанного тела рисуется на самом блоке, а не на колонке
+        // прозы: только так оно доходит до низа вырезки и до её краёв.
+        className={`home-article${clipped ? " home-article-clipped" : ""}`}
         role="button"
         tabIndex={0}
         onClick={(e) => {
@@ -97,7 +99,7 @@ export function HomeArticleCard() {
           <div className="home-article-text">
             <div
               ref={bodyRef}
-              className={`home-article-body${clipped ? " home-article-body-clipped" : ""}`}
+              className="home-article-body"
             >
               <MentionText text={article.description} />
             </div>
