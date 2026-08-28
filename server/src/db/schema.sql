@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'player', -- gm | player
   player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
-  is_admin INTEGER NOT NULL DEFAULT 0, -- marks the seeded admin account, see services/auth.ts
+  is_admin INTEGER NOT NULL DEFAULT 0, -- права админа: смена роли у чужих учёток; достаётся первому мастеру, см. services/auth.ts
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

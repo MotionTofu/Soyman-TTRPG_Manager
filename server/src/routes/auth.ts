@@ -42,15 +42,17 @@ authRouter.post("/setup", async (req, res) => {
     return res.status(400).json({ error: "username and password are required" });
   }
   const passwordHash = await hashPassword(password);
+  // Первый мастер получает и права администратора: отдельной учётки с
+  // известным паролем в приложении нет, а сменить роль игрока кто-то должен.
   const info = db
-    .prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'gm')")
+    .prepare("INSERT INTO users (username, password_hash, role, is_admin) VALUES (?, ?, 'gm', 1)")
     .run(username.trim(), passwordHash);
   const user: AuthUser = {
     id: Number(info.lastInsertRowid),
     username: username.trim(),
     role: "gm",
     playerId: null,
-    isAdmin: false,
+    isAdmin: true,
   };
   res.status(201).json({ token: signToken(user), user });
 });

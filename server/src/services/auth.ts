@@ -37,10 +37,10 @@ export interface AuthUser {
   username: string;
   role: "gm" | "player";
   playerId: number | null;
-  // Marks the seeded admin/admin account (see bootstrapAdminAccount below) —
-  // independent of `role` (which stays "gm" so it also has normal GM access
-  // everywhere else). The only thing gated on this flag is changing other
-  // accounts' role.
+  // Права администратора — независимо от `role` (она остаётся "gm", то есть
+  // обычный мастерский доступ у такого аккаунта тоже есть). Единственное, что
+  // закрыто этим флагом, — смена роли у чужих учёток. Флаг получает первый
+  // мастер, заведённый первым запуском (см. POST /auth/setup).
   isAdmin: boolean;
 }
 
@@ -121,22 +121,11 @@ export async function bootstrapGmAccount(): Promise<void> {
   const password = process.env.ADMIN_PASSWORD;
   if (!username || !password) return;
   const passwordHash = await hashPassword(password);
-  db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'gm')").run(username, passwordHash);
+  // Права администратора — этой же учётке: она первая и единственная, и
+  // отдельного аккаунта с известным паролем в приложении больше нет.
+  db.prepare(
+    "INSERT INTO users (username, password_hash, role, is_admin) VALUES (?, ?, 'gm', 1)"
+  ).run(username, passwordHash);
   console.log(`[auth] Bootstrapped gm account "${username}".`);
 }
 
-// Called once at startup, every startup — unlike bootstrapGmAccount above,
-// this is NOT gated on needsSetup(), since an install that already has a gm
-// account (i.e. every existing install as of this feature) would otherwise
-// never get an admin account at all. Only creates it if no user named
-// "admin" exists yet, so it never clobbers a password the account's owner
-// (or another admin) has since changed.
-export async function bootstrapAdminAccount(): Promise<void> {
-  const existing = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
-  if (existing) return;
-  const passwordHash = await hashPassword("admin");
-  db.prepare(
-    "INSERT INTO users (username, password_hash, role, is_admin) VALUES ('admin', ?, 'gm', 1)"
-  ).run(passwordHash);
-  console.log('[auth] Bootstrapped admin account "admin".');
-}

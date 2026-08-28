@@ -56,12 +56,11 @@ import { canvasRouter } from "./routes/canvas";
 import { adventureImportRouter } from "./routes/adventureImport";
 import { systemImportRouter } from "./routes/systemImport";
 import { sweepOrphans } from "./services/orphans";
-import { attachUser, requireAuth, bootstrapGmAccount, bootstrapAdminAccount, verifyToken, type AuthedRequest } from "./services/auth";
+import { attachUser, requireAuth, bootstrapGmAccount, verifyToken, type AuthedRequest } from "./services/auth";
 import { apiRoleGate } from "./services/playerAccess";
 
 initVault();
 bootstrapGmAccount();
-bootstrapAdminAccount();
 
 // One-off reconciliation at boot: clear any polymorphic statblock/gallery/date
 // rows whose owner was removed before this sweep existed (e.g. by a pre-fix

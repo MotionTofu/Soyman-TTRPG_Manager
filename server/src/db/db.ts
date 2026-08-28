@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
@@ -16,6 +17,19 @@ function columnExists(database: Database.Database, table: string, column: string
     name: string;
   }[];
   return cols.some((c) => c.name === column);
+}
+
+// Отметка «разовый проход уже сделан» — тем же приёмом, что и у остальных
+// разовых миграций в этом файле (`default_vehicle_section_backfilled` и
+// прочие): строка в app_settings, а не догадка по состоянию данных.
+function appSettingFlag(database: Database.Database, key: string): boolean {
+  return !!database.prepare("SELECT value FROM app_settings WHERE key = ?").get(key);
+}
+
+function setAppSettingFlag(database: Database.Database, key: string): void {
+  database
+    .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
+    .run(key);
 }
 
 function columnIsNotNull(database: Database.Database, table: string, column: string): boolean {
@@ -1243,12 +1257,50 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec(`CREATE INDEX idx_gm_reminders_target ON gm_reminders(target_type, target_id)`);
   }
 
-  // Marks the seeded admin/admin account (see services/auth.ts
-  // bootstrapAdminAccount) — the only account allowed to change other
-  // accounts' role, independent of its own role column (which stays 'gm' so
-  // it also has normal GM access everywhere else).
+  // Права администратора — единственное, что закрыто отдельно от роли: смена
+  // роли у чужих учёток. Сама роль при этом остаётся 'gm', то есть обычный
+  // мастерский доступ у такого аккаунта тоже есть.
   if (!columnExists(database, "users", "is_admin")) {
     database.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Учётка `admin` с паролем `admin` заводилась при КАЖДОМ старте, пока её не
+  // было в базе. Сервер при этом слушает все интерфейсы (доступ с телефона в
+  // том же вайфае — намеренная возможность, см. isPrivateLanHost в index.ts),
+  // поэтому любой в той же сети входил полным мастером: секреты, финансы, всё.
+  // Заведение убрано (services/auth.ts), права переехали к первому мастеру —
+  // здесь то же самое делается для установок, которые уже существуют.
+  //
+  // Учётка удаляется ТОЛЬКО если её пароль всё ещё `admin`: тогда это не
+  // аккаунт, а ключ под ковриком. Пароль сменили — значит им пользуются как
+  // настоящей учёткой, и трогать её нельзя.
+  if (!appSettingFlag(database, "admin_account_retired")) {
+    const firstGm = database
+      .prepare(
+        "SELECT id FROM users WHERE role = 'gm' AND username != 'admin' ORDER BY id LIMIT 1"
+      )
+      .get() as { id: number } | undefined;
+    if (firstGm) {
+      database.prepare("UPDATE users SET is_admin = 1 WHERE id = ?").run(firstGm.id);
+    }
+    const seeded = database
+      .prepare("SELECT id, password_hash FROM users WHERE username = 'admin' AND player_id IS NULL")
+      .get() as { id: number; password_hash: string } | undefined;
+    if (seeded && firstGm) {
+      let stillDefault = false;
+      try {
+        stillDefault = bcrypt.compareSync("admin", seeded.password_hash);
+      } catch (err) {
+        console.error("Не удалось проверить пароль учётки admin:", err);
+      }
+      if (stillDefault) {
+        database.prepare("DELETE FROM users WHERE id = ?").run(seeded.id);
+        console.log("[auth] Учётка admin с паролем по умолчанию удалена.");
+      } else {
+        console.log("[auth] Учётка admin оставлена: её пароль менялся.");
+      }
+    }
+    setAppSettingFlag(database, "admin_account_retired");
   }
 
   // Initiative tracker rows for the "Пульт сессии" cockpit — see
