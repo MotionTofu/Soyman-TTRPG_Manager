@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Cormorant+SC:wght@600;700&family=JetBrains+Mono:wght@400;500;700&family=Oswald:wght@400;500;600&family=PT+Mono&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #12100E; text-decoration: none; } a:hover { color: #D6321E; }
+    .card { border: 2px solid var(--ink); background: var(--paper); }
+    .sec { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1.5px solid var(--line); padding: 10px 14px 8px; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; color: var(--ink); }
+    .sec:first-child { border-top: 0; }
+    .secmark { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+    .body { display: flex; flex-direction: column; gap: 8px; padding: 2px 14px 14px; font-family: var(--font-body); }
+    .entry { font-size: 12.5px; line-height: 1.42; color: var(--ink); }
+    .ename { font-family: 'Oswald', sans-serif; font-weight: 600; letter-spacing: .03em; }
+    .mech { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); }
+    .toggle { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 9px; padding: 4px 9px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; }
+    .toggle.on { background: var(--ink); color: var(--paper); }
+    .fieldlab { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 8.5px; color: var(--muted); margin-bottom: 3px; }
+    .inp { border: 1.5px solid var(--line); background: var(--paper); border-radius: 0; padding: 6px 8px; font-family: var(--font-body); font-size: 12px; color: var(--ink); width: 100%; }
+    .inp.mono { font-family: 'JetBrains Mono', monospace; }
+    .editrow { border: 1.5px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--paper-2); }
+    .handle { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); cursor: grab; }
+    .addbtn { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 9.5px; padding: 7px 11px; border: 1.5px dashed var(--line); background: transparent; color: var(--muted); }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 900px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; padding: 26px; overflow: hidden; font-family: 'Archivo', sans-serif; color: #12100E;">
+
+  <div style="font-family: 'Anton', sans-serif; text-transform: uppercase; font-size: 26px; line-height: .94;">Правка по месту — одна секция</div>
+  <div style="font-family: 'Archivo', sans-serif; font-size: 12px; line-height: 1.45; color: #4A4740; max-width: 84ch; margin-top: 8px;">Правится «Действия»; соседние секции остаются просмотром и никуда не уезжают. Формы-простыни (`DndCreatureEdit`) больше нет — тумблер стоит в подписи каждой секции. Сверху «Соевый нуар», внизу та же секция в «Соевом панке».</div>
+
+  <div class="card" style="--paper: #e8e4da; --paper-2: #e0dcd2; --ink: #1c1c1c; --ink-2: #4a4947; --muted: #787672; --line: #2a2a2a; --font-body: 'PT Mono', monospace; margin-top: 18px;">
+
+    <div class="sec"><span>Защита и чувства</span><span class="secmark">−</span></div>
+    <div class="body">
+      <div class="entry"><span class="ename">Иммунитет</span> <span class="mech">Огонь</span></div>
+      <div class="entry"><span class="ename">Чувства</span> <span class="mech">слепое зрение 60 фт., тёмное зрение 120 фт., пассивная внимательность 23</span></div>
+    </div>
+
+    <div class="sec" style="border-top-width: 2px;">
+      <span>Действия</span>
+      <span style="display: flex; align-items: center; gap: 8px;">
+        <span class="toggle on">Готово</span>
+        <span class="secmark">−</span>
+      </span>
+    </div>
+    <div class="body">
+      <div class="editrow">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="handle">⠿</span>
+          <div style="flex-grow: 1;">
+            <div class="fieldlab">Название</div>
+            <div class="inp">Укус</div>
+          </div>
+          <div style="width: 120px;">
+            <div class="fieldlab">Бонус атаки</div>
+            <div class="inp mono">+14</div>
+          </div>
+          <div style="width: 120px;">
+            <div class="fieldlab">Урон</div>
+            <div class="inp mono">2к10+8</div>
+          </div>
+        </div>
+        <div>
+          <div class="fieldlab">Описание</div>
+          <div class="inp" style="min-height: 46px; line-height: 1.45;">Досягаемость 10 фт. Дополнительно 2к6 огня.</div>
+        </div>
+      </div>
+
+      <div class="editrow">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="handle">⠿</span>
+          <div style="flex-grow: 1;">
+            <div class="fieldlab">Название</div>
+            <div class="inp">Огненное дыхание</div>
+          </div>
+          <div style="width: 120px;">
+            <div class="fieldlab">СЛ спасброска</div>
+            <div class="inp mono">21 ЛОВ</div>
+          </div>
+          <div style="width: 120px;">
+            <div class="fieldlab">Урон</div>
+            <div class="inp mono">18к6</div>
+          </div>
+        </div>
+        <div>
+          <div class="fieldlab">Описание</div>
+          <div class="inp" style="min-height: 46px; line-height: 1.45;">Конус 60 фт. Половина урона при успехе. Перезарядка 5–6.</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <span class="addbtn">+ Действие</span>
+        <span class="addbtn">+ Бонусное действие</span>
+        <span class="addbtn">+ Реакция</span>
+      </div>
+    </div>
+
+    <div class="sec"><span>Снаряжение и лут</span><span class="secmark">−</span></div>
+    <div class="body">
+      <div class="entry"><span class="ename">Сокровища</span> <span class="mech">Клад (тип H), 3к6 × 1000 зм</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="--paper: #EDE7D9; --paper-2: #e5dfd1; --ink: #12100E; --ink-2: #403c35; --muted: #6E675C; --line: #12100E; --font-body: 'Archivo', sans-serif; margin-top: 20px;">
+    <div class="sec">
+      <span>Действия</span>
+      <span style="display: flex; align-items: center; gap: 8px;">
+        <span class="toggle on">Готово</span>
+        <span class="secmark">−</span>
+      </span>
+    </div>
+    <div class="body">
+      <div class="editrow">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="handle">⠿</span>
+          <div style="flex-grow: 1;">
+            <div class="fieldlab">Название</div>
+            <div class="inp">Укус</div>
+          </div>
+          <div style="width: 120px;">
+            <div class="fieldlab">Бонус атаки</div>
+            <div class="inp mono">+14</div>
+          </div>
+          <div style="width: 120px;">
+            <div class="fieldlab">Урон</div>
+            <div class="inp mono">2к10+8</div>
+          </div>
+        </div>
+        <div>
+          <div class="fieldlab">Описание</div>
+          <div class="inp" style="min-height: 46px; line-height: 1.45;">Досягаемость 10 фт. Дополнительно 2к6 огня.</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <span class="addbtn">+ Действие</span>
+        <span class="addbtn">+ Бонусное действие</span>
+        <span class="addbtn">+ Реакция</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

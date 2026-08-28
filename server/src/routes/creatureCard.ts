@@ -86,7 +86,8 @@ creatureCardRouter.get("/:type/:id", (req, res) => {
            FROM setting_beings b WHERE b.id = ?`
         )
       : db.prepare(
-          `SELECT ce.id, ce.name, ce.description, ce.combat_roles, ce.tactics, ce.secret
+          `SELECT ce.id, ce.name, ce.description, ce.combat_roles, ce.tactics, ce.secret,
+                  ce.avatar_image_path
            FROM compendium_entries ce WHERE ce.id = ?`
         )
   ).get(id) as CardRow | undefined;
@@ -140,6 +141,18 @@ creatureCardRouter.get("/:type/:id", (req, res) => {
   // той же причине, по какой наследует тактику.
   const baseStatblock = !statblock && baseId ? pickStatblock("compendium_entry", baseId) : null;
 
+  // Портрет — как тактика: свой, иначе шаблонный. У записи компендиума он
+  // теперь свой (`compendium_entries.avatar_image_path`, вкладка
+  // «Изображения»), а не картинка статблока, поэтому у карточки, плитки
+  // бестиария и модалки предпросмотра источник один.
+  let avatarPath = row.avatar_image_path ?? null;
+  if (!avatarPath && baseId) {
+    const base = db
+      .prepare("SELECT avatar_image_path FROM compendium_entries WHERE id = ?")
+      .get(baseId) as { avatar_image_path: string | null } | undefined;
+    avatarPath = base?.avatar_image_path ?? null;
+  }
+
   res.json({
     type,
     id: row.id,
@@ -148,7 +161,7 @@ creatureCardRouter.get("/:type/:id", (req, res) => {
     combat_roles: parseList(row.combat_roles),
     tactics: parseList(row.tactics),
     secret: row.secret ?? "",
-    avatar_image_url: row.avatar_image_path ? toFileUrl(row.avatar_image_path) : null,
+    avatar_image_url: avatarPath ? toFileUrl(avatarPath) : null,
     statblock: statblock ?? baseStatblock,
     statblock_inherited: !statblock && !!baseStatblock,
     inherited,

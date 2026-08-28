@@ -7,7 +7,6 @@ import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { api } from "../../api/client";
-import { statblockScopeClass } from "../../statblockThemes";
 import { NavIcon } from "../NavIcons";
 import {
   findLitmSystemId,
@@ -462,14 +461,10 @@ export function LitMCharacterView({
   value,
   onQuickUpdate,
   campaignId,
-  theme,
-  density,
 }: {
   value: LitMCharacterData;
   onQuickUpdate: (v: LitMCharacterData) => void;
   campaignId?: number;
-  theme?: string | null;
-  density?: string | null;
 }) {
   function updateTheme(i: number, patch: LitMThemeCard) {
     const themes = value.themes.slice();
@@ -483,7 +478,7 @@ export function LitMCharacterView({
   }
 
   return (
-    <div className={`stack ${statblockScopeClass(theme, density)}`}>
+    <div className="stack sb-scope">
       {value.promise && (
         <div>
           <strong>Обещание</strong> <span>{value.promise}</span>

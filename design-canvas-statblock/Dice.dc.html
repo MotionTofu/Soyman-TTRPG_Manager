@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Cormorant+SC:wght@600;700&family=JetBrains+Mono:wght@400;500;700&family=Oswald:wght@400;500;600&family=PT+Mono&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #12100E; text-decoration: none; } a:hover { color: #D6321E; }
+    .shapetitle { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .14em; font-size: 11px; color: #12100E; }
+    .shapenote { font-family: 'Archivo', sans-serif; font-size: 11px; line-height: 1.45; color: #4A4740; max-width: 34ch; }
+    .panel { border: 2px solid; padding: 12px 14px; }
+    .panellab { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 8.5px; margin-bottom: 9px; }
+    .dies { display: flex; gap: 6px; }
+    .die { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .dieshape { position: relative; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .dieshape svg { position: absolute; left: 0; top: 0; }
+    .dienum { position: relative; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; line-height: 1; }
+    .dielab { font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; }
+  </style>
+</helmet>
+
+<div style="width: 1000px; height: 900px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; padding: 26px; overflow: hidden; font-family: 'Archivo', sans-serif; color: #12100E;">
+
+  <div style="font-family: 'Anton', sans-serif; text-transform: uppercase; font-size: 26px; line-height: .94;">Кость характеристики — четыре силуэта</div>
+  <div style="font-family: 'Archivo', sans-serif; font-size: 12px; line-height: 1.45; color: #4A4740; max-width: 78ch; margin-top: 8px;">Ряд из шести в настоящем размере — прежние кости разваливались именно в ряду. Залитая кость означает владение спасбросоком; клик по любой переворачивает её на спасбросок и обратно. Слева «Соевый нуар» (акцент равен чернилам), справа «Соевый панк» (акцент красный).</div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 18px;">
+    <sc-for list="{{ shapes }}" as="sh" hint-placeholder-count="4">
+      <div style="display: grid; grid-template-columns: 190px minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start;">
+        <div style="display: flex; flex-direction: column; gap: 5px; padding-top: 6px;">
+          <div class="shapetitle">{{ sh.title }}</div>
+          <div class="shapenote">{{ sh.note }}</div>
+        </div>
+
+        <div class="panel" style="border-color: #1c1c1c; background: #e8e4da;">
+          <div class="panellab" style="color: #787672;">Соевый нуар</div>
+          <div class="dies">
+            <sc-for list="{{ sh.noir }}" as="d" hint-placeholder-count="6">
+              <div class="die">
+                <div class="dieshape" onClick="{{ d.flip }}">
+                  <svg width="46" height="46" viewBox="0 0 100 100"><polygon points="{{ sh.points }}" fill="{{ d.fill }}" stroke="{{ d.stroke }}" stroke-width="{{ sh.stroke }}"></polygon></svg>
+                  <span class="dienum" style="color: {{ d.ink }};">{{ d.num }}</span>
+                </div>
+                <span class="dielab" style="color: #787672;">{{ d.caption }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="panel" style="border-color: #12100E; background: #EDE7D9;">
+          <div class="panellab" style="color: #6E675C;">Соевый панк</div>
+          <div class="dies">
+            <sc-for list="{{ sh.zine }}" as="d" hint-placeholder-count="6">
+              <div class="die">
+                <div class="dieshape" onClick="{{ d.flip }}">
+                  <svg width="46" height="46" viewBox="0 0 100 100"><polygon points="{{ sh.points }}" fill="{{ d.fill }}" stroke="{{ d.stroke }}" stroke-width="{{ sh.stroke }}"></polygon></svg>
+                  <span class="dienum" style="color: {{ d.ink }};">{{ d.num }}</span>
+                </div>
+                <span class="dielab" style="color: #6E675C;">{{ d.caption }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+
+<script data-dc-script data-props='{"$preview":{"width":1000,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { flipped: {} };
+  }
+  renderVals() {
+    const abilities = [
+      { key: 'str', caption: 'СИЛ 27', mod: '+8', save: '+8', prof: false },
+      { key: 'dex', caption: 'ЛОВ 10', mod: '+0', save: '+6', prof: true },
+      { key: 'con', caption: 'ТЕЛ 25', mod: '+7', save: '+13', prof: true },
+      { key: 'int', caption: 'ИНТ 16', mod: '+3', save: '+3', prof: false },
+      { key: 'wis', caption: 'МДР 13', mod: '+1', save: '+7', prof: true },
+      { key: 'cha', caption: 'ХАР 21', mod: '+5', save: '+11', prof: true },
+    ];
+
+    const shapes = [
+      {
+        id: 'hex', title: 'Шестиугольник (d20)', stroke: 7,
+        points: '50,3 92,27 92,73 50,97 8,73 8,27',
+        note: 'Ближе всего к «броску». Углы съедают ширину: число живёт в узкой средней полосе.',
+      },
+      {
+        id: 'rhomb', title: 'Ромб (d8)', stroke: 7,
+        points: '50,2 98,50 50,98 2,50',
+        note: 'Самый узнаваемый силуэт и самый расточительный: полезной площади под число вдвое меньше, чем у прямоугольника.',
+      },
+      {
+        id: 'square', title: 'Квадрат (d6)', stroke: 7,
+        points: '6,6 94,6 94,94 6,94',
+        note: 'Прямой угол системы. От плитки отличается только пропорцией — то есть почти ничем.',
+      },
+      {
+        id: 'plate', title: 'Плитка без силуэта', stroke: 5,
+        points: '3,22 97,22 97,78 3,78',
+        note: 'Страховка: если ни один силуэт не выживет, поведение переворота останется, а форма будет системной.',
+      },
+    ];
+
+    const build = (shape, theme) => abilities.map((a) => {
+      const key = shape.id + '-' + theme + '-' + a.key;
+      const flipped = !!this.state.flipped[key];
+      const inkColor = theme === 'noir' ? '#1c1c1c' : '#12100E';
+      const fillColor = theme === 'noir' ? '#1c1c1c' : '#D6321E';
+      const onFill = theme === 'noir' ? '#e8e4da' : '#ffffff';
+      return {
+        caption: flipped ? 'СПАС' : a.caption,
+        num: flipped ? a.save : a.mod,
+        fill: a.prof ? fillColor : 'none',
+        stroke: a.prof ? fillColor : inkColor,
+        ink: a.prof ? onFill : inkColor,
+        flip: () => this.setState({ flipped: Object.assign({}, this.state.flipped, { [key]: !flipped }) }),
+      };
+    });
+
+    return {
+      shapes: shapes.map((sh) => Object.assign({}, sh, {
+        noir: build(sh, 'noir'),
+        zine: build(sh, 'zine'),
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

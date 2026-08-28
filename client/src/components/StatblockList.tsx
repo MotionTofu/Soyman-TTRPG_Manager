@@ -19,7 +19,7 @@ import {
   normalizeCharacter,
   normalizeTheme,
 } from "./litm/LitMCharacterForm";
-import { normalizeDndCreature, DndCreatureEdit, DndCreatureView } from "./dnd/DndCreatureForm";
+import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { CreatureCardLoader } from "./CreatureCard";
 import { emptyDndCharacter, normalizeDndCharacter, DndCharacterEdit, DndCharacterView } from "./dnd/DndCharacterForm";
 import { findDndSystemId } from "./dnd/dndCompendium";
@@ -29,20 +29,6 @@ import { DndCreatureWizard } from "./dnd/DndCreatureWizard";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
-import { STATBLOCK_THEMES } from "../statblockThemes";
-
-// Shared <option> rendering for the theme <select>.
-function ThemeOptions() {
-  return (
-    <>
-      {STATBLOCK_THEMES.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.label}
-        </option>
-      ))}
-    </>
-  );
-}
 
 const TEMPLATE_TYPE = "statblock_template";
 const KIND_LABELS: Record<string, string> = { short: "Краткий", full: "Полный" };
@@ -68,7 +54,7 @@ interface Props {
   ownerName?: string;
   ownerPlayerName?: string;
   // Bestiary-only (ownerType === "compendium_entry"): pre-fills a new
-  // dnd_creature statblock's Размер/Тип/УО from the profile fields set on the
+  // dnd_creature statblock's Размер/Тип/КО from the profile fields set on the
   // compendium monster entry itself, so they don't have to be typed twice.
   ownerCreatureType?: string;
   ownerCreatureSize?: string;
@@ -419,8 +405,6 @@ function StatblockCard({
   });
   const [content, setContent] = useState(statblock.content);
   const [note, setNote] = useState(statblock.note);
-  const [theme, setTheme] = useState(statblock.theme);
-  const [density] = useState(statblock.density);
   // Mirrors the <details> element's own open/closed state — native <summary>
   // clicks toggle the DOM directly (uncontrolled), so this needs an onToggle
   // handler to stay in sync rather than being driven only by editMode. Used
@@ -457,11 +441,6 @@ function StatblockCard({
     syncMentionLinks(statblock.owner_type, statblock.owner_id, statblock.content, content);
     setEditMode(false);
     onChange();
-  }
-
-  async function changeTheme(v: string) {
-    setTheme(v);
-    await api.put(`/statblocks/${statblock.id}`, { theme: v });
   }
 
   // Lets tag add/remove in the collapsed view persist immediately, without
@@ -506,65 +485,17 @@ function StatblockCard({
       ? (dndValue as DndCharacterData)?.characterName || "Без имени"
       : null;
 
-  // D&D creature statblocks render their own themed title bar (sb-head), so
-  // wrapping them in the generic <details className="card"> accordion below
-  // would duplicate that header in a second, plainer frame. Fold the theme
-  // picker + edit/delete controls into sb-head instead, and let sb-head
-  // itself be the expand/collapse toggle.
+  // Статблок существа сам рисует плашку-шапку (§1.4), поэтому обёртка
+  // <details className="card"> ниже дала бы вторую, более плоскую шапку
+  // поверх первой: кнопки уезжают в саму плашку, и она же служит
+  // переключателем свёрнутости. Правка идёт ПО СЕКЦИЯМ внутри вида —
+  // кнопки «редактировать» здесь больше нет (design_revision.md, шаг 6).
   if (statblock.format === "dnd_creature") {
     const headerExtra = (
-      <>
-        <select value={theme ?? "zine"} onChange={(e) => changeTheme(e.target.value)}>
-          <ThemeOptions />
-        </select>
-        <button
-          type="button"
-          className="comp-mini"
-          title="Редактировать"
-          onClick={() => setEditMode((v) => !v)}
-        >
-          <NavIcon name="edit" />
-        </button>
-        <button type="button" className="comp-mini" onClick={() => onRemove(statblock.id)}>
-          <NavIcon name="delete" />
-        </button>
-      </>
+      <button type="button" className="comp-mini" onClick={() => onRemove(statblock.id)}>
+        <NavIcon name="delete" />
+      </button>
     );
-
-    if (editMode) {
-      return (
-        <div className="stack">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <strong>{(dndValue as DndCreatureData)?.name || "Без названия"}</strong>
-            <span className="row" style={{ gap: 4 }}>
-              <button
-                type="button"
-                className="comp-mini"
-                title="Закрыть редактирование"
-                onClick={() => setEditMode(false)}
-              >
-                <NavIcon name="close" />
-              </button>
-            </span>
-          </div>
-          {dndValue && (
-            <DndCreatureEdit
-              value={dndValue as DndCreatureData}
-              onChange={(v) => {
-                setDndValue(v);
-                setContent(JSON.stringify(v));
-              }}
-            />
-          )}
-          <div className="row">
-            <button className="primary" onClick={save}>
-              Сохранить
-            </button>
-            <button onClick={() => setEditMode(false)}>Отмена</button>
-          </div>
-        </div>
-      );
-    }
 
     // Краткий статблок существа — это и есть быстрый взгляд, просто в
     // четвёртом месте: рисуется карточкой существа (design_revision.md, шаг
@@ -599,8 +530,6 @@ function StatblockCard({
       <div className={!collapsed ? "sb-fullscreen-mobile" : undefined}>
         <DndCreatureView
           value={dndValue as DndCreatureData}
-          theme={theme}
-          density={density}
           onQuickUpdate={quickSaveDndCreature}
           collapsed={collapsed}
           headerExtra={headerExtra}
@@ -707,31 +636,19 @@ function StatblockCard({
           </>
         ) : (
           <>
-            {(isDnd || isLitm) && (dndValue || litmValue) && (
-              <div className="sb-theme-picker">
-                <span className="muted">Тема:</span>
-                <select value={theme ?? "zine"} onChange={(e) => changeTheme(e.target.value)}>
-                  <ThemeOptions />
-                </select>
-              </div>
-            )}
             {statblock.format === "litm_character" && litmValue && (
               <LitMCharacterView
                 value={litmValue as LitMCharacterData}
                 onQuickUpdate={quickSave}
                 campaignId={campaignId}
-                theme={theme}
-                density={density}
               />
             )}
             {statblock.format === "litm_challenge" && litmValue && (
-              <LitMChallengeView value={litmValue as LitMChallengeData} theme={theme} density={density} />
+              <LitMChallengeView value={litmValue as LitMChallengeData} />
             )}
             {statblock.format === "dnd_character" && dndValue && (
               <DndCharacterView
                 value={dndValue as DndCharacterData}
-                theme={theme}
-                density={density}
                 compact={kind === "short"}
                 onQuickUpdate={quickSaveDnd}
               />

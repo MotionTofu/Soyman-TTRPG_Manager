@@ -15,7 +15,10 @@ import { loadCoverDuotone, saveCoverDuotone } from "../imagePrefs";
 import { loadHideFinance, saveHideFinance } from "../financePrivacy";
 import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
-import { DND_SKILL_SORT_OPTIONS, loadDndPrefs, saveDndPrefs, type DndSkillSortMode } from "../dndPrefs";
+import {
+  DND_ABILITY_PRIMARY_OPTIONS, DND_SKILL_SORT_OPTIONS, loadDndPrefs, saveDndPrefs,
+  type DndAbilityPrimary, type DndSkillSortMode,
+} from "../dndPrefs";
 import type { AppSettings } from "../types";
 
 const NAV_WIDGET_POSITIONS: { key: NavWidgetPosition; label: string }[] = [
@@ -104,6 +107,12 @@ export function AppearanceSettingsPage() {
 
   function changeDndSkillSort(mode: DndSkillSortMode) {
     const next = { ...dndPrefs, skillSortMode: mode };
+    setDndPrefs(next);
+    saveDndPrefs(next);
+  }
+
+  function changeDndAbilityPrimary(mode: DndAbilityPrimary) {
+    const next = { ...dndPrefs, abilityPrimary: mode };
     setDndPrefs(next);
     saveDndPrefs(next);
   }
@@ -325,6 +334,29 @@ export function AppearanceSettingsPage() {
         <summary>
           <strong className="entry-title">ДнД 5.5</strong>
         </summary>
+        <div>
+          <div className="muted" style={{ marginBottom: 4 }}>
+            Главное число на кости характеристики
+          </div>
+          <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
+            {DND_ABILITY_PRIMARY_OPTIONS.map((opt) => (
+              <label key={opt.key} className="row" style={{ gap: 6 }}>
+                <input
+                  type="radio"
+                  name="dnd-ability-primary"
+                  checked={dndPrefs.abilityPrimary === opt.key}
+                  onChange={() => changeDndAbilityPrimary(opt.key)}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+          <div className="muted" style={{ marginTop: 4 }}>
+            Второе число уходит подписью под кость, спасбросок открывается щелчком по ней. Общее
+            для статблока существа, карточки существа и листа персонажа.
+          </div>
+        </div>
+
         <div>
           <div className="muted" style={{ marginBottom: 4 }}>
             Сортировка навыков во вкладке "Навыки" статблока персонажа

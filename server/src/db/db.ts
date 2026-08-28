@@ -2,9 +2,8 @@ import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
-import { systemFolder } from "../services/filesystem";
-import { backfillAllSummaries } from "../services/monsterSummary";
-import { backfillDefaultMechanicsSections } from "./defaultSections";
+import { entryImageFolder, systemFolder } from "../services/filesystem";
+import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections } from "./defaultSections";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -2297,6 +2296,56 @@ export function openDatabase(dbDir: string): Database.Database {
     }
   }
 
+  // Своё изображение записи компендиума. Раньше портрет записи брался из её
+  // статблока — тогда у записи без статблока картинки не могло быть вовсе, а
+  // замена портрета в статблоке молча меняла морду на плитке бестиария.
+  // Колонка своя, и при её появлении уже загруженное переносится один раз:
+  // берётся первый статблок записи с картинкой (полный вперёд краткого) и
+  // файл КОПИРУЕТСЯ в папку раздела — ссылкой на чужой файл нельзя, замена
+  // портрета статблока удаляет старый файл и оставила бы битую картинку.
+  // Копия почти ничего не стоит: storeDeduped/hard link кладёт те же байты.
+  if (!columnExists(database, "compendium_entries", "avatar_image_path")) {
+    database.exec("ALTER TABLE compendium_entries ADD COLUMN avatar_image_path TEXT");
+    const rows = database
+      .prepare(
+        `SELECT ce.id, ce.kind, sy.folder_path AS system_folder_path,
+                (SELECT sb.avatar_image_path FROM statblocks sb
+                  WHERE sb.owner_type = 'compendium_entry' AND sb.owner_id = ce.id
+                    AND sb.avatar_image_path IS NOT NULL AND sb.avatar_image_path != ''
+                  ORDER BY CASE sb.kind WHEN 'full' THEN 0 ELSE 1 END, sb.id
+                  LIMIT 1) AS source_path
+           FROM compendium_entries ce JOIN systems sy ON sy.id = ce.system_id`
+      )
+      .all() as {
+      id: number;
+      kind: string;
+      system_folder_path: string | null;
+      source_path: string | null;
+    }[];
+    const setAvatar = database.prepare(
+      "UPDATE compendium_entries SET avatar_image_path = ? WHERE id = ?"
+    );
+    for (const row of rows) {
+      if (!row.source_path || !row.system_folder_path) continue;
+      if (!fs.existsSync(row.source_path)) continue;
+      try {
+        const folder = entryImageFolder(row.system_folder_path, row.kind);
+        const ext = path.extname(row.source_path) || ".jpg";
+        const target = path.join(folder, `entry-${row.id}-avatar${ext}`);
+        if (!fs.existsSync(target)) {
+          try {
+            fs.linkSync(row.source_path, target);
+          } catch {
+            fs.copyFileSync(row.source_path, target);
+          }
+        }
+        setAvatar.run(target, row.id);
+      } catch (err) {
+        console.error(`Не удалось перенести портрет записи ${row.id}:`, err);
+      }
+    }
+  }
+
   // История и Поведение существа бестиария — зеркало being_chapters без
   // campaign_id и visible_to_players: шаблон системы к кампании не привязан и
   // игроку не синхронизируется.
@@ -2314,10 +2363,13 @@ export function openDatabase(dbDir: string): Database.Database {
     );
   }
 
-  // Размер, тип и мировоззрение у большинства импортированных существ знает
-  // только статблок, а фильтры раздела бестиария читают data. Проход
-  // идемпотентен — заполняет пустое, ничего не перезаписывая.
-  backfillAllSummaries(database);
+  // Размер, тип и класс опасности у импортированных существ знает только
+  // статблок, а фильтры раздела бестиария читают data. Раньше здесь стоял
+  // проход по всему бестиарию при каждом старте — он убран: массовая правка
+  // справочника делается по кнопке «Привести справочник в порядок» и
+  // показывает отчёт, а молчаливую правку пятисот записей на старте владелец
+  // не заказывал и не видел. Открытая карточка существа по-прежнему
+  // дозаполняет себя сама — см. backfillEntrySummary.
 
   // Тайна помнит, в какой сессии её раскрыли. У раскрытых раньше колонка
   // остаётся пустой — так и показываем: «раскрыто раньше».
@@ -2382,6 +2434,7 @@ export function openDatabase(dbDir: string): Database.Database {
   // «Справочник» стал базовым разделом системы — системам, заведённым раньше,
   // он добавляется один раз (см. defaultSections.ts).
   backfillDefaultMechanicsSections(database);
+  backfillDefaultVehicleSections(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
@@ -2545,6 +2598,23 @@ export function openDatabase(dbDir: string): Database.Database {
     if (!columnExists(database, table, "secret")) {
       database.exec(`ALTER TABLE ${table} ADD COLUMN secret TEXT NOT NULL DEFAULT ''`);
     }
+  }
+
+  // Избранное бестиария (шаг 5 ревизии): личная полка Мастера, а не свойство
+  // записи. Своя у каждого аккаунта с ролью gm — общий на всех список молча
+  // расходился бы между двумя мастерами одной базы, и никто бы не понял,
+  // почему звезда то есть, то нет. Ссылка на запись, а не на существо
+  // сеттинга: звёздочка стоит в разделе системы.
+  if (!tableExists(database, "compendium_favourites")) {
+    database.exec(`CREATE TABLE compendium_favourites (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      entry_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, entry_id)
+    )`);
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_compendium_favourites_entry ON compendium_favourites(entry_id)`
+    );
   }
 
   compactIfBloated(database);

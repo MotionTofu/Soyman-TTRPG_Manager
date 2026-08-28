@@ -1,9 +1,17 @@
 import { Router } from "express";
+import type { AuthedRequest } from "../services/auth";
 import multer from "multer";
 import path from "path";
 import { db } from "../db/db";
-import { ensureDefaultMechanicsSection } from "../db/defaultSections";
-import { readFileAsBase64, systemFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
+import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../db/defaultSections";
+import {
+  entryImageFolder,
+  readFileAsBase64,
+  systemFolder,
+  toFileUrl,
+  writeReplacingOldFile,
+} from "../services/filesystem";
+import { removeOrArchive } from "../services/vaultDedup";
 import { renameEntityFolder } from "../services/vaultPaths";
 import {
   ImportedEntities,
@@ -14,6 +22,7 @@ import {
   suggestCode,
 } from "../services/mentions";
 import { backfillEntrySummary, writeDndCreatureSummary } from "../services/monsterSummary";
+import { applyTidy, planTidy } from "../services/tidyCompendium";
 
 export const systemsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -28,6 +37,7 @@ function withThumbUrl<T extends { thumbnail_image_path?: string | null }>(row: T
 interface EntryRow {
   data: string;
   aliases?: string;
+  avatar_image_path?: string | null;
   [key: string]: unknown;
 }
 // The `data` column is JSON text in SQLite; parse it so the client gets a
@@ -48,7 +58,16 @@ function parseEntry(row: EntryRow | undefined) {
   } catch {
     aliases = [];
   }
-  return { ...row, data, aliases };
+  return {
+    ...row,
+    data,
+    aliases,
+    // Портрет записи — её собственный файл, а не картинка статблока: список
+    // раздела, одиночная запись и batch отдают его одинаково, чтобы плитка
+    // бестиария, модалка предпросмотра и карточка существа показывали одну
+    // и ту же морду.
+    avatar_image_url: row.avatar_image_path ? toFileUrl(String(row.avatar_image_path)) : null,
+  };
 }
 
 // --- Compendium: per-system sections (tabs) ---
@@ -145,7 +164,7 @@ systemsRouter.put("/:id/sections/reorder", (req, res) => {
 
 // --- Compendium: entries within a section (self-nesting via parent_id) ---
 
-systemsRouter.get("/:id/entries", (req, res) => {
+systemsRouter.get("/:id/entries", (req: AuthedRequest, res) => {
   const { section_id } = req.query as { section_id?: string };
   const rows = (
     section_id
@@ -157,9 +176,51 @@ systemsRouter.get("/:id/entries", (req, res) => {
   // описании. Одним запросом на весь список, а не по записи.
   const ids = rows.map((r) => Number(r.id));
   const counts = statblockCounts(ids);
+  // Звёздочка — тем же приёмом: один запрос на весь список. По ней бестиарий
+  // ещё и сортирует, поэтому догружать её по записи значило бы 535 запросов
+  // на открытие раздела. Портрет догружать не нужно вовсе — он лежит в самой
+  // строке записи.
+  const favourites = favouriteEntryIds(req.user?.id ?? null, ids);
   res.json(
-    rows.map((row) => ({ ...parseEntry(row), statblock_count: counts.get(Number(row.id)) ?? 0 }))
+    rows.map((row) => ({
+      ...parseEntry(row),
+      statblock_count: counts.get(Number(row.id)) ?? 0,
+      favourite: favourites.has(Number(row.id)),
+    }))
   );
+});
+
+function favouriteEntryIds(userId: number | null, entryIds: number[]): Set<number> {
+  const set = new Set<number>();
+  if (userId == null || entryIds.length === 0) return set;
+  const placeholders = entryIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT entry_id FROM compendium_favourites
+       WHERE user_id = ? AND entry_id IN (${placeholders})`
+    )
+    .all(userId, ...entryIds) as { entry_id: number }[];
+  for (const r of rows) set.add(r.entry_id);
+  return set;
+}
+
+// Звёздочка бестиария. Своя у каждого мастера — см. таблицу в db.ts.
+systemsRouter.put("/entries/:entryId/favourite", (req: AuthedRequest, res) => {
+  const userId = req.user?.id;
+  if (userId == null) return res.status(401).json({ error: "unauthorized" });
+  const entryId = Number(req.params.entryId);
+  const { favourite } = req.body as { favourite?: boolean };
+  if (favourite) {
+    db.prepare(
+      "INSERT OR IGNORE INTO compendium_favourites (user_id, entry_id) VALUES (?, ?)"
+    ).run(userId, entryId);
+  } else {
+    db.prepare("DELETE FROM compendium_favourites WHERE user_id = ? AND entry_id = ?").run(
+      userId,
+      entryId
+    );
+  }
+  res.json({ ok: true, favourite: !!favourite });
 });
 
 function statblockCounts(entryIds: number[]): Map<number, number> {
@@ -371,6 +432,50 @@ systemsRouter.delete("/entries/chapters/:chapterId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Портрет записи — свой файл в папке раздела системы (Bestiary/Vehicles).
+// Загружается с вкладки «Изображения» профиля; картинки статблоков лежат
+// там же на вкладке, но грузятся своим маршрутом (routes/statblocks.ts).
+systemsRouter.post("/entries/:entryId/avatar", upload.single("file"), async (req, res) => {
+  const entry = db
+    .prepare(
+      `SELECT ce.id, ce.kind, ce.avatar_image_path, sy.folder_path AS system_folder_path
+         FROM compendium_entries ce JOIN systems sy ON sy.id = ce.system_id
+        WHERE ce.id = ?`
+    )
+    .get(req.params.entryId) as
+    | { id: number; kind: string; avatar_image_path: string | null; system_folder_path: string | null }
+    | undefined;
+  if (!entry) return res.status(404).json({ error: "not found" });
+  if (!entry.system_folder_path) return res.status(400).json({ error: "system folder is missing" });
+  if (!req.file) return res.status(400).json({ error: "file is required" });
+
+  const folder = entryImageFolder(entry.system_folder_path, entry.kind);
+  const ext = path.extname(req.file.originalname) || ".jpg";
+  const target = path.join(folder, `entry-${entry.id}-avatar${ext}`);
+  await writeReplacingOldFile(target, req.file.buffer, entry.avatar_image_path, "avatar");
+
+  db.prepare("UPDATE compendium_entries SET avatar_image_path = ? WHERE id = ?").run(target, entry.id);
+  res.json({ avatar_image_url: toFileUrl(target) });
+});
+
+// «Убрать» — не только отвязать: оставленный файл никому уже не принадлежит,
+// а папка раздела за полгода зарастает такими. Последняя ссылка на байты
+// уходит в _Archive (removeOrArchive), чтобы случайное удаление можно было
+// откатить; если теми же байтами владеет кто-то ещё — просто снимается link.
+systemsRouter.delete("/entries/:entryId/avatar", (req, res) => {
+  const entry = db
+    .prepare("SELECT id, name, avatar_image_path FROM compendium_entries WHERE id = ?")
+    .get(req.params.entryId) as
+    | { id: number; name: string; avatar_image_path: string | null }
+    | undefined;
+  if (!entry) return res.status(404).json({ error: "not found" });
+  if (entry.avatar_image_path) {
+    removeOrArchive(entry.avatar_image_path, "archive", "compendium_entry", entry.id, entry.name);
+  }
+  db.prepare("UPDATE compendium_entries SET avatar_image_path = NULL WHERE id = ?").run(entry.id);
+  res.json({ avatar_image_url: null });
+});
+
 systemsRouter.delete("/entries/:entryId", (req, res) => {
   db.prepare("DELETE FROM compendium_entries WHERE id = ?").run(req.params.entryId);
   res.json({ ok: true });
@@ -414,6 +519,22 @@ systemsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) => 
   res.json(withThumbUrl({ thumbnail_image_path: target }));
 });
 
+// «Привести справочник в порядок»: сперва план — сколько работы нашлось и что
+// предлагается перенести в «Транспорт», — потом применение с отмеченным.
+// Разделены не ради красоты: подтверждение с числами и экран сверки читают
+// ровно то, что потом и запишется.
+systemsRouter.get("/:id/tidy", (req, res) => {
+  res.json(planTidy(db, Number(req.params.id)));
+});
+
+systemsRouter.post("/:id/tidy", (req, res) => {
+  const { move_ids } = req.body as { move_ids?: unknown };
+  const ids = Array.isArray(move_ids)
+    ? move_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    : [];
+  res.json(applyTidy(db, Number(req.params.id), ids));
+});
+
 systemsRouter.post("/", (req, res) => {
   const { name, description } = req.body as { name: string; description?: string };
   if (!name) return res.status(400).json({ error: "name is required" });
@@ -422,6 +543,7 @@ systemsRouter.post("/", (req, res) => {
     .prepare("INSERT INTO systems (name, description, folder_path, code) VALUES (?, ?, ?, ?)")
     .run(name, description || "", folder, suggestCode("systems", name));
   ensureDefaultMechanicsSection(db, Number(info.lastInsertRowid));
+  ensureDefaultVehicleSection(db, Number(info.lastInsertRowid));
   res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(info.lastInsertRowid));
 });
 
@@ -627,6 +749,7 @@ export async function importSystemExport(data: SystemExportData): Promise<number
   // должен быть, как у системы, заведённой руками. Если он в выгрузке был,
   // вызов ничего не делает.
   ensureDefaultMechanicsSection(db, newSystemId);
+  ensureDefaultVehicleSection(db, newSystemId);
 
   const entryIdMap = new Map<number, number>();
   const insertEntry = db.prepare(

@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { PipTrack } from "./PipTrack";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
-import { statblockScopeClass } from "../../statblockThemes";
 import {
   findLitmSystemId,
   loadLitmRefItemsByGroup,
@@ -101,15 +100,11 @@ export function LitMChallengeEdit({
 
 export function LitMChallengeView({
   value,
-  theme,
-  density,
 }: {
   value: LitMChallengeData;
-  theme?: string | null;
-  density?: string | null;
 }) {
   return (
-    <div className={`stack ${statblockScopeClass(theme, density)}`}>
+    <div className="stack sb-scope">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <strong>{value.title || "Без названия"}</strong>
         {value.role && <span className="badge planned">{value.role}</span>}

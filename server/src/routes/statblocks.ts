@@ -5,6 +5,7 @@ import { db } from "../db/db";
 import { parseLongStoryShort } from "../services/lssImport";
 import { broadcastCharacterUpdate } from "../services/realtime";
 import { beingFolder, ensureSubfolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
+import { removeOrArchive } from "../services/vaultDedup";
 import { ensureCharacterFolder } from "./characters";
 
 export const statblocksRouter = Router();
@@ -148,6 +149,30 @@ statblocksRouter.post("/:id/avatar", upload.single("file"), async (req, res) => 
   db.prepare("UPDATE statblocks SET avatar_image_path = ? WHERE id = ?").run(target, statblock.id);
   if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
   res.json(withAvatarUrl({ avatar_image_path: target }));
+});
+
+// Убрать портрет статблока — с вкладки «Изображения» профиля записи, где
+// портреты статблоков стоят рядом с аватаром самой записи. Файл уходит в
+// _Archive той же дорогой, что и остальные удалённые картинки хранилища.
+statblocksRouter.delete("/:id/avatar", (req, res) => {
+  const statblock = db
+    .prepare("SELECT id, owner_type, owner_id, avatar_image_path FROM statblocks WHERE id = ?")
+    .get(req.params.id) as
+    | { id: number; owner_type: string; owner_id: number; avatar_image_path: string | null }
+    | undefined;
+  if (!statblock) return res.status(404).json({ error: "not found" });
+  if (statblock.avatar_image_path) {
+    removeOrArchive(
+      statblock.avatar_image_path,
+      "archive",
+      "statblock",
+      statblock.id,
+      `Портрет статблока ${statblock.id}`
+    );
+  }
+  db.prepare("UPDATE statblocks SET avatar_image_path = NULL WHERE id = ?").run(statblock.id);
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  res.json({ avatar_image_url: null });
 });
 
 statblocksRouter.delete("/:id", (req, res) => {

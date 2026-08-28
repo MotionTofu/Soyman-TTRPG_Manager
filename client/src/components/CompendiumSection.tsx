@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionTextarea } from "./mentions/MentionTextarea";
@@ -7,6 +7,7 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { addToBag } from "../bag";
+import { MonsterTileGrid, saveFavourite, type MonsterGrouping } from "./MonsterTileGrid";
 import { StatblockList } from "./StatblockList";
 import { StatblockIcon, statblockBadgeTitle } from "./StatblockIcon";
 import { NavIcon } from "./NavIcons";
@@ -20,6 +21,7 @@ import {
   ARMOR_TYPES,
   CHALLENGE_RATINGS,
   CREATURE_SIZES,
+  VEHICLE_CATEGORIES,
   EQUIPMENT_CATEGORIES,
   FEAT_CATEGORIES,
   KIND_DEFS,
@@ -327,7 +329,10 @@ async function loadMechanicsOptions(systemId: number): Promise<MechanicsOptions>
 
 // A class the spell-availability picker can offer, with its subclasses kept
 // separate (collapsed by default — requirement 8) rather than flattened.
-type SortMode = "manual" | "alpha" | "school" | "type" | "rarity";
+// «Вручную» в бестиарии больше нет (шаг 5 ревизии): порядок там задают
+// сортировки, а не перетаскивание 535 плиток. В остальных разделах ручной
+// порядок осмыслен (уровни классов, группы справочника) и остаётся.
+type SortMode = "manual" | "alpha" | "school" | "type" | "rarity" | "creature_type" | "cr" | "size";
 
 interface ClassGroupOption {
   id: number;
@@ -485,15 +490,20 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [filterCreatureType, setFilterCreatureType] = useState("");
   const [filterCR, setFilterCR] = useState("");
   const [filterSize, setFilterSize] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>(
-    () => (localStorage.getItem(`compendium-sort-${section.id}`) as SortMode | null) ?? "manual"
-  );
+  const [filterVehicleCategory, setFilterVehicleCategory] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    const stored = localStorage.getItem(`compendium-sort-${section.id}`) as SortMode | null;
+    // Бестиарий мог остаться на снятом режиме «Вручную» из прежней настройки.
+    if (section.kind === "monster") return stored && stored !== "manual" ? stored : "alpha";
+    return stored ?? "manual";
+  });
   const [dragId, setDragId] = useState<number | null>(null);
 
   const isSpellSection = section.kind === "spell";
   const isMagicItemSection = section.kind === "magic_item";
   const isMonsterSection = section.kind === "monster";
   const isEquipmentSection = section.kind === "equipment";
+  const isVehicleSection = section.kind === "vehicle";
 
   function changeSortMode(mode: SortMode) {
     setSortMode(mode);
@@ -504,6 +514,30 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (sortMode !== "alpha") return list;
     return [...list].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   }
+
+  // Сортировку не трогает: её выбирают осознанно и надолго, а фильтры с
+  // поиском — на один заход.
+  function resetMonsterFilters() {
+    setFilterCreatureType("");
+    setFilterCR("");
+    setFilterSize("");
+    setSearchQuery("");
+  }
+
+  // Звезда пишется точечно и правит одну запись в состоянии: перезагружать
+  // 535 записей ради одной отметки — это заметная пауза на пустом месте.
+  // Колбэк обязан быть стабильным — на нём держится memo плитки, иначе один
+  // щелчок перерисовывает весь раздел (та же ловушка, что была с вехами).
+  const toggleFavourite = useCallback(async (entry: CompendiumEntry, favourite: boolean) => {
+    setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, favourite } : e)));
+    try {
+      await saveFavourite(entry.id, favourite);
+    } catch {
+      setEntries((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, favourite: !favourite } : e))
+      );
+    }
+  }, []);
 
   // Manual drag-n-drop reorder — only meaningful within one sibling group
   // (same parent_id/level), matching how `position` is scoped server-side.
@@ -581,6 +615,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   // expand-on-match pattern as the focusEntryId deep-link effect above) so
   // a match isn't hidden behind a collapsed parent.
   const [searchQuery, setSearchQuery] = useState("");
+
+  const monsterFiltersActive =
+    filterCreatureType !== "" || filterCR !== "" || filterSize !== "" || searchQuery !== "";
+
   const searchVisible = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return null;
@@ -918,6 +956,13 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         if (filterSize !== "" && (e.data.size as string | undefined) !== filterSize) return false;
         return true;
       })
+    : isVehicleSection
+    ? topLevel.filter((e) => {
+        if (filterVehicleCategory !== "" && (e.data.category as string | undefined) !== filterVehicleCategory)
+          return false;
+        if (filterSize !== "" && (e.data.size as string | undefined) !== filterSize) return false;
+        return true;
+      })
     : topLevel;
 
   const nodeProps = {
@@ -961,12 +1006,36 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         >
           А-Я
         </button>
-        <button
-          className={sortMode === "manual" ? "active-sort" : ""}
-          onClick={() => changeSortMode("manual")}
-        >
-          Вручную
-        </button>
+        {!isMonsterSection && (
+          <button
+            className={sortMode === "manual" ? "active-sort" : ""}
+            onClick={() => changeSortMode("manual")}
+          >
+            Вручную
+          </button>
+        )}
+        {isMonsterSection && (
+          <>
+            <button
+              className={sortMode === "creature_type" ? "active-sort" : ""}
+              onClick={() => changeSortMode("creature_type")}
+            >
+              По типу
+            </button>
+            <button
+              className={sortMode === "cr" ? "active-sort" : ""}
+              onClick={() => changeSortMode("cr")}
+            >
+              По КО
+            </button>
+            <button
+              className={sortMode === "size" ? "active-sort" : ""}
+              onClick={() => changeSortMode("size")}
+            >
+              По размеру
+            </button>
+          </>
+        )}
         {isSpellSection && (
           <button
             className={sortMode === "school" ? "active-sort" : ""}
@@ -1114,10 +1183,47 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
               </option>
             ))}
           </select>
+          {/* Кнопки нет, пока сбрасывать нечего (§1.11): пустая кнопка в
+              ряду фильтров — это лишний орган управления за столом. */}
+          {monsterFiltersActive && (
+            <button type="button" onClick={resetMonsterFilters}>
+              Сбросить фильтры
+            </button>
+          )}
+        </div>
+      )}
+      {isVehicleSection && (
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <select value={filterVehicleCategory} onChange={(e) => setFilterVehicleCategory(e.target.value)}>
+            <option value="">Все категории</option>
+            {VEHICLE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
+            <option value="">Все размеры</option>
+            {CREATURE_SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
         </div>
       )}
       <div className="comp-list">
-        {isSpellSection
+        {isMonsterSection ? (
+          <MonsterTileGrid
+            entries={filteredTopLevel}
+            grouping={
+              (sortMode === "alpha" ? "alpha" : sortMode) as MonsterGrouping
+            }
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+          />
+        ) : isSpellSection
           ? (sortMode === "school"
               ? groupBySchool(sortForDisplay(filteredTopLevel)).map(
                   ([label, list]) => [label, list, undefined] as [string, CompendiumEntry[], number | undefined]
@@ -1177,7 +1283,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                 ))}
               </details>
             ))
-          : isMagicItemSection || isMonsterSection
+          : isMagicItemSection
           ? sortForDisplay(filteredTopLevel).map((e) => (
               <SortableRow key={e.id} entry={e} group={filteredTopLevel} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
                 <EntryNode entry={e} depth={0} {...nodeProps} />
@@ -1291,6 +1397,10 @@ function EntryNode(props: NodeProps) {
   const isClass = entry.kind === "class";
   const isMagicItem = entry.kind === "magic_item";
   const isMonster = entry.kind === "monster";
+  // У транспорта и поста экипажа своя страница — как у существа: статблок
+  // поста и список постов судна в развёрнутой строке раздела не помещаются.
+  const isVehicle = entry.kind === "vehicle" || entry.kind === "vehicle_post";
+  const hasOwnPage = isMonster || isVehicle;
   const isEquipment = entry.kind === "equipment";
   const equipCategory = isEquipment
     ? (entry.data.category as string | undefined)
@@ -1439,7 +1549,7 @@ function EntryNode(props: NodeProps) {
             {litmMight === "origin" ? "Происх." : litmMight === "adventure" ? "Приключ." : litmMight === "greatness" ? "Величие" : "Перем."}
           </span>
         )}
-        {isMonster && (entry.statblock_count ?? 0) > 0 && (
+        {hasOwnPage && (entry.statblock_count ?? 0) > 0 && (
           <span className="comp-badge" title={statblockBadgeTitle(entry.statblock_count ?? 0)}>
             <StatblockIcon />
           </span>
@@ -1478,8 +1588,12 @@ function EntryNode(props: NodeProps) {
           <button className="comp-mini" title="Скопировать ссылку на запись" onClick={copyLink}>
             <NavIcon name={linkCopied ? "check" : "link"} />
           </button>
-          {isMonster && (
-            <Link className="comp-mini" to={`/compendium/${entry.id}`} title="Открыть страницу существа">
+          {hasOwnPage && (
+            <Link
+              className="comp-mini"
+              to={`/compendium/${entry.id}`}
+              title={isVehicle ? "Открыть страницу транспорта" : "Открыть страницу существа"}
+            >
               <NavIcon name="arrowRight" />
             </Link>
           )}

@@ -76,7 +76,6 @@ import { PipTrack } from "../litm/PipTrack";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
-import { statblockScopeClass } from "../../statblockThemes";
 import { useBag } from "../../bag";
 import { computeArmorClass } from "./armorClass";
 import { allResources, applicableStats, type ClassResourceSource } from "./dndResources";
@@ -3250,7 +3249,7 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
 }
 
 // Compact GM/player summary card — same content, .card-mini layout.
-function DndCharacterViewMini({ value, theme, density }: { value: DndCharacterData; theme?: string | null; density?: string | null }) {
+function DndCharacterViewMini({ value }: { value: DndCharacterData }) {
   const classLine = classAndLevelSummary(value.classes);
   const computedAc = computeArmorClass(
     abilityModifier(value.abilities.dex),
@@ -3258,7 +3257,7 @@ function DndCharacterViewMini({ value, theme, density }: { value: DndCharacterDa
     parseBonus(value.manualAcBonus)
   );
   return (
-    <div className={statblockScopeClass(theme, density)}>
+    <div className="sb-scope">
       <div className="sb-card card-mini">
         <div className="sb-head">
           <div className="sb-head-row">
@@ -3770,14 +3769,10 @@ function DndRestModal({
 
 export function DndCharacterView({
   value,
-  theme,
-  density,
   compact,
   onQuickUpdate,
 }: {
   value: DndCharacterData;
-  theme?: string | null;
-  density?: string | null;
   compact?: boolean;
   // View-mode quick edits (HP, inspiration, death saves, spell slots used)
   // save immediately without entering the full DndCharacterEdit form —
@@ -3839,7 +3834,7 @@ export function DndCharacterView({
     );
   }, [needsFallbackTable, systemIdForSlots, fallbackProgressions.length]);
 
-  if (compact) return <DndCharacterViewMini value={value} theme={theme} density={density} />;
+  if (compact) return <DndCharacterViewMini value={value} />;
   const liveCantrips = value.cantrips.map((s) => resolveSpell(s, getEntry));
   const liveSpellsByLevel = value.spellsByLevel.map((lvl) => lvl.map((s) => resolveSpell(s, getEntry)));
   const computedSlots = computeSpellSlots(slotSources, fallbackProgressions);
@@ -3916,7 +3911,7 @@ export function DndCharacterView({
     parseBonus(value.manualAcBonus)
   );
   return (
-    <div className={statblockScopeClass(theme, density)}>
+    <div className="sb-scope">
       <div className="sb-card">
         <div className="sb-head">
           <div className="sb-head-row">

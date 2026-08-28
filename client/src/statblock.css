@@ -1,0 +1,1012 @@
+/* Статблок — вёрстка, общая для D&D и LitM.
+   (Бывший statblockThemes.css: свой слой тем снят в шаге 6 ревизии,
+   design_revision.md.)
+
+   Собственной палитры у статблока больше нет. `.sb-scope` остаётся
+   namespace-классом, но цвета, гарнитуры и радиус приходят токенами
+   приложения (themes.ts): «Соевый нуар» статблока и «Соевый нуар»
+   приложения были двумя разными нуарами, и мост --sb-paper/--sb-ink в
+   index.css появился именно из-за столкновения имён.
+
+   Здесь остаются только локальные величины вёрстки — кегли и поля. Они
+   фиксированные: плотность (density: compact) убрана вместе с темами. */
+.sb-scope {
+  --border: var(--ink);
+  --head-bg: var(--surface);
+  --head-ink: var(--on-surface);
+  --head-rule: 0 solid transparent;
+  --label: var(--muted);
+  /* §4: пользовательское переопределение радиуса действует только на внешний
+     угол карточки. Всё внутри — плашки, чипы, ячейки — прямоугольное. */
+  --radius-card: var(--card-radius);
+  --radius-cell: 0px;
+  --name-tracking: -0.01em;
+  --name-shadow: none;
+  --section-transform: uppercase;
+  --label-transform: uppercase;
+  --fs: 14px;
+  --fs-sm2: 13.5px;
+  --fs-big: 18px;
+  --fs-title: 23px;
+  --fs-label: 11px;
+  --fs-label2: 12px;
+  --pad-x: 20px;
+  --pad-y: 16px;
+  --pad-head: 14px;
+  --sec-gap: 14px;
+  --sb-paper: var(--paper);
+  --sb-ink: var(--ink);
+  --sb-muted: var(--muted);
+  font-family: var(--font-body);
+  color: var(--ink);
+}
+
+/* Печать — не тема, а обязательная поправка: белая бумага, чёрные чернила,
+   текстуры и обработка изображений выключены. Гарнитуры и радиус остаются
+   экранными: инвариант (§1.1 радиусов нет, §1.3 обводка 2px) на бумаге
+   действует ровно так же. */
+@media print {
+  .sb-scope {
+    --paper: #fff;
+    --paper-2: #fff;
+    --ink: #000;
+    --ink-2: #222;
+    --muted: #444;
+    --line: #000;
+    --surface: #000;
+    --on-surface: #fff;
+    --on-surface-muted: #ddd;
+    --accent: #000;
+    --accent-text: #fff;
+    --radius-card: 0px;
+  }
+  .sb-scope .sbc__portrait,
+  .sb-scope .sbc__portrait-sm {
+    filter: grayscale(1);
+  }
+}
+
+/* ---- рамка карточки ---- */
+.sb-card {
+  background: var(--paper);
+  /* §1.3: обводка внешнего контура 2px, промежуточных толщин не бывает. */
+  border: 2px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  color: var(--ink);
+}
+.sb-head {
+  background: var(--head-bg);
+  color: var(--head-ink);
+  border-bottom: var(--head-rule);
+  padding: var(--pad-head) var(--pad-x) 14px;
+}
+.sb-head-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+}
+.sb-head-clickable {
+  cursor: pointer;
+}
+.sb-head-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sb-head-controls .comp-mini {
+  background: transparent;
+  color: inherit;
+  border: 1.5px solid var(--on-surface-muted);
+  border-radius: 0;
+}
+.sb-head-controls .comp-mini:hover {
+  background: var(--on-surface);
+  color: var(--surface);
+}
+.sb-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-title);
+  line-height: 1.1;
+  letter-spacing: var(--name-tracking);
+  text-transform: var(--name-transform);
+  text-shadow: var(--name-shadow);
+  -webkit-text-stroke: var(--name-stroke);
+}
+.sb-meta {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  color: var(--on-surface-muted);
+  margin-top: 5px;
+}
+.sb-body {
+  padding: var(--pad-y) var(--pad-x) calc(var(--pad-y) + 4px);
+  font-size: var(--fs);
+}
+
+/* ---- блоки, общие с листом персонажа и LitM ---- */
+.sb-vitals {
+  display: flex;
+  flex-wrap: wrap;
+  text-align: center;
+  border: 1.5px solid var(--line);
+  margin-bottom: var(--sec-gap);
+}
+.sb-vitals > div {
+  flex: 1;
+  min-width: 70px;
+  padding: 8px 4px;
+  border-radius: var(--radius-cell);
+}
+.sb-vitals > div + div {
+  border-left: 1.5px solid var(--line);
+}
+/* На узком экране лист персонажа несёт 8–9 ячеек — переносим их на
+   несколько строк, а не сжимаем до нечитаемого. */
+@media (max-width: 640px) {
+  .sb-vitals > div {
+    flex: 1 1 30%;
+    border-left: none !important;
+    border-top: 1.5px solid var(--line);
+  }
+  .sb-vitals > div:nth-child(-n + 3) {
+    border-top: none;
+  }
+}
+.sb-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  color: var(--label);
+  text-transform: var(--label-transform);
+}
+.sb-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-big);
+  font-weight: 600;
+}
+
+.sb-abilities {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  text-align: center;
+  margin-bottom: var(--sec-gap);
+}
+.sb-abilities > div {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-cell);
+  padding: 6px 2px;
+}
+.sb-score {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+}
+.sb-mod {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sb-props {
+  font-size: var(--fs);
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--sec-gap);
+}
+.sb-prop-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-label2);
+  letter-spacing: 0.12em;
+  color: var(--label);
+  text-transform: var(--label-transform);
+}
+.sb-prop-label::after {
+  content: ":";
+}
+
+.sb-section {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  border-top: 1.5px solid var(--line);
+  padding-top: 8px;
+  margin: var(--sec-gap) 0 8px;
+  text-transform: var(--section-transform);
+}
+.sb-section:first-child {
+  margin-top: 0;
+}
+summary.sb-section {
+  cursor: pointer;
+}
+/* Заголовки кругов заклинаний — тот же голос, что у подписи секции. */
+.dnd-spell-level-card {
+  margin: 0;
+}
+.dnd-spell-level-summary {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  border-top: 1.5px solid var(--line);
+  padding-top: 8px;
+  margin-bottom: 8px;
+  text-transform: var(--section-transform);
+  font-weight: 400;
+  cursor: pointer;
+}
+.sb-entry {
+  margin: 0 0 8px;
+  font-size: var(--fs);
+  line-height: 1.5;
+}
+.sb-entry:last-child {
+  margin-bottom: 0;
+}
+
+/* Компактная карточка листа персонажа (mini) — подписи графы отделяются
+   двоеточием, как в остальных «подпись: значение» строках. */
+.mini-vitals b::after,
+.mini-abilities b::after {
+  content: ":";
+}
+
+/* ---- лист персонажа ---- */
+.cs-columns {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: var(--sec-gap) 24px;
+  margin-top: 10px;
+}
+.cs-skill {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs);
+}
+.cs-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cs-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.cs-spellpanel {
+  display: flex;
+  gap: 6px 16px;
+  align-items: baseline;
+  font-size: var(--fs);
+  margin-top: 8px;
+  border: 1.5px solid var(--line);
+  padding: 7px 10px;
+  flex-wrap: wrap;
+}
+.cs-spellpanel > span {
+  white-space: nowrap;
+}
+.cs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs);
+  line-height: 1.45;
+}
+.cs-mt {
+  margin-top: var(--sec-gap);
+}
+
+/* ---- портрет статблока (лист персонажа; у существа свой, ниже) ---- */
+.sb-top-section {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+.sb-top-main {
+  flex: 1;
+  min-width: 0;
+}
+.sb-top-avatar {
+  flex: 0 0 220px;
+  width: 220px;
+  min-height: 140px;
+  display: flex;
+  cursor: pointer;
+  position: relative;
+  border: 1.5px solid var(--line);
+  overflow: hidden;
+  background: var(--paper);
+}
+.sb-top-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sb-top-avatar-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 28px;
+  color: var(--muted);
+}
+.sb-top-avatar-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  text-align: center;
+  padding: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sb-top-avatar:hover .sb-top-avatar-hint {
+  opacity: 1;
+}
+@media (max-width: 560px) {
+  .sb-top-section {
+    flex-direction: column;
+  }
+  .sb-top-avatar {
+    width: 100%;
+    flex: 0 0 auto;
+    min-height: 160px;
+  }
+}
+
+/* ======================================================================
+   Статблок существа (шаг 6 ревизии). Порядок боевой, а не справочный:
+   легендарное → защита и чувства → черты → действия → заклинания →
+   снаряжение → заметки. Секция, которой нечего показать, не рисуется.
+   ====================================================================== */
+.sbc {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  background: var(--paper);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* Шапка — плашка-инверсия (§1.4), тот же состав, что у карточки существа:
+   в статблок приходят кнопкой из карточки, и сменившаяся шапка стоит
+   Мастеру полсекунды на «куда я попал». */
+.sbc__band {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  color: var(--on-surface);
+}
+.sbc__band.is-clickable {
+  cursor: pointer;
+}
+.sbc__portrait-sm {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--on-surface);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  cursor: pointer;
+}
+.sbc__portrait-sm img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sbc__portrait-sm .sbc__portrait-empty {
+  font-size: 18px;
+  color: var(--on-surface-muted);
+}
+/* Подпись «Изменить» на миниатюре не помещается — миниатюра просто
+   светлеет под курсором, а подсказка остаётся у крупного кадра. */
+.sbc__portrait-sm .sbc__portrait-hint {
+  font-size: 0;
+  background: var(--on-surface);
+  opacity: 0;
+}
+.sbc__portrait-sm:hover .sbc__portrait-hint {
+  opacity: 0.25;
+}
+.sbc__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sbc__name {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 0.94;
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+.sbc__meta {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  color: var(--on-surface-muted);
+  margin-top: 6px;
+}
+.sbc__cr {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--on-surface-muted);
+  white-space: nowrap;
+  align-self: flex-start;
+}
+.sbc__controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.sbc__cols {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+.sbc__side {
+  border-right: 1.5px solid var(--line);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sbc__scroll {
+  min-width: 0;
+}
+
+.sbc__pair {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+}
+.sbc__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sbc__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sbc__lab {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  color: var(--muted);
+  flex: 0 0 96px;
+}
+.sbc__lab--auto {
+  flex: none;
+}
+/* Моноширинный — только под значения (§1.5). */
+.sbc__val {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sbc__val--big {
+  font-size: 17px;
+  font-weight: 700;
+}
+.sbc__hint {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 8.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.sbc__divider {
+  border-top: 1.5px solid var(--line);
+  padding-top: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* ---- кости характеристик ----
+   Две грани: главное число (модификатор или значение — настройка во
+   «Внешнем виде») и спасбросок. Щелчок переворачивает ОДНУ кость: у
+   Ловкости свой спасбросок, у остальных его нет.
+   Владение спасбросоком показано ЗАЛИВКОЙ, а не оттенком: в «Соевом нуаре»
+   --accent равен чернилам, и акцентный контур там не отличался бы ни от
+   чего (тот же дефект уже ловили в календаре на шаге 1). */
+.sbc__dies {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+}
+.sbc__die {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.sbc__die-shape {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sbc__die-shape svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.sbc__die-num {
+  position: relative;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+}
+.sbc__die.is-prof .sbc__die-num {
+  color: var(--accent-text);
+}
+.sbc__die-lab {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Портрет статблока — свой, отдельный от аватара сущности. Дуотон на него
+   не идёт (§1.13): это изображение-содержимое. Широко он стоит крупным
+   кадром в остатке левой колонки, и миниатюры в шапке тогда нет — один арт
+   не работает дважды на одном экране. */
+.sbc__portrait {
+  flex-grow: 1;
+  min-height: 190px;
+  border: 1.5px solid var(--line);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  cursor: pointer;
+  background: var(--paper-2);
+}
+.sbc__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sbc__portrait-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  color: var(--muted);
+}
+.sbc__portrait-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sbc__portrait:hover .sbc__portrait-hint {
+  opacity: 1;
+}
+
+/* ---- подписи секций: капс на разделителе 1.5px, не вторая плашка ---- */
+.sbc__sec {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-top: 1.5px solid var(--line);
+  padding: 10px 14px 6px;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--ink);
+}
+.sbc__scroll > .sbc__sec:first-child {
+  border-top: 0;
+}
+.sbc__sec-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sbc__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 14px 14px;
+}
+.sbc__entry {
+  font-size: 12.5px;
+  line-height: 1.42;
+  /* Мера чтения, а не ширина колонки: на 2560 колонка свитка выходит за
+     1600 px, и строка описания становится вчетверо длиннее читаемой — тот же
+     приём, что у прозы «Напомню!» на главной. */
+  max-width: 78ch;
+}
+.sbc__ename {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.sbc__mech {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.sbc__toggle {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9px;
+  padding: 3px 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.sbc__toggle.is-on {
+  background: var(--ink);
+  color: var(--paper);
+}
+.sbc__add {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  padding: 6px 10px;
+  border: 1.5px dashed var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sbc__adds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px 14px;
+  border-top: 1.5px solid var(--line);
+}
+
+/* Приглашение вместо трёх заглушек «Действий пока нет / Заклинательной
+   способности нет / Снаряжения пока нет» (§1.11: главный блок обязан
+   объяснить, что здесь будет). */
+.sbc__invite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1.5px solid var(--line);
+  padding: 12px 14px;
+}
+.sbc__invite-text {
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 52ch;
+}
+
+/* ---- сегментный переключатель разделов (узкая раскладка) ---- */
+.sbc__segs {
+  display: flex;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1.5px solid var(--line);
+}
+.sbc__seg {
+  flex-grow: 1;
+  padding: 9px 4px;
+  border: 0;
+  border-left: 1.5px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sbc__seg:first-child {
+  border-left: 0;
+}
+.sbc__seg.is-on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Узко: одна колонка, крупному портрету места нет — он уступает миниатюре
+   в шапке, а разделы уходят под сегментный переключатель.
+   Порог ставит JS (по ширине самой карточки, а не окна) и он же прячет
+   неактивные разделы. Контейнерный запрос здесь был бы вторым источником
+   правды: в кадре, который браузер не рисует, ResizeObserver молчит, и
+   CSS уже уезжал в две колонки, пока разметка оставалась узкой. */
+.sbc__cols.is-narrow {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sbc__cols.is-narrow .sbc__side {
+  border-right: 0;
+  border-bottom: 1.5px solid var(--line);
+}
+.sbc__cols.is-narrow .sbc__dies {
+  gap: 4px;
+}
+
+/* Кости хитов — под средним числом и мельче: «19к12+133» вдвое длиннее
+   самого числа и разносило пару «КЗ | Хиты». */
+.sbc__val-sub {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+/* ---- заклинания ----
+   Разложены по кругам, как в листе персонажа: подпись круга, ячейки
+   квадратами (§1.1 — кругов система не рисует), строки свёрнуты до
+   «название + короткая выкладка», описание разворачивается по щелчку. */
+.sbc__spell-level {
+  border-top: 1.5px solid var(--line);
+  padding-top: 7px;
+}
+.sbc__spell-level:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.sbc__spell-level-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  color: var(--muted);
+  list-style: none;
+}
+.sbc__spell-level-head::-webkit-details-marker {
+  display: none;
+}
+.sbc__slots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.sbc__slot {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--ink);
+  background: var(--accent);
+}
+.sbc__slot-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.sbc__spells {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 5px;
+}
+.sbc__spell-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 6px;
+  margin: 0 -6px;
+}
+.sbc__spell-row.is-toggle {
+  cursor: pointer;
+}
+.sbc__spell-row.is-toggle:hover {
+  background: var(--paper-2);
+}
+.sbc__spell-name {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.sbc__spell-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+  text-align: right;
+}
+.sbc__spell-row .chevron-icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.sbc__spell-desc {
+  font-size: 12px;
+  line-height: 1.42;
+  color: var(--ink-2);
+  padding: 2px 6px 6px;
+  max-width: 78ch;
+}
+
+/* Строка заклинания в правке: название и частота всегда, механика и
+   описание — по кнопке «Подробно». */
+.sbc__spell-edit {
+  border: 1.5px solid var(--line);
+  padding: 6px;
+}
+.sbc__spell-edit + .sbc__spell-edit {
+  margin-top: 4px;
+}
+.sbc__spell-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sbc__spell-edit-name {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+/* ---- таблица правки «подпись | поле» ---- */
+.sbc__side-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 14px 22px;
+  align-items: start;
+}
+.sbc__form {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 6px 10px;
+  /* start, а не center: в графе может стоять список чувств или текстовое
+     поле на две строки, и подпись уезжала бы к их середине. */
+  align-items: start;
+}
+.sbc__form--wide {
+  grid-column: 1 / -1;
+}
+.sbc__form-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.sbc__form-lab {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 9px;
+  color: var(--muted);
+  /* Ровно по первой строке поля рядом, а не по верхнему краю ячейки. */
+  padding-top: 8px;
+}
+.sbc__form-block > .sbc__form-lab {
+  padding-top: 0;
+}
+.sbc__form > input,
+.sbc__form > select,
+.sbc__form > textarea {
+  min-width: 0;
+  width: 100%;
+}
+/* Поля внутри вложенных редакторов (список чувств, пара «характеристика +
+   СЛ») тоже обязаны укладываться в свою колонку: на 375 селект «добавить
+   чувство» вылезал за край карточки на 50 px. */
+.sbc__form > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.sbc__form input,
+.sbc__form select,
+.sbc__form textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+.sbc__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+/* Пока правится «Основное», левая колонка занимает всю карточку: в 300 px
+   таблица не встаёт, а именно из-за этого подписи и вылезали за край. */
+.sbc__cols.is-editing-side {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sbc__cols.is-editing-side .sbc__side {
+  border-right: 0;
+  border-bottom: 1.5px solid var(--line);
+}
+
+/* Формы правки внутри секции. */
+.sbc__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 14px 14px;
+}
+.sbc__editor-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+/* ---- Legend in the Mist: рамка карточки и чипы тегов ---- */
+.sb-scope .litm-theme-card {
+  background: var(--paper);
+  border-color: var(--line);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+}
+.sb-scope .litm-theme-title {
+  font-family: var(--font-display);
+}
+.sb-scope .litm-tag {
+  border-color: var(--line);
+}
+.sb-scope .litm-tag-power {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+}
+.sb-scope .litm-tag-weak {
+  color: var(--muted);
+  background: color-mix(in oklab, var(--muted) 12%, transparent);
+  border-color: var(--line);
+}
+.sb-scope .litm-tag-add {
+  border-color: var(--line);
+}

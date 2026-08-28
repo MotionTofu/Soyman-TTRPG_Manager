@@ -142,6 +142,17 @@ export function ensureSubfolder(basePath: string, sub: string): string {
   return ensureDir(path.join(basePath, sub));
 }
 
+// Куда ложится собственное изображение записи компендиума — по разделу, к
+// которому запись относится: смешивать портреты бестиария с портретами судов
+// в одной папке значит получить список файлов `entry-317-avatar.jpg`, по
+// которому ничего не найти. Имя латиницей, как у остальных служебных папок
+// хранилища (Gallery, Inventory, Resources); кириллическая `Статблоки`
+// осталась одна и переименовывается отдельной задачей (see later.md).
+export function entryImageFolder(systemFolderPath: string, entryKind: string): string {
+  const sub = entryKind === "vehicle" || entryKind === "vehicle_post" ? "Vehicles" : "Bestiary";
+  return ensureSubfolder(systemFolderPath, sub);
+}
+
 // Extensions an export JSON might need to embed as base64 (images for
 // avatars/thumbnails, audio/pdf for resources) — used by both systems.ts's
 // export (thumbnail only) and settings.ts's export (avatars/background/

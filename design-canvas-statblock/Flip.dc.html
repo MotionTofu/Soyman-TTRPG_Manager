@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Oswald:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #12100E; text-decoration: none; } a:hover { color: #D6321E; }
+    .colhead { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .14em; font-size: 9.5px; color: #6E675C; }
+    .big { position: relative; width: 96px; height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .big svg { position: absolute; left: 0; top: 0; }
+    .bignum { position: relative; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 30px; line-height: 1; }
+    .bigsub { position: relative; font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; margin-top: 4px; }
+    .caption { font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #6E675C; margin-top: 6px; text-align: center; }
+    .note { font-family: 'Archivo', sans-serif; font-size: 11.5px; line-height: 1.45; color: #4A4740; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 520px; background: #EDE7D9; background-image: radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px); background-size: 3px 3px; padding: 26px; overflow: hidden; font-family: 'Archivo', sans-serif; color: #12100E;">
+
+  <div style="font-family: 'Anton', sans-serif; text-transform: uppercase; font-size: 26px; line-height: .94;">Две грани и настройка главного числа</div>
+  <div class="note" style="max-width: 82ch; margin-top: 8px;">Настройка во «Внешнем виде» решает, что стоит на лицевой грани — модификатор или само значение. Щелчок по кости переворачивает её на спасбросок и обратно; перевёрнутая подписана, чтобы «+6» нельзя было спутать с модификатором. Владение спасбросоком показано заливкой (кость ЛОВ владеет, кость СИЛ — нет).</div>
+
+  <div style="display: grid; grid-template-columns: 128px repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 26px; align-items: start;">
+
+    <div></div>
+    <div class="colhead">Главное — модификатор</div>
+    <div class="colhead">Главное — значение</div>
+    <div class="colhead">Перевёрнута щелчком</div>
+
+    <div style="font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; padding-top: 30px;">Соевый нуар</div>
+    <div style="display: flex; gap: 14px; border: 2px solid #1c1c1c; background: #e8e4da; padding: 14px;">
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="none" stroke="#1c1c1c" stroke-width="6"></polygon></svg><span class="bignum">+8</span></div>
+        <div class="caption" style="color: #787672;">СИЛ 27</div>
+      </div>
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="6"></polygon></svg><span class="bignum" style="color: #e8e4da;">+0</span></div>
+        <div class="caption" style="color: #787672;">ЛОВ 10</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 14px; border: 2px solid #1c1c1c; background: #e8e4da; padding: 14px;">
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="none" stroke="#1c1c1c" stroke-width="6"></polygon></svg><span class="bignum">27</span></div>
+        <div class="caption" style="color: #787672;">СИЛ +8</div>
+      </div>
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="6"></polygon></svg><span class="bignum" style="color: #e8e4da;">10</span></div>
+        <div class="caption" style="color: #787672;">ЛОВ +0</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 14px; border: 2px solid #1c1c1c; background: #e8e4da; padding: 14px;">
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="none" stroke="#1c1c1c" stroke-width="6"></polygon></svg><span class="bignum">+8</span><span class="bigsub" style="color: #787672;">спас</span></div>
+        <div class="caption" style="color: #787672;">СИЛ</div>
+      </div>
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="6"></polygon></svg><span class="bignum" style="color: #e8e4da;">+6</span><span class="bigsub" style="color: #a3a099;">спас</span></div>
+        <div class="caption" style="color: #787672;">ЛОВ</div>
+      </div>
+    </div>
+
+    <div style="font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; padding-top: 30px;">Соевый панк</div>
+    <div style="display: flex; gap: 14px; border: 2px solid #12100E; background: #EDE7D9; padding: 14px;">
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="none" stroke="#12100E" stroke-width="6"></polygon></svg><span class="bignum">+8</span></div>
+        <div class="caption">СИЛ 27</div>
+      </div>
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="#D6321E" stroke="#D6321E" stroke-width="6"></polygon></svg><span class="bignum" style="color: #ffffff;">+0</span></div>
+        <div class="caption">ЛОВ 10</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 14px; border: 2px solid #12100E; background: #EDE7D9; padding: 14px;">
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="none" stroke="#12100E" stroke-width="6"></polygon></svg><span class="bignum">27</span></div>
+        <div class="caption">СИЛ +8</div>
+      </div>
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="#D6321E" stroke="#D6321E" stroke-width="6"></polygon></svg><span class="bignum" style="color: #ffffff;">10</span></div>
+        <div class="caption">ЛОВ +0</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 14px; border: 2px solid #12100E; background: #EDE7D9; padding: 14px;">
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="none" stroke="#12100E" stroke-width="6"></polygon></svg><span class="bignum">+8</span><span class="bigsub" style="color: #6E675C;">спас</span></div>
+        <div class="caption">СИЛ</div>
+      </div>
+      <div>
+        <div class="big"><svg width="96" height="96" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="#D6321E" stroke="#D6321E" stroke-width="6"></polygon></svg><span class="bignum" style="color: #ffffff;">+6</span><span class="bigsub" style="color: #ffd8d2;">спас</span></div>
+        <div class="caption">ЛОВ</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

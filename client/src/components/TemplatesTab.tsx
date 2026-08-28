@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { emptyChallenge, LitMChallengeEdit, LitMChallengeView } from "./litm/LitMChallengeForm";
-import { emptyCreature, normalizeDndCreature, DndCreatureEdit, DndCreatureView } from "./dnd/DndCreatureForm";
+import { emptyCreature, normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { MentionText } from "./mentions/MentionText";
 import type { DndCreatureData, LitMChallengeData, Resource, StatblockFormat } from "../types";
 
@@ -151,7 +151,7 @@ export function TemplatesTab({ systemId }: Props) {
         ) : templateFormat === "litm_challenge" ? (
           <LitMChallengeEdit value={challengeDraft} onChange={setChallengeDraft} />
         ) : (
-          <DndCreatureEdit value={creatureDraft} onChange={setCreatureDraft} />
+          <DndCreatureView value={creatureDraft} onQuickUpdate={(p) => setCreatureDraft({ ...creatureDraft, ...p })} />
         )}
         <div className="row">
           <button className="primary" onClick={saveTemplate} style={{ alignSelf: "flex-start" }}>

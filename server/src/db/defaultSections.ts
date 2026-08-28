@@ -51,3 +51,40 @@ export function backfillDefaultMechanicsSections(database: Database): void {
     .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
     .run(key);
 }
+
+/**
+ * «Транспорт» — такой же базовый раздел, как «Справочник»: корабль, повозка и
+ * пост экипажа воздушного судна раньше расходились по Снаряжению и Бестиарию,
+ * хотя это ни товар, ни существо. Раздел заводится и там, где транспорта нет
+ * (Legend in the Mist): признака «система с транспортом» не существует, а
+ * пустой раздел стоит одну строку и сразу говорит, куда класть корабль.
+ */
+export const DEFAULT_VEHICLE_SECTION = "Транспорт";
+
+/** Идемпотентно — как ensureDefaultMechanicsSection. */
+export function ensureDefaultVehicleSection(database: Database, systemId: number): void {
+  const existing = database
+    .prepare("SELECT 1 FROM system_sections WHERE system_id = ? AND kind = 'vehicle' LIMIT 1")
+    .get(systemId);
+  if (existing) return;
+  const { p } = database
+    .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS p FROM system_sections WHERE system_id = ?")
+    .get(systemId) as { p: number };
+  database
+    .prepare("INSERT INTO system_sections (system_id, position, name, kind) VALUES (?, ?, ?, 'vehicle')")
+    .run(systemId, p, DEFAULT_VEHICLE_SECTION);
+}
+
+/** Разовый перенос старым системам — с отметкой, как у «Справочника». */
+export function backfillDefaultVehicleSections(database: Database): void {
+  const key = "default_vehicle_section_backfilled";
+  const done = database.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as
+    | { value: string }
+    | undefined;
+  if (done) return;
+  const systems = database.prepare("SELECT id FROM systems").all() as { id: number }[];
+  for (const s of systems) ensureDefaultVehicleSection(database, s.id);
+  database
+    .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
+    .run(key);
+}

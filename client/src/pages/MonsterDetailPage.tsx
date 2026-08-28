@@ -7,6 +7,7 @@ import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCa
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { CreatureCardEditor } from "../components/CreatureCardEditor";
+import { EntryImagesTab } from "../components/EntryImagesTab";
 import { useTabState } from "../hooks/useTabState";
 import { api } from "../api/client";
 import {
@@ -16,7 +17,10 @@ import {
 } from "../compendium";
 import type { CompendiumEntry, System, SystemSection } from "../types";
 
-const TABS = ["Статблоки", "Досье", "Карточка существа", "Упоминания"] as const;
+// «Упоминания» замыкают ряд вкладок на всех страницах приложения — это
+// служебные обратные ссылки, а не содержимое записи; «Изображения» встают
+// перед ними, последними среди содержательных.
+const TABS = ["Статблоки", "Досье", "Карточка существа", "Изображения", "Упоминания"] as const;
 
 interface MechanicsOption {
   id: number;
@@ -254,6 +258,16 @@ export function MonsterDetailPage({
 
       {tab === "Карточка существа" && (
         <CreatureCardEditor type="compendium_entry" id={entryId} onChange={onChange} />
+      )}
+
+      {tab === "Изображения" && (
+        <EntryImagesTab
+          entryId={entryId}
+          entryName={entry.name}
+          entryKind={entry.kind}
+          avatarUrl={entry.avatar_image_url ?? null}
+          onChange={onChange}
+        />
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="compendium_entry" entityId={entryId} />}

@@ -7,7 +7,7 @@ import { Modal } from "./Modal";
 import { EntityTypeChip } from "./EntityTypeChip";
 import { MentionText } from "./mentions/MentionText";
 import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
-import { CreatureCardLoader, type CreatureCardPayload } from "./CreatureCard";
+import { CreatureCardLoader, fetchCreatureCard, type CreatureCardPayload } from "./CreatureCard";
 import { normalizeDndCharacter, DndCharacterView } from "./dnd/DndCharacterForm";
 import type { DndCharacterData, DndCreatureData, Statblock } from "../types";
 
@@ -83,12 +83,13 @@ export function EntityPreviewContent({
   );
 }
 
-function CreatureCardPreview({
+export function CreatureCardPreview({
   type,
   id,
   onClose,
   profileInNewWindow,
   statblockInline,
+  autoShowStatblock,
   collapsed,
   onToggleCollapse,
 }: {
@@ -97,10 +98,26 @@ function CreatureCardPreview({
   onClose?: () => void;
   profileInNewWindow?: boolean;
   statblockInline?: boolean;
+  // Плитка бестиария открывает статблок отдельной кнопкой, минуя карточку.
+  // Существо без статблока при этом остаётся на карточке: она и объясняет,
+  // что заполнить, — вместо модалки, которая открылась пустой.
+  autoShowStatblock?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
   const [shown, setShown] = useState<CreatureCardPayload | null>(null);
+  useEffect(() => {
+    if (!autoShowStatblock) return;
+    let cancelled = false;
+    fetchCreatureCard(type, id)
+      .then((d) => {
+        if (!cancelled && d.statblock) setShown(d);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [autoShowStatblock, type, id]);
   if (shown?.statblock) {
     let parsed: unknown = {};
     try {
@@ -113,11 +130,7 @@ function CreatureCardPreview({
         <button type="button" className="comp-mini" onClick={() => setShown(null)}>
           ← Карточка
         </button>
-        <DndCreatureView
-          value={normalizeDndCreature(parsed)}
-          theme={shown.statblock.theme}
-          density={shown.statblock.density}
-        />
+        <DndCreatureView value={normalizeDndCreature(parsed)} />
       </div>
     );
   }
@@ -228,8 +241,6 @@ function OtherEntityPreview({
               <DndCharacterView
                 value={parseDndStatblock(statblock) as DndCharacterData}
                 compact
-                theme={statblock.theme}
-                density={statblock.density}
               />
             ) : (
               <>

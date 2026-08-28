@@ -16,7 +16,7 @@
 // класс — на снаряжение, снаряжение — на свойства оружия из справочника.
 
 import { db } from "../db/db";
-import { ensureDefaultMechanicsSection } from "../db/defaultSections";
+import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../db/defaultSections";
 import { systemPrefixOf, SYSTEM_KEY_PREFIX_TO_KIND } from "./systemFormat";
 import { buildTokenWeights, normalizeName, similarity } from "./names";
 import type {
@@ -872,6 +872,7 @@ export function applySystemImport(
         );
         systemCreated = true;
         ensureDefaultMechanicsSection(db, systemId);
+        ensureDefaultVehicleSection(db, systemId);
         bump("создано систем");
       }
     }

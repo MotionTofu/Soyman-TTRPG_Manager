@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type {
   CompendiumEntry,
   DndAbilityKey,
@@ -17,7 +17,6 @@ import type {
   DndCreatureSpeed,
   DndCreatureHitPoints,
   DndCreatureArmorClass,
-  DndFeature,
   DndLegendaryActionEntry,
   SearchResult,
 } from "../../types";
@@ -41,11 +40,12 @@ import {
   type DndSpellOption,
 } from "./dndCompendium";
 import { MECHANICS_CREATURE_TYPE_GROUP, MECHANICS_ALIGNMENT_GROUP } from "../../compendium";
+import { useDndPrefs } from "../../hooks/useDndPrefs";
+import type { DndAbilityPrimary } from "../../dndPrefs";
 import { effectsLabel, type DndCheck, type DndEffect } from "./effects";
 import { FeatureListEdit } from "./FeatureList";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
-import { statblockScopeClass } from "../../statblockThemes";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
 import { averageDiceFormula, rollDiceFormula } from "./diceRoll";
@@ -194,7 +194,7 @@ const AC_RE = /^(\d+)\s*\(?([^)]*)\)?/;
 const HIT_DICE_RE = /(\d+)\s*[кdD](\d+)\s*([+-]\s*\d+)?/;
 
 // Bridges old saved creature statblocks (free-text АС/ХП/скорость/размер-
-// тип-мировоззрение/УО/чувства/урон-состояния) into the new structured
+// тип-мировоззрение/КО/чувства/урон-состояния) into the new structured
 // shape, so existing data keeps displaying instead of going blank — mirrors
 // normalizeDndCharacter's approach in this same directory.
 export function normalizeDndCreature(raw: unknown): DndCreatureData {
@@ -270,12 +270,61 @@ export function normalizeDndCreature(raw: unknown): DndCreatureData {
   merged.savingThrowProfs = { ...emptySavingThrowProfs(), ...((r.savingThrowProfs as object) ?? {}) };
   merged.skillProfs = typeof r.skillProfs === "object" && r.skillProfs ? (r.skillProfs as Record<string, boolean>) : {};
 
+  // Импортированные записи бестиария несут владения списками полных русских
+  // названий (`savingThrowProficiencies: ["Ловкость", "Мудрость"]`,
+  // `skillProficiencies`), а структурных `savingThrowProfs`/`skillProfs` у них
+  // нет. Без этого разбора у всего импортированного бестиария не залита ни
+  // одна кость характеристики и пуста строка навыков, хотя данные лежат
+  // рядом. Своё значение всегда сильнее: разбор идёт, только если структурного
+  // владения ещё нет.
+  const legacySaveProfs = Array.isArray(r.savingThrowProficiencies) ? r.savingThrowProficiencies : null;
+  if (legacySaveProfs && !Object.values(merged.savingThrowProfs).some(Boolean)) {
+    for (const raw of legacySaveProfs) {
+      if (typeof raw !== "string") continue;
+      const key = ABILITY_NAME_TO_KEY[raw.trim()];
+      if (key) merged.savingThrowProfs[key] = true;
+    }
+  }
+  const legacySkillProfs = Array.isArray(r.skillProficiencies) ? r.skillProficiencies : null;
+  if (legacySkillProfs && Object.keys(merged.skillProfs).length === 0) {
+    // Навыки в импорте написаны в своём регистре («Внимание/Восприятие»
+    // против «Внимание/восприятие» в справочнике), поэтому сверяем без него.
+    const byLower = new Map(ALL_SKILLS.map((skill) => [skill.toLowerCase(), skill]));
+    for (const raw of legacySkillProfs) {
+      if (typeof raw !== "string") continue;
+      const skill = byLower.get(raw.trim().toLowerCase());
+      if (skill) merged.skillProfs[skill] = true;
+    }
+  }
+
+  // Текстовые «старые данные» дописываются в примечание, ТОЛЬКО пока владение
+  // не разобрано структурно: иначе те же спасброски печатались бы дважды —
+  // залитой костью и строкой под ней.
   let defenseNotes = typeof merged.defenseNotes === "string" ? merged.defenseNotes : "";
-  if (typeof r.skills === "string" && r.skills && !defenseNotes.includes(r.skills)) {
+  if (
+    typeof r.skills === "string" && r.skills &&
+    Object.keys(merged.skillProfs).length === 0 &&
+    !defenseNotes.includes(r.skills)
+  ) {
     defenseNotes = [defenseNotes, `Навыки (старые данные): ${r.skills}`].filter(Boolean).join("\n");
   }
-  if (typeof r.savingThrows === "string" && r.savingThrows && !defenseNotes.includes(r.savingThrows)) {
+  if (
+    typeof r.savingThrows === "string" && r.savingThrows &&
+    !Object.values(merged.savingThrowProfs).some(Boolean) &&
+    !defenseNotes.includes(r.savingThrows)
+  ) {
     defenseNotes = [defenseNotes, `Спасброски (старые данные): ${r.savingThrows}`].filter(Boolean).join("\n");
+  }
+  // Те же две строки могли быть дописаны прежней нормализацией и УЖЕ лежать
+  // в сохранённом примечании. Раз владение теперь разобрано структурно, они
+  // повторяют залитую кость и строку навыков — снимаем их при чтении (в базе
+  // ничего не переписывается, пока Мастер сам не сохранит запись).
+  if (Object.values(merged.savingThrowProfs).some(Boolean) || Object.keys(merged.skillProfs).length > 0) {
+    defenseNotes = defenseNotes
+      .split(/\r?\n/)
+      .filter((line) => !/^(Навыки|Спасброски) \(старые данные\):/.test(line.trim()))
+      .join("\n")
+      .trim();
   }
   merged.defenseNotes = defenseNotes;
 
@@ -526,6 +575,123 @@ async function fetchCreatureSpellMeta(
   }
 }
 
+// Строка заклинания в правке. Свёрнутая держит только то, что меняют чаще
+// всего — название и частоту; механика (бросок, СЛ, урон) и описание
+// разворачиваются по кнопке. Прежняя строка выкладывала все семь полей в один
+// ряд, и он переносился по три раза на каждое заклинание.
+function CreatureSpellEditRow({
+  spell,
+  onChange,
+  onRemove,
+}: {
+  spell: DndCreatureSpell;
+  onChange: (patch: Partial<DndCreatureSpell>) => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="sbc__spell-edit">
+      <div className="sbc__spell-edit-head">
+        <input
+          className="sbc__spell-edit-name"
+          value={spell.name}
+          placeholder="Название"
+          onChange={(e) => onChange({ name: e.target.value })}
+        />
+        <select
+          value={spell.frequency}
+          onChange={(e) => onChange({ frequency: e.target.value as DndCreatureSpellFrequency })}
+        >
+          <option value="atwill">Бесконечно</option>
+          <option value="perday">N раз/день</option>
+          <option value="slots">По ячейкам</option>
+        </select>
+        {spell.frequency === "perday" && (
+          <input
+            type="number"
+            style={{ width: 46 }}
+            min={1}
+            value={spell.perDayCount ?? 1}
+            onChange={(e) => onChange({ perDayCount: Number(e.target.value) || 1 })}
+          />
+        )}
+        <button
+          type="button"
+          className={`sbc__toggle${open ? " is-on" : ""}`}
+          title="Механика и описание"
+          onClick={() => setOpen((v) => !v)}
+        >
+          Подробно
+        </button>
+        <button type="button" className="comp-mini danger" onClick={onRemove}>
+          <NavIcon name="close" />
+        </button>
+      </div>
+      {open && (
+        <div className="sbc__form">
+          <span className="sbc__form-lab">Бросок</span>
+          <select
+            value={spell.rollType ?? ""}
+            onChange={(e) => onChange({ rollType: (e.target.value || undefined) as DndAttackRollType | undefined })}
+            title="Механика для автодобавления в Действия"
+          >
+            <option value="">Без броска</option>
+            <option value="attack">Бросок атаки</option>
+            <option value="save">Спасбросок</option>
+          </select>
+          {spell.rollType === "attack" && (
+            <>
+              <span className="sbc__form-lab">Бонус</span>
+              <input
+                type="number"
+                value={spell.bonus ?? ""}
+                onChange={(e) => onChange({ bonus: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            </>
+          )}
+          {spell.rollType === "save" && (
+            <>
+              <span className="sbc__form-lab">Спасбросок</span>
+              <span className="row" style={{ gap: 6 }}>
+                <select
+                  value={spell.saveAbility ?? ""}
+                  onChange={(e) => onChange({ saveAbility: e.target.value as DndAbilityKey | "" })}
+                >
+                  <option value="">—</option>
+                  {ABILITY_LABELS.map(({ key, label }) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  placeholder="СЛ"
+                  style={{ width: 60 }}
+                  value={spell.saveDC ?? ""}
+                  onChange={(e) => onChange({ saveDC: e.target.value === "" ? null : Number(e.target.value) })}
+                />
+              </span>
+            </>
+          )}
+          {spell.rollType && (
+            <>
+              <span className="sbc__form-lab">Урон</span>
+              <input
+                placeholder="напр. 8к6 огня"
+                value={spell.damage ?? ""}
+                onChange={(e) => onChange({ damage: e.target.value })}
+              />
+            </>
+          )}
+          <span className="sbc__form-lab">Описание</span>
+          <textarea rows={2} value={spell.description} onChange={(e) => onChange({ description: e.target.value })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // One circle (or the cantrips row, level 0) of the creature's spell list —
 // mirrors DndSpellLevelSection's compendium-search add flow and PipTrack
 // slot display from the character sheet, instead of the free-text-only
@@ -597,72 +763,12 @@ function CreatureSpellLevelSection({
       <div className="stack" style={{ marginTop: 6, gap: 4 }}>
         {spellsAtLevel.length === 0 && <span className="muted">Пусто</span>}
         {spellsAtLevel.map((s) => (
-          <div key={value.spells.indexOf(s)} className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontWeight: 600, minWidth: 140 }}>{s.name}</span>
-            <select value={s.frequency} onChange={(e) => updateSpell(s, { frequency: e.target.value as DndCreatureSpellFrequency })}>
-              <option value="atwill">Бесконечно</option>
-              <option value="perday">N раз/день</option>
-              <option value="slots">По ячейкам</option>
-            </select>
-            {s.frequency === "perday" && (
-              <input
-                type="number"
-                style={{ width: 50 }}
-                min={1}
-                value={s.perDayCount ?? 1}
-                onChange={(e) => updateSpell(s, { perDayCount: Number(e.target.value) || 1 })}
-              />
-            )}
-            <select
-              value={s.rollType ?? ""}
-              onChange={(e) => updateSpell(s, { rollType: (e.target.value || undefined) as DndAttackRollType | undefined })}
-              title="Механика для автодобавления в Действия"
-            >
-              <option value="">Без урона</option>
-              <option value="attack">Бросок атаки</option>
-              <option value="save">Спасбросок</option>
-            </select>
-            {s.rollType === "attack" && (
-              <input
-                type="number"
-                placeholder="Бонус"
-                style={{ width: 50 }}
-                value={s.bonus ?? ""}
-                onChange={(e) => updateSpell(s, { bonus: e.target.value === "" ? null : Number(e.target.value) })}
-              />
-            )}
-            {s.rollType === "save" && (
-              <>
-                <select value={s.saveAbility ?? ""} onChange={(e) => updateSpell(s, { saveAbility: e.target.value as DndAbilityKey | "" })}>
-                  <option value="">—</option>
-                  {ABILITY_LABELS.map(({ key, label }) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  placeholder="СЛ"
-                  style={{ width: 50 }}
-                  value={s.saveDC ?? ""}
-                  onChange={(e) => updateSpell(s, { saveDC: e.target.value === "" ? null : Number(e.target.value) })}
-                />
-              </>
-            )}
-            {s.rollType && (
-              <input placeholder="Урон/лечение" value={s.damage ?? ""} onChange={(e) => updateSpell(s, { damage: e.target.value })} style={{ width: 120 }} />
-            )}
-            <input
-              placeholder="Описание"
-              value={s.description}
-              onChange={(e) => updateSpell(s, { description: e.target.value })}
-              style={{ flex: 1, minWidth: 140 }}
-            />
-            <button type="button" className="comp-mini danger" onClick={() => removeSpell(s)}>
-              <NavIcon name="close" />
-            </button>
-          </div>
+          <CreatureSpellEditRow
+            key={value.spells.indexOf(s)}
+            spell={s}
+            onChange={(patch) => updateSpell(s, patch)}
+            onRemove={() => removeSpell(s)}
+          />
         ))}
         {adding ? (
           <div className="dnd-spell-add">
@@ -1293,476 +1399,6 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
   );
 }
 
-export function DndCreatureEdit({
-  value,
-  onChange,
-}: {
-  value: DndCreatureData;
-  onChange: (v: DndCreatureData) => void;
-}) {
-  // Same fix as DndCharacterEdit/LitMCharacterEdit: a keystroke in any one
-  // field used to replace the whole DndCreatureData object and hand every
-  // FeatureListEdit block (traits/actions/bonus/reactions/legendary — each
-  // can hold long descriptions) a fresh inline onChange, defeating their
-  // React.memo and forcing all five to re-diff on every keystroke anywhere
-  // on the sheet. These refs let the setters below stay referentially
-  // stable while still reading/writing the latest value.
-  const valueRef = useRef(value);
-  valueRef.current = value;
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  const [damageTypes, setDamageTypes] = useState<DndMechanicsOption[]>([]);
-  const [conditions, setConditions] = useState<DndMechanicsOption[]>([]);
-  const [senseOptions, setSenseOptions] = useState<DndMechanicsOption[]>([]);
-  const [creatureTypeOptions, setCreatureTypeOptions] = useState<DndMechanicsOption[]>([]);
-  const [alignmentOptions, setAlignmentOptions] = useState<DndMechanicsOption[]>([]);
-  const [systemId, setSystemId] = useState<number | null>(null);
-
-  useEffect(() => {
-    findDndSystemId().then((sid) => {
-      setSystemId(sid);
-      if (!sid) return;
-      loadDndMechanicsGroup(sid, "Типы урона").then(setDamageTypes);
-      loadDndMechanicsGroup(sid, "Состояния").then(setConditions);
-      loadDndMechanicsGroup(sid, "Особое восприятие").then(setSenseOptions);
-      loadDndMechanicsGroup(sid, MECHANICS_CREATURE_TYPE_GROUP).then(setCreatureTypeOptions);
-      loadDndMechanicsGroup(sid, MECHANICS_ALIGNMENT_GROUP).then(setAlignmentOptions);
-    });
-  }, []);
-
-  const { setAbilities, setTraits, setActions, setBonusActions, setReactions, setLegendary, setNotes } = useMemo(() => {
-    function set<K extends keyof DndCreatureData>(key: K, v: DndCreatureData[K]) {
-      onChangeRef.current({ ...valueRef.current, [key]: v });
-    }
-    return {
-      setAbilities: (v: DndCreatureData["abilities"]) => set("abilities", v),
-      setTraits: (v: DndFeature[]) => set("traits", v),
-      setActions: (v: DndCreatureAction[]) => set("actions", v),
-      setBonusActions: (v: DndCreatureAction[]) => set("bonusActions", v),
-      setReactions: (v: DndCreatureAction[]) => set("reactions", v),
-      setLegendary: (v: DndCreatureLegendary) => set("legendary", v),
-      setNotes: (v: string) => set("notes", v),
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function toggleSkill(skill: string) {
-    onChange({ ...value, skillProfs: { ...value.skillProfs, [skill]: !value.skillProfs[skill] } });
-  }
-  function toggleSave(key: DndAbilityKey) {
-    onChange({ ...value, savingThrowProfs: { ...value.savingThrowProfs, [key]: !value.savingThrowProfs[key] } });
-  }
-  function toggleSaveAdvantageCondition(name: string) {
-    const list = value.saveAdvantageConditions.includes(name)
-      ? value.saveAdvantageConditions.filter((c) => c !== name)
-      : [...value.saveAdvantageConditions, name];
-    onChange({ ...value, saveAdvantageConditions: list });
-  }
-
-  return (
-    <div className="stack dnd-card">
-      <details className="card stack" open>
-        <summary>
-          <strong className="entry-title">База</strong>
-        </summary>
-        <div className="row">
-          <input
-            placeholder="Название существа"
-            value={value.name}
-            onChange={(e) => onChange({ ...value, name: e.target.value })}
-            style={{ flex: 1 }}
-          />
-          <select value={value.challenge.rating} onChange={(e) => onChange({ ...value, challenge: { rating: e.target.value, proficiencyBonus: computeProficiencyBonusForCR(e.target.value) } })}>
-            <option value="">— УО —</option>
-            {CR_VALUES.map((cr) => (
-              <option key={cr} value={cr}>
-                {cr}
-              </option>
-            ))}
-          </select>
-          <label className="row" style={{ gap: 4 }}>
-            Бонус мастерства
-            <input
-              type="number"
-              style={{ width: 50 }}
-              value={value.challenge.proficiencyBonus ?? ""}
-              onChange={(e) => onChange({ ...value, challenge: { ...value.challenge, proficiencyBonus: e.target.value === "" ? null : Number(e.target.value) } })}
-            />
-          </label>
-        </div>
-
-        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          <select value={value.size} onChange={(e) => onChange({ ...value, size: e.target.value })}>
-            {CREATURE_SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select
-            value={value.creatureType}
-            onChange={(e) => onChange({ ...value, creatureType: e.target.value })}
-            style={{ flex: 1 }}
-          >
-            <option value="">— тип существа —</option>
-            {value.creatureType && !creatureTypeOptions.some((o) => o.name === value.creatureType) && (
-              <option value={value.creatureType}>{value.creatureType}</option>
-            )}
-            {creatureTypeOptions.map((o) => (
-              <option key={o.id} value={o.name}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={value.alignment}
-            onChange={(e) => onChange({ ...value, alignment: e.target.value })}
-            style={{ flex: 1 }}
-          >
-            <option value="">— мировоззрение —</option>
-            {value.alignment && !alignmentOptions.some((o) => o.name === value.alignment) && (
-              <option value={value.alignment}>{value.alignment}</option>
-            )}
-            {alignmentOptions.map((o) => (
-              <option key={o.id} value={o.name}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
-          <label className="row" style={{ gap: 4 }}>
-            КД
-            <input
-              type="number"
-              style={{ width: 56 }}
-              value={value.armorClass.value ?? ""}
-              onChange={(e) => onChange({ ...value, armorClass: { ...value.armorClass, value: e.target.value === "" ? null : Number(e.target.value) } })}
-            />
-            <input
-              placeholder="напр. натуральная броня"
-              value={value.armorClass.note}
-              onChange={(e) => onChange({ ...value, armorClass: { ...value.armorClass, note: e.target.value } })}
-              style={{ width: 160 }}
-            />
-          </label>
-          <label className="row" style={{ gap: 4 }}>
-            Кости хитов
-            <input
-              type="number"
-              style={{ width: 44 }}
-              value={value.hitPoints.diceCount ?? ""}
-              onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, diceCount: e.target.value === "" ? null : Number(e.target.value) } })}
-            />
-            к
-            <select
-              value={value.hitPoints.dieSize ?? ""}
-              onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, dieSize: e.target.value === "" ? null : Number(e.target.value) } })}
-            >
-              <option value="">—</option>
-              {DIE_SIZES.map((d) => (
-                <option key={d} value={d}>
-                  к{d}
-                </option>
-              ))}
-            </select>
-            <span className="muted">бонус</span>
-            <input
-              type="number"
-              style={{ width: 50 }}
-              value={value.hitPoints.bonus ?? ""}
-              onChange={(e) => onChange({ ...value, hitPoints: { ...value.hitPoints, bonus: e.target.value === "" ? null : Number(e.target.value) } })}
-            />
-            {(value.hitPoints.diceCount || value.hitPoints.formula) && <span className="muted">≈ {formatHitPoints(value.hitPoints)}</span>}
-          </label>
-          <label className="row" style={{ gap: 4 }}>
-            Бонус инициативы
-            <input
-              type="number"
-              style={{ width: 50 }}
-              value={value.initiativeBonus ?? ""}
-              onChange={(e) => onChange({ ...value, initiativeBonus: e.target.value === "" ? null : Number(e.target.value) })}
-            />
-          </label>
-        </div>
-
-        <SpeedEditor value={value.speed} onChange={(v) => onChange({ ...value, speed: v })} />
-      </details>
-
-      <details className="card stack" open>
-        <summary>
-          <strong className="entry-title">Характеристики</strong>
-        </summary>
-        <AbilityScoresEdit value={value.abilities} onChange={setAbilities} />
-
-        <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
-          <div className="stack" style={{ gap: 4 }}>
-            <span className="sb-prop-label">Спасброски</span>
-            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-              {ABILITY_LABELS.map(({ key, label }) => (
-                <label key={key} className="row" style={{ gap: 4 }}>
-                  <input type="checkbox" checked={value.savingThrowProfs[key]} onChange={() => toggleSave(key)} />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="stack" style={{ gap: 4 }}>
-            <span className="sb-prop-label">Навыки</span>
-            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-              {ALL_SKILLS.map((skill) => (
-                <label key={skill} className="row" style={{ gap: 4 }}>
-                  <input type="checkbox" checked={!!value.skillProfs[skill]} onChange={() => toggleSkill(skill)} />
-                  {skill}
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="stack" style={{ gap: 4 }}>
-          <span className="sb-prop-label">Чувства</span>
-          <SensesEditor value={value.sensesList} onChange={(v) => onChange({ ...value, sensesList: v })} options={senseOptions} />
-        </div>
-        <label>
-          Особенности восприятия
-          <input
-            placeholder="напр. преимущество на Внимание/восприятие, полагающееся на слух"
-            value={value.perceptionNote}
-            onChange={(e) => onChange({ ...value, perceptionNote: e.target.value })}
-          />
-        </label>
-        <label className="row" style={{ gap: 4 }}>
-          Пассивная Внимательность
-          <input
-            type="number"
-            style={{ width: 50 }}
-            value={value.passivePerception ?? ""}
-            onChange={(e) => onChange({ ...value, passivePerception: e.target.value === "" ? null : Number(e.target.value) })}
-          />
-          <button type="button" onClick={() => onChange({ ...value, passivePerception: computePassivePerception(value) })}>
-            Авто
-          </button>
-        </label>
-        <label>
-          Языки
-          <input value={value.languages} onChange={(e) => onChange({ ...value, languages: e.target.value })} />
-        </label>
-      </details>
-
-      <details className="card stack" open>
-        <summary>
-          <strong className="entry-title">Защита</strong>
-        </summary>
-        <ChecklistEditor
-          label="Уязвимости к урону"
-          value={value.damageVulnerabilities}
-          onChange={(v) => onChange({ ...value, damageVulnerabilities: v })}
-          options={damageTypes}
-        />
-        <ChecklistEditor
-          label="Сопротивления урону"
-          value={value.damageResistances}
-          onChange={(v) => onChange({ ...value, damageResistances: v })}
-          options={damageTypes}
-        />
-        <ChecklistEditor
-          label="Иммунитет к урону"
-          value={value.damageImmunities}
-          onChange={(v) => onChange({ ...value, damageImmunities: v })}
-          options={damageTypes}
-        />
-        <ChecklistEditor
-          label="Иммунитет к состояниям"
-          value={value.conditionImmunities}
-          onChange={(v) => onChange({ ...value, conditionImmunities: v })}
-          options={conditions}
-        />
-        <div className="stack" style={{ gap: 4 }}>
-          <span className="sb-prop-label">Преимущество на спасброски от</span>
-          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-            {conditions.map((c) => (
-              <label key={c.id} className="row" style={{ gap: 4 }}>
-                <input type="checkbox" checked={value.saveAdvantageConditions.includes(c.name)} onChange={() => toggleSaveAdvantageCondition(c.name)} />
-                {c.name}
-              </label>
-            ))}
-            <label className="row" style={{ gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={value.saveAdvantageMagic}
-                onChange={(e) => onChange({ ...value, saveAdvantageMagic: e.target.checked })}
-              />
-              Магии
-            </label>
-          </div>
-        </div>
-        <label>
-          Дополнительно (защита)
-          <MentionTextarea value={value.defenseNotes} onChange={(v) => onChange({ ...value, defenseNotes: v })} rows={2} />
-        </label>
-      </details>
-
-      <details className="card stack" open>
-        <summary>
-          <strong className="entry-title">Заклинания</strong>
-        </summary>
-        <SpellcastingEditor
-          value={value.spellcasting}
-          onChange={(v) => onChange({ ...value, spellcasting: v })}
-          systemId={systemId}
-          abilities={value.abilities}
-          proficiencyBonus={value.challenge.proficiencyBonus ?? 0}
-        />
-      </details>
-
-      <details className="card stack" open>
-        <summary>
-          <strong className="entry-title">Действия</strong>
-        </summary>
-        <FeatureListEdit title="Особенности (Traits)" values={value.traits} onChange={setTraits} />
-
-        <AddSpellActionButton
-          spells={value.spellcasting.spells}
-          actions={value.actions}
-          onAdd={(a) => setActions([...value.actions, a])}
-        />
-        <ActionListEdit
-          title="Действия (Actions)"
-          values={value.actions}
-          onChange={setActions}
-          headerColorClass="dnd-header-actions"
-          abilities={value.abilities}
-          proficiencyBonus={value.challenge.proficiencyBonus}
-        />
-        <ActionListEdit
-          title="Бонусные действия"
-          values={value.bonusActions}
-          onChange={setBonusActions}
-          headerColorClass="dnd-header-bonus"
-          abilities={value.abilities}
-          proficiencyBonus={value.challenge.proficiencyBonus}
-        />
-        <ActionListEdit
-          title="Реакции"
-          values={value.reactions}
-          onChange={setReactions}
-          headerColorClass="dnd-header-reactions"
-          abilities={value.abilities}
-          proficiencyBonus={value.challenge.proficiencyBonus}
-        />
-        <LegendaryEditor
-          value={value.legendary}
-          onChange={setLegendary}
-          abilities={value.abilities}
-          proficiencyBonus={value.challenge.proficiencyBonus}
-        />
-      </details>
-
-      <details className="card stack" open>
-        <summary>
-          <strong className="entry-title">Снаряжение</strong>
-        </summary>
-        <div className="row">
-          <label style={{ flex: 1 }}>
-            Среда обитания
-            <input value={value.habitat} onChange={(e) => onChange({ ...value, habitat: e.target.value })} />
-          </label>
-          <label style={{ flex: 1 }}>
-            Сокровища
-            <input value={value.treasure} onChange={(e) => onChange({ ...value, treasure: e.target.value })} />
-          </label>
-        </div>
-
-        <EquipmentEditor value={value.equipment} onChange={(v) => onChange({ ...value, equipment: v })} systemId={systemId} />
-        <LootEditor value={value.loot} onChange={(v) => onChange({ ...value, loot: v })} />
-      </details>
-
-      <label>
-        Заметки
-        <MentionTextarea value={value.notes} onChange={setNotes} rows={3} />
-      </label>
-    </div>
-  );
-}
-
-// One "Название графы | значение" row for the compact two-column edit
-// layout — label to the left at a fixed width, control to the right,
-// mirroring the source spreadsheet's table shape instead of the wide
-// label-above-input rows used by the whole-card DndCreatureEdit form.
-function FieldRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="sb-field-row">
-      <span className="sb-field-row-label">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-// Pencil-as-edit-toggle for a single view tab — same convention as the
-// character sheet's TabEditToggle (DndCharacterForm.tsx): click to edit,
-// click again to save, without leaving the compact view for other tabs.
-function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () => void }) {
-  return (
-    <button type="button" className="comp-mini dnd-tab-edit-toggle" title={editing ? "Сохранить" : "Редактировать"} onClick={onToggle}>
-      <NavIcon name={editing ? "check" : "edit"} />
-    </button>
-  );
-}
-
-// One collapsible statblock line — like the character sheet's spell rows: a
-// clickable summary (name + optional mechanical line) that expands to show
-// the full description, instead of always dumping the whole text inline.
-// Rows with no description just render flat (nothing to expand).
-function SbEntryRow({
-  name,
-  extra,
-  mech,
-  description,
-}: {
-  name?: string;
-  extra?: ReactNode;
-  mech?: string;
-  description: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const hasDetail = !!description.trim();
-  return (
-    <div className="sb-entry">
-      <div
-        className={`sb-entry-row${hasDetail ? " sb-entry-toggle" : ""}`}
-        onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
-      >
-        {name && <strong>{name}</strong>}
-        {extra}
-        {mech && <span className="muted"> {mech}</span>}
-        {hasDetail && (
-          <NavIcon name="chevron" className={`sb-entry-caret chevron-icon${open ? " is-open" : ""}`} />
-        )}
-      </div>
-      {open && hasDetail && (
-        <div className="sb-entry-detail">
-          <MentionText text={description} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[] }) {
-  if (values.length === 0) return null;
-  return (
-    <>
-      <div className="sb-section">{title}</div>
-      {values.map((f, i) => (
-        <SbEntryRow key={i} name={f.name ? `${f.name}.` : undefined} description={f.description} />
-      ))}
-    </>
-  );
-}
-
 // Renders an action's mechanical line the way real 5e statblocks phrase it
 // ("Бросок атаки +5, Урон 2к6+3 рубящий" / "Спасбросок Телосложение СЛ 14"),
 // blank for multiattack rows (their description carries the summary text)
@@ -1780,23 +1416,6 @@ function formatAction(a: DndCreatureAction): string {
   return parts.join(", ");
 }
 
-function SbActionGroup({ title, values }: { title: string; values: DndCreatureAction[] }) {
-  if (values.length === 0) return null;
-  return (
-    <>
-      <div className="sb-section">{title}</div>
-      {values.map((a, i) => (
-        <SbEntryRow
-          key={i}
-          name={a.name ? `${a.name}.` : undefined}
-          mech={formatAction(a)}
-          description={a.description}
-        />
-      ))}
-    </>
-  );
-}
-
 export function formatSpeed(speed: DndCreatureSpeed): string {
   const parts: string[] = [];
   if (speed.walk !== null) parts.push(`${speed.walk} фт.`);
@@ -1808,13 +1427,27 @@ export function formatSpeed(speed: DndCreatureSpeed): string {
   return parts.join(", ");
 }
 
-export function formatHitPoints(hp: DndCreatureHitPoints): string {
+// Среднее число хитов — то, чем Мастер пользуется за столом.
+export function hitPointsAverage(hp: DndCreatureHitPoints): string {
   if (hp.diceCount && hp.dieSize) {
-    const avg = Math.floor(hp.diceCount * (hp.dieSize / 2 + 0.5)) + (hp.bonus ?? 0);
-    const bonusStr = hp.bonus ? (hp.bonus >= 0 ? `+${hp.bonus}` : `${hp.bonus}`) : "";
-    return `${avg} (${hp.diceCount}к${hp.dieSize}${bonusStr})`;
+    return String(Math.floor(hp.diceCount * (hp.dieSize / 2 + 0.5)) + (hp.bonus ?? 0));
   }
   return hp.formula || "";
+}
+
+// Кости и постоянный бонус — происхождение числа. У высоких костей с большим
+// бонусом («19к12+133») строка вдвое длиннее самого числа и разносила пару
+// «КЗ | Хиты», поэтому в статблоке она печатается отдельно и мельче.
+export function hitPointsDice(hp: DndCreatureHitPoints): string {
+  if (!hp.diceCount || !hp.dieSize) return "";
+  const bonusStr = hp.bonus ? (hp.bonus >= 0 ? `+${hp.bonus}` : `${hp.bonus}`) : "";
+  return `${hp.diceCount}к${hp.dieSize}${bonusStr}`;
+}
+
+export function formatHitPoints(hp: DndCreatureHitPoints): string {
+  const dice = hitPointsDice(hp);
+  const avg = hitPointsAverage(hp);
+  return dice ? `${avg} (${dice})` : avg;
 }
 
 export function formatArmorClass(ac: DndCreatureArmorClass): string {
@@ -1828,68 +1461,264 @@ function formatSpellFrequency(s: DndCreatureSpell): string {
   return "по ячейкам";
 }
 
-// Compact GM card — same data as the full view, just a smaller subset of
-// fields laid out per the .card-mini reference (name+CR header, one-line
-// vitals, ability modifiers only, and the action list).
-function DndCreatureViewMini({ value, theme, density }: { value: DndCreatureData; theme?: string | null; density?: string | null }) {
-  const allActions: { name: string; description: string }[] = [
-    ...value.traits,
-    ...value.actions,
-    ...value.bonusActions,
-    ...value.reactions,
-    ...value.legendary.actions,
-    ...value.legendary.lairActions,
-  ];
-  const acText = formatArmorClass(value.armorClass);
-  const hpText = formatHitPoints(value.hitPoints);
-  const speedText = formatSpeed(value.speed);
+// ====================================================================
+// Статблок существа — полный рабочий лист боя (design_revision.md, шаг 6).
+//
+// Быстрый взгляд занят карточкой существа (шаг 4), и переход между ними
+// односторонний: из карточки кнопкой «Статблок». Поэтому порядок здесь
+// боевой, а не справочный, а секция, которой нечего показать, не рисуется
+// вовсе (§1.11).
+// ====================================================================
+
+type SbcSectionId =
+  | "legendary"
+  | "defense"
+  | "traits"
+  | "actions"
+  | "bonus"
+  | "reactions"
+  | "spells"
+  | "gear"
+  | "notes";
+
+const SBC_SECTIONS: { id: SbcSectionId; title: string }[] = [
+  { id: "legendary", title: "Легендарное" },
+  { id: "defense", title: "Защита и чувства" },
+  { id: "traits", title: "Черты" },
+  { id: "actions", title: "Действия" },
+  { id: "bonus", title: "Бонусные действия" },
+  { id: "reactions", title: "Реакции" },
+  { id: "spells", title: "Заклинания" },
+  { id: "gear", title: "Снаряжение и лут" },
+  { id: "notes", title: "Заметки" },
+];
+
+// Узкая раскладка группирует девять секций в пять разделов: за столом
+// «действия, бонусные и реакции» — один вопрос, а не три.
+const SBC_SEGMENTS: { id: string; label: string; sections: SbcSectionId[] }[] = [
+  { id: "legendary", label: "Легенд.", sections: ["legendary"] },
+  { id: "defense", label: "Защита", sections: ["defense"] },
+  { id: "traits", label: "Черты", sections: ["traits"] },
+  { id: "actions", label: "Действия", sections: ["actions", "bonus", "reactions"] },
+  { id: "rest", label: "Прочее", sections: ["spells", "gear", "notes"] },
+];
+
+function sectionHasContent(v: DndCreatureData, id: SbcSectionId): boolean {
+  switch (id) {
+    case "legendary":
+      return v.legendary.resistanceEnabled || v.legendary.actionsEnabled || v.legendary.lairEnabled;
+    case "defense":
+      return (
+        v.damageVulnerabilities.length > 0 ||
+        v.damageResistances.length > 0 ||
+        v.damageImmunities.length > 0 ||
+        v.conditionImmunities.length > 0 ||
+        v.saveAdvantageConditions.length > 0 ||
+        v.saveAdvantageMagic ||
+        !!v.defenseNotes ||
+        v.sensesList.length > 0 ||
+        v.passivePerception !== null ||
+        !!v.perceptionNote ||
+        !!v.languages
+      );
+    case "traits":
+      return v.traits.length > 0;
+    case "actions":
+      return v.actions.length > 0;
+    case "bonus":
+      return v.bonusActions.length > 0;
+    case "reactions":
+      return v.reactions.length > 0;
+    case "spells":
+      return v.spellcasting.enabled;
+    case "gear":
+      return (
+        v.equipment.length > 0 ||
+        v.loot.items.length > 0 ||
+        v.loot.currency.length > 0 ||
+        !!v.habitat ||
+        !!v.treasure
+      );
+    case "notes":
+      return !!v.notes;
+  }
+}
+
+function SbcRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className={statblockScopeClass(theme, density)}>
-      <div className="sb-card card-mini">
-        <div className="sb-head">
-          <div className="sb-head-row">
-            <div className="sb-name">{value.name || "Без названия"}</div>
-            {value.challenge.rating && <div style={{ fontSize: 12.5, opacity: 0.8 }}>УО {value.challenge.rating}</div>}
-          </div>
-        </div>
-        <div className="sb-body">
-          <div className="mini-vitals">
-            <span>
-              <b>КД</b> {acText}
-            </span>
-            <span>
-              <b>ХП</b> {hpText || "—"}
-            </span>
-            <span>
-              <b>Ск.</b> {speedText || "—"}
-            </span>
-          </div>
-          <div className="mini-abilities">
-            {ABILITY_LABELS.map(({ key, label }) => (
-              <span key={key}>
-                <b>{label[0]}</b> {formatModifier(abilityModifier(value.abilities[key]))}
-              </span>
-            ))}
-          </div>
-          {allActions.map((f, i) => (
-            <div key={i} className="mini-action">
-              {f.name && <b>{f.name}.</b>} <MentionText text={f.description} />
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="sbc__row">
+      <span className="sbc__lab">{label}</span>
+      <span className="sbc__val">{children}</span>
     </div>
   );
 }
 
-const DND_CREATURE_VIEW_TABS = ["Действия", "Заклинания", "Снаряжение", "Особенности"] as const;
-type DndCreatureViewTab = (typeof DND_CREATURE_VIEW_TABS)[number];
+function SbcEntry({ name, mech, description }: { name?: string; mech?: string; description: string }) {
+  return (
+    <div className="sbc__entry">
+      {name && <span className="sbc__ename">{name}.</span>}
+      {mech && <span className="sbc__mech"> {mech}.</span>}{" "}
+      <MentionText text={description} />
+    </div>
+  );
+}
+
+// Короткая выкладка заклинания — то, ради чего у заклинания заведены
+// отдельные поля механики: частота, бросок и урон одной строкой, чтобы за
+// столом не приходилось разворачивать описание.
+function creatureSpellMech(s: DndCreatureSpell): string {
+  const parts: string[] = [formatSpellFrequency(s)];
+  if (s.rollType === "attack" && s.bonus !== null && s.bonus !== undefined) {
+    parts.push(`атака ${formatModifier(s.bonus)}`);
+  } else if (s.rollType === "save" && s.saveDC) {
+    const ab = s.saveAbility ? ABILITY_LABELS.find((a) => a.key === s.saveAbility)?.label : "";
+    parts.push(`СЛ ${s.saveDC}${ab ? ` ${ab}` : ""}`);
+  }
+  if (s.damage) parts.push(s.damage);
+  return parts.join(" · ");
+}
+
+// Ячейки — квадратами, а не кружками: §1.1, кругов система не рисует
+// (PipTrack листа персонажа — вокабуляр LitM, его разбор ещё не дошёл).
+function SbcSlots({ count }: { count: number }) {
+  return (
+    <span className="sbc__slots" title={`Ячеек: ${count}`}>
+      {Array.from({ length: count }, (_, i) => (
+        <span key={i} className="sbc__slot" />
+      ))}
+      <span className="sbc__slot-count">{count}</span>
+    </span>
+  );
+}
+
+function SbcSpellRow({ spell }: { spell: DndCreatureSpell }) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = !!spell.description.trim();
+  return (
+    <div className="sbc__spell">
+      <div
+        className={`sbc__spell-row${hasDetail ? " is-toggle" : ""}`}
+        onClick={hasDetail ? () => setOpen((v) => !v) : undefined}
+      >
+        <span className="sbc__spell-name">{spell.name || "Без названия"}</span>
+        <span className="sbc__spell-meta">{creatureSpellMech(spell)}</span>
+        {hasDetail && <NavIcon name="chevron" className={`chevron-icon${open ? " is-open" : ""}`} />}
+      </div>
+      {open && hasDetail && (
+        <div className="sbc__spell-desc">
+          <MentionText text={spell.description} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Круг заклинаний в просмотре: подпись, ячейки квадратами, свёрнутые строки.
+// Круг, в котором ничего нет и ячеек нет, не печатается вовсе (§1.11).
+function SbcSpellLevel({ level, slots, spells }: { level: number; slots: number; spells: DndCreatureSpell[] }) {
+  return (
+    <details className="sbc__spell-level" open>
+      <summary className="sbc__spell-level-head">
+        <span>{level === 0 ? "Заговоры" : `${level} круг`}</span>
+        {slots > 0 && <SbcSlots count={slots} />}
+      </summary>
+      <div className="sbc__spells">
+        {spells.map((s, i) => (
+          <SbcSpellRow key={i} spell={s} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function SbcActionList({ values }: { values: DndCreatureAction[] }) {
+  return (
+    <>
+      {values.map((a, i) => (
+        <SbcEntry key={i} name={a.name || undefined} mech={formatAction(a) || undefined} description={a.description} />
+      ))}
+    </>
+  );
+}
+
+// Кость характеристики — две грани, как у монеты: главное число (модификатор
+// или само значение, настройка во «Внешнем виде») и спасбросок. Клик
+// переворачивает ОДНУ кость: у Ловкости свой спасбросок, у остальных
+// характеристик его нет, и переворачивать шесть, чтобы посмотреть один,
+// незачем.
+//
+// Владение спасбросоком показано ЗАЛИВКОЙ, а не оттенком: в «Соевом нуаре»
+// --accent равен чернилам (themes.ts), и акцентный контур там не отличался
+// бы ни от чего — тот же дефект уже ловили в календаре на шаге 1. Скачок
+// «контур → заливка» читается в любом режиме и на ч/б печати.
+const SBC_DIE_POINTS = "50,3 92,27 92,73 50,97 8,73 8,27";
+
+function AbilityDie({
+  label,
+  score,
+  mod,
+  save,
+  prof,
+  primary,
+}: {
+  label: string;
+  score: number;
+  mod: number;
+  save: number;
+  prof: boolean;
+  primary: DndAbilityPrimary;
+}) {
+  const [flipped, setFlipped] = useState(false);
+  const main = primary === "score" ? String(score) : formatModifier(mod);
+  const under = primary === "score" ? formatModifier(mod) : String(score);
+  return (
+    <button
+      type="button"
+      className={`sbc__die${prof ? " is-prof" : ""}`}
+      onClick={() => setFlipped((v) => !v)}
+      title={flipped ? `${label}: спасбросок ${formatModifier(save)}` : `${label}: показать спасбросок`}
+    >
+      <span className="sbc__die-shape">
+        <svg width="42" height="42" viewBox="0 0 100 100" aria-hidden="true">
+          <polygon
+            points={SBC_DIE_POINTS}
+            fill={prof ? "var(--accent)" : "none"}
+            stroke={prof ? "var(--accent)" : "var(--ink)"}
+            strokeWidth="7"
+          />
+        </svg>
+        <span className="sbc__die-num">{flipped ? formatModifier(save) : main}</span>
+      </span>
+      <span className="sbc__die-lab">{flipped ? "спас" : `${label} ${under}`}</span>
+    </button>
+  );
+}
+
+function SbcSectionHead({
+  title,
+  editing,
+  onToggleEdit,
+}: {
+  title: string;
+  editing: boolean;
+  onToggleEdit?: () => void;
+}) {
+  return (
+    <div className="sbc__sec">
+      <span>{title}</span>
+      {onToggleEdit && (
+        <span className="sbc__sec-tools">
+          <button type="button" className={`sbc__toggle${editing ? " is-on" : ""}`} onClick={onToggleEdit}>
+            {editing ? "Готово" : "Править"}
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function DndCreatureView({
   value,
-  theme,
-  density,
-  compact,
   onQuickUpdate,
   collapsed,
   headerExtra,
@@ -1899,38 +1728,53 @@ export function DndCreatureView({
   avatarUploading,
 }: {
   value: DndCreatureData;
-  theme?: string | null;
-  density?: string | null;
-  compact?: boolean;
+  // Правка идёт ПО МЕСТУ, по секциям: форма-простыня (DndCreatureEdit)
+  // удалена вместе с темами — держать два интерфейса правки одного и того
+  // же существа значило гарантированно их разойтись.
   onQuickUpdate?: (patch: Partial<DndCreatureData>) => void;
-  // Lets the owning card (StatblockCard) fold its edit/delete/theme controls
-  // and expand/collapse toggle into this component's own title bar instead
-  // of wrapping it in a second, redundant <details> frame.
   collapsed?: boolean;
   headerExtra?: ReactNode;
   onHeaderClick?: () => void;
-  // Portrait shown next to the vitals/abilities block (sb-top-avatar) — the
-  // statblock's own art, separate from whatever avatar the owning being/
-  // character has on its profile. Column only renders when there's an
-  // image or a way to add one, so read-only previews without either prop
-  // stay exactly as before.
   avatarUrl?: string | null;
   onAvatarUpload?: (file: File) => void;
   avatarUploading?: boolean;
 }) {
-  // Not URL-synced / not lifted to props — same reasoning as the character
-  // sheet's view tab state: several statblocks can render on one page (e.g.
-  // a bestiary list), each needs its own independent tab.
-  const [tab, setTab] = useState<DndCreatureViewTab>("Действия");
+  const prefs = useDndPrefs();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  // Порог раскладки считается ПО КОНТЕЙНЕРУ, а не по окну: на шаге 2
+  // медиазапрос по окну уже соврал — колонка контента была 501 при окне 1100.
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = (w: number) => {
+      if (w > 0) setNarrow(w < 900);
+    };
+    // Меряем сразу, а не ждём наблюдателя: ResizeObserver не присылает первый
+    // отчёт, пока окно не рисует кадры (свёрнутое окно, фоновая вкладка,
+    // скрытая панель), и статблок оставался бы в широкой раскладке, даже
+    // будучи узким.
+    measure(el.getBoundingClientRect().width);
+    // Пересчёт по окну — дешёвая подстраховка на тот же случай: окно
+    // развернули, кадры пошли, а наблюдатель ещё спит.
+    const onResize = () => measure(el.getBoundingClientRect().width);
+    window.addEventListener("resize", onResize);
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", onResize);
+    }
+    const ro = new ResizeObserver((entries) => measure(entries[0]?.contentRect.width ?? 0));
+    ro.observe(el);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      ro.disconnect();
+    };
+  }, []);
 
-  // Each of the 5 tabs edits independently in place (TabEditToggle pattern,
-  // same as the character sheet's Заклинания/Инвентарь tabs) — no whole-card
-  // edit mode required for day-to-day tweaks.
-  const [editingMain, setEditingMain] = useState(false);
-  const [editingActions, setEditingActions] = useState(false);
-  const [editingSpells, setEditingSpells] = useState(false);
-  const [editingEquipment, setEditingEquipment] = useState(false);
-  const [editingTraits, setEditingTraits] = useState(false);
+  const [editing, setEditing] = useState<SbcSectionId | "side" | null>(null);
+  // Секция, которой нечего показать, не рисуется — но завести первую черту
+  // как-то надо. «Раскрытые» секции держатся только на время сеанса правки.
+  const [revealed, setRevealed] = useState<SbcSectionId[]>([]);
+  const [seg, setSeg] = useState<string | null>(null);
 
   const [damageTypes, setDamageTypes] = useState<DndMechanicsOption[]>([]);
   const [conditions, setConditions] = useState<DndMechanicsOption[]>([]);
@@ -1953,36 +1797,34 @@ export function DndCreatureView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!onQuickUpdate]);
 
+  const patch = (p: Partial<DndCreatureData>) => onQuickUpdate?.(p);
   function toggleSkill(skill: string) {
-    onQuickUpdate?.({ skillProfs: { ...value.skillProfs, [skill]: !value.skillProfs[skill] } });
+    patch({ skillProfs: { ...value.skillProfs, [skill]: !value.skillProfs[skill] } });
   }
   function toggleSave(key: DndAbilityKey) {
-    onQuickUpdate?.({ savingThrowProfs: { ...value.savingThrowProfs, [key]: !value.savingThrowProfs[key] } });
+    patch({ savingThrowProfs: { ...value.savingThrowProfs, [key]: !value.savingThrowProfs[key] } });
   }
   function toggleSaveAdvantageCondition(name: string) {
     const list = value.saveAdvantageConditions.includes(name)
       ? value.saveAdvantageConditions.filter((c) => c !== name)
       : [...value.saveAdvantageConditions, name];
-    onQuickUpdate?.({ saveAdvantageConditions: list });
+    patch({ saveAdvantageConditions: list });
   }
-  const patch = (p: Partial<DndCreatureData>) => onQuickUpdate?.(p);
 
-  if (compact) return <DndCreatureViewMini value={value} theme={theme} density={density} />;
-
+  const pb = value.challenge.proficiencyBonus ?? 0;
   const metaParts = [
     [value.size, value.creatureType].filter(Boolean).join(" "),
     value.alignment,
-    value.challenge.rating ? `УО ${value.challenge.rating}${value.challenge.proficiencyBonus ? ` (Бонус мастерства +${value.challenge.proficiencyBonus})` : ""}` : "",
   ].filter(Boolean);
+  const crText = value.challenge.rating
+    ? `КО ${value.challenge.rating}${pb ? ` (БМ +${pb})` : ""}`
+    : "КО —";
 
-  const saveList = ABILITY_LABELS.filter(({ key }) => value.savingThrowProfs[key]).map(
-    ({ key, label }) => `${label} ${formatModifier(abilityModifier(value.abilities[key]) + (value.challenge.proficiencyBonus ?? 0))}`
-  );
   const skillList = Object.entries(value.skillProfs)
-    .filter(([, v]) => v)
+    .filter(([, on]) => on)
     .map(([skill]) => {
       const ab = SKILL_ABILITY[skill];
-      const bonus = ab ? abilityModifier(value.abilities[ab]) + (value.challenge.proficiencyBonus ?? 0) : 0;
+      const bonus = ab ? abilityModifier(value.abilities[ab]) + pb : 0;
       return `${skill} ${formatModifier(bonus)}`;
     });
   const sensesText = [
@@ -1993,560 +1835,699 @@ export function DndCreatureView({
     .join(", ");
   const advantageParts = [...value.saveAdvantageConditions, value.saveAdvantageMagic ? "магии" : ""].filter(Boolean);
 
-  const hasActions =
-    value.actions.length > 0 ||
-    value.bonusActions.length > 0 ||
-    value.reactions.length > 0 ||
-    value.legendary.resistanceEnabled ||
-    value.legendary.actionsEnabled ||
-    value.legendary.lairEnabled;
+  // Круги, которым есть что показать: заклинания этого круга или его ячейки.
+  const spellLevels = Array.from(
+    new Set([
+      ...value.spellcasting.spells.map((s) => s.level),
+      ...value.spellcasting.slots.filter((s) => s.slots > 0).map((s) => s.level),
+    ])
+  )
+    .sort((a, b) => a - b)
+    .map((level) => ({
+      level,
+      slots: value.spellcasting.slots.find((s) => s.level === level)?.slots ?? 0,
+      spells: value.spellcasting.spells.filter((s) => s.level === level),
+    }));
 
-  return (
-    <div className={statblockScopeClass(theme, density)}>
-      <div className="sb-card">
-        <div
-          className={`sb-head${onHeaderClick ? " sb-head-clickable" : ""}`}
-          onClick={onHeaderClick}
-        >
-          <div className="sb-head-row">
-            <div>
-              <div className="sb-name">{value.name || "Без названия"}</div>
-              {metaParts.length > 0 && <div className="sb-meta">{metaParts.join(" · ")}</div>}
+  const visible = SBC_SECTIONS.filter((s) => sectionHasContent(value, s.id) || revealed.includes(s.id));
+  const absent = SBC_SECTIONS.filter((s) => !sectionHasContent(value, s.id) && !revealed.includes(s.id));
+  const segments = SBC_SEGMENTS.filter((g) => visible.some((s) => g.sections.includes(s.id)));
+  const activeSeg =
+    segments.find((g) => g.id === seg) ?? segments.find((g) => g.id === "actions") ?? segments[0] ?? null;
+  const shown = narrow && activeSeg ? visible.filter((s) => activeSeg.sections.includes(s.id)) : visible;
+
+  // Портрет статблока — свой, отдельный от аватара сущности (§1.13, дуотон
+  // на него не идёт). Широко он стоит крупным кадром в остатке левой
+  // колонки, и миниатюры в шапке тогда нет: один арт не работает дважды на
+  // одном экране (тот же довод снял фоновый слой главной на шаге 1).
+  const hasPortrait = !!avatarUrl || !!onAvatarUpload;
+  const bigPortrait = hasPortrait && !narrow;
+
+  function portrait(className: string) {
+    const inner = avatarUrl ? (
+      <img src={avatarUrl} alt="" />
+    ) : (
+      <span className="sbc__portrait-empty">+</span>
+    );
+    if (!onAvatarUpload) {
+      return avatarUrl ? <span className={className}>{inner}</span> : null;
+    }
+    return (
+      <label className={className} title="Изображение существа" onClick={(e) => e.stopPropagation()}>
+        {inner}
+        <span className="sbc__portrait-hint">{avatarUploading ? "Загрузка…" : avatarUrl ? "Изменить" : "Добавить"}</span>
+        <input
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onAvatarUpload(file);
+          }}
+        />
+      </label>
+    );
+  }
+
+  function renderSection(id: SbcSectionId) {
+    const isEditing = editing === id;
+    switch (id) {
+      case "legendary":
+        return isEditing ? (
+          <div className="sbc__editor">
+            <LegendaryEditor
+              value={value.legendary}
+              onChange={(v) => patch({ legendary: v })}
+              abilities={value.abilities}
+              proficiencyBonus={value.challenge.proficiencyBonus}
+            />
+          </div>
+        ) : (
+          <div className="sbc__body">
+            {value.legendary.resistanceEnabled && (
+              <SbcRow label="Сопротивления">{value.legendary.resistanceCount ?? "—"} / день</SbcRow>
+            )}
+            {value.legendary.actionsEnabled && (
+              <>
+                {value.legendary.actionPoints !== null && (
+                  <SbcRow label="Очки действий">{value.legendary.actionPoints} за раунд</SbcRow>
+                )}
+                {value.legendary.actions.map((a, i) => (
+                  <SbcEntry
+                    key={i}
+                    name={a.name || undefined}
+                    mech={`(${a.cost})${formatAction(a) ? ` ${formatAction(a)}` : ""}`}
+                    description={a.description}
+                  />
+                ))}
+              </>
+            )}
+            {value.legendary.lairEnabled &&
+              value.legendary.lairActions.map((a, i) => (
+                <SbcEntry
+                  key={i}
+                  name={a.name || undefined}
+                  mech={`(логово)${formatAction(a) ? ` ${formatAction(a)}` : ""}`}
+                  description={a.description}
+                />
+              ))}
+          </div>
+        );
+
+      case "defense":
+        return isEditing ? (
+          <div className="sbc__editor">
+            <div className="sbc__editor-cols">
+              <ChecklistEditor
+                label="Уязвимости к урону"
+                value={value.damageVulnerabilities}
+                onChange={(v) => patch({ damageVulnerabilities: v })}
+                options={damageTypes}
+              />
+              <ChecklistEditor
+                label="Сопротивления урону"
+                value={value.damageResistances}
+                onChange={(v) => patch({ damageResistances: v })}
+                options={damageTypes}
+              />
+              <ChecklistEditor
+                label="Иммунитет к урону"
+                value={value.damageImmunities}
+                onChange={(v) => patch({ damageImmunities: v })}
+                options={damageTypes}
+              />
+              <ChecklistEditor
+                label="Иммунитет к состояниям"
+                value={value.conditionImmunities}
+                onChange={(v) => patch({ conditionImmunities: v })}
+                options={conditions}
+              />
             </div>
-            {headerExtra && (
-              <div className="sb-head-controls" onClick={(e) => e.stopPropagation()}>
-                {headerExtra}
+            <div className="sbc__form-block">
+              <span className="sbc__form-lab">Преимущество на спасброски от</span>
+              <div className="sbc__checks">
+                {conditions.map((c) => (
+                  <label key={c.id} className="row" style={{ gap: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={value.saveAdvantageConditions.includes(c.name)}
+                      onChange={() => toggleSaveAdvantageCondition(c.name)}
+                    />
+                    {c.name}
+                  </label>
+                ))}
+                <label className="row" style={{ gap: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={value.saveAdvantageMagic}
+                    onChange={(e) => patch({ saveAdvantageMagic: e.target.checked })}
+                  />
+                  Магии
+                </label>
+              </div>
+            </div>
+
+            {/* Чувства, языки и примечание — такой же таблицей «подпись |
+                поле», как «Основное»: в две колонки подписи наезжали на
+                соседние поля, потому что подпись держала фиксированную
+                ширину, а текст в неё не помещался. */}
+            <div className="sbc__form">
+              <span className="sbc__form-lab">Особые чувства</span>
+              <SensesEditor value={value.sensesList} onChange={(v) => patch({ sensesList: v })} options={senseOptions} />
+
+              <span className="sbc__form-lab">Пассивное восприятие</span>
+              <span className="row" style={{ gap: 6 }}>
+                <input
+                  type="number"
+                  style={{ width: 68 }}
+                  value={value.passivePerception ?? ""}
+                  onChange={(e) => patch({ passivePerception: e.target.value === "" ? null : Number(e.target.value) })}
+                />
+                <button type="button" onClick={() => patch({ passivePerception: computePassivePerception(value) })}>
+                  Авто
+                </button>
+              </span>
+
+              <span className="sbc__form-lab">Особенности восприятия</span>
+              <input
+                placeholder="напр. преимущество на восприятие, полагающееся на слух"
+                value={value.perceptionNote}
+                onChange={(e) => patch({ perceptionNote: e.target.value })}
+              />
+
+              <span className="sbc__form-lab">Языки</span>
+              <input value={value.languages} onChange={(e) => patch({ languages: e.target.value })} />
+
+              <span className="sbc__form-lab">Дополнительно</span>
+              <MentionTextarea value={value.defenseNotes} onChange={(v) => patch({ defenseNotes: v })} rows={2} />
+            </div>
+          </div>
+        ) : (
+          <div className="sbc__body">
+            {value.damageVulnerabilities.length > 0 && (
+              <SbcRow label="Уязвимости">{value.damageVulnerabilities.join(", ")}</SbcRow>
+            )}
+            {value.damageResistances.length > 0 && (
+              <SbcRow label="Сопротивления">{value.damageResistances.join(", ")}</SbcRow>
+            )}
+            {(value.damageImmunities.length > 0 || value.conditionImmunities.length > 0) && (
+              <SbcRow label="Иммунитет">
+                {[value.damageImmunities.join(", "), value.conditionImmunities.join(", ")].filter(Boolean).join("; ")}
+              </SbcRow>
+            )}
+            {advantageParts.length > 0 && <SbcRow label="Преим. на спас">{advantageParts.join(", ")}</SbcRow>}
+            {sensesText && <SbcRow label="Чувства">{sensesText}</SbcRow>}
+            {value.perceptionNote && <SbcRow label="Восприятие">{value.perceptionNote}</SbcRow>}
+            {value.languages && <SbcRow label="Языки">{value.languages}</SbcRow>}
+            {value.defenseNotes && (
+              <div className="sbc__entry">
+                <MentionText text={value.defenseNotes} />
               </div>
             )}
           </div>
-        </div>
-        {!collapsed && <div className="sb-body">
-        <div className="sb-top-section">
-        <div className="sb-top-main">
-          <div className="sb-props">
-            <div>
-              <span className="sb-prop-label">Класс Защиты</span> {formatArmorClass(value.armorClass)}
-            </div>
-            <div>
-              <span className="sb-prop-label">Хиты</span> {formatHitPoints(value.hitPoints) || "—"}
-            </div>
-            <div>
-              <span className="sb-prop-label">Скорость</span> {formatSpeed(value.speed) || "—"}
-            </div>
-            <div>
-              <span className="sb-prop-label">Инициатива</span> {value.initiativeBonus !== null ? formatModifier(value.initiativeBonus) : "—"}
-            </div>
-          </div>
+        );
 
-          <div className="sb-abilities-inline">
-            {ABILITY_LABELS.map(({ key, label }) => (
-              <div key={key} className="sb-ability-tile">
-                <div className="sb-ability-tile-mod">{formatModifier(abilityModifier(value.abilities[key]))}</div>
-                <div className="sb-ability-tile-score">
-                  {label} {value.abilities[key]}
-                </div>
-              </div>
+      case "traits":
+        return isEditing ? (
+          <div className="sbc__editor">
+            <FeatureListEdit title="Черты" values={value.traits} onChange={(v) => patch({ traits: v })} />
+          </div>
+        ) : (
+          <div className="sbc__body">
+            {value.traits.map((f, i) => (
+              <SbcEntry key={i} name={f.name || undefined} description={f.description} />
             ))}
           </div>
+        );
 
-          {/* Always visible — matches the source table's intent that base/
-              characteristics/defense data sits right alongside HP/AC, not
-              behind a click, same as the printed dnd.su statblock layout. */}
-          <div className="sb-props">
-            {onQuickUpdate && <TabEditToggle editing={editingMain} onToggle={() => setEditingMain((v) => !v)} />}
-              {editingMain ? (
-                <div className="sb-edit-compact">
-                  <div className="sb-edit-col">
-                    <FieldRow label="Имя">
-                      <input value={value.name} onChange={(e) => patch({ name: e.target.value })} />
-                    </FieldRow>
-                    <FieldRow label="Тип">
-                      <select value={value.creatureType} onChange={(e) => patch({ creatureType: e.target.value })}>
-                        <option value="">— тип существа —</option>
-                        {value.creatureType && !creatureTypeOptions.some((o) => o.name === value.creatureType) && (
-                          <option value={value.creatureType}>{value.creatureType}</option>
-                        )}
-                        {creatureTypeOptions.map((o) => (
-                          <option key={o.id} value={o.name}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </select>
-                    </FieldRow>
-                    <FieldRow label="Размер">
-                      <select value={value.size} onChange={(e) => patch({ size: e.target.value })}>
-                        {CREATURE_SIZES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </FieldRow>
-                    <FieldRow label="Мировоззрение">
-                      <select value={value.alignment} onChange={(e) => patch({ alignment: e.target.value })}>
-                        <option value="">— мировоззрение —</option>
-                        {value.alignment && !alignmentOptions.some((o) => o.name === value.alignment) && (
-                          <option value={value.alignment}>{value.alignment}</option>
-                        )}
-                        {alignmentOptions.map((o) => (
-                          <option key={o.id} value={o.name}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </select>
-                    </FieldRow>
-                    <FieldRow label="Класс опасности">
-                      <div className="row" style={{ gap: 6 }}>
-                        <select value={value.challenge.rating} onChange={(e) => patch({ challenge: { rating: e.target.value, proficiencyBonus: computeProficiencyBonusForCR(e.target.value) } })}>
-                          <option value="">—</option>
-                          {CR_VALUES.map((cr) => (
-                            <option key={cr} value={cr}>
-                              {cr}
-                            </option>
-                          ))}
-                        </select>
-                        <span className="muted">Б.М.</span>
-                        <input
-                          type="number"
-                          style={{ width: 44 }}
-                          value={value.challenge.proficiencyBonus ?? ""}
-                          onChange={(e) => patch({ challenge: { ...value.challenge, proficiencyBonus: e.target.value === "" ? null : Number(e.target.value) } })}
-                        />
-                      </div>
-                    </FieldRow>
-                    <FieldRow label="Класс защиты">
-                      <input
-                        type="number"
-                        value={value.armorClass.value ?? ""}
-                        onChange={(e) => patch({ armorClass: { ...value.armorClass, value: e.target.value === "" ? null : Number(e.target.value) } })}
-                      />
-                    </FieldRow>
-                    <FieldRow label="Тип защиты">
-                      <input
-                        placeholder="напр. натуральная броня"
-                        value={value.armorClass.note}
-                        onChange={(e) => patch({ armorClass: { ...value.armorClass, note: e.target.value } })}
-                      />
-                    </FieldRow>
-                    <FieldRow label="Кость здоровья">
+      case "actions":
+      case "bonus":
+      case "reactions": {
+        const key = id === "actions" ? "actions" : id === "bonus" ? "bonusActions" : "reactions";
+        const list = value[key] as DndCreatureAction[];
+        const title = id === "actions" ? "Действия" : id === "bonus" ? "Бонусные действия" : "Реакции";
+        const colorClass =
+          id === "actions" ? "dnd-header-actions" : id === "bonus" ? "dnd-header-bonus" : "dnd-header-reactions";
+        return isEditing ? (
+          <div className="sbc__editor">
+            <ActionListEdit
+              title={title}
+              values={list}
+              onChange={(v) => patch({ [key]: v } as Partial<DndCreatureData>)}
+              headerColorClass={colorClass}
+              abilities={value.abilities}
+              proficiencyBonus={value.challenge.proficiencyBonus}
+            />
+          </div>
+        ) : (
+          <div className="sbc__body">
+            <SbcActionList values={list} />
+          </div>
+        );
+      }
+
+      case "spells":
+        return isEditing ? (
+          <div className="sbc__editor">
+            <SpellcastingEditor
+              value={value.spellcasting}
+              onChange={(v) => patch({ spellcasting: v })}
+              systemId={systemId}
+              abilities={value.abilities}
+              proficiencyBonus={pb}
+            />
+          </div>
+        ) : (
+          <div className="sbc__body">
+            {value.spellcasting.ability && (
+              <SbcRow label="Характеристика">
+                {ABILITY_LABELS.find((a) => a.key === value.spellcasting.ability)?.label}
+              </SbcRow>
+            )}
+            {spellLevels.map(({ level, slots, spells }) => (
+              <SbcSpellLevel key={level} level={level} slots={slots} spells={spells} />
+            ))}
+          </div>
+        );
+
+      case "gear":
+        return isEditing ? (
+          <div className="sbc__editor">
+            <div className="sbc__form">
+              <span className="sbc__form-lab">Среда обитания</span>
+              <input value={value.habitat} onChange={(e) => patch({ habitat: e.target.value })} />
+              <span className="sbc__form-lab">Сокровища</span>
+              <input value={value.treasure} onChange={(e) => patch({ treasure: e.target.value })} />
+            </div>
+            <EquipmentEditor value={value.equipment} onChange={(v) => patch({ equipment: v })} systemId={systemId} />
+            <LootEditor value={value.loot} onChange={(v) => patch({ loot: v })} />
+          </div>
+        ) : (
+          <div className="sbc__body">
+            {value.habitat && <SbcRow label="Среда">{value.habitat}</SbcRow>}
+            {value.treasure && <SbcRow label="Сокровища">{value.treasure}</SbcRow>}
+            {value.equipment.length > 0 && (
+              <SbcRow label="Снаряжение">
+                {value.equipment.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
+              </SbcRow>
+            )}
+            {(value.loot.items.length > 0 || value.loot.currency.length > 0) && (
+              <SbcRow label="Лут">
+                {value.loot.items.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
+                {value.loot.items.length > 0 && value.loot.currency.length > 0 && "; "}
+                {value.loot.currency
+                  .map((c) => {
+                    const avg = averageDiceFormula(c.formula);
+                    return `${c.label}: ${c.formula}${avg !== null ? ` (≈ ${avg})` : ""}`;
+                  })
+                  .join(", ")}
+              </SbcRow>
+            )}
+          </div>
+        );
+
+      case "notes":
+        return isEditing ? (
+          <div className="sbc__editor">
+            <MentionTextarea value={value.notes} onChange={(v) => patch({ notes: v })} rows={3} />
+          </div>
+        ) : (
+          <div className="sbc__body">
+            <div className="sbc__entry" style={{ whiteSpace: "pre-wrap" }}>
+              <MentionText text={value.notes} />
+            </div>
+          </div>
+        );
+    }
+  }
+
+  return (
+    <div className="sb-scope">
+      <div className="sbc" ref={rootRef}>
+        <div
+          className={`sbc__band${onHeaderClick ? " is-clickable" : ""}`}
+          onClick={onHeaderClick}
+        >
+          {!bigPortrait && portrait("sbc__portrait-sm")}
+          <div className="sbc__title">
+            <div className="sbc__name">{value.name || "Без названия"}</div>
+            {metaParts.length > 0 && <div className="sbc__meta">{metaParts.join(" · ")}</div>}
+          </div>
+          <div className="sbc__cr">{crText}</div>
+          {headerExtra && (
+            <div className="sbc__controls" onClick={(e) => e.stopPropagation()}>
+              {headerExtra}
+            </div>
+          )}
+        </div>
+
+        {!collapsed && (
+          <div className={`sbc__cols${narrow ? " is-narrow" : ""}${editing === "side" ? " is-editing-side" : ""}`}>
+            {/* Левая колонка — то, чем существо бросает. Не уезжает из виду. */}
+            <div className="sbc__side">
+              {onQuickUpdate && (
+                <SbcSectionHead
+                  title="Основное"
+                  editing={editing === "side"}
+                  onToggleEdit={() => setEditing((v) => (v === "side" ? null : "side"))}
+                />
+              )}
+
+              {editing === "side" ? (
+                <div className="sbc__side-form">
+                  {/* Правится таблицей «подпись | поле», а не свободным
+                      потоком: у поля своя колонка, и длинная подпись больше
+                      не выталкивает контрол за край раздела. */}
+                  <div className="sbc__form">
+                    <span className="sbc__form-lab">Имя</span>
+                    <input value={value.name} onChange={(e) => patch({ name: e.target.value })} />
+
+                    <span className="sbc__form-lab">Тип</span>
+                    <select value={value.creatureType} onChange={(e) => patch({ creatureType: e.target.value })}>
+                      <option value="">— тип существа —</option>
+                      {value.creatureType && !creatureTypeOptions.some((o) => o.name === value.creatureType) && (
+                        <option value={value.creatureType}>{value.creatureType}</option>
+                      )}
+                      {creatureTypeOptions.map((o) => (
+                        <option key={o.id} value={o.name}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="sbc__form-lab">Размер</span>
+                    <select value={value.size} onChange={(e) => patch({ size: e.target.value })}>
+                      {CREATURE_SIZES.map((sz) => (
+                        <option key={sz} value={sz}>
+                          {sz}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="sbc__form-lab">Мировоззрение</span>
+                    <select value={value.alignment} onChange={(e) => patch({ alignment: e.target.value })}>
+                      <option value="">— мировоззрение —</option>
+                      {value.alignment && !alignmentOptions.some((o) => o.name === value.alignment) && (
+                        <option value={value.alignment}>{value.alignment}</option>
+                      )}
+                      {alignmentOptions.map((o) => (
+                        <option key={o.id} value={o.name}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="sbc__form-lab">Класс опасности</span>
+                    <span className="row" style={{ gap: 6 }}>
                       <select
-                        value={value.hitPoints.dieSize ?? ""}
-                        onChange={(e) => patch({ hitPoints: { ...value.hitPoints, dieSize: e.target.value === "" ? null : Number(e.target.value) } })}
+                        value={value.challenge.rating}
+                        onChange={(e) =>
+                          patch({
+                            challenge: {
+                              rating: e.target.value,
+                              proficiencyBonus: computeProficiencyBonusForCR(e.target.value),
+                            },
+                          })
+                        }
                       >
                         <option value="">—</option>
+                        {CR_VALUES.map((cr) => (
+                          <option key={cr} value={cr}>
+                            {cr}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="muted">Б.М.</span>
+                      <input
+                        type="number"
+                        style={{ width: 52 }}
+                        value={value.challenge.proficiencyBonus ?? ""}
+                        onChange={(e) =>
+                          patch({
+                            challenge: {
+                              ...value.challenge,
+                              proficiencyBonus: e.target.value === "" ? null : Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </span>
+                  </div>
+
+                  <div className="sbc__form">
+                    <span className="sbc__form-lab">Класс защиты</span>
+                    <input
+                      type="number"
+                      value={value.armorClass.value ?? ""}
+                      onChange={(e) =>
+                        patch({
+                          armorClass: {
+                            ...value.armorClass,
+                            value: e.target.value === "" ? null : Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+
+                    <span className="sbc__form-lab">Тип защиты</span>
+                    <input
+                      placeholder="напр. натуральная броня"
+                      value={value.armorClass.note}
+                      onChange={(e) => patch({ armorClass: { ...value.armorClass, note: e.target.value } })}
+                    />
+
+                    <span className="sbc__form-lab">Хиты</span>
+                    <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      <input
+                        type="number"
+                        placeholder="костей"
+                        style={{ width: 68 }}
+                        value={value.hitPoints.diceCount ?? ""}
+                        onChange={(e) =>
+                          patch({
+                            hitPoints: {
+                              ...value.hitPoints,
+                              diceCount: e.target.value === "" ? null : Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                      <select
+                        value={value.hitPoints.dieSize ?? ""}
+                        onChange={(e) =>
+                          patch({
+                            hitPoints: {
+                              ...value.hitPoints,
+                              dieSize: e.target.value === "" ? null : Number(e.target.value),
+                            },
+                          })
+                        }
+                      >
+                        <option value="">к—</option>
                         {DIE_SIZES.map((d) => (
                           <option key={d} value={d}>
                             к{d}
                           </option>
                         ))}
                       </select>
-                    </FieldRow>
-                    <FieldRow label="Количество костей">
+                      <span className="muted">+</span>
                       <input
                         type="number"
-                        value={value.hitPoints.diceCount ?? ""}
-                        onChange={(e) => patch({ hitPoints: { ...value.hitPoints, diceCount: e.target.value === "" ? null : Number(e.target.value) } })}
-                      />
-                    </FieldRow>
-                    <FieldRow label="Пост. бонус к здоровью">
-                      <input
-                        type="number"
+                        placeholder="бонус"
+                        style={{ width: 68 }}
                         value={value.hitPoints.bonus ?? ""}
-                        onChange={(e) => patch({ hitPoints: { ...value.hitPoints, bonus: e.target.value === "" ? null : Number(e.target.value) } })}
+                        onChange={(e) =>
+                          patch({
+                            hitPoints: {
+                              ...value.hitPoints,
+                              bonus: e.target.value === "" ? null : Number(e.target.value),
+                            },
+                          })
+                        }
                       />
-                      {(value.hitPoints.diceCount || value.hitPoints.formula) && <span className="muted"> ≈ {formatHitPoints(value.hitPoints)}</span>}
-                    </FieldRow>
-                    <FieldRow label="Бонус к инициативе">
-                      <input
-                        type="number"
-                        value={value.initiativeBonus ?? ""}
-                        onChange={(e) => patch({ initiativeBonus: e.target.value === "" ? null : Number(e.target.value) })}
-                      />
-                    </FieldRow>
+                      {hitPointsAverage(value.hitPoints) && (
+                        <span className="sbc__val">≈ {hitPointsAverage(value.hitPoints)}</span>
+                      )}
+                    </span>
+
+                    <span className="sbc__form-lab">Инициатива</span>
+                    <input
+                      type="number"
+                      value={value.initiativeBonus ?? ""}
+                      onChange={(e) => patch({ initiativeBonus: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
                   </div>
 
-                  <div className="sb-edit-col">
-                    <FieldRow label="Скорости">
-                      <SpeedEditor value={value.speed} onChange={(v) => patch({ speed: v })} />
-                    </FieldRow>
-                    <FieldRow label="Особые чувства">
-                      <SensesEditor value={value.sensesList} onChange={(v) => patch({ sensesList: v })} options={senseOptions} />
-                    </FieldRow>
-                    <FieldRow label="Особенности восприятия">
-                      <input
-                        placeholder="напр. преимущество на Внимание/восприятие, полагающееся на слух"
-                        value={value.perceptionNote}
-                        onChange={(e) => patch({ perceptionNote: e.target.value })}
-                      />
-                    </FieldRow>
-                    <FieldRow label="Пассивное восприятие">
-                      <div className="row" style={{ gap: 6 }}>
-                        <input
-                          type="number"
-                          style={{ width: 50 }}
-                          value={value.passivePerception ?? ""}
-                          onChange={(e) => patch({ passivePerception: e.target.value === "" ? null : Number(e.target.value) })}
-                        />
-                        <button type="button" onClick={() => patch({ passivePerception: computePassivePerception(value) })}>
-                          Авто
-                        </button>
-                      </div>
-                    </FieldRow>
-                    <FieldRow label="Языки">
-                      <input value={value.languages} onChange={(e) => patch({ languages: e.target.value })} />
-                    </FieldRow>
+                  {/* Скорости — своя строка на всю ширину: пять полей с
+                      подписями в колонку 300 px не встают, и «Скорости»
+                      висело в пустоте. */}
+                  <div className="sbc__form sbc__form--wide">
+                    <span className="sbc__form-lab">Скорости</span>
+                    <SpeedEditor value={value.speed} onChange={(v) => patch({ speed: v })} />
                   </div>
 
-                  <div className="sb-edit-col">
+                  <div className="sbc__form-block">
                     <AbilityScoresEdit value={value.abilities} onChange={(v) => patch({ abilities: v })} />
-                    <div className="stack" style={{ gap: 4 }}>
-                      <span className="sb-prop-label">Спасброски</span>
-                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-                        {ABILITY_LABELS.map(({ key, label }) => (
-                          <label key={key} className="row" style={{ gap: 4 }}>
-                            <input type="checkbox" checked={value.savingThrowProfs[key]} onChange={() => toggleSave(key)} />
-                            {label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="stack" style={{ gap: 4 }}>
-                      <span className="sb-prop-label">Навыки</span>
-                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-                        {ALL_SKILLS.map((skill) => (
-                          <label key={skill} className="row" style={{ gap: 4 }}>
-                            <input type="checkbox" checked={!!value.skillProfs[skill]} onChange={() => toggleSkill(skill)} />
-                            {skill}
-                          </label>
-                        ))}
-                      </div>
+                  </div>
+
+                  <div className="sbc__form-block">
+                    <span className="sbc__lab sbc__lab--auto">Спасброски</span>
+                    <div className="sbc__checks">
+                      {ABILITY_LABELS.map(({ key, label }) => (
+                        <label key={key} className="row" style={{ gap: 4 }}>
+                          <input type="checkbox" checked={value.savingThrowProfs[key]} onChange={() => toggleSave(key)} />
+                          {label}
+                        </label>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="sb-edit-col">
-                    <ChecklistEditor label="Уязвимости к урону" value={value.damageVulnerabilities} onChange={(v) => patch({ damageVulnerabilities: v })} options={damageTypes} />
-                    <ChecklistEditor label="Сопротивления урону" value={value.damageResistances} onChange={(v) => patch({ damageResistances: v })} options={damageTypes} />
-                    <ChecklistEditor label="Иммунитет к урону" value={value.damageImmunities} onChange={(v) => patch({ damageImmunities: v })} options={damageTypes} />
-                    <ChecklistEditor label="Иммунитет к состояниям" value={value.conditionImmunities} onChange={(v) => patch({ conditionImmunities: v })} options={conditions} />
-                    <div className="stack" style={{ gap: 4 }}>
-                      <span className="sb-prop-label">Преимущество на спасброски от</span>
-                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-                        {conditions.map((c) => (
-                          <label key={c.id} className="row" style={{ gap: 4 }}>
-                            <input type="checkbox" checked={value.saveAdvantageConditions.includes(c.name)} onChange={() => toggleSaveAdvantageCondition(c.name)} />
-                            {c.name}
-                          </label>
-                        ))}
-                        <label className="row" style={{ gap: 4 }}>
-                          <input type="checkbox" checked={value.saveAdvantageMagic} onChange={(e) => patch({ saveAdvantageMagic: e.target.checked })} />
-                          Магии
+                  <div className="sbc__form-block sbc__form--wide">
+                    <span className="sbc__lab sbc__lab--auto">Навыки</span>
+                    <div className="sbc__checks">
+                      {ALL_SKILLS.map((skill) => (
+                        <label key={skill} className="row" style={{ gap: 4 }}>
+                          <input type="checkbox" checked={!!value.skillProfs[skill]} onChange={() => toggleSkill(skill)} />
+                          {skill}
                         </label>
-                      </div>
+                      ))}
                     </div>
-                    <FieldRow label="Дополнительно (защита)">
-                      <MentionTextarea value={value.defenseNotes} onChange={(v) => patch({ defenseNotes: v })} rows={2} />
-                    </FieldRow>
                   </div>
                 </div>
               ) : (
                 <>
-                  {saveList.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Спасброски</span> {saveList.join(", ")}
+                  {/* КЗ и хиты — два самых спрашиваемых числа, одной строкой
+                      пополам: держать их на двух строках значит гонять глаз
+                      вертикально там, где хватает одного взгляда. */}
+                  <div className="sbc__pair">
+                    <span className="sbc__lab sbc__lab--auto">КЗ</span>
+                    <span className="sbc__val sbc__val--big">{formatArmorClass(value.armorClass)}</span>
+                    <span className="sbc__lab sbc__lab--auto">Хиты</span>
+                    <span className="sbc__val sbc__val--big">
+                      {hitPointsAverage(value.hitPoints) || "—"}
+                      {hitPointsDice(value.hitPoints) && (
+                        <span className="sbc__val-sub">{hitPointsDice(value.hitPoints)}</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="sbc__rows">
+                    <SbcRow label="Скорость">{formatSpeed(value.speed) || "—"}</SbcRow>
+                    <SbcRow label="Инициатива">
+                      {value.initiativeBonus !== null ? formatModifier(value.initiativeBonus) : "—"}
+                    </SbcRow>
+                  </div>
+
+                  <div className="sbc__divider">
+                    <span className="sbc__lab sbc__lab--auto">Характеристики</span>
+                    <div className="sbc__dies">
+                      {ABILITY_LABELS.map(({ key, label }) => {
+                        const mod = abilityModifier(value.abilities[key]);
+                        const prof = !!value.savingThrowProfs[key];
+                        return (
+                          <AbilityDie
+                            key={key}
+                            label={label}
+                            score={value.abilities[key]}
+                            mod={mod}
+                            save={mod + (prof ? pb : 0)}
+                            prof={prof}
+                            primary={prefs.abilityPrimary}
+                          />
+                        );
+                      })}
                     </div>
-                  )}
+                    <span className="sbc__hint">
+                      Залитая кость — владение спасбросоком. Щелчок переворачивает кость на спасбросок.
+                    </span>
+                  </div>
+
                   {skillList.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Навыки</span> {skillList.join(", ")}
+                    <div className="sbc__divider">
+                      <span className="sbc__lab sbc__lab--auto">Навыки</span>
+                      <span className="sbc__val">{skillList.join(", ")}</span>
                     </div>
                   )}
-                  {value.damageVulnerabilities.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Уязвимости</span> {value.damageVulnerabilities.join(", ")}
-                    </div>
-                  )}
-                  {value.damageResistances.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Сопротивления</span> {value.damageResistances.join(", ")}
-                    </div>
-                  )}
-                  {value.damageImmunities.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Иммунитет к урону</span> {value.damageImmunities.join(", ")}
-                    </div>
-                  )}
-                  {value.conditionImmunities.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Иммунитет к состояниям</span> {value.conditionImmunities.join(", ")}
-                    </div>
-                  )}
-                  {advantageParts.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Преимущество на спасброски от</span> {advantageParts.join(", ")}
-                    </div>
-                  )}
-                  {value.defenseNotes && (
-                    <div>
-                      <MentionText text={value.defenseNotes} />
-                    </div>
-                  )}
-                  {sensesText && (
-                    <div>
-                      <span className="sb-prop-label">Чувства</span> {sensesText}
-                    </div>
-                  )}
-                  {value.perceptionNote && (
-                    <div>
-                      <MentionText text={value.perceptionNote} />
-                    </div>
-                  )}
-                  {value.languages && (
-                    <div>
-                      <span className="sb-prop-label">Языки</span> {value.languages}
-                    </div>
-                  )}
+
+                  {bigPortrait && portrait("sbc__portrait")}
                 </>
               )}
             </div>
-        </div>
-        {(avatarUrl || onAvatarUpload) && (
-          <label className="sb-top-avatar" title="Изображение существа">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="sb-top-avatar-img" />
-            ) : (
-              <div className="sb-top-avatar-placeholder">+</div>
-            )}
-            {onAvatarUpload && (
-              <>
-                <span className="sb-top-avatar-hint">{avatarUploading ? "Загрузка…" : avatarUrl ? "Изменить" : "Добавить"}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) onAvatarUpload(file);
-                  }}
-                />
-              </>
-            )}
-          </label>
-        )}
-        </div>
 
-          <div className="tabs">
-            {DND_CREATURE_VIEW_TABS.map((t) => (
-              <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-                {t}
-              </button>
-            ))}
-          </div>
-
-          {tab === "Действия" && (
-            <>
-              {onQuickUpdate && <TabEditToggle editing={editingActions} onToggle={() => setEditingActions((v) => !v)} />}
-              {editingActions ? (
-                <div className="stack">
-                  <ActionListEdit
-                    title="Действия (Actions)"
-                    values={value.actions}
-                    onChange={(v) => patch({ actions: v })}
-                    headerColorClass="dnd-header-actions"
-                    abilities={value.abilities}
-                    proficiencyBonus={value.challenge.proficiencyBonus}
-                  />
-                  <ActionListEdit
-                    title="Бонусные действия"
-                    values={value.bonusActions}
-                    onChange={(v) => patch({ bonusActions: v })}
-                    headerColorClass="dnd-header-bonus"
-                    abilities={value.abilities}
-                    proficiencyBonus={value.challenge.proficiencyBonus}
-                  />
-                  <ActionListEdit
-                    title="Реакции"
-                    values={value.reactions}
-                    onChange={(v) => patch({ reactions: v })}
-                    headerColorClass="dnd-header-reactions"
-                    abilities={value.abilities}
-                    proficiencyBonus={value.challenge.proficiencyBonus}
-                  />
-                  <LegendaryEditor
-                    value={value.legendary}
-                    onChange={(v) => patch({ legendary: v })}
-                    abilities={value.abilities}
-                    proficiencyBonus={value.challenge.proficiencyBonus}
-                  />
-                </div>
-              ) : (
-                <>
-                  <SbActionGroup title="Действия" values={value.actions} />
-                  <SbActionGroup title="Бонусные действия" values={value.bonusActions} />
-                  <SbActionGroup title="Реакции" values={value.reactions} />
-
-                  {value.legendary.resistanceEnabled && (
-                    <div className="sb-entry">
-                      <span className="sb-prop-label">Легендарные сопротивления</span> {value.legendary.resistanceCount ?? "—"}/день
-                    </div>
-                  )}
-                  {value.legendary.actionsEnabled && (
-                    <>
-                      <div className="sb-section">
-                        Легендарные действия
-                        {value.legendary.actionPoints !== null ? ` (Очков: ${value.legendary.actionPoints} за раунд)` : ""}
-                      </div>
-                      {value.legendary.actions.map((a, i) => (
-                        <SbEntryRow
-                          key={i}
-                          name={a.name || undefined}
-                          extra={<span className="muted"> (Стоимость: {a.cost})</span>}
-                          mech={formatAction(a)}
-                          description={a.description}
-                        />
-                      ))}
-                    </>
-                  )}
-                  {value.legendary.lairEnabled && <SbActionGroup title="Действия логова" values={value.legendary.lairActions} />}
-
-                  {!hasActions && <p className="muted">Действий пока нет.</p>}
-                </>
-              )}
-            </>
-          )}
-
-          {tab === "Заклинания" && (
-            <>
-              {onQuickUpdate && <TabEditToggle editing={editingSpells} onToggle={() => setEditingSpells((v) => !v)} />}
-              {editingSpells ? (
-                <SpellcastingEditor
-                  value={value.spellcasting}
-                  onChange={(v) => patch({ spellcasting: v })}
-                  systemId={systemId}
-                  abilities={value.abilities}
-                  proficiencyBonus={value.challenge.proficiencyBonus ?? 0}
-                />
-              ) : value.spellcasting.enabled ? (
-                <>
-                  <div className="sb-entry">
-                    {value.spellcasting.ability && (
-                      <>
-                        Основная характеристика: {ABILITY_LABELS.find((a) => a.key === value.spellcasting.ability)?.label}.{" "}
-                      </>
-                    )}
-                    {value.spellcasting.slots.length > 0 && (
-                      <>Ячейки: {value.spellcasting.slots.map((s) => `${s.level} круг — ${s.slots}`).join(", ")}. </>
-                    )}
-                  </div>
-                  {value.spellcasting.spells.map((s, i) => (
-                    <SbEntryRow
-                      key={i}
-                      name={s.name || "Без названия"}
-                      extra={
-                        <span className="muted">
-                          {" "}
-                          ({s.level === 0 ? "заговор" : `круг ${s.level}`}, {formatSpellFrequency(s)})
-                        </span>
-                      }
-                      description={s.description}
-                    />
+            <div className="sbc__scroll">
+              {narrow && segments.length > 1 && (
+                <div className="sbc__segs">
+                  {segments.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      className={`sbc__seg${activeSeg?.id === g.id ? " is-on" : ""}`}
+                      onClick={() => setSeg(g.id)}
+                    >
+                      {g.label}
+                    </button>
                   ))}
-                  {value.spellcasting.spells.length === 0 && <p className="muted">Заклинаний пока нет.</p>}
-                </>
-              ) : (
-                <p className="muted">Заклинательной способности нет.</p>
+                </div>
               )}
-            </>
-          )}
 
-          {tab === "Снаряжение" && (
-            <>
-              {onQuickUpdate && <TabEditToggle editing={editingEquipment} onToggle={() => setEditingEquipment((v) => !v)} />}
-              {editingEquipment ? (
-                <div className="stack">
-                  <div className="row">
-                    <label style={{ flex: 1 }}>
-                      Среда обитания
-                      <input value={value.habitat} onChange={(e) => patch({ habitat: e.target.value })} />
-                    </label>
-                    <label style={{ flex: 1 }}>
-                      Сокровища
-                      <input value={value.treasure} onChange={(e) => patch({ treasure: e.target.value })} />
-                    </label>
-                  </div>
-                  <EquipmentEditor value={value.equipment} onChange={(v) => patch({ equipment: v })} systemId={systemId} />
-                  <LootEditor value={value.loot} onChange={(v) => patch({ loot: v })} />
+              {shown.map((s) => (
+                <div key={s.id}>
+                  <SbcSectionHead
+                    title={s.title}
+                    editing={editing === s.id}
+                    onToggleEdit={
+                      onQuickUpdate ? () => setEditing((v) => (v === s.id ? null : s.id)) : undefined
+                    }
+                  />
+                  {renderSection(s.id)}
                 </div>
-              ) : (
-                <div className="sb-props">
-                  {(value.habitat || value.treasure) && (
-                    <div>
-                      {value.habitat && (
-                        <>
-                          <span className="sb-prop-label">Среда обитания</span> {value.habitat}{" "}
-                        </>
-                      )}
-                      {value.treasure && (
-                        <>
-                          <span className="sb-prop-label">Сокровища</span> {value.treasure}
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {value.equipment.length > 0 && (
-                    <div>
-                      <span className="sb-prop-label">Снаряжение</span>{" "}
-                      {value.equipment.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
-                    </div>
-                  )}
-                  {(value.loot.items.length > 0 || value.loot.currency.length > 0) && (
-                    <div>
-                      <span className="sb-prop-label">Лут</span>{" "}
-                      {value.loot.items.map((it) => `${it.name}${it.qty ? ` ×${it.qty}` : ""}`).join(", ")}
-                      {value.loot.items.length > 0 && value.loot.currency.length > 0 && "; "}
-                      {value.loot.currency
-                        .map((c) => {
-                          const avg = averageDiceFormula(c.formula);
-                          return `${c.label}: ${c.formula}${avg !== null ? ` (≈ ${avg})` : ""}`;
-                        })
-                        .join(", ")}
-                    </div>
-                  )}
-                  {!value.habitat && !value.treasure && value.equipment.length === 0 && value.loot.items.length === 0 && value.loot.currency.length === 0 && (
-                    <p className="muted">Снаряжения пока нет.</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+              ))}
 
-          {tab === "Особенности" && (
-            <>
-              {onQuickUpdate && <TabEditToggle editing={editingTraits} onToggle={() => setEditingTraits((v) => !v)} />}
-              {editingTraits ? (
-                <div className="stack">
-                  <FeatureListEdit title="Особенности (Traits)" values={value.traits} onChange={(v) => patch({ traits: v })} />
-                  <label>
-                    Заметки
-                    <MentionTextarea value={value.notes} onChange={(v) => patch({ notes: v })} rows={3} />
-                  </label>
-                </div>
-              ) : (
-                <>
-                  <SbFeatureGroup title="Особенности" values={value.traits} />
-                  {value.traits.length === 0 && <p className="muted">Особенностей пока нет.</p>}
-                  {value.notes && (
-                    <>
-                      <div className="sb-section">Заметки</div>
-                      <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
-                        <MentionText text={value.notes} />
-                      </div>
-                    </>
+              {/* §1.11: у пустого статблока главный блок обязан объяснить,
+                  что здесь будет — одной строкой, а не тремя заглушками
+                  «Действий пока нет / Заклинательной способности нет /
+                  Снаряжения пока нет». */}
+              {visible.length === 0 && (
+                <div className="sbc__invite">
+                  <span className="sbc__invite-text">
+                    {onQuickUpdate
+                      ? "Здесь будут действия, черты и защита — всё, чем существо ходит в бою. Пока не заполнено, ни одна секция не показывается."
+                      : "Статблок пока не заполнен."}
+                  </span>
+                  {onQuickUpdate && (
+                    <button
+                      type="button"
+                      className="sbc__toggle"
+                      onClick={() => {
+                        setRevealed(["actions"]);
+                        setEditing("actions");
+                      }}
+                    >
+                      Заполнить
+                    </button>
                   )}
-                </>
+                </div>
               )}
-            </>
-          )}
-        </div>}
+
+              {onQuickUpdate && absent.length > 0 && visible.length > 0 && (
+                <div className="sbc__adds">
+                  {absent.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="sbc__add"
+                      onClick={() => {
+                        setRevealed((v) => [...v, s.id]);
+                        setEditing(s.id);
+                      }}
+                    >
+                      + {s.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

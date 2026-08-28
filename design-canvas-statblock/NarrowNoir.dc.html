@@ -1,0 +1,192 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Cormorant+SC:wght@600;700&family=JetBrains+Mono:wght@400;500;700&family=Oswald:wght@400;500;600&family=PT+Mono&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #1c1c1c; text-decoration: none; } a:hover { color: #1c1c1c; }
+    .sb { font-family: var(--font-body); color: var(--ink); }
+    .card { border: 2px solid var(--ink); background: var(--paper); }
+    .band { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--ink); color: var(--paper); }
+    .portrait { width: 46px; height: 46px; flex: 0 0 auto; border: 1.5px solid var(--paper); }
+    .name { font-family: var(--font-display); text-transform: uppercase; line-height: .94; font-size: 19px; }
+    .meta { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .11em; font-size: 8.5px; color: var(--on-muted); margin-top: 5px; }
+    .cr { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--on-muted); white-space: nowrap; }
+    .body { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; }
+    .row { display: flex; align-items: baseline; gap: 8px; }
+    .lab { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .12em; font-size: 9.5px; color: var(--muted); flex: 0 0 84px; }
+    .val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
+    .entry { font-size: 12.5px; line-height: 1.42; }
+    .ename { font-family: 'Oswald', sans-serif; font-weight: 600; letter-spacing: .03em; }
+    .mech { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); }
+    .dies { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+    .die { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .dieshape { position: relative; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; }
+    .dieshape svg { position: absolute; left: 0; top: 0; }
+    .dienum { position: relative; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; line-height: 1; }
+    .dielab { font-family: 'Oswald', sans-serif; font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .prof .dienum { color: var(--accent-text); }
+    .segs { display: flex; border-top: 2px solid var(--ink); border-bottom: 1.5px solid var(--line); }
+    .seg { flex-grow: 1; padding: 9px 4px; border: 0; border-left: 1.5px solid var(--line); background: transparent; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .08em; font-size: 9px; color: var(--muted); cursor: pointer; }
+    .seg:first-child { border-left: 0; }
+  </style>
+</helmet>
+
+<div class="sb" style="--paper: #e8e4da; --ink: #1c1c1c; --ink-2: #4a4947; --muted: #787672; --line: #2a2a2a; --on-muted: #a3a099; --accent: #1c1c1c; --accent-text: #e8e4da; --font-display: 'Cormorant SC', serif; --font-body: 'PT Mono', monospace; width: 390px; min-height: 860px; background: #e8e4da; background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 3px 3px; padding: 10px; overflow: hidden;">
+
+  <div class="card" style="display: flex; flex-direction: column;">
+
+    <div class="band">
+      <div class="portrait" style="background: linear-gradient(150deg, #6b3a2a, #2a1a16 70%);"></div>
+      <div style="flex-grow: 1; min-width: 0;">
+        <div class="name">Взрослый красный дракон</div>
+        <div class="meta">Огромный · Дракон · хаотично-злое</div>
+      </div>
+      <div class="cr">КО 17</div>
+    </div>
+
+    <div class="body">
+      <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; column-gap: 8px; align-items: baseline;">
+        <span class="lab" style="flex: none;">КЗ</span>
+        <span class="val" style="font-size: 17px; font-weight: 700;">19</span>
+        <span class="lab" style="flex: none;">Хиты</span>
+        <span class="val" style="font-size: 17px; font-weight: 700;">256</span>
+      </div>
+      <div class="row"><span class="lab">Скорость</span><span class="val">ходьба 40, лаз. 40, полёт 80</span></div>
+      <div class="row"><span class="lab">Инициатива</span><span class="val">+6</span></div>
+
+      <div class="dies" style="margin-top: 2px;">
+        <sc-for list="{{ abilities }}" as="ab" hint-placeholder-count="6">
+          <div class="{{ ab.cls }}">
+            <div class="dieshape" onClick="{{ ab.flip }}">
+              <svg width="46" height="46" viewBox="0 0 100 100"><polygon points="50,3 92,27 92,73 50,97 8,73 8,27" fill="{{ ab.fill }}" stroke="{{ ab.stroke }}" stroke-width="7"></polygon></svg>
+              <span class="dienum">{{ ab.num }}</span>
+            </div>
+            <span class="dielab">{{ ab.caption }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: .1em; font-size: 8.5px; color: var(--muted); line-height: 1.5;">Щелчок по кости — спасбросок. Заливка — владение.</div>
+
+      <div class="row" style="align-items: flex-start;"><span class="lab">Навыки</span><span class="val" style="line-height: 1.5;">Внимательность +13, Скрытность +6, Обман +11</span></div>
+    </div>
+
+    <!-- Сегментный переключатель вместо свитка. Пустых разделов в нём нет. -->
+    <div class="segs">
+      <sc-for list="{{ segs }}" as="s" hint-placeholder-count="5">
+        <button class="seg" style="{{ s.style }}" onClick="{{ s.pick }}">{{ s.label }}</button>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ isLegendary }}" hint-placeholder-val="{{ false }}">
+      <div class="body">
+        <div class="row"><span class="lab">Сопротивл.</span><span class="val">3 / день</span></div>
+        <div class="row"><span class="lab">Очки</span><span class="val">3 за раунд</span></div>
+        <div class="entry"><span class="ename">Обнаружение</span> <span class="mech">(1)</span> — проверка Мудрости (Восприятие).</div>
+        <div class="entry"><span class="ename">Удар хвостом</span> <span class="mech">(1)</span> — одна атака хвостом.</div>
+        <div class="entry"><span class="ename">Взмах крыльев</span> <span class="mech">(2)</span> — <span class="mech">СЛ 21 ЛОВ</span>, 2к6+8 дробящего в 15 фт., цели сбиты с ног.</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDefense }}" hint-placeholder-val="{{ false }}">
+      <div class="body">
+        <div class="row"><span class="lab">Иммунитет</span><span class="val">Огонь</span></div>
+        <div class="row" style="align-items: flex-start;"><span class="lab">Чувства</span><span class="val" style="line-height: 1.5;">слепое зрение 60 фт., тёмное зрение 120 фт., пасс. внимательность 23</span></div>
+        <div class="row"><span class="lab">Языки</span><span class="val">Общий, Драконий</span></div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isTraits }}" hint-placeholder-val="{{ false }}">
+      <div class="body">
+        <div class="entry"><span class="ename">Огненная кровь.</span> Существо, попавшее по дракону в ближнем бою, получает 3 огненного урона.</div>
+        <div class="entry"><span class="ename">Легендарное сопротивление (3/день).</span> Проваленный спасбросок можно считать успешным.</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isActions }}" hint-placeholder-val="{{ true }}">
+      <div class="body">
+        <div class="entry"><span class="ename">Мультиатака.</span> «Устрашающее присутствие», затем три атаки: две Укусом, одна Когтями.</div>
+        <div class="entry"><span class="ename">Укус.</span> <span class="mech">+14, 10 фт., 2к10+8 колющего + 2к6 огня.</span></div>
+        <div class="entry"><span class="ename">Когти.</span> <span class="mech">+14, 5 фт., 2к6+8 рубящего.</span></div>
+        <div class="entry"><span class="ename">Огненное дыхание</span> <span class="mech">(перезарядка 5–6).</span> Конус 60 фт., <span class="mech">СЛ 21 ЛОВ</span>, 18к6 огня.</div>
+        <div class="entry"><span class="ename">Хвостовой удар</span> <span class="mech">(реакция).</span> Уходящее из досягаемости существо получает <span class="mech">+14, 2к8+8 дробящего.</span></div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isRest }}" hint-placeholder-val="{{ false }}">
+      <div class="body">
+        <div class="row"><span class="lab">Среда</span><span class="val">Горы, подземелья</span></div>
+        <div class="row"><span class="lab">Сокровища</span><span class="val">Клад (тип H), 3к6 × 1000 зм</span></div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+
+<script data-dc-script data-props='{"$preview":{"width":390,"height":860}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // Раздел по умолчанию — «Действия»: узкая раскладка открывается на том,
+    // что нужно каждый ход.
+    this.state = { seg: 'actions', flipped: {} };
+  }
+  renderVals() {
+    const ink = '#1c1c1c';
+    const paper = '#e8e4da';
+    const rows = [
+      { key: 'str', caption: 'СИЛ 27', mod: '+8', save: '+8', prof: false },
+      { key: 'dex', caption: 'ЛОВ 10', mod: '+0', save: '+6', prof: true },
+      { key: 'con', caption: 'ТЕЛ 25', mod: '+7', save: '+13', prof: true },
+      { key: 'int', caption: 'ИНТ 16', mod: '+3', save: '+3', prof: false },
+      { key: 'wis', caption: 'МДР 13', mod: '+1', save: '+7', prof: true },
+      { key: 'cha', caption: 'ХАР 21', mod: '+5', save: '+11', prof: true },
+    ];
+    const abilities = rows.map((r) => {
+      const flipped = !!this.state.flipped[r.key];
+      return {
+        caption: flipped ? 'СПАС' : r.caption,
+        num: flipped ? r.save : r.mod,
+        fill: r.prof ? ink : 'none',
+        stroke: ink,
+        cls: r.prof ? 'die prof' : 'die',
+        flip: () => this.setState({ flipped: { ...this.state.flipped, [r.key]: !flipped } }),
+      };
+    });
+
+    const items = [
+      { id: 'legendary', label: 'Легенд.' },
+      { id: 'defense', label: 'Защита' },
+      { id: 'traits', label: 'Черты' },
+      { id: 'actions', label: 'Действия' },
+      { id: 'rest', label: 'Прочее' },
+    ];
+    const segs = items.map((it) => ({
+      label: it.label,
+      style: it.id === this.state.seg
+        ? 'background: ' + ink + '; color: ' + paper + ';'
+        : '',
+      pick: () => this.setState({ seg: it.id }),
+    }));
+
+    return {
+      abilities,
+      segs,
+      isLegendary: this.state.seg === 'legendary',
+      isDefense: this.state.seg === 'defense',
+      isTraits: this.state.seg === 'traits',
+      isActions: this.state.seg === 'actions',
+      isRest: this.state.seg === 'rest',
+    };
+  }
+}
+</script>
+</body>
+</html>

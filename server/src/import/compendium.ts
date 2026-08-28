@@ -12,6 +12,7 @@
 
 import { db } from "../db/db";
 import { NameMatch, buildTokenWeights, normalizeName, similarity } from "./names";
+import { matchCreatureType, parseCreatureMeta } from "./creatureMeta";
 
 interface Candidate {
   id: number;
@@ -212,53 +213,32 @@ function sameStem(a: string, b: string): boolean {
 export const itemType = (raw: string) => fromVocabulary(raw, ITEM_TYPES);
 export const itemRarity = (raw: string) => fromVocabulary(raw, RARITIES);
 
-const CREATURE_SIZES = ["Крошечный", "Маленький", "Средний", "Большой", "Огромный", "Громадный"];
-
 /**
  * Размер и тип существа из строки «Средний гуманоид, любое мировоззрение».
- * Клиент разбирает её так же (normalizeDndCreature), но у записи компендиума
- * размер и УО живут ещё и в data: по ним работают фильтры раздела бестиария,
- * а карточка статблока к ним не подключена.
+ * Разбор общий с кнопкой «Привести справочник в порядок» — см. creatureMeta.ts;
+ * клиент разбирает ту же строку так же (normalizeDndCreature), но у записи
+ * компендиума размер и класс опасности живут ещё и в data: по ним работают
+ * фильтры раздела бестиария, а карточка статблока к ним не подключена.
  */
 export function parseSizeType(sizeTypeAlignment: string): { size: string; type: string } {
-  // Скобки снимаются до разбора: уточнение в них — не часть типа («гуманоид
-  // (любая раса)», «монстр (перевёртыш)»), а запятая внутри них не отделяет
-  // мировоззрение. У «Средний гуманоид (человек, перевёртыш), хаотично-злой»
-  // разрез по первой запятой оставлял «гуманоид (человек» — и тип не находился.
-  const plain = sizeTypeAlignment.replace(/\s*\([^)]*\)/g, "");
-  const head = plain.split(",")[0]?.trim() ?? "";
-  const size = CREATURE_SIZES.find((s) => head.toLowerCase().startsWith(s.toLowerCase()));
-  return { size: size ?? "", type: size ? head.slice(size.length).trim() : head };
+  const meta = parseCreatureMeta(sizeTypeAlignment);
+  return { size: meta.size, type: meta.type || meta.unknownType };
 }
 
 /**
- * Мировоззрение из той же строки «Средний гуманоид, хаотично-злой».
- *
- * Скобки снимаются до разреза по той же причине, что и в parseSizeType:
- * запятая внутри уточнения типа мировоззрение не отделяет. Хвост берётся
- * целиком — книга пишет там условия («любое не-доброе»), а не пункт списка.
+ * Мировоззрение из той же строки «Средний гуманоид, хаотично-злой». Хвост
+ * берётся целиком — книга пишет там условия («любое не-доброе»), а не пункт
+ * списка.
  */
 export function parseAlignment(sizeTypeAlignment: string): string {
-  const plain = sizeTypeAlignment.replace(/\s*\([^)]*\)/g, "");
-  const comma = plain.indexOf(",");
-  return comma === -1 ? "" : plain.slice(comma + 1).trim();
+  return parseCreatureMeta(sizeTypeAlignment).alignment;
 }
 
-/**
- * Опыт из строки опасности: книга пишет «1/2 (100 опыта)», а поле хранит одну
- * только опасность. Хвост ломает и фильтр раздела (там ровно «1/2»), и расчёт
- * бонуса мастерства на карточке — он читает число.
- */
-export function cleanChallengeRating(raw: string): string {
-  return withoutParenthetical(raw.trim());
-}
+export { cleanChallengeRating } from "./creatureMeta";
 
-const withoutParenthetical = (text: string) => text.replace(/\s*\([^)]*\)\s*$/, "").trim();
-
-/** Тип существа из списка механик системы — иначе фильтр по типу его не увидит. */
-export function creatureTypeRef(systemId: number, type: string): { id: number; name: string } | null {
-  if (!type.trim()) return null;
-  const rows = db
+/** Типы существ из справочника механик системы — словарь, к которому сводится тип. */
+export function creatureTypeVocabulary(systemId: number): { id: number; name: string }[] {
+  return db
     .prepare(
       `SELECT child.id, child.name
          FROM compendium_entries child
@@ -267,7 +247,20 @@ export function creatureTypeRef(systemId: number, type: string): { id: number; n
           AND grp.name = 'Типы существ и их особенности'`
     )
     .all(systemId) as { id: number; name: string }[];
-  return rows.find((r) => normalizeName(r.name) === normalizeName(type)) ?? null;
+}
+
+/**
+ * Тип существа из списка механик системы — иначе фильтр по типу его не увидит.
+ * Точного совпадения мало: книга склоняет тип по стае и роду («Зверей»,
+ * «Исчадий»), а справочник хранит именительный.
+ */
+export function creatureTypeRef(systemId: number, type: string): { id: number; name: string } | null {
+  if (!type.trim()) return null;
+  const rows = creatureTypeVocabulary(systemId);
+  const exact = rows.find((r) => normalizeName(r.name) === normalizeName(type));
+  if (exact) return exact;
+  const matched = matchCreatureType(type, rows.map((r) => r.name));
+  return matched ? rows.find((r) => r.name === matched) ?? null : null;
 }
 
 /**

@@ -179,7 +179,7 @@ export function DndCreatureWizard({
               value={draft.challenge.rating}
               onChange={(e) => setDraft({ ...draft, challenge: { rating: e.target.value, proficiencyBonus: computeProficiencyBonusForCR(e.target.value) } })}
             >
-              <option value="">— УО —</option>
+              <option value="">— КО —</option>
               {CR_VALUES.map((cr) => (
                 <option key={cr} value={cr}>
                   {cr}
@@ -491,7 +491,7 @@ export function DndCreatureWizard({
         <div className="stack">
           <div>
             <strong>{draft.name || "Без названия"}</strong>
-            {draft.challenge.rating && <span className="muted"> — УО {draft.challenge.rating}</span>}
+            {draft.challenge.rating && <span className="muted"> — КО {draft.challenge.rating}</span>}
           </div>
           <div className="muted">
             {[draft.size, draft.creatureType].filter(Boolean).join(" ")} · {draft.alignment || "—"}

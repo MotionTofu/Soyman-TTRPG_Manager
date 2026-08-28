@@ -155,7 +155,7 @@ function cardSenses(value: DndCreatureData): string[] {
 function formatChallenge(value: DndCreatureData): string {
   if (!value.challenge.rating) return "";
   const pb = value.challenge.proficiencyBonus;
-  return `УО ${value.challenge.rating}${pb ? ` (БМ +${pb})` : ""}`;
+  return `КО ${value.challenge.rating}${pb ? ` (БМ +${pb})` : ""}`;
 }
 
 function safeParse(raw: string): unknown {
@@ -284,7 +284,11 @@ export function CreatureCard({
   const isEmpty = !hasMechanics && !hasDescription && roles.length === 0;
 
   const profilePath = `${PROFILE_PATH[data.type] ?? "/beings"}/${data.id}`;
-  const avatar = data.avatar_image_url ?? data.statblock?.avatar_image_url ?? null;
+  // Портрет — только собственный портрет существа (вкладка «Изображения» его
+  // профиля). Подстраховка «взять картинку статблока» убрана намеренно: с ней
+  // карточка показывала не то, что вкладка, и было непонятно, какую именно
+  // картинку ты меняешь.
+  const avatar = data.avatar_image_url ?? null;
 
   return (
     <article className={`creature-card${variant === "page" ? " creature-card--page" : ""}`}>
@@ -444,7 +448,7 @@ export function CreatureCard({
       {statblockOpen && creature && data.statblock && (
         <Modal onClose={() => setStatblockOpen(false)}>
           <div className="stack">
-            <DndCreatureView value={creature} theme={data.statblock.theme} density={data.statblock.density} />
+            <DndCreatureView value={creature} />
             <button type="button" onClick={() => setStatblockOpen(false)}>
               Закрыть
             </button>

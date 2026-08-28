@@ -4214,50 +4214,6 @@ input.litm-theme-title {
   flex: 1 1 120px;
   min-width: 0;
 }
-/* Creature statblock's always-visible "Основное" block, in edit mode — a
-   two-column x two-row grid (base identity | speed & senses, then
-   characteristics | defense), matching the source spreadsheet's table
-   shape instead of the whole-card DndCreatureEdit form's wide flex rows.
-   Each field is one "Название графы | значение" row (.sb-field-row) so
-   nothing stretches to fill the surrounding page's width. */
-.sb-edit-compact {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 28px;
-  align-items: start;
-  max-width: 640px;
-}
-.sb-edit-col {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.sb-field-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.sb-field-row-label {
-  flex: 0 0 150px;
-  color: var(--label);
-  font-size: calc(var(--fs, 15px) * 0.85);
-}
-.sb-field-row > input,
-.sb-field-row > select {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.sb-field-row > .row {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-@media (max-width: 640px) {
-  .sb-edit-compact {
-    grid-template-columns: 1fr;
-  }
-}
 /* Inline checkbox/pip-track fields (Вдохновение, Спасброски от смерти) size
    to their own content instead of stretching to the 120px basis above —
    that basis fights their natural (wider) content width and produces
@@ -4937,36 +4893,6 @@ input.litm-theme-title {
   text-underline-offset: 2px;
 }
 .dnd-spell-description {
-  font-size: calc(var(--fs, 15px) * 0.87);
-  color: var(--sb-muted);
-  padding: 4px 8px 8px;
-  white-space: pre-wrap;
-}
-/* Creature statblock rows (traits/actions/spells) mirror the character
-   sheet's collapsible spell row — a clickable summary line that expands to
-   the full description, instead of always showing everything inline. */
-.sb-entry-row {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-}
-.sb-entry-row.sb-entry-toggle {
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
-  border-radius: var(--card-radius);
-  margin: 0 -6px;
-  padding: 2px 6px;
-}
-.sb-entry-row.sb-entry-toggle:hover {
-  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
-}
-.sb-entry-caret {
-  margin-left: auto;
-  color: var(--sb-muted);
-  font-size: 11px;
-}
-.sb-entry-detail {
   font-size: calc(var(--fs, 15px) * 0.87);
   color: var(--sb-muted);
   padding: 4px 8px 8px;
@@ -7507,4 +7433,146 @@ details[open] > .res-group__band .chevron-icon {
   letter-spacing: 0.12em;
   font-size: 10px;
   color: var(--muted);
+}
+
+/* --- Бестиарий плиткой (шаг 5 ревизии) ---------------------------------
+   Раскладка считается от ширины плитки, а не от числа колонок: на 1920 это
+   четыре колонки по 315 px (владелец подтвердил, что так и надо), на 1440 —
+   три, на телефоне одна. Жёсткие «ровно три» дали бы на 1440 плитки по
+   260 px без места под портрет, а на 2560 — по 500. */
+.monster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+.monster-tile {
+  border: 2px solid var(--ink);
+  border-radius: var(--card-radius);
+  background: var(--paper);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+.monster-tile:hover {
+  border-color: var(--accent);
+}
+/* Шапка — плашка-инверсия (§1.4). Звезда слева, мешок справа: обе цели
+   стоят по краям плашки и не спорят с именем в середине. */
+.monster-tile__band {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
+}
+.monster-tile__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 0.96;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.monster-tile__star,
+.monster-tile__bag {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--on-surface-muted);
+  display: flex;
+  align-items: center;
+}
+.monster-tile__star:hover,
+.monster-tile__bag:hover {
+  color: var(--on-surface);
+}
+/* Избранное различается ЗАЛИВКОЙ звезды, а не цветом: в «Соевом нуаре»
+   --accent равен чернилам, и закрашенная акцентом звезда на плашке-инверсии
+   пропадала совсем. Контур приглушён, залитая — в полный цвет плашки. */
+.monster-tile__star.is-on {
+  color: var(--on-surface);
+}
+.monster-tile__body {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  align-items: flex-start;
+}
+.monster-tile__portrait,
+.monster-tile__monogram {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+}
+.monster-tile__portrait {
+  object-fit: cover;
+}
+/* Портрета почти нигде нет — монограмма делит сетку на узнаваемые полосы по
+   типу существа. Тон приглушённый: это заглушка, а не смысловой код. */
+.monster-tile__monogram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1;
+  color: #12100e;
+  background: hsl(var(--monogram-tone, 0) 16% 84%);
+}
+.monster-tile__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.monster-tile__en {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  overflow-wrap: anywhere;
+}
+.monster-tile__meta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+/* Значение — моноширинным (§1.5). */
+.monster-tile__cr {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.monster-tile__actions {
+  display: flex;
+  border-top: 1.5px solid var(--line);
+  margin-top: auto;
+}
+.monster-tile__actions > * {
+  flex: 1 1 0;
+  text-align: center;
+  padding: 6px 4px;
+  font-size: var(--fs-meta);
+  background: none;
+  border: 0;
+  border-left: 1.5px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.monster-tile__actions > *:first-child {
+  border-left: 0;
+}
+.monster-tile__actions > *:hover {
+  background: var(--surface);
+  color: var(--on-surface);
 }

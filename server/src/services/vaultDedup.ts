@@ -18,9 +18,30 @@ export async function storeDeduped(buffer: Buffer, targetPath: string): Promise<
     | { path: string }
     | undefined;
 
-  if (existing && existing.path !== targetPath && fs.existsSync(existing.path)) {
+  // Замена картинки по уже занятому пути начинается с УДАЛЕНИЯ файла, а не с
+  // записи поверх. Дедупликация ниже кладёт по этому пути жёсткую ссылку на
+  // чужие байты (те же байты у портрета статблока и у аватара записи —
+  // обычное дело, их и переносила миграция compendium_entries.avatar_image_path),
+  // а `writeFileSync` пишет В ТОТ ЖЕ inode: у соседней ссылки молча меняется
+  // картинка. Именно так портрет статблока подменялся картинкой плитки.
+  // Удаление рвёт связь: новый файл получает свой inode, соседи целы.
+  // `linkSync` к тому же не умеет писать поверх существующего пути (EEXIST).
+  if (fs.existsSync(targetPath)) {
     try {
-      fs.linkSync(existing.path, targetPath);
+      fs.unlinkSync(targetPath);
+    } catch (err) {
+      console.error(`Failed to unlink ${targetPath} before write:`, err);
+    }
+    // Запись дедупликации, указывавшая сюда, стала ложной: по этому пути
+    // теперь будут другие байты. Оставить её — значит однажды прилинковать
+    // к чужой картинке по чужому хешу.
+    db.prepare("DELETE FROM vault_files WHERE path = ?").run(targetPath);
+  }
+
+  const reusable = existing && existing.path !== targetPath && fs.existsSync(existing.path);
+  if (reusable) {
+    try {
+      fs.linkSync(existing!.path, targetPath);
       return;
     } catch {
       // Cross-volume, or a filesystem that doesn't support hard links —
@@ -29,7 +50,7 @@ export async function storeDeduped(buffer: Buffer, targetPath: string): Promise<
   }
 
   fs.writeFileSync(targetPath, buffer);
-  if (!existing || !fs.existsSync(existing.path)) {
+  if (!reusable) {
     db.prepare(
       `INSERT INTO vault_files (hash, path, size) VALUES (?, ?, ?)
        ON CONFLICT(hash) DO UPDATE SET path = excluded.path, size = excluded.size`

@@ -9,6 +9,7 @@ import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemSection } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -20,6 +21,12 @@ export function SystemDetailPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [tidying, setTidying] = useState(false);
+  // Уборка справочника правит записи мимо экрана: раздел читает их один раз
+  // при монтировании и о правке не узнаёт, поэтому после неё показывал старое
+  // — пустые поля и фильтр, которому не по чему фильтровать. Ключ раздела
+  // меняется, раздел перечитывает записи.
+  const [tidyRun, setTidyRun] = useState(0);
   const [exportImages, setExportImages] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,6 +114,9 @@ export function SystemDetailPage() {
           <button onClick={() => navigate(`/import-system?system=${systemId}`)}>
             Импорт книги правил
           </button>
+          {/* Соседство с импортом не случайно: чаще всего порядок наводят
+              сразу после того, как книга разложилась по разделам. */}
+          <button onClick={() => setTidying(true)}>Привести справочник в порядок</button>
           <button className="danger" onClick={archiveSystem}>
             <NavIcon name="archive" /> Архивировать
           </button>
@@ -201,7 +211,7 @@ export function SystemDetailPage() {
       {activeTab !== "overview" &&
         (currentSection ? (
           <CompendiumSection
-            key={currentSection.id}
+            key={`${currentSection.id}-${tidyRun}`}
             systemId={systemId}
             section={currentSection}
             focusEntryId={focusEntryId}
@@ -209,6 +219,17 @@ export function SystemDetailPage() {
         ) : (
           <p className="muted">Раздел не найден.</p>
         ))}
+
+      {tidying && (
+        <TidyCompendiumDialog
+          systemId={systemId}
+          onClose={() => {
+            setTidying(false);
+            refreshSections();
+            setTidyRun((n) => n + 1);
+          }}
+        />
+      )}
 
       {exporting && (
         <Modal onClose={() => setExporting(false)}>

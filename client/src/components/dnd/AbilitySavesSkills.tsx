@@ -1,6 +1,8 @@
 import { memo, useState } from "react";
 import type { DndAbilityKey, DndAbilityScores, DndSkillProfLevel } from "../../types";
 import { ABILITY_LABELS, abilityModifier, formatModifier, parseBonus } from "./AbilityScores";
+import { useDndPrefs } from "../../hooks/useDndPrefs";
+import type { DndAbilityPrimary } from "../../dndPrefs";
 
 interface CommonProps {
   abilities: DndAbilityScores;
@@ -131,12 +133,17 @@ function AbilityBox({
   mod,
   save,
   isSaveProficient,
+  primary,
 }: {
   label: string;
   score: number;
   mod: number;
   save: string;
   isSaveProficient: boolean;
+  // Какое число крупное — модификатор или само значение. Настройка сквозная
+  // (dndPrefs), общая со статблоком существа: «+3» здесь при «16» там было бы
+  // расхождением, а не гибкостью.
+  primary: DndAbilityPrimary;
 }) {
   const [showSave, setShowSave] = useState(false);
   return (
@@ -154,8 +161,10 @@ function AbilityBox({
           </>
         ) : (
           <>
-            <span className="dnd-ability-score">{score}</span>
-            <span className="dnd-ability-mod">{formatModifier(mod)}</span>
+            <span className="dnd-ability-score">
+              {primary === "score" ? score : formatModifier(mod)}
+            </span>
+            <span className="dnd-ability-mod">{primary === "score" ? formatModifier(mod) : score}</span>
           </>
         )}
       </div>
@@ -169,6 +178,7 @@ export function AbilitySavesSkillsView({
   savingThrowProfs,
 }: CommonProps) {
   const profBonus = parseBonus(proficiencyBonus);
+  const prefs = useDndPrefs();
 
   return (
     <div className="dnd-abilities-block">
@@ -186,6 +196,7 @@ export function AbilitySavesSkillsView({
               mod={mod}
               save={computed(mod, savingThrowProfs[key] ? 1 : 0, profBonus)}
               isSaveProficient={savingThrowProfs[key]}
+              primary={prefs.abilityPrimary}
             />
           );
         })}

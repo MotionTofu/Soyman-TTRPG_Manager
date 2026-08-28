@@ -31,7 +31,12 @@ export const SECTION_KINDS: { value: string; label: string }[] = [
   { value: "mechanics", label: "Справочник" },
   { value: "equipment", label: "Базовое снаряжение" },
   { value: "magic_item", label: "Магические предметы" },
+  { value: "vehicle", label: "Транспорт" },
 ];
+
+// Транспорт делится по среде, а не по размеру: за столом ищут «чем плыть»,
+// а не «что размером с дом».
+export const VEHICLE_CATEGORIES = ["Наземный", "Водный", "Воздушный"] as const;
 
 // The fixed reference lists auto-seeded into a section's "Общее"
 // subsection when that section is set to kind "mechanics". Species entries
@@ -277,6 +282,33 @@ export const KIND_DEFS: Record<string, KindDef> = {
     fields: [
       { key: "size", label: "Размер", type: "select", options: [...CREATURE_SIZES] },
       { key: "cr", label: "Класс опасности", type: "select", options: [...CHALLENGE_RATINGS] },
+    ],
+  },
+  vehicle: {
+    label: "Транспорт",
+    fields: [
+      { key: "category", label: "Категория", type: "select", options: [...VEHICLE_CATEGORIES] },
+      { key: "size", label: "Размер", type: "select", options: [...CREATURE_SIZES] },
+      { key: "speed", label: "Скорость", type: "text" },
+      { key: "crew", label: "Экипаж", type: "text" },
+      { key: "passengers", label: "Пассажиры", type: "text" },
+      { key: "cargo", label: "Груз", type: "text" },
+      { key: "ac", label: "Класс доспеха", type: "text" },
+      { key: "hp", label: "Прочность", type: "text" },
+      { key: "damage_threshold", label: "Порог урона", type: "text" },
+      { key: "cost", label: "Стоимость", type: "text" },
+    ],
+    childKinds: [{ kind: "vehicle_post", label: "пост экипажа" }],
+  },
+  // Пост экипажа сам по себе не транспорт — это узел судна со своей
+  // прочностью, который ломают в бою. Полей у него только три: остальное
+  // (скорость, груз, экипаж) — свойства судна, под которым он висит.
+  vehicle_post: {
+    label: "Пост экипажа",
+    fields: [
+      { key: "size", label: "Размер", type: "select", options: [...CREATURE_SIZES] },
+      { key: "ac", label: "Класс доспеха", type: "text" },
+      { key: "hp", label: "Прочность", type: "text" },
     ],
   },
   equipment: {

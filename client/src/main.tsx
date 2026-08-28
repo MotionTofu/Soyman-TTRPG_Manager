@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import './statblockThemes.css'
+import './statblock.css'
 import './zine.css'
 import App from './App.tsx'
 import { applyTheme, findTheme, loadThemePrefs } from './themes'
