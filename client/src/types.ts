@@ -113,6 +113,11 @@ export type CampaignType = "campaign" | "oneshot";
 export type PaymentFrequency = "per_session" | "per_month";
 export type RateSplit = "per_person" | "per_table";
 
+export interface SettingGenre {
+  genre: string;
+  subgenre?: string;
+}
+
 export interface Setting {
   id: number;
   name: string;
@@ -120,6 +125,7 @@ export interface Setting {
       полного имени: см. client/src/mentions.ts. Пустой — значит имя. */
   code: string | null;
   description: string;
+  genres?: SettingGenre[];
   background_image_path: string | null;
   background_image_url: string | null;
   thumbnail_image_path: string | null;
@@ -2107,9 +2113,11 @@ export interface CanvasRouteNode {
     to_key: string;
     kind: string;
     role: string;
-    /** Имена соседей — для тела рераута «A → B» (cast/исход/нить). */
+    /** Имя входа (носителя) — для тела рераута «A → B» (cast/исход/нить). */
     from_name?: string;
     to_name?: string;
+    /** Выходы хаба: сцены, куда передаётся носитель. */
+    outputs?: { to_key: string; role: string; to_name?: string }[];
     /** У перехода — реальная строка `story_scene_transitions` между соседями:
      *  её id и label и есть «Условие перехода», которое правят в панели. */
     transition_id?: number | null;
@@ -2117,13 +2125,15 @@ export interface CanvasRouteNode {
   };
 }
 
-/** Строка памяти прохода из `canvas_routes` — без раскладки. */
+/** Строка памяти прохода из `canvas_routes` + выходы — без раскладки. */
 export interface CanvasRoute {
   id: number;
   from_key: string;
   to_key: string;
   kind: string;
   role: string;
+  /** Выходы хаба: сцены, куда передаётся носитель. */
+  outputs?: { to_key: string; role: string }[];
 }
 
 /**

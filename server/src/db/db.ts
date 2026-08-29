@@ -2672,6 +2672,11 @@ export function openDatabase(dbDir: string): Database.Database {
     );
   }
 
+  // Жанры сеттинга — JSON-массив объектов { genre, subgenre? }.
+  if (!columnExists(database, "settings", "genres")) {
+    database.exec(`ALTER TABLE settings ADD COLUMN genres TEXT`);
+  }
+
   compactIfBloated(database);
   return database;
 }

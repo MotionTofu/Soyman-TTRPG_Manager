@@ -21,8 +21,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api } from "../api/client";
-// SectionHeading not used after breadcrumb — kept for other pages if needed
-// import { SectionHeading } from "../components/SectionHeading";
+import { SectionHeading } from "../components/SectionHeading";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SCENE_KINDS, SCENE_KIND_LABELS, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
@@ -57,6 +56,7 @@ import type {
   CanvasBoardNode,
   CanvasThread,
   CanvasChapterNode,
+  CanvasRoute,
   OutsideLink,
   CalendarMonth,
   EventStatus,
@@ -693,47 +693,85 @@ function routeInk(bg: string): string {
   return lum > 150 ? INK_DARK : INK_LIGHT;
 }
 
+/**
+ * Имя хендла-выхода рераута-хаба, к которому цеплять сегмент.
+ * Сегмент `route:<id> → target` принадлежит тому выходу, чей `to_key`
+ * совпал с целью (у хаба их N, у перехода — один). Совпадение по ключу —
+ * в новом «каст-носителе» выход это сцена, и её ключ равен адресу цели.
+ */
+function routeOutHandle(
+  source: string,
+  target: string,
+  routes?: CanvasRoute[]
+): string | null {
+  const idMatch = /^route:(\d+)$/.exec(source);
+  if (!idMatch || !routes) return null;
+  const rid = Number(idMatch[1]);
+  const route = routes.find((c) => c.id === rid);
+  const first = route?.outputs?.[0]?.to_key;
+  const matched = route?.outputs?.find((o) => o.to_key === target)?.to_key;
+  const chosen = matched ?? first;
+  return chosen ? `route-out-${chosen}` : "route-out";
+}
+
 function RouteNode({ data }: NodeProps<Node<RouteNodeData>>) {
-  const roleKey: string = ROUTE_ROLE_KEY[data.role] ?? "story";
-  const color =
-    roleKey === "story"
-      ? STORY_COLOR
-      : (HANDLE_COLORS[roleKey as keyof typeof HANDLE_COLORS] ?? STORY_COLOR);
-  // Подключён ли рераут: нужны ОБА соседа (вход и выход). Пока хотя бы одного
-  // нет — это «пустышка»: чёрно-жёлтый прямоугольник без текста.
-  const hasNeighbors = !!(data.fromKey && data.toKey);
-  // Тело: у перехода — условие перехода; у cast/исхода/нити — «A → B». Пока
-  // соседей нет — пусто, текст не пишем.
-  const label =
-    data.kind === "transition"
-      ? (data.condition ?? "")
-      : data.fromLabel && data.toLabel
-        ? `${data.fromLabel} → ${data.toLabel}`
+  const outputs = data.outputs ?? [];
+  const hasFrom = !!data.fromKey;
+  const hasTo = outputs.length > 0;
+  const hasNeighbors = hasFrom && hasTo;
+  const isPartial = hasFrom !== hasTo;
+  const hint = !data.fromKey && outputs.length === 0
+    ? "Подведите слева вход и справа выход — нужно 2 соединения"
+    : !data.fromKey
+      ? "Подведите вход слева"
+      : outputs.length === 0
+        ? "Подведите выход справа"
         : "";
-  const ink = hasNeighbors ? routeInk(color) : undefined;
+  // Шапка — как у прочих нод: две строки откуда/куда, полосы 30deg, текст белый
+  const fromText = data.fromLabel || (data.fromKey ? data.fromKey : "—");
+  const toText = outputs.length > 0
+    ? outputs.map((o) => o.toName ?? o.toKey).join(", ")
+    : data.toLabel || "—";
+  const bodyText = data.kind === "transition" ? (data.condition ?? "") : "";
   return (
     <div
-      className={`canvas-node canvas-node--route${hasNeighbors ? " is-connected" : " is-empty"}`}
-      style={hasNeighbors ? { background: color, borderColor: color } : undefined}
+      className={`canvas-node canvas-node--route${hasNeighbors ? " is-connected" : isPartial ? " is-partial" : " is-empty"}`}
+      title={hint || undefined}
     >
       <Handle
+        id="route-in"
         type="target"
         position={Position.Left}
-        id="route-in"
-        className={`canvas-handle--route canvas-handle--${roleKey}`}
+        className={`canvas-handle--route${!hasFrom ? " is-missing" : ""}`}
       />
-      <span
-        className="canvas-node__route-text"
-        style={hasNeighbors ? { color: ink, borderColor: color } : undefined}
-      >
-        {hasNeighbors ? label : ""}
-      </span>
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="route-out"
-        className={`canvas-handle--route canvas-handle--${roleKey}`}
-      />
+      <div className="canvas-node__band" style={{ background: "repeating-linear-gradient(30deg, #1a1a1a 0 14px, #f4c400 14px 28px)", color: "white", flexDirection: "column", alignItems: "flex-start", gap: 2, padding: "6px 8px" }}>
+        <span style={{ fontSize: "var(--fs-meta)", lineHeight: 1.2 }}>{fromText}</span>
+        <span style={{ fontSize: "var(--fs-meta)", lineHeight: 1.2 }}>{toText}</span>
+      </div>
+      <div className="canvas-node__body" style={{ padding: bodyText ? "6px 8px" : 0 }}>
+        <span className="canvas-node__route-text" style={{ whiteSpace: "normal", wordBreak: "break-word", maxWidth: 220 }}>
+          {bodyText}
+        </span>
+      </div>
+      {outputs.length > 0 ? (
+        outputs.map((out, i) => (
+          <Handle
+            key={out.toKey}
+            type="source"
+            position={Position.Right}
+            id={`route-out-${out.toKey}`}
+            style={outputs.length > 1 && i > 0 ? { top: `${(i + 1) * 30}%` } : undefined}
+            className={`canvas-handle--route`}
+          />
+        ))
+      ) : (
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="route-out"
+          className={`canvas-handle--route is-missing`}
+        />
+      )}
     </div>
   );
 }
@@ -742,7 +780,8 @@ interface RouteNodeData extends Record<string, unknown> {
   kind: RouteKind;
   role: string;
   fromKey: string;
-  toKey: string;
+  /** Выходы хаба: сцены, куда передаётся носитель (модель «1 вход + N выходов»). */
+  outputs?: { toKey: string; role: string; toName?: string }[];
   /** Подпись тела: у перехода — условие, читается с сервера. */
   condition?: string;
   fromLabel?: string;
@@ -1606,6 +1645,11 @@ function toFlowNode(
         condition: n.route.transition_label,
         fromLabel: n.route.from_name,
         toLabel: n.route.to_name,
+        outputs: (n.route.outputs ?? []).map((o) => ({
+          toKey: o.to_key,
+          role: o.role,
+          toName: o.to_name,
+        })),
       },
     };
   }
@@ -2051,6 +2095,7 @@ export function CanvasPage() {
   const [selectedAdventureId, setSelectedAdventureId] = useState<number | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [index, setIndex] = useState<CanvasIndex | null>(null);
+  const [canvasTab, setCanvasTab] = useState<"campaigns" | "settings" | "boards">("campaigns");
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem("canvasPropsCollapsed") === "1");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   // Карточка существа (шаг 4 ревизии). Нода остаётся компактной, карточка —
@@ -2480,9 +2525,12 @@ export function CanvasPage() {
         target,
         // У карточки главы хендл один и без имени: имя входа принадлежит
         // спрятанной сцене, а не главе. Для рераут-сегментов разъёмы маршрута
-        // именованные (route-in/route-out), так что цепляемся точно; конец на
+        // именованные (route-in/route-out-<to_key>), так что цепляемся точно;
+        // у хаба с N выходами — по совпавшему выходу, иначе в первый. Конец на
         // реальной ноде держим по её входу.
-        sourceHandle: source.startsWith("route:") ? "route-out" : undefined,
+        sourceHandle: source.startsWith("route:")
+          ? (routeOutHandle(e.source, target, board?.routes) ?? "route-out")
+          : undefined,
         targetHandle: target.startsWith("route:")
           ? "route-in"
           : (target === e.target && e.target_handle ? e.target_handle : null),
@@ -3529,10 +3577,11 @@ export function CanvasPage() {
       const handle = connection.targetHandle ?? "story";
       const sourceHandle = connection.sourceHandle ?? "";
 
-      // Рераут («Маршрут»). Сам данных не заводит: реальное ребро остаётся одно,
-      // а эта проводка лишь запоминает, каких соседей рераут разводит — какого
-      // бы вида ребро ни рвал. `from_key` — сосед по входу (слева), `to_key` —
-      // по выходу (справа); соседом может быть и другой рераут (цепочка).
+      // Рераут («Маршрут») как носитель-хаб: один вход (носитель слева —
+      // существо/локация/сцена) и N выходов (сцены справа, куда носитель
+      // передаётся и реально пишется в их каст). Проводка во вход пишет
+      // `from_key` (`PUT /routes/:id`), проводка из выхода добавляет выход
+      // (`POST /routes/:id/outputs`).
       if (sourceType === "route" || targetType === "route") {
         // Диагностика коннектов рераута (временная).
         console.log("[reroute] onConnect", {
@@ -3541,20 +3590,32 @@ export function CanvasPage() {
           sourceHandle: connection.sourceHandle ?? null,
           targetHandle: connection.targetHandle ?? null,
         });
-        if (sourceType === "route" && targetType === "route") {
-          // Цепочка разрывов одного ребра: исходящий рераут соседствует по
-          // выходу с входящим, входящий — по входу с исходящим. Оба рераута
-          // несут одно и то же ребро, поэтому вид/роль у вновь подключённого
-          // наследуем от настроенного источника: иначе BFS по kind разойдётся
-          // и цепь не соберётся (например, cast-рераут + свежий transition).
-          const srcData = nodes.find((n) => n.id === `route:${sourceId}`)?.data as
+        // Вход или выход? Во вход рераута входят слева (target — рераут), из
+        // выхода выходят справа (source — рераут).
+        // P0-1: from/to �� handle route-in/route-out, � �� �� ���� � ��������� ���������� from ��� drag � ��������
+        const isIn = targetType === "route" ? (connection.targetHandle ? connection.targetHandle === "route-in" : true) : false;
+        const routeId = isIn ? targetId : sourceId;
+        const peerKey = isIn ? connection.source : connection.target;
+        const peerType = isIn ? sourceType : targetType;
+        const peerHandle = isIn ? (connection.sourceHandle ?? "") : (connection.targetHandle ?? "");
+
+        // Сосед — тоже рераут: цепочка носителей. Устраиваем её входами: у
+        // второго рераута вход (from_key) — первый рераут, вид/роль наследуем
+        // от уже настроенного рераута, иначе BFS разойдётся.
+        if (peerType === "route") {
+          const inheritedId = isIn ? sourceId : targetId;
+          const srcData = nodes.find((n) => n.id === `route:${inheritedId}`)?.data as
             | RouteNodeData
             | undefined;
           const kin = srcData?.kind ?? "transition";
           const rol = srcData?.role ?? "";
+          const childRouteId = isIn ? routeId : inheritedId;
           try {
-            await api.put(`/canvas/routes/${sourceId}`, { to_key: `route:${targetId}`, kind: kin, role: rol });
-            await api.put(`/canvas/routes/${targetId}`, { from_key: `route:${sourceId}`, kind: kin, role: rol });
+            await api.put(`/canvas/routes/${childRouteId}`, {
+              from_key: `route:${isIn ? inheritedId : routeId}`,
+              kind: kin,
+              role: rol,
+            });
           } catch (e) {
             alert(`Не удалось связать маршруты: ${e instanceof Error ? e.message : String(e)}`);
             return;
@@ -3562,58 +3623,52 @@ export function CanvasPage() {
           loadBoard();
           return;
         }
-        const routeId = sourceType === "route" ? sourceId : targetId;
-        const peerKey = sourceType === "route" ? connection.target : connection.source;
-        const isIn = targetType === "route"; // в вход — from_key, наружу — to_key
-        // Вид и роль ребра определяет РЕАЛЬНАЯ сторона связи (не сам рераут):
-        // роль у входящего разъёма реальной ноды или у её разъёма-источника,
-        // иначе переход. Исход проверки (outcome:<id>) и нить пинов различимы
-        // только тут — обобщённое правило по «таргету» их не видит.
-        const realIsSource = sourceType !== "route";
-        const realType = realIsSource ? sourceType : targetType;
-        const realHandle = realIsSource ? (connection.sourceHandle ?? "") : (connection.targetHandle ?? "");
+
         // Нити пинов рераутом не рвём: они живут в поле `threads` отдельно от
         // `edges`, и серверный разрыв рёбер (`routedEdges`) их не видит — такой
         // рераут висел бы без эффекта. Проводку отклоняем явно (#7).
-        if (realType === "pin") return;
-        // Вид/роль рераута фиксирует ПЕРВАЯ подведённая сторона; вторую не
-        // пересчитываем, иначе исход проверки (outcome) на второй связи скатился
-        // бы в «переход» и BFS не сошёлся бы (блок #5).
+        if (peerType === "pin") return;
+
+        // Вид/роль определяет РЕАЛЬНАЯ сторона (вход — существо/локация/сцена,
+        // выход — сцена, куда ложится носитель). Роль у выхода наследуем от
+        // носителя (тот же каст-тип), у входа — от разъёма реальной ноды.
         const routeData = nodes.find((n) => n.id === `route:${routeId}`)?.data as RouteNodeData | undefined;
-        // Вид/роль ребра выводим по текущей подводке монотонно: найденный более
-        // конкретный вид (outcome/cast/member) применяется, а если подводка
-        // ничего не говорит (переход/неоднозначно) — ПРЕЖНИЙ вид сохраняем.
-        // Так cast/member работают в любом порядке подводки, а outcome не
-        // скатывается обратно в transition при второй подводке `route→scene
-        // (story)` (блок #5). Раньше kind запирался первой подводкой, и
-        // `being→route` навсегда уходил в 'transition' — cast-рерауты молча
-        // не рвались.
         const prevKind = (routeData?.kind as RouteKind) ?? "transition";
         const prevRole = routeData?.role ?? "";
         let kind: RouteKind = prevKind;
         let role: string = prevRole;
-        if (realHandle.startsWith("outcome:")) {
-          kind = "outcome";
-          role = realHandle;
-        } else if (realType === "bundle" || realHandle === "members") {
-          kind = "member";
-          role = "members";
-        } else if (realType === "setting_event" || realType === "campaign_event") {
-          kind = "cast";
-          role = "consequences";
-        } else if (realType === "scene" && realHandle !== "story" && realHandle !== "prev") {
-          kind = "cast";
-          role = realHandle;
+        if (isIn) {
+          // Вход — вид/роль носителя по реальной ноде: исход проверки, набор
+          // (member), событие (consequences) или каст-сущность по разъёму.
+          if (peerHandle.startsWith("outcome:")) {
+            kind = "outcome";
+            role = peerHandle;
+          } else if (peerType === "bundle" || peerHandle === "members") {
+            kind = "member";
+            role = "members";
+          } else if (peerType === "setting_event" || peerType === "campaign_event") {
+            kind = "cast";
+            role = "consequences";
+          } else if (["being","location","artifact","community","character","compendium_entry"].includes(peerType)) {
+            kind = "cast";
+            role = peerType;
+          } else if (peerType === "scene" && peerHandle !== "story" && peerHandle !== "prev") {
+            kind = "cast";
+            role = peerHandle;
+          }
+        } else {
+          // Выход — тот же носитель уходит в сцену, роль сохраняем каст-типа.
+          role = prevRole;
         }
         try {
-          await api.put(`/canvas/routes/${routeId}`, {
-            ...(isIn ? { from_key: peerKey } : { to_key: peerKey }),
-            kind,
-            role,
-          });
-          console.log("[reroute] PUT ok", { routeId, peerKey, isIn, kind, role });
+          if (isIn) {
+            await api.put(`/canvas/routes/${routeId}`, { from_key: peerKey, kind, role });
+          } else {
+            await api.post(`/canvas/routes/${routeId}/outputs`, { to_key: peerKey, role });
+          }
+          console.log("[reroute] " + (isIn ? "PUT ok" : "POST output ok"), { routeId, peerKey, kind, role });
         } catch (e) {
-          console.error("[reroute] PUT failed", { routeId, peerKey, isIn, kind, role, error: e });
+          console.error("[reroute] " + (isIn ? "PUT failed" : "POST output failed"), { routeId, peerKey, kind, role, error: e });
           alert(`Не удалось подвести маршрут: ${e instanceof Error ? e.message : String(e)}`);
           return;
         }
@@ -3691,6 +3746,14 @@ export function CanvasPage() {
     async (removed: Edge[]) => {
       await Promise.all(
         removed.map((e) => {
+          // Сегмент выхода рераута-хаба: ребро `route:<id> → сцена`. Удаление
+          // снимает именно этот выход (`DELETE /routes/:id/outputs`) и сам
+          // реальный каст, который он клал в сцену. К целевым рераутам-цепочкам
+          // (source route → route) не трогаем: они разбираются удалением нод.
+          if (e.source.startsWith("route:") && !e.target.startsWith("route:")) {
+            const [, rid] = e.source.split(":");
+            return api.del(`/canvas/routes/${rid}/outputs?to_key=${encodeURIComponent(e.target)}`);
+          }
           const [kind, rawId] = e.id.split(":");
           if (kind === "outcome") {
             return api.put(`/story/outcomes/${rawId}`, { target_type: null, target_id: null });
@@ -4652,7 +4715,31 @@ export function CanvasPage() {
             return;
           }
           if (data.kind === "route") {
-            await api.post("/canvas/routes", { board_id: board.board_id, x, y });
+            // P1: автоподхват ближайшего ребра при дропе — один жест вместо двух подводок
+            let from_key = "";
+            let to_key = "";
+            let kind: string | undefined = undefined;
+            let bestDist = Infinity;
+            let bestEdge: any = null;
+            for (const e of edges) {
+              const s: any = (nodes as any[]).find((n: any) => n.id === e.source);
+              const t2: any = (nodes as any[]).find((n: any) => n.id === e.target);
+              if (!s || !t2) continue;
+              const mx = (s.position.x + t2.position.x) / 2;
+              const my = (s.position.y + t2.position.y) / 2;
+              const d = Math.hypot(x - mx, y - my);
+              if (d < bestDist) { bestDist = d; bestEdge = e; }
+            }
+            if (bestEdge && bestDist < 120) {
+              from_key = bestEdge.source;
+              to_key = bestEdge.target;
+              kind = "transition";
+            }
+            if (from_key && to_key) {
+              await api.post("/canvas/routes", { board_id: board.board_id, x, y, from_key, to_key, kind });
+            } else {
+              await api.post("/canvas/routes", { board_id: board.board_id, x, y });
+            }
             loadBoard();
             return;
           }
@@ -4696,7 +4783,7 @@ export function CanvasPage() {
       }
       loadBoard();
     },
-    [board, loadBoard, arcId, boardTarget]
+    [board, loadBoard, arcId, boardTarget, nodes, edges]
   );
 
   // Delete клавишей — для фриформ стикеров/картинок (после onNodesDelete, иначе TDZ)
@@ -5256,7 +5343,7 @@ export function CanvasPage() {
             ) : null}
           </>
         ) : (
-          <span style={{ color: "var(--ink)" }}>Полотно</span>
+          <SectionHeading section="canvas" compact>Полотно</SectionHeading>
         )}
         </div>
         {/* «Открыть доску…», а не «Открыть холст…» (блок D5): слово «холст»
@@ -5445,163 +5532,152 @@ export function CanvasPage() {
         // боков, 72 снизу под панель звука). Собственные 16px и сдвигали
         // плитки относительно шапки, и добавляли пустоты сверху.
         <div className="stack">
-          {/* Кампании (блок D2). Кампания попадает на экран только тогда, когда
-              у неё есть доска: своего холста у неё пока нет — это блок D4, — и
-              пустая плитка вела бы в никуда. */}
-          {(index?.campaigns ?? []).length > 0 && <h3>Кампании</h3>}
-          {(index?.campaigns ?? []).map((c) => (
-            <div key={c.id} className="stack" style={{ gap: 8 }}>
-              {/* Карта кампании (блок D4). Кампании стоят первыми: за столом
-                  открывают именно их (решение D0 §14). */}
-              <div className="canvas-group-head">
-                <div className="canvas-props__label">{c.name}</div>
-                <div className="canvas-group-head__actions">
-                  <button
-                    className="canvas-index__map"
-                    onClick={() => setSearchParams({ campaign: String(c.id), view: "map" })}
-                  >
-                    Карта
-                  </button>
-                  {/* «+ Приключение» и «+ Доска» у кампании (блок D5). */}
-                  <GroupAdd
-                    ownerType="campaign"
-                    ownerId={c.id}
-                    settingId={c.setting_id ?? null}
-                    onCreatedBoard={(scopeId) => setSearchParams({ free_id: String(scopeId) })}
-                    onCreatedArc={() => setSearchParams({ campaign: String(c.id), view: "map" })}
-                  />
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-                {(campaignGroups.find((g) => g.id === c.id)?.boards ?? []).map((b) => (
-                  <BoardTile
-                    key={b.id}
-                    board={b}
-                    settings={index?.all_settings ?? []}
-                    campaigns={index?.campaigns ?? []}
-                    onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
-                    onChanged={reloadIndex}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+          <div className="canvas-index-tabs">
+            <button className={`canvas-index-tab${canvasTab === "campaigns" ? " is-active" : ""}`} onClick={() => setCanvasTab("campaigns")}>Кампании</button>
+            <button className={`canvas-index-tab${canvasTab === "settings" ? " is-active" : ""}`} onClick={() => setCanvasTab("settings")}>Сеттинги</button>
+            <button className={`canvas-index-tab${canvasTab === "boards" ? " is-active" : ""}`} onClick={() => setCanvasTab("boards")}>Мои доски</button>
+          </div>
 
-          <h3 style={{ marginTop: (index?.campaigns ?? []).length > 0 ? 24 : 0 }}>Сеттинги</h3>
-          {(index?.settings ?? []).map((st) => (
-            <div key={st.id} className="stack" style={{ gap: 8 }}>
-              {/* «Схема» — второй взгляд на тот же сеттинг (блок D3). Список
-                  остаётся дорогой по умолчанию: схема необязательна, и попасть
-                  на неё можно только этой кнопкой. Она у заголовка группы, а не
-                  общая на страницу, потому что схема бывает у каждого сеттинга
-                  своя. */}
-              <div className="canvas-group-head">
-                <div className="canvas-props__label">{st.name}</div>
-                <div className="canvas-group-head__actions">
-                  <button
-                    className="canvas-index__map"
-                    onClick={() => setSearchParams({ setting: String(st.id), view: "map" })}
-                  >
-                    Схема
-                  </button>
-                  {/* «+ Приключение» и «+ Доска» у сеттинга (блок D5). Заведённое
-                      приключение остаётся на этом же экране, в этой же группе:
-                      уходить в его пустой холст незачем — новое приключение
-                      сначала кладут рядом с остальными. */}
-                  <GroupAdd
-                    ownerType="setting"
-                    ownerId={st.id}
-                    settingId={st.id}
-                    onCreatedBoard={(scopeId) => setSearchParams({ free_id: String(scopeId) })}
-                    onCreatedArc={reloadIndex}
-                  />
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-                {/* Доски сеттинга — рядом с его приключениями: смысл привязки в
-                    том, чтобы доска лежала возле своего дела (решение D0 §14). */}
-                {boardsOfSetting(st.id).map((b) => (
-                  <BoardTile
-                    key={b.id}
-                    board={b}
-                    settings={index?.all_settings ?? []}
-                    campaigns={index?.campaigns ?? []}
-                    onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
-                    onChanged={reloadIndex}
-                  />
-                ))}
-                {st.adventures.map((a) => (
-                  // Карточка, а не кнопка: селект «дальше» отсюда ушёл на схему
-                  // (блок D3), но карточкой она осталась — блок A4 разбирался с
-                  // тем же самым, и возвращать кнопку внутрь кнопки незачем.
-                  <div key={a.id} className="card" style={{ textAlign: "left", padding: 12 }}>
-                    <button
-                      className="canvas-index__open"
-                      onClick={() => setSearchParams({ setting: String(st.id), arc: String(a.id) })}
-                    >
-                      {a.name}
-                    </button>
-                    {/* Счётчики моношрифтом — величины, а не часть названия;
-                        приключения сравнимы столбиком. */}
-                    <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                      {a.chapter_count > 0 ? `${a.chapter_count} ${plural(a.chapter_count, "глава", "главы", "глав")} · ` : ""}
-                      {a.scene_count} {plural(a.scene_count, "сцена", "сцены", "сцен")}
+          {canvasTab === "campaigns" && (
+            <>
+              {(index?.campaigns ?? []).map((c) => (
+                <div key={c.id} className="stack" style={{ gap: 8 }}>
+                  <div className="canvas-group-head">
+                    <div className="canvas-props__label">{c.name}</div>
+                    <div className="canvas-group-head__actions">
+                      <button
+                        className="canvas-index__map"
+                        onClick={() => setSearchParams({ campaign: String(c.id), view: "map" })}
+                      >
+                        Карта
+                      </button>
+                      <GroupAdd
+                        ownerType="campaign"
+                        ownerId={c.id}
+                        settingId={c.setting_id ?? null}
+                        onCreatedBoard={(scopeId) => setSearchParams({ free_id: String(scopeId) })}
+                        onCreatedArc={() => setSearchParams({ campaign: String(c.id), view: "map" })}
+                      />
                     </div>
-                    {/* «Дальше» на плитке больше нет (блок D3). Селект вылезал
-                        за карточку и не выражал ветвления; связи переехали на
-                        схему сеттинга, где рисуются рёбрами и читаются сразу.
-                        Сами связи при этом сохранены — удалять их владелец не
-                        стал (решение D0 §4). */}
                   </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {index && index.settings.length === 0 && <p className="muted">Нет приключений — создайте в разделе Сеттинги.</p>}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+                    {(campaignGroups.find((g) => g.id === c.id)?.boards ?? []).map((b) => (
+                      <BoardTile
+                        key={b.id}
+                        board={b}
+                        settings={index?.all_settings ?? []}
+                        campaigns={index?.campaigns ?? []}
+                        onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
+                        onChanged={reloadIndex}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {index && (index?.campaigns ?? []).length === 0 && <p className="muted">Нет кампаний с досками.</p>}
+            </>
+          )}
 
-          <div className="canvas-group-head" style={{ marginTop: 24 }}>
-            <h3 style={{ margin: 0 }}>Мои доски</h3>
-            {/* Ничья доска заводится здесь же, где лежит: кнопка стоит у своего
-                раздела, как «+ Доска» у сеттинга и у кампании (блок D5). */}
-            {newBoardName === null ? (
-              <button className="canvas-index__map" onClick={() => setNewBoardName("")}>+ Доска</button>
-            ) : (
-              <form
-                className="row"
-                style={{ gap: 8 }}
-                onSubmit={(e) => { e.preventDefault(); void createFreeBoard(); }}
-              >
-                <input
-                  autoFocus
-                  id="canvas-new-board"
-                  name="canvas-new-board"
-                  autoComplete="off"
-                  placeholder="Название доски"
-                  aria-label="Название новой доски"
-                  value={newBoardName}
-                  onChange={(e) => setNewBoardName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Escape") setNewBoardName(null); }}
-                />
-                <button type="submit" className="primary" disabled={!newBoardName.trim() || creatingBoard}>
-                  {creatingBoard ? "Создаю…" : "Создать"}
-                </button>
-                <button type="button" onClick={() => setNewBoardName(null)}>Отмена</button>
-              </form>
-            )}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-            {ownerlessBoards.map((b) => (
-              <BoardTile
-                key={b.id}
-                board={b}
-                settings={index?.all_settings ?? []}
-                campaigns={index?.campaigns ?? []}
-                onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
-                onChanged={reloadIndex}
-              />
-            ))}
-            {index && ownerlessBoards.length === 0 && <p className="muted">Ничьих досок нет — «+ Доска» заведёт пустое полотно без сеттинга (сохраняется само).</p>}
-          </div>
+          {canvasTab === "settings" && (
+            <>
+              {(index?.settings ?? []).map((st) => (
+                <div key={st.id} className="stack" style={{ gap: 8 }}>
+                  <div className="canvas-group-head">
+                    <div className="canvas-props__label">{st.name}</div>
+                    <div className="canvas-group-head__actions">
+                      <button
+                        className="canvas-index__map"
+                        onClick={() => setSearchParams({ setting: String(st.id), view: "map" })}
+                      >
+                        Схема
+                      </button>
+                      <GroupAdd
+                        ownerType="setting"
+                        ownerId={st.id}
+                        settingId={st.id}
+                        onCreatedBoard={(scopeId) => setSearchParams({ free_id: String(scopeId) })}
+                        onCreatedArc={reloadIndex}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+                    {boardsOfSetting(st.id).map((b) => (
+                      <BoardTile
+                        key={b.id}
+                        board={b}
+                        settings={index?.all_settings ?? []}
+                        campaigns={index?.campaigns ?? []}
+                        onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
+                        onChanged={reloadIndex}
+                      />
+                    ))}
+                    {st.adventures.map((a) => (
+                      <div key={a.id} className="card" style={{ textAlign: "left", padding: 12 }}>
+                        <button
+                          className="canvas-index__open"
+                          onClick={() => setSearchParams({ setting: String(st.id), arc: String(a.id) })}
+                        >
+                          {a.name}
+                        </button>
+                        <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                          {a.chapter_count > 0 ? `${a.chapter_count} ${plural(a.chapter_count, "глава", "главы", "глав")} · ` : ""}
+                          {a.scene_count} {plural(a.scene_count, "сцена", "сцены", "сцен")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {index && index.settings.length === 0 && <p className="muted">Нет приключений — создайте в разделе Сеттинги.</p>}
+            </>
+          )}
+
+          {canvasTab === "boards" && (
+            <>
+              <div className="canvas-group-head">
+                <div className="canvas-group-head__actions">
+                  {newBoardName === null ? (
+                    <button className="canvas-index__map" onClick={() => setNewBoardName("")}>+ Доска</button>
+                  ) : (
+                    <form
+                      className="row"
+                      style={{ gap: 8 }}
+                      onSubmit={(e) => { e.preventDefault(); void createFreeBoard(); }}
+                    >
+                      <input
+                        autoFocus
+                        id="canvas-new-board"
+                        name="canvas-new-board"
+                        autoComplete="off"
+                        placeholder="Название доски"
+                        aria-label="Название новой доски"
+                        value={newBoardName}
+                        onChange={(e) => setNewBoardName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Escape") setNewBoardName(null); }}
+                      />
+                      <button type="submit" className="primary" disabled={!newBoardName.trim() || creatingBoard}>
+                        {creatingBoard ? "Создаю…" : "Создать"}
+                      </button>
+                      <button type="button" onClick={() => setNewBoardName(null)}>Отмена</button>
+                    </form>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+                {ownerlessBoards.map((b) => (
+                  <BoardTile
+                    key={b.id}
+                    board={b}
+                    settings={index?.all_settings ?? []}
+                    campaigns={index?.campaigns ?? []}
+                    onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
+                    onChanged={reloadIndex}
+                  />
+                ))}
+                {index && ownerlessBoards.length === 0 && <p className="muted">Ничьих досок нет — «+ Доска» заведёт пустое полотно без сеттинга (сохраняется само).</p>}
+              </div>
+            </>
+          )}
         </div>
       ) : !board ? (
         <EmptyState
@@ -6599,12 +6675,27 @@ function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: 
           <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>
             {kindLabel}{roleLabel ? ` · ${roleLabel}` : ""}
           </p>
-          {route.from_name && route.to_name && (
+          {route.from_name && (
             <p className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 4 }}>
-              {route.from_name} → {route.to_name}
+              {route.from_name} → {(route.outputs ?? []).length
+                ? route.outputs!.map((o) => o.to_name ?? o.to_key).join(", ")
+                : "…"}
             </p>
           )}
         </div>
+        {(route.outputs ?? []).length > 0 && (
+          <div className="canvas-props__field">
+            <span className="canvas-props__label">Выходы ({route.outputs!.length})</span>
+            <div className="stack" style={{ gap: 6 }}>
+              {route.outputs!.map((o) => (
+                <div key={o.to_key} className="row" style={{ gap: 6, alignItems: "center", border: "1.5px solid var(--line)", padding: "4px 6px" }}>
+                  <span style={{ flex: 1, fontSize: "var(--fs-meta)" }}>{o.to_name ?? o.to_key}</span>
+                  <button className="danger" onClick={async () => { await api.del(`/canvas/routes/${routeId}/outputs?to_key=${encodeURIComponent(o.to_key)}`); onSaved(); }} title="Снять выход">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {isTransition && route.transition_id != null && (
           <label className="canvas-props__field">
             <span className="canvas-props__label">Условие перехода</span>
@@ -6633,8 +6724,9 @@ function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: 
         )}
         {!isTransition && (
           <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>
-            Рераут перенимает роль от ребра, которое рвёт. Удаление «Маршрут»
-            снимает разрыв, но оставляет само ребро.
+            Маршрут — носитель: левый вход принимает существо/локацию/сцену, правые
+            выходы кладут его в каст сцен. Удаление «Маршрут» снимает разрыв и касты
+            выходов.
           </p>
         )}
       </div>

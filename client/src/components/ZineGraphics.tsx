@@ -10,7 +10,7 @@
 // icon system — reach for NavIcons for anything functional/navigational.
 import type { SVGProps } from "react";
 
-export type ZineGraphicName = "skullDie" | "anarchyStar" | "splatter" | "barcode" | "issueStamp";
+export type ZineGraphicName = "skullDie" | "anarchyStar" | "splatter" | "barcode" | "issueStamp" | "fantasySwords" | "cosmicOrbit";
 
 const SHARED: SVGProps<SVGSVGElement> = {
   fill: "none",
@@ -121,6 +121,38 @@ function IssueStamp({ number = "01", ...props }: SVGProps<SVGSVGElement> & { num
   );
 }
 
+/** Crossed swords — hand-drawn fantasy motif, two blades crossing at the center. */
+function FantasySwords(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 64 64" {...SHARED} strokeWidth={2.2} {...props}>
+      {/* sword 1: top-left to bottom-right */}
+      <path d="M12 12 52 52" />
+      <path d="M12 12 8 8M12 12 16 8" /> {/* crossguard */}
+      <path d="M9 9l-1-5M9 9l-5-1" strokeWidth={1.8} /> {/* pommel hint */}
+      {/* sword 2: top-right to bottom-left */}
+      <path d="M52 12 12 52" />
+      <path d="M52 12 48 8M52 12 56 8" /> {/* crossguard */}
+      <path d="M55 9l1-5M55 9l5-1" strokeWidth={1.8} /> {/* pommel hint */}
+      {/* center gem */}
+      <circle cx="32" cy="32" r="3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Cosmic orbit — a star with an elliptical ring, sci-fi motif. */
+function CosmicOrbit(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 64 64" {...SHARED} strokeWidth={2.2} {...props}>
+      {/* central star */}
+      <path d="M32 18 35 28 45 25 37 32 45 39 35 36 32 46 29 36 19 39 27 32 19 25 29 28Z" />
+      {/* orbit ring */}
+      <ellipse cx="32" cy="32" rx="26" ry="10" transform="rotate(-20 32 32)" />
+      {/* small planet on orbit */}
+      <circle cx="54" cy="24" r="2.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function ZineGraphic({
   name,
   className,
@@ -142,5 +174,9 @@ export function ZineGraphic({
       return <Barcode className={className} aria-hidden="true" />;
     case "issueStamp":
       return <IssueStamp className={className} number={issueNumber} aria-hidden="true" />;
+    case "fantasySwords":
+      return <FantasySwords className={className} aria-hidden="true" />;
+    case "cosmicOrbit":
+      return <CosmicOrbit className={className} aria-hidden="true" />;
   }
 }

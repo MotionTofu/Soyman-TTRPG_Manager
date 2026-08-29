@@ -336,7 +336,6 @@ h4 { font-size: var(--fs-body); }
 .badge {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 999px;
   /* NOT force-capped: badges here often carry entity names (campaign name,
      compendium item name, system name) alongside genuine status/type
      labels, so text-transform is left to the caller rather than assumed —
@@ -600,7 +599,6 @@ h4 { font-size: var(--fs-body); }
 .entity-type-chip {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   background: var(--bg-elevated);
@@ -612,6 +610,14 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.page-header-row {
+  justify-content: space-between;
+}
+
+.modal-footer {
+  justify-content: flex-end;
 }
 
 .stack {
@@ -733,7 +739,6 @@ h4 { font-size: var(--fs-body); }
 }
 
 .btn-capsule {
-  border-radius: 999px;
   padding: 2px 10px;
   font-size: 12px;
 }
@@ -1283,7 +1288,6 @@ h4 { font-size: var(--fs-body); }
   color: var(--muted);
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: 999px;
   padding: 3px 8px;
   cursor: pointer;
   display: flex;
@@ -2181,26 +2185,33 @@ th, td {
 
 .tabs {
   display: flex;
-  gap: 4px;
-  border-bottom: var(--card-border-width, 1px) solid var(--line);
+  gap: 0;
+  border-bottom: 1.5px solid var(--line);
   margin-bottom: 16px;
 }
 .tabs button {
   background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  padding: 8px 12px;
+  border: 1.5px solid transparent;
+  border-bottom: none;
+  padding: 6px 14px;
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  position: relative;
+  top: 1.5px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tabs button:hover {
+  color: var(--ink);
 }
 .tabs button.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--paper);
 }
 /* Mobile-only stand-in for DndCharacterView's .tabs row (7 sections don't
    fit one line on a phone) — a single-line dropdown showing the current
@@ -3215,6 +3226,15 @@ details.card[open] summary {
   color: var(--accent);
   font-size: 13px;
   padding-left: 4px;
+}
+.player-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.player-list-info {
+  gap: 2px;
+  min-width: 0;
 }
 .player-list-row {
   align-items: center;
@@ -4980,7 +5000,6 @@ input.litm-theme-title {
   gap: 4px;
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: 999px;
   padding: 2px 4px 2px 10px;
   font-size: calc(var(--fs, 15px) * 0.87);
 }
@@ -5969,7 +5988,6 @@ input.litm-theme-title {
   font-weight: 600;
   color: #fff;
   padding: 1px 6px;
-  border-radius: 999px;
   white-space: nowrap;
 }
 .initiative-condition-picker {
@@ -6195,7 +6213,6 @@ input.litm-theme-title {
 .audio-player-bar button.active {
   background: var(--accent);
   color: var(--accent-text);
-  border-radius: 999px;
 }
 /* .muted's hardcoded --muted assumes a light card surface; the bar's own
    dark band needs the band's own (already-contrast-checked) text color. */
@@ -7750,4 +7767,149 @@ details[open] > .res-group__band .chevron-icon {
 .monster-tile__actions > *:hover {
   background: var(--surface);
   color: var(--on-surface);
+}
+
+/* Genre picker & display */
+.genre-display {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.genre-display-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.genre-display-header h3 {
+  margin: 0;
+}
+.genre-add-btn {
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--line);
+  background: var(--paper-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+.genre-add-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.genre-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.genre-chip {
+  --genre-color: #888;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1.5px solid var(--genre-color);
+  background: color-mix(in oklab, var(--genre-color) 15%, transparent);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  cursor: default;
+}
+.genre-chip-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--genre-color);
+}
+.campaign-tile .genre-chips { gap: 4px; }
+.campaign-tile .genre-chip {
+  font-size: 8px;
+  padding: 2px 6px;
+  gap: 3px;
+}
+.campaign-tile .genre-chip-icon {
+  width: 10px;
+  height: 10px;
+}
+.genre-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 480px;
+}
+.genre-picker h2 {
+  margin: 0;
+}
+.genre-picker-hint {
+  margin: 0;
+}
+.genre-category {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.genre-category-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--genre-color);
+  transition: opacity 0.15s;
+}
+.genre-category-header:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.genre-category-header--selected {
+  text-decoration: underline;
+}
+.genre-category-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--genre-color);
+}
+.genre-subgenres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-left: 24px;
+}
+.genre-subgenres .genre-chip {
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.genre-subgenres .genre-chip:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--genre-color) 30%, transparent);
+}
+.genre-subgenres .genre-chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.genre-subgenres .genre-chip--selected {
+  background: var(--genre-color);
+  color: #fff;
+}
+.genre-subgenres .genre-chip--selected .genre-chip-icon {
+  color: #fff;
+}
+.genre-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }

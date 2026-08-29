@@ -23,6 +23,10 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { downloadJson } from "../downloadJson";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { TagChips } from "../components/TagChips";
+import { GenrePicker } from "../components/GenrePicker";
+import { ZineGraphic } from "../components/ZineGraphics";
+import { GENRE_CATEGORIES } from "../genreData";
+import type { SettingGenre } from "../types";
 import { LocationFilter } from "../components/LocationCascadePicker";
 import { SettingEntryList } from "../components/SettingEntryList";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
@@ -174,6 +178,7 @@ export function SettingDetailPage() {
     description: string;
     important: boolean;
   } | null>(null);
+  const [genrePickerOpen, setGenrePickerOpen] = useState(false);
 
   function refreshCalendarEvents() {
     api.get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`).then(setCalendarEvents);
@@ -237,6 +242,12 @@ export function SettingDetailPage() {
     if (saved.code_taken_by) {
       alert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
     }
+    refresh();
+  }
+
+  async function saveGenres(genres: SettingGenre[]) {
+    await api.put(`/settings/${settingId}`, { genres });
+    setGenrePickerOpen(false);
     refresh();
   }
 
@@ -528,6 +539,42 @@ export function SettingDetailPage() {
             ]}
             onSaveFields={(v) => saveName(v.name, v.code)}
           />
+
+          <div className="card">
+            <div className="genre-display">
+              <div className="genre-display-header">
+                <h3>Жанры</h3>
+                <button className="genre-add-btn" onClick={() => setGenrePickerOpen(true)}>+</button>
+              </div>
+              {setting.genres && setting.genres.length > 0 ? (
+                <div className="genre-chips">
+                  {setting.genres.map((g, i) => {
+                    const cat = GENRE_CATEGORIES.find((c) => c.name === g.genre);
+                    return (
+                      <span
+                        key={i}
+                        className="genre-chip genre-chip--selected"
+                        style={{ "--genre-color": cat?.color ?? "#888" } as React.CSSProperties}
+                      >
+                        {cat && <ZineGraphic name={cat.icon} className="genre-chip-icon" />}
+                        {g.subgenre ?? g.genre}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="muted">Жанры не выбраны</p>
+              )}
+            </div>
+          </div>
+
+          {genrePickerOpen && (
+            <GenrePicker
+              selected={setting.genres ?? []}
+              onSave={saveGenres}
+              onClose={() => setGenrePickerOpen(false)}
+            />
+          )}
 
           <CrossLinksWizard
             ownerKind="setting"

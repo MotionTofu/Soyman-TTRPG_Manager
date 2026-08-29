@@ -163,6 +163,15 @@
   padding: 2px 6px;
   min-height: 22px;
 }
+.canvas-node--route.is-partial {
+  border: 2px dashed var(--ink);
+  opacity: 0.9;
+}
+.canvas-handle--route.is-missing {
+  box-shadow: 0 0 0 2px #f4c400;
+  animation: route-missing-pulse 1.2s infinite;
+}
+@keyframes route-missing-pulse { 0% { box-shadow: 0 0 0 2px #f4c400; } 50% { box-shadow: 0 0 0 4px #f4c400; } 100% { box-shadow: 0 0 0 2px #f4c400; } }
 .canvas-node--route.is-empty .canvas-handle--route {
   background: #1a1a1a;
   border-color: #f4c400;
@@ -175,7 +184,9 @@
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   color: var(--ink);
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 220px;
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1531,4 +1542,34 @@
 }
 .canvas-rehearse__cast + .canvas-rehearse__cast {
   margin-top: 8px;
+}
+
+/* Canvas index tabs — Кампании / Сеттинги / Мои доски */
+.canvas-index-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1.5px solid var(--line);
+}
+.canvas-index-tab {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border: 1.5px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  position: relative;
+  top: 1.5px;
+}
+.canvas-index-tab:hover {
+  color: var(--ink);
+}
+.canvas-index-tab.is-active {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--paper);
 }

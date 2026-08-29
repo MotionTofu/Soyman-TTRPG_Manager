@@ -1600,10 +1600,19 @@ CREATE INDEX IF NOT EXISTS idx_canvas_threads_pins ON canvas_threads(from_pin_id
 CREATE TABLE IF NOT EXISTS canvas_routes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
-  from_key TEXT NOT NULL,
-  to_key TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'transition', -- transition | cast | outcome | thread
-  role TEXT NOT NULL DEFAULT '',
+  from_key TEXT NOT NULL, -- вход рераута: ключ носителя (being:N / location:N / scene:N / ...)
+  kind TEXT NOT NULL DEFAULT 'transition', -- переход: что это за связь
+  role TEXT NOT NULL DEFAULT '', -- тип носителя: being | location | ...
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_canvas_routes_board ON canvas_routes(board_id);
+-- Выходы рераута-хаба: N сцен, куда носитель передаётся. Каждый выход — это
+-- связь «носитель in из from_key → сцена to_key» того же `kind`, что и рераут:
+-- при подключении сервер реально регистрирует cast сцены (как если бы носитель
+-- тянули на сцену напрямую).
+CREATE TABLE IF NOT EXISTS canvas_route_outputs (
+  route_id INTEGER NOT NULL REFERENCES canvas_routes(id) ON DELETE CASCADE,
+  to_key TEXT NOT NULL, -- ключ выходной сцены (scene:N)
+  role TEXT NOT NULL DEFAULT '', -- роль в этой сцене (plot_characters / loot / consequences / ...)
+  PRIMARY KEY (route_id, to_key)
+);

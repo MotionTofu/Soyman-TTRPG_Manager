@@ -37,13 +37,15 @@ import {
 export const settingsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-function withBgUrl<T extends { background_image_path?: string | null; thumbnail_image_path?: string | null }>(
+function withBgUrl<T extends { background_image_path?: string | null; thumbnail_image_path?: string | null; genres?: string | null }>(
   row: T
 ) {
+  const { genres: rawGenres, ...rest } = row;
   return {
-    ...row,
+    ...rest,
     background_image_url: row.background_image_path ? toFileUrl(row.background_image_path) : null,
     thumbnail_image_url: row.thumbnail_image_path ? toFileUrl(row.thumbnail_image_path) : null,
+    genres: rawGenres ? JSON.parse(rawGenres) : null,
   };
 }
 
@@ -106,7 +108,7 @@ settingsRouter.post("/", (req, res) => {
   const newId = info.lastInsertRowid as number;
   const preset = calendar ? resolvePreset(calendar) : null;
   if (preset) applyCalendarPreset(newId, preset, calendar?.withEra === true);
-  res.status(201).json(db.prepare("SELECT * FROM settings WHERE id = ?").get(newId));
+  res.status(201).json(withBgUrl(db.prepare("SELECT * FROM settings WHERE id = ?").get(newId) as { background_image_path: string | null; thumbnail_image_path: string | null; genres: string | null }));
 });
 
 // Пакетное создание сеттинга визардом: сам сеттинг, дерево локаций,
@@ -713,23 +715,25 @@ settingsRouter.put("/:id", (req, res) => {
     .prepare("SELECT * FROM settings WHERE id = ?")
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { name, description, code } = req.body as {
+  const { name, description, code, genres } = req.body as {
     name?: string;
     description?: string;
     code?: string;
+    genres?: { genre: string; subgenre?: string }[];
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
+  const genresJson = genres !== undefined ? JSON.stringify(genres) : null;
   db.prepare(
-    "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code) WHERE id = ?"
-  ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), req.params.id);
+    "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code), genres = COALESCE(?, genres) WHERE id = ?"
+  ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), genresJson, req.params.id);
   // Двойник кода не запрещается, только называется: код — подсказка человеку в
   // окне неработающей ссылки, а не ключ. Резолв идёт по uid цели, и совпадение
   // кодов ни на что не влияет, кроме понятности фразы «поставьте модуль wdh».
   res.json({
-    ...(db.prepare("SELECT * FROM settings WHERE id = ?").get(req.params.id) as object),
+    ...withBgUrl(db.prepare("SELECT * FROM settings WHERE id = ?").get(req.params.id) as { background_image_path: string | null; thumbnail_image_path: string | null; genres: string | null }),
     code_taken_by: code ? codeTakenBy(code, "settings", Number(req.params.id)) : null,
   });
 });
@@ -743,7 +747,7 @@ settingsRouter.delete("/:id", (req, res) => {
 
 settingsRouter.put("/:id/restore", (req, res) => {
   db.prepare("UPDATE settings SET archived_at = NULL WHERE id = ?").run(req.params.id);
-  res.json(db.prepare("SELECT * FROM settings WHERE id = ?").get(req.params.id));
+  res.json(withBgUrl(db.prepare("SELECT * FROM settings WHERE id = ?").get(req.params.id) as { background_image_path: string | null; thumbnail_image_path: string | null; genres: string | null }));
 });
 
 // Reveals the setting's "Resources" folder in the OS file explorer — mirrors
