@@ -60,7 +60,10 @@ if (typeof document !== "undefined") {
   document.addEventListener("input", () => (lastInputAt = Date.now()), true);
 }
 
-function isBusyEditing(): boolean {
+// Exported so client.ts can reuse the same "не перезагружать под руками"
+// guard when another window's login/logout invalidates this window's token —
+// a forced reload mid-edit would drop the very work П0.6 tries to protect.
+export function isBusyEditing(): boolean {
   if (Date.now() - lastInputAt < RECENT_INPUT_MS) return true;
   const el = document.activeElement as HTMLElement | null;
   if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {

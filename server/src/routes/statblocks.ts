@@ -4,6 +4,7 @@ import path from "path";
 import { db } from "../db/db";
 import { parseLongStoryShort } from "../services/lssImport";
 import { broadcastCharacterUpdate } from "../services/realtime";
+import { syncCreatureDataFromStatblock } from "../services/monsterSummary";
 import { beingFolder, ensureSubfolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { removeOrArchive } from "../services/vaultDedup";
 import { ensureCharacterFolder } from "./characters";
@@ -104,9 +105,18 @@ statblocksRouter.post("/", (req, res) => {
       "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES (?, ?, ?, ?, ?, ?)"
     )
     .run(owner_type, owner_id, kind ?? "full", format ?? "text", content ?? "", note ?? "");
-  res
-    .status(201)
-    .json(withAvatarUrl(db.prepare("SELECT * FROM statblocks WHERE id = ?").get(info.lastInsertRowid) as { avatar_image_path: string | null }));
+  const row = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(info.lastInsertRowid) as {
+    owner_type: string;
+    owner_id: number;
+    format: string;
+    avatar_image_path: string | null;
+  };
+  // Сохранение dnd-статблока монстра — источник истины: сводка разделов идёт
+  // в ту же секунду (см. обратный ход writeDndCreatureSummary).
+  if (row.owner_type === "compendium_entry" && row.format === "dnd_creature") {
+    syncCreatureDataFromStatblock(db, row.owner_id);
+  }
+  res.status(201).json(withAvatarUrl(row));
 });
 
 statblocksRouter.put("/:id", (req, res) => {
@@ -124,10 +134,24 @@ statblocksRouter.put("/:id", (req, res) => {
      WHERE id = ?`
   ).run(kind ?? null, content ?? null, note ?? null, theme ?? null, density ?? null, req.params.id);
   const updated = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(req.params.id) as
-    | { owner_type: string; owner_id: number; avatar_image_path: string | null }
+    | {
+        owner_type: string;
+        owner_id: number;
+        format: string;
+        avatar_image_path: string | null;
+      }
     | undefined;
-  if (updated?.owner_type === "character") broadcastCharacterUpdate(updated.owner_id);
-  res.json(updated ? withAvatarUrl(updated) : updated);
+  if (!updated) {
+    res.json(updated);
+    return;
+  }
+  if (updated.owner_type === "character") broadcastCharacterUpdate(updated.owner_id);
+  // Правка dnd-статблока монстра синхронизируется со сводкой записи — новое
+  // значение КО/размера видно в разделе сразу, без переимпорта.
+  if (updated.owner_type === "compendium_entry" && updated.format === "dnd_creature") {
+    syncCreatureDataFromStatblock(db, updated.owner_id);
+  }
+  res.json(withAvatarUrl(updated));
 });
 
 statblocksRouter.post("/:id/avatar", upload.single("file"), async (req, res) => {

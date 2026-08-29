@@ -1243,6 +1243,8 @@ interface LayoutSnapshot {
   nodes: Node<CanvasNodeData>[];
   /** id сцены → её глава на момент снимка. */
   arcs: Map<number, number | null>;
+  /** «тип:id» свободного узла → его рамка (`frame:<id>`) или null на момент снимка. */
+  parentKeys: Map<string, string | null>;
 }
 
 /** Позиция ноды в координатах доски — то, что уходит в базу. */
@@ -2089,6 +2091,12 @@ export function CanvasPage() {
   const focusRef = useRef(focusParam);
   focusRef.current = focusParam;
 
+  // Какой `focus` уже применён к выделению. Эффект ниже гоняется и на правке
+  // `board` (например, `loadBoard` после сохранения), а повторно навязывать
+  // фокус там — это схлопывать Ctrl-мультивыбор до одной ноды: он `focus` в
+  // адрес не пишет, и он всё ещё указывает на последний единичный клик.
+  const appliedFocusRef = useRef<string | null>(null);
+
   // Видов доски три: свободная, холст приключения и схема сеттинга (блок D3).
   // Кампания — не свой вид доски, а путь входа: тот же холст приключения, но
   // с её правками (Q26).
@@ -2308,11 +2316,20 @@ export function CanvasPage() {
     // Выделение React Flow держит в самих нодах, поэтому ставим его там.
     // Ноды, у которых состояние уже верное, возвращаются как есть — иначе
     // каждый переход фокуса пересоздавал бы весь массив.
-    setNodes((cur) =>
-      cur.every((n) => !!n.selected === (n.id === focusParam))
-        ? cur
-        : cur.map((n) => (!!n.selected === (n.id === focusParam) ? n : { ...n, selected: n.id === focusParam }))
-    );
+    //
+    // Навязываем выделение только когда `focus` действительно изменился
+    // (переход по ссылке, «назад»). Тот же эффект гоняется на правке `board`,
+    // и там переопределять `selected` нельзя — Ctrl-мультивыбор `focus` в
+    // адрес не пишет, и сводить его обратно к одной ноде фокуса значит
+    // схлопывать выделение на любом обновлении доски (Ш1).
+    if (appliedFocusRef.current !== focusParam) {
+      appliedFocusRef.current = focusParam;
+      setNodes((cur) =>
+        cur.every((n) => !!n.selected === (n.id === focusParam))
+          ? cur
+          : cur.map((n) => (!!n.selected === (n.id === focusParam) ? n : { ...n, selected: n.id === focusParam }))
+      );
+    }
   }, [board, focusParam]);
 
   // Рёбра держим состоянием, а не выводим из board на лету: React Flow — это
@@ -2675,19 +2692,24 @@ export function CanvasPage() {
           .filter((n) => n.node_type === "scene")
           .map((n) => [n.node_id, n.scene.arc_id] as [number, number | null])
       ),
+      parentKeys: new Map(
+        (boardRef.current?.nodes ?? [])
+          .filter((n) => n.node_type !== "frame")
+          .map((n) => [n.key, n.parent_key ?? null] as [string, string | null])
+      ),
     }),
     []
   );
   const restoreSnapshot = useCallback(
     (snap: LayoutSnapshot) => {
       const b = boardRef.current;
-      // Главу, свободную рамку и пин `scheduleSave` не отправляет: их место —
-      // истина СВОЕЙ таблицы (`canvas_groups`, `canvas_frames`, `canvas_pins`),
-      // а `PUT /canvas/board/nodes` пишет только `canvas_nodes`. Без этого
-      // цикла отмена возвращала их на экране и не возвращала в базе: пока
-      // рамка непустая, обман незаметен — сервер всё равно обнимает ею
-      // содержимое; у пустой главы своя строка единственный источник места,
-      // и перезагрузка возвращала рамку туда, откуда её только что отменили.
+      // Свободную рамку и пин `scheduleSave` не отправляет: их место — истина
+      // СВОЕЙ таблицы (`canvas_frames`, `canvas_pins`), а `PUT /canvas/board/nodes`
+      // пишет только `canvas_nodes`. Без этого цикла отмена возвращала их на
+      // экране и не возвращала в базе: пока рамка непустая, обман незаметен —
+      // сервер всё равно обнимает ею содержимое; у пустой рамки своя строка
+      // единственный источник места, и перезагрузка возвращала её туда, откуда
+      // её только что отменили.
       const byId = new Map(snap.nodes.map((n) => [n.id, n]));
       const nowById = new Map(nodesRef.current.map((n) => [n.id, n]));
       for (const n of snap.nodes) {
@@ -2737,6 +2759,26 @@ export function CanvasPage() {
             returned = true;
           }
         }
+      }
+      // Отмена должна вернуть и принадлежность свободных узлов группам-рамкам
+      // (В4). `scheduleSave` ниже `parent_key` не шлёт — сервер сохраняет
+      // текущее значение, поэтому вернувшийся из группы узел после undo и
+      // перезагрузки снова туда «вваливается». Догоняем членство отдельным
+      // пакетом для его владельцев: сравниваем снимок (чего хотим) с текущей
+      // доской (что лежит в базе) и отправляем только разошедшихся.
+      if (b) {
+        const nowKeys = new Map(b.nodes.filter((n) => n.node_type !== "frame").map((n) => [n.key, n.parent_key ?? null] as [string, string | null]));
+        const writes: { node_type: string; node_id: number; x: number; y: number; parent_key: string | null }[] = [];
+        for (const [key, want] of snap.parentKeys) {
+          const now = nowKeys.get(key);
+          if (now === want) continue;
+          const snapNode = byId.get(key);
+          if (!snapNode) continue;
+          const abs = toAbsolute(snapNode, byId);
+          const [t, idRaw] = splitKey(key);
+          writes.push({ node_type: t, node_id: Number(idRaw), x: Math.round(abs.x), y: Math.round(abs.y), parent_key: want ?? null });
+        }
+        if (writes.length && b.board_id) api.put("/canvas/board/nodes", { board_id: b.board_id, nodes: writes });
       }
       if (returned) {
         loadBoard();
@@ -3059,12 +3101,40 @@ export function CanvasPage() {
         // лежит в `canvas_nodes` наравне с прочими (блок G6.2), и уходит оно
         // общей записью `scheduleSave`.
         const [, id] = splitKey(node.id);
+        const newX = Math.round(node.position.x);
+        const newY = Math.round(node.position.y);
         api.put(`/canvas/frames/${id}`, {
-          x: Math.round(node.position.x),
-          y: Math.round(node.position.y),
+          x: newX,
+          y: newY,
           w: Math.round(node.width ?? dataSize(node.data).w ?? 320),
           h: Math.round(node.height ?? dataSize(node.data).h ?? 240),
         });
+        // Дрейф детей (В3): `PUT /canvas/frames` двигает только рамку, а
+        // абсолюты членов лежат в `canvas_nodes` и сами собой не меняются.
+        // `scheduleSave` из `onNodesChange` опирается на локальную позицию
+        // React Flow относительно родителя — сдвиг рамки здесь считается
+        // детерминированно по дельте, от этих внутренностей не завися.
+        const b = boardRef.current;
+        if (b) {
+          const frameOld = b.nodes.find((n) => n.node_type === "frame" && n.node_id === id);
+          if (frameOld) {
+            const dx = newX - Math.round(frameOld.x);
+            const dy = newY - Math.round(frameOld.y);
+            if (dx || dy) {
+              const members = b.nodes.filter((n) => n.parent_key === `frame:${id}`);
+              if (members.length) {
+                const moved = members.map((n) => ({
+                  node_type: n.node_type,
+                  node_id: n.node_id,
+                  x: Math.round(n.x) + dx,
+                  y: Math.round(n.y) + dy,
+                  parent_key: `frame:${id}`,
+                }));
+                api.put("/canvas/board/nodes", { board_id: board.board_id, nodes: moved });
+              }
+            }
+          }
+        }
       } else if (isPin(node.id) && board) {
         // Пин ходит своей дверью (`/canvas/pins/:id`), но по общим правилам:
         // в базу — абсолютные координаты (Q15), и рамка, на которую его
@@ -3160,7 +3230,7 @@ export function CanvasPage() {
         // положения никому не нужны, а выделение и подсветка вообще не
         // касаются раскладки.
         if (isDragEnd) scheduleSave(next);
-        // Растягивание рамки ручкой — w/h в canvas_frames / canvas_groups.
+        // Растягивание рамки ручкой — w/h в canvas_frames.
         //
         // Единственное место, где размер рамки доезжает до базы:
         // `onNodeDragStop` на растягивание не срабатывает. Условие здесь
@@ -3954,7 +4024,7 @@ export function CanvasPage() {
             const cur = nodeTitle(node.data) ?? "";
             const name = prompt("Новое имя", String(cur));
             if (!name?.trim()) return;
-            if (type === "sticker") await api.put(`/canvas/stickers/${id}`, { text: name.trim() });
+            if (type === "sticker") await api.put(`/canvas/stickers/${id}`, { text: name.trim(), name: name.trim() });
             else if (type === "adventure") await api.put(`/story/arcs/${id}`, { name: name.trim() });
             else if (type === "check") await api.put(`/story/checks/${id}`, { what: name.trim() });
             else if (type === "bundle") await api.put(`/canvas/bundles/${id}`, { name: name.trim() });
@@ -4161,12 +4231,16 @@ export function CanvasPage() {
           const data = JSON.parse(paletteRaw) as PaletteDragPayload;
           if (data.kind === "entity" && data.item) {
             const item = data.item;
+            // Бросок поверх рамки сразу делает ноду членом группы (В5):
+            // сервер принимает `parent_key` в `POST /board/node`.
+            const parent = frameAtPoint(board, x, y);
             await api.post("/canvas/board/node", {
               ...boardTarget,
               node_type: item.type,
               node_id: item.id,
               x,
               y,
+              ...(parent ? { parent_key: parent } : {}),
             });
             loadBoard();
             return;
@@ -4430,6 +4504,13 @@ export function CanvasPage() {
               openCreatureCard(type, id, rect);
               return;
             }
+            // П1.2: Ctrl/Cmd-щелчок — добавить узел к выделению, а не заменить
+            // его. React Flow сам переключает выделение (onNodesChange ->
+            // applyNodeChanges пропускает select-изменения, и в базу оно не
+            // пишется), так что при зажатом модификаторе не схлопываем выборку
+            // в selectOnly и не пишем focus в адрес: эффект по focusParam ниже
+            // иначе снова свёл бы набор выделенных к одному узлу.
+            if (event.ctrlKey || event.metaKey) return;
             selectOnly(type, id);
             // focus в адресе — чтобы ссылку на узел можно было сохранить.
             const next: Record<string, string> = {};
@@ -4624,6 +4705,15 @@ export function CanvasPage() {
             onExit={stopRehearsal}
             onPlay={playRehearsalSound}
           />
+        ) : nodes.filter((n) => n.selected).length > 1 ? (
+          /* Мультивыделение (П1.2): несколько узлов — вместо одиночных панелей
+             свойств сводка по выделению (число, разбивка по типам, сборка в
+             группу). Ровно один выбранный узел по-прежнему открывает свою
+             панель ниже. */
+          <MultiselectPanel
+            nodes={nodes.filter((n) => n.selected)}
+            onCreateGroup={() => void createGroup()}
+          />
         ) : selectedAdventureId != null ? (
           <AdventureProperties
             arcId={selectedAdventureId}
@@ -4641,9 +4731,9 @@ export function CanvasPage() {
           <StickerProperties stickerId={selectedStickerId} onSaved={refreshAll} board={board} />
         ) : selectedCheckId != null ? (
           <CheckProperties checkId={selectedCheckId} onSaved={refreshAll} board={board} />
-        ) : (
+        ) : selectedSceneId != null ? (
           <SceneProperties sceneId={selectedSceneId} onSaved={refreshAll} board={board} />
-        ))}
+        ) : null)}
     </div>
   );
 
@@ -5334,6 +5424,84 @@ function PropsPanel({
       </div>
       {children}
     </div>
+  );
+}
+
+/** Русские имена типов узлов для сводки мультивыделения. Сущности уже есть в
+ *  `ENTITY_TYPE_LABEL`, но они не покрывают структурные виды узлов холста
+ *  (сцена, рамка, стикер…), поэтому здесь свой сведённый словник. */
+const MULTI_TYPE_LABEL: Record<string, string> = {
+  scene: "Сцена",
+  check: "Проверка",
+  sticker: "Стикер",
+  frame: "Рамка",
+  chapter: "Глава",
+  pin: "Пин",
+  adventure: "Приключение",
+  image: "Картинка",
+  bundle: "Набор",
+  event: "Событие",
+  sound_set: "Саундсет",
+  playlist: "Плейлист",
+  being: "Существо",
+  location: "Локация",
+  artifact: "Предмет",
+  community: "Сообщество",
+  compendium_entry: "Из книги",
+  character: "Персонаж",
+};
+
+/**
+ * Панель мультивыделения (П1.2).
+ *
+ * Когда выбрано несколько узлов сразу, одиночные панели свойств не показывают
+ * ничего осмысленного, поэтому вместо них — сводка: сколько выбрано, по типам,
+ * и кнопка сборки в группу. Число — голос Data (моноширинный, §1.5),
+ * множественность — сменой состояния панели, а не размножением меток (§1.10).
+ *
+ * Группировка по типу — по префиксу ключа ноды (`splitKey`): он и есть
+ * `node_type` с сервера. Порядок — по убыванию числа в типе: вид, которого
+ * больше, читается первым.
+ *
+ * Рамки в выбранном считаются и подсвечиваются, но в группу не входят: их
+ * отсеивает сам createGroup через `canJoinFrame`, здесь это не дублируем.
+ */
+function MultiselectPanel({
+  nodes,
+  onCreateGroup,
+}: {
+  nodes: Node<CanvasNodeData>[];
+  onCreateGroup: () => void;
+}) {
+  const groups = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of nodes) {
+      const [type] = splitKey(n.id);
+      m.set(type, (m.get(type) ?? 0) + 1);
+    }
+    return [...m.entries()]
+      .map(([type, n]) => ({ type, label: MULTI_TYPE_LABEL[type] ?? type, n }))
+      .sort((a, b) => b.n - a.n);
+  }, [nodes]);
+
+  return (
+    <PropsPanel
+      label="Выделено"
+      aside={<span className="canvas-props__count">{nodes.length}</span>}
+    >
+      <div className="canvas-props__fields">
+        <div className="canvas-node__chips">
+          {groups.map((g) => (
+            <span className="canvas-node__chip" key={g.type}>
+              {g.label} <b className="canvas-props__count">{g.n}</b>
+            </span>
+          ))}
+        </div>
+        <button className="primary" onClick={onCreateGroup}>
+          Создать группу
+        </button>
+      </div>
+    </PropsPanel>
   );
 }
 

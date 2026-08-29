@@ -8,7 +8,7 @@ import { applyActiveStorageEnv } from "./services/storages";
 // Resolve which storage profile is active and point DB_DIR/VAULT_ROOT at it
 // before anything below opens a database connection or touches the vault.
 applyActiveStorageEnv();
-import "./db/db";
+import { db } from "./db/db";
 import { initVault, VAULT_ROOT } from "./services/filesystem";
 import { storagesRouter } from "./routes/storages";
 import { appSettingsRouter } from "./routes/appSettings";
@@ -56,6 +56,7 @@ import { canvasRouter } from "./routes/canvas";
 import { adventureImportRouter } from "./routes/adventureImport";
 import { systemImportRouter } from "./routes/systemImport";
 import { sweepOrphans } from "./services/orphans";
+import { backfillCompendiumSummaries } from "./services/monsterSummary";
 import { attachUser, requireAuth, bootstrapGmAccount, verifyToken, type AuthedRequest } from "./services/auth";
 import { apiRoleGate } from "./services/playerAccess";
 
@@ -68,6 +69,22 @@ bootstrapGmAccount();
 {
   const removed = sweepOrphans();
   if (removed > 0) console.log(`Cleaned ${removed} orphaned satellite row(s) at startup.`);
+}
+
+// Стартовый проход сводок бестиария: у импортированных систем data записей
+// пустая, а её знает статблок — дозаполняем один раз здесь, чтобы список и
+// профиль раздела читали готовое, не дописывая при каждом GET. Заполняется
+// только пустое; руками заданное не трогается (см. monsterSummary).
+{
+  const fill = backfillCompendiumSummaries(db);
+  if (fill.changed > 0) {
+    console.log(
+      `Compendium summaries: ${fill.changed}/${fill.checked} monsters filled ` +
+        `(size ${fill.filled.size}, type ${fill.filled.creatureType}, ` +
+        `alignment ${fill.filled.alignment}, CR ${fill.filled.cr}, ` +
+        `${fill.conflicts.length} conflicts, ${fill.unknownTypes.length} unknown types).`
+    );
+  }
 }
 
 const app = express();
@@ -155,6 +172,16 @@ app.use("/files", (req: AuthedRequest, _res, next) => {
     const user = verifyToken(req.query.token);
     if (user) req.user = user;
   }
+  next();
+});
+app.use("/files", requireAuth(), (req, res, next) => {
+  // Митгация утечки ?token= (H4): файлы не должны кэшироваться публично и не
+  // должны уходить в Referer. Полный фикс — грузить через Authorization header
+  // (см. client/src/utils/fileUrl.ts), но пока ?token= остаётся fallback для
+  // <img>/<audio> — режем кэш и реферер.
+  res.setHeader("Cache-Control", "private, no-store, max-age=0");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Content-Type-Options", "nosniff");
   next();
 });
 app.use("/files", requireAuth(), (req, res, next) => {

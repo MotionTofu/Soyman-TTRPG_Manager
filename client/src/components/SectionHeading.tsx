@@ -19,6 +19,8 @@ interface SectionHeadingProps {
   icon?: NavIconName;
   /** Renders a right-aligned "label →" link — "section" level only. */
   action?: SectionHeadingAction;
+  /** Right-aligned custom node (e.g. clock) — "section" level only, renders before/after action. */
+  right?: ReactNode;
   /** Which nav destination this page-level heading belongs to (matches the
    *  left-nav icon names) — "page" level only. Lets per-theme CSS (e.g. the
    *  Neon theme) color each section's <h1> without hardcoding routes into
@@ -32,7 +34,7 @@ interface SectionHeadingProps {
 // Системы, etc.), not on entity detail pages. Also doubles, via `level:
 // "section"`, as the shared "icon, caps-header, все →" pattern for
 // sub-sections within a page.
-export function SectionHeading({ children, level = "page", icon, action, section }: SectionHeadingProps) {
+export function SectionHeading({ children, level = "page", icon, action, right, section }: SectionHeadingProps) {
   if (level === "section") {
     return (
       <div className="section-heading section-heading-sub">
@@ -40,10 +42,15 @@ export function SectionHeading({ children, level = "page", icon, action, section
           {icon && <NavIcon name={icon} className="section-heading-sub-icon" />}
           {children}
         </h2>
-        {action && (
-          <Link to={action.to} className="section-heading-sub-action">
-            {action.label} →
-          </Link>
+        {(right || action) && (
+          <span style={{ display: "flex", gap: 12, alignItems: "center", marginLeft: "auto" }}>
+            {right}
+            {action && (
+              <Link to={action.to} className="section-heading-sub-action">
+                {action.label} →
+              </Link>
+            )}
+          </span>
         )}
       </div>
     );

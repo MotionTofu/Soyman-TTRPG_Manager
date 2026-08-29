@@ -17,6 +17,7 @@
 
 import { db } from "../db/db";
 import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../db/defaultSections";
+import { backfillCompendiumSummaries } from "../services/monsterSummary";
 import { systemPrefixOf, SYSTEM_KEY_PREFIX_TO_KIND } from "./systemFormat";
 import { buildTokenWeights, normalizeName, similarity } from "./names";
 import type {
@@ -1194,7 +1195,13 @@ export function applySystemImport(
     return { batchId, systemId: sid, systemCreated, counts, warnings };
   });
 
-  return run();
+  const result = run();
+  // Импорт пишет монстров с пустой data (её хранит статблок) — сводка нужна
+  // разделу сразу, поэтому дозаполняем после транзакции, а не на каждый GET.
+  if (result.systemId != null) {
+    backfillCompendiumSummaries(db, result.systemId);
+  }
+  return result;
 }
 
 /**

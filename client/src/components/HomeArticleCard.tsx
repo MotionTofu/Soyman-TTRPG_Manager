@@ -23,23 +23,27 @@ export function HomeArticleCard() {
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const last = sessionStorage.getItem(LAST_SHOWN_KEY);
+    let last: string | null = null;
+    try { last = sessionStorage.getItem(LAST_SHOWN_KEY); } catch {}
     api
-      .get<RandomArticle | null>(`/random-article${last ? `?exclude=${last}` : ""}`)
+      .get<RandomArticle | null>(`/random-article${last ? `?exclude=${encodeURIComponent(last)}` : ""}`)
       .then((next) => {
         setArticle(next);
-        if (next) sessionStorage.setItem(LAST_SHOWN_KEY, String(next.id));
+        if (next) try { sessionStorage.setItem(LAST_SHOWN_KEY, String(next.id)); } catch {}
       })
       .catch(() => setArticle(null));
   }, []);
 
-  // «Читать целиком» показывается только когда текст действительно не влез:
-  // у большинства записей справочника описание в две-три строки, и вечная
-  // подпись под ними обещала бы продолжение, которого нет.
+  // «Читать целиком» показывается только когда текст действительно не влез.
+  // Пересчитываем и на ресайз (ResizeObserver) — иначе после поворота телефона флаг врёт.
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
-    setClipped(el.scrollHeight > el.clientHeight + 1);
+    const update = () => setClipped(el.scrollHeight > el.clientHeight + 1);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [article]);
 
   if (article === undefined || article === null) return null;
@@ -55,11 +59,13 @@ export function HomeArticleCard() {
   // соседи, на фоне которых наклон заметен нарочно.
   const issue = (() => {
     const now = new Date();
-    // Номер недели от начала года — «выпуск» меняется вместе со статьёй и
-    // не врёт: это настоящая дата, а не декоративное число.
-    const start = new Date(now.getFullYear(), 0, 1);
-    const week = Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
-    return `ВЫПУСК ${now.getFullYear()}.${week}`;
+    // ISO-неделя (понедельник-четверг) — не врёт на 1 января (воскресенье → 52 неделя прошлого года)
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `ВЫПУСК ${d.getUTCFullYear()}.${week}`;
   })();
 
   return (
@@ -70,6 +76,7 @@ export function HomeArticleCard() {
         className={`home-article${clipped ? " home-article-clipped" : ""}`}
         role="button"
         tabIndex={0}
+        aria-label={`Открыть статью: ${article.name}, ${issue}`}
         onClick={(e) => {
           // Ссылка-меншен внутри тела ведёт к своей сущности — её щелчок не
           // должен ещё и открывать статью, поверх которой он стоит.

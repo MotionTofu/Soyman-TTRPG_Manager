@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";
+import { toLocalDateKey } from "../utils/date";
 import type {
   PartyMember,
   PlayerSection,
@@ -83,7 +84,7 @@ export function PlayerCampaignPage() {
   const list = entries.filter((e) => e.kind === kind);
   const activeTab = KIND_TABS.find((t) => t.kind === kind)!;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateKey();
   const nextSession = content
     ? [...content.schedule]
         .filter((s) => s.status === "planned" && s.date >= today)

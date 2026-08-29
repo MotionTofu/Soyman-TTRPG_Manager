@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import type { Campaign } from "../types";
 import { formatNearestDate } from "../nearestDate";
+import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
+import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 
 // Плитка-обложка (§6.3.1): обложка с подписью поверх и компактная мета под
 // ней. Общая для сетки на «Кампаниях» и ряда на главной — два экрана рисуют
@@ -15,20 +17,26 @@ import { formatNearestDate } from "../nearestDate";
 // когда следующая», а не описывает объект. Сеттинг, счётчики и оплата никуда
 // не делись — они внутри кампании, куда плитка и ведёт.
 export function CampaignCoverTile({ campaign: c }: { campaign: Campaign }) {
-  const imageUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
+  const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
+  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
+  const authBlob = useAuthenticatedFileUrl(imageUrl);
+  // Для /files грузим через Authorization header (blob), иначе safeBackgroundImage (https)
+  const bg = imageUrl?.startsWith("/files/")
+    ? (authBlob ? `url("${authBlob}")` : undefined)
+    : safeBackgroundImage(imageUrl);
 
   return (
     <Link to={`/campaigns/${c.id}`} className="card campaign-tile">
       <div className="campaign-tile-cover cover-halftone">
-        {imageUrl ? (
+        {bg ? (
           // Обложка — изображение-ФОН, поэтому проходит дуотон (zine.css).
           // Отдельный слой под картинкой нужен, чтобы grayscale-фильтр не
           // достался подписи поверх неё.
           <div className="cover-art cover-photo">
-            <div className="cover-art-image" style={{ backgroundImage: `url("${imageUrl}")` }} />
+            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
           </div>
         ) : (
-          <div className="cover-art cover-art-fallback zine-grain" />
+          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
         )}
         <div className="campaign-tile-scrim" />
         <h3 className="campaign-tile-name">{c.name}</h3>

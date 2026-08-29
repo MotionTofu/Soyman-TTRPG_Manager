@@ -46,12 +46,14 @@ interface Dashboard {
 // player-app's Главная uses.
 export function PlayerHomePage() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get<Dashboard>("/player/dashboard").then(setDashboard);
+    api.get<Dashboard>("/player/dashboard").then(setDashboard).catch((e) => setError(String(e)));
   }, []);
 
+  if (error) return <div className="card">Не загрузилось: {error} <button onClick={() => location.reload()}>Повторить</button></div>;
   if (!dashboard) return <p className="muted">Загрузка…</p>;
 
   const { unpaidSessions, reminders, sessions } = dashboard;
@@ -84,8 +86,13 @@ export function PlayerHomePage() {
       <MonthCalendar
         events={events}
         onDayClick={() => {}}
-        onEventClick={(e) => navigate(`/campaigns/${sessions.find((s) => s.id === e.id)!.campaign_id}`)}
+        onEventClick={(e) => {
+          const s = sessions.find((s) => s.id === e.id);
+          if (!s) return;
+          navigate(`/campaigns/${s.campaign_id}`);
+        }}
       />
+      {events.length === 0 && <p className="muted">Пока нет сессий — календарь пуст.</p>}
 
       {!loadHideFinance() && unpaidSessions.length > 0 && (
         <div className="stack">

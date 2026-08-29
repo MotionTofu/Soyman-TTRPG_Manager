@@ -24,11 +24,24 @@ const TOKEN_RE =
 function parseSpanAttrs(attrs: string): CSSProperties {
   const style: CSSProperties = {};
   const attrRe = /(\w+)="([^"]*)"/g;
+  const allowedFonts = new Set(["PT Mono", "Oswald", "Cormorant SC", "JetBrains Mono", "RussianPunk", "NewZelek", "RookiePunk", "serif", "monospace", "sans-serif"]);
   for (const m of attrs.matchAll(attrRe)) {
     const [, key, val] = m;
-    if (key === "color") style.color = val;
-    else if (key === "size") style.fontSize = `${val}px`;
-    else if (key === "font") style.fontFamily = val;
+    if (/[;{}]/.test(val)) continue;
+    if (key === "color") {
+      const okHex = /^#[0-9a-fA-F]{3,8}$/.test(val);
+      const okFunc = /^(rgb|rgba|hsl|hsla|var)\(.+\)$/.test(val);
+      const okNamed = /^[a-zA-Z]+$/.test(val) && val.length < 20;
+      if (okHex || okFunc || okNamed) style.color = val;
+    } else if (key === "size") {
+      const n = Number(val);
+      if (Number.isFinite(n) && n >= 8 && n <= 72) style.fontSize = `${n}px`;
+    } else if (key === "font") {
+      if (val.length < 60 && /^[a-zA-Z0-9 ,\-"']+$/.test(val)) {
+        const first = val.split(",")[0].trim().replace(/^["']|["']$/g, "");
+        if (allowedFonts.has(first) || /^[a-zA-Z ]+$/.test(first)) style.fontFamily = val;
+      }
+    }
   }
   return style;
 }

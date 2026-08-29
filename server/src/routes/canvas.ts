@@ -1962,7 +1962,11 @@ canvasRouter.post("/stickers", (req, res) => {
 });
 canvasRouter.put("/stickers/:id", (req, res) => {
   const { text, name, note, color } = req.body as { text?: string; name?: string; note?: string; color?: string };
-  if (text !== undefined) db.prepare("UPDATE canvas_stickers SET text=?, name=? WHERE id=?").run(text, text, Number(req.params.id));
+  // `text` и `name` развязаны (Ш2): тело и подпись стикера независимы, и запись
+  // одного не должна затирать другое. Раньше `text` тянул за собой `name`,
+  // поэтому кастомная подпись стикера (поле «Имя», имя вместо заготовки)
+  // стиралась при любом обновлении текста тела.
+  if (text !== undefined) db.prepare("UPDATE canvas_stickers SET text=? WHERE id=?").run(text, Number(req.params.id));
   if (name !== undefined) db.prepare("UPDATE canvas_stickers SET name=? WHERE id=?").run(name, Number(req.params.id));
   if (note !== undefined) db.prepare("UPDATE canvas_stickers SET note=? WHERE id=?").run(note, Number(req.params.id));
   if (color !== undefined) db.prepare("UPDATE canvas_stickers SET color=? WHERE id=?").run(color, Number(req.params.id));
@@ -2167,67 +2171,27 @@ canvasRouter.get("/export", (req, res) => {
   let canvas: unknown = null;
   if (board) {
     const nodes = db.prepare("SELECT id, node_type, node_id, x, y, z_index, parent_key FROM canvas_nodes WHERE board_id = ?").all(board.id);
-    const groups = db.prepare("SELECT arc_id, x, y, w, h FROM canvas_groups WHERE board_id = ?").all(board.id);
     const bundleIds = (nodes as { node_type: string; node_id: number }[]).filter((n) => n.node_type === "bundle").map((n) => n.node_id);
     const bundles = bundleIds.length ? db.prepare(`SELECT * FROM canvas_bundles WHERE id IN (${bundleIds.map(() => "?").join(",")})`).all(...bundleIds) : [];
     const bundleLinks = bundleIds.length ? db.prepare(`SELECT l.*, IFNULL(c.qty,'') as qty FROM generic_links l LEFT JOIN link_cast c ON c.link_id=l.id WHERE l.from_type='bundle' AND l.from_id IN (${bundleIds.map(() => "?").join(",")})`).all(...bundleIds) : [];
-    canvas = { board_id: board.id, nodes, groups, bundles, bundleLinks };
+    canvas = { board_id: board.id, nodes, bundles, bundleLinks };
   }
   res.json({ arc, scenes, transitions, checks, outcomes, canvas });
 });
 
 /**
- * Подвинули или растянули рамку главы.
+ * Переименование главы.
  *
- * Сцены внутри при этом НЕ пересчитываются: они держат свои координаты в
- * системе холста. Двигать их вместе с рамкой — работа клиента, который знает,
- * кто в рамке лежал в момент захвата; на сервере это означало бы решать за
- * Мастера, попала ли в рамку сцена соседней главы.
+ * Единственное оставшееся применение: правка `story_arcs.name`. Раньше сюда же
+ * писался прямоугольник главы в `canvas_groups`, но главы стали узлами и
+ * отказались от глав-рамок — путь к legacy-геометрии выпилен, `canvas_groups`
+ * больше не пишется.
  */
 canvasRouter.put("/groups/:arcId", (req, res) => {
-  const { board_id, x, y, w, h, color, name, collapsed } = req.body as {
-    board_id?: number;
-    x?: number;
-    y?: number;
-    w?: number;
-    h?: number;
-    color?: string;
-    name?: string;
-    collapsed?: boolean;
-  };
-  if (!board_id) return res.status(400).json({ error: "board_id is required" });
+  const { name } = req.body as { name?: string };
   if (name !== undefined) {
-    db.prepare("UPDATE story_arcs SET name = ? WHERE id = ?").run(String(name).trim() || "Глава", req.params.arcId);
+    db.prepare("UPDATE story_arcs SET name = ? WHERE id = ?").run(String(name).trim() || "Глава", Number(req.params.arcId));
   }
-  // Заводит строку, если её ещё нет. Раньше рамку создавал GET, и простого
-  // UPDATE хватало; теперь GET не пишет, и первый же сдвиг рамки главы
-  // пришёлся бы в ноль строк — то есть молча пропал бы.
-  // Именованные параметры, а не excluded: при частичной правке (ресайз шлёт
-  // только w/h) excluded уже подставил бы дефолт и обнулил x/y.
-  db.prepare(
-    `INSERT INTO canvas_groups (board_id, arc_id, x, y, w, h, color, collapsed, updated_at)
-     VALUES (@board, @arc, COALESCE(@x, 0), COALESCE(@y, 0), COALESCE(@w, @defW), COALESCE(@h, @defH), COALESCE(@color, '#2C3E50'), COALESCE(@collapsed, 1), datetime('now'))
-     ON CONFLICT(board_id, arc_id) DO UPDATE SET
-       x = COALESCE(@x, canvas_groups.x), y = COALESCE(@y, canvas_groups.y),
-       w = COALESCE(@w, canvas_groups.w), h = COALESCE(@h, canvas_groups.h),
-       color = COALESCE(@color, canvas_groups.color),
-       collapsed = COALESCE(@collapsed, canvas_groups.collapsed),
-       updated_at = datetime('now')`
-  ).run({
-    board: Number(board_id),
-    arc: Number(req.params.arcId),
-    x: x ?? null,
-    y: y ?? null,
-    w: w ?? null,
-    h: h ?? null,
-    color: color ?? null,
-    collapsed: collapsed === undefined ? null : collapsed ? 1 : 0,
-    // Размер новой строки — размер пустой главы по Q14: одна колонка сцен
-    // плюс шапка. Для непустой он всё равно пересчитывается охватом при
-    // каждой отдаче доски, так что важен только для главы без сцен.
-    defW: COL_W + FRAME_PAD * 2,
-    defH: FRAME_HEAD + ROW_H + FRAME_PAD,
-  });
   res.json({ ok: true });
 });
 
@@ -2303,7 +2267,7 @@ canvasRouter.put("/board/nodes", (req, res) => {
  * Существо же оказывается на схеме только потому, что его сюда положили.
  */
 canvasRouter.post("/board/node", (req, res) => {
-  const { arc_id, setting_id, campaign_id, board_id, node_type, node_id, x, y } = req.body as {
+  const { arc_id, setting_id, campaign_id, board_id, node_type, node_id, x, y, parent_key } = req.body as {
     arc_id?: number;
     setting_id?: number;
     campaign_id?: number;
@@ -2312,6 +2276,7 @@ canvasRouter.post("/board/node", (req, res) => {
     node_id?: number;
     x?: number;
     y?: number;
+    parent_key?: string | null;
   };
   if ((!arc_id && !setting_id && !campaign_id && !board_id) || !node_type || !node_id) {
     return res
@@ -2333,12 +2298,22 @@ canvasRouter.post("/board/node", (req, res) => {
       : setting_id
         ? ensureBoard("setting", Number(setting_id))
         : ensureBoard("campaign", Number(campaign_id));
+  // Членство в группе-рамке: `parent_key` формата `frame:<id>`. Палитра-дроп
+  // на рамку может захотеть сразу вступить в группу (В5). Проверяем формат и
+  // что рамка живёт на той же доске — иначе нельзя доверять координатам узла.
+  const pk = parent_key ?? null;
+  if (pk !== null) {
+    const m = /^frame:(\d+)$/.exec(pk);
+    if (!m) return res.status(400).json({ error: "parent_key must be 'frame:<id>' or null" });
+    const frame = db.prepare("SELECT id FROM canvas_frames WHERE id = ? AND board_id = ?").get(Number(m[1]), boardId);
+    if (!frame) return res.status(400).json({ error: "frame not found on this board" });
+  }
   db.prepare(
-    `INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, updated_at)
-     VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, parent_key, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(board_id, node_type, node_id)
-     DO UPDATE SET x = excluded.x, y = excluded.y, updated_at = excluded.updated_at`
-  ).run(boardId, node_type, Number(node_id), Number(x) || 0, Number(y) || 0);
+     DO UPDATE SET x = excluded.x, y = excluded.y, parent_key = excluded.parent_key, updated_at = excluded.updated_at`
+  ).run(boardId, node_type, Number(node_id), Number(x) || 0, Number(y) || 0, pk);
   res.status(201).json({ ok: true, key: `${node_type}:${node_id}` });
 });
 
@@ -2366,7 +2341,13 @@ canvasRouter.delete("/board/node", (req, res) => {
     db.prepare("DELETE FROM canvas_images WHERE id = ?").run(Number(node_id));
     void row;
   }
-  if (node_type === "frame") db.prepare("DELETE FROM canvas_frames WHERE id = ?").run(Number(node_id));
+  if (node_type === "frame") {
+    // Вместе с рамкой убираем и её членство: дети остаются на холсте, но
+    // перестают «принадлежать» удалённой группе. Раньше `parent_key` не чистился,
+    // и узлы осиротевали со ссылкой на несуществующую рамку (В2).
+    db.prepare("UPDATE canvas_nodes SET parent_key = NULL WHERE parent_key = ?").run(`frame:${Number(node_id)}`);
+    db.prepare("DELETE FROM canvas_frames WHERE id = ?").run(Number(node_id));
+  }
   res.json({ ok: true });
 });
 

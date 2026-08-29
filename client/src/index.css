@@ -1388,6 +1388,21 @@ h4 { font-size: var(--fs-body); }
   flex-direction: column;
   gap: var(--sp-3);
 }
+.mini-calendar-legend {
+  display: flex;
+  gap: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+.mini-calendar-legend-item.legend-planned {
+  border-bottom: 1px dashed var(--ink);
+  padding-bottom: 1px;
+}
+.mini-calendar-legend-item.legend-held {
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 1px;
+}
 .mini-calendar-nav {
   display: flex;
   align-items: center;
@@ -1590,6 +1605,33 @@ h4 { font-size: var(--fs-body); }
 }
 .mini-calendar-daylist-row:hover .mini-calendar-daylist-time {
   color: var(--on-surface-muted);
+}
+
+/* Поповер списка игр дня — открывается над датой по клику (B1).
+   Фиксированный, чтобы не зависеть от overflow карточки; клапан по краю
+   экрана — transform + max-width. */
+.mini-calendar-popover {
+  position: fixed;
+  z-index: 60;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: min(60vh, 400px);
+  overflow-y: auto;
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--ink);
+  border-radius: var(--card-radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+  /* Если ячейка у правого края — поповер не уезжает за экран */
+  transform: translateX(0);
+}
+@media (max-width: 860px) {
+  .mini-calendar-popover {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%);
+    top: 50% !important;
+    max-width: calc(100vw - 24px);
+  }
 }
 
 .search-pins {
@@ -1973,6 +2015,55 @@ th, td {
 }
 .modal:has(.mention-picker-modal) {
   width: 480px;
+}
+
+/* Подтверждение перехода на внешний ресурс (Boosty, Telegram) — зинная модалка
+   (design_revision.md): плашка-инверсия называет её (§1.4), капс-подпись
+   шрифтом Label, проза обычной гарнитурой (§1.5), акцентный бюджет — ровно
+   одна кнопка (§1.8). `overflow: hidden` прячет углы плашки под радиусом
+   пользовательской настройки (§4 — радиус разрешён только на внешнем углу,
+   плашка внутри остаётся прямоугольной). */
+.modal:has(.external-confirm) {
+  width: 360px;
+  overflow: hidden;
+}
+.external-confirm__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -20px -20px 14px;
+  padding: 10px 14px;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border-bottom: 1.5px solid var(--line);
+}
+.external-confirm__head .nav-icon {
+  width: 16px;
+  height: 16px;
+}
+.external-confirm__text {
+  margin: 0 0 18px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.external-confirm__actions {
+  display: flex;
+  /* Кнопки во всю ширину, одна под другой: длинные подписи («Да, прям сейчас
+     напишу!», «Нет, не очень-то хочется») перестают воевать за одну строку и
+     никогда не вылезают за рамку (overflow у .modal:has(.external-confirm)
+     скрыт ради углов плашки). */
+  flex-direction: column;
+  gap: 8px;
+}
+.external-confirm__actions button {
+  width: 100%;
+  white-space: normal;
 }
 .mention-picker-results {
   max-height: 260px;
@@ -3675,13 +3766,6 @@ details.card[open] summary {
   .home-hero-cover {
     height: 186px;
   }
-  /* Второй месяц на телефоне убирается: две сетки в 375 px становятся тесными
-     и клетка перестаёт быть целью для пальца. Один месяц читается нормально,
-     следующий — по стрелке. Правило здесь, а не в компоненте: «не хватает
-     ширины» — это про экран, а не про то, сколько месяцев имеет смысл. */
-  .mini-calendar-grid-block + .mini-calendar-grid-block {
-    display: none;
-  }
   /* Клетка — цель для пальца, а не для мыши: при обычном поле карточки в
      14 px на 375-м экране выходило 42 px, на два ниже порога в 44. Поле
      карточки календаря ужимается ровно настолько, чтобы клетка добрала. */
@@ -3884,6 +3968,11 @@ details.card[open] summary {
 .nav-bottom-button:disabled {
   cursor: default;
   opacity: 0.6;
+}
+/* Пункт-действие в нижнем списке (Boosty): кнопка, но читается как соседние
+   ссылки раздела — та же гарнитура, что у .nav-bottom a (display-голос). */
+.nav-bottom-button.nav-bottom-external {
+  font-family: var(--font-display);
 }
 
 .timeline {
@@ -5080,6 +5169,24 @@ input.litm-theme-title {
   color: var(--accent-2);
   font-weight: 600;
   text-decoration: underline;
+}
+/* Ссылки-кнопки в списке контактов раздела «Автор» (страница «О программе»):
+   снимают с button его обычный вид (заливка, контур, паддинги) и оставляют
+   подчёркнутый текст поверх остальных строк-контактов. Внешний ресурс не
+   открывается сразу — сначала та же модалка подтверждения, что и в навигации. */
+.author-contact-link {
+  background: none;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  text-align: left;
+  white-space: normal;
+  color: var(--accent-2);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.author-contact-link:hover {
+  border-color: transparent;
 }
 .rt-h {
   display: inline-block;

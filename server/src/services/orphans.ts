@@ -14,10 +14,17 @@ const OWNER_TABLE: Record<string, string> = {
   being: "setting_beings",
   community: "setting_communities",
   location: "setting_locations",
+  // Записи компендиума тоже владеют статблоками (полный лист существа
+  // бестиария — статблок с owner_type='compendium_entry'). Раньше этого типа
+  // здесь не было, и удалённая запись оставляла свой статблок висеть: сирота
+  // жила вечно, потому что sweep её не видел. generic_links и entity_relations
+  // этот случай уже покрывают (см. LINK_ENDPOINT_TABLE/RELATION_ENDPOINT_TABLE),
+  // а statblocks — нет.
+  compendium_entry: "compendium_entries",
 };
 
 const SATELLITES: { table: string; ownerTypes: string[] }[] = [
-  { table: "statblocks", ownerTypes: ["character", "being"] },
+  { table: "statblocks", ownerTypes: ["character", "being", "compendium_entry"] },
   { table: "gallery_images", ownerTypes: ["character", "being"] },
   { table: "important_dates", ownerTypes: ["being", "community", "location", "character"] },
 ];

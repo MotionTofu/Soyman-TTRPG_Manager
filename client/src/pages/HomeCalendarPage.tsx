@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { MiniCalendar, type MiniEvent } from "../components/MiniCalendar";
@@ -12,6 +12,10 @@ import { HomeArticleCard } from "../components/HomeArticleCard";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
 import { formatCompactNumber } from "../formatNumber";
+import { toLocalDateKey } from "../utils/date";
+import { safeBackgroundImage } from "../utils/safeUrl";
+import { useAuthenticatedFileUrl } from "../utils/fileUrl";
+import { LocalClock } from "../components/LocalClock";
 import type { AppSettings, Campaign, SessionSummary } from "../types";
 
 interface FinanceSummary {
@@ -41,41 +45,78 @@ export function HomeCalendarPage() {
   } | null>(null);
   const [oneshotSessions, setOneshotSessions] = useState<SessionSummary[]>([]);
   const [initialLoad, setInitialLoad] = useState(false);
-  const [calendarRefresh, setCalendarRefresh] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   function refreshSessions() {
-    api.get<SessionSummary[]>("/calendar").then(setSessions);
-    setCalendarRefresh((n) => n + 1);
+    api.get<SessionSummary[]>("/calendar").then(setSessions).catch((e) => setCalendarError(String(e)));
+  }
+
+  const miniEvents: MiniEvent[] = sessions.map((s) => ({
+    id: s.id,
+    date: s.date,
+    status: s.status,
+    campaignId: s.campaign_id,
+    campaignName: s.campaign_name,
+    startTime: s.start_time,
+  }));
+
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [campaignsError, setCampaignsError] = useState<string | null>(null);
+  const loadIdRef = useRef(0);
+
+  function loadInitial() {
+    const cur = ++loadIdRef.current;
+    setCalendarError(null);
+    setCampaignsError(null);
+    setInitialLoad(false);
+    const guarded = <T,>(fn: (v: T) => void) => (v: T) => { if (loadIdRef.current === cur) fn(v); };
+    Promise.allSettled([
+      api.get<SessionSummary[]>("/calendar").then(guarded(setSessions)).catch((e) => { if (loadIdRef.current === cur) setCalendarError(String(e)); throw e; }),
+      api.get<FinanceSummary>("/finance/summary").then(guarded(setFinance)).catch(() => {}),
+      api.get<AppSettings>("/app-settings").then((s) => { if (loadIdRef.current === cur) setHomeBgUrl(s.home_background_url); }).catch(() => {}),
+      api.get<Campaign[]>("/campaigns").then(guarded(setCampaigns)).catch((e) => { if (loadIdRef.current === cur) setCampaignsError(String(e)); throw e; }),
+    ]).finally(() => { if (loadIdRef.current === cur) setInitialLoad(true); });
   }
 
   useEffect(() => {
-    Promise.allSettled([
-      api.get<SessionSummary[]>("/calendar").then(setSessions),
-      api.get<FinanceSummary>("/finance/summary").then(setFinance),
-      api.get<AppSettings>("/app-settings").then((s) => setHomeBgUrl(s.home_background_url)),
-      api.get<Campaign[]>("/campaigns").then(setCampaigns),
-    ]).finally(() => setInitialLoad(true));
+    loadInitial();
+    return () => { loadIdRef.current++; };
   }, []);
 
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const nearest = sessions
-      .filter((s) => s.status === "planned" && s.date >= today)
-      .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
-    if (!nearest) {
-      setBgUrl(null);
-      return;
-    }
-    api.get<Campaign>(`/campaigns/${nearest.campaign_id}`).then((c) => setBgUrl(c.background_image_url ?? null));
-  }, [sessions]);
+  const authHomeBgBlob = useAuthenticatedFileUrl(homeBgUrl);
+  const authBgBlob = useAuthenticatedFileUrl(bgUrl);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateKey();
   const nearestSession = sessions
     .filter((s) => s.status === "planned" && s.date >= today)
     .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
 
+  function bgStyle(url: string | null, blob: string | null): string | undefined {
+    if (!url) return undefined;
+    if (url.startsWith("/files/")) return blob ? `url("${blob}")` : undefined;
+    return safeBackgroundImage(url);
+  }
+
+  useEffect(() => {
+    if (!nearestSession) {
+      setBgUrl(null);
+      return;
+    }
+    const campaign = campaigns.find((c) => c.id === nearestSession.campaign_id);
+    if (campaign) {
+      setBgUrl(campaign.background_image_url ?? null);
+      return;
+    }
+    const controller = new AbortController();
+    api.get<Campaign>(`/campaigns/${nearestSession.campaign_id}`, { signal: controller.signal } as RequestInit).then((c) => setBgUrl(c.background_image_url ?? null)).catch(() => { if (!controller.signal.aborted) setBgUrl(null); });
+    return () => controller.abort();
+  }, [nearestSession, campaigns]);
+
   function openCreateModal(date: string) {
+    setCreateError(null);
+    setCreating(false);
     setCreateModal({
       date,
       campaignId: campaigns[0] ? String(campaigns[0].id) : "",
@@ -93,7 +134,9 @@ export function HomeCalendarPage() {
       setOneshotSessions([]);
       return;
     }
-    api.get<SessionSummary[]>(`/campaigns/${createModal.campaignId}/sessions`).then(setOneshotSessions);
+    const controller = new AbortController();
+    api.get<SessionSummary[]>(`/campaigns/${createModal.campaignId}/sessions`, { signal: controller.signal } as RequestInit).then(setOneshotSessions).catch(() => { if (!controller.signal.aborted) setOneshotSessions([]); });
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createModal?.campaignId, selectedCampaign?.type]);
 
@@ -104,31 +147,24 @@ export function HomeCalendarPage() {
         onClick: () => navigate(`/sessions/${event.id}/live`),
       },
       {
-        label: "Статус",
-        children: [
-          {
-            label: "Запланировано",
-            onClick: async () => {
-              await api.put(`/sessions/${event.id}`, { status: "planned" });
-              refreshSessions();
-            },
+            label: "Статус",
+            children: [
+              {
+                label: "Запланировано",
+                onClick: async () => {
+                  await api.put(`/sessions/${event.id}`, { status: "planned" });
+                  refreshSessions();
+                },
+              },
+              {
+                label: "Состоялась",
+                onClick: async () => {
+                  await api.put(`/sessions/${event.id}`, { status: "held" });
+                  refreshSessions();
+                },
+              },
+            ],
           },
-          {
-            label: "Состоялась",
-            onClick: async () => {
-              await api.put(`/sessions/${event.id}`, { status: "held" });
-              refreshSessions();
-            },
-          },
-          {
-            label: "Отмена",
-            onClick: async () => {
-              await api.put(`/sessions/${event.id}`, { status: "cancelled" });
-              refreshSessions();
-            },
-          },
-        ],
-      },
       {
         label: "Удалить (в архив)",
         danger: true,
@@ -144,20 +180,37 @@ export function HomeCalendarPage() {
     ];
   }
 
-  if (!initialLoad) return <p className="muted">Загрузка…</p>;
+  if (!initialLoad) return <div className="stack" style={{ padding: 24 }}><div className="card" style={{ height: 260, background: "var(--bg-elevated)" }} /><div className="card" style={{ height: 340, background: "var(--bg-elevated)" }} /></div>;
 
   async function createSessionFromModal() {
-    if (!createModal || !createModal.campaignId) return;
-    const created = await api.post<{ id: number }>("/sessions", {
-      campaign_id: Number(createModal.campaignId),
-      date: createModal.date,
-      start_time: createModal.startTime || null,
-    });
-    if (createModal.copyFromSessionId) {
-      await copySessionPrep(Number(createModal.copyFromSessionId), created.id);
+    if (!createModal || !createModal.campaignId || creating) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(createModal.date) || Number.isNaN(Date.parse(createModal.date))) {
+      setCreateError("Неверная дата — используйте формат ГГГГ-ММ-ДД");
+      return;
     }
-    setCreateModal(null);
-    refreshSessions();
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await api.post<{ id: number }>("/sessions", {
+        campaign_id: Number(createModal.campaignId),
+        date: createModal.date,
+        start_time: createModal.startTime || null,
+      });
+      if (createModal.copyFromSessionId) {
+        try {
+          await copySessionPrep(Number(createModal.copyFromSessionId), created.id);
+        } catch (e) {
+          setCreateError(`Сессия создана, но копирование подготовки не удалось: ${String(e)}`);
+          return;
+        }
+      }
+      setCreateModal(null);
+      refreshSessions();
+    } catch (e) {
+      setCreateError(String(e));
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
@@ -169,9 +222,16 @@ export function HomeCalendarPage() {
 
           Заголовка «Главная» здесь больше нет: имя экрана на экране по
           умолчанию — служебная надпись, а представляет страницу герой. */}
-      {homeBgUrl && (
+      {bgStyle(homeBgUrl, authHomeBgBlob) && (
         <div className="campaign-bg-layer cover-photo">
-          <div className="cover-art-image" style={{ backgroundImage: `url("${homeBgUrl}")` }} />
+          <div className="cover-art-image" style={{ backgroundImage: bgStyle(homeBgUrl, authHomeBgBlob) }} />
+        </div>
+      )}
+
+      {(calendarError || campaignsError) && (
+        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span>Не удалось загрузить: {[calendarError, campaignsError].filter(Boolean).join(" · ")}</span>
+          <button onClick={loadInitial}>Повторить</button>
         </div>
       )}
 
@@ -184,9 +244,9 @@ export function HomeCalendarPage() {
             // виджете из любой точки приложения.
             <Link to={`/sessions/${nearestSession.id}`} className="card home-hero">
               <div className="home-hero-cover cover-halftone">
-                {bgUrl ? (
+                {bgStyle(bgUrl, authBgBlob) ? (
                   <div className="cover-art cover-photo">
-                    <div className="cover-art-image" style={{ backgroundImage: `url("${bgUrl}")` }} />
+                    <div className="cover-art-image" style={{ backgroundImage: bgStyle(bgUrl, authBgBlob) }} />
                   </div>
                 ) : (
                   <div className="cover-art cover-art-fallback zine-grain" />
@@ -303,11 +363,11 @@ export function HomeCalendarPage() {
           )}
 
           <div className="card stack home-rail-calendar">
-            <SectionHeading level="section" icon="calendar">
+            <SectionHeading level="section" icon="calendar" right={<LocalClock />}>
               Календарь
             </SectionHeading>
             <MiniCalendar
-              refreshKey={calendarRefresh}
+              events={miniEvents}
               // Клетка календаря показывает только число, поэтому меню
               // само называет игру, к которой относятся его пункты: иначе
               // «Удалить (в архив)» в дне с игрой — действие вслепую.
@@ -343,6 +403,7 @@ export function HomeCalendarPage() {
                   </option>
                 ))}
               </select>
+              {campaigns.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Сначала создайте кампанию в разделе «Кампании»</span>}
             </label>
             <label>
               Дата
@@ -376,11 +437,12 @@ export function HomeCalendarPage() {
                 </select>
               </label>
             )}
+            {createError && <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", color: "var(--status-cancelled-fg)" }}>{createError}</div>}
             <div className="row">
-              <button className="primary" onClick={createSessionFromModal} disabled={!createModal.campaignId}>
-                Создать
+              <button className="primary" onClick={createSessionFromModal} disabled={!createModal.campaignId || creating}>
+                {creating ? "Создаю…" : "Создать"}
               </button>
-              <button onClick={() => setCreateModal(null)}>Отмена</button>
+              <button onClick={() => setCreateModal(null)} disabled={creating}>Отмена</button>
             </div>
           </div>
         </Modal>

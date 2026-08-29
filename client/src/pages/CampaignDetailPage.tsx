@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { toLocalDateKey } from "../utils/date";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
@@ -460,13 +461,6 @@ export function CampaignDetailPage() {
           await api.put(`/sessions/${event.id}`, { status: "held" });
           refreshSessions();
           refreshCampaign();
-        },
-      },
-      {
-        label: "Статус: Отмена",
-        onClick: async () => {
-          await api.put(`/sessions/${event.id}`, { status: "cancelled" });
-          refreshSessions();
         },
       },
       ...paymentItems,
@@ -1732,7 +1726,7 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
       });
   }, [campaign.id]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateKey();
   const nextSession = sessions
     .filter((s) => s.status === "planned" && s.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))[0];

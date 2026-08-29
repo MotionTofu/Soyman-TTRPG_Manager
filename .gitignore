@@ -79,3 +79,6 @@ diff_screenshot.txt
 *.py
 scripts/*.py
 scripts/kits_raw.json
+
+# ���-�}��ΰ� ���Ұ�� � �Ұ�Ҫ�� ���䥣� (audit-reports)
+SideWorks/

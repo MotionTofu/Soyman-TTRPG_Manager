@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
+import { formatDateKeyRu } from "../utils/date";
 import type { SessionStatus, SessionSummary } from "../types";
 
 export interface MiniEvent {
@@ -14,13 +15,12 @@ export interface MiniEvent {
 }
 
 interface Props {
+  events?: MiniEvent[];
   onEventContextMenu?: (event: MiniEvent, x: number, y: number) => void;
   onDayContextMenu?: (date: string, x: number, y: number) => void;
   /** Сколько месяцев показывать подряд, начиная с текущего курсора. */
   months?: number;
-  /** Календарь тянет сессии сам, поэтому о правках снаружи — созданной
-   *  сессии, смене статуса, удалении — он узнаёт только отсюда: страница
-   *  меняет число, календарь перечитывает. */
+  /** @deprecated — используется только в режиме без `events` (fallback). */
   refreshKey?: number;
 }
 
@@ -65,29 +65,43 @@ function toDateKey(y: number, m: number, d: number): string {
 //    6 px: инверсия читается с любого расстояния и остаётся одной целью для
 //    мыши. Клик по дню с одной игрой ведёт прямо в неё, по дню с несколькими
 //    открывает короткий список.
-export function MiniCalendar({ onEventContextMenu, onDayContextMenu, months = 2, refreshKey = 0 }: Props) {
+export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayContextMenu, months = 2, refreshKey = 0 }: Props) {
   const { user } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const navigate = useNavigate();
-  const [events, setEvents] = useState<MiniEvent[]>([]);
-  const [dayList, setDayList] = useState<{ key: string; events: MiniEvent[] } | null>(null);
+  const [internalEvents, setInternalEvents] = useState<MiniEvent[]>([]);
+  const [popover, setPopover] = useState<{ key: string; events: MiniEvent[]; x: number; y: number } | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
   });
+  const [isMobileCal, setIsMobileCal] = useState(() => typeof window !== "undefined" ? window.matchMedia("(max-width: 860px)").matches : false);
+  useEffect(() => {
+    const m = window.matchMedia("(max-width: 860px)");
+    const h = () => setIsMobileCal(m.matches);
+    m.addEventListener("change", h);
+    return () => m.removeEventListener("change", h);
+  }, []);
+  const effectiveMonths = isMobileCal ? 1 : months;
+
+  // Если родитель передал events — используем их напрямую (единственный источник).
+  // Иначе — fallback: календарь тянет сам (для изоляции/сторибука).
+  const events = propEvents ?? internalEvents;
 
   useEffect(() => {
+    if (propEvents !== undefined) return;
     if (isPlayer) {
       api
         .get<{ sessions: PlayerDashboardSession[] }>("/player/dashboard")
         .then((d) =>
-          setEvents(d.sessions.map((s) => ({ id: s.id, date: s.date, status: s.status, campaignId: s.campaign_id })))
+          setInternalEvents(d.sessions.map((s) => ({ id: s.id, date: s.date, status: s.status, campaignId: s.campaign_id })))
         );
     } else {
       api
         .get<SessionSummary[]>("/calendar")
         .then((rows) =>
-          setEvents(
+          setInternalEvents(
             rows.map((s) => ({
               id: s.id,
               date: s.date,
@@ -99,33 +113,91 @@ export function MiniCalendar({ onEventContextMenu, onDayContextMenu, months = 2,
           )
         );
     }
-  }, [isPlayer, refreshKey]);
+  }, [isPlayer, refreshKey, propEvents]);
+
+  // Отменённые в сетке не показываем (история — в Архиве). Фильтр здесь,
+  // а не у родителя, чтобы и fallback-режим MiniCalendar вёл себя так же.
+  const visibleEvents = useMemo(() => events.filter((e) => e.status !== "cancelled"), [events]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, MiniEvent[]>();
-    for (const e of events) {
+    for (const e of visibleEvents) {
       const list = map.get(e.date) ?? [];
       list.push(e);
       map.set(e.date, list);
     }
     // Внутри дня — по времени начала: список, который открывается по клику,
-    // должен идти в том порядке, в каком игры пойдут.
+    // должен идти в том порядке, в каком игры пойдут. Без времени — в конец.
     for (const list of map.values()) {
-      list.sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""));
+      list.sort((a, b) => {
+        if (!a.startTime && !b.startTime) return 0;
+        if (!a.startTime) return 1;
+        if (!b.startTime) return -1;
+        return a.startTime.localeCompare(b.startTime);
+      });
     }
     return map;
-  }, [events]);
+  }, [visibleEvents]);
 
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    const onVis = () => { if (document.visibilityState === "visible") setNow(new Date()); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
   const todayKey = toDateKey(now.getFullYear(), now.getMonth(), now.getDate());
 
   function openEvent(e: MiniEvent) {
-    setDayList(null);
+    setPopover(null);
     navigate(isPlayer ? `/campaigns/${e.campaignId}` : `/sessions/${e.id}`);
   }
 
+  function openPopoverForDay(key: string, dayEvents: MiniEvent[], anchor: HTMLElement) {
+    if (isMobileCal) {
+      // На мобиле поповер центрируется CSS left:50% top:50% — JS координаты не нужны
+      setPopover((cur) => (cur?.key === key ? null : { key, events: dayEvents, x: 0, y: 0 }));
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    const popW = 320;
+    const popH = 320;
+    const pad = 8;
+    const maxX = window.innerWidth - popW - pad;
+    const maxY = window.innerHeight - popH - pad;
+    const x = Math.min(rect.left, Math.max(pad, maxX));
+    const y = Math.min(rect.bottom + 6, Math.max(pad, maxY));
+    setPopover((cur) => (cur?.key === key ? null : { key, events: dayEvents, x, y }));
+  }
+
+  // Закрытие поповера по Esc / клику вне — mousedown стабильнее click+stopPropagation
+  useEffect(() => {
+    if (!popover) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPopover(null);
+    }
+    function onMouseDown(e: MouseEvent) {
+      const t = e.target as HTMLElement;
+      if (t.closest(".mini-calendar-popover")) return;
+      if (t.closest(".mini-calendar-day.day-open")) return;
+      setPopover(null);
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onMouseDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onMouseDown);
+    };
+  }, [popover]);
+
+  useEffect(() => {
+    if (!popover || !popoverRef.current) return;
+    const firstBtn = popoverRef.current.querySelector("button") as HTMLElement;
+    firstBtn?.focus();
+  }, [popover]);
+
   function shiftMonth(delta: number) {
-    setDayList(null);
+    setPopover(null);
     setCursor((c) => {
       const m = c.month + delta;
       if (m < 0) return { year: c.year - 1, month: 11 };
@@ -137,7 +209,7 @@ export function MiniCalendar({ onEventContextMenu, onDayContextMenu, months = 2,
   // Месяцы строятся от курсора вперёд: сдвиг ведёт всю связку, а не только
   // первую сетку — иначе стрелка «вперёд» показывала бы один и тот же месяц
   // дважды на соседних сетках.
-  const grids = Array.from({ length: months }, (_, offset) => {
+  const grids = Array.from({ length: effectiveMonths }, (_, offset) => {
     const year = cursor.year + Math.floor((cursor.month + offset) / 12);
     const month = (cursor.month + offset) % 12;
     const startWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // с понедельника
@@ -150,6 +222,10 @@ export function MiniCalendar({ onEventContextMenu, onDayContextMenu, months = 2,
 
   return (
     <div className="mini-calendar-widget">
+      <div className="mini-calendar-legend" aria-hidden="true">
+        <span className="mini-calendar-legend-item legend-planned">— запланирована</span>
+        <span className="mini-calendar-legend-item legend-held">— состоялась</span>
+      </div>
       <div className="mini-calendar-nav">
         <button type="button" className="comp-mini" onClick={() => shiftMonth(-1)} aria-label="Предыдущий месяц">
           ←
@@ -195,16 +271,24 @@ export function MiniCalendar({ onEventContextMenu, onDayContextMenu, months = 2,
                 one ? "has-one" : "",
                 one ? `st-${dayEvents[0].status}` : "",
                 many ? "has-many" : "",
-                dayList?.key === c.key ? "day-open" : "",
+                popover?.key === c.key ? "day-open" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
+              const isInteractive = dayEvents.length > 0;
               return (
                 <div
                   key={c.key}
                   className={cls}
-                  role={dayEvents.length > 0 ? "button" : undefined}
-                  tabIndex={dayEvents.length > 0 ? 0 : undefined}
+                  role={isInteractive ? "button" : undefined}
+                  tabIndex={isInteractive ? 0 : undefined}
+                  aria-label={
+                    isInteractive
+                      ? many
+                        ? `${c.day} число, ${dayEvents.length} игры: ${dayEvents.map((e) => `${e.campaignName ?? "Сессия"} ${STATUS_LABELS[e.status]}${e.startTime ? ` ${e.startTime}` : ""}`).join(", ")}`
+                        : `${c.day} число, ${dayEvents[0].campaignName ?? "Сессия"} — ${STATUS_LABELS[dayEvents[0].status]}${dayEvents[0].startTime ? ` ${dayEvents[0].startTime}` : ""}`
+                      : undefined
+                  }
                   title={
                     many
                       ? `${dayEvents.length} игры в этот день`
@@ -212,14 +296,21 @@ export function MiniCalendar({ onEventContextMenu, onDayContextMenu, months = 2,
                         ? `${dayEvents[0].campaignName ?? "Сессия"} — ${STATUS_LABELS[dayEvents[0].status]}`
                         : undefined
                   }
-                  onClick={() => {
-                    if (dayEvents.length === 1) openEvent(dayEvents[0]);
-                    else if (many) setDayList((cur) => (cur?.key === c.key ? null : { key: c.key!, events: dayEvents }));
+                  onClick={(e) => {
+                    if (!isInteractive) return;
+                    // Всегда открываем список над датой (даже для 1 игры) — единый паттерн (B1).
+                    e.stopPropagation();
+                    openPopoverForDay(c.key!, dayEvents, e.currentTarget);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!isInteractive) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openPopoverForDay(c.key!, dayEvents, e.currentTarget as HTMLElement);
+                    }
                   }}
                   onContextMenu={(ev) => {
                     ev.preventDefault();
-                    // Меню одной игры имеет смысл только когда игра одна;
-                    // в дне с несколькими сначала выбирают, какую.
                     if (dayEvents.length === 1 && onEventContextMenu) {
                       onEventContextMenu(dayEvents[0], ev.clientX, ev.clientY);
                       return;
@@ -236,28 +327,58 @@ export function MiniCalendar({ onEventContextMenu, onDayContextMenu, months = 2,
         </div>
       ))}
 
-      {dayList && (
-        <div className="mini-calendar-daylist">
-          <div className="mini-calendar-daylist-head">
-            {new Date(`${dayList.key}T00:00:00`).toLocaleDateString("ru", { day: "numeric", month: "long" })}
+      {popover && (
+        <div
+          ref={popoverRef}
+          className="mini-calendar-popover"
+          style={{ left: popover.x, top: popover.y } as React.CSSProperties}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-label="Игры в этот день"
+          aria-modal="true"
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === "Tab") {
+              const focusable = Array.from(popoverRef.current?.querySelectorAll("button") ?? []) as HTMLElement[];
+              if (focusable.length === 0) return;
+              const first = focusable[0];
+              const last = focusable[focusable.length - 1];
+              if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+              } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+              }
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setPopover(null);
+            }
+          }}
+        >
+          <div className="mini-calendar-daylist">
+            <div className="mini-calendar-daylist-head">
+              {formatDateKeyRu(popover.key)}
+            </div>
+            {popover.events.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className={`mini-calendar-daylist-row ${e.status}`}
+                onClick={() => openEvent(e)}
+                onContextMenu={(ev) => {
+                  ev.preventDefault();
+                  onEventContextMenu?.(e, ev.clientX, ev.clientY);
+                }}
+              >
+                <span className="mini-calendar-daylist-name">{e.campaignName ?? "Сессия"}</span>
+                <span className="mini-calendar-daylist-time">
+                  {[STATUS_LABELS[e.status], e.startTime].filter(Boolean).join(" · ")}
+                </span>
+              </button>
+            ))}
           </div>
-          {dayList.events.map((e) => (
-            <button
-              key={e.id}
-              type="button"
-              className={`mini-calendar-daylist-row ${e.status}`}
-              onClick={() => openEvent(e)}
-              onContextMenu={(ev) => {
-                ev.preventDefault();
-                onEventContextMenu?.(e, ev.clientX, ev.clientY);
-              }}
-            >
-              <span className="mini-calendar-daylist-name">{e.campaignName ?? "Сессия"}</span>
-              <span className="mini-calendar-daylist-time">
-                {[STATUS_LABELS[e.status], e.startTime].filter(Boolean).join(" · ")}
-              </span>
-            </button>
-          ))}
         </div>
       )}
     </div>

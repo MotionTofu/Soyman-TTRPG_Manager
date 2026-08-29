@@ -248,6 +248,29 @@ ipcMain.on("restore-focus", (event) => {
   event.sender.focus();
 });
 
+// Открыть внешний URL в браузере пользователя по умолчанию (переход на Boosty
+// из нижнего списка навигации). Без этого ссылка открылась бы новым окном
+// Electron, а не системным браузером. Пускаем только http/https — произвольный
+// протокол из рендерера наружу не уходит.
+ipcMain.on("open-external", (_event, url) => {
+  if (typeof url === "string" && /^https?:\/\//i.test(url)) shell.openExternal(url);
+});
+
+// Контакт автора — Telegram. Приоритетно открываем установленный клиент
+// глубокой ссылкой tg://; если его нет, промис отклоняется, и та же страница
+// открывается в браузере (t.me сам предложит «открыть в Telegram», если
+// приложение появится). Отдельный ipc, а не расширение open-external: общий
+// канал сознательно заперт на http/https, а tg:// поднимает локальный клиент.
+const TELEGRAM_DEEP_LINK = "tg://resolve?domain=brothertofu";
+const TELEGRAM_WEB_URL = "https://t.me/brothertofu";
+ipcMain.on("open-telegram", async () => {
+  try {
+    await shell.openExternal(TELEGRAM_DEEP_LINK);
+  } catch {
+    shell.openExternal(TELEGRAM_WEB_URL);
+  }
+});
+
 // Все окна смотрят в один и тот же локальный сервер и одну базу, поэтому
 // второе окно — это просто ещё один BrowserWindow: отдельная страница
 // приложения, общие данные. Открывается со смещением, чтобы не легло ровно

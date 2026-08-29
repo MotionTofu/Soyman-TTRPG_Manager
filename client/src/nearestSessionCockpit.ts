@@ -1,15 +1,21 @@
 import { useEffect, useState } from "react";
 import { api } from "./api/client";
 import type { SessionSummary } from "./types";
+import { parseDateKey, toLocalDateKey } from "./utils/date";
 
 const REFRESH_MS = 60_000;
 
 function pickNearestId(sessions: SessionSummary[]): number | null {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = toLocalDateKey(now);
   const planned = sessions
     .filter((s) => s.status === "planned")
-    .map((s) => ({ s, dt: new Date(`${s.date}T${s.start_time ?? "00:00"}:00`) }))
+    .map((s) => {
+      const d = parseDateKey(s.date);
+      const [h, m] = (s.start_time ?? "00:00").split(":").map(Number);
+      d.setHours(h, m, 0, 0);
+      return { s, dt: d };
+    })
     .sort((a, b) => a.dt.getTime() - b.dt.getTime() || a.s.id - b.s.id);
 
   // "Current" — the latest of today's sessions whose start time has already

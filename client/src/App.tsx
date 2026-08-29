@@ -79,44 +79,44 @@ const PlayerSettingPage = lazy(() => import("./pages/PlayerSettingPage").then((m
 // error states.
 function HomeRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <PlayerHomePage /> : <HomeCalendarPage />;
 }
 function CampaignsRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <PlayerCampaignsListPage /> : <CampaignsListPage />;
 }
 function CampaignDetailRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <PlayerCampaignPage /> : <CampaignDetailPage />;
 }
 function SettingsRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <PlayerSettingsListPage /> : <SettingsListPage />;
 }
 // Импорт книги приключений — инструмент мастера: игроку тут делать нечего.
 function ImportRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <Navigate to="/" replace /> : <ImportAdventurePage />;
 }
 // Импорт книги правил — тоже мастерский инструмент: он правит компендиум системы.
 function ImportSystemRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <Navigate to="/" replace /> : <ImportSystemPage />;
 }
 function SettingDetailRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <PlayerSettingPage /> : <SettingDetailPage />;
 }
 function LibraryRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return null;
+  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
   return user?.role === "player" ? <PlayerLibraryPage /> : <LibraryPage />;
 }
 

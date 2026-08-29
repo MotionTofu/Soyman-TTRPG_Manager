@@ -13,15 +13,17 @@ import { AudioPlayerBar, MiniPlayerBar } from "../audioPlayer";
 import { SoundEngineProvider } from "../sound/engine";
 import { SoundBarExtras, SoundSetEmpty } from "../sound/SoundBarExtras";
 import { useNearestSessionCockpitId } from "../nearestSessionCockpit";
-import { openSecondWindow } from "../electronApi";
+import { openSecondWindow, openExternalLink } from "../electronApi";
 import { UnloadTargetsProvider } from "../unloadTargets";
 import { brandLogo } from "../brandLogo";
+import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 
 interface NavItem {
-  to: string;
+  to?: string;
   label: string;
   icon: NavIconName;
   end?: boolean;
+  onClick?: () => void;
 }
 
 const GM_NAV_ITEMS: NavItem[] = [
@@ -201,8 +203,20 @@ export function AppShell() {
   const { user } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
-  const navBottomItems = isPlayer ? PLAYER_NAV_BOTTOM_ITEMS : GM_NAV_BOTTOM_ITEMS;
   const updateAvailable = useUpdateAvailable();
+
+  // Нижний список разделов: свои пункты роли плюс Boosty. Пункт уходит за
+  // «О программе» и ведёт не в раздел, а в модалку подтверждения — внешняя
+  // ссылка без явного согласия не открывается.
+  const [boostyOpen, setBoostyOpen] = useState(false);
+  const navBottomItems: NavItem[] = [
+    ...(isPlayer ? PLAYER_NAV_BOTTOM_ITEMS : GM_NAV_BOTTOM_ITEMS),
+    {
+      label: "Boosty",
+      icon: "boosty",
+      onClick: () => setBoostyOpen(true),
+    },
+  ];
 
   // Пульт сессии swaps the main nav sidebar for a drag-and-drop preview
   // dock (see PreviewDock) instead — a GM running a live session gets a
@@ -298,7 +312,7 @@ export function AppShell() {
           {navItems.map((item) => (
             <NavLink
               key={item.to}
-              to={item.to}
+              to={item.to!}
               end={item.end}
               className={({ isActive }) => (isActive ? "active" : "")}
               onClick={() => setNavOpen(false)}
@@ -309,22 +323,34 @@ export function AppShell() {
           ))}
           <div className="nav-bottom">
             <ParticleField count={10} className="footer-particles" />
-            {navBottomItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => (isActive ? "active" : "")}
-              >
-                <NavIcon name={item.icon} />
-                {item.label}
-                {/* Блок «Обновления» ушёл с главной в настройки; точка — всё,
-                    что от него осталось снаружи. Появляется, только когда
-                    обновление действительно есть. */}
-                {item.to === "/storages" && updateAvailable && (
-                  <span className="nav-dot" title="Доступно обновление" aria-label="Доступно обновление" />
-                )}
-              </NavLink>
-            ))}
+            {navBottomItems.map((item) =>
+              item.onClick ? (
+                <button
+                  key={item.label}
+                  type="button"
+                  className="nav-bottom-button nav-bottom-external"
+                  onClick={item.onClick}
+                >
+                  <NavIcon name={item.icon} />
+                  {item.label}
+                </button>
+              ) : (
+                <NavLink
+                  key={item.to}
+                  to={item.to!}
+                  className={({ isActive }) => (isActive ? "active" : "")}
+                >
+                  <NavIcon name={item.icon} />
+                  {item.label}
+                  {/* Блок «Обновления» ушёл с главной в настройки; точка — всё,
+                      что от него осталось снаружи. Появляется, только когда
+                      обновление действительно есть. */}
+                  {item.to === "/storages" && updateAvailable && (
+                    <span className="nav-dot" title="Доступно обновление" aria-label="Доступно обновление" />
+                  )}
+                </NavLink>
+              )
+            )}
             {!isPlayer && <BackupButton />}
             <NewWindowButton />
             <LogoutButton username={user?.username} />
@@ -360,6 +386,20 @@ export function AppShell() {
         contextualAction={contextualAction}
         showCharacters={isPlayer}
       />
+      {boostyOpen && (
+        <ExternalLinkConfirmModal
+          title="Поддержать проект"
+          message="Вы уверены, что хотите отправиться на Бусти?"
+          confirmLabel="Да, конечно"
+          cancelLabel="Пожалуй, нет"
+          icon="boosty"
+          onClose={() => setBoostyOpen(false)}
+          onConfirm={() => {
+            setBoostyOpen(false);
+            openExternalLink(BOOSTY_URL);
+          }}
+        />
+      )}
     </div>
     </UnloadTargetsProvider>
     </SoundEngineProvider>

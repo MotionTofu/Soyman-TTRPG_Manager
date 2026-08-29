@@ -10,7 +10,6 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemSection } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
-import { CrossLinksWizard } from "../components/CrossLinksWizard";
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -192,11 +191,15 @@ export function SystemDetailPage() {
             ]}
             onSaveFields={(v) => saveName(v.name, v.code)}
            />
-           <CrossLinksWizard
+           {/* Визард ссылок для системы скрыт до тех пор, пока в нём не появится
+               нужда: у систем нет прозы, которую стоило бы прочёсывать, и кнопка
+               обещала искать «в текстах системы», а сканировать нечего. Код оставлен
+               по решению владельца — см. ToDo.md П1.10. */}
+           {/* <CrossLinksWizard
              ownerKind="system"
              ownerId={systemId}
              help="Ищет имена сущностей сеттинга и записей компендиума в текстах системы — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
-           />
+           /> */}
            <details className="sys-card">
              <summary className="sys-card-head">Кампании с этой системой ({campaigns.length})</summary>
             <div className="sys-card-body">

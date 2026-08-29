@@ -15,6 +15,10 @@ export interface ElectronAPI {
   restoreFocus: () => void;
   /** Открыть ещё одно окно приложения на указанном маршруте. */
   openWindow: (route: string) => void;
+  /** Открыть внешний URL в браузере пользователя по умолчанию (shell.openExternal). */
+  openExternal: (url: string) => void;
+  /** Открыть Telegram автора: сначала установленный клиент (tg://), фолбэк — браузер. */
+  openTelegram: () => void;
 }
 
 declare global {
@@ -42,6 +46,36 @@ export function openSecondWindow(route: string = window.location.pathname + wind
     return;
   }
   window.open(route, "_blank", "noopener,width=1400,height=900");
+}
+
+/**
+ * Открыть внешнюю ссылку в браузере пользователя по умолчанию. В собранном
+ * приложении это ipc "open-external" → shell.openExternal (electron/main.js);
+ * в браузере во время разработки — обычное новое окно. Отдельный канал нужен,
+ * чтобы ссылка не открылась новым окном Electron вместо системного браузера.
+ */
+export function openExternalLink(url: string): void {
+  if (window.electronAPI?.openExternal) {
+    window.electronAPI.openExternal(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener");
+}
+
+/**
+ * Открыть Telegram автора. В приложении приоритет у установленного клиента:
+ * ipc "open-telegram" сначала пробует глубокую ссылку tg:// и только если
+ * Telegram не установлен, открывает t.me уже в браузере (см. electron/main.js).
+ * В браузере во время разработки глубокая ссылка обычно блокируется и толку
+ * от неё нет — открываем сразу t.me: страница сама перекинет в приложение,
+ * если оно стоит.
+ */
+export function openTelegramLink(): void {
+  if (window.electronAPI?.openTelegram) {
+    window.electronAPI.openTelegram();
+    return;
+  }
+  window.open("https://t.me/brothertofu", "_blank", "noopener");
 }
 
 /**

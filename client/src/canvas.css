@@ -258,6 +258,14 @@
   text-transform: uppercase;
   color: var(--muted);
 }
+/* Счётчик мультивыделения — голос Data (моноширинный, §1.5). В шапке панели и
+   в чипах разбивки по типам (§1.10: число, а не повтор меток). */
+.canvas-props__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--ink);
+}
 .canvas-props__fields {
   padding: 14px;
   display: flex;

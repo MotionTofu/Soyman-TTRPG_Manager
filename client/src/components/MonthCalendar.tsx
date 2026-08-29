@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CampaignRole, PaymentType, SessionStatus } from "../types";
 
 export interface CalendarEvent {
@@ -35,15 +35,17 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
     return { year: now.getFullYear(), month: now.getMonth() };
   });
 
+  const visibleEvents = useMemo(() => events.filter((e) => e.status !== "cancelled"), [events]);
+
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
-    for (const e of events) {
+    for (const e of visibleEvents) {
       const list = map.get(e.date) ?? [];
       list.push(e);
       map.set(e.date, list);
     }
     return map;
-  }, [events]);
+  }, [visibleEvents]);
 
   const { year, month } = cursor;
   const firstOfMonth = new Date(year, month, 1);
@@ -56,7 +58,13 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
     cells.push({ day: d, key: toDateKey(year, month, d) });
   }
 
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    const onVis = () => { if (document.visibilityState === "visible") setNow(new Date()); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
   const todayKey = toDateKey(now.getFullYear(), now.getMonth(), now.getDate());
 
   return (
@@ -101,7 +109,20 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
             <div
               key={c.key}
               className={`day${c.key === todayKey ? " today" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-label={
+                (eventsByDate.get(c.key!)?.length ?? 0) > 0
+                  ? `${c.day} число, ${eventsByDate.get(c.key!)!.length} ${eventsByDate.get(c.key!)!.length === 1 ? "игра" : "игры"}`
+                  : `${c.day} число`
+              }
               onClick={() => onDayClick(c.key!)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onDayClick(c.key!);
+                }
+              }}
               onContextMenu={(ev) => {
                 ev.preventDefault();
                 onDayContextMenu?.(c.key!, ev.clientX, ev.clientY);
@@ -111,11 +132,21 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
               {(eventsByDate.get(c.key!) ?? []).map((e) => (
                 <span
                   key={e.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${e.label}${e.startTime ? ` ${e.startTime}` : ""}, ${e.status}`}
                   className={`dot ${e.status}${e.paymentType === "paid" ? " pay-paid" : ""}${e.paymentType === "negotiable" ? " pay-negotiable" : ""}${e.campaignRole === "player" ? " role-player" : ""}`}
                   title={e.label}
                   onClick={(ev) => {
                     ev.stopPropagation();
                     onEventClick?.(e);
+                  }}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter" || ev.key === " ") {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      onEventClick?.(e);
+                    }
                   }}
                   onContextMenu={(ev) => {
                     ev.preventDefault();

@@ -1421,31 +1421,6 @@ CREATE TABLE IF NOT EXISTS canvas_nodes (
 );
 CREATE INDEX IF NOT EXISTS idx_canvas_nodes_board ON canvas_nodes(board_id);
 
--- Рамка главы на холсте приключения: своя нода-группа, а не обводка по
--- содержимому. Обводка обошлась бы без хранения, но переставить главу местами
--- значило бы выделить и не промахнувшись перетащить четырнадцать нод — а
--- переставлять их хочется сразу после переезда.
---
--- Хранится один прямоугольник на главу. Сцены внутри держат СВОИ координаты в
--- системе холста, а не относительно рамки: иначе перетаскивание сцены из
--- главы в главу пересчитывало бы её место, и она бы прыгала.
-CREATE TABLE IF NOT EXISTS canvas_groups (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
-  arc_id INTEGER NOT NULL REFERENCES story_arcs(id) ON DELETE CASCADE,
-  x REAL NOT NULL DEFAULT 0,
-  y REAL NOT NULL DEFAULT 0,
-  w REAL NOT NULL DEFAULT 320,
-  h REAL NOT NULL DEFAULT 240,
-  color TEXT NOT NULL DEFAULT '#2C3E50',
-  -- Свёрнутость — часть раскладки, поэтому здесь, а не в localStorage. По
-  -- умолчанию 1: приключение встречает карточками глав, а не грудой сцен.
-  -- Действует один раз — развернули, и выбор запомнен навсегда.
-  collapsed INTEGER NOT NULL DEFAULT 1,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(board_id, arc_id)
-);
-
 -- Набор — универсальный объединитель узлового редактора: своё имя, внутри
 -- перечисление сущностей с количеством, один выход. Отряд гоблинов, связка
 -- ключей, три двери подземелья.

@@ -21,7 +21,10 @@ import {
   rewritePayload,
   suggestCode,
 } from "../services/mentions";
-import { backfillEntrySummary, writeDndCreatureSummary } from "../services/monsterSummary";
+import {
+  backfillCompendiumSummaries,
+  writeDndCreatureSummary,
+} from "../services/monsterSummary";
 import { applyTidy, planTidy } from "../services/tidyCompendium";
 
 export const systemsRouter = Router();
@@ -301,11 +304,8 @@ systemsRouter.get("/entries/batch", (req, res) => {
 });
 
 systemsRouter.get("/entries/:entryId", (req, res) => {
-  // Сводка существа дозаполняется из его D&D-статблока перед выдачей: у
-  // импортированных записей размер и тип знает статблок, а data пустая, и
-  // профиль иначе показывал бы прочерки поверх заполненного статблока.
-  // Заполняется только пустое — руками заданное не трогается.
-  backfillEntrySummary(db, Number(req.params.entryId));
+  // Чтение не пишет: сводку дозаполняют стартовый проход, импорт и живая
+  // синхронизация статблока, так что профиль видит готовую data.
   const row = db.prepare("SELECT * FROM compendium_entries WHERE id = ?").get(req.params.entryId) as
     | EntryRow
     | undefined;
@@ -827,6 +827,9 @@ export async function importSystemExport(data: SystemExportData): Promise<number
   }
 
   imported.resolve();
+  // Импорт принёс data пустой (дача её хранит в статблоках) — заполняем сводку
+  // тут же, а не на каждый GET. См. backfillEntrySummary/backfillCompendiumSummaries.
+  backfillCompendiumSummaries(db, newSystemId);
   // См. importSettingExport: зачёркнутые ссылки на принесённое оживают сами.
   return newSystemId;
 }
@@ -1074,6 +1077,9 @@ export async function updateSystemFromExport(
   }
 
   imported.resolve();
+  // Слияние могло принести data пустой — дозаполнить сводку так же, как при
+  // новом импорте (пустые поля из статблоков, руками заданные не трогаем).
+  backfillCompendiumSummaries(db, targetSystemId);
   return summary;
 }
 

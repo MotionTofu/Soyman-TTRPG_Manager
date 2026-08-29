@@ -1,4 +1,4 @@
-import { notifyDataChanged } from "../dataSync";
+import { isBusyEditing, notifyDataChanged } from "../dataSync";
 
 const BASE = "/api";
 const TOKEN_KEY = "rpgManagerAuthToken";
@@ -7,6 +7,33 @@ const TOKEN_KEY = "rpgManagerAuthToken";
 // carries a bearer token; LoginGate.tsx shows the login/setup form on 401.
 let token: string | null = localStorage.getItem(TOKEN_KEY);
 let onUnauthorized: (() => void) | null = null;
+
+// Другое окно («Новое окно» — в нём регистрируется/входит другой мастер
+// или тот же) сменило токен в localStorage, а наш токен в памяти застыл на
+// значении, прочитанном при загрузке модуля. Если это не слушать, окно,
+// открытое до входа, продолжает слать запросы без токена: чтения тихо
+// отдают пустоту, любая запись отвечает 401, и на экране не меняется
+// ничего — работа теряется без предупреждения (П0.6).
+// storage-событие приходит только в *другие* окна того же адреса, поэтому
+// собственный вход/выход этот слушатель не заденет (setAuthToken в этом же
+// окне storage не порождает).
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== TOKEN_KEY) return;
+    const next = localStorage.getItem(TOKEN_KEY);
+    if (next === token) return;
+    token = next;
+    // Токен сменился — перезагружаемся, чтобы страницы перечитали юзера и
+    // сбросили кеш currentUser (как LoginScreen и делает на входе). Но не
+    // под руками: если в этом окне печатают, дожидаемся возврата фокуса,
+    // иначе потеряем тот самый недописанный текст, который и защищаем.
+    if (isBusyEditing() || !document.hasFocus()) {
+      window.addEventListener("focus", () => window.location.reload(), { once: true });
+    } else {
+      window.location.reload();
+    }
+  });
+}
 
 export function getAuthToken(): string | null {
   return token;
@@ -24,6 +51,11 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 // thumbnail_image_url, file_url, background_image_url, ...) needs the same
 // bearer token plain <img>/<audio> tags can't attach as a header — appended
 // here once, centrally, instead of touching every page that renders one.
+// Оптимизация P-09: клонируем только url-поля, не весь объект, и не трогаем description/text.
+function isUrlKey(k: string): boolean {
+  const lower = k.toLowerCase();
+  return lower.endsWith("_url") || lower.endsWith("url");
+}
 function withFileTokens<T>(value: T): T {
   if (typeof value === "string") {
     if (value.startsWith("/files/") && token) {
@@ -35,24 +67,57 @@ function withFileTokens<T>(value: T): T {
   if (Array.isArray(value)) return value.map((v) => withFileTokens(v)) as unknown as T;
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = withFileTokens(v);
+    let changed = false;
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof v === "string" && v.startsWith("/files/") && token && isUrlKey(k)) {
+        const sep = v.includes("?") ? "&" : "?";
+        out[k] = v + sep + "token=" + encodeURIComponent(token);
+        changed = true;
+      } else if (v && typeof v === "object") {
+        const next = withFileTokens(v as unknown as T);
+        out[k] = next;
+        if (next !== v) changed = true;
+      } else {
+        out[k] = v;
+      }
+    }
+    // Если ни одно url-поле не менялось и вложенные объекты те же — возвращаем исходный, без аллокации
+    if (!changed) return value;
     return out as T;
   }
   return value;
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(options?.body && !(options.body instanceof FormData)
-        ? { "Content-Type": "application/json" }
-        : undefined),
-      ...(token ? { Authorization: `Bearer ${token}` } : undefined),
-      ...options?.headers,
-    },
-  });
+  const { timeoutMs: rawTimeout, ...rest } = (options ?? {}) as RequestInit & { timeoutMs?: number };
+  const timeoutMs = rawTimeout ?? 10000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (rest.signal) {
+    rest.signal.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...rest,
+      signal: controller.signal,
+      headers: {
+        ...(rest.body && !(rest.body instanceof FormData)
+          ? { "Content-Type": "application/json" }
+          : undefined),
+        ...(token ? { Authorization: `Bearer ${token}` } : undefined),
+        ...(rest.headers as Record<string, string> | undefined),
+      },
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("Сервер не отвечает (таймаут 10с) — попробуйте ещё раз");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+    if (rest.signal) rest.signal.removeEventListener("abort", onExternalAbort);
+  }
   if (res.status === 401) onUnauthorized?.();
   if (!res.ok) {
     // The server's error handler returns { error: "message" }; surface just
@@ -74,15 +139,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
+  get: <T>(path: string, options?: RequestInit & { timeoutMs?: number }) => request<T>(path, options),
+  post: <T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) =>
     request<T>(path, {
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body ?? {}),
+      ...options,
     }),
-  put: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PUT", body: JSON.stringify(body ?? {}) }),
-  del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  put: <T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) =>
+    request<T>(path, { method: "PUT", body: JSON.stringify(body ?? {}), ...options }),
+  del: <T>(path: string, options?: RequestInit & { timeoutMs?: number }) => request<T>(path, { method: "DELETE", ...options }),
 };
 
 // A handful of delete routes (gallery images, a location's map) can respond

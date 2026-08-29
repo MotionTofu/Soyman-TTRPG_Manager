@@ -889,11 +889,20 @@ export function openDatabase(dbDir: string): Database.Database {
   // this env var when it finds no bundled `seed` resources folder) — the
   // whole point of that flavor is a genuinely blank app, not four
   // already-created (if content-less) systems.
-  if (process.env.SEED_DEFAULT_SYSTEMS !== "false") {
+  //
+  // П.0.4: сид выполняется ровно один раз за жизнь базы (флаг в app_settings),
+  // а не на каждом старте. Раньше `INSERT OR IGNORE` шёл на каждом запуске
+  // сервера, а AUTOINCREMENT резервирует слот из sqlite_sequence ещё до
+  // проверки ограничения — то есть даже «проигнорированная» вставка
+  // подкручивала счётчик systems без создания реальной системы. За месяц
+  // разработки это раздуло seq до ~6900 при 4 живых системах. Флаг замыкает
+  // сид на первую инициализацию — дальше он пропускается и счётчик не растёт.
+  if (process.env.SEED_DEFAULT_SYSTEMS !== "false" && !appSettingFlag(database, "default_systems_seeded")) {
     const seedSystems = database.prepare("INSERT OR IGNORE INTO systems (name) VALUES (?)");
     for (const name of ["D&D 5.5", "Legend in the Mist", "City of Mist", "Daggerheart"]) {
       seedSystems.run(name);
     }
+    setAppSettingFlag(database, "default_systems_seeded");
   }
 
   for (const column of ["description", "folder_path", "created_at", "archived_at", "thumbnail_image_path"]) {
@@ -2497,25 +2506,17 @@ export function openDatabase(dbDir: string): Database.Database {
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "collapsed")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0");
   }
-  if (tableExists(database, "canvas_groups") && !columnExists(database, "canvas_groups", "color")) {
-    database.exec("ALTER TABLE canvas_groups ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
-  }
-  // Свёрнутость главы — часть раскладки, поэтому живёт рядом с ней, а не в
-  // localStorage: иначе на другой машине раскладка приехала бы, а свёртка нет.
-  // По умолчанию 1 — приключение встречает карточками глав, а не грудой из
-  // девяноста сцен. Действует ровно один раз: как только главу развернули,
-  // выбор запоминается здесь навсегда.
-  if (tableExists(database, "canvas_groups") && !columnExists(database, "canvas_groups", "collapsed")) {
-    database.exec("ALTER TABLE canvas_groups ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 1");
-  }
+  // Главы стали узлами и отказались от глав-рамок: `canvas_groups` больше не
+  // читается и не пишется (см. маршруты canvas). Legacy-таблица выпиливается
+  // целиком; ALTER-миграции на её колонки (color/collapsed) удалены вместе с ней.
+  database.exec("DROP TABLE IF EXISTS canvas_groups");
   // Родитель для нод, у которых своей главы нет: сущности, стикера, картинки,
   // пина. У сцены и проверки родитель выводится из данных (arc_id сцены), и
   // сюда не пишется. Геометрия решает один раз — в момент броска на рамку;
   // дальше это данные, а не перекрытие прямоугольников.
   //
-  // Ключ строкой, а не числом: рамок два вида — глава (`canvas_groups`, ключ
-  // по arc_id, своей строки в canvas_nodes не имеет) и свободная рамка
-  // (`canvas_frames`). Числом их не различить, поэтому `chapter:26`/`frame:4`.
+  // Ключ строкой (`frame:<id>`), а не числом: рамка одна, но строка позволяет
+  // не путаться с числовыми id других таблиц.
   if (tableExists(database, "canvas_nodes") && columnExists(database, "canvas_nodes", "parent_node_id")) {
     // Колонка прожила меньше часа и всегда была пустой — заменяется целиком.
     database.exec("ALTER TABLE canvas_nodes DROP COLUMN parent_node_id");
@@ -2706,7 +2707,6 @@ function migrateChapterBoards(database: Database.Database): void {
     .all() as { board_id: number; arc_id: number; parent_id: number }[];
 
   const LANE = 520;      // высота полосы главы
-  const PAD = 40;        // поля рамки вокруг нод
 
   const run = database.transaction(() => {
     for (const b of boards) {
@@ -2742,31 +2742,6 @@ function migrateChapterBoards(database: Database.Database): void {
            ON CONFLICT(board_id, node_type, node_id) DO NOTHING`
         );
         for (const n of nodes) move.run(target.id, shift, n.id);
-
-        const xs = nodes.map((n) => n.x);
-        const ys = nodes.map((n) => n.y + shift);
-        database
-          .prepare(
-            `INSERT INTO canvas_groups (board_id, arc_id, x, y, w, h) VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(board_id, arc_id) DO NOTHING`
-          )
-          .run(
-            target.id,
-            b.arc_id,
-            Math.min(...xs) - PAD,
-            Math.min(...ys) - PAD,
-            Math.max(...xs) - Math.min(...xs) + 220 + PAD * 2,
-            Math.max(...ys) - Math.min(...ys) + 160 + PAD * 2
-          );
-      } else {
-        // Пустая глава тоже получает рамку: иначе в неё некуда положить
-        // первую сцену.
-        database
-          .prepare(
-            `INSERT INTO canvas_groups (board_id, arc_id, x, y, w, h) VALUES (?, ?, 40, ?, 360, 300)
-             ON CONFLICT(board_id, arc_id) DO NOTHING`
-          )
-          .run(target.id, b.arc_id, 40 + shift);
       }
 
       database.prepare("DELETE FROM canvas_boards WHERE id = ?").run(b.board_id);
