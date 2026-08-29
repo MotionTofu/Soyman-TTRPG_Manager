@@ -2083,7 +2083,48 @@ export interface CanvasCheckNode {
   };
 }
 
-export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode | CanvasCheckNode | CanvasAdventureNode | CanvasChapterNode | CanvasStickerNode | CanvasImageNode | CanvasFrameNode | CanvasPinNode | CanvasSoundSetNode | CanvasPlaylistNode;
+export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode | CanvasCheckNode | CanvasAdventureNode | CanvasChapterNode | CanvasStickerNode | CanvasImageNode | CanvasFrameNode | CanvasPinNode | CanvasSoundSetNode | CanvasPlaylistNode | CanvasRouteNode;
+
+/**
+ * Рераут-нода («Маршрут»): визуальный проход-развязка, который рвёт длинное
+ * реальное ребро (переход/каст/исход/нить) на два сегмента вокруг себя.
+ * Сам данных не заводит — реальное ребро остаётся одно, а `route` здесь лишь
+ * память прохода: каких двух соседей рераут разводит и ребро какого вида несёт.
+ * Роль/цвет гнезда перенимаются от ребра (`kind`/`role`), поэтому конфликт
+ * ролей на ноде невозможен по построению: одно ребро — одна роль.
+ */
+export interface CanvasRouteNode {
+  key: string;
+  node_type: "route";
+  node_id: number;
+  x: number;
+  y: number;
+  z_index?: number;
+  placed: boolean;
+  route: {
+    id: number;
+    from_key: string;
+    to_key: string;
+    kind: string;
+    role: string;
+    /** Имена соседей — для тела рераута «A → B» (cast/исход/нить). */
+    from_name?: string;
+    to_name?: string;
+    /** У перехода — реальная строка `story_scene_transitions` между соседями:
+     *  её id и label и есть «Условие перехода», которое правят в панели. */
+    transition_id?: number | null;
+    transition_label?: string;
+  };
+}
+
+/** Строка памяти прохода из `canvas_routes` — без раскладки. */
+export interface CanvasRoute {
+  id: number;
+  from_key: string;
+  to_key: string;
+  kind: string;
+  role: string;
+}
 
 /**
  * Рамка главы на холсте приключения — ОТМЕНЕНА блоком G6.2.
@@ -2189,6 +2230,9 @@ export interface CanvasBoard {
   groups: CanvasGroup[];
   edges: CanvasEdge[];
   threads?: CanvasThread[];
+  /** Память прохода рераут-нод. Приходит вместе с доской, но в стороне от
+   *  раскладки: это данные, а не место. */
+  routes?: CanvasRoute[];
 }
 
 

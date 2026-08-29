@@ -1,7 +1,7 @@
 import { Router } from "express";
 import fs from "fs";
 import { db } from "../db/db";
-import { ensureSubfolder, openInFileExplorer, VAULT_ROOT } from "../services/filesystem";
+import { ensureSubfolder, openInFileExplorer, VAULT_ROOT, vaultAbs } from "../services/filesystem";
 
 // Files moved here by vaultDedup.ts's removeOrArchive() when a user chose
 // "отправить в архив" over "удалить навсегда" for the last remaining link to
@@ -25,7 +25,7 @@ archivedFilesRouter.delete("/:id", (req, res) => {
     | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
   try {
-    fs.unlinkSync(row.archive_path);
+    fs.unlinkSync(vaultAbs(row.archive_path));
   } catch {
     // already gone — proceed with removing the DB row regardless
   }

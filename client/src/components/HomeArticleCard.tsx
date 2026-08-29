@@ -20,19 +20,28 @@ export function HomeArticleCard() {
   const [article, setArticle] = useState<RandomArticle | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const [clipped, setClipped] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     let last: string | null = null;
     try { last = sessionStorage.getItem(LAST_SHOWN_KEY); } catch {}
+    setError(null);
     api
-      .get<RandomArticle | null>(`/random-article${last ? `?exclude=${encodeURIComponent(last)}` : ""}`)
+      .get<RandomArticle | null>(`/random-article${last ? `?exclude=${encodeURIComponent(last)}` : ""}`, { signal: controller.signal } as RequestInit)
       .then((next) => {
         setArticle(next);
         if (next) try { sessionStorage.setItem(LAST_SHOWN_KEY, String(next.id)); } catch {}
       })
-      .catch(() => setArticle(null));
-  }, []);
+      .catch((e) => {
+        if ((e as Error).name === "AbortError") return;
+        setError(String(e));
+        setArticle(null);
+      });
+    return () => controller.abort();
+  }, [reloadKey]);
 
   // «Читать целиком» показывается только когда текст действительно не влез.
   // Пересчитываем и на ресайз (ResizeObserver) — иначе после поворота телефона флаг врёт.
@@ -46,7 +55,11 @@ export function HomeArticleCard() {
     return () => ro.disconnect();
   }, [article]);
 
-  if (article === undefined || article === null) return null;
+  if (article === undefined) return null;
+  if (article === null) {
+    if (error) return <div className="home-section"><div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><span>Не загрузилось: {error}</span><button onClick={() => { setArticle(undefined); setReloadKey((k) => k + 1); }}>Повторить</button></div></div>;
+    return null;
+  }
 
   // Единственный блок главной, который каждый раз другой, — и единственный,
   // имеющий право выглядеть вырванным из журнала. Поэтому не карточка с
@@ -59,13 +72,12 @@ export function HomeArticleCard() {
   // соседи, на фоне которых наклон заметен нарочно.
   const issue = (() => {
     const now = new Date();
-    // ISO-неделя (понедельник-четверг) — не врёт на 1 января (воскресенье → 52 неделя прошлого года)
-    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayNum = d.getDay() || 7;
+    d.setDate(d.getDate() + 4 - dayNum);
+    const yearStart = new Date(d.getFullYear(), 0, 1);
     const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-    return `ВЫПУСК ${d.getUTCFullYear()}.${week}`;
+    return `ВЫПУСК ${d.getFullYear()}.${week}`;
   })();
 
   return (

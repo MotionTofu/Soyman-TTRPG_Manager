@@ -24,7 +24,14 @@ export function NavWidget() {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }
   function goBack() {
-    navigate(-1);
+    // Прямой заход по ссылке — history пуст, navigate(-1) ничего не делает.
+    // React Router хранит idx в history.state; window.history.length fallback.
+    const idx = (window.history.state as { idx?: number } | null)?.idx;
+    if (typeof idx === "number" ? idx > 0 : window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/", { replace: true });
+    }
   }
   function pinHere() {
     const path = location.pathname + location.search;

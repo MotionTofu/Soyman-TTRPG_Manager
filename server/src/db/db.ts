@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
-import { entryImageFolder, systemFolder } from "../services/filesystem";
+import { entryImageFolder, systemFolder, vaultAbs } from "../services/filesystem";
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections } from "./defaultSections";
 
 function tableExists(database: Database.Database, name: string): boolean {
@@ -2388,16 +2388,18 @@ export function openDatabase(dbDir: string): Database.Database {
     );
     for (const row of rows) {
       if (!row.source_path || !row.system_folder_path) continue;
-      if (!fs.existsSync(row.source_path)) continue;
+      const absSource = vaultAbs(row.source_path);
+      if (!fs.existsSync(absSource)) continue;
       try {
         const folder = entryImageFolder(row.system_folder_path, row.kind);
-        const ext = path.extname(row.source_path) || ".jpg";
+        const ext = path.extname(absSource) || ".jpg";
         const target = path.join(folder, `entry-${row.id}-avatar${ext}`);
-        if (!fs.existsSync(target)) {
+        const absTarget = vaultAbs(target);
+        if (!fs.existsSync(absTarget)) {
           try {
-            fs.linkSync(row.source_path, target);
+            fs.linkSync(absSource, absTarget);
           } catch {
-            fs.copyFileSync(row.source_path, target);
+            fs.copyFileSync(absSource, absTarget);
           }
         }
         setAvatar.run(target, row.id);

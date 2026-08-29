@@ -6,9 +6,11 @@ import { db } from "../db/db";
 import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../db/defaultSections";
 import {
   entryImageFolder,
+  ensureSubfolder,
   readFileAsBase64,
   systemFolder,
   toFileUrl,
+  writeBase64File,
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { removeOrArchive } from "../services/vaultDedup";
@@ -25,6 +27,7 @@ import {
   backfillCompendiumSummaries,
   writeDndCreatureSummary,
 } from "../services/monsterSummary";
+import { isCompendiumKind } from "../services/compendiumKinds";
 import { applyTidy, planTidy } from "../services/tidyCompendium";
 
 export const systemsRouter = Router();
@@ -169,6 +172,15 @@ systemsRouter.put("/:id/sections/reorder", (req, res) => {
 
 systemsRouter.get("/:id/entries", (req: AuthedRequest, res) => {
   const { section_id } = req.query as { section_id?: string };
+  // Раздел берётся только из своей системы: чужой section_id в запросе к
+  // соседней системе — либо ошибка клиента, либо попытка утянуть чужие
+  // данные, ни то ни другое молча выдавать не следует.
+  if (section_id) {
+    const section = db
+      .prepare("SELECT id FROM system_sections WHERE id = ? AND system_id = ?")
+      .get(section_id, req.params.id);
+    if (!section) return res.status(404).json({ error: "section not in system" });
+  }
   const rows = (
     section_id
       ? db.prepare("SELECT * FROM compendium_entries WHERE section_id = ? ORDER BY position, id").all(section_id)
@@ -230,10 +242,15 @@ function statblockCounts(entryIds: number[]): Map<number, number> {
   const map = new Map<number, number>();
   if (entryIds.length === 0) return map;
   const placeholders = entryIds.map(() => "?").join(",");
+  // Значок «разобран» в бестиарии — про карточки форматов существ; проза в
+  // текстовом статблоке записью не считается (форматы litm/dnd_character —
+  // персональные листы, на монстра не вешаются).
   const rows = db
     .prepare(
       `SELECT owner_id, COUNT(*) as count FROM statblocks
-       WHERE owner_type = 'compendium_entry' AND owner_id IN (${placeholders})
+       WHERE owner_type = 'compendium_entry'
+         AND format IN ('dnd_creature', 'litm_challenge')
+         AND owner_id IN (${placeholders})
        GROUP BY owner_id`
     )
     .all(...entryIds) as { owner_id: number; count: number }[];
@@ -252,6 +269,13 @@ systemsRouter.post("/:id/entries", (req, res) => {
     description?: string;
   };
   if (!section_id) return res.status(400).json({ error: "section_id is required" });
+  const section = db
+    .prepare("SELECT id FROM system_sections WHERE id = ? AND system_id = ?")
+    .get(section_id, req.params.id);
+  if (!section) return res.status(404).json({ error: "section not in system" });
+  if (kind && !isCompendiumKind(kind)) {
+    return res.status(400).json({ error: `unknown kind: ${kind}` });
+  }
   const { p } = db
     .prepare(
       "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE section_id = ? AND parent_id IS ?"
@@ -286,6 +310,11 @@ systemsRouter.post("/:id/entries", (req, res) => {
 // Отсутствующие id молча пропускаются: заклинание могли удалить из
 // компендиума уже после того, как его вписали в лист, и ронять из-за этого
 // весь запрос нельзя — лист покажет такую запись по сохранённому имени.
+//
+// Чтение по id — намеренно без сверки с «системой запроса»: у маршрута нет
+// контекста системы, а лист персонажа ссылается на записи разных систем
+// сразу (заклинания + монстры + классы). Проверять принадлежность можно было
+// бы только по глобальной доступности, что здесь и происходит.
 systemsRouter.get("/entries/batch", (req, res) => {
   const raw = String(req.query.ids ?? "");
   const ids = raw
@@ -346,6 +375,9 @@ systemsRouter.put("/entries/:entryId", (req, res) => {
     tactics?: string[];
     secret?: string;
   };
+  if (kind && !isCompendiumKind(kind)) {
+    return res.status(400).json({ error: `unknown kind: ${kind}` });
+  }
   db.prepare(
     `UPDATE compendium_entries SET
        name = COALESCE(?, name),
@@ -372,7 +404,7 @@ systemsRouter.put("/entries/:entryId", (req, res) => {
     name_original ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
-    combat_roles ? JSON.stringify(combat_roles.slice(0, 2)) : null,
+    combat_roles ? JSON.stringify(combat_roles) : null,
     tactics ? JSON.stringify(tactics) : null,
     secret ?? null,
     req.params.entryId
@@ -477,7 +509,77 @@ systemsRouter.delete("/entries/:entryId/avatar", (req, res) => {
 });
 
 systemsRouter.delete("/entries/:entryId", (req, res) => {
-  db.prepare("DELETE FROM compendium_entries WHERE id = ?").run(req.params.entryId);
+  // Удаление записи чистит следы сразу, а не оставляет сирот до фонового
+  // sweepOrphans: аватары записи и портреты её статблоков собираются в SQL-
+  // транзакции, а уходят в _Archive ПОСЛЕ её коммита — файловые операции не
+  // участвуют в откате, и БД не разъезжается с переименованными файлами
+  // (см. находку 10.3). Полиморфные generic_links/entity_relations внешними
+  // ключами не привязаны (тот же приём, что в settings.ts:618), потому
+  // сносятся здесь же (10.4); слайды/избранное/key_value — каскадом FK.
+  // Дочерние записи (посты экипажа судна) уходят каскадом parent_id
+  // (schema.sql:1108), но их полиморфные спутники каскаду не подчиняются —
+  // уборка повторяется для каждого потомка рекурсивно: без неё статблоки/
+  // связи постов повисли бы до следующего стартового sweepOrphans, а их
+  // файлы (аватары постов, портреты их статблоков) не дожили бы до _Archive
+  // (находка E6).
+  const entry = db
+    .prepare("SELECT id, name, avatar_image_path FROM compendium_entries WHERE id = ?")
+    .get(req.params.entryId) as
+    | { id: number; name: string; avatar_image_path: string | null }
+    | undefined;
+  if (!entry) return res.status(404).json({ error: "not found" });
+
+  const filesToArchive: { path: string; ownerType: string; ownerId: number; displayName: string }[] = [];
+  const cleanupEntry = (id: number): void => {
+    const me = db
+      .prepare("SELECT id, name, avatar_image_path FROM compendium_entries WHERE id = ?")
+      .get(id) as { id: number; name: string; avatar_image_path: string | null };
+    if (me.avatar_image_path) {
+      filesToArchive.push({
+        path: me.avatar_image_path,
+        ownerType: "compendium_entry",
+        ownerId: me.id,
+        displayName: me.name,
+      });
+    }
+    const statblocks = db
+      .prepare(
+        "SELECT id, avatar_image_path FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ?"
+      )
+      .all(id) as { id: number; avatar_image_path: string | null }[];
+    for (const sb of statblocks) {
+      if (sb.avatar_image_path) {
+        filesToArchive.push({
+          path: sb.avatar_image_path,
+          ownerType: "statblock",
+          ownerId: sb.id,
+          displayName: me.name,
+        });
+      }
+    }
+    db.prepare("DELETE FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ?").run(id);
+    db.prepare(
+      `DELETE FROM generic_links
+       WHERE (from_type = 'compendium_entry' AND from_id = ?) OR (to_type = 'compendium_entry' AND to_id = ?)`
+    ).run(id, id);
+    db.prepare(
+      `DELETE FROM entity_relations
+       WHERE (from_type = 'compendium_entry' AND from_id = ?) OR (to_type = 'compendium_entry' AND to_id = ?)`
+    ).run(id, id);
+    const children = db
+      .prepare("SELECT id FROM compendium_entries WHERE parent_id = ?")
+      .all(id) as { id: number }[];
+    for (const child of children) cleanupEntry(child.id);
+  };
+
+  db.transaction(() => {
+    cleanupEntry(entry.id);
+    db.prepare("DELETE FROM compendium_entries WHERE id = ?").run(entry.id);
+  })();
+
+  for (const f of filesToArchive) {
+    removeOrArchive(f.path, "archive", f.ownerType, f.ownerId, f.displayName);
+  }
   res.json({ ok: true });
 });
 
@@ -585,7 +687,7 @@ systemsRouter.put("/:id/restore", (req, res) => {
 // templates, as one JSON file. Metadata only by default — pass ?images=1 to
 // additionally embed the system thumbnail as base64 (the only image type a
 // system row owns; compendium entries and templates carry no images).
-function buildSystemExportData(systemId: number | string, includeImages: boolean): SystemExportData | null {
+export function buildSystemExportData(systemId: number | string, includeImages: boolean): SystemExportData | null {
   const system = db.prepare("SELECT * FROM systems WHERE id = ?").get(systemId) as
     | { name: string; description: string; thumbnail_image_path: string | null }
     | undefined;
@@ -607,7 +709,7 @@ function buildSystemExportData(systemId: number | string, includeImages: boolean
   if (entryIds.length) {
     const statblockRows = db
       .prepare(
-        `SELECT owner_id, kind, format, content, note, theme, density FROM statblocks
+        `SELECT owner_id, kind, format, content, note, theme, density, avatar_image_path FROM statblocks
          WHERE owner_type = 'compendium_entry' AND owner_id IN (${entryIds.map(() => "?").join(",")})`
       )
       .all(...entryIds) as {
@@ -618,6 +720,7 @@ function buildSystemExportData(systemId: number | string, includeImages: boolean
       note: string;
       theme: string | null;
       density: string | null;
+      avatar_image_path: string | null;
     }[];
     const statblocksByEntry = new Map<number, SystemExportData["entries"][number]["statblocks"]>();
     for (const { owner_id, ...sb } of statblockRows) {
@@ -628,6 +731,18 @@ function buildSystemExportData(systemId: number | string, includeImages: boolean
     for (const e of entries) {
       const list = statblocksByEntry.get(e.id);
       if (list) e.statblocks = list;
+    }
+  }
+
+  // Портреты записей и статблоков едут с файлом как base64 (тот же приём,
+  // что avatar_data в buildSettingExportData): на чужой машине локальных
+  // путей всё равно нет, а картинки постичались заново при импорте.
+  if (includeImages) {
+    for (const e of entries) {
+      if (e.avatar_image_path) e.avatar_data = readFileAsBase64(e.avatar_image_path);
+      for (const sb of e.statblocks ?? []) {
+        if (sb.avatar_image_path) sb.avatar_data = readFileAsBase64(sb.avatar_image_path);
+      }
     }
   }
 
@@ -656,13 +771,19 @@ systemsRouter.get("/:id/export", (req, res) => {
   res.json(data);
 });
 
+export interface EmbeddedImageData {
+  filename: string;
+  mime: string;
+  base64: string;
+}
+
 export interface SystemExportData {
   system: {
     name: string;
     description: string;
     /** Короткое общее сокращение модуля — «phb». Едет с файлом: см. SettingExportData. */
     code?: string | null;
-    thumbnail_data?: { filename: string; mime: string; base64: string } | null;
+    thumbnail_data?: EmbeddedImageData | null;
   };
   sections: { id: number; position: number; name: string; kind: string }[];
   entries: {
@@ -672,10 +793,15 @@ export interface SystemExportData {
     parent_id: number | null;
     kind: string;
     name: string;
+    aliases?: string[];
+    name_original?: string;
     level: number | null;
     data: unknown;
     description: string;
     position: number;
+    /** Локальный путь портрета записи — несёт только дебаг-значение вне машины-экспортёра. */
+    avatar_image_path?: string | null;
+    avatar_data?: EmbeddedImageData | null;
     statblocks?: {
       kind: string;
       format: string;
@@ -683,6 +809,8 @@ export interface SystemExportData {
       note: string;
       theme: string | null;
       density: string | null;
+      avatar_image_path?: string | null;
+      avatar_data?: EmbeddedImageData | null;
     }[];
   }[];
   templates: {
@@ -753,9 +881,17 @@ export async function importSystemExport(data: SystemExportData): Promise<number
 
   const entryIdMap = new Map<number, number>();
   const insertEntry = db.prepare(
-    `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, level, data, description, position)
-     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, aliases, name_original, level, data, description, position)
+     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
+  // Кинды из выгрузки сверяются с каноническим списком до вставки: запись с
+  // несуществующим видом молча сломала бы раздел, лучше упасть на импорте.
+  const badKinds = (entries ?? []).filter((e) => !isCompendiumKind(e.kind));
+  if (badKinds.length > 0) {
+    throw new Error(
+      `Неизвестные виды записей в импорте: ${[...new Set(badKinds.map((e) => e.kind))].join(", ")}`
+    );
+  }
   for (const e of entries ?? []) {
     const newSectionId = sectionIdMap.get(e.section_id);
     if (!newSectionId) continue;
@@ -764,13 +900,25 @@ export async function importSystemExport(data: SystemExportData): Promise<number
       newSectionId,
       e.kind,
       e.name,
+      e.aliases ? JSON.stringify(e.aliases) : "[]",
+      e.name_original ?? "",
       e.level,
       JSON.stringify(e.data ?? {}),
       e.description || "",
       e.position
     );
-    entryIdMap.set(e.id, info.lastInsertRowid as number);
-    imported.claim("compendium_entry", info.lastInsertRowid as number, e.uid);
+    const newEntryId = info.lastInsertRowid as number;
+    entryIdMap.set(e.id, newEntryId);
+    imported.claim("compendium_entry", newEntryId, e.uid);
+    if (e.avatar_data) {
+      const ext = path.extname(e.avatar_data.filename) || ".jpg";
+      const target = await writeBase64File(
+        entryImageFolder(folder, e.kind),
+        `entry-${newEntryId}-avatar${ext}`,
+        e.avatar_data.base64
+      );
+      db.prepare("UPDATE compendium_entries SET avatar_image_path = ? WHERE id = ?").run(target, newEntryId);
+    }
   }
   const updateParent = db.prepare("UPDATE compendium_entries SET parent_id = ? WHERE id = ?");
   for (const e of entries ?? []) {
@@ -789,7 +937,17 @@ export async function importSystemExport(data: SystemExportData): Promise<number
     if (!newEntryId || !e.statblocks) continue;
     for (const sb of e.statblocks) {
       const sbRow = insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
-      imported.track("statblocks", sbRow.lastInsertRowid as number);
+      const newSbId = sbRow.lastInsertRowid as number;
+      imported.track("statblocks", newSbId);
+      if (sb.avatar_data) {
+        const ext = path.extname(sb.avatar_data.filename) || ".jpg";
+        const target = await writeBase64File(
+          ensureSubfolder(folder, "Statblocks"),
+          `statblock-${newSbId}-avatar${ext}`,
+          sb.avatar_data.base64
+        );
+        db.prepare("UPDATE statblocks SET avatar_image_path = ? WHERE id = ?").run(target, newSbId);
+      }
     }
   }
 
@@ -876,6 +1034,15 @@ export async function updateSystemFromExport(
   targetSystemId: number,
   { system, sections, entries, templates }: SystemExportData
 ): Promise<SystemUpdateSummary> {
+  // Кинды сверяются с каноническим списком ДО любых записей, как в
+  // importSystemExport — иначе битая выгрузка прошла бы частично (секции
+  // вставились, записи с несуществующим видом развалили бы раздел).
+  const badKinds = (entries ?? []).filter((e) => !isCompendiumKind(e.kind));
+  if (badKinds.length > 0) {
+    throw new Error(
+      `Неизвестные виды записей в импорте: ${[...new Set(badKinds.map((e) => e.kind))].join(", ")}`
+    );
+  }
   // При слиянии побеждает uid из файла: он — «издательская» личность записи,
   // общая у всех, кто ставил этот модуль. Локальный ключ такой записи никто
   // снаружи не видел, и держаться за него незачем.
@@ -936,19 +1103,34 @@ export async function updateSystemFromExport(
   );
   const entryIdMap = new Map<number, number>();
   const insertEntry = db.prepare(
-    `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, level, data, description, position)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, aliases, name_original, level, data, description, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const updateEntry = db.prepare(
-    "UPDATE compendium_entries SET name = ?, level = ?, data = ?, description = ?, position = ? WHERE id = ?"
+    `UPDATE compendium_entries SET name = ?, aliases = ?, name_original = ?, level = ?, data = ?, description = ?, position = ? WHERE id = ?`
   );
+  // Папка слияемой системы нужна, чтобы постичать принесённые портреты в
+  // те же места, где они лежали бы при ручной загрузке.
+  const targetSystemFolder =
+    (db.prepare("SELECT folder_path FROM systems WHERE id = ?").get(targetSystemId) as
+      | { folder_path: string }
+      | undefined)?.folder_path ?? null;
   for (const e of entries ?? []) {
     const newSectionId = sectionIdMap.get(e.section_id);
     if (!newSectionId) continue;
     const key = buildEntryPathKey(newByIdMappedSection.get(e.id)!, newByIdMappedSection);
     const existingId = existingByKey.get(key);
     if (existingId) {
-      updateEntry.run(e.name, e.level, JSON.stringify(e.data ?? {}), e.description || "", e.position, existingId);
+      updateEntry.run(
+        e.name,
+        e.aliases ? JSON.stringify(e.aliases) : "[]",
+        e.name_original ?? "",
+        e.level,
+        JSON.stringify(e.data ?? {}),
+        e.description || "",
+        e.position,
+        existingId
+      );
       entryIdMap.set(e.id, existingId);
       touchedIds.add(existingId);
       imported.claim("compendium_entry", existingId, e.uid);
@@ -961,6 +1143,8 @@ export async function updateSystemFromExport(
         newParentId,
         e.kind,
         e.name,
+        e.aliases ? JSON.stringify(e.aliases) : "[]",
+        e.name_original ?? "",
         e.level,
         JSON.stringify(e.data ?? {}),
         e.description || "",
@@ -971,6 +1155,18 @@ export async function updateSystemFromExport(
       touchedIds.add(insertedId);
       imported.claim("compendium_entry", insertedId, e.uid);
       summary.entriesAdded++;
+    }
+    // Портрет обновлён: перепостить его и под слияную запись. Заметен тот же
+    // паттерн, что и в importSystemExport/upload — файл с идентификатором.
+    const resolvedEntryId = entryIdMap.get(e.id);
+    if (resolvedEntryId && e.avatar_data && targetSystemFolder) {
+      const ext = path.extname(e.avatar_data.filename) || ".jpg";
+      const target = await writeBase64File(
+        entryImageFolder(targetSystemFolder, e.kind),
+        `entry-${resolvedEntryId}-avatar${ext}`,
+        e.avatar_data.base64
+      );
+      db.prepare("UPDATE compendium_entries SET avatar_image_path = ? WHERE id = ?").run(target, resolvedEntryId);
     }
   }
   summary.entriesKeptLocal = existingEntries.filter((e) => !touchedIds.has(e.id)).length;
@@ -1025,14 +1221,29 @@ export async function updateSystemFromExport(
     if (!newEntryId || !e.statblocks) continue;
     for (const sb of e.statblocks) {
       const existingId = existingEntryStatblockByKey.get(`${newEntryId}:${sb.format}`);
+      let statblockId: number | null = null;
       if (existingId) {
         updateEntryStatblock.run(sb.kind, sb.content, sb.note || "", sb.theme, sb.density, existingId);
         imported.track("statblocks", existingId);
         summary.statblocksUpdated++;
+        statblockId = existingId;
       } else {
         const sbRow = insertEntryStatblock.run(newEntryId, sb.kind, sb.format, sb.content, sb.note || "", sb.theme, sb.density);
-        imported.track("statblocks", sbRow.lastInsertRowid as number);
+        const newSbId = sbRow.lastInsertRowid as number;
+        imported.track("statblocks", newSbId);
         summary.statblocksAdded++;
+        statblockId = newSbId;
+      }
+      // Портрет статблока едет с файлом — постить его под совпавший/новый
+      // статблок (та же папка «Statblocks», что и у upload-роута).
+      if (statblockId && sb.avatar_data && targetSystemFolder) {
+        const ext = path.extname(sb.avatar_data.filename) || ".jpg";
+        const target = await writeBase64File(
+          ensureSubfolder(targetSystemFolder, "Statblocks"),
+          `statblock-${statblockId}-avatar${ext}`,
+          sb.avatar_data.base64
+        );
+        db.prepare("UPDATE statblocks SET avatar_image_path = ? WHERE id = ?").run(target, statblockId);
       }
     }
   }

@@ -611,7 +611,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
     short_name ?? null,
     aliases ? JSON.stringify(aliases) : null,
     name_original ?? null,
-    combat_roles ? JSON.stringify(combat_roles.slice(0, 2)) : null,
+    combat_roles ? JSON.stringify(combat_roles) : null,
     tactics ? JSON.stringify(tactics) : null,
     secret ?? null,
     folderPath,

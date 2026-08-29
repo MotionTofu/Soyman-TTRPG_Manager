@@ -6,7 +6,6 @@ import {
   Handle,
   MarkerType,
   MiniMap,
-  NodeResizer,
   Position,
   ReactFlow,
   applyNodeChanges,
@@ -46,6 +45,8 @@ import {
   FRAME_SWATCHES,
   DEFAULT_FRAME_COLOR,
   INK_LIGHT,
+  INK_DARK,
+  STORY_COLOR,
   CANVAS_LEGEND_IN,
   CANVAS_LEGEND_OUT,
   type LegendItem,
@@ -657,6 +658,97 @@ const PIN_SHAPE_LABEL: Record<string, string> = {
   star: "Звезда",
 };
 
+/** Виды реального ребра, которое рвёт рераут («Маршрут»). */
+type RouteKind = "transition" | "outcome" | "cast" | "member" | "thread";
+
+/**
+ * Роль = цвет разъёма. Рераут перенимает роль от ребра, которое рвёт: переход —
+ * ромб «истории», исход — «последствия», участник набора — «участники»,
+ * каст-сущность — свою роль (location/being/…), нить — нейтральный ромб.
+ * Ключ должен лежать в HANDLE_COLORS; для неизвестного — story.
+ */
+const ROUTE_ROLE_KEY: Record<string, string> = {
+  location: "location",
+  plot_characters: "plot_characters",
+  obstacles: "obstacles",
+  loot: "loot",
+  consequences: "consequences",
+  being: "being",
+  artifact: "artifact",
+  members: "members",
+  in: "in",
+  audio: "audio",
+  battle: "battle",
+};
+
+/** Цвет текста на плашке роли: 4.5:1 от яркости фона. */
+function routeInk(bg: string): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(bg);
+  if (!m) return INK_DARK;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 150 ? INK_DARK : INK_LIGHT;
+}
+
+function RouteNode({ data }: NodeProps<Node<RouteNodeData>>) {
+  const roleKey: string = ROUTE_ROLE_KEY[data.role] ?? "story";
+  const color =
+    roleKey === "story"
+      ? STORY_COLOR
+      : (HANDLE_COLORS[roleKey as keyof typeof HANDLE_COLORS] ?? STORY_COLOR);
+  // Подключён ли рераут: нужны ОБА соседа (вход и выход). Пока хотя бы одного
+  // нет — это «пустышка»: чёрно-жёлтый прямоугольник без текста.
+  const hasNeighbors = !!(data.fromKey && data.toKey);
+  // Тело: у перехода — условие перехода; у cast/исхода/нити — «A → B». Пока
+  // соседей нет — пусто, текст не пишем.
+  const label =
+    data.kind === "transition"
+      ? (data.condition ?? "")
+      : data.fromLabel && data.toLabel
+        ? `${data.fromLabel} → ${data.toLabel}`
+        : "";
+  const ink = hasNeighbors ? routeInk(color) : undefined;
+  return (
+    <div
+      className={`canvas-node canvas-node--route${hasNeighbors ? " is-connected" : " is-empty"}`}
+      style={hasNeighbors ? { background: color, borderColor: color } : undefined}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="route-in"
+        className={`canvas-handle--route canvas-handle--${roleKey}`}
+      />
+      <span
+        className="canvas-node__route-text"
+        style={hasNeighbors ? { color: ink, borderColor: color } : undefined}
+      >
+        {hasNeighbors ? label : ""}
+      </span>
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="route-out"
+        className={`canvas-handle--route canvas-handle--${roleKey}`}
+      />
+    </div>
+  );
+}
+
+interface RouteNodeData extends Record<string, unknown> {
+  kind: RouteKind;
+  role: string;
+  fromKey: string;
+  toKey: string;
+  /** Подпись тела: у перехода — условие, читается с сервера. */
+  condition?: string;
+  fromLabel?: string;
+  toLabel?: string;
+}
+
 function PinNode({ data, selected }: NodeProps<Node<PinNodeData>>) {
   const size = PIN_SIZES[data.size] ?? 24;
   const col = data.color || DEFAULT_FRAME_COLOR;
@@ -789,7 +881,6 @@ function FrameNode({ data, selected }: NodeProps<Node<FrameNodeData>>) {
   }
   return (
     <div className={`canvas-frame${data.isFresh ? " is-fresh" : ""}`} style={{ borderColor: col }}>
-      <NodeResizer isVisible={!!selected} minWidth={200} minHeight={120} lineStyle={{ borderColor: col }} handleStyle={{ width: 30, height: 30, borderColor: col, background: "var(--paper)" }} />
       {editing ? (
         <input
           className="canvas-frame__title-input"
@@ -992,6 +1083,7 @@ const NODE_TYPES = {
   sound_set: SoundSetNode,
   playlist: PlaylistNode,
   pin: PinNode,
+  route: RouteNode,
 };
 
 /** Ширина холста, ниже которой палитра и поиск перестают помещаться рядом.
@@ -1027,7 +1119,8 @@ type CanvasNodeData =
   | ChapterNodeData
   | SoundSetNodeData
   | PlaylistNodeData
-  | PinNodeData;
+  | PinNodeData
+  | RouteNodeData;
 
 /** Рамки лежат в том же массиве нод — отличать их надо по ключу. */
 /**
@@ -1290,12 +1383,6 @@ function applyGroupDepth(all: Node<CanvasNodeData>[]): Node<CanvasNodeData>[] {
  * `n.pin` или `n.scene` без приведения не добраться. Предикат написан один
  * раз здесь, вместо приведения на каждом обращении.
  */
-/**
- * Подпись ноды. У разных видов она лежит в разных полях: у сцены и сущности
- * `name`, у события `title`, у стикера `text`, у проверки `what`. Три места
- * читали это тремя цепочками `??` через приведение к `Record<string,
- * unknown>` — теперь порядок полей написан один раз.
- */
 function nodeTitle(data: CanvasNodeData): string | undefined {
   for (const key of ["name", "title", "text", "what"] as const) {
     const v = data[key];
@@ -1323,6 +1410,10 @@ function boardNodeTitle(n: CanvasBoardNode): string {
     case "playlist": return n.playlist.name || "Плейлист";
     case "setting_event":
     case "campaign_event": return n.event.title;
+    case "route":
+      // Рераут-нода — только память прохода между двумя соседями, у неё нет
+      // имени: называем её «A → B», если имена соседей доехали, иначе вид.
+      return [n.route.from_name, n.route.to_name].filter(Boolean).join(" → ") || "Маршрут";
     default: return n.entity.name;
   }
 }
@@ -1498,6 +1589,23 @@ function toFlowNode(
         color: n.pin.color,
         shape: n.pin.shape,
         z_index: n.pin.z_index,
+      },
+    };
+  }
+  if (n.node_type === "route") {
+    return {
+      ...base,
+      type: "route",
+      // Рераут рвёт ребро на сегменты; при Drag & Drop цепляет и их — обычный
+      // жест перемещения, выбор nodes/edges сделает React Flow сам.
+      data: {
+        kind: n.route.kind as RouteKind,
+        role: n.route.role,
+        fromKey: n.route.from_key,
+        toKey: n.route.to_key,
+        condition: n.route.transition_label,
+        fromLabel: n.route.from_name,
+        toLabel: n.route.to_name,
       },
     };
   }
@@ -1941,6 +2049,7 @@ export function CanvasPage() {
   // править нечего. На карте кампании есть — расхождение с сеттингом и состав
   // кампании (блок D4).
   const [selectedAdventureId, setSelectedAdventureId] = useState<number | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [index, setIndex] = useState<CanvasIndex | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem("canvasPropsCollapsed") === "1");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -2311,6 +2420,7 @@ export function CanvasPage() {
     setSelectedFrameId(ft === "frame" ? id : null);
     setSelectedChapterId(ft === "chapter" ? id : null);
     setSelectedPinId(ft === "pin" ? id : null);
+    setSelectedRouteId(ft === "route" ? id : null);
     // Подсветить саму ноду, а не только открыть панель: придя по ссылке на
     // схему из семидесяти узлов, мастер должен увидеть, о котором речь.
     // Выделение React Flow держит в самих нодах, поэтому ставим его там.
@@ -2369,9 +2479,18 @@ export function CanvasPage() {
         source,
         target,
         // У карточки главы хендл один и без имени: имя входа принадлежит
-        // спрятанной сцене, а не главе.
-        targetHandle: target === e.target ? e.target_handle : null,
-        label: e.label || undefined,
+        // спрятанной сцене, а не главе. Для рераут-сегментов разъёмы маршрута
+        // именованные (route-in/route-out), так что цепляемся точно; конец на
+        // реальной ноде держим по её входу.
+        sourceHandle: source.startsWith("route:") ? "route-out" : undefined,
+        targetHandle: target.startsWith("route:")
+          ? "route-in"
+          : (target === e.target && e.target_handle ? e.target_handle : null),
+        // «Стаканчик» с условием на сегментах разорванного маршрутом ребра не
+        // рисуем: текст условия уезжает в тело самого рераута (пока он
+        // существует). Разрыв опознаём по суффиксу `::r<N>` в id сегмента —
+        // его подставляет routedEdges на сервере.
+        label: e.id.includes("::r") ? undefined : (e.label || undefined),
         style: e.width ? { stroke: e.color, strokeWidth: e.width } : undefined,
         markerEnd: e.kind === "thread" ? undefined : EDGE_MARKER,
         // Вид ребра — классом, а не цветом: в палитре ровно три цвета.
@@ -2676,6 +2795,21 @@ export function CanvasPage() {
     loadBoard();
     setShelfVersion((v) => v + 1);
   }, [loadBoard]);
+
+  // Новая рамка выбирается и открывает поле имени сразу (см. createGroup),
+  // пин — тем же жестом (П2.8): свежий пин попадает в панель свойств с
+  // автофокусом на «Имя». `fresh`+`edit` гаснут через 2.2 с, и повторный
+  // щелчок по пину редактирование сам по себе не открывает.
+  function openPinNameEditor(id: number) {
+    setSelectedPinId(id);
+    setSelectedChapterId(null);
+    setSelectedSceneId(null);
+    setSelectedCheckId(null);
+    setSelectedStickerId(null);
+    setSelectedFrameId(null);
+    loadBoard();
+    setTimeout(() => setFresh({ key: `pin:${id}`, edit: true }), 400);
+  }
 
   // Кого рамка тащит за собой. Состав считается ОДИН раз, в момент захвата:
   // пересчитывать его на каждом кадре значит терять по дороге сцену, которая
@@ -3089,6 +3223,113 @@ export function CanvasPage() {
     );
   }, [dropChapter, setNodes]);
 
+  // Группа живёт размером охвата своих членов (гибридная модель): члена нельзя
+  // вытащить рукой — рамка растягивается вместе с ним, а вывести можно только
+  // явным «Убрать из группы», после чего рамка сужается до нового охвата.
+  // Источник правды о размере — клиент, знающий настоящие отрисованные размеры
+  // узлов: сервер хранит `w/h` как есть и ничего не пересчитывает, так рост и
+  // сужение рамки следуют за составом с верными размерами содержимого.
+  // `include` — ноды, которые только что попали в семью (их parentId ещё не
+  // выставлен до перечитывания доски); `exclude` — того, кого только что вывели.
+  const recomputeFrame = useCallback(
+    (frameId: number, opts?: { include?: string[]; exclude?: string[]; moved?: { id: string; position: { x: number; y: number } } }) => {
+      const incl = opts?.include ?? [];
+      const excl = opts?.exclude ?? [];
+      const moved = opts?.moved;
+      const frameNode = nodesRef.current.find((n) => n.id === `frame:${frameId}`);
+      if (!frameNode) return;
+      if ((frameNode.data as FrameNodeData).collapsed) return;
+      // `nodesRef.current` синхронизируется на рендере, а на drag-stop он ещё
+      // держит ДО-ДРАГОВОЕ место перетаскиваемой ноды. Подменяем для неё
+      // свежую позицию из события, иначе охват считается по старой точке:
+      // рамка не догонит уехавшего наружу члена до перезагрузки.
+      const nodes = nodesRef.current.map((n) =>
+        moved && n.id === moved.id ? { ...n, position: { ...moved.position } } : n
+      );
+      const members = nodes.filter(
+        (n) => n.id !== frameNode.id && (n.parentId === `frame:${frameId}` || incl.includes(n.id)) && !excl.includes(n.id)
+      );
+      if (!members.length) return;
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const fx = frameNode.position.x;
+      const fy = frameNode.position.y;
+      let maxX = fx;
+      let maxY = fy;
+      for (const m of members) {
+        const abs = toAbsolute(m, byId);
+        const s = getNodeSize(m);
+        maxX = Math.max(maxX, abs.x + s.w + 16);
+        maxY = Math.max(maxY, abs.y + s.h + 16);
+      }
+      const w = Math.max(Math.ceil((maxX - fx) / GRID) * GRID, 160);
+      const h = Math.max(Math.ceil((maxY - fy) / GRID) * GRID, 100);
+      api.put(`/canvas/frames/${frameId}`, { w: Math.round(w), h: Math.round(h) });
+      // Доска — источник собираемых заново нод (`setNodes` в эффекте по board):
+      // без правки её `frame.w/h` пересборка вернёт рамке прежний размер, и
+      // рост до перезагрузки не доживёт. Пишем в тот же объект, чтобы и
+      // соседний `setBoard({...b})` из drag-stop увидел новый размер.
+      const b = boardRef.current;
+      if (b) {
+        for (const n of b.nodes) {
+          if (n.node_type === "frame" && n.node_id === frameId) {
+            n.frame.w = w;
+            n.frame.h = h;
+            break;
+          }
+        }
+        setBoard({ ...b });
+      }
+      setNodes((cur) =>
+        cur.map((n) =>
+          n.id !== `frame:${frameId}`
+            ? n
+            : { ...n, width: w, height: h, data: { ...n.data, w, h } }
+        )
+      );
+    },
+    [setNodes, setBoard]
+  );
+
+  // «Убрать из группы» (гибридная модель): единственный способ вывести члена —
+  // явный жест, рукой не вытащить. Пишется `parent_key = null` той же пачкой,
+  // что и раскладку (пин зеркалит `canvas_pins` сам), затем рамка сужается
+  // пересчётом по оставшимся членам, и доска перечитывается.
+  const removeFromGroup = useCallback(
+    async (node: Node<CanvasNodeData>) => {
+      const parent = node.parentId;
+      if (!parent?.startsWith("frame:")) return;
+      const boardState = boardRef.current;
+      if (!boardState) return;
+      const frameId = Number(parent.split(":")[1]);
+      const [nodeType, nodeId] = splitKey(node.id);
+      const byId = new Map(nodesRef.current.map((n) => [n.id, n]));
+      const abs = toAbsolute(node, byId);
+      await api.put("/canvas/board/nodes", {
+        board_id: boardState.board_id,
+        nodes: [
+          {
+            node_type: nodeType,
+            node_id: nodeId,
+            x: Math.round(abs.x),
+            y: Math.round(abs.y),
+            parent_key: null,
+          },
+        ],
+      });
+      for (const n of boardState.nodes) {
+        if (n.key === node.id) {
+          n.parent_key = null;
+          break;
+        }
+      }
+      setBoard({ ...boardState });
+      // Сужение: пересчёт по оставшимся членам, выведенного исключаем.
+      recomputeFrame(frameId, { exclude: [node.id] });
+      loadBoard();
+    },
+    [loadBoard, recomputeFrame]
+  );
+
   const onNodeDragStop = useCallback(
     (_: unknown, node: Node<CanvasNodeData>) => {
       // Рамки и пины мимо `scheduleSave`, поэтому доску догоняем здесь.
@@ -3143,19 +3384,30 @@ export function CanvasPage() {
         const byId = new Map(nodesRef.current.map((n) => [n.id, n]));
         const abs = toAbsolute(node, byId);
         const { w, h } = getNodeSize(node);
-        const parentKey = frameAtPoint(board, abs.x + w / 2, abs.y + h / 2);
+        // Члена нельзя вытащить рукой: если пин уже в семье — остаётся в ней,
+        // рамка растягивается следом. В семье его больше нет только после
+        // явного «Убрать из группы», и тогда авто-добавление снова в силе.
+        const existing = nodesRef.current.find((n) => n.id === node.id);
+        const stickyParent = existing?.parentId ?? null;
+        const parentKey = stickyParent
+          ? stickyParent
+          : (() => {
+              const pk = frameAtPoint(board, abs.x + w / 2, abs.y + h / 2);
+              return pk === node.id ? null : pk;
+            })();
         api.put(`/canvas/pins/${id}`, {
           x: Math.round(abs.x),
           y: Math.round(abs.y),
-          parent_key: parentKey === node.id ? null : parentKey,
+          parent_key: parentKey,
         });
         const b = boardRef.current;
         if (b) {
           for (const n of b.nodes) {
-            if (n.key === node.id) n.parent_key = parentKey === node.id ? null : parentKey;
+            if (n.key === node.id) n.parent_key = parentKey;
           }
           setBoard({ ...b });
         }
+        if (parentKey) recomputeFrame(Number(parentKey.split(":")[1]), { include: [node.id], moved: { id: node.id, position: node.position } });
       } else if (node.type === "scene" && target != null) {
         /**
          * Перенос между главами — правка самой сцены, а не холста: глава
@@ -3191,7 +3443,17 @@ export function CanvasPage() {
         const byId = new Map(nodesRef.current.map((n) => [n.id, n]));
         const abs = toAbsolute(node, byId);
         const { w, h } = getNodeSize(node);
-        const parentKey = frameAtPoint(board, abs.x + w / 2, abs.y + h / 2);
+        // Члена нельзя вытащить рукой: уже состоящая в семье нода остаётся в
+        // ней, рамка растягивается следом. Авто-добавление бросанием (Q11)
+        // включается только для свободной ноды, а не для члена.
+        const existing = nodesRef.current.find((n) => n.id === node.id);
+        const stickyParent = existing?.parentId ?? null;
+        const parentKey = stickyParent
+          ? stickyParent
+          : (() => {
+              const pk = frameAtPoint(board, abs.x + w / 2, abs.y + h / 2);
+              return pk === node.id ? null : pk;
+            })();
         const [nodeType, nodeId] = splitKey(node.id);
         api.put("/canvas/board/nodes", {
           board_id: board.board_id,
@@ -3201,20 +3463,21 @@ export function CanvasPage() {
               node_id: nodeId,
               x: Math.round(abs.x),
               y: Math.round(abs.y),
-              parent_key: parentKey === node.id ? null : parentKey,
+              parent_key: parentKey,
             },
           ],
         });
         const b = boardRef.current;
         if (b) {
           for (const n of b.nodes) {
-            if (n.key === node.id) n.parent_key = parentKey === node.id ? null : parentKey;
+            if (n.key === node.id) n.parent_key = parentKey;
           }
           setBoard({ ...b });
         }
+        if (parentKey) recomputeFrame(Number(parentKey.split(":")[1]), { include: [node.id], moved: { id: node.id, position: node.position } });
       }
     },
-    [board, commitPositions, loadBoard]
+    [board, commitPositions, recomputeFrame, loadBoard]
   );
 
   const onNodesChange = useCallback(
@@ -3265,6 +3528,98 @@ export function CanvasPage() {
       const [targetType, targetId] = splitKey(connection.target);
       const handle = connection.targetHandle ?? "story";
       const sourceHandle = connection.sourceHandle ?? "";
+
+      // Рераут («Маршрут»). Сам данных не заводит: реальное ребро остаётся одно,
+      // а эта проводка лишь запоминает, каких соседей рераут разводит — какого
+      // бы вида ребро ни рвал. `from_key` — сосед по входу (слева), `to_key` —
+      // по выходу (справа); соседом может быть и другой рераут (цепочка).
+      if (sourceType === "route" || targetType === "route") {
+        // Диагностика коннектов рераута (временная).
+        console.log("[reroute] onConnect", {
+          source: connection.source,
+          target: connection.target,
+          sourceHandle: connection.sourceHandle ?? null,
+          targetHandle: connection.targetHandle ?? null,
+        });
+        if (sourceType === "route" && targetType === "route") {
+          // Цепочка разрывов одного ребра: исходящий рераут соседствует по
+          // выходу с входящим, входящий — по входу с исходящим. Оба рераута
+          // несут одно и то же ребро, поэтому вид/роль у вновь подключённого
+          // наследуем от настроенного источника: иначе BFS по kind разойдётся
+          // и цепь не соберётся (например, cast-рераут + свежий transition).
+          const srcData = nodes.find((n) => n.id === `route:${sourceId}`)?.data as
+            | RouteNodeData
+            | undefined;
+          const kin = srcData?.kind ?? "transition";
+          const rol = srcData?.role ?? "";
+          try {
+            await api.put(`/canvas/routes/${sourceId}`, { to_key: `route:${targetId}`, kind: kin, role: rol });
+            await api.put(`/canvas/routes/${targetId}`, { from_key: `route:${sourceId}`, kind: kin, role: rol });
+          } catch (e) {
+            alert(`Не удалось связать маршруты: ${e instanceof Error ? e.message : String(e)}`);
+            return;
+          }
+          loadBoard();
+          return;
+        }
+        const routeId = sourceType === "route" ? sourceId : targetId;
+        const peerKey = sourceType === "route" ? connection.target : connection.source;
+        const isIn = targetType === "route"; // в вход — from_key, наружу — to_key
+        // Вид и роль ребра определяет РЕАЛЬНАЯ сторона связи (не сам рераут):
+        // роль у входящего разъёма реальной ноды или у её разъёма-источника,
+        // иначе переход. Исход проверки (outcome:<id>) и нить пинов различимы
+        // только тут — обобщённое правило по «таргету» их не видит.
+        const realIsSource = sourceType !== "route";
+        const realType = realIsSource ? sourceType : targetType;
+        const realHandle = realIsSource ? (connection.sourceHandle ?? "") : (connection.targetHandle ?? "");
+        // Нити пинов рераутом не рвём: они живут в поле `threads` отдельно от
+        // `edges`, и серверный разрыв рёбер (`routedEdges`) их не видит — такой
+        // рераут висел бы без эффекта. Проводку отклоняем явно (#7).
+        if (realType === "pin") return;
+        // Вид/роль рераута фиксирует ПЕРВАЯ подведённая сторона; вторую не
+        // пересчитываем, иначе исход проверки (outcome) на второй связи скатился
+        // бы в «переход» и BFS не сошёлся бы (блок #5).
+        const routeData = nodes.find((n) => n.id === `route:${routeId}`)?.data as RouteNodeData | undefined;
+        // Вид/роль ребра выводим по текущей подводке монотонно: найденный более
+        // конкретный вид (outcome/cast/member) применяется, а если подводка
+        // ничего не говорит (переход/неоднозначно) — ПРЕЖНИЙ вид сохраняем.
+        // Так cast/member работают в любом порядке подводки, а outcome не
+        // скатывается обратно в transition при второй подводке `route→scene
+        // (story)` (блок #5). Раньше kind запирался первой подводкой, и
+        // `being→route` навсегда уходил в 'transition' — cast-рерауты молча
+        // не рвались.
+        const prevKind = (routeData?.kind as RouteKind) ?? "transition";
+        const prevRole = routeData?.role ?? "";
+        let kind: RouteKind = prevKind;
+        let role: string = prevRole;
+        if (realHandle.startsWith("outcome:")) {
+          kind = "outcome";
+          role = realHandle;
+        } else if (realType === "bundle" || realHandle === "members") {
+          kind = "member";
+          role = "members";
+        } else if (realType === "setting_event" || realType === "campaign_event") {
+          kind = "cast";
+          role = "consequences";
+        } else if (realType === "scene" && realHandle !== "story" && realHandle !== "prev") {
+          kind = "cast";
+          role = realHandle;
+        }
+        try {
+          await api.put(`/canvas/routes/${routeId}`, {
+            ...(isIn ? { from_key: peerKey } : { to_key: peerKey }),
+            kind,
+            role,
+          });
+          console.log("[reroute] PUT ok", { routeId, peerKey, isIn, kind, role });
+        } catch (e) {
+          console.error("[reroute] PUT failed", { routeId, peerKey, isIn, kind, role, error: e });
+          alert(`Не удалось подвести маршрут: ${e instanceof Error ? e.message : String(e)}`);
+          return;
+        }
+        loadBoard();
+        return;
+      }
 
       // Исход проверки → сцена (Q2, Q4): хендл outcome:<id> на check-ноде
       if (sourceType === "check" && targetType === "scene") {
@@ -3880,6 +4235,12 @@ export function CanvasPage() {
             onClick: async () => { await api.put(`/canvas/pins/${id}`, { color: sw.value }); loadBoard(); },
           })),
         });
+        if (node.parentId?.startsWith("frame:")) {
+          items.push({
+            label: "Убрать из группы",
+            onClick: () => void removeFromGroup(node),
+          });
+        }
         items.push({
           label: "Удалить",
           danger: true,
@@ -3972,6 +4333,12 @@ export function CanvasPage() {
             onClick: async () => { await api.put(`/canvas/pins/${id}`, { color: sw.value }); loadBoard(); },
           })),
         });
+        if (node.parentId?.startsWith("frame:")) {
+          items.push({
+            label: "Убрать из группы",
+            onClick: () => void removeFromGroup(node),
+          });
+        }
         items.push({
           label: "Удалить",
           danger: true,
@@ -4086,13 +4453,39 @@ export function CanvasPage() {
           },
         });
       }
-      items.push({
-        label: "Удалить",
-        danger: true,
-        onClick: async () => {
-          if (type === "check") await api.del(`/story/checks/${id}`);
+        if (node.parentId?.startsWith("frame:")) {
+          items.push({
+            label: "Убрать из группы",
+            onClick: () => void removeFromGroup(node),
+          });
+        }
+      if (type === "route") {
+        // Второй пункт удаления рераута: «Удалить с ребром» убирает не только
+        // разрыв, но и само реальное ребро (переход между сценами). Пункт
+        // «Удалить» ниже по-прежнему лишь снимает разрыв (блок #6).
+        const row = boardNodesOfType(board, "route").find((n) => n.route.id === Number(id))?.route;
+        if (row?.kind === "transition" && row.transition_id != null) {
+          items.push({
+            label: "Удалить с ребром",
+            danger: true,
+            onClick: async () => {
+              await api.del(`/story/transitions/${row.transition_id}`);
+              await api.del(`/canvas/routes/${id}`);
+              loadBoard();
+            },
+          });
+        }
+      }
+        items.push({
+          label: "Удалить",
+          danger: true,
+          onClick: async () => {
+            if (type === "check") await api.del(`/story/checks/${id}`);
           else if (type === "sticker" || type === "image") {
             await api.del(`/canvas/board/node?board_id=${board?.board_id}&node_type=${type}&node_id=${id}`);
+          } else if (type === "route") {
+            // «Маршрут»: удаляем только разрыв — реальное ребро остаётся.
+            await api.del(`/canvas/routes/${id}`);
           } else if (type === "scene") {
             if (confirm(`Архивировать сцену "${(node.data as Record<string, unknown>).name ?? ""}"?`)) await api.del(`/story/scenes/${id}`);
           } else if (type === "chapter" || type === "adventure") {
@@ -4106,7 +4499,7 @@ export function CanvasPage() {
       });
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup]
+    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup]
   );
 
   // Убрать ноду сущности/набора/проверки — значит убрать её С ХОЛСТА или удалить сущность.
@@ -4131,6 +4524,9 @@ export function CanvasPage() {
           if (nodeType === "bundle") return api.del(`/canvas/bundles/${nodeId}`);
           if (nodeType === "check") return api.del(`/story/checks/${nodeId}`);
           if (nodeType === "pin") return api.del(`/canvas/pins/${nodeId}`);
+          // Рераут — только разрыв: реальное ребро остаётся, снимаем память
+          // прохода, а не саму связь. Удаление «нода+связь» — отдельный жест.
+          if (nodeType === "route") return api.del(`/canvas/routes/${nodeId}`);
           const boardParam = board?.board_id ? `board_id=${board.board_id}` : `arc_id=${arcId}`;
           return api.del(`/canvas/board/node?${boardParam}&node_type=${nodeType}&node_id=${nodeId}`);
         }),
@@ -4251,7 +4647,12 @@ export function CanvasPage() {
           if (!board.board_id) return;
           if (data.kind === "pin" && data.pin) {
             const pinData = data.pin;
-            await api.post("/canvas/pins", { board_id: board.board_id, name: pinData.name, x, y, size: pinData.size, color: pinData.color, shape: pinData.shape });
+            const created = await api.post<{ id: number }>("/canvas/pins", { board_id: board.board_id, name: pinData.name, x, y, size: pinData.size, color: pinData.color, shape: pinData.shape });
+            openPinNameEditor(created.id);
+            return;
+          }
+          if (data.kind === "route") {
+            await api.post("/canvas/routes", { board_id: board.board_id, x, y });
             loadBoard();
             return;
           }
@@ -4407,6 +4808,7 @@ export function CanvasPage() {
     setSelectedChapterId(type === "chapter" ? id : null);
     setSelectedPinId(type === "pin" ? id : null);
     setSelectedAdventureId(type === "adventure" ? id : null);
+    setSelectedRouteId(type === "route" ? id : null);
   }, []);
 
   /** Найденное поиском — в центр экрана и в панель свойств. */
@@ -4690,6 +5092,7 @@ export function CanvasPage() {
               refreshAll();
               if (sceneId != null) setSelectedSceneId(sceneId);
             }}
+            onPinCreated={(pinId) => openPinNameEditor(pinId)}
           />
         )}
       </div>
@@ -4722,11 +5125,21 @@ export function CanvasPage() {
             onChanged={refreshAll}
           />
         ) : selectedFrameId != null ? (
-          <FrameProperties frameId={selectedFrameId} board={board} onSaved={refreshAll} />
+          <FrameProperties
+            frameId={selectedFrameId}
+            board={board}
+            onSaved={refreshAll}
+            onRemoveMember={(key) => {
+              const n = nodesRef.current.find((x) => x.id === key);
+              if (n) void removeFromGroup(n);
+            }}
+          />
         ) : selectedChapterId != null ? (
           <ChapterProperties chapterId={selectedChapterId} board={board} onSaved={refreshAll} onEnter={enterChapter} />
         ) : selectedPinId != null ? (
-          <PinProperties pinId={selectedPinId} board={board} onSaved={refreshAll} />
+          <PinProperties pinId={selectedPinId} board={board} onSaved={refreshAll} autoEdit={fresh?.edit === true && fresh.key === `pin:${selectedPinId}`} />
+        ) : selectedRouteId != null ? (
+          <RouteProperties routeId={selectedRouteId} board={board} onSaved={refreshAll} />
         ) : selectedStickerId != null ? (
           <StickerProperties stickerId={selectedStickerId} onSaved={refreshAll} board={board} />
         ) : selectedCheckId != null ? (
@@ -5879,10 +6292,12 @@ function PropsChips({
   label,
   items,
   empty,
+  onRemove,
 }: {
   label: string;
   items: { key: string; title: string }[];
   empty: string;
+  onRemove?: (key: string) => void;
 }) {
   return (
     <div className="canvas-props__field">
@@ -5896,8 +6311,18 @@ function PropsChips({
       ) : (
         <div className="stack" style={{ gap: 4 }}>
           {items.map((it) => (
-            <span key={it.key} className="canvas-node__chip">
+            <span key={it.key} className="canvas-node__chip" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               {it.title}
+              {onRemove && (
+                <button
+                  type="button"
+                  className="comp-mini"
+                  title="Убрать из группы"
+                  onClick={(e) => { e.stopPropagation(); onRemove(it.key); }}
+                >
+                  −
+                </button>
+              )}
             </span>
           ))}
         </div>
@@ -6008,7 +6433,7 @@ function StickerProperties({ stickerId, onSaved, board }: { stickerId: number; o
   );
 }
 
-function FrameProperties({ frameId, board, onSaved }: { frameId: number; board: CanvasBoard | null; onSaved: () => void }) {
+function FrameProperties({ frameId, board, onSaved, onRemoveMember }: { frameId: number; board: CanvasBoard | null; onSaved: () => void; onRemoveMember: (key: string) => void }) {
   const frame = boardNodesOfType(board, "frame").find((n) => n.node_id === frameId)?.frame;
   const [name, setName] = useState(frame?.name ?? "");
   useEffect(() => { setName(frame?.name ?? ""); }, [frame?.name]);
@@ -6052,6 +6477,7 @@ function FrameProperties({ frameId, board, onSaved }: { frameId: number; board: 
           label="В группе"
           items={members.map((m) => ({ key: m.key, title: boardNodeTitle(m) }))}
           empty="Перетащи узлы внутрь рамки — они поедут вместе с ней."
+          onRemove={onRemoveMember}
         />
       </div>
     </PropsPanel>
@@ -6093,13 +6519,23 @@ function ChapterProperties({ chapterId, board, onSaved, onEnter }: { chapterId: 
   );
 }
 
-function PinProperties({ pinId, board, onSaved }: { pinId: number; board: CanvasBoard | null; onSaved: () => void }) {
+function PinProperties({ pinId, board, onSaved, autoEdit = false }: { pinId: number; board: CanvasBoard | null; onSaved: () => void; autoEdit?: boolean }) {
   const pin = boardNodesOfType(board, "pin").find((n) => n.pin.id === pinId)?.pin;
   const [name, setName] = useState(pin?.name ?? "");
   const [size, setSize] = useState(pin?.size ?? "M");
   const [color, setColor] = useState(pin?.color ?? DEFAULT_FRAME_COLOR);
   const [shape, setShape] = useState(pin?.shape ?? "circle");
+  const nameRef = useRef<HTMLInputElement>(null);
   useEffect(() => { setName(pin?.name ?? ""); setSize(pin?.size ?? "M"); setColor(pin?.color ?? DEFAULT_FRAME_COLOR); setShape(pin?.shape ?? "circle"); }, [pin?.name, pin?.size, pin?.color, pin?.shape]);
+  // П2.8: свежесозданный пин открывает панель сразу в поле имени. Эффект
+  // пережидает и поставку `pin` (панель рендерится раньше данных доски), и
+  // 400 мс отложенного `fresh` — фокус приходит к готовому инпуту.
+  useEffect(() => {
+    if (autoEdit && pin && nameRef.current) {
+      nameRef.current.focus();
+      nameRef.current.select();
+    }
+  }, [autoEdit, pin]);
   const threads = board?.threads ?? [];
   const myThreads = threads.filter((th) => th.from_pin_id === pinId || th.to_pin_id === pinId);
   async function save(part: Record<string, unknown>) {
@@ -6113,7 +6549,7 @@ function PinProperties({ pinId, board, onSaved }: { pinId: number; board: Canvas
       aside={<PropsDelete onDelete={async () => { await api.del(`/canvas/pins/${pinId}`); onSaved(); }} />}
     >
       <div className="canvas-props__fields">
-        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() !== pin.name && save({ name: name.trim() || "Пин" })} placeholder="Пин" /></label>
+        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() !== pin.name && save({ name: name.trim() || "Пин" })} placeholder="Пин" /></label>
         <div className="canvas-props__field"><span className="canvas-props__label">Размер</span><div className="row" style={{ gap: 6 }}>{(["S","M","L"] as const).map((s) => (<button key={s} className={size===s ? "primary" : ""} onClick={() => { setSize(s); save({ size: s }); }}>{s} {s==="S"?"16":s==="M"?"24":"32"}</button>))}</div></div>
         <ColorSwatches swatches={FRAME_SWATCHES} selected={color} by="value" onPick={(sw) => { setColor(sw.value); save({ color: sw.value }); }} />
         <div className="canvas-props__field"><span className="canvas-props__label">Форма</span><div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{(PIN_SHAPES as readonly string[]).map((sh) => (<button key={sh} className={shape===sh ? "primary" : ""} onClick={() => { setShape(sh); save({ shape: sh }); }}>{PIN_SHAPE_LABEL[sh] ?? sh}</button>))}</div></div>
@@ -6133,6 +6569,96 @@ function PinProperties({ pinId, board, onSaved }: { pinId: number; board: Canvas
     </PropsPanel>
   );
 }
+
+/**
+ * Рераут («Маршрут») в панели свойств.
+ *
+ * Сам данных не заводит — реальное ребро остаётся одно, а здесь у рераута
+ * править почти нечего: роль (вид ребра, которое рвёт) read-only, потому что
+ * конфликт ролей невозможен по построению. Особый случай — переход между
+ * сценами: рераут становится местом для редактора строки «Условие перехода»
+ * (`story_scene_transitions.label`), которая раньше жила подписью на середине
+ * ребра.
+ */
+function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: CanvasBoard | null; onSaved: () => void }) {
+  const route = boardNodesOfType(board, "route").find((n) => n.route.id === routeId)?.route;
+  const [condition, setCondition] = useState(route?.transition_label ?? "");
+  useEffect(() => { setCondition(route?.transition_label ?? ""); }, [route?.transition_label]);
+  if (!route) return <PropsPlaceholder label="Маршрут">Загрузка…</PropsPlaceholder>;
+  const kindLabel = ROUTE_KIND_LABEL[route.kind] ?? route.kind;
+  const roleLabel = route.role ? ROUTE_ROLE_LABEL[route.role] ?? route.role : "";
+  const isTransition = route.kind === "transition";
+  return (
+    <PropsPanel
+      label="Маршрут"
+      aside={<PropsDelete onDelete={async () => { await api.del(`/canvas/routes/${routeId}`); onSaved(); }} />}
+    >
+      <div className="canvas-props__fields">
+        <div className="canvas-props__field">
+          <span className="canvas-props__label">Ребро</span>
+          <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>
+            {kindLabel}{roleLabel ? ` · ${roleLabel}` : ""}
+          </p>
+          {route.from_name && route.to_name && (
+            <p className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 4 }}>
+              {route.from_name} → {route.to_name}
+            </p>
+          )}
+        </div>
+        {isTransition && route.transition_id != null && (
+          <label className="canvas-props__field">
+            <span className="canvas-props__label">Условие перехода</span>
+            <input
+              value={condition}
+              placeholder="Условие"
+              onChange={(e) => setCondition(e.target.value)}
+              onBlur={() => { const v = condition.trim(); if (v !== (route.transition_label ?? "")) { void api.put(`/story/transitions/${route.transition_id}`, { label: v }); onSaved(); } }}
+            />
+          </label>
+        )}
+        {isTransition && route.transition_id != null && (
+          <div className="canvas-props__field">
+            <button
+              className="button button--danger"
+              onClick={async () => {
+                // Снять не только разрыв, но и сам переход (блок #6).
+                await api.del(`/story/transitions/${route.transition_id}`);
+                await api.del(`/canvas/routes/${routeId}`);
+                onSaved();
+              }}
+            >
+              Удалить с ребром
+            </button>
+          </div>
+        )}
+        {!isTransition && (
+          <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>
+            Рераут перенимает роль от ребра, которое рвёт. Удаление «Маршрут»
+            снимает разрыв, но оставляет само ребро.
+          </p>
+        )}
+      </div>
+    </PropsPanel>
+  );
+}
+
+// Подписи вида ребра и роли для панели свойств рераута.
+const ROUTE_KIND_LABEL: Record<string, string> = {
+  transition: "Переход",
+  outcome: "Исход проверки",
+  cast: "Состав сцены",
+  member: "Участник набора",
+  thread: "Нить",
+};
+const ROUTE_ROLE_LABEL: Record<string, string> = {
+  location: "Локация",
+  beings: "Существа",
+  plot_characters: "Персонажи",
+  loot: "Артефакты",
+  consequences: "Последствия",
+  members: "Участники",
+  story: "Переход",
+};
 
 // Палитра: чем пополнить холст. Плавает над холстом, а не забирает третью
 // колонку — при окне в 1000 px полотну и так достаётся меньше пятисот, и
@@ -6258,6 +6784,7 @@ function CanvasPalette({
   campaignId,
   shelfVersion,
   onAdded,
+  onPinCreated,
   flowRef,
 }: {
   arcId: number;
@@ -6272,6 +6799,8 @@ function CanvasPalette({
   /** Меняется, когда сцену положили на полку или сняли с неё. */
   shelfVersion: number;
   onAdded: (sceneId: number | null) => void;
+  /** Свежесозданный пин (П2.8): страница выделяет его и открывает имя. */
+  onPinCreated: (pinId: number) => void;
   flowRef?: React.RefObject<ReactFlowInstance<Node<CanvasNodeData>, Edge> | null>;
 }) {
   const [tab, setTab] = useState<PaletteTab>("scenes");
@@ -6753,12 +7282,29 @@ function CanvasPalette({
               }}
               onClick={async () => {
                 const pos = freshSpotAtCenter(flowRef?.current ?? null);
-                await api.post("/canvas/pins", { board_id: boardId, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
+                const created = await api.post<{ id: number }>("/canvas/pins", { board_id: boardId, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
+                onPinCreated(created.id);
                 onAdded(null);
               }}
             >
               <span className="canvas-palette__item-name">📌 Пин</span>
               <span className="canvas-palette__item-meta">Точка • M • круг</span>
+            </button>
+            <button
+              className="canvas-palette__item"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(PALETTE_DRAG_MIME, JSON.stringify({ kind: "route" }));
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+              onClick={async () => {
+                const pos = freshSpotAtCenter(flowRef?.current ?? null);
+                await api.post("/canvas/routes", { board_id: boardId, x: Math.round(pos.x), y: Math.round(pos.y) });
+                onAdded(null);
+              }}
+            >
+              <span className="canvas-palette__item-name">⇆ Маршрут</span>
+              <span className="canvas-palette__item-meta">Разводка длинного ребра</span>
             </button>
             <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>
               Перетащи на холст или нажми. ПКМ на пине — создать связь, цвет, удалить. Нити — в свойствах пина.

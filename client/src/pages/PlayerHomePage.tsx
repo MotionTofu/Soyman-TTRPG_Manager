@@ -50,7 +50,9 @@ export function PlayerHomePage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get<Dashboard>("/player/dashboard").then(setDashboard).catch((e) => setError(String(e)));
+    const controller = new AbortController();
+    api.get<Dashboard>("/player/dashboard", { signal: controller.signal } as RequestInit).then(setDashboard).catch((e) => { if ((e as Error).name !== "AbortError") setError(String(e)); });
+    return () => controller.abort();
   }, []);
 
   if (error) return <div className="card">Не загрузилось: {error} <button onClick={() => location.reload()}>Повторить</button></div>;
@@ -85,14 +87,17 @@ export function PlayerHomePage() {
 
       <MonthCalendar
         events={events}
-        onDayClick={() => {}}
         onEventClick={(e) => {
           const s = sessions.find((s) => s.id === e.id);
           if (!s) return;
           navigate(`/campaigns/${s.campaign_id}`);
         }}
       />
-      {events.length === 0 && <p className="muted">Пока нет сессий — календарь пуст.</p>}
+      {events.length === 0 ? (
+        <p className="muted">Пока нет сессий — календарь пуст.</p>
+      ) : (
+        events.filter((e) => e.status !== "cancelled").length === 0 && <p className="muted">Все сессии отменены — история в Архиве</p>
+      )}
 
       {!loadHideFinance() && unpaidSessions.length > 0 && (
         <div className="stack">

@@ -13,7 +13,7 @@ export interface CalendarEvent {
 
 interface Props {
   events: CalendarEvent[];
-  onDayClick: (date: string) => void;
+  onDayClick?: (date: string) => void;
   onEventClick?: (event: CalendarEvent) => void;
   onEventContextMenu?: (event: CalendarEvent, x: number, y: number) => void;
   onDayContextMenu?: (date: string, x: number, y: number) => void;
@@ -60,10 +60,20 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60000);
-    const onVis = () => { if (document.visibilityState === "visible") setNow(new Date()); };
+    let id: number | undefined;
+    const start = () => { id = window.setInterval(() => setNow(new Date()), 60000); };
+    const stop = () => { if (id !== undefined) { clearInterval(id); id = undefined; } };
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        setNow(new Date());
+        if (id === undefined) start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === "visible") start();
     document.addEventListener("visibilitychange", onVis);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+    return () => { stop(); document.removeEventListener("visibilitychange", onVis); };
   }, []);
   const todayKey = toDateKey(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -109,20 +119,26 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
             <div
               key={c.key}
               className={`day${c.key === todayKey ? " today" : ""}`}
-              role="button"
-              tabIndex={0}
+              role={onDayClick ? "button" : undefined}
+              tabIndex={onDayClick ? 0 : undefined}
               aria-label={
-                (eventsByDate.get(c.key!)?.length ?? 0) > 0
-                  ? `${c.day} число, ${eventsByDate.get(c.key!)!.length} ${eventsByDate.get(c.key!)!.length === 1 ? "игра" : "игры"}`
-                  : `${c.day} число`
+                onDayClick
+                  ? (eventsByDate.get(c.key!)?.length ?? 0) > 0
+                    ? `${c.day} число, ${eventsByDate.get(c.key!)!.length} ${eventsByDate.get(c.key!)!.length === 1 ? "игра" : "игры"}`
+                    : `${c.day} число`
+                  : undefined
               }
-              onClick={() => onDayClick(c.key!)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onDayClick(c.key!);
-                }
-              }}
+              onClick={onDayClick ? () => onDayClick(c.key!) : undefined}
+              onKeyDown={
+                onDayClick
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onDayClick(c.key!);
+                      }
+                    }
+                  : undefined
+              }
               onContextMenu={(ev) => {
                 ev.preventDefault();
                 onDayContextMenu?.(c.key!, ev.clientX, ev.clientY);
@@ -161,6 +177,11 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
           )
         )}
       </div>
+        {visibleEvents.length === 0 && events.length > 0 && (
+          <p className="muted" style={{ textAlign: "center", marginTop: 8 }}>
+            Все сессии отменены — история в Архиве
+          </p>
+        )}
     </div>
   );
 }

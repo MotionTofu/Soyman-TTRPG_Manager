@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { pruneRoutesForKeys } from "./canvas";
 import {
   contentSceneId,
   copySceneChildren,
@@ -1478,7 +1479,13 @@ storyRouter.put("/cast/:linkId", (req, res) => {
 });
 
 storyRouter.delete("/cast/:linkId", (req, res) => {
-  db.prepare("DELETE FROM generic_links WHERE id = ?").run(req.params.linkId);
+  const lid = Number(req.params.linkId);
+  const l = db
+    .prepare("SELECT from_type, from_id, to_type, to_id FROM generic_links WHERE id=?")
+    .get(lid) as { from_type: string; from_id: number; to_type: string; to_id: number } | undefined;
+  db.prepare("DELETE FROM generic_links WHERE id = ?").run(lid);
+  // Каст/состав рвётся и здесь: рераут по такому ребру больше не несёт смысла.
+  if (l) pruneRoutesForKeys([`${l.from_type}:${l.from_id}`, `${l.to_type}:${l.to_id}`]);
   res.json({ ok: true });
 });
 
@@ -1824,8 +1831,31 @@ storyRouter.post("/scenes/:id/transitions", (req, res) => {
 });
 
 storyRouter.delete("/transitions/:transitionId", (req, res) => {
-  db.prepare("DELETE FROM story_scene_transitions WHERE id = ?").run(req.params.transitionId);
+  // Рераут между сценами живёт за счёт этого перехода: когда он уходит,
+  // подметаем и рерауты, что разрывали его (см. pruneRoutesForKeys).
+  const tid = Number(req.params.transitionId);
+  const t = db
+    .prepare("SELECT from_scene_id, to_scene_id FROM story_scene_transitions WHERE id=?")
+    .get(tid) as { from_scene_id: number; to_scene_id: number } | undefined;
+  db.prepare("DELETE FROM story_scene_transitions WHERE id = ?").run(tid);
+  if (t) pruneRoutesForKeys([`scene:${t.from_scene_id}`, `scene:${t.to_scene_id}`]);
   res.json({ ok: true });
+});
+
+// Смена «Условия перехода» (label) существующего перехода. Рераут между сценами
+// редактирует именно эту строку — это его «частный случай». INSERT OR IGNORE в
+// POST выше молча ронял новую строку, если такая связь уже была, поэтому здесь
+// UPDATE по id.
+storyRouter.put("/transitions/:transitionId", (req, res) => {
+  const id = Number(req.params.transitionId);
+  const { label } = req.body as { label?: string };
+  if (label === undefined) return res.status(400).json({ error: "label is required" });
+  const row = db
+    .prepare("SELECT id FROM story_scene_transitions WHERE id = ?")
+    .get(id) as { id: number } | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  db.prepare("UPDATE story_scene_transitions SET label = ? WHERE id = ?").run(label, id);
+  res.json({ ok: true, id });
 });
 
 /**

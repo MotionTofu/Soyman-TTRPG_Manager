@@ -36,9 +36,12 @@ export function PreviewDock({ open }: { open?: boolean }) {
     setDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
-    if (!ACCEPT_TYPES.includes(result.type)) return;
-    addPreviewDockCard({ type: result.type, id: result.id });
+    try {
+      const result = JSON.parse(raw) as SearchResult;
+      if (!result || typeof result.type !== "string" || typeof result.id !== "number" || !Number.isFinite(result.id)) return;
+      if (!ACCEPT_TYPES.includes(result.type)) return;
+      addPreviewDockCard({ type: result.type, id: result.id });
+    } catch {}
   }
 
   return (
@@ -48,7 +51,12 @@ export function PreviewDock({ open }: { open?: boolean }) {
         e.preventDefault();
         setDragOver(true);
       }}
-      onDragLeave={() => setDragOver(false)}
+      onDragLeave={(e) => {
+        // relatedTarget null = ушли за окно, содержит = ушли на ребёнка — не гасим
+        const rt = e.relatedTarget as Node | null;
+        if (rt && e.currentTarget.contains(rt)) return;
+        setDragOver(false);
+      }}
       onDrop={handleDrop}
     >
       <div className="preview-dock-header">

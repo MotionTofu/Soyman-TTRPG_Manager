@@ -141,10 +141,20 @@ export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayCont
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60000);
-    const onVis = () => { if (document.visibilityState === "visible") setNow(new Date()); };
+    let id: number | undefined;
+    const start = () => { id = window.setInterval(() => setNow(new Date()), 60000); };
+    const stop = () => { if (id !== undefined) { clearInterval(id); id = undefined; } };
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        setNow(new Date());
+        if (id === undefined) start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === "visible") start();
     document.addEventListener("visibilitychange", onVis);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+    return () => { stop(); document.removeEventListener("visibilitychange", onVis); };
   }, []);
   const todayKey = toDateKey(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -155,13 +165,13 @@ export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayCont
 
   function openPopoverForDay(key: string, dayEvents: MiniEvent[], anchor: HTMLElement) {
     if (isMobileCal) {
-      // На мобиле поповер центрируется CSS left:50% top:50% — JS координаты не нужны
       setPopover((cur) => (cur?.key === key ? null : { key, events: dayEvents, x: 0, y: 0 }));
       return;
     }
     const rect = anchor.getBoundingClientRect();
     const popW = 320;
-    const popH = 320;
+    const estH = 40 + dayEvents.length * 42 + 16;
+    const popH = Math.min(320, Math.round(window.innerHeight * 0.6), estH);
     const pad = 8;
     const maxX = window.innerWidth - popW - pad;
     const maxY = window.innerHeight - popH - pad;

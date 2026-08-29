@@ -125,6 +125,7 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
   const towards = mode === "dark" ? "#ffffff" : "#000000";
   const surfaceMix = cfg.surfaceMix ?? (mode === "dark" ? 0.06 : 0.035);
   const surfaceAltMix = cfg.surfaceAltMix ?? (mode === "dark" ? 0.1 : 0.06);
+  // По умолчанию — `--card-border-width: 1px` и `--card-radius: 0` (откат 2026-08-29 по просьбе).
   const borderWidth = cfg.cardBorderWidth ?? 1;
   const sem = fixSemanticSet({ ...SEMANTIC_BY_MODE[mode], ...(cfg.semanticOverrides || {}) }, mode);
   const primaryBg = cfg.bandBg || cfg.accent;
@@ -138,7 +139,11 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
   const paperElevated = mixHex(cfg.bg, towards, surfaceAltMix);
   const ink = cfg.text;
   const inkBright = mode === "dark" ? mixHex(cfg.text, "#ffffff", 0.15) : cfg.text;
-  const muted = cfg.textMutedOverride || mixHex(cfg.text, cfg.bg, 0.45);
+  // Подмес чернил в фон для `--muted`. В светлом режиме 0.37 — БОЛЬШЕ, чем
+  // 0.35, из расчёта §1.1 на бумаге нуара (#e8e4da) даёт ровно 4.5:1 по
+  // WCAG против неё (#676662 ≈ 4.53:1), а с #EDE7D9 уже 4.7:1. Тёмный не
+  // напрягаем: фон там близок к чернилам, и 0.45 тянет к белому (П1.7).
+  const muted = cfg.textMutedOverride || mixHex(cfg.text, cfg.bg, mode === "dark" ? 0.45 : 0.37);
   // §3.1's `--ink-2` sits between the main ink and the muted ink.
   const ink2 = mixHex(ink, muted, 0.5);
   const line = cfg.border;
@@ -179,7 +184,9 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--primary-text": primaryText,
     "--font-display": cfg.fontDisplay,
     "--font-body": cfg.fontBody,
-    "--card-radius": `${cfg.cardRadius ?? 6}px`,
+    "--font-ui": "'Oswald', var(--font-body)",
+    "--font-mono": "'JetBrains Mono', ui-monospace, 'PT Mono', monospace",
+    "--card-radius": `${cfg.cardRadius ?? 0}px`,
     "--card-border-width": `${borderWidth}px`,
     "--card-clip": cfg.cardClip || "none",
     "--card-band-bg": cfg.bandBg || "var(--paper-2)",
@@ -264,9 +271,11 @@ function skinTheme(
       "--primary-text": pickTextOn(primaryBg.startsWith("#") ? primaryBg : d.accent),
       "--font-display": d.fontDisplay,
       "--font-body": d.fontBody,
-      // §6.2: "Радиусы: 0 или 2 px. Скруглений в системе нет."
+      "--font-ui": "'Oswald', var(--font-body)",
+      "--font-mono": "'JetBrains Mono', ui-monospace, 'PT Mono', monospace",
+      // §6.2: "Радиусы: 0 или 2 px. Скруглений в системе нет." (откат 2026-08-29 — 1px по просьбе)
       "--card-radius": "0px",
-      "--card-border-width": "2px",
+      "--card-border-width": "1px",
       "--card-clip": "none",
       "--card-band-bg": d.bandBg || "var(--paper-2)",
       "--card-band-image": d.bandImage || "none",
@@ -328,7 +337,7 @@ const RIOT_THEME = skinTheme("riot", "Соевый бунт", "dark", {
 // NEON — acid. The only skin that uses --glow (§3.1).
 const NEON_THEME = skinTheme("neon", "Соевый неон", "dark", {
   paper: "#07070A", paper2: "#0F0F14", elevated: "#16161C",
-  ink: "#F0FFE8", ink2: "#B9D6AC", muted: "#6F7A6A",
+  ink: "#F0FFE8", ink2: "#B9D6AC", muted: "#727E6D",
   accent: "#FF2E88", accent2: "#B6FF2E",
   surface: "#0F0F14", onSurface: "#F0FFE8",
   line: "rgba(182,255,46,.35)", glow: "0 0 12px rgba(182,255,46,.45)",
@@ -340,7 +349,7 @@ const NEON_THEME = skinTheme("neon", "Соевый неон", "dark", {
 
 const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
   bg: "#e8e4da", text: "#1c1c1c", accent: "#1c1c1c", border: "#2a2a2a",
-  fontDisplay: "'Cormorant SC', serif", fontBody: "'PT Mono', monospace",
+  fontDisplay: "'Cormorant SC', serif", fontBody: "'Archivo', sans-serif",
   bandImage: "repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px)",
   pageTexture: "radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px) 0 0/3px 3px",
   cardBodyTexture: "radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px",
@@ -404,8 +413,8 @@ export function findTheme(id: string, customThemes: Theme[] = []): Theme {
 }
 
 // Personal corner-radius override (px), independent of the active theme —
-// every built-in theme now ships the same default (6px, "Классическая"'s
-// value); this lets a user dial it up/down without needing a custom theme.
+// every built-in theme now ships the same default (0px, П1.6+Н18); this lets
+// a user dial it up/down without needing a custom theme.
 const RADIUS_STORAGE_KEY = "rpgManagerRadiusOverride";
 
 export function loadRadiusOverride(): number | null {

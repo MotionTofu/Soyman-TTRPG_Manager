@@ -245,7 +245,14 @@ export function CreatureCard({
   const toggleSection = (key: "mechanics" | "description") =>
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   const creature: DndCreatureData | null = data.statblock
-    ? normalizeDndCreature(safeParse(data.statblock.content))
+    ? {
+        // Унаследованный статблок несёт content.name ШАБЛОНА (сервер отдаёт
+        // его целиком, creatureCard.ts): в модалке статблока это выглядело
+        // бы чужим именем под имени существа — подменяем на фактическое
+        // (находка 10.10).
+        ...normalizeDndCreature(safeParse(data.statblock.content)),
+        ...(data.statblock_inherited ? { name: data.name } : {}),
+      }
     : null;
 
   const roles = data.combat_roles.length ? data.combat_roles : data.inherited?.combat_roles ?? [];

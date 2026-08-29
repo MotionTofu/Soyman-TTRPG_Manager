@@ -7,13 +7,19 @@ export function toLocalDateKey(d = new Date()): string {
 
 export function parseDateKey(key: string): Date {
   const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return new Date(NaN);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return new Date(NaN);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return new Date(NaN);
+  return dt;
 }
 
 const ruDayMonth = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
 
 export function formatDateKeyRu(key: string): string {
-  return ruDayMonth.format(parseDateKey(key));
+  const d = parseDateKey(key);
+  if (Number.isNaN(d.getTime())) return key;
+  return ruDayMonth.format(d);
 }
 
 export function addDays(key: string, delta: number): string {

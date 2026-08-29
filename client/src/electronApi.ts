@@ -40,12 +40,16 @@ export function hasElectronAPI(): boolean {
  * сервер и одну базу, а «Мешок» у них общий (см. bag.ts), поэтому сущность
  * можно взять в одном окне и перетащить в другом.
  */
+function isSafeRoute(route: string): boolean {
+  return route.startsWith("/") && !route.startsWith("//") && !route.includes("..") && !route.includes("\\") && !route.toLowerCase().startsWith("javascript:");
+}
 export function openSecondWindow(route: string = window.location.pathname + window.location.search): void {
+  const safe = isSafeRoute(route) ? route : "/";
   if (window.electronAPI?.openWindow) {
-    window.electronAPI.openWindow(route);
+    window.electronAPI.openWindow(safe);
     return;
   }
-  window.open(route, "_blank", "noopener,width=1400,height=900");
+  window.open(safe, "_blank", "noopener,width=1400,height=900");
 }
 
 /**
@@ -55,6 +59,7 @@ export function openSecondWindow(route: string = window.location.pathname + wind
  * чтобы ссылка не открылась новым окном Electron вместо системного браузера.
  */
 export function openExternalLink(url: string): void {
+  if (!/^https?:\/\//i.test(url)) return;
   if (window.electronAPI?.openExternal) {
     window.electronAPI.openExternal(url);
     return;

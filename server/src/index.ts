@@ -9,7 +9,7 @@ import { applyActiveStorageEnv } from "./services/storages";
 // before anything below opens a database connection or touches the vault.
 applyActiveStorageEnv();
 import { db } from "./db/db";
-import { initVault, VAULT_ROOT } from "./services/filesystem";
+import { initVault, VAULT_ROOT, vaultAbs } from "./services/filesystem";
 import { storagesRouter } from "./routes/storages";
 import { appSettingsRouter } from "./routes/appSettings";
 import { systemsRouter } from "./routes/systems";
@@ -136,6 +136,33 @@ app.use(
 // files can legitimately be much larger.
 app.use(express.json({ limit: "500mb" }));
 app.use(attachUser);
+
+// П2.1: в БД пути хранятся ОТНОСИТЕЛЬНО корня хранилища, но наружу — клиенту —
+// они уходят как раньше, абсолютными: клиент показывает folder_path/file_path
+// текстом (ArtifactDetailPage и т.п.) и не должен видеть «Campaigns\...»
+// вместо «E:\RPG-Vault\Campaigns\...». Конвертация на границе ответа одной
+// точкой: рекурсивно по JSON, ключи `*_path` (плюс old_path/new_path из
+// relink-кандидатов) → vaultAbs. Голый `path` НЕ трогается (пути валидации
+// import'ов и `path` у JSON-pointer'ов — не файлы). Внешние absolute-пути
+// (ресурсы вне vault) vaultAbs пропускает как есть.
+function absolutizeVaultPaths(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(absolutizeVaultPaths);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) {
+      const isPathField =
+        k.endsWith("_path") || k === "old_path" || k === "new_path";
+      out[k] = isPathField && typeof val === "string" ? vaultAbs(val) : absolutizeVaultPaths(val);
+    }
+    return out;
+  }
+  return v;
+}
+app.use((_req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = (body) => origJson(body === undefined ? body : absolutizeVaultPaths(body));
+  next();
+});
 
 app.use("/api/auth", authRouter);
 app.get("/api/health", (_req, res) => res.json({ ok: true }));

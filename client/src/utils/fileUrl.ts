@@ -10,6 +10,12 @@ const blobCache = new Map<string, string>();
  */
 export function useAuthenticatedFileUrl(path: string | null | undefined): string | null {
   const [url, setUrl] = useState<string | null>(null);
+  const [tokenTick, setTokenTick] = useState(0);
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => { if (e.key === "rpgManagerAuthToken") setTokenTick((t) => t + 1); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     if (!path) {
@@ -21,13 +27,16 @@ export function useAuthenticatedFileUrl(path: string | null | undefined): string
       setUrl(null);
       return;
     }
-    if (blobCache.has(clean)) {
-      setUrl(blobCache.get(clean)!);
-      return;
-    }
     const token = getAuthToken();
     if (!token) {
+      // Токен сброшен в другом окне — чистим кэш, иначе blob останется доступен после логаута
+      blobCache.forEach((u) => URL.revokeObjectURL(u));
+      blobCache.clear();
       setUrl(null);
+      return;
+    }
+    if (blobCache.has(clean)) {
+      setUrl(blobCache.get(clean)!);
       return;
     }
     const controller = new AbortController();
@@ -41,6 +50,13 @@ export function useAuthenticatedFileUrl(path: string | null | undefined): string
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
+        // LRU 20 — не копим гигабайты
+        if (blobCache.size >= 20) {
+          const firstKey = blobCache.keys().next().value as string;
+          const old = blobCache.get(firstKey);
+          if (old) URL.revokeObjectURL(old);
+          blobCache.delete(firstKey);
+        }
         blobCache.set(clean, objectUrl);
         setUrl(objectUrl);
       })
@@ -50,10 +66,9 @@ export function useAuthenticatedFileUrl(path: string | null | undefined): string
     return () => {
       cancelled = true;
       controller.abort();
-      // Не revoke если в кэше — кэш держит URL для переиспользования
       if (objectUrl && !blobCache.has(clean)) URL.revokeObjectURL(objectUrl);
     };
-  }, [path]);
+  }, [path, tokenTick]);
 
   return url;
 }

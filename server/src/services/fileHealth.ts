@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
-import { toFileUrl, VAULT_ROOT } from "../services/filesystem";
+import { toFileUrl, VAULT_ROOT, vaultAbs, vaultRel } from "../services/filesystem";
 
 // Проверка и починка путей к файлам — общая для всех ресурсов, а не только
 // для звуков. Первым заказчиком был пульт («кнопка погашена, файл не
@@ -43,7 +43,7 @@ function allResourceFiles(): ResourceFileRow[] {
 export function findMissingFiles(): MissingFile[] {
   const missing: MissingFile[] = [];
   for (const row of allResourceFiles()) {
-    if (fs.existsSync(row.file_path)) continue;
+    if (fs.existsSync(vaultAbs(row.file_path))) continue;
     missing.push({
       resource_id: row.id,
       name: row.name,
@@ -58,7 +58,7 @@ export function findMissingFiles(): MissingFile[] {
 
 export function isMissing(filePath: string | null | undefined): boolean {
   if (!filePath) return false;
-  return !fs.existsSync(filePath);
+  return !fs.existsSync(vaultAbs(filePath));
 }
 
 export type MatchStrength = "name_and_size" | "name_only";
@@ -84,17 +84,18 @@ export interface RelinkCandidate {
 export function findRelinkCandidates(folder: string, excludeResourceId?: number): RelinkCandidate[] {
   let entries: string[];
   try {
-    entries = fs.readdirSync(folder);
+    entries = fs.readdirSync(vaultAbs(folder));
   } catch {
     return [];
   }
+  const absFolder = vaultAbs(folder);
   const byName = new Map<string, string>();
-  for (const entry of entries) byName.set(entry.toLowerCase(), path.join(folder, entry));
+  for (const entry of entries) byName.set(entry.toLowerCase(), path.join(absFolder, entry));
 
   const candidates: RelinkCandidate[] = [];
   for (const row of allResourceFiles()) {
     if (excludeResourceId != null && row.id === excludeResourceId) continue;
-    if (fs.existsSync(row.file_path)) continue;
+    if (fs.existsSync(vaultAbs(row.file_path))) continue;
     const fileName = path.basename(row.file_path);
     const found = byName.get(fileName.toLowerCase());
     if (!found) continue;
@@ -128,7 +129,7 @@ export function findRelinkCandidates(folder: string, excludeResourceId?: number)
 }
 
 export function relinkResource(resourceId: number, newPath: string): void {
-  db.prepare("UPDATE resources SET file_path = ? WHERE id = ?").run(newPath, resourceId);
+  db.prepare("UPDATE resources SET file_path = ? WHERE id = ?").run(vaultRel(newPath), resourceId);
   rememberFileSize(resourceId, newPath);
 }
 
@@ -137,7 +138,7 @@ export function relinkResource(resourceId: number, newPath: string): void {
 // «только по имени», то есть таким, которому нельзя верить молча.
 export function rememberFileSize(resourceId: number, filePath: string): void {
   try {
-    const size = fs.statSync(filePath).size;
+    const size = fs.statSync(vaultAbs(filePath)).size;
     db.prepare(
       `INSERT INTO resource_file_sizes (resource_id, size_bytes) VALUES (?, ?)
        ON CONFLICT(resource_id) DO UPDATE SET size_bytes = excluded.size_bytes`
@@ -154,7 +155,8 @@ export function rememberFileSize(resourceId: number, filePath: string): void {
 // невозможен: путь не собирается из запроса, а берётся из базы.
 export function fileSrc(resourceId: number, filePath: string | null): string | null {
   if (!filePath) return null;
-  const relative = path.relative(VAULT_ROOT, filePath);
+  const abs = vaultAbs(filePath);
+  const relative = path.relative(VAULT_ROOT, abs);
   const inside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-  return inside ? toFileUrl(filePath) : `/api/files/raw/${resourceId}`;
+  return inside ? toFileUrl(abs) : `/api/files/raw/${resourceId}`;
 }

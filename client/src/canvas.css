@@ -135,6 +135,68 @@
   width: 190px;
   min-height: 88px;
 }
+/* Рераут («Маршрут») — узкий проход, рвущий длинное ребро на два сегмента.
+   Сама по себе коробка компактная: содержимое — подпись и два разъёма по
+   краям, а тело раскрывается панелью свойств, а не ростом ноды. */
+.canvas-node--route {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: calc(var(--card-radius) - 2px);
+  min-width: 64px;
+  /* Рераут 24px на длинном ребре иначе тонет под крупной нодой сцены (300px);
+     поднимаем, как у пина (блок #11). */
+  z-index: 1000;
+}
+.canvas-node--route.is-empty {
+  /* Не подключён: чёрно-жёлтый прямоугольник с диагональными полосами под 30°. */
+  background: repeating-linear-gradient(
+    30deg,
+    #1a1a1a 0 14px,
+    #f4c400 14px 28px
+  );
+  border: 2px solid #1a1a1a;
+  border-radius: 4px;
+  padding: 2px 6px;
+  min-height: 22px;
+}
+.canvas-node--route.is-empty .canvas-handle--route {
+  background: #1a1a1a;
+  border-color: #f4c400;
+}
+.canvas-node--route.is-connected .canvas-node__route-text {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.canvas-node__route-text {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  color: var(--ink);
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px dashed transparent;
+}
+.canvas-node--route:hover .canvas-node__route-text {
+  border-bottom-color: var(--line);
+}
+.canvas-node--route .canvas-handle--route {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--ink);
+}
+.canvas-node--route .canvas-handle--route.react-flow__handle-left {
+  left: -3px;
+}
+.canvas-node--route .canvas-handle--route.react-flow__handle-right {
+  right: -3px;
+}
 .canvas-node__band {
   background: var(--surface);
   color: var(--on-surface);

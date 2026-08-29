@@ -13,6 +13,18 @@ import { z } from "zod";
 const text = z.string().default("");
 const optionalText = z.string().optional();
 
+/**
+ * Оригинальное название и синонимы записи компендиума. По ним ищут поиск
+ * (`search.ts`) и главы бестиария при записи в справочник системы
+ * (`compendium.ts`). Раньше оригинал вклеивался прямо в имя
+ * («Нимблрайт [Nimblewright]») — теперь он живёт отдельной колонкой.
+ */
+const nameOriginal = optionalText;
+// Без значения по умолчанию: «поля нет» и «поле пусто» — разное. Первое
+// значит «не трогай прежнее» при повторном импорте главы, второе — «синонимов
+// нет» (очистить список).
+const aliases = z.array(z.string()).optional();
+
 const key = (prefix: string) =>
   z
     .string()
@@ -146,12 +158,16 @@ export const mechanicSchema = z.object({
   key: key("mech."),
   group: z.string().min(1),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   description: text,
 });
 
 export const spellSchema = z.object({
   key: key("spell."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   // Круг необязателен: глава со списками заклинаний класса дописывает
   // доступность к тому, что в компендиуме уже есть, и повторять там уровень
   // каждого из ста заклинаний незачем. Пустой круг ничего не затирает.
@@ -178,6 +194,8 @@ export const spellSchema = z.object({
 const featureSchema = z.object({
   key: key("feature."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   level: z.number().int().min(0).max(20).optional(),
   description: text,
   ...activatable,
@@ -204,6 +222,8 @@ const startingEquipmentSchema = z.object({
 const subclassSchema = z.object({
   key: key("sub."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   description: text,
   features: z.array(featureSchema).default([]),
 });
@@ -211,6 +231,8 @@ const subclassSchema = z.object({
 export const classSchema = z.object({
   key: key("class."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   short_description: optionalText,
   hit_die: optionalText,
   primary_abilities: z.array(z.enum(ABILITY_NAMES)).default([]),
@@ -235,6 +257,8 @@ export const classSchema = z.object({
 export const speciesSchema = z.object({
   key: key("species."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   size: z.enum(["Крошечный", "Маленький", "Средний", "Большой", "Огромный", "Громадный"]).optional(),
   size_choice: z.boolean().default(false),
   creature_type: optionalRef,
@@ -250,6 +274,8 @@ export const speciesSchema = z.object({
 export const backgroundSchema = z.object({
   key: key("bg."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   abilities: z.array(z.enum(ABILITY_NAMES)).default([]),
   origin_feat: optionalRef,
   skills: z.array(z.string()).default([]),
@@ -263,6 +289,8 @@ export const backgroundSchema = z.object({
 export const featSchema = z.object({
   key: key("feat."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   category: optionalText,
   prerequisite: optionalText,
   description: text,
@@ -272,6 +300,8 @@ export const featSchema = z.object({
 export const equipmentSchema = z.object({
   key: key("eq."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   category: optionalText,
   cost: optionalText,
   weight: optionalText,
@@ -297,6 +327,8 @@ export const equipmentSchema = z.object({
 export const magicItemSchema = z.object({
   key: key("item."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   item_type: optionalText,
   rarity: optionalText,
   // «Настройка заклинателем» — тоже настройка: в компендиуме это флажок, а
@@ -317,6 +349,8 @@ export const magicItemSchema = z.object({
 export const monsterSchema = z.object({
   key: key("mon."),
   name: z.string().min(1),
+  name_original: nameOriginal,
+  aliases,
   description: text,
   /** Статблок формы dnd_creature — та же, что в adventure-import/1. */
   statblock: z.record(z.string(), z.unknown()).optional(),

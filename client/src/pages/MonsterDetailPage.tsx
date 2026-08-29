@@ -14,6 +14,7 @@ import {
   CREATURE_SIZES,
   MECHANICS_ALIGNMENT_GROUP,
   MECHANICS_CREATURE_TYPE_GROUP,
+  extractEnglishName,
 } from "../compendium";
 import type { CompendiumEntry, System, SystemSection } from "../types";
 
@@ -92,7 +93,7 @@ export function MonsterDetailPage({
     onChange();
   }
 
-  const creatureType = entry.data.creature_type as MechanicsOption | undefined;
+  const creatureType = entry.data?.creature_type as MechanicsOption | undefined;
   const size = typeof entry.data.size === "string" ? entry.data.size : "";
   const alignment = typeof entry.data.alignment === "string" ? entry.data.alignment : "";
   const aliases = entry.aliases ?? [];
@@ -144,10 +145,18 @@ export function MonsterDetailPage({
     if (values.alignment.trim()) data.alignment = values.alignment.trim();
     else delete data.alignment;
     if (type) data.creature_type = type;
+    // Тип, который после переименования в справочнике не резолвится в
+    // механики, не стирается молча: он остаётся {name}-снапшотом, как тип
+    // существа вне словаря, и продолжает попадать в фильтры и группы по
+    // имени (та же философия, что у сводки бестиария).
+    else if (values.creature_type.trim()) data.creature_type = { name: values.creature_type.trim() };
     else delete data.creature_type;
+    // «[English]» в конце имени переносится в name_original (см. extractEnglishName):
+    // оригинал не нужно заносить дважды, а имя перестаёт носить скобки на виду.
+    const { name, en } = extractEnglishName(values.name.trim());
     await api.put(`/systems/entries/${entryId}`, {
-      name: values.name.trim(),
-      name_original: values.name_original.trim(),
+      name,
+      name_original: values.name_original.trim() || en,
       short_name: values.short_name.trim(),
       aliases: nextAliases,
       data,
@@ -186,6 +195,7 @@ export function MonsterDetailPage({
           ownerName={entry.name}
           ownerCreatureType={creatureType?.name}
           ownerCreatureSize={size || undefined}
+          ownerCreatureCR={typeof entry.data?.cr === "string" ? entry.data.cr : undefined}
         />
       )}
 

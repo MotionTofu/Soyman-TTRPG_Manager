@@ -7,6 +7,7 @@ import {
   locationFolder,
   settingGeographyRoot,
   toFileUrl,
+  vaultAbs,
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { renameEntityFolder, moveEntityFolder } from "../services/vaultPaths";
@@ -444,7 +445,7 @@ settingLocationsRouter.post("/:id/map/transfer", async (req, res) => {
   if (!target) return res.status(404).json({ error: "target not found" });
   if (target.map_image_path) return res.status(409).json({ error: "target already has a map" });
 
-  const buffer = fs.readFileSync(source.map_image_path);
+  const buffer = fs.readFileSync(vaultAbs(source.map_image_path));
   const ext = path.extname(source.map_image_path) || ".jpg";
   const targetPath = path.join(target.folder_path, `map${ext}`);
 

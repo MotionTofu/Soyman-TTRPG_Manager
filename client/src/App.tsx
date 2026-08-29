@@ -79,7 +79,7 @@ const PlayerSettingPage = lazy(() => import("./pages/PlayerSettingPage").then((m
 // error states.
 function HomeRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <div className="stack" style={{ padding: 24 }}><div className="card" style={{ height: 260, background: "var(--bg-elevated)" }} /><div className="card" style={{ height: 340, background: "var(--bg-elevated)" }} /></div>;
   return user?.role === "player" ? <PlayerHomePage /> : <HomeCalendarPage />;
 }
 function CampaignsRoute() {

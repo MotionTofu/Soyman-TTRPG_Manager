@@ -14,7 +14,7 @@ import { firstSceneOf, rehearsalStep } from "../story/rehearsal";
 import { CANVAS_PRESETS, isPresetKey } from "../story/presets";
 import multer from "multer";
 import path from "path";
-import { ensureSubfolder, toFileUrl, VAULT_ROOT, writeReplacingOldFile } from "../services/filesystem";
+import { ensureSubfolder, toFileUrl, VAULT_ROOT, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 
 export const canvasRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -107,6 +107,27 @@ function ensureBoard(scopeType: ScopeType, scopeId: number): number {
     .prepare("INSERT INTO canvas_boards (scope_type, scope_id) VALUES (?, ?)")
     .run(scopeType, scopeId);
   return Number(info.lastInsertRowid);
+}
+
+/**
+ * Свободная доска адресуется СВОИМ `scope_id` (канон П2.4): ссылка `?free_id=`
+ * и маршруты `/free-boards` ходят по нему, и в содержимое он прошит
+ * построением — при создании `scope_id` приравнивается к `id` строки доски.
+ * Содержимое же клиент шлёт как `board_id`, то есть числом, глядящим на
+ * строку. Пока числа совпадают — это одно и то же; если они когда-нибудь
+ * разойдутся, здесь совершается единственно правильный переход: входящий
+ * `board_id` свободной доски трактуется как `scope_id`, и содержимое
+ * оборачивается на каноническую строку.
+ *
+ * Для досок arc/setting/campaign `scope_id` — это id приключения/сеттинга, а
+ * не строки, поэтому их `board_id` резолвится в самого себя (совпадения по
+ * `scope_type='free'` нет).
+ */
+function resolveFreeBoardId(boardId: number): number {
+  const b = db
+    .prepare("SELECT id FROM canvas_boards WHERE scope_type='free' AND scope_id=?")
+    .get(boardId) as { id: number } | undefined;
+  return b ? b.id : boardId;
 }
 
 /**
@@ -277,29 +298,12 @@ function boardDecor(boardId: number, saved: PlacedNode[]) {
   // Разрешение сущностей — ОДИН раз, а не заново на каждую рамку: раньше на
   // семи рамках база опрашивалась семь раз подряд об одном и том же.
   const entities = entityNodes(boardId, saved);
-  const inFrames = [...stickerNodes, ...imageNodes, ...entities] as {
-    node_type: string;
-    node_id: number;
-    x: number;
-    y: number;
-  }[];
-  const NODE_W: Record<string, number> = { sticker: 320, image: 320 };
-  const NODE_H: Record<string, number> = { sticker: 120, image: 240 };
-  for (const fn of frameNodes) {
-    // Свёрнутую рамку под содержимое не растягиваем: её размера сейчас нет
-    // вовсе, а хранимые w/h относятся к развёрнутому виду (блок G6.3).
-    if (fn.frame.collapsed) continue;
-    const fx = fn.x;
-    const fy = fn.y;
-    const { w, h } = fn.frame;
-    // Внутри — те, чей левый-верхний угол в рамке; так же считает и клиент.
-    const inside = inFrames.filter((nn) => nn.x >= fx && nn.y >= fy && nn.x <= fx + w && nn.y <= fy + h);
-    if (inside.length === 0) continue;
-    const maxX = Math.max(...inside.map((nn) => nn.x + (NODE_W[nn.node_type] ?? 200)));
-    const maxY = Math.max(...inside.map((nn) => nn.y + (NODE_H[nn.node_type] ?? 124)));
-    fn.frame.w = Math.max(w, maxX - fx + 16);
-    fn.frame.h = Math.max(h, maxY - fy + 16);
-  }
+  // Размер рамки здесь не пересчитывается: по гибридной модели рамка — контейнер
+  // по охвату членов, а источник правды — клиент, который знает настоящие
+  // отрисованные размеры узлов (у сервера их нет, только заглушки NODE_W/H, что
+  // и давало баг «слетает размер»). Клиент пишет `w/h` рамки на каждое движение
+  // и удаление члена; сервер лишь отдаёт хранимое. Так и рост, и сужение рамки
+  // следуют за составом с верными размерами содержимого.
 
   const pins = db
     .prepare("SELECT id, name, x, y, size, color, shape, z_index FROM canvas_pins WHERE board_id=?")
@@ -326,6 +330,282 @@ function boardDecor(boardId: number, saved: PlacedNode[]) {
     .all(boardId) as { id: number; from_pin_id: number; to_pin_id: number; width: number; color: string }[];
 
   return { nodes: [...stickerNodes, ...imageNodes, ...frameNodes, ...pinNodes, ...entities], threads };
+}
+
+/** Строка рераута («Маршрут») из `canvas_routes`. */
+interface RouteRow {
+  id: number;
+  from_key: string;
+  to_key: string;
+  kind: string;
+  role: string;
+}
+
+function splitNodeKey(key: string): [string, string] {
+  const i = key.indexOf(":");
+  return i === -1 ? [key, ""] : [key.slice(0, i), key.slice(i + 1)];
+}
+
+/** Типы ключей, которые могут быть соседями рераута (`from_key`/`to_key`). */
+const ROUTE_PEER_RE = /^(scene|being|location|artifact|community|compendium_entry|bundle|adventure|chapter|sticker|image|frame|pin|sound_set|playlist|check|setting_event|campaign_event|route|character|campaign):\d+$/;
+const ROUTE_KIND_RE = /^(transition|outcome|cast|member|thread)$/;
+const isValidRouteKey = (key: string) => key === "" || ROUTE_PEER_RE.test(key);
+
+/**
+ * Рераут-ноды доски.
+ *
+ * Рераут — визуальный проход-развязка, который рвёт длинное реальное ребро
+ * (переход/каст/исход/нить) на два сегмента вокруг себя. Сам данных не заводит:
+ * реальное ребро остаётся одно, а здесь только ПАМЯТЬ ПРОХОДА — какие два соседа
+ * рераут соединяет и ребро какого вида несёт. Позиция живёт в парной строке
+ * `canvas_nodes(node_type='route', node_id=id)`, как у пинов и стикеров.
+ *
+ * Роль/цвет гнезда рераут перенимает от ребра, которое рвёт (`kind`/`role`),
+ * поэтому конфликт ролей на ноде невозможен по построению: одно ребро — одна роль.
+ */
+function boardRoutes(boardId: number, saved: PlacedNode[]) {
+  const rows = db
+    .prepare(
+      "SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE board_id=? ORDER BY id"
+    )
+    .all(boardId) as RouteRow[];
+
+  // Имя узла по ключу — для тела рераута «A → B» (у cast/исхода/нити имена
+  // соседей дороже, чем плейсхолдер). Посторонний ключ (чужой доски) называем
+  // ключом — такой сосед на этот холст не приезжает. Таблицы имён по типу:
+  // каждый вид существа лежит в своей таблице (см. MENTION_TABLES в db.ts),
+  // а не в одной setting_beings.
+  const NAME_TABLES: Record<string, string> = {
+    scene: "story_scenes",
+    being: "setting_beings",
+    location: "setting_locations",
+    community: "setting_communities",
+    artifact: "artifacts",
+    campaign: "campaigns",
+  };
+  // Бач строк ключей (не отдельных нод): собираем все имена разом, а не
+  // по одному SELECT на соседа (на 20 рераутах были бы 40 запросов).
+  const idsByType = new Map<string, number[]>();
+  for (const key of rows.flatMap((r) => [r.from_key, r.to_key])) {
+    if (!key) continue;
+    const [type, raw] = splitNodeKey(key);
+    const id = Number(raw);
+    if (id && NAME_TABLES[type]) {
+      if (!idsByType.has(type)) idsByType.set(type, []);
+      idsByType.get(type)!.push(id);
+    }
+  }
+  const nameByKey = new Map<string, string>();
+  for (const [type, ids] of idsByType) {
+    const table = NAME_TABLES[type];
+    if (!table || ids.length === 0) continue;
+    const ph = ids.map(() => "?").join(",");
+    const rowsT = db
+      .prepare(`SELECT id, name FROM ${table} WHERE id IN (${ph})`)
+      .all(...(ids as number[])) as { id: number; name: string }[];
+    for (const r of rowsT) nameByKey.set(`${type}:${r.id}`, r.name);
+  }
+  const nameOf = (key: string): string => {
+    const hit = nameByKey.get(key);
+    if (hit !== undefined) return hit;
+    const [type] = splitNodeKey(key);
+    if (type === "check") return "Проверка";
+    if (type === "route") return "Маршрут";
+    return key;
+  };
+
+  const posOfKey = new Map(saved.map((p) => [`${p.node_type}:${p.node_id}`, p]));
+  const nodes = rows.map((r) => {
+    const pos = posOfKey.get(`route:${r.id}`);
+    const fromName = r.from_key ? nameOf(r.from_key) : "";
+    const toName = r.to_key ? nameOf(r.to_key) : "";
+    // Для перехода — реальная строка `story_scene_transitions` между соседями:
+    // её id и label и есть «Условие перехода», которое правим в панели свойств.
+    let transition_id: number | null = null;
+    let transition_label = "";
+    if (r.kind === "transition" && r.from_key.startsWith("scene:") && r.to_key.startsWith("scene:")) {
+      const t = db
+        .prepare(
+          "SELECT id, label FROM story_scene_transitions WHERE from_scene_id=? AND to_scene_id=? ORDER BY id LIMIT 1"
+        )
+        .get(Number(r.from_key.slice(6)), Number(r.to_key.slice(6))) as
+        | { id: number; label: string }
+        | undefined;
+      if (t) {
+        transition_id = t.id;
+        transition_label = t.label ?? "";
+      }
+    }
+    return {
+      key: `route:${r.id}`,
+      node_type: "route" as const,
+      node_id: r.id,
+      x: pos?.x ?? 0,
+      y: pos?.y ?? 0,
+      z_index: pos?.z_index ?? 0,
+      parent_key: pos?.parent_key ?? null,
+      placed: !!pos,
+      route: {
+        id: r.id,
+        from_key: r.from_key,
+        to_key: r.to_key,
+        kind: r.kind,
+        role: r.role,
+        from_name: fromName,
+        to_name: toName,
+        transition_id,
+        transition_label,
+      },
+    };
+  });
+  return { nodes, rows };
+}
+
+/**
+ * Разводит реальные рёбра через цепочки рераутов.
+ *
+ * Модель (согласовано с владельцем): рераут — узел графа, а строка
+ * `canvas_routes` для рераута с id=k запоминает двух его СОСЕДЕЙ — `from_key` и
+ * `to_key`, каждый из которых либо ключ настоящего узла (`scene:41`,
+ * `being:12`, `pin:3`), либо ключ другого рераута (`route:7`). Из этого строится
+ * неориентированный граф связности: узел `route:k` смежен с `from_key` и с
+ * `to_key`.
+ *
+ * Реальное ребро E: X→Y (с известным `kind`) рвётся, когда X и Y связаны цепью
+ * рераутов того же `kind`. Путь X=r0, route:r1, route:r2, ..., route:rn, Y=Y
+ * превращается в сегменты (X→route:r1), (route:r1→route:r2), ..., (route:rn→Y),
+ * сохранённые в порядке направления ребра E. Признак сам-ребро несущей реальной
+ * связи кладётся в каждый сегмент, чтобы клиент знал, у какого сегмента вешается
+ * подпись/условие. Обезьяний патч: исходное ребро не рвём, если пути нет.
+ *
+ * `routeLabelKey` используется для согласования: сегменты реального ребра
+ * оставляем без подписи (label переносится выбранным рераутом на средний сегмент).
+ */
+function routedEdges(
+  edges: (Omit<EdgeOut, "target_handle"> & { label?: string; target_handle?: string })[],
+  rows: RouteRow[]
+) {
+  if (rows.length === 0) return edges;
+
+  // Граф: ключ ноды → соседи (ключи) через рерауты данного kind.
+  // Для учёта каждой строки: узел `route:<id>` смежен с from_key и to_key.
+  // Но нам нужны только рерауты, попадающие в конкретное ребро — см. ниже.
+  // Граф: ключ ноды → соседи (ключи). Узел `route:k` смежен со своими from_key и
+  // to_key. Это неориентированные связи пути, а порядок задаёт направление
+  // реального ребра, которое разрезаем.
+  const adj = new Map<string, string[]>();
+  const link = (a: string, b: string) => {
+    if (!adj.has(a)) adj.set(a, []);
+    if (!adj.has(b)) adj.set(b, []);
+    adj.get(a)!.push(b);
+    adj.get(b)!.push(a);
+  };
+  for (const r of rows) {
+    // Пустой рераут (только что брошен из палитры, соседи ещё не подведены)
+    // не участвует в графе: подключать его некуда. `from_key`/`to_key` у
+    // пустышки — '', и если связать '' с маршрутом, то все пустышки доски
+    // слипнутся через общий ключ "" и BFS начал бы рвать чужие рёбра.
+    if (!r.from_key || !r.to_key) continue;
+    link(r.from_key, `route:${r.id}`);
+    link(`route:${r.id}`, r.to_key);
+  }
+  // Какие рерауты какого вида несут (для фильтрации сегментов).
+  const kindOfRoute = new Map<string, string>();
+  for (const r of rows) kindOfRoute.set(`route:${r.id}`, r.kind);
+
+  // Стандартный BFS: путь (типа вершин) от `from` до `to` по рёбрам графа,
+  // но проходить можно только через рерауты нужного kind. Возвращает полную
+  // цепочку вершин [from, ..., to] или null, если пути нет.
+  const findVertices = (from: string, to: string, kind: string): string[] | null => {
+    if (from === to) return null;
+    const prev = new Map<string, string | null>([[from, null]]);
+    const queue = [from];
+    while (queue.length > 0) {
+      const node = queue.shift()!;
+      for (const nb of adj.get(node) ?? []) {
+        // Шаг во внешний мир допускаем только к самой цели — рераут не должен
+        // тянуться сквозь посторонние узлы, это рвало бы не наше ребро.
+        if (nb.startsWith("route:")) {
+          if (kindOfRoute.get(nb) !== kind) continue;
+        } else if (nb !== to) {
+          continue;
+        }
+        if (prev.has(nb)) continue;
+        prev.set(nb, node);
+        if (nb === to) {
+          const path = [to];
+          let cur: string | null = to;
+          while ((cur = prev.get(cur) ?? null) !== null) path.unshift(cur);
+          return path;
+        }
+        queue.push(nb);
+      }
+    }
+    return null;
+  };
+
+  const out: (EdgeOut & { label?: string })[] = [];
+  for (const e of edges) {
+    const kind = e.kind === "story" ? "transition" : e.kind;
+    const verts = findVertices(e.source, e.target, kind);
+    if (!verts || verts.length < 3) {
+      out.push(e as EdgeOut);
+      continue;
+    }
+    // Сегменты: X → route:r1 → route:r2 → … → Y. Подпись реального ребра вешаем
+    // только на последний сегмент (у цели), средние сегменты идут чистыми.
+    for (let i = 0; i < verts.length - 1; i++) {
+      const isLast = i === verts.length - 2;
+      const targetIsRoute = verts[i + 1].startsWith("route:");
+      out.push({
+        id: `${e.id}::r${i}`,
+        kind: e.kind,
+        source: verts[i],
+        target: verts[i + 1],
+        // Когда цель — рераут-нода, её единственный входной разъём безымянный:
+        // наследованный id исходного ребра («story» и т.п.) React Flow найти не
+        // сможет (ошибка #008), поэтому сбрасываем его.
+        target_handle: targetIsRoute ? "" : (e.target_handle ?? "in"),
+        label: isLast ? e.label ?? "" : "",
+        width: e.width,
+        color: e.color,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Подметает осиротевшие рерауты после удаления реального ребра/узла.
+ *
+ * `canvas_routes.from_key`/`to_key` — голый TEXT без FK: если удалить само
+ * ребро (переход между сценами, generic_link каста/состава и т.п.) или один из
+ * крайних узлов, строка рераута остаётся висячей — BFS путь потеряет, и рераут
+ * начнёт пустовать / терять имя соседа. Здесь удаляем строки, ссылающиеся на
+ * пропавшие ключи, и каскадно те рерауты, что вели на эти рерауты (цепочка).
+ */
+export function pruneRoutesForKeys(gone: string[]) {
+  if (gone.length === 0) return;
+  const goneSet = new Set(gone);
+  let removed = true;
+  // Каскад: сначала ключи, потом рерауты, ссылавшиеся на удалённые рерауты,
+  // и так пока стабилизируется. (Удалённый реальный узел тянет за собой и свой
+  // рераут-«сироту», и соседей по цепочке.)
+  while (removed) {
+    removed = false;
+    const rows = db
+      .prepare("SELECT id, from_key, to_key FROM canvas_routes")
+      .all() as { id: number; from_key: string; to_key: string }[];
+    const doomed = rows.filter(
+      (r) => goneSet.has(r.from_key) || goneSet.has(r.to_key) || goneSet.has(`route:${r.id}`)
+    );
+    for (const r of doomed) {
+      db.prepare("DELETE FROM canvas_nodes WHERE node_type='route' AND node_id=?").run(r.id);
+      db.prepare("DELETE FROM canvas_routes WHERE id=?").run(r.id);
+      goneSet.add(`route:${r.id}`);
+      removed = true;
+    }
+  }
 }
 
 function entityNodes(boardId: number, placed: PlacedNode[]) {
@@ -623,14 +903,16 @@ canvasRouter.get("/board", (req, res) => {
     if (!board) return res.status(404).json({ error: "not found" });
     const saved = db.prepare("SELECT id, node_type, node_id, x, y, z_index, parent_key FROM canvas_nodes WHERE board_id=?").all(board.id) as { id: number; node_type: string; node_id: number; x: number; y: number; z_index: number; parent_key: string | null }[];
     const decor = boardDecor(board.id, saved);
+    const { nodes: routeNodes, rows: routeRows } = boardRoutes(board.id, saved);
     return res.json({
       board_id: board.id,
       free: { id: freeId, name: board.name },
       campaign_id: null,
-      nodes: decor.nodes,
+      nodes: [...decor.nodes, ...routeNodes],
       groups: [],
       edges: [],
       threads: decor.threads,
+      routes: routeRows,
     });
   }
 
@@ -803,14 +1085,19 @@ canvasRouter.get("/board", (req, res) => {
           saved.filter((p) => p.node_type !== "adventure")
         )
       : { nodes: [], threads: [] };
+    const routeRows = board
+      ? boardRoutes(board.id, saved.filter((p) => p.node_type !== "adventure"))
+      : { nodes: [], rows: [] };
+    const routed = routedEdges(edges, routeRows.rows);
     return res.json({
       board_id: board?.id ?? null,
       setting: { id: setting.id, name: setting.name },
       campaign_id: null,
-      nodes: [...arcNodes, ...decor.nodes],
+      nodes: [...arcNodes, ...decor.nodes, ...routeRows.nodes],
       groups: [],
-      edges,
+      edges: routed,
       threads: decor.threads,
+      routes: routeRows.rows,
     });
   }
 
@@ -1040,6 +1327,10 @@ canvasRouter.get("/board", (req, res) => {
           saved.filter((p) => p.node_type !== "adventure")
         )
       : { nodes: [], threads: [] };
+    const routeRows = board
+      ? boardRoutes(board.id, saved.filter((p) => p.node_type !== "adventure"))
+      : { nodes: [], rows: [] };
+    const routed = routedEdges(edges, routeRows.rows);
 
     return res.json({
       board_id: board?.id ?? null,
@@ -1050,10 +1341,11 @@ canvasRouter.get("/board", (req, res) => {
         own_transitions: ownTransitions,
       },
       campaign_id: campaignId,
-      nodes: [...arcNodes, ...decor.nodes],
+      nodes: [...arcNodes, ...decor.nodes, ...routeRows.nodes],
       groups: [],
-      edges,
+      edges: routed,
       threads: decor.threads,
+      routes: routeRows.rows,
     });
   }
 
@@ -1635,6 +1927,8 @@ canvasRouter.get("/board", (req, res) => {
   // фриформ-доске (Q5, Q6).
   const decorArc = boardDecor(boardId, saved);
   const threadEdgesArc: EdgeOut[] = decorArc.threads.map((t) => ({ id: `thread:${t.id}`, kind: "thread" as const, source: `pin:${t.from_pin_id}`, target: `pin:${t.to_pin_id}`, target_handle: "pin", label: "", width: t.width, color: t.color }));
+  const { nodes: routeNodesArc, rows: routeRowsArc } = boardRoutes(boardId, saved);
+  const routedEdgesArc = routedEdges(edges, routeRowsArc);
 
   // Имя кампании входа — ради крошек (Q26, блок E1). Читается там же, где
   // берётся её правило на связи глав: отдельным запросом с клиента это стоило
@@ -1648,12 +1942,13 @@ canvasRouter.get("/board", (req, res) => {
     arc: { id: arc.id, name: arc.name, setting_id: arc.setting_id, parent: parentArc },
     campaign_id: campaignId,
     campaign: entryCampaign,
-    nodes: [...nodes, ...chapterNodes, ...checkNodes, ...decorArc.nodes],
+    nodes: [...nodes, ...chapterNodes, ...checkNodes, ...decorArc.nodes, ...routeNodesArc],
     // Рамок глав больше нет. Поле остаётся ради формы ответа, общей со
     // схемой сеттинга и свободной доской, и всегда пусто.
     groups: [],
-    edges,
+    edges: routedEdgesArc,
     threads: decorArc.threads,
+    routes: routeRowsArc,
   });
 });
 
@@ -1834,13 +2129,21 @@ canvasRouter.post("/free-boards", (req, res) => {
   const name = String(req.body?.name ?? "Доска").trim() || "Доска";
   const owner = readOwner(req.body);
   if (owner === "bad") return res.status(400).json({ error: "unknown owner" });
-  const info = db
-    .prepare(
-      "INSERT INTO canvas_boards (scope_type, scope_id, name, owner_type, owner_id) VALUES ('free', 0, ?, ?, ?)"
-    )
-    .run(name, owner.type, owner.id);
-  const id = Number(info.lastInsertRowid);
-  db.prepare("UPDATE canvas_boards SET scope_id=? WHERE id=?").run(id, id);
+  // Канон П2.4: у свободной доски `scope_id === id`. Пара запросов атомарна,
+  // чтобы между вставкой (scope_id=0) и приравниванием никто не увидел доску,
+  // которую нельзя достать через `?free_id=`. Единственный создатель свободных
+  // досок — этот маршрут, и после него инвариант каноничности стоит всегда.
+  const create = db.transaction(() => {
+    const info = db
+      .prepare(
+        "INSERT INTO canvas_boards (scope_type, scope_id, name, owner_type, owner_id) VALUES ('free', 0, ?, ?, ?)"
+      )
+      .run(name, owner.type, owner.id);
+    const id = Number(info.lastInsertRowid);
+    db.prepare("UPDATE canvas_boards SET scope_id=? WHERE id=?").run(id, id);
+    return id;
+  });
+  const id = create();
   res.status(201).json({ id, scope_id: id, name, owner_type: owner.type, owner_id: owner.id });
 });
 
@@ -1953,11 +2256,12 @@ canvasRouter.post("/free-boards/:id/preset", (req, res) => {
 canvasRouter.post("/stickers", (req, res) => {
   const { board_id, text, name, note, color, x, y } = req.body as { board_id?: number; text?: string; name?: string; note?: string; color?: string; x?: number; y?: number };
   if (!board_id) return res.status(400).json({ error: "board_id required" });
+  const board_id_r = resolveFreeBoardId(board_id);
   const n = name ?? text ?? "";
   const nt = note ?? "";
-  const info = db.prepare("INSERT INTO canvas_stickers (board_id, text, name, note, color) VALUES (?,?,?,?,?)").run(board_id, text ?? n, n, nt, color ?? "paper");
+  const info = db.prepare("INSERT INTO canvas_stickers (board_id, text, name, note, color) VALUES (?,?,?,?,?)").run(board_id_r, text ?? n, n, nt, color ?? "paper");
   const sid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id, "sticker", sid, Number(x) || 0, Number(y) || 0);
+  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id_r, "sticker", sid, Number(x) || 0, Number(y) || 0);
   res.status(201).json({ id: sid });
 });
 canvasRouter.put("/stickers/:id", (req, res) => {
@@ -1986,10 +2290,11 @@ canvasRouter.get("/stickers/:id", (req, res) => {
 canvasRouter.post("/frames", (req, res) => {
   const { board_id, name, color, x, y, w, h } = req.body as { board_id?: number; name?: string; color?: string; x?: number; y?: number; w?: number; h?: number };
   if (!board_id) return res.status(400).json({ error: "board_id required" });
+  const board_id_r = resolveFreeBoardId(board_id);
   const c = color ?? "#2C3E50";
-  const info = db.prepare("INSERT INTO canvas_frames (board_id, name, color, x, y, w, h) VALUES (?,?,?,?,?,?,?)").run(board_id, name ?? "Группа", c, Number(x) || 0, Number(y) || 0, Number(w) || 320, Number(h) || 240);
+  const info = db.prepare("INSERT INTO canvas_frames (board_id, name, color, x, y, w, h) VALUES (?,?,?,?,?,?,?)").run(board_id_r, name ?? "Группа", c, Number(x) || 0, Number(y) || 0, Number(w) || 320, Number(h) || 240);
   const fid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id, "frame", fid, Number(x) || 0, Number(y) || 0);
+  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id_r, "frame", fid, Number(x) || 0, Number(y) || 0);
   res.status(201).json({ id: fid });
 });
 canvasRouter.put("/frames/:id", (req, res) => {
@@ -2031,10 +2336,11 @@ canvasRouter.get("/frames", (req, res) => {
 canvasRouter.post("/pins", (req, res) => {
   const { board_id, name, x, y, size, color, shape } = req.body as { board_id?: number; name?: string; x?: number; y?: number; size?: string; color?: string; shape?: string };
   if (!board_id) return res.status(400).json({ error: "board_id required" });
-  const maxZ = (db.prepare("SELECT MAX(z_index) as m FROM canvas_pins WHERE board_id=?").get(board_id) as { m: number | null }).m ?? 1000;
-  const info = db.prepare("INSERT INTO canvas_pins (board_id, name, x, y, size, color, shape, z_index) VALUES (?,?,?,?,?,?,?,?)").run(board_id, name ?? "Пин", Number(x) || 0, Number(y) || 0, size ?? "M", color ?? "#2C3E50", shape ?? "circle", maxZ + 1);
+  const board_id_r = resolveFreeBoardId(board_id);
+  const maxZ = (db.prepare("SELECT MAX(z_index) as m FROM canvas_pins WHERE board_id=?").get(board_id_r) as { m: number | null }).m ?? 1000;
+  const info = db.prepare("INSERT INTO canvas_pins (board_id, name, x, y, size, color, shape, z_index) VALUES (?,?,?,?,?,?,?,?)").run(board_id_r, name ?? "Пин", Number(x) || 0, Number(y) || 0, size ?? "M", color ?? "#2C3E50", shape ?? "circle", maxZ + 1);
   const pid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index) VALUES (?,?,?,?,?,?)").run(board_id, "pin", pid, Number(x) || 0, Number(y) || 0, maxZ + 1);
+  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index) VALUES (?,?,?,?,?,?)").run(board_id_r, "pin", pid, Number(x) || 0, Number(y) || 0, maxZ + 1);
   res.status(201).json(db.prepare("SELECT * FROM canvas_pins WHERE id=?").get(pid));
 });
 canvasRouter.put("/pins/:id", (req, res) => {
@@ -2085,15 +2391,16 @@ canvasRouter.get("/pins", (req, res) => {
 canvasRouter.post("/threads", (req, res) => {
   const { board_id, from_pin_id, to_pin_id, width, color } = req.body as { board_id?: number; from_pin_id?: number; to_pin_id?: number; width?: number; color?: string };
   if (!board_id || !from_pin_id || !to_pin_id) return res.status(400).json({ error: "board_id, from_pin_id, to_pin_id required" });
+  const board_id_r = resolveFreeBoardId(board_id);
   if (from_pin_id === to_pin_id) return res.status(400).json({ error: "self link not allowed" });
   const a = Math.min(Number(from_pin_id), Number(to_pin_id));
   const b = Math.max(Number(from_pin_id), Number(to_pin_id));
   // проверка что оба пина на той же доске
   const fromRow = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(a) as { board_id: number } | undefined;
   const toRow = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(b) as { board_id: number } | undefined;
-  if (!fromRow || !toRow || fromRow.board_id !== board_id || toRow.board_id !== board_id) return res.status(400).json({ error: "pins not on board" });
+  if (!fromRow || !toRow || fromRow.board_id !== board_id_r || toRow.board_id !== board_id_r) return res.status(400).json({ error: "pins not on board" });
   try {
-    const info = db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color) VALUES (?,?,?,?,?)").run(board_id, a, b, Number(width) || 2, color ?? "#2C3E50");
+    const info = db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color) VALUES (?,?,?,?,?)").run(board_id_r, a, b, Number(width) || 2, color ?? "#2C3E50");
     res.status(201).json(db.prepare("SELECT * FROM canvas_threads WHERE id=?").get(info.lastInsertRowid));
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -2123,13 +2430,95 @@ canvasRouter.get("/threads", (req, res) => {
   res.json(db.prepare("SELECT * FROM canvas_threads WHERE board_id=?").all(board_id));
 });
 
+// ── Рераут-ноды («Маршрут») ────────────────────────────────────────────────
+// Память прохода живёт в `canvas_routes`, место — в парной строке `canvas_nodes`
+// с `node_type='route'`, ровно по паттерну пинов и стикеров. Рераут сам данных
+// не заводит: реальное ребро (переход/каст/исход/нить) остаётся одно, а строка
+// здесь лишь говорит, каких двух соседей рераут разводит и ребро какого вида
+// несёт. `from_key`/`to_key` могут ссылаться и на другой рераут (`route:N`) —
+// так строится цепочка разрывов одного ребра.
+canvasRouter.get("/routes", (req, res) => {
+  const board_id = req.query.board_id ? Number(req.query.board_id) : null;
+  if (!board_id) return res.status(400).json({ error: "board_id required" });
+  res.json(
+    db
+      .prepare("SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE board_id=? ORDER BY id")
+      .all(board_id)
+  );
+});
+canvasRouter.post("/routes", (req, res) => {
+  const { board_id, x, y } = req.body as { board_id?: number; x?: number; y?: number };
+  if (!board_id) return res.status(400).json({ error: "board_id required" });
+  const board_id_r = resolveFreeBoardId(board_id);
+  // Пустой рераут: с обоими пустыми рёбрами-holes. from/to заполняются, когда
+  // Мастер подводит концы реального ребра. Висящий одноконцовый допустим.
+  const info = db
+    .prepare("INSERT INTO canvas_routes (board_id, from_key, to_key, kind, role) VALUES (?,?,?,?,?)")
+    .run(board_id_r, "", "", "transition", "");
+  const id = Number(info.lastInsertRowid);
+  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?,?,?)").run(
+    board_id_r,
+    "route",
+    id,
+    Number(x) || 0,
+    Number(y) || 0
+  );
+  res.status(201).json(
+    db
+      .prepare("SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE id=?")
+      .get(id)
+  );
+});
+canvasRouter.put("/routes/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const { from_key, to_key, kind, role } = req.body as {
+    from_key?: string;
+    to_key?: string;
+    kind?: string;
+    role?: string;
+  };
+  const row = db.prepare("SELECT * FROM canvas_routes WHERE id=?").get(id) as RouteRow | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  if (from_key !== undefined && (!isValidRouteKey(from_key) || from_key === `route:${id}`))
+    return res.status(400).json({ error: "invalid from_key" });
+  if (to_key !== undefined && (!isValidRouteKey(to_key) || to_key === `route:${id}`))
+    return res.status(400).json({ error: "invalid to_key" });
+  if (kind !== undefined && !ROUTE_KIND_RE.test(kind))
+    return res.status(400).json({ error: "invalid kind" });
+  db.prepare(
+    "UPDATE canvas_routes SET from_key=COALESCE(?,from_key), to_key=COALESCE(?,to_key), kind=COALESCE(?,kind), role=COALESCE(?,role) WHERE id=?"
+  ).run(
+    from_key !== undefined ? from_key : null,
+    to_key !== undefined ? to_key : null,
+    kind !== undefined ? kind : null,
+    role !== undefined ? role : null,
+    id
+  );
+  res.json(
+    db
+      .prepare("SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE id=?")
+      .get(id)
+  );
+});
+canvasRouter.delete("/routes/:id", (req, res) => {
+  const id = Number(req.params.id);
+  // Каскадная уборка: сам рераут + любые рерауты-соседи по цепочке, ссылающиеся
+  // на `route:<id>` (их сегменты без удалённого рераута бессмысленны). Сначала
+  // удаляем ноду и строку, потом подметаем осиротевшие цепочки.
+  db.prepare("DELETE FROM canvas_nodes WHERE node_type='route' AND node_id=?").run(id);
+  db.prepare("DELETE FROM canvas_routes WHERE id=?").run(id);
+  pruneRoutesForKeys([`route:${id}`]);
+  res.json({ ok: true });
+});
+
 // Изображения (Q6) — загрузка файла уже через /filesystem, здесь только привязка
 canvasRouter.post("/images", (req, res) => {
   const { board_id, file_path, x, y, w, h } = req.body as { board_id?: number; file_path?: string; x?: number; y?: number; w?: number; h?: number };
   if (!board_id || !file_path) return res.status(400).json({ error: "board_id and file_path required" });
-  const info = db.prepare("INSERT INTO canvas_images (board_id, file_path, w, h) VALUES (?,?,?,?)").run(board_id, file_path, w ?? 320, h ?? 240);
+  const board_id_r = resolveFreeBoardId(board_id);
+  const info = db.prepare("INSERT INTO canvas_images (board_id, file_path, w, h) VALUES (?,?,?,?)").run(board_id_r, vaultRel(file_path), w ?? 320, h ?? 240);
   const iid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id, "image", iid, Number(x) || 0, Number(y) || 0);
+  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id_r, "image", iid, Number(x) || 0, Number(y) || 0);
   res.status(201).json({ id: iid, file_url: toFileUrl(file_path) });
 });
 canvasRouter.post("/images/upload", upload.single("file"), async (req, res) => {
@@ -2137,20 +2526,21 @@ canvasRouter.post("/images/upload", upload.single("file"), async (req, res) => {
   const x = Number(req.body?.x) || 0;
   const y = Number(req.body?.y) || 0;
   if (!board_id || !req.file) return res.status(400).json({ error: "board_id and file required" });
+  const board_id_r = resolveFreeBoardId(board_id);
   const ext = path.extname(req.file.originalname) || ".png";
   const allowed = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
   if (!allowed.includes(ext.toLowerCase())) return res.status(400).json({ error: "allowed png/jpg/webp/gif" });
-  const sub = `canvas/${board_id}`;
+  const sub = `canvas/${board_id_r}`;
   await ensureSubfolder(VAULT_ROOT, sub);
   const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
   const target = path.join(VAULT_ROOT, sub, fileName);
   // write file directly (no old file to replace)
   const fs = await import("fs/promises");
   await fs.writeFile(target, req.file.buffer);
-  const file_path = target;
-  const info = db.prepare("INSERT INTO canvas_images (board_id, file_path, w, h) VALUES (?,?,?,?)").run(board_id, file_path, 320, 240);
+  const file_path = vaultRel(target);
+  const info = db.prepare("INSERT INTO canvas_images (board_id, file_path, w, h) VALUES (?,?,?,?)").run(board_id_r, file_path, 320, 240);
   const iid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?,?,?)").run(board_id, "image", iid, x, y);
+  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?,?,?)").run(board_id_r, "image", iid, x, y);
   res.status(201).json({ id: iid, file_url: toFileUrl(file_path) });
 });
 
@@ -2210,7 +2600,7 @@ canvasRouter.put("/board/nodes", (req, res) => {
   };
   if (!Array.isArray(body.nodes)) return res.status(400).json({ error: "nodes must be an array" });
   let boardId: number;
-  if (body.board_id) boardId = Number(body.board_id);
+  if (body.board_id) boardId = resolveFreeBoardId(Number(body.board_id));
   else if (body.arc_id) boardId = ensureBoard("arc", Number(body.arc_id));
   // Доска схемы сеттинга заводится здесь, при первом сохранении раскладки, а
   // не на чтении: `GET /canvas/board` в базу не пишет (блок D3).
@@ -2292,7 +2682,7 @@ canvasRouter.post("/board/node", (req, res) => {
   // может и на нетронутую карту. Без этой ветки палитра там молчала: 400 на
   // щелчок и мёртвый бросок (найдено в блоке G7).
   const boardId = board_id
-    ? Number(board_id)
+    ? resolveFreeBoardId(Number(board_id))
     : arc_id
       ? ensureBoard("arc", Number(arc_id))
       : setting_id
@@ -2331,7 +2721,7 @@ canvasRouter.delete("/board/node", (req, res) => {
   };
   if (!node_type || !node_id) return res.status(400).json({ error: "node_type and node_id are required" });
   let boardId: number;
-  if (board_id) boardId = Number(board_id);
+  if (board_id) boardId = resolveFreeBoardId(Number(board_id));
   else if (arc_id) boardId = ensureBoard("arc", Number(arc_id));
   else return res.status(400).json({ error: "arc_id or board_id required" });
   db.prepare("DELETE FROM canvas_nodes WHERE board_id = ? AND node_type = ? AND node_id = ?").run(boardId, node_type, Number(node_id));
@@ -2388,7 +2778,7 @@ canvasRouter.post("/bundles", (req, res) => {
   };
   // free-доска: board_id напрямую (Q1 а), иначе arc_id
   let boardId: number;
-  if (board_id) boardId = Number(board_id);
+  if (board_id) boardId = resolveFreeBoardId(Number(board_id));
   else if (arc_id) boardId = ensureBoard("arc", Number(arc_id));
   else return res.status(400).json({ error: "arc_id or board_id required" });
   const info = db
@@ -2502,7 +2892,7 @@ canvasRouter.post("/bundles/:id/insert", (req, res) => {
     )
     .run(source.id, source.setting_id);
   const bundleId = Number(info.lastInsertRowid);
-  const boardId = board_id ? Number(board_id) : ensureBoard("arc", Number(arc_id));
+  const boardId = board_id ? resolveFreeBoardId(Number(board_id)) : ensureBoard("arc", Number(arc_id));
   db.prepare(
     "INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?, 'bundle', ?, ?, ?)"
   ).run(boardId, bundleId, Number(x) || 0, Number(y) || 0);

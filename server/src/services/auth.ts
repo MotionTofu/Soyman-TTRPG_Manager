@@ -57,7 +57,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function signToken(user: AuthUser): string {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
 }
 
 // Exported (not just used internally) so routes/index.ts can accept a

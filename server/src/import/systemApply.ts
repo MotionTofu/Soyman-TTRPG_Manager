@@ -20,6 +20,7 @@ import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../d
 import { backfillCompendiumSummaries } from "../services/monsterSummary";
 import { systemPrefixOf, SYSTEM_KEY_PREFIX_TO_KIND } from "./systemFormat";
 import { buildTokenWeights, normalizeName, similarity } from "./names";
+import { cleanChallengeRating } from "./creatureMeta";
 import type {
   ImportClass,
   ImportEquipment,
@@ -371,6 +372,9 @@ interface PendingEntry {
   kind: string;
   name: string;
   level: number | null;
+  /** Оригинальное название и синонимы: их колонки ищет поиск. */
+  name_original?: string;
+  aliases?: string[];
   description: string;
   parentKey: string | null;
   /** Считается вторым проходом, когда id есть у всех. */
@@ -387,6 +391,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: f.key,
       kind,
       name: f.name,
+      name_original: f.name_original,
+      aliases: f.aliases,
       level: f.level ?? null,
       description: f.description,
       parentKey,
@@ -400,6 +406,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: m.key,
       kind: "mechanic_item",
       name: m.name,
+      name_original: m.name_original,
+      aliases: m.aliases,
       level: null,
       description: m.description,
       // Группа справочника («Типы урона») — не ключ, а название: группы
@@ -413,6 +421,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: e.key,
       kind: "equipment",
       name: e.name,
+      name_original: e.name_original,
+      aliases: e.aliases,
       level: null,
       description: e.description,
       parentKey: null,
@@ -424,6 +434,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: s.key,
       kind: "spell",
       name: s.name,
+      name_original: s.name_original,
+      aliases: s.aliases,
       level: s.level ?? null,
       description: s.description,
       parentKey: null,
@@ -435,6 +447,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: c.key,
       kind: "class",
       name: c.name,
+      name_original: c.name_original,
+      aliases: c.aliases,
       level: null,
       description: c.description,
       parentKey: null,
@@ -447,6 +461,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
         key: sub.key,
         kind: "subclass",
         name: sub.name,
+        name_original: sub.name_original,
+        aliases: sub.aliases,
         level: null,
         description: sub.description,
         parentKey: c.key,
@@ -460,6 +476,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: s.key,
       kind: "species",
       name: s.name,
+      name_original: s.name_original,
+      aliases: s.aliases,
       level: null,
       description: s.description,
       parentKey: null,
@@ -491,6 +509,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: b.key,
       kind: "background",
       name: b.name,
+      name_original: b.name_original,
+      aliases: b.aliases,
       level: null,
       description: b.description,
       parentKey: null,
@@ -509,6 +529,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: f.key,
       kind: "feat",
       name: f.name,
+      name_original: f.name_original,
+      aliases: f.aliases,
       level: null,
       description: f.description,
       parentKey: null,
@@ -523,6 +545,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: m.key,
       kind: "magic_item",
       name: m.name,
+      name_original: m.name_original,
+      aliases: m.aliases,
       level: null,
       description: m.description,
       parentKey: null,
@@ -544,6 +568,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       key: m.key,
       kind: "monster",
       name: m.name,
+      name_original: m.name_original,
+      aliases: m.aliases,
       level: null,
       description: m.description,
       parentKey: null,
@@ -1030,18 +1056,33 @@ export function applySystemImport(
 
       const existing = keyToEntry.get(p.key);
       const row = existing
-        ? (db.prepare("SELECT id, name, level, data, description FROM compendium_entries WHERE id = ?").get(existing.id) as
-            | { id: number; name: string; level: number | null; data: string; description: string }
+        ? (db.prepare(
+            "SELECT id, name, level, aliases, name_original, data, description FROM compendium_entries WHERE id = ?"
+          ).get(existing.id) as
+            | {
+                id: number;
+                name: string;
+                level: number | null;
+                aliases: string;
+                name_original: string;
+                data: string;
+                description: string;
+              }
             | undefined)
         : undefined;
 
       if (row) {
         // Круг, которого в файле нет, не затирается: глава со списками
-        // заклинаний знает только их ключи и классы.
+        // заклинаний знает только их ключи и классы. То же для синонимов и
+        // оригинала: их отсутствие в файле не значит, что их нет у записи.
         const level = p.level ?? row.level;
+        const aliases = p.aliases !== undefined ? JSON.stringify(p.aliases) : row.aliases;
+        const name_original = p.name_original !== undefined ? p.name_original : row.name_original;
         db.prepare(
-          "UPDATE compendium_entries SET name = ?, level = ?, parent_id = ?, section_id = ? WHERE id = ?"
-        ).run(p.name, level, parentId, sectionId, row.id);
+          `UPDATE compendium_entries
+              SET name = ?, level = ?, parent_id = ?, section_id = ?, aliases = ?, name_original = ?
+            WHERE id = ?`
+        ).run(p.name, level, parentId, sectionId, aliases, name_original, row.id);
         rowsToFill.push({ entry: p, id: row.id, created: false, before: row });
         keyToEntry.set(p.key, { id: row.id, name: p.name });
       } else {
@@ -1049,10 +1090,21 @@ export function applySystemImport(
         const id = Number(
           db
             .prepare(
-              `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, level, data, description, position)
-               VALUES (?, ?, ?, ?, ?, ?, '{}', '', ?)`
+              `INSERT INTO compendium_entries
+                 (system_id, section_id, parent_id, kind, name, level, aliases, name_original, data, description, position)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', '', ?)`
             )
-            .run(sid, sectionId, parentId, p.kind, p.name, p.level, position).lastInsertRowid
+            .run(
+              sid,
+              sectionId,
+              parentId,
+              p.kind,
+              p.name,
+              p.level,
+              JSON.stringify(p.aliases ?? []),
+              p.name_original ?? "",
+              position
+            ).lastInsertRowid
         );
         rememberKey.run(sid, p.key, id);
         recordCreate.run(batchId, id);
@@ -1173,15 +1225,28 @@ export function applySystemImport(
       const existing = db
         .prepare("SELECT id FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ?")
         .get(ref.id) as { id: number } | undefined;
-      const content = JSON.stringify({ name: p.name, ...p.statblock });
+      const statblock: Record<string, unknown> = { name: p.name, ...(p.statblock ?? {}) };
+      // Тот же канонизатор, что в adventure-импорте (apply.ts:435): иначе
+      // грязное «3 (200 опыта)» доживает до статблока — бэкфилл чистит
+      // только data.cr, а сам статблок остаётся грязным (находка 10.5).
+      if (typeof statblock.challengeRating === "string") {
+        statblock.challengeRating = cleanChallengeRating(statblock.challengeRating);
+      }
+      // Форма берётся из статблока, если он её несёт (з.record этого не
+      // гарантирует) — по умолчанию dnd_creature, и этим полем контент не
+      // засоряется (в apply.ts format из контента изымается).
+      const format =
+        typeof statblock.format === "string" && statblock.format ? statblock.format : "dnd_creature";
+      delete statblock.format;
+      const content = JSON.stringify(statblock);
       if (existing) {
         db.prepare("UPDATE statblocks SET content = ? WHERE id = ?").run(content, existing.id);
         bump("обновлено статблоков");
       } else {
         db.prepare(
           `INSERT INTO statblocks (owner_type, owner_id, kind, format, content)
-           VALUES ('compendium_entry', ?, 'full', 'dnd_creature', ?)`
-        ).run(ref.id, content);
+           VALUES ('compendium_entry', ?, 'full', ?, ?)`
+        ).run(ref.id, format, content);
         bump("создано статблоков");
       }
     }
@@ -1249,12 +1314,26 @@ export function rollbackSystemBatch(batchId: number): { deleted: number; restore
         const before = JSON.parse(r.payload) as {
           name: string;
           level: number | null;
+          aliases: string;
+          name_original: string;
           data: string;
           description: string;
         };
         restored += db
-          .prepare("UPDATE compendium_entries SET name = ?, level = ?, data = ?, description = ? WHERE id = ?")
-          .run(before.name, before.level, before.data, before.description, r.entry_id).changes;
+          .prepare(
+            `UPDATE compendium_entries
+                SET name = ?, level = ?, aliases = ?, name_original = ?, data = ?, description = ?
+              WHERE id = ?`
+          )
+          .run(
+            before.name,
+            before.level,
+            before.aliases ?? "[]",
+            before.name_original ?? "",
+            before.data,
+            before.description,
+            r.entry_id
+          ).changes;
       }
     }
     const batch = db.prepare("SELECT created_system, system_id FROM system_import_batches WHERE id = ?").get(batchId) as

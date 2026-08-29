@@ -124,6 +124,21 @@ export const CHALLENGE_RATINGS = [
   "21", "22", "23", "24", "25", "26", "27", "28", "29", "30",
 ] as const;
 
+/**
+ * Класс опасности к каноническому виду. Старые снапшоты и легаси-импорты
+ * пишут дробь десятичной («0.5» вместо «1/2»), а фильтр раздела и группы
+ * «По КО» сверяются с каноническим списком CHALLENGE_RATINGS — сравнивать
+ * надо нормализованное значение, а не исходную строку. Заодно срезается
+ * хвост «(100 опыта)», который проскакивал из книги.
+ */
+export function normaliseCr(raw: unknown): string {
+  let s = String(raw ?? "").trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (s === "0.5") return "1/2";
+  if (s === "0.25") return "1/4";
+  if (s === "0.125") return "1/8";
+  return s;
+}
+
 export const MAGIC_ITEM_RARITIES = [
   "Обычный",
   "Необычный",
@@ -404,4 +419,20 @@ mechanic_group: {
 
 export function kindLabel(kind: string): string {
   return KIND_DEFS[kind]?.label ?? kind;
+}
+
+// «[English]»-хвост имени — устаревшее хранилище оригинала (бестиарий писал
+// «Ядовитая змея [Venomous Snake]»). При сохранении сводки переносится в
+// name_original, а из имени убирается; плитки показывают оригинал из
+// name_original. Регекс тот же, что у splitCreatureName (MonsterTileGrid).
+export function extractEnglishName(name: string): { name: string; en: string } {
+  const match = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name ?? "");
+  return match ? { name: match[1].trim(), en: match[2].trim() } : { name: (name ?? "").trim(), en: "" };
+}
+
+// Имя, оригинал и синонимы ищутся наравне (заявлено в types.ts у
+// CompendiumEntry): синонимы/оригинал вытаскиваются из скобок миграцией,
+// но фильтр секции не должен завязываться на то, откуда взялся оригинал.
+export function searchableText(entry: { name?: string | null; name_original?: string | null; aliases?: string[] }): string {
+  return [entry.name ?? "", entry.name_original ?? "", ...(entry.aliases ?? [])].join(" ").toLowerCase();
 }

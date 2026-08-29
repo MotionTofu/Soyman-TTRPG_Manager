@@ -7,7 +7,6 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { addToBag } from "../bag";
-import { MonsterTileGrid, saveFavourite, type MonsterGrouping } from "./MonsterTileGrid";
 import { StatblockList } from "./StatblockList";
 import { StatblockIcon, statblockBadgeTitle } from "./StatblockIcon";
 import { NavIcon } from "./NavIcons";
@@ -19,7 +18,6 @@ import { EMPTY_COST, type DndCheck, type DndCost, type DndEffect } from "./dnd/e
 import {
   ABILITY_SCORES,
   ARMOR_TYPES,
-  CHALLENGE_RATINGS,
   CREATURE_SIZES,
   VEHICLE_CATEGORIES,
   EQUIPMENT_CATEGORIES,
@@ -28,17 +26,10 @@ import {
   kindLabel,
   MAGIC_ITEM_RARITIES,
   MAGIC_ITEM_TYPES,
-  MECHANICS_ARMOR_GROUP,
-  MECHANICS_CREATURE_TYPE_GROUP,
-  MECHANICS_SCHOOL_GROUP,
-  MECHANICS_SENSES_GROUP,
-  MECHANICS_SPEED_GROUP,
   MECHANICS_TOOL_GROUP,
-  MECHANICS_WEAPON_GROUP,
-  MECHANICS_WEAPON_MASTERY_GROUP,
-  MECHANICS_WEAPON_PROPERTIES_GROUP,
   type FieldDef,
 } from "../compendium";
+import { EMPTY_MECHANICS_OPTIONS, loadMechanicsOptions, type MechanicsOptions } from "../compendiumMechanics";
 import { ALL_SKILLS } from "./dnd/AbilityScores";
 import type { CompendiumEntry, SearchResult, SystemSection } from "../types";
 
@@ -56,30 +47,6 @@ interface MechanicsOption {
 interface MechanicsPick extends MechanicsOption {
   distance: string;
 }
-
-interface MechanicsOptions {
-  creatureTypes: MechanicsOption[];
-  senses: MechanicsOption[];
-  speeds: MechanicsOption[];
-  weapons: MechanicsOption[];
-  armor: MechanicsOption[];
-  tools: MechanicsOption[];
-  schools: MechanicsOption[];
-  weaponProperties: MechanicsOption[];
-  weaponMastery: MechanicsOption[];
-}
-
-const EMPTY_MECHANICS_OPTIONS: MechanicsOptions = {
-  creatureTypes: [],
-  senses: [],
-  speeds: [],
-  weapons: [],
-  armor: [],
-  tools: [],
-  schools: [],
-  weaponProperties: [],
-  weaponMastery: [],
-};
 
 // A pick can go stale if the mechanics-list item it points to gets deleted
 // and recreated under the same name (new id) — the old pick then lingers
@@ -295,44 +262,10 @@ function getExtraFields(entry: CompendiumEntry, parentGroupName?: string): Field
   return [];
 }
 
-// Loads the option lists a "Вид" (species) entry picks from: finds the
-// system's "mechanics" section, then the 3 relevant fixed groups within it
-// by name, and returns each group's direct children as pickable options.
-async function loadMechanicsOptions(systemId: number): Promise<MechanicsOptions> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
-  const mechSection = sections.find((s) => s.kind === "mechanics");
-  if (!mechSection) return EMPTY_MECHANICS_OPTIONS;
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${mechSection.id}`
-  );
-  const groupsByName = new Map(entries.filter((e) => e.parent_id === null).map((e) => [e.name, e]));
-  const optionsFor = (groupName: string): MechanicsOption[] => {
-    const group = groupsByName.get(groupName);
-    if (!group) return [];
-    return entries
-      .filter((e) => e.parent_id === group.id)
-      .sort((a, b) => a.position - b.position)
-      .map((e) => ({ id: e.id, name: e.name }));
-  };
-  return {
-    creatureTypes: optionsFor(MECHANICS_CREATURE_TYPE_GROUP),
-    senses: optionsFor(MECHANICS_SENSES_GROUP),
-    speeds: optionsFor(MECHANICS_SPEED_GROUP),
-    weapons: optionsFor(MECHANICS_WEAPON_GROUP),
-    armor: optionsFor(MECHANICS_ARMOR_GROUP),
-    tools: optionsFor(MECHANICS_TOOL_GROUP),
-    schools: optionsFor(MECHANICS_SCHOOL_GROUP),
-    weaponProperties: optionsFor(MECHANICS_WEAPON_PROPERTIES_GROUP),
-    weaponMastery: optionsFor(MECHANICS_WEAPON_MASTERY_GROUP),
-  };
-}
-
 // A class the spell-availability picker can offer, with its subclasses kept
 // separate (collapsed by default — requirement 8) rather than flattened.
-// «Вручную» в бестиарии больше нет (шаг 5 ревизии): порядок там задают
-// сортировки, а не перетаскивание 535 плиток. В остальных разделах ручной
-// порядок осмыслен (уровни классов, группы справочника) и остаётся.
-type SortMode = "manual" | "alpha" | "school" | "type" | "rarity" | "creature_type" | "cr" | "size";
+type SortMode = "manual" | "alpha" | "level" | "school" | "type" | "rarity";
+type SortDir = "asc" | "desc";
 
 interface ClassGroupOption {
   id: number;
@@ -423,19 +356,20 @@ function spellLevelLabel(level: number): string {
 // shape — an effect plus a cost — and so are magic items with charges.
 const EFFECT_KINDS = new Set(["spell", "feature", "class_option", "magic_item", "equipment"]);
 
-function groupByLevel(list: CompendiumEntry[]): [number, CompendiumEntry[]][] {
+function groupByLevel(list: CompendiumEntry[], dir: SortDir = "asc"): [number, CompendiumEntry[]][] {
   const map = new Map<number, CompendiumEntry[]>();
   for (const e of list) {
     const lvl = e.level ?? 0;
     if (!map.has(lvl)) map.set(lvl, []);
     map.get(lvl)!.push(e);
   }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]);
+  const entries = [...map.entries()].sort((a, b) => (dir === "asc" ? a[0] - b[0] : b[0] - a[0]));
+  return entries;
 }
 
 const NO_SCHOOL_LABEL = "Без школы";
 
-function groupBySchool(list: CompendiumEntry[]): [string, CompendiumEntry[]][] {
+function groupBySchool(list: CompendiumEntry[], dir: SortDir = "asc"): [string, CompendiumEntry[]][] {
   const map = new Map<string, CompendiumEntry[]>();
   for (const e of list) {
     const name = (e.data.school as MechanicsOption | undefined)?.name || NO_SCHOOL_LABEL;
@@ -445,7 +379,8 @@ function groupBySchool(list: CompendiumEntry[]): [string, CompendiumEntry[]][] {
   const keys = [...map.keys()].sort((a, b) => {
     if (a === NO_SCHOOL_LABEL) return 1;
     if (b === NO_SCHOOL_LABEL) return -1;
-    return a.localeCompare(b, "ru");
+    const cmp = a.localeCompare(b, "ru");
+    return dir === "asc" ? cmp : -cmp;
   });
   return keys.map((k) => [k, map.get(k)!]);
 }
@@ -458,7 +393,8 @@ const NO_CATEGORY_LABEL = "Без категории";
 function groupByCategory(
   list: CompendiumEntry[],
   field: string,
-  categories: readonly string[]
+  categories: readonly string[],
+  dir: SortDir = "asc"
 ): [string, CompendiumEntry[]][] {
   const map = new Map<string, CompendiumEntry[]>();
   for (const e of list) {
@@ -466,7 +402,7 @@ function groupByCategory(
     if (!map.has(cat)) map.set(cat, []);
     map.get(cat)!.push(e);
   }
-  const order = [...categories, NO_CATEGORY_LABEL];
+  const order = dir === "asc" ? [...categories, NO_CATEGORY_LABEL] : [...[...categories].reverse(), NO_CATEGORY_LABEL];
   return order.filter((c) => map.has(c)).map((c) => [c, map.get(c)!]);
 }
 
@@ -487,57 +423,63 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [filterRarity, setFilterRarity] = useState("");
   const [filterItemClass, setFilterItemClass] = useState("");
   const [filterAttunement, setFilterAttunement] = useState("");
-  const [filterCreatureType, setFilterCreatureType] = useState("");
-  const [filterCR, setFilterCR] = useState("");
-  const [filterSize, setFilterSize] = useState("");
   const [filterVehicleCategory, setFilterVehicleCategory] = useState("");
+  const [filterSize, setFilterSize] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>(() => {
-    const stored = localStorage.getItem(`compendium-sort-${section.id}`) as SortMode | null;
-    // Бестиарий мог остаться на снятом режиме «Вручную» из прежней настройки.
-    if (section.kind === "monster") return stored && stored !== "manual" ? stored : "alpha";
-    return stored ?? "manual";
+    const raw = localStorage.getItem(`compendium-sort-${section.id}`);
+    const stored = raw?.split(":")[0] as SortMode | null;
+    const valid: SortMode[] = ["manual", "alpha", "level", "school", "type", "rarity"];
+    return stored && valid.includes(stored) ? stored : "manual";
+  });
+  const [sortDir, setSortDir] = useState<SortDir>(() => {
+    const raw = localStorage.getItem(`compendium-sort-${section.id}`);
+    const dir = raw?.split(":")[1] as SortDir | undefined;
+    return dir === "desc" ? "desc" : "asc";
   });
   const [dragId, setDragId] = useState<number | null>(null);
 
   const isSpellSection = section.kind === "spell";
   const isMagicItemSection = section.kind === "magic_item";
-  const isMonsterSection = section.kind === "monster";
   const isEquipmentSection = section.kind === "equipment";
   const isVehicleSection = section.kind === "vehicle";
 
   function changeSortMode(mode: SortMode) {
-    setSortMode(mode);
-    localStorage.setItem(`compendium-sort-${section.id}`, mode);
-  }
-
-  function sortForDisplay(list: CompendiumEntry[]): CompendiumEntry[] {
-    if (sortMode !== "alpha") return list;
-    return [...list].sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  }
-
-  // Сортировку не трогает: её выбирают осознанно и надолго, а фильтры с
-  // поиском — на один заход.
-  function resetMonsterFilters() {
-    setFilterCreatureType("");
-    setFilterCR("");
-    setFilterSize("");
-    setSearchQuery("");
-  }
-
-  // Звезда пишется точечно и правит одну запись в состоянии: перезагружать
-  // 535 записей ради одной отметки — это заметная пауза на пустом месте.
-  // Колбэк обязан быть стабильным — на нём держится memo плитки, иначе один
-  // щелчок перерисовывает весь раздел (та же ловушка, что была с вехами).
-  const toggleFavourite = useCallback(async (entry: CompendiumEntry, favourite: boolean) => {
-    setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, favourite } : e)));
-    try {
-      await saveFavourite(entry.id, favourite);
-    } catch {
-      setEntries((prev) =>
-        prev.map((e) => (e.id === entry.id ? { ...e, favourite: !favourite } : e))
-      );
+    if (mode === "manual") {
+      setSortMode(mode);
+      setSortDir("asc");
+      localStorage.setItem(`compendium-sort-${section.id}`, `${mode}:asc`);
+      return;
     }
-  }, []);
+    if (mode === sortMode) {
+      setSortDir((prev) => {
+        const next = prev === "asc" ? "desc" : "asc";
+        localStorage.setItem(`compendium-sort-${section.id}`, `${mode}:${next}`);
+        return next;
+      });
+    } else {
+      setSortMode(mode);
+      setSortDir("asc");
+      localStorage.setItem(`compendium-sort-${section.id}`, `${mode}:asc`);
+    }
+  }
+
+  // useCallback — не украшение: `sortForDisplay` уходит в nodeProps и в мемо
+  // плиток, новая функция на каждый рендер перерисовывала бы всё дерево.
+  const sortForDisplay = useCallback(
+    (list: CompendiumEntry[]): CompendiumEntry[] => {
+      if (sortMode === "alpha") {
+        const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+        return sortDir === "asc" ? sorted : sorted.reverse();
+      }
+      if (sortMode === "level") {
+        // Для заклинаний уровень не используется в flat-сортировке, но
+        // сохраняем единый путь: уровень уже группирует, здесь не сортируем.
+        return list;
+      }
+      return list;
+    },
+    [sortMode, sortDir]
+  );
 
   // Manual drag-n-drop reorder — only meaningful within one sibling group
   // (same parent_id/level), matching how `position` is scoped server-side.
@@ -568,14 +510,14 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       loadClassOptions(systemId).then(setClassOptions);
       loadClassHierarchy(systemId).then(setClassHierarchy);
     }
-    if (isSpellSection || isMonsterSection || isEquipmentSection || isMagicItemSection) {
-      // Needed both for the school/creature-type filter dropdowns above the
-      // list and for the pickers inside each entry's edit form (weapon
+    if (isSpellSection || isEquipmentSection || isMagicItemSection) {
+      // Needed for the school/creature-type filter dropdowns above the list
+      // and for the pickers inside each entry's edit form (weapon
       // properties/mastery for equipment and magic-item weapons/armor).
       loadMechanicsOptions(systemId).then(setMechanicsOptions);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [systemId, isSpellSection, isMagicItemSection, isMonsterSection, isEquipmentSection]);
+  }, [systemId, isSpellSection, isMagicItemSection, isEquipmentSection]);
 
   // Deep-link support: expand every ancestor of the mentioned entry and
   // scroll it into view once its data has loaded.
@@ -615,9 +557,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   // expand-on-match pattern as the focusEntryId deep-link effect above) so
   // a match isn't hidden behind a collapsed parent.
   const [searchQuery, setSearchQuery] = useState("");
-
-  const monsterFiltersActive =
-    filterCreatureType !== "" || filterCR !== "" || filterSize !== "" || searchQuery !== "";
 
   const searchVisible = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -903,8 +842,12 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const categoryGroups: readonly string[] | null =
     section.kind === "feat" ? FEAT_CATEGORIES : section.kind === "equipment" ? EQUIPMENT_CATEGORIES : null;
 
-  const filteredTopLevel = isSpellSection
-    ? topLevel.filter((e) => {
+  // Фильтры одни и те же на каждый ре-рендер, но результат обязан быть
+  // стабильным по ссылке: дерево ниже кэширует группы через useMemo, и новый
+  // массив каждый рендер сводил бы этот кэш к нулю.
+  const filteredTopLevel = useMemo(() => {
+    if (isSpellSection)
+      return topLevel.filter((e) => {
         if (filterLevel !== "" && (e.level ?? 0) !== Number(filterLevel)) return false;
         if (filterClass !== "") {
           const classes = (e.data.classes as MechanicsOption[] | undefined) ?? [];
@@ -927,9 +870,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           if (school?.id !== Number(filterSchool)) return false;
         }
         return true;
-      })
-    : isMagicItemSection
-    ? topLevel.filter((e) => {
+      });
+    if (isMagicItemSection)
+      return topLevel.filter((e) => {
         if (filterItemType !== "" && e.data.item_type !== filterItemType) return false;
         if (filterRarity !== "" && e.data.rarity !== filterRarity) return false;
         if (filterItemClass !== "") {
@@ -945,25 +888,33 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         if (filterAttunement === "yes" && !e.data.attunement) return false;
         if (filterAttunement === "no" && e.data.attunement) return false;
         return true;
-      })
-    : isMonsterSection
-    ? topLevel.filter((e) => {
-        if (filterCreatureType !== "") {
-          const type = e.data.creature_type as MechanicsOption | undefined;
-          if (type?.id !== Number(filterCreatureType)) return false;
-        }
-        if (filterCR !== "" && (e.data.cr as string | undefined) !== filterCR) return false;
-        if (filterSize !== "" && (e.data.size as string | undefined) !== filterSize) return false;
-        return true;
-      })
-    : isVehicleSection
-    ? topLevel.filter((e) => {
+      });
+    if (isVehicleSection)
+      return topLevel.filter((e) => {
         if (filterVehicleCategory !== "" && (e.data.category as string | undefined) !== filterVehicleCategory)
           return false;
         if (filterSize !== "" && (e.data.size as string | undefined) !== filterSize) return false;
         return true;
-      })
-    : topLevel;
+      });
+    return topLevel;
+  }, [
+    topLevel,
+    isSpellSection,
+    isMagicItemSection,
+    isVehicleSection,
+    filterLevel,
+    filterClass,
+    filterSubclass,
+    filterRitual,
+    filterSchool,
+    filterItemType,
+    filterRarity,
+    filterItemClass,
+    filterAttunement,
+    filterVehicleCategory,
+    filterSize,
+    classHierarchy,
+  ]);
 
   const nodeProps = {
     expanded,
@@ -990,9 +941,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const magicItemGroups: [string, CompendiumEntry[]][] | null = !isMagicItemSection
     ? null
     : sortMode === "type"
-    ? groupByCategory(sortForDisplay(filteredTopLevel), "item_type", MAGIC_ITEM_TYPES)
+    ? groupByCategory(sortForDisplay(filteredTopLevel), "item_type", MAGIC_ITEM_TYPES, sortDir)
     : sortMode === "rarity"
-    ? groupByCategory(sortForDisplay(filteredTopLevel), "rarity", MAGIC_ITEM_RARITIES)
+    ? groupByCategory(sortForDisplay(filteredTopLevel), "rarity", MAGIC_ITEM_RARITIES, sortDir)
     : null;
 
   return (
@@ -1003,46 +954,31 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         <button
           className={sortMode === "alpha" ? "active-sort" : ""}
           onClick={() => changeSortMode("alpha")}
+          title={sortMode === "alpha" ? (sortDir === "asc" ? "А-Я (повтор — Я-А)" : "Я-А (повтор — А-Я)") : "А-Я"}
         >
-          А-Я
+          {sortMode === "alpha" ? (sortDir === "asc" ? "А-Я ↑" : "Я-А ↓") : "А-Я"}
         </button>
-        {!isMonsterSection && (
-          <button
-            className={sortMode === "manual" ? "active-sort" : ""}
-            onClick={() => changeSortMode("manual")}
-          >
-            Вручную
-          </button>
-        )}
-        {isMonsterSection && (
+        <button
+          className={sortMode === "manual" ? "active-sort" : ""}
+          onClick={() => changeSortMode("manual")}
+        >
+          Вручную
+        </button>
+        {isSpellSection && (
           <>
             <button
-              className={sortMode === "creature_type" ? "active-sort" : ""}
-              onClick={() => changeSortMode("creature_type")}
+              className={sortMode === "level" ? "active-sort" : ""}
+              onClick={() => changeSortMode("level")}
             >
-              По типу
+              По уровню{sortMode === "level" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
             </button>
             <button
-              className={sortMode === "cr" ? "active-sort" : ""}
-              onClick={() => changeSortMode("cr")}
+              className={sortMode === "school" ? "active-sort" : ""}
+              onClick={() => changeSortMode("school")}
             >
-              По КО
-            </button>
-            <button
-              className={sortMode === "size" ? "active-sort" : ""}
-              onClick={() => changeSortMode("size")}
-            >
-              По размеру
+              По школе{sortMode === "school" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
             </button>
           </>
-        )}
-        {isSpellSection && (
-          <button
-            className={sortMode === "school" ? "active-sort" : ""}
-            onClick={() => changeSortMode("school")}
-          >
-            По школе
-          </button>
         )}
         {isMagicItemSection && (
           <>
@@ -1050,13 +986,13 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
               className={sortMode === "type" ? "active-sort" : ""}
               onClick={() => changeSortMode("type")}
             >
-              По типу
+              По типу{sortMode === "type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
             </button>
             <button
               className={sortMode === "rarity" ? "active-sort" : ""}
               onClick={() => changeSortMode("rarity")}
             >
-              По редкости
+              По редкости{sortMode === "rarity" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
             </button>
           </>
         )}
@@ -1157,41 +1093,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           </select>
         </div>
       )}
-      {isMonsterSection && (
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <select value={filterCreatureType} onChange={(e) => setFilterCreatureType(e.target.value)}>
-            <option value="">Все типы существ</option>
-            {mechanicsOptions.creatureTypes.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          <select value={filterCR} onChange={(e) => setFilterCR(e.target.value)}>
-            <option value="">Все классы опасности</option>
-            {CHALLENGE_RATINGS.map((cr) => (
-              <option key={cr} value={cr}>
-                {cr}
-              </option>
-            ))}
-          </select>
-          <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
-            <option value="">Все размеры</option>
-            {CREATURE_SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          {/* Кнопки нет, пока сбрасывать нечего (§1.11): пустая кнопка в
-              ряду фильтров — это лишний орган управления за столом. */}
-          {monsterFiltersActive && (
-            <button type="button" onClick={resetMonsterFilters}>
-              Сбросить фильтры
-            </button>
-          )}
-        </div>
-      )}
       {isVehicleSection && (
         <div className="row" style={{ flexWrap: "wrap" }}>
           <select value={filterVehicleCategory} onChange={(e) => setFilterVehicleCategory(e.target.value)}>
@@ -1213,50 +1114,57 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         </div>
       )}
       <div className="comp-list">
-        {isMonsterSection ? (
-          <MonsterTileGrid
-            entries={filteredTopLevel}
-            grouping={
-              (sortMode === "alpha" ? "alpha" : sortMode) as MonsterGrouping
-            }
-            sectionId={section.id}
-            searchActive={searchQuery.trim() !== ""}
-            onToggleFavourite={toggleFavourite}
-          />
-        ) : isSpellSection
-          ? (sortMode === "school"
-              ? groupBySchool(sortForDisplay(filteredTopLevel)).map(
-                  ([label, list]) => [label, list, undefined] as [string, CompendiumEntry[], number | undefined]
-                )
-              : groupByLevel(sortForDisplay(filteredTopLevel)).map(
-                  ([lvl, list]) => [spellLevelLabel(lvl), list, lvl] as [string, CompendiumEntry[], number | undefined]
-                )
-            ).map(([label, list, level]) => (
-              <details key={label} className="comp-category">
-                <summary className="comp-level-label chevron-summary">
-                  <NavIcon name="chevron" className="chevron-icon" />
-                  {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
-                </summary>
-                {level !== undefined && (
-                  <button
-                    type="button"
-                    className="comp-mini"
-                    title={`Добавить заклинание — ${label.toLowerCase()}`}
-                    onClick={() => addEntry(null, "spell", level)}
-                    style={{ marginBottom: 6 }}
-                  >
-                    + Добавить заклинание
-                  </button>
-                )}
-                {list.map((e) => (
-                  <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
-                    <EntryNode entry={e} depth={0} {...nodeProps} />
-                  </SortableRow>
-                ))}
-              </details>
-            ))
+        {isSpellSection
+          ? sortMode === "school"
+            ? groupBySchool(sortForDisplay(filteredTopLevel), sortDir).map(
+                ([label, list]) => [label, list] as [string, CompendiumEntry[]]
+              ).map(([label, list]) => (
+                <details key={label} className="comp-category">
+                  <summary className="comp-level-label chevron-summary">
+                    <NavIcon name="chevron" className="chevron-icon" />
+                    {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
+                  </summary>
+                  {list.map((e) => (
+                    <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
+                      <EntryNode entry={e} depth={0} {...nodeProps} />
+                    </SortableRow>
+                  ))}
+                </details>
+              ))
+            : sortMode === "level"
+            ? groupByLevel(sortForDisplay(filteredTopLevel), sortDir).map(
+                ([lvl, list]) => [spellLevelLabel(lvl), list, lvl] as [string, CompendiumEntry[], number | undefined]
+              ).map(([label, list, level]) => (
+                <details key={label} className="comp-category">
+                  <summary className="comp-level-label chevron-summary">
+                    <NavIcon name="chevron" className="chevron-icon" />
+                    {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
+                  </summary>
+                  {level !== undefined && (
+                    <button
+                      type="button"
+                      className="comp-mini"
+                      title={`Добавить заклинание — ${label.toLowerCase()}`}
+                      onClick={() => addEntry(null, "spell", level)}
+                      style={{ marginBottom: 6 }}
+                    >
+                      + Добавить заклинание
+                    </button>
+                  )}
+                  {list.map((e) => (
+                    <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
+                      <EntryNode entry={e} depth={0} {...nodeProps} />
+                    </SortableRow>
+                  ))}
+                </details>
+              ))
+            : sortForDisplay(filteredTopLevel).map((e) => (
+                <SortableRow key={e.id} entry={e} group={filteredTopLevel} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
+                  <EntryNode entry={e} depth={0} {...nodeProps} />
+                </SortableRow>
+              ))
           : categoryGroups
-          ? groupByCategory(sortForDisplay(topLevel), "category", categoryGroups).map(([cat, list]) => (
+          ? groupByCategory(sortForDisplay(topLevel), "category", categoryGroups, sortDir).map(([cat, list]) => (
               <details key={cat} className="comp-category">
                 <summary className="comp-level-label chevron-summary">
                   <NavIcon name="chevron" className="chevron-icon" />
@@ -1299,7 +1207,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             {searchQuery.trim() ? `Ничего не найдено по «${searchQuery.trim()}».` : "Пока пусто."}
           </p>
         )}
-        {(isSpellSection || isMagicItemSection || isMonsterSection) && topLevel.length > 0 && filteredTopLevel.length === 0 && (
+        {(isSpellSection || isMagicItemSection) && topLevel.length > 0 && filteredTopLevel.length === 0 && (
           <p className="muted">Ничего не найдено по фильтрам.</p>
         )}
       </div>

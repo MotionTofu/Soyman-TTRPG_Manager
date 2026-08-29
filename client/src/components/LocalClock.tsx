@@ -21,17 +21,27 @@ export function LocalClock() {
     const timeout = window.setTimeout(() => {
       setTime(nowHHMM());
       setFull(nowFull());
-      interval = window.setInterval(() => {
-        setTime(nowHHMM());
-        setFull(nowFull());
-      }, 60000);
+      if (document.visibilityState === "visible") {
+        interval = window.setInterval(() => {
+          setTime(nowHHMM());
+          setFull(nowFull());
+        }, 60000);
+      }
     }, msToNextMinute);
 
-    // На случай если вкладка скрыта — не тикаем зря
     const onVis = () => {
       if (document.visibilityState === "visible") {
         setTime(nowHHMM());
         setFull(nowFull());
+        if (!interval) {
+          interval = window.setInterval(() => {
+            setTime(nowHHMM());
+            setFull(nowFull());
+          }, 60000);
+        }
+      } else if (interval) {
+        clearInterval(interval);
+        interval = undefined;
       }
     };
     document.addEventListener("visibilitychange", onVis);
@@ -48,7 +58,6 @@ export function LocalClock() {
       className="local-clock"
       title={`${full} ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}
       aria-label={`Текущее время ${time}`}
-      style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", color: "var(--ink-2)", letterSpacing: "0.06em" }}
     >
       {time}
     </span>

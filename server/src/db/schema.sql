@@ -1584,5 +1584,26 @@ CREATE TABLE IF NOT EXISTS canvas_threads (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(board_id, from_pin_id, to_pin_id)
 );
-CREATE INDEX IF NOT EXISTS idx_canvas_threads_board ON canvas_threads(board_id);
+ CREATE INDEX IF NOT EXISTS idx_canvas_threads_board ON canvas_threads(board_id);
 CREATE INDEX IF NOT EXISTS idx_canvas_threads_pins ON canvas_threads(from_pin_id, to_pin_id);
+
+-- Рераут-нода («Маршрут», блок узлового редактора): визуальный проход, рвущий
+-- длинное реальное ребро на два сегмента (source→рераут, рераут→target).
+-- Сам данных не заводит: настоящее ребро (переход/каст/исход/нить) остаётся
+-- одно, а эта таблица хранит лишь ПАМЯТЬ ПРОХОДА — какие ноды рераут разводит
+-- и какого вида ребро несёт. Позиция живёт в парной строке `canvas_nodes`
+-- (`node_type='route'`, `node_id` = это id), как у пинов и стикеров.
+-- `from_key`/`to_key` — ключи нод («scene:41», «being:12», «pin:3», «route:7»
+-- для цепочки рераутов). `kind` — вид реального ребра, `role` — подроль разъёма
+-- для cast (location/being/...) или пусто. Роль/цвет гнезда рераут перенимает
+-- от ребра, поэтому конфликт ролей невозможен по построению: цепь несёт одну.
+CREATE TABLE IF NOT EXISTS canvas_routes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER NOT NULL REFERENCES canvas_boards(id) ON DELETE CASCADE,
+  from_key TEXT NOT NULL,
+  to_key TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'transition', -- transition | cast | outcome | thread
+  role TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_routes_board ON canvas_routes(board_id);

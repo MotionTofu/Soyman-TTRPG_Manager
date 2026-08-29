@@ -11,7 +11,7 @@
 // многие-ко-многим. Автоматически ничего не связывается: выбор за человеком.
 
 import { db } from "../db/db";
-import { NameMatch, buildTokenWeights, normalizeName, similarity } from "./names";
+import { NameMatch, buildTokenWeights, normalizeName, parseAliases, similarity } from "./names";
 import { matchCreatureType, parseCreatureMeta } from "./creatureMeta";
 
 interface Candidate {
@@ -23,11 +23,13 @@ interface Candidate {
 }
 
 /**
- * Имена компендиума несут оригинал в скобках: «Нимблрайт [Nimblewright]»,
- * «Гоблин–пси-командир [Goblin Psi Commander] PBSO». Искать нужно по обеим
- * половинам: перевод книги совпадёт с русской, name_original — с английской.
+ * Имена компендиума, по которым запись ищешь. Раньше оригинал жил в скобках —
+ * «Нимблрайт [Nimblewright]» — и его надо было выковыривать из имени; теперь
+ * он лежит в отдельной колонке наравне с синонимами, но скобочная конвенция
+ * осталась в базах, импортированных до реформы, поэтому разбирается и она:
+ * перевод книги совпадёт с русской половиной, оригинал — с английской.
  */
-function spellings(name: string): string[] {
+function spellings(name: string, name_original: string, aliases: string): string[] {
   const out = [name];
   const bracket = name.match(/\[([^\]]+)\]/);
   if (bracket) {
@@ -35,6 +37,8 @@ function spellings(name: string): string[] {
     // Хвост после скобки — пометка источника вроде «PBSO», не часть имени.
     out.push(name.slice(0, bracket.index).trim());
   }
+  if (name_original.trim()) out.push(name_original.trim());
+  for (const alias of parseAliases(aliases)) if (alias.trim()) out.push(alias.trim());
   return out.filter((n) => n.trim());
 }
 
@@ -52,15 +56,24 @@ export function compendiumCandidates(
   if (settingId == null) return [];
   const rows = db
     .prepare(
-      `SELECT e.id, e.name, sys.name AS system
+      `SELECT e.id, e.name, e.name_original, e.aliases, sys.name AS system
          FROM compendium_entries e
          JOIN systems sys ON sys.id = e.system_id
         WHERE e.kind = ?
           AND e.system_id IN (SELECT DISTINCT system_id FROM campaigns WHERE setting_id = ?)
         ORDER BY sys.name, e.name`
     )
-    .all(kind, settingId) as { id: number; name: string; system: string }[];
-  return rows.map((row) => ({ ...row, names: spellings(row.name) }));
+    .all(kind, settingId) as {
+    id: number;
+    name: string;
+    name_original: string;
+    aliases: string;
+    system: string;
+  }[];
+  return rows.map((row) => ({
+    ...row,
+    names: spellings(row.name, row.name_original, row.aliases),
+  }));
 }
 
 /**

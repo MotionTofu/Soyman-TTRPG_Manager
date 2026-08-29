@@ -7,6 +7,7 @@ import {
   findRelinkCandidates,
   relinkResource,
 } from "../services/fileHealth";
+import { vaultAbs } from "../services/filesystem";
 
 export const filesRouter = Router();
 
@@ -18,8 +19,9 @@ filesRouter.get("/raw/:id", (req, res) => {
     .prepare("SELECT file_path FROM resources WHERE id = ?")
     .get(req.params.id) as { file_path: string | null } | undefined;
   if (!row?.file_path) return res.status(404).json({ error: "у ресурса нет файла" });
-  if (!fs.existsSync(row.file_path)) return res.status(404).json({ error: "файл не найден" });
-  res.sendFile(row.file_path);
+  const abs = vaultAbs(row.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: "файл не найден" });
+  res.sendFile(abs);
 });
 
 // Все ресурсы с файлом, которого нет на диске. Пульт зовёт это при открытии,

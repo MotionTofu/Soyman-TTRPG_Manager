@@ -692,8 +692,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         );
         const insertEntry = db.prepare(
           `INSERT INTO compendium_entries
-             (system_id, section_id, parent_id, kind, name, data, description, position)
-           VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`
+             (system_id, section_id, parent_id, kind, name, aliases, name_original, data, description, position)
+           VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`
         );
         const create = (
           kind: CompendiumKind,
@@ -702,7 +702,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           title: string,
           nameOriginal: string,
           description: string,
-          entryData: Record<string, unknown>
+          entryData: Record<string, unknown>,
+          aliases: string[] = []
         ) => {
           const self = keys.get(key);
           if (!self) return null;
@@ -713,16 +714,17 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             });
             return null;
           }
-          // Оригинал в скобках — конвенция компендиума: «Нимблрайт
-          // [Nimblewright]». По ней же ищет matchCompendium, так что следующая
-          // книга с тем же монстром найдёт эту запись и не заведёт вторую.
-          const name = nameOriginal ? `${title} [${nameOriginal}]` : title;
+          // Оригинал и синонимы живут отдельными колонками: по ним ищут поиск
+          // и matchCompendium (см. compendium.ts), и следующая книга с тем же
+          // монстром найдёт эту запись и не заведёт вторую.
           const entryId = Number(
             insertEntry.run(
               system.id,
               sectionId,
               kind,
-              name,
+              title,
+              JSON.stringify(aliases),
+              nameOriginal,
               JSON.stringify(entryData),
               description,
               (nextPosition.get(sectionId) as { p: number }).p
@@ -759,7 +761,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             title,
             beast.name_original ?? "",
             beast.description,
-            entryData
+            entryData,
+            beast.aliases ?? []
           );
           if (entryId && beast.statblock) {
             insertStatblock("compendium_entry", entryId, title, beast.statblock);
@@ -796,7 +799,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             item.name,
             item.name_original ?? "",
             description,
-            entryData
+            entryData,
+            item.aliases ?? []
           );
         }
       }

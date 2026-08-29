@@ -12,7 +12,7 @@ import { HomeArticleCard } from "../components/HomeArticleCard";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
 import { formatCompactNumber } from "../formatNumber";
-import { toLocalDateKey } from "../utils/date";
+import { parseDateKey, toLocalDateKey } from "../utils/date";
 import { safeBackgroundImage } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { LocalClock } from "../components/LocalClock";
@@ -50,7 +50,7 @@ export function HomeCalendarPage() {
   const navigate = useNavigate();
 
   function refreshSessions() {
-    api.get<SessionSummary[]>("/calendar").then(setSessions).catch((e) => setCalendarError(String(e)));
+    api.get<SessionSummary[]>("/calendar").then((data) => { setCalendarError(null); setSessions(data); }).catch((e) => { if ((e as Error).name !== "AbortError") setCalendarError(String(e)); });
   }
 
   const miniEvents: MiniEvent[] = sessions.map((s) => ({
@@ -73,10 +73,10 @@ export function HomeCalendarPage() {
     setInitialLoad(false);
     const guarded = <T,>(fn: (v: T) => void) => (v: T) => { if (loadIdRef.current === cur) fn(v); };
     Promise.allSettled([
-      api.get<SessionSummary[]>("/calendar").then(guarded(setSessions)).catch((e) => { if (loadIdRef.current === cur) setCalendarError(String(e)); throw e; }),
+      api.get<SessionSummary[]>("/calendar").then(guarded(setSessions)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCalendarError(String(e)); throw e; }),
       api.get<FinanceSummary>("/finance/summary").then(guarded(setFinance)).catch(() => {}),
       api.get<AppSettings>("/app-settings").then((s) => { if (loadIdRef.current === cur) setHomeBgUrl(s.home_background_url); }).catch(() => {}),
-      api.get<Campaign[]>("/campaigns").then(guarded(setCampaigns)).catch((e) => { if (loadIdRef.current === cur) setCampaignsError(String(e)); throw e; }),
+      api.get<Campaign[]>("/campaigns").then(guarded(setCampaigns)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCampaignsError(String(e)); throw e; }),
     ]).finally(() => { if (loadIdRef.current === cur) setInitialLoad(true); });
   }
 
@@ -88,10 +88,42 @@ export function HomeCalendarPage() {
   const authHomeBgBlob = useAuthenticatedFileUrl(homeBgUrl);
   const authBgBlob = useAuthenticatedFileUrl(bgUrl);
 
-  const today = toLocalDateKey();
-  const nearestSession = sessions
-    .filter((s) => s.status === "planned" && s.date >= today)
-    .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let id: number | undefined;
+    const start = () => { id = window.setInterval(() => setNow(new Date()), 60000); };
+    const stop = () => { if (id !== undefined) { clearInterval(id); id = undefined; } };
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        setNow(new Date());
+        if (id === undefined) start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => { stop(); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
+  const today = toLocalDateKey(now);
+  const nearestSession = (() => {
+    const planned = sessions
+      .filter((s) => s.status === "planned")
+      .map((s) => {
+        const d = parseDateKey(s.date);
+        const [h, m] = (s.start_time ?? "00:00").split(":").map(Number);
+        d.setHours(h, m, 0, 0);
+        return { s, dt: d };
+      })
+      .sort((a, b) => a.dt.getTime() - b.dt.getTime());
+    // Текущая сегодня (последняя с dt <= now) как в кокпите, иначе ближайшая будущая
+    let current: SessionSummary | null = null;
+    for (const { s, dt } of planned) {
+      if (s.date === today && dt.getTime() <= now.getTime()) current = s;
+    }
+    if (current) return current;
+    return planned.find(({ dt }) => dt.getTime() > now.getTime())?.s ?? null;
+  })();
 
   function bgStyle(url: string | null, blob: string | null): string | undefined {
     if (!url) return undefined;
@@ -184,9 +216,17 @@ export function HomeCalendarPage() {
 
   async function createSessionFromModal() {
     if (!createModal || !createModal.campaignId || creating) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(createModal.date) || Number.isNaN(Date.parse(createModal.date))) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(createModal.date)) {
       setCreateError("Неверная дата — используйте формат ГГГГ-ММ-ДД");
       return;
+    }
+    {
+      const [y, m, d] = createModal.date.split("-").map(Number);
+      const parsed = parseDateKey(createModal.date);
+      if (parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) {
+        setCreateError("Неверная дата — такого дня не существует");
+        return;
+      }
     }
     setCreating(true);
     setCreateError(null);
@@ -201,6 +241,7 @@ export function HomeCalendarPage() {
           await copySessionPrep(Number(createModal.copyFromSessionId), created.id);
         } catch (e) {
           setCreateError(`Сессия создана, но копирование подготовки не удалось: ${String(e)}`);
+          refreshSessions();
           return;
         }
       }

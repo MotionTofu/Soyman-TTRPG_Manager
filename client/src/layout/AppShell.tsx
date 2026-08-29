@@ -200,7 +200,7 @@ export function AppShell() {
   // Role decides which navigation renders: players get no GM tooling
   // (Мастерение/Ресурсы/Граф связей/Игроки/Бэкап/Приглашения/Архив) and see
   // "Персонажи" (their own characters) instead of the "Игроки" roster.
-  const { user } = useCurrentUser();
+  const { user, loading: userLoading } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
   const updateAvailable = useUpdateAvailable();
@@ -283,31 +283,47 @@ export function AppShell() {
     <UnloadTargetsProvider>
     <div className={`app-shell${isLivePult ? " app-shell-live" : ""}`}>
       <div className="mobile-topbar">
-        <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню">
+        <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню" aria-expanded={navOpen} aria-controls="app-nav">
           <NavIcon name="menu" />
         </button>
         <img src={brandLogo} alt="SoyMan" className="mobile-topbar-logo" />
         {/* Плеер toggle used to live here too — it's now one of the bottom
             nav's own buttons (see bottomNavItems above), so this row is just
             search. */}
-        <button className="mobile-topbar-button" onClick={() => setSearchOpen(true)} aria-label="Поиск">
+        <button className="mobile-topbar-button" onClick={() => setSearchOpen(true)} aria-label="Поиск" aria-expanded={searchOpen} aria-controls="search-panel">
           <NavIcon name="search" />
         </button>
       </div>
-      {(navOpen || searchOpen) && (
+      {navOpen && (
         <div
           className="mobile-drawer-backdrop"
-          onClick={() => {
-            setNavOpen(false);
-            setSearchOpen(false);
-          }}
+          aria-hidden="true"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      {searchOpen && (
+        <div
+          className="mobile-drawer-backdrop"
+          aria-hidden="true"
+          onClick={() => setSearchOpen(false)}
         />
       )}
       {isLivePult ? (
         <PreviewDock open={navOpen} />
+      ) : userLoading ? (
+        <nav id="app-nav" className={`app-nav${navOpen ? " open" : ""}`} aria-busy="true" aria-label="Загрузка навигации">
+          <div className="brand-logo" style={{ height: 48, background: "var(--bg-elevated)", borderRadius: "var(--card-radius)", opacity: 0.5 }} />
+          <div className="stack" style={{ gap: 6, marginTop: 12 }}>
+            <div className="card" style={{ height: 36, opacity: 0.35 }} />
+            <div className="card" style={{ height: 36, opacity: 0.3 }} />
+            <div className="card" style={{ height: 36, opacity: 0.25 }} />
+            <div className="card" style={{ height: 36, opacity: 0.2 }} />
+            <div className="card" style={{ height: 36, opacity: 0.15 }} />
+          </div>
+        </nav>
       ) : (
-        <nav className={`app-nav${navOpen ? " open" : ""}`}>
-          <ParticleField count={10} className="header-particles" />
+        <nav id="app-nav" className={`app-nav${navOpen ? " open" : ""}`}>
+          <ParticleField count={5} className="header-particles" />
           <img src={brandLogo} alt="SoyMan — TTRPG Manager" className="brand-logo" />
           {navItems.map((item) => (
             <NavLink
@@ -322,7 +338,7 @@ export function AppShell() {
             </NavLink>
           ))}
           <div className="nav-bottom">
-            <ParticleField count={10} className="footer-particles" />
+            <ParticleField count={5} className="footer-particles" />
             {navBottomItems.map((item) =>
               item.onClick ? (
                 <button
@@ -357,10 +373,10 @@ export function AppShell() {
           </div>
         </nav>
       )}
-      <main className={`app-content${isPlayer ? "" : " has-player"}`}>
+      <main className={`app-content${userLoading ? "" : isPlayer ? "" : " has-player"}`}>
         <Outlet />
       </main>
-      <div className={`search-panel-slot${searchOpen ? " open" : ""}`}>
+      <div id="search-panel" className={`search-panel-slot${searchOpen ? " open" : ""}`}>
         <SearchPanel />
       </div>
       <NavWidget />
@@ -369,22 +385,24 @@ export function AppShell() {
           via CSS, see index.css); mobile gets MiniPlayerBar below instead —
           a small "now playing" capsule that only exists while something is
           actually playing, tapping it opens NowPlayingPage. */}
-      {!isPlayer && (
+      {!userLoading && !isPlayer && (
         <div className="audio-player-slot">
           <AudioPlayerBar extras={<SoundBarExtras />} empty={<SoundSetEmpty />} />
         </div>
       )}
-      {!isPlayer && pathname !== "/now-playing" && <MiniPlayerBar />}
-      <MobileBottomNav
-        leftItems={bottomNavLeft}
-        rightItems={bottomNavRight}
-        onCenterClick={() => setQuickOpen((open) => !open)}
-      />
+      {!userLoading && !isPlayer && pathname !== "/now-playing" && <MiniPlayerBar />}
+      {!userLoading && (
+        <MobileBottomNav
+          leftItems={bottomNavLeft}
+          rightItems={bottomNavRight}
+          onCenterClick={() => setQuickOpen((open) => !open)}
+        />
+      )}
       <MobileQuickAccess
         open={quickOpen}
         onClose={() => setQuickOpen(false)}
         contextualAction={contextualAction}
-        showCharacters={isPlayer}
+        showCharacters={!!isPlayer && !userLoading}
       />
       {boostyOpen && (
         <ExternalLinkConfirmModal

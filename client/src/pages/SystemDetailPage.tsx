@@ -4,6 +4,8 @@ import { api } from "../api/client";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { Modal } from "../components/Modal";
 import { CompendiumSection } from "../components/CompendiumSection";
+import { MonsterSection } from "../components/MonsterSection";
+import { VehicleSection } from "../components/VehicleSection";
 import { downloadJson } from "../downloadJson";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -219,12 +221,26 @@ export function SystemDetailPage() {
 
       {activeTab !== "overview" &&
         (currentSection ? (
-          <CompendiumSection
-            key={`${currentSection.id}-${tidyRun}`}
-            systemId={systemId}
-            section={currentSection}
-            focusEntryId={focusEntryId}
-          />
+          currentSection.kind === "monster" ? (
+            <MonsterSection
+              key={`${currentSection.id}-${tidyRun}`}
+              systemId={systemId}
+              section={currentSection}
+            />
+          ) : currentSection.kind === "vehicle" ? (
+            <VehicleSection
+              key={`${currentSection.id}-${tidyRun}`}
+              systemId={systemId}
+              section={currentSection}
+            />
+          ) : (
+            <CompendiumSection
+              key={`${currentSection.id}-${tidyRun}`}
+              systemId={systemId}
+              section={currentSection}
+              focusEntryId={focusEntryId}
+            />
+          )
         ) : (
           <p className="muted">Раздел не найден.</p>
         ))}

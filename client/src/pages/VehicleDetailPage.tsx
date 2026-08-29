@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { StatblockList } from "../components/StatblockList";
 import { EntryImagesTab } from "../components/EntryImagesTab";
 import { MentionsTab } from "../components/MentionsTab";
@@ -9,7 +9,7 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { useTabState } from "../hooks/useTabState";
 import { api } from "../api/client";
-import { KIND_DEFS } from "../compendium";
+import { KIND_DEFS, extractEnglishName } from "../compendium";
 import type { CompendiumEntry, System } from "../types";
 
 // «Изображения» — перед «Упоминаниями», как на странице существа: служебные
@@ -30,6 +30,7 @@ export function VehicleDetailPage({
   onChange: () => void;
 }) {
   const entryId = entry.id;
+  const navigate = useNavigate();
   const [tab, selectTab] = useTabState(TABS, "Досье", { Статблок: "Статблоки" });
   const [posts, setPosts] = useState<CompendiumEntry[]>([]);
   const isPost = entry.kind === "vehicle_post";
@@ -63,9 +64,11 @@ export function VehicleDetailPage({
       if (next) data[f.key] = next;
       else delete data[f.key];
     }
+    // «[English]» в конце имени переносится в name_original (см. extractEnglishName):
+    const { name, en } = extractEnglishName(values.name.trim());
     await api.put(`/systems/entries/${entryId}`, {
-      name: values.name.trim(),
-      name_original: values.name_original.trim(),
+      name,
+      name_original: values.name_original.trim() || en,
       data,
     });
     onChange();
@@ -74,6 +77,37 @@ export function VehicleDetailPage({
   async function saveDescription(value: string) {
     await api.put(`/systems/entries/${entryId}`, { description: value });
     onChange();
+  }
+
+  async function addPost() {
+    const created = await api.post<CompendiumEntry>(`/systems/${entry.system_id}/entries`, {
+      section_id: entry.section_id,
+      parent_id: entryId,
+      kind: "vehicle_post",
+      name: "",
+      level: null,
+      data: {},
+      description: "",
+    });
+    // Пустой пост открывается сразу на своей странице — имя задаётся в «Сводке».
+    navigate(`/compendium/${created.id}`);
+  }
+
+  async function deletePost(post: CompendiumEntry) {
+    if (!confirm(`Удалить пост экипажа «${post.name}»?`)) return;
+    await api.del(`/systems/entries/${post.id}`);
+    setPosts((prev) => prev.filter((e) => e.id !== post.id));
+  }
+
+  async function deleteShip() {
+    if (isPost) return;
+    const msg =
+      posts.length > 0
+        ? `Удалить судно «${entry.name}» и все посты экипажа (${posts.length})?`
+        : `Удалить судно «${entry.name}»?`;
+    if (!confirm(msg)) return;
+    await api.del(`/systems/entries/${entryId}`);
+    navigate(`/systems/${entry.system_id}`);
   }
 
   return (
@@ -85,10 +119,17 @@ export function VehicleDetailPage({
           { label: entry.name },
         ]}
       />
-      <div className="row" style={{ alignItems: "center", gap: 8 }}>
-        <EntityTypeChip type="compendium_entry" />
-        <h2 style={{ margin: 0 }}>{entry.name}</h2>
-        <span className="muted">{def?.label ?? "Транспорт"}</span>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div className="row" style={{ alignItems: "center", gap: 8 }}>
+          <EntityTypeChip type="compendium_entry" />
+          <h2 style={{ margin: 0 }}>{entry.name}</h2>
+          <span className="muted">{def?.label ?? "Транспорт"}</span>
+        </div>
+        {!isPost && (
+          <button className="danger" onClick={deleteShip}>
+            Удалить
+          </button>
+        )}
       </div>
 
       <div className="tabs">
@@ -118,14 +159,25 @@ export function VehicleDetailPage({
             collapsible
             defaultOpen
           />
-          {!isPost && posts.length > 0 && (
+          {!isPost && (
             <div className="card stack">
-              <h4 style={{ margin: 0 }}>Посты экипажа</h4>
-              {posts.map((p) => (
-                <Link key={p.id} to={`/compendium/${p.id}`}>
-                  {p.name}
-                </Link>
-              ))}
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                <h4 style={{ margin: 0 }}>Посты экипажа</h4>
+                <button className="primary" onClick={addPost}>
+                  + Пост экипажа
+                </button>
+              </div>
+              <div className="stack">
+                {posts.map((p) => (
+                  <div key={p.id} className="row" style={{ justifyContent: "space-between" }}>
+                    <Link to={`/compendium/${p.id}`}>{p.name}</Link>
+                    <button className="comp-mini" title="Удалить пост" onClick={() => deletePost(p)}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {posts.length === 0 && <p className="muted">Постов экипажа пока нет.</p>}
+              </div>
             </div>
           )}
         </div>

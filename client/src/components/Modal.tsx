@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
@@ -24,6 +24,49 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
   // and only closing when it *also* started on the backdrop fixes that
   // without losing the real "click outside to close" behavior.
   const mouseDownOnBackdrop = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    // Фокус на первый интерактив внутри модалки, иначе — на саму модалку
+    const focusable = modalRef.current?.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable?.[0];
+    if (first) first.focus();
+    else modalRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !modalRef.current || !focusable || focusable.length === 0) return;
+      const list = Array.from(focusable).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
+      if (list.length === 0) return;
+      const firstEl = list[0];
+      const lastEl = list[list.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === firstEl) {
+          e.preventDefault();
+          lastEl.focus();
+        }
+      } else {
+        if (document.activeElement === lastEl) {
+          e.preventDefault();
+          firstEl.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      // Возврат фокуса на триггер
+      prev?.focus?.();
+    };
+  }, [onClose]);
+
   return createPortal(
     <div
       className="modal-backdrop"
@@ -37,7 +80,9 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
         mouseDownOnBackdrop.current = false;
       }}
     >
-      <div className="modal">{children}</div>
+      <div className="modal" ref={modalRef} role="dialog" aria-modal="true" tabIndex={-1}>
+        {children}
+      </div>
     </div>,
     document.body
   );

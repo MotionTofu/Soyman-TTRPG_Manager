@@ -79,18 +79,17 @@ export function useCrossWindowDataSync(): { stale: boolean; refresh: () => void 
 
   useEffect(() => {
     if (!stale) return;
-    // Обычный случай: пинг пришёл, пока окно было в стороне — обновляемся
-    // молча, когда в него возвращаются. Если в этот момент что-то правится,
-    // остаётся полоска с кнопкой, и решает пользователь.
     const reloadIfIdle = () => {
       if (!isBusyEditing()) window.location.reload();
     };
-    // Событие focus само по себе значит «в окно вернулись»; проверка
-    // hasFocus нужна только для случая, когда пинг пришёл в окно, которое и
-    // так активно (второй монитор, окно рядом).
-    if (document.hasFocus()) reloadIfIdle();
+    if (document.hasFocus() || document.visibilityState === "visible") reloadIfIdle();
     window.addEventListener("focus", reloadIfIdle);
-    return () => window.removeEventListener("focus", reloadIfIdle);
+    const onVis = () => { if (document.visibilityState === "visible") reloadIfIdle(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", reloadIfIdle);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [stale]);
 
   return { stale, refresh: () => window.location.reload() };

@@ -26,8 +26,6 @@ export function isSafeImageUrl(url: string): boolean {
 export function safeBackgroundImage(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
   if (!isSafeImageUrl(url)) return undefined;
-  // encodeURI не трогает "/:?=&", но кодирует пробелы и не-ASCII — достаточно.
-  // Кавычка уже отсечена выше, дополнительная замена на случай.
-  const encoded = encodeURI(url).replace(/"/g, "%22");
+  const encoded = encodeURI(url).replace(/"/g, "%22").replace(/\(/g, "%28").replace(/\)/g, "%29");
   return `url("${encoded}")`;
 }

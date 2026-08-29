@@ -45,6 +45,8 @@ export function SearchPanel({ horizontal }: Props = {}) {
     () => new Set(TYPES.map((t) => t.key))
   );
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   // Narrows compendium_entry results to the "D&D 5.5" system — handy when
   // dragging a feat/spell into a DnD statblock and other systems' entries of
@@ -71,26 +73,38 @@ export function SearchPanel({ horizontal }: Props = {}) {
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
+      setIsSearching(false);
+      setSearchError(null);
       return;
     }
+    setIsSearching(true);
+    setSearchError(null);
+    const controller = new AbortController();
     const handle = setTimeout(async () => {
       let url: string;
       if (isPlayer) {
-        // /api/search is a GM-only tool with no visibility scoping (surfaces
-        // secrets/GM notes text in results) — players get the separately
-        // scoped /api/player/search instead (own characters, world-exploration
-        // entries in own campaigns, compendium entries in own campaigns'
-        // systems). No type/system filters there — it's already narrow.
         url = `/player/search?q=${encodeURIComponent(query)}`;
       } else {
         const types = Array.from(activeTypes).join(",");
         url = `/search?q=${encodeURIComponent(query)}&types=${types}`;
         if (dndOnly && dndSystemId != null) url += `&system_id=${dndSystemId}`;
       }
-      const res = await api.get<SearchResult[]>(url);
-      setResults(res);
+      try {
+        const res = await api.get<SearchResult[]>(url, { signal: controller.signal } as RequestInit);
+        setResults(res);
+        setSearchError(null);
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        setResults([]);
+        setSearchError(String(e));
+      } finally {
+        setIsSearching(false);
+      }
     }, 200);
-    return () => clearTimeout(handle);
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
   }, [query, activeTypes, dndOnly, dndSystemId, isPlayer]);
 
   function toggleType(key: string) {
@@ -174,7 +188,19 @@ export function SearchPanel({ horizontal }: Props = {}) {
         </>
       )}
       <div className="stack">
-        {query.trim() && results.length === 0 && (
+        {isSearching && (
+          <div className="stack search-skeleton" aria-busy="true" aria-label="Загрузка">
+            <div className="card search-skeleton-row" />
+            <div className="card search-skeleton-row" />
+            <div className="card search-skeleton-row" />
+          </div>
+        )}
+        {searchError && !isSearching && (
+          <span className="muted" style={{ color: "var(--status-cancelled-fg)", background: "var(--status-cancelled)", padding: "6px 8px", borderRadius: "var(--card-radius)" }}>
+            Ошибка поиска: {searchError}
+          </span>
+        )}
+        {!isSearching && !searchError && query.trim() && results.length === 0 && (
           <span className="muted">Ничего не найдено</span>
         )}
         {results.map((r) => {

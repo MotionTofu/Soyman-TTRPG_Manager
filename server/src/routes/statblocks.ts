@@ -19,7 +19,7 @@ function withAvatarUrl<T extends { avatar_image_path?: string | null }>(row: T) 
 // A statblock's owner (character/being/compendium_entry) already has its own
 // folder for characters/beings — compendium entries don't (a system's
 // bestiary can have thousands of them, so no per-entry folder was ever
-// created), so those share one "Статблоки" folder under the system, keyed
+// created), so those share one "Statblocks" folder under the system, keyed
 // by statblock id in the filename to avoid collisions.
 function resolveStatblockOwnerFolder(ownerType: string, ownerId: number): string | null {
   if (ownerType === "character") {
@@ -43,7 +43,7 @@ function resolveStatblockOwnerFolder(ownerType: string, ownerId: number): string
       )
       .get(ownerId) as { system_folder_path: string } | undefined;
     if (!entry) return null;
-    return ensureSubfolder(entry.system_folder_path, "Статблоки");
+    return ensureSubfolder(entry.system_folder_path, "Statblocks");
   }
   return null;
 }
@@ -200,6 +200,67 @@ statblocksRouter.delete("/:id/avatar", (req, res) => {
 });
 
 statblocksRouter.delete("/:id", (req, res) => {
-  db.prepare("DELETE FROM statblocks WHERE id = ?").run(req.params.id);
+  const statblock = db
+    .prepare("SELECT id, owner_type, owner_id, format, avatar_image_path FROM statblocks WHERE id = ?")
+    .get(req.params.id) as
+    | {
+        id: number;
+        owner_type: string;
+        owner_id: number;
+        format: string;
+        avatar_image_path: string | null;
+      }
+    | undefined;
+  if (!statblock) return res.status(404).json({ error: "not found" });
+
+  // Для компендиум-монстра: если сносится последний dnd_creature, сводка
+  // записи (data.cr/size/creature_type) перестаёт подтверждаться источником
+  // истины — чистим её, чтобы фильтры бестиария не показывали мёртвые
+  // значения (находка 10.2). Живые dnd_character/litm статблоки не мешают:
+  // их поля живут в другом пространстве имён.
+  const cleanupData =
+    statblock.owner_type === "compendium_entry" && statblock.format === "dnd_creature";
+  db.transaction(() => {
+    db.prepare("DELETE FROM statblocks WHERE id = ?").run(statblock.id);
+    if (cleanupData) {
+      const remaining = db
+        .prepare(
+          "SELECT COUNT(*) AS c FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ? AND format = 'dnd_creature'"
+        )
+        .get(statblock.owner_id) as { c: number };
+      if (remaining.c === 0) {
+        const entry = db
+          .prepare("SELECT data FROM compendium_entries WHERE id = ?")
+          .get(statblock.owner_id) as { data: string } | undefined;
+        if (entry) {
+          try {
+            const data = JSON.parse(entry.data ?? "{}") as Record<string, unknown>;
+            if ("cr" in data || "size" in data || "creature_type" in data) {
+              delete data.cr;
+              delete data.size;
+              delete data.creature_type;
+              db.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(
+                JSON.stringify(data),
+                statblock.owner_id
+              );
+            }
+          } catch {
+            // Битый JSON в data не должен мешать удалению статблока.
+          }
+        }
+      }
+    }
+  })();
+
+  // Файл-портрет — после коммита SQL, архивной дорогой (как DELETE /:id/avatar).
+  if (statblock.avatar_image_path) {
+    removeOrArchive(
+      statblock.avatar_image_path,
+      "archive",
+      "statblock",
+      statblock.id,
+      `Портрет статблока ${statblock.id}`
+    );
+  }
   res.json({ ok: true });
 });

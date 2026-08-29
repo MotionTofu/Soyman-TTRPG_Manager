@@ -27,6 +27,10 @@ interface SectionHeadingProps {
    *  the theme system. See index.css's `[data-theme-id="neon"]
    *  .section-heading h1[data-section=...]` rules. */
   section?: NavIconName;
+  /** Compact page heading — keeps h1 but reduces particle count and vertical
+   *  padding. Used to reclaim space without removing the landmark heading.
+   *  Rollback: remove prop → default 6 particles + normal margins restored. */
+  compact?: boolean;
 }
 
 // Wraps a page's top-level <h1> with a small thematic particle field (see
@@ -34,31 +38,31 @@ interface SectionHeadingProps {
 // Системы, etc.), not on entity detail pages. Also doubles, via `level:
 // "section"`, as the shared "icon, caps-header, все →" pattern for
 // sub-sections within a page.
-export function SectionHeading({ children, level = "page", icon, action, right, section }: SectionHeadingProps) {
+export function SectionHeading({ children, level = "page", icon, action, right, section, compact }: SectionHeadingProps) {
   if (level === "section") {
     return (
-      <div className="section-heading section-heading-sub">
+      <div className={`section-heading section-heading-sub${compact ? " section-heading--compact" : ""}`}>
         <h2 className="section-heading-sub-title">
           {icon && <NavIcon name={icon} className="section-heading-sub-icon" />}
           {children}
         </h2>
         {(right || action) && (
-          <span style={{ display: "flex", gap: 12, alignItems: "center", marginLeft: "auto" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginLeft: "auto" }}>
             {right}
             {action && (
               <Link to={action.to} className="section-heading-sub-action">
                 {action.label} →
               </Link>
             )}
-          </span>
+          </div>
         )}
       </div>
     );
   }
 
   return (
-    <div className="section-heading">
-      <ParticleField count={6} />
+    <div className={`section-heading${compact ? " section-heading--compact" : ""}`}>
+      <ParticleField count={compact ? 3 : 6} />
       <h1 className="zine-marker-underline" data-section={section}>{children}</h1>
     </div>
   );

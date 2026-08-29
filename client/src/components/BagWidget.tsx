@@ -1,8 +1,8 @@
-import { useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
-import { useBag, addToBag, removeFromBag, removeItemsFromBag } from "../bag";
+import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag } from "../bag";
 import { detectCurrentEntity, resolveCurrentEntityDetails } from "../currentEntity";
 import { useUnloadTargets, type UnloadTarget } from "../unloadTargets";
 import type { SearchResult } from "../types";
@@ -20,6 +20,15 @@ export function BagWidget() {
   const targets = useUnloadTargets();
   const [dragOver, setDragOver] = useState(false);
   const [unloading, setUnloading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; kind: "info" | "error" } | null>(null);
+
+  useEffect(() => {
+    const off = onBagToast((payload) => {
+      setToast(payload);
+      window.setTimeout(() => setToast((cur) => (cur?.message === payload.message ? null : cur)), 2500);
+    });
+    return off;
+  }, []);
 
   async function handleAddCurrent() {
     const current = detectCurrentEntity(location.pathname, location.search);
@@ -40,7 +49,11 @@ export function BagWidget() {
     setDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    addToBag(JSON.parse(raw) as SearchResult);
+    try {
+      addToBag(JSON.parse(raw) as SearchResult);
+    } catch {
+      // битый DnD — addToBag уже покажет тост через isValidBagItem, но parse может кинуть
+    }
   }
 
   // Куда именно можно положить каждую вещь на этой странице.
@@ -93,6 +106,11 @@ export function BagWidget() {
           Выгрузить
         </button>
       </div>
+      {toast && (
+        <div className={`bag-toast bag-toast-${toast.kind}`} role="status" aria-live="polite">
+          {toast.message}
+        </div>
+      )}
       <div
         className={`bag-grid${dragOver ? " drag-over" : ""}`}
         onDragOver={(e) => {

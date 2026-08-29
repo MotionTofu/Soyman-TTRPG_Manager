@@ -4,81 +4,49 @@ import { api } from "../api/client";
 import { addToBag } from "../bag";
 import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
-import { CreatureCardPreview } from "./EntityPreviewModal";
-import { CHALLENGE_RATINGS, CREATURE_SIZES, normaliseCr } from "../compendium";
+import { CREATURE_SIZES, VEHICLE_CATEGORIES } from "../compendium";
+import { VehicleCardPreview } from "./VehicleCardPreview";
 import type { CompendiumEntry } from "../types";
 
-// Бестиарий плиткой (шаг 5 ревизии). Строка списка отвечала на вопрос «как
-// называется», плитка отвечает на «кого выставить»: морда, тип, размер и КО
-// видны сразу, а три кнопки ведут туда, куда Мастер и шёл, — карточка,
-// статблок, профиль.
+// Транспорт плиткой — по лекалу бестиария (шаг 5 ревизии). Плитка отвечает
+// на «что это за судно»: категория, размер и прочность видны сразу, три
+// кнопки ведут туда, куда Мастер и шёл, — карточка, статблок, профиль.
 //
-// Правка и удаление с плитки убраны намеренно: они живут на странице
-// профиля. Плитка — это «посмотреть и взять в бой», и кнопка удаления в
-// сетке из 535 одинаковых прямоугольников — это ошибка, ждущая своего часа.
+// Правка и удаление с плитки убраны намеренно (то же решение, что у
+// бестиария): они живут на странице судна — там же, где посты экипажа.
 
-interface MechanicsOption {
-  id: number;
-  name: string;
-}
-
-/** Порядок групп по КО — числовой, а не строковый: «10» после «9», а не после «1». */
-const CR_ORDER = new Map<string, number>(CHALLENGE_RATINGS.map((cr, i) => [cr, i]));
+export type VehicleGrouping = "alpha" | "category" | "size";
+export type VehicleSortDir = "asc" | "desc";
 
 const UNSET_LABEL = "Не указан";
+const CATEGORY_ORDER = new Map<string, number>(VEHICLE_CATEGORIES.map((c, i) => [c, i]));
 
-export type MonsterGrouping = "alpha" | "creature_type" | "cr" | "size";
-export type MonsterSortDir = "asc" | "desc";
-
-/** Русское имя и английское из скобок: «Ядовитая змея [Venomous Snake]». */
-export function splitCreatureName(name: string): { ru: string; en: string } {
-  const match = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name ?? "");
-  return match ? { ru: match[1].trim(), en: match[2].trim() } : { ru: (name ?? "").trim(), en: "" };
+function categoryName(entry: CompendiumEntry): string {
+  return (entry.data?.category as string | undefined) ?? "";
 }
-
-function creatureTypeName(entry: CompendiumEntry): string {
-  return (entry.data?.creature_type as MechanicsOption | undefined)?.name ?? "";
-}
-
 function sizeName(entry: CompendiumEntry): string {
   return (entry.data?.size as string | undefined) ?? "";
 }
 
-function crName(entry: CompendiumEntry): string {
-  return (entry.data?.cr as string | undefined) ?? "";
-}
-
-/**
- * Монограмма вместо портрета. Портрет есть у 243 записей бестиария D&D 5.5
- * из 535 — почти половина плиток осталась бы пустым серым квадратом, и это
- * было бы честно, но бесполезно. Цвет — не смысловой код (§1.7 тип
- * кодируется формой), а различитель заглушки: он появляется только там, где
- * портрета нет, и держится подтоном бумаги, а не заливкой.
- */
-function monogramTone(type: string): number {
+function monogramTone(category: string): number {
   let hash = 0;
-  for (const ch of type) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
+  for (const ch of category) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
   return hash;
 }
 
-/** Первая буква имени — на месте портрета. */
-function monogramLetter(ru: string): string {
-  return (ru.trim()[0] ?? "?").toUpperCase();
+function monogramLetter(name: string): string {
+  return (name.trim()[0] ?? "?").toUpperCase();
 }
 
-// Группировка. Пустая группа не создаётся вовсе (§1.11), а записи без
-// значения собираются в хвостовую «Не указан»: спрятать их нельзя — запись,
-// исчезнувшая при смене сортировки, читается как потеря данных.
-// Направление задаётся повторным кликом по той же кнопке сортировки.
-function groupMonsters(
+// Группировка ровно как у бестиария: пустая группа не создаётся (§1.11),
+// записи без значения собираются в хвостовую «Не указан».
+function groupVehicles(
   list: CompendiumEntry[],
-  grouping: MonsterGrouping,
-  dir: MonsterSortDir = "asc"
+  grouping: VehicleGrouping,
+  dir: VehicleSortDir = "asc"
 ): [string, CompendiumEntry[]][] {
-  const collator = (a: string, b: string) =>
-    dir === "asc" ? a.localeCompare(b, "ru") : b.localeCompare(a, "ru");
   const byName = [...list].sort((a, b) => {
-    const cmp = splitCreatureName(a.name).ru.localeCompare(splitCreatureName(b.name).ru, "ru");
+    const cmp = a.name.localeCompare(b.name, "ru");
     return dir === "asc" ? cmp : -cmp;
   });
   const map = new Map<string, CompendiumEntry[]>();
@@ -87,22 +55,17 @@ function groupMonsters(
     map.get(key)!.push(entry);
   };
   for (const e of byName) {
-    if (grouping === "alpha") push(monogramLetter(splitCreatureName(e.name).ru), e);
-    else if (grouping === "creature_type") push(creatureTypeName(e) || UNSET_LABEL, e);
-    else if (grouping === "cr") {
-      // Легаси «0.5» ложится в ту же группу и позицию, что и «1/2».
-      const cr = normaliseCr(crName(e));
-      push(cr ? `КО ${cr}` : UNSET_LABEL, e);
-    }
+    if (grouping === "alpha") push(monogramLetter(e.name), e);
+    else if (grouping === "category") push(categoryName(e) || UNSET_LABEL, e);
     else push(sizeName(e) || UNSET_LABEL, e);
   }
 
   const keys = [...map.keys()];
   const unset = keys.filter((k) => k === UNSET_LABEL);
   const rest = keys.filter((k) => k !== UNSET_LABEL);
-  if (grouping === "cr") {
+  if (grouping === "category") {
     rest.sort((a, b) => {
-      const cmp = (CR_ORDER.get(a.slice(3)) ?? 999) - (CR_ORDER.get(b.slice(3)) ?? 999);
+      const cmp = (CATEGORY_ORDER.get(a) ?? 999) - (CATEGORY_ORDER.get(b) ?? 999);
       return dir === "asc" ? cmp : -cmp;
     });
   } else if (grouping === "size") {
@@ -112,23 +75,22 @@ function groupMonsters(
       return dir === "asc" ? cmp : -cmp;
     });
   } else {
-    rest.sort((a, b) => collator(a, b));
+    rest.sort((a, b) => (dir === "asc" ? a.localeCompare(b, "ru") : b.localeCompare(a, "ru")));
   }
-  // «Не указан» всегда в хвосте, вне зависимости от направления.
   return [...rest, ...unset].map((k) => [k, map.get(k)!]);
 }
 
 interface Props {
   entries: CompendiumEntry[];
-  grouping: MonsterGrouping;
-  sortDir?: MonsterSortDir;
+  grouping: VehicleGrouping;
+  sortDir?: VehicleSortDir;
   sectionId: number;
   /** Поиск раскрывает все группы: свёрнутая группа прячет то, что искали. */
   searchActive: boolean;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
 }
 
-export function MonsterTileGrid({
+export function VehicleTileGrid({
   entries,
   grouping,
   sortDir = "asc",
@@ -143,22 +105,21 @@ export function MonsterTileGrid({
       entries
         .filter((e) => e.favourite)
         .sort((a, b) => {
-          const cmp = splitCreatureName(a.name).ru.localeCompare(splitCreatureName(b.name).ru, "ru");
+          const cmp = a.name.localeCompare(b.name, "ru");
           return sortDir === "asc" ? cmp : -cmp;
         }),
     [entries, sortDir]
   );
-  // Избранные не дублируются в своей группе: один и тот же дракон дважды на
-  // экране — это вопрос «а почему», а не удобство.
+  // Избранные не дублируются в своей группе.
   const groups = useMemo(
-    () => groupMonsters(entries.filter((e) => !e.favourite), grouping, sortDir),
+    () => groupVehicles(entries.filter((e) => !e.favourite), grouping, sortDir),
     [entries, grouping, sortDir]
   );
 
   return (
     <div className="stack" style={{ gap: 10 }}>
       {favourites.length > 0 && (
-        <MonsterGroup
+        <VehicleGroup
           label="Избранное"
           sectionId={sectionId}
           list={favourites}
@@ -168,7 +129,7 @@ export function MonsterTileGrid({
         />
       )}
       {groups.map(([label, list]) => (
-        <MonsterGroup
+        <VehicleGroup
           key={label}
           label={label}
           sectionId={sectionId}
@@ -180,8 +141,7 @@ export function MonsterTileGrid({
       ))}
       {modal && (
         <Modal onClose={() => setModal(null)}>
-          <CreatureCardPreview
-            type="compendium_entry"
+          <VehicleCardPreview
             id={modal.id}
             statblockInline
             autoShowStatblock={modal.view === "statblock"}
@@ -193,7 +153,7 @@ export function MonsterTileGrid({
   );
 }
 
-function MonsterGroup({
+function VehicleGroup({
   label,
   list,
   sectionId,
@@ -208,12 +168,11 @@ function MonsterGroup({
   onOpenModal: (m: { id: number; view: "card" | "statblock" }) => void;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
 }) {
-  const key = `bestiary-group-${sectionId}-${label}`;
+  const key = `vehicle-group-${sectionId}-${label}`;
   const [open, setOpen] = useState(() => localStorage.getItem(key) !== "0");
-  // Пишется только настоящее переключение. React проставляет `open` уже
-  // после монтирования, и браузер шлёт на это `toggle`, — без сверки раздел
-  // при каждом открытии оставлял в localStorage по ключу на каждую из
-  // тридцати групп, ни одну из которых Мастер не трогал.
+  // Пишется только настоящее переключение (та же ловушка, что у бестиария:
+  // без сверки React проставлял `open` после монтирования и браузер шлёл на
+  // это `toggle`).
   const remember = useCallback(
     (next: boolean) => {
       setOpen((prev) => {
@@ -245,7 +204,7 @@ function MonsterGroup({
       </summary>
       <div className="monster-grid">
         {list.map((e) => (
-          <MonsterTile
+          <VehicleTile
             key={e.id}
             entry={e}
             onOpenModal={onOpenModal}
@@ -257,11 +216,10 @@ function MonsterGroup({
   );
 }
 
-// memo — не украшение: щелчок по звезде правит одну запись, а без него
-// перерисовывались все 535 плиток раздела (замерено, см. отчёт шага 5).
-// Обработчики приходят стабильными (useCallback у владельца состояния),
-// иначе memo не срабатывает — ровно та же ловушка, что была с вехами.
-const MonsterTile = memo(function MonsterTile({
+// memo — то же, что у бестиария: щелчок по звезде правит одну запись, а без
+// него перерисовывался весь раздел. Обработчики приходят стабильными
+// (useCallback у владельца состояния).
+const VehicleTile = memo(function VehicleTile({
   entry,
   onOpenModal,
   onToggleFavourite,
@@ -270,20 +228,22 @@ const MonsterTile = memo(function MonsterTile({
   onOpenModal: (m: { id: number; view: "card" | "statblock" }) => void;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
 }) {
-  const { ru, en } = splitCreatureName(entry.name);
-  // Оригинал в имени устарел (переносится в name_original при сохранении и
-  // миграцией): показывает name_original, иначе ещё не перенесённую скобку.
-  const original = entry.name_original || en;
-  const type = creatureTypeName(entry);
+  const category = categoryName(entry);
   const size = sizeName(entry);
-  const cr = crName(entry);
   const favourite = !!entry.favourite;
+  const raw = entry.data ?? {};
+  const str = (k: string) => {
+    const v = raw[k];
+    return v == null || v === "" ? "" : String(v);
+  };
+  const ac = str("ac");
+  const hp = str("hp");
 
   return (
     <article
       className="monster-tile"
       onClick={() => onOpenModal({ id: entry.id, view: "card" })}
-      title="Открыть карточку существа"
+      title="Открыть карточку транспорта"
     >
       <header className="monster-tile__band">
         <button
@@ -297,7 +257,7 @@ const MonsterTile = memo(function MonsterTile({
         >
           <NavIcon name="star" filled={favourite} />
         </button>
-        <span className="monster-tile__name">{ru || "Без названия"}</span>
+        <span className="monster-tile__name">{entry.name || "Без названия"}</span>
         <button
           type="button"
           className="monster-tile__bag"
@@ -325,18 +285,20 @@ const MonsterTile = memo(function MonsterTile({
         ) : (
           <span
             className="monster-tile__monogram"
-            style={{ ["--monogram-tone" as string]: `${monogramTone(type)}` }}
+            style={{ ["--monogram-tone" as string]: `${monogramTone(category)}` }}
             aria-hidden="true"
           >
-            {monogramLetter(ru)}
+            {monogramLetter(entry.name)}
           </span>
         )}
         <div className="monster-tile__facts">
-          {original && <span className="monster-tile__en">{original}</span>}
+          {entry.name_original && <span className="monster-tile__en">{entry.name_original}</span>}
           <span className="monster-tile__meta">
-            {[type, size].filter(Boolean).join(" · ") || "Тип не указан"}
+            {[category, size].filter(Boolean).join(" · ") || "Категория не указана"}
           </span>
-          <span className="monster-tile__cr">{cr ? `КО ${cr}` : "КО —"}</span>
+          <span className="monster-tile__value">
+            КД {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
+          </span>
         </div>
       </div>
 
@@ -355,7 +317,7 @@ const MonsterTile = memo(function MonsterTile({
   );
 });
 
-/** Звезда пишется сразу — список бестиария не перезагружается ради одной отметки. */
+/** Звезда пишется сразу — список раздела не перезагружается ради одной отметки. */
 export async function saveFavourite(entryId: number, favourite: boolean): Promise<void> {
   await api.put(`/systems/entries/${entryId}/favourite`, { favourite });
 }

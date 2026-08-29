@@ -43,9 +43,22 @@ export function MobileQuickAccess({
   const navigate = useNavigate();
   const [characters, setCharacters] = useState<MyCharacter[] | null>(null);
 
+  const [charError, setCharError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!open || !showCharacters) return;
-    api.get<{ characters: MyCharacter[] }>("/player/me").then((res) => setCharacters(res.characters));
+    const controller = new AbortController();
+    setCharacters(null);
+    setCharError(null);
+    api
+      .get<{ characters: MyCharacter[] }>("/player/me", { signal: controller.signal } as RequestInit)
+      .then((res) => setCharacters(res.characters))
+      .catch((e) => {
+        if ((e as Error).name === "AbortError") return;
+        setCharError(String(e));
+        setCharacters([]);
+      });
+    return () => controller.abort();
   }, [open, showCharacters]);
 
   if (!open) return null;
@@ -62,8 +75,9 @@ export function MobileQuickAccess({
         {showCharacters && (
           <div className="mobile-quick-access-characters">
             <span className="muted">Персонажи</span>
-            {characters === null && <p className="muted">Загрузка…</p>}
-            {characters?.length === 0 && <p className="muted">У вас пока нет персонажей.</p>}
+            {charError && <p className="muted" style={{ color: "var(--status-cancelled-fg)", background: "var(--status-cancelled)", padding: "4px 6px", borderRadius: "var(--card-radius)" }}>Ошибка: {charError}</p>}
+            {characters === null && !charError && <p className="muted">Загрузка…</p>}
+            {characters?.length === 0 && !charError && <p className="muted">У вас пока нет персонажей.</p>}
             {characters?.map((c) => (
               <button
                 key={c.id}

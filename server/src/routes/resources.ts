@@ -3,7 +3,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
-import { VAULT_ROOT, ensureSubfolder, openInFileExplorer, sanitizeName, toFileUrl } from "../services/filesystem";
+import { VAULT_ROOT, ensureSubfolder, openInFileExplorer, sanitizeName, toFileUrl, vaultAbs, vaultRel } from "../services/filesystem";
 import { storeDeduped } from "../services/vaultDedup";
 
 // Local Windows path ("C:\...") or a UNC share ("\\server\...") — the only
@@ -157,7 +157,7 @@ resourcesRouter.get("/", (req, res) => {
 
 function statSizeOrNull(filePath: string): number | null {
   try {
-    return fs.statSync(filePath).size;
+    return fs.statSync(vaultAbs(filePath)).size;
   } catch {
     return null;
   }
@@ -347,9 +347,10 @@ resourcesRouter.post("/:id/reveal", (req, res) => {
 function uniqueTargetPath(folder: string, filename: string): string {
   const ext = path.extname(filename);
   const base = path.basename(filename, ext);
-  let candidate = path.join(folder, filename);
+  const absFolder = vaultAbs(folder);
+  let candidate = path.join(absFolder, filename);
   for (let n = 2; fs.existsSync(candidate); n++) {
-    candidate = path.join(folder, `${base}-${n}${ext}`);
+    candidate = path.join(absFolder, `${base}-${n}${ext}`);
   }
   return candidate;
 }
@@ -378,12 +379,12 @@ resourcesRouter.post("/:id/promote", async (req, res) => {
 
   const folder = resolveFolder({ scope: "setting", setting_id: String(setting_id) } as ResourceBody);
   let filePath: string | null = null;
-  if (source.file_path && fs.existsSync(source.file_path)) {
+  if (source.file_path && fs.existsSync(vaultAbs(source.file_path))) {
     const subdir = source.category ? CATEGORY_SUBDIR[source.category] : undefined;
     const targetFolder = subdir ? ensureSubfolder(folder, subdir) : folder;
     const target = uniqueTargetPath(targetFolder, path.basename(source.file_path));
-    await storeDeduped(fs.readFileSync(source.file_path), target);
-    filePath = target;
+    await storeDeduped(fs.readFileSync(vaultAbs(source.file_path)), target);
+    filePath = vaultRel(target);
   }
 
   const info = db
@@ -422,7 +423,7 @@ resourcesRouter.post("/from-location-map", async (req, res) => {
   const folder = resolveFolder({ scope: "session", session_id: String(session_id) } as ResourceBody);
   const targetFolder = ensureSubfolder(folder, CATEGORY_SUBDIR.image);
   const target = uniqueTargetPath(targetFolder, path.basename(location.map_image_path));
-  await storeDeduped(fs.readFileSync(location.map_image_path), target);
+  await storeDeduped(fs.readFileSync(vaultAbs(location.map_image_path)), target);
 
   const maxPos = db
     .prepare(
@@ -440,7 +441,7 @@ resourcesRouter.post("/from-location-map", async (req, res) => {
       `INSERT INTO resources (name, type, scope, session_id, template_format, file_path, category, position)
        VALUES (?, 'link', 'session', ?, 'text', ?, 'map', ?)`
     )
-    .run(`Карта: ${location.name}`, session_id, target, maxPos.m + 1);
+    .run(`Карта: ${location.name}`, session_id, vaultRel(target), maxPos.m + 1);
 
   res
     .status(201)

@@ -2,25 +2,30 @@ import path from "path";
 import { db } from "../db/db";
 import { renameFolder, moveFolder } from "./filesystem";
 
-// Every DB column that stores an absolute vault path ends in "_path"
-// (folder_path, file_path, and the various *_image_path). We discover them by
-// introspecting the live schema, so a newly added path column is covered
-// automatically and there's no hand-maintained list to fall out of date.
+// Every DB column that stores a vault path ends in "_path" (folder_path,
+// file_path, and the various *_image_path), plus vault_files.path (dedup index
+// uses a bare `path` column). We discover them by introspecting the live
+// schema, so a newly added path column is covered automatically and there's
+// no hand-maintained list to fall out of date.
 function pathColumns(table: string): string[] {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  return cols.filter((c) => c.name.endsWith("_path")).map((c) => c.name);
+  return cols
+    .filter((c) => c.name.endsWith("_path") || (table === "vault_files" && c.name === "path"))
+    .map((c) => c.name);
 }
 
 // After a folder is moved on disk, rewrite every stored path that WAS that
 // folder or lived inside it — the renamed entity's own folder_path/images AND
 // all descendants at any depth (a campaign's sessions & characters, a setting's
 // nested locations/beings/communities, their uploaded files) — so no stored
-// absolute path is left dangling at the old location.
+// path is left dangling at the old location.
 //
-// Match is prefix-based but separator-aware: `oldPrefix + sep` guards against a
-// sibling like `…/Test2` being caught when renaming `…/Test`. Table and column
-// names come from the DB's own catalog (never from user input), so the
-// interpolated identifiers are injection-safe.
+// Stored paths are RELATIVE to the vault root (since П2.1), so both prefixes
+// are relative too (e.g. `Campaigns\Old` → `Campaigns\New`). Match is
+// prefix-based but separator-aware: `oldPrefix + sep` guards against a sibling
+// like `…/Test2` being caught when renaming `…/Test`. Table and column names
+// come from the DB's own catalog (never from user input), so the interpolated
+// identifiers are injection-safe.
 export function rewriteVaultPaths(oldPrefix: string, newPrefix: string): void {
   if (!oldPrefix || oldPrefix === newPrefix) return;
   const withSep = oldPrefix + path.sep;

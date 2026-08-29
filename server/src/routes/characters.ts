@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { db } from "../db/db";
-import { characterFolder, ensureSubfolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
+import { characterFolder, ensureSubfolder, toFileUrl, vaultAbs, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 import { broadcastCharacterUpdate } from "../services/realtime";
 
 export const charactersRouter = Router();
@@ -257,12 +257,13 @@ charactersRouter.put("/:id", (req, res) => {
 
   let folderPath = existing.folder_path ?? ensureCharacterFolder(req.params.id);
   if (character_name && character_name !== existing.character_name) {
-    const parent = path.dirname(folderPath);
+    const absFolder = vaultAbs(folderPath);
+    const parent = path.dirname(absFolder);
     const newPath = path.join(parent, character_name.replace(/[<>:"/\\|?*\x00-\x1F]/g, "").trim() || "untitled");
-    if (fs.existsSync(folderPath) && folderPath !== newPath) {
-      fs.renameSync(folderPath, newPath);
+    if (fs.existsSync(absFolder) && absFolder !== newPath) {
+      fs.renameSync(absFolder, newPath);
     }
-    folderPath = newPath;
+    folderPath = vaultRel(newPath);
   }
 
   db.prepare(

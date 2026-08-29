@@ -53,8 +53,7 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 // here once, centrally, instead of touching every page that renders one.
 // Оптимизация P-09: клонируем только url-поля, не весь объект, и не трогаем description/text.
 function isUrlKey(k: string): boolean {
-  const lower = k.toLowerCase();
-  return lower.endsWith("_url") || lower.endsWith("url");
+  return k.toLowerCase().endsWith("_url");
 }
 function withFileTokens<T>(value: T): T {
   if (typeof value === "string") {
@@ -93,7 +92,8 @@ async function request<T>(path: string, options?: RequestInit & { timeoutMs?: nu
   const { timeoutMs: rawTimeout, ...rest } = (options ?? {}) as RequestInit & { timeoutMs?: number };
   const timeoutMs = rawTimeout ?? 10000;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const onExternalAbort = () => controller.abort();
   if (rest.signal) {
     rest.signal.addEventListener("abort", onExternalAbort, { once: true });
@@ -112,7 +112,10 @@ async function request<T>(path: string, options?: RequestInit & { timeoutMs?: nu
       },
     });
   } catch (e) {
-    if ((e as Error).name === "AbortError") throw new Error("Сервер не отвечает (таймаут 10с) — попробуйте ещё раз");
+    if ((e as Error).name === "AbortError") {
+      if (timedOut) throw new Error("Сервер не отвечает (таймаут 10с) — попробуйте ещё раз");
+      throw e;
+    }
     throw e;
   } finally {
     clearTimeout(timeout);
