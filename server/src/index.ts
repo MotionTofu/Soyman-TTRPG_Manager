@@ -14,6 +14,10 @@ import { storagesRouter } from "./routes/storages";
 import { appSettingsRouter } from "./routes/appSettings";
 import { systemsRouter } from "./routes/systems";
 import { settingsRouter } from "./routes/settings";
+import { settingsGroupsRouter } from "./routes/settingsGroups";
+import { campaignGroupsRouter } from "./routes/campaignGroups";
+import { systemGroupsRouter } from "./routes/systemGroups";
+import { playerGroupsRouter } from "./routes/playerGroups";
 import { playersRouter } from "./routes/players";
 import { campaignsRouter } from "./routes/campaigns";
 import { sessionsRouter } from "./routes/sessions";
@@ -216,7 +220,11 @@ app.use("/files", requireAuth(), (req, res, next) => {
 });
 
 app.use("/api/systems", systemsRouter);
+app.use("/api/system-groups", systemGroupsRouter);
 app.use("/api/settings", settingsRouter);
+app.use("/api/setting-groups", settingsGroupsRouter);
+app.use("/api/campaign-groups", campaignGroupsRouter);
+app.use("/api/player-groups", playerGroupsRouter);
 app.use("/api/players", playersRouter);
 app.use("/api/campaigns", campaignsRouter);
 app.use("/api/sessions", sessionsRouter);

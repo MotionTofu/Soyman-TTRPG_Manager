@@ -1616,3 +1616,75 @@ CREATE TABLE IF NOT EXISTS canvas_route_outputs (
   role TEXT NOT NULL DEFAULT '', -- роль в этой сцене (plot_characters / loot / consequences / ...)
   PRIMARY KEY (route_id, to_key)
 );
+
+-- ─── Группы сеттингов ──────────────────────────────────────────────────────
+--
+-- Именованные контейнеры для визуальной группировки сеттингов на главной
+-- странице. Сеттинг может входить в несколько групп; таб «Вне групп»
+-- показывает только те, что ни в одну группу не вошли.
+CREATE TABLE IF NOT EXISTS setting_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS setting_group_members (
+  group_id INTEGER NOT NULL REFERENCES setting_groups(id) ON DELETE CASCADE,
+  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  PRIMARY KEY (group_id, setting_id)
+);
+
+-- ─── Группы игроков ────────────────────────────────────────────────────────
+--
+-- Именованные контейнеры для визуальной группировки игроков на странице
+-- списка. Игрок может входить в несколько групп; таб «Вне групп»
+-- показывает только тех, ни в одну группу не вошедших.
+CREATE TABLE IF NOT EXISTS player_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS player_group_members (
+  group_id INTEGER NOT NULL REFERENCES player_groups(id) ON DELETE CASCADE,
+  player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  PRIMARY KEY (group_id, player_id)
+);
+
+-- ─── Группы кампаний ────────────────────────────────────────────────────────
+--
+-- Именованные контейнеры для визуальной группировки кампаний на странице
+-- списка. Кампания может входить в несколько групп; таб «Вне групп»
+-- показывает только те, ни в одну группу не вошедшие.
+CREATE TABLE IF NOT EXISTS campaign_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS campaign_group_members (
+  group_id INTEGER NOT NULL REFERENCES campaign_groups(id) ON DELETE CASCADE,
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  PRIMARY KEY (group_id, campaign_id)
+);
+
+-- ─── Группы систем ────────────────────────────────────────────────────────
+--
+-- Именованные контейнеры для визуальной группировки систем на странице
+-- списка. Система может входить в несколько групп; таб «Вне групп»
+-- показывает только те, ни в одну группу не вошедшие.
+CREATE TABLE IF NOT EXISTS system_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS system_group_members (
+  group_id INTEGER NOT NULL REFERENCES system_groups(id) ON DELETE CASCADE,
+  system_id INTEGER NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+  PRIMARY KEY (group_id, system_id)
+);

@@ -139,6 +139,34 @@ export interface Setting {
   imported_at: string | null;
 }
 
+export interface SettingGroup {
+  id: number;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface CampaignGroup {
+  id: number;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface SystemGroup {
+  id: number;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface PlayerGroup {
+  id: number;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface CalendarMonth {
   id: number;
   setting_id: number;

@@ -7,8 +7,11 @@ import { EmptyState } from "../components/EmptyState";
 import { MentionText } from "../components/mentions/MentionText";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
+import { SystemGroupTabs } from "../components/SystemGroupTabs";
+import { SystemGroupMembersModal } from "../components/SystemGroupMembersModal";
+import { NavIcon } from "../components/NavIcons";
 
-import type { System } from "../types";
+import type { System, SystemGroup } from "../types";
 
 function SystemCoverTile({ system: s }: { system: System }) {
   const rawUrl = s.thumbnail_image_url ?? null;
@@ -55,6 +58,36 @@ export function SystemsListPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [groups, setGroups] = useState<SystemGroup[]>([]);
+  const [groupMembers, setGroupMembers] = useState<Map<number, Set<number>>>(new Map());
+  const [groupModalGroupId, setGroupModalGroupId] = useState<number | null>(null);
+  const [ungroupedIds, setUngroupedIds] = useState<Set<number>>(new Set());
+
+  async function loadGroups() {
+    try {
+      const data = await api.get<SystemGroup[]>("/system-groups");
+      setGroups(data);
+    } catch { /* silent */ }
+  }
+
+  async function loadGroupMembers() {
+    try {
+      const memberMap = new Map<number, Set<number>>();
+      for (const g of groups) {
+        const members = await api.get<System[]>(`/system-groups/${g.id}/members`);
+        memberMap.set(g.id, new Set(members.map(m => m.id)));
+      }
+      setGroupMembers(memberMap);
+
+      const allMemberIds = new Set<number>();
+      for (const ids of memberMap.values()) {
+        for (const id of ids) allMemberIds.add(id);
+      }
+      setUngroupedIds(new Set(systems.filter(s => !allMemberIds.has(s.id)).map(s => s.id)));
+    } catch { /* silent */ }
+  }
+
   async function loadSystems(signal?: AbortSignal) {
     setLoading(true);
     setLoadError(null);
@@ -72,8 +105,24 @@ export function SystemsListPage() {
   useEffect(() => {
     const controller = new AbortController();
     loadSystems(controller.signal);
+    loadGroups();
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (systems.length > 0 && groups.length >= 0) {
+      loadGroupMembers();
+    }
+  }, [systems, groups]);
+
+  const filteredSystems = (() => {
+    if (activeTab === null) return systems;
+    if (activeTab === "ungrouped") return systems.filter(s => ungroupedIds.has(s.id));
+    const groupId = Number(activeTab);
+    const memberIds = groupMembers.get(groupId);
+    if (!memberIds) return systems.filter(() => false);
+    return systems.filter(s => memberIds.has(s.id));
+  })();
 
   function refresh() {
     void loadSystems();
@@ -106,6 +155,12 @@ export function SystemsListPage() {
         </div>
       </div>
 
+      <SystemGroupTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onGroupsChanged={loadGroups}
+      />
+
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось загрузить системы: {loadError}</span>
@@ -121,9 +176,28 @@ export function SystemsListPage() {
         </div>
       ) : (
         <div className="grid-cards">
-          {systems.map((s) => (
+          {filteredSystems.map((s) => (
             <SystemCoverTile key={s.id} system={s} />
           ))}
+          {activeTab !== null && activeTab !== "ungrouped" && (
+            <button
+              className="card campaign-tile setting-group-empty-add"
+              onClick={() => {
+                const g = groups.find((gr) => gr.id === Number(activeTab));
+                if (g) setGroupModalGroupId(g.id);
+              }}
+            >
+              <div className="campaign-tile-cover cover-halftone">
+                <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+                <div className="campaign-tile-scrim" />
+                <span className="group-add-icon"><NavIcon name="gears" /></span>
+                <h3 className="campaign-tile-name">+</h3>
+              </div>
+              <div className="campaign-tile-meta">
+                <div className="campaign-tile-system muted">нажми, чтобы добавить систему в группу</div>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
@@ -160,6 +234,15 @@ export function SystemsListPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {groupModalGroupId !== null && (
+        <SystemGroupMembersModal
+          groupId={groupModalGroupId}
+          groupName={groups.find(g => g.id === groupModalGroupId)?.name ?? ""}
+          onClose={() => setGroupModalGroupId(null)}
+          onUpdated={loadGroupMembers}
+        />
       )}
     </div>
   );

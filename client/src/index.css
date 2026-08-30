@@ -64,6 +64,7 @@
   --accent-2: #1c1c1c;
   --primary-bg: #1c1c1c;
   --primary-text: #ffffff;
+  --player-bar-text: #1c1c1c;
   --font-display: 'Cormorant SC', serif;
   --font-body: 'Archivo', sans-serif;
   /* Typography voices (design doc §4.1). Display/Body vary per theme (see
@@ -74,6 +75,10 @@
   --font-ui: 'Oswald', var(--font-body);
   --font-mono: 'JetBrains Mono', ui-monospace, 'PT Mono', monospace;
   --card-radius: 0px;
+  --app-nav-width: 200px;
+  --app-search-width: 320px;
+  --app-dock-width: 320px;
+  --player-bar-height: 52px;
   --card-border-width: 1px;
   --card-clip: none;
   --card-band-bg: var(--paper-2);
@@ -859,6 +864,21 @@ h4 { font-size: var(--fs-body); }
   text-transform: var(--name-transform);
   line-height: 0.96;
 }
+/* Иконка на плейсхолдере плитки «добавить в группу» — крупная, тёмная,
+   центрирована в зоне обложки. */
+.group-add-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -60%);
+  z-index: 2;
+  color: rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+.group-add-icon .nav-icon {
+  width: 56px;
+  height: 56px;
+}
 /* Мета плитки: три факта, три голоса (см. CampaignCoverTile.tsx). Панель
    отбита от обложки той же чернильной линией, что и шапка карточки, —
    плитка читается как один объект с швом, а не как две карточки подряд. */
@@ -894,14 +914,14 @@ h4 { font-size: var(--fs-body); }
 /* App shell layout */
 .app-shell {
   display: grid;
-  grid-template-columns: 200px 1fr 320px;
+  grid-template-columns: var(--app-nav-width) 1fr var(--app-search-width);
   height: 100vh;
 }
 /* The preview dock needs more room than the plain nav links it replaces —
    compact statblock cards (ability grid, vitals row) don't fit in 200px
    without wrapping/scrolling. */
 .app-shell-live {
-  grid-template-columns: 320px 1fr 320px;
+  grid-template-columns: var(--app-dock-width) 1fr var(--app-search-width);
 }
 
 .app-nav {
@@ -1149,7 +1169,7 @@ h4 { font-size: var(--fs-body); }
   min-width: 0;
 }
 .app-content.has-player {
-  padding-bottom: 72px;
+  padding-bottom: var(--player-bar-height);
 }
 
 .page-fill {
@@ -2713,6 +2733,10 @@ details.card[open] summary {
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
+    /* Intentionally different from desktop: translucent + blur for a floating
+       capsule that overlays content, vs solid background for a docked bar.
+       Font sizes and vertical padding match --player-bar-height for visual
+       consistency across form factors. */
     background: color-mix(in oklab, var(--paper-2) 94%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -3489,7 +3513,7 @@ details.card[open] summary {
   display: flex;
   align-items: baseline;
   gap: 3px;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: var(--fs-h2);
   line-height: 1;
   color: var(--ink);
@@ -3517,6 +3541,7 @@ details.card[open] summary {
   padding: var(--sp-3);
 }
 .stat-plate-lead .stat-plate-value {
+  font-family: var(--font-mono);
   font-size: var(--fs-stat);
   color: var(--accent-text);
 }
@@ -3634,7 +3659,7 @@ details.card[open] summary {
   font-family: var(--font-body);
   font-size: var(--fs-body);
   font-style: italic;
-  color: color-mix(in srgb, var(--paper) 82%, transparent);
+  color: color-mix(in srgb, var(--paper) 90%, transparent);
 }
 /* Номер, дата и время — значения, значит моношрифт. Это то, чего герою не
    хватало: он говорил куда идти, но не в каком состоянии то, куда идёшь. */
@@ -3693,10 +3718,6 @@ details.card[open] summary {
      не оторванный край, а мелкую пилу: на широком блоке зубцы растягивались
      в пологие волны, а сам clip-path заодно срезал нижнюю рамку. Ровный низ
      честнее — «вырванность» держат плашка-шапка, наклон и штамп выпуска. */
-}
-.home-article:hover .home-article-band {
-  background: var(--accent);
-  color: var(--accent-text);
 }
 .home-article:focus-visible {
   outline: 2px solid var(--accent);
@@ -5691,6 +5712,57 @@ input.litm-theme-title {
   align-items: center;
 }
 
+.graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.graph-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.graph-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  flex-shrink: 0;
+}
+.graph-tb-btn {
+  font-size: var(--fs-meta, 12px);
+  text-transform: uppercase;
+  letter-spacing: .10em;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.graph-tb-btn:hover {
+  border-color: var(--ink);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.graph-tb-btn:active {
+  transform: translate(0, 0);
+  box-shadow: none;
+}
+.graph-tb-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.graph-tb-btn.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
 .relation-graph-wrap {
   position: relative;
   width: 100%;
@@ -5801,9 +5873,7 @@ input.litm-theme-title {
 .relation-graph-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--muted);
+  gap: 6px;
 }
 /* Ссылка «Показать в графе» рядом с заголовком сущности — вспомогательная,
    поэтому по размеру и цвету ближе к подписи, чем к кнопке. */
@@ -5823,19 +5893,6 @@ input.litm-theme-title {
   height: 14px;
 }
 
-/* Разделитель между тонами отношений и переключателями видов связи —
-   в легенде это два разных ряда смысла, а не один длинный список. */
-.relation-graph-legend-sep {
-  width: 1px;
-  align-self: stretch;
-  background: var(--line);
-}
-.relation-graph-legend label {
-  cursor: pointer;
-}
-.relation-graph-legend label:has(input:disabled) {
-  cursor: default;
-}
 .relation-graph-path-chain {
   font-size: 13px;
   max-width: 60ch;
@@ -6065,12 +6122,16 @@ input.litm-theme-title {
   opacity: 0.7;
 }
 /* Quiet capsule, not a control-dense strip: dark masthead band + one accent
-   color, matching the reference's minimal floating player. */
+   color, matching the reference's minimal floating player.
+   Shared tokens with .mini-player-bar: font-size:13px (track name), padding:8px
+   (vertical), gap:8-10px. Visual differences (solid vs blur, no-radius vs radius)
+   are intentional: docked bar vs floating capsule. */
 .audio-player-bar {
   position: fixed;
-  left: 200px;
-  right: 320px;
+  left: var(--app-nav-width);
+  right: var(--app-search-width);
   bottom: 0;
+  height: var(--player-bar-height);
   z-index: 40;
   display: flex;
   align-items: center;
@@ -6078,15 +6139,15 @@ input.litm-theme-title {
   padding: 8px 16px;
   background: var(--card-band-bg, var(--bg-elevated));
   background-image: var(--card-band-image, none);
-  color: var(--primary-text, var(--text-bright));
+  color: var(--player-bar-text, var(--primary-text, var(--text-bright)));
   border-top: var(--card-border-width) solid var(--line);
-  border-radius: var(--card-radius) var(--card-radius) 0 0;
+  border-radius: 0;
 }
 /* В режиме пульта сессии левая колонка шире (320px вместо 200px) — это
    докстанция с карточками. Панель звука приколочена к низу окна и своим
    левым краем наезжала на неё, закрывая нижнюю карточку. */
 .app-shell-live .audio-player-bar {
-  left: 320px;
+  left: var(--app-dock-width);
 }
 /* Кнопки действий панели — «Заглушить всё», «Плейлисты», «Пульт».
    Обведённая плашка с подписью капсом, а не голая иконка: панель висит на
@@ -6131,12 +6192,6 @@ input.litm-theme-title {
 /* Раскладка панели по макету пульта: транспорт слева, «что играет» с
    полосой времени во всю оставшуюся ширину, за разделителем — состояние
    трёх остальных каналов, папка плейлистов и вход в пульт. */
-.audio-player-transport {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-}
 .audio-player-now {
   display: flex;
   flex-direction: column;
@@ -6165,7 +6220,7 @@ input.litm-theme-title {
   width: 2px;
   height: 26px;
   flex: 0 0 auto;
-  background: color-mix(in srgb, currentColor 22%, transparent);
+  background: var(--line);
 }
 
 .audio-player-bar button {
@@ -6217,8 +6272,18 @@ input.litm-theme-title {
 /* .muted's hardcoded --muted assumes a light card surface; the bar's own
    dark band needs the band's own (already-contrast-checked) text color. */
 .audio-player-bar .muted {
-  color: var(--primary-text, inherit);
-  opacity: 0.75;
+  color: var(--on-surface-muted);
+}
+.audio-player-empty {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.audio-player-empty-hint {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--on-surface-muted);
+  opacity: 0.7;
 }
 .audio-player-track {
   /* Голос UI из дизайн-системы (§4.1): узкий гротеск капсом с трекингом —
@@ -6238,36 +6303,130 @@ input.litm-theme-title {
 .audio-player-time {
   font-family: var(--font-mono);
   font-size: 10px;
-  opacity: 0.65;
+  color: var(--on-surface-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.audio-player-time:hover {
+  color: var(--player-bar-text, var(--primary-text, var(--text-bright)));
+}
+.audio-player-counter {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--on-surface-muted);
   flex-shrink: 0;
 }
-.audio-player-seek {
-  flex: 1;
-  min-width: 80px;
-}
-.audio-player-volume {
-  position: relative;
+.audio-player-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.audio-player-btn:hover {
+  opacity: 1;
+}
+.audio-player-btn.active {
+  opacity: 1;
+  color: var(--accent);
+}
+.audio-player-transport {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.audio-player-help {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.4;
+}
+.audio-player-help:hover {
+  opacity: 1;
+}
+.audio-player-shortcuts {
+  position: absolute;
+  bottom: calc(var(--player-bar-height) + 4px);
+  right: 16px;
+  background: var(--card-band-bg, var(--bg-elevated));
+  border: var(--card-border-width) solid var(--line);
+  padding: 12px 16px;
+  z-index: 41;
+  min-width: 260px;
+}
+.audio-player-shortcuts-title {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.audio-player-shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.audio-player-shortcuts-list kbd {
+  display: inline-block;
+  min-width: 80px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--on-surface-muted);
+}
+.audio-player-volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
 }
-.volume-popover {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 6px;
-  background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: var(--card-radius);
-  padding: 10px 8px;
-  z-index: 50;
+.audio-player-volume-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
 }
-.volume-slider-vertical {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  width: 20px;
-  height: 90px;
+.audio-player-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+}
+.audio-player-volume-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+}
+.audio-player-volume-range::-moz-range-track {
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
 }
 .audio-player-playlist-menu {
   position: relative;
@@ -7912,4 +8071,190 @@ details[open] > .res-group__band .chevron-icon {
   justify-content: space-between;
   padding-top: 8px;
   border-top: 1px solid var(--line);
+}
+
+/* ─── Setting group tabs extras ──────────────────────────────────────────── */
+.setting-group-tab-rename-input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+  color: var(--ink);
+  width: 120px;
+}
+.setting-group-create-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+.setting-group-create-input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--ink);
+  width: 200px;
+}
+.setting-group-context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+  min-width: 160px;
+}
+.setting-group-context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--ink);
+  cursor: pointer;
+}
+.setting-group-context-menu button:hover {
+  background: var(--bg-hover);
+}
+.setting-group-context-menu button.danger {
+  color: var(--status-cancelled);
+}
+.setting-group-context-menu button.danger:hover {
+  background: var(--status-cancelled-bg, rgba(220, 50, 50, 0.08));
+}
+.setting-group-empty-add {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.setting-group-empty-add:hover {
+  opacity: 1;
+}
+
+/* ─── Detail table ──────────────────────────────────────────────────────── */
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+}
+.detail-table td {
+  padding: 4px 8px;
+  vertical-align: top;
+  border-bottom: 1.5px solid var(--line);
+}
+.detail-table tr:last-child td {
+  border-bottom: none;
+}
+.detail-label {
+  color: var(--muted);
+  white-space: nowrap;
+  width: 140px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 400;
+}
+.detail-value-mono {
+  font-family: var(--font-mono);
+}
+
+/* ─── Campaign Overview: Основное section ──────────────────────────────── */
+.campaign-overview-header {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 6px 10px;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  list-style: none;
+}
+.campaign-overview-header::-webkit-details-marker {
+  display: none;
+}
+.campaign-overview-header::marker {
+  content: "";
+}
+.campaign-field-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--muted);
+  margin-bottom: 2px;
+  display: block;
+}
+.campaign-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.campaign-edit-form label {
+  display: flex;
+  flex-direction: column;
+}
+.campaign-edit-form select,
+.campaign-edit-form input {
+  width: 100%;
+}
+.campaign-group-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 0;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  font-size: var(--fs-meta);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.campaign-group-chip.is-in {
+  border-color: var(--accent);
+  background: var(--accent-bg, rgba(79, 140, 255, 0.08));
+}
+.campaign-group-chip input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+.campaign-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+}
+.campaign-actions button {
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  padding: 6px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.campaign-actions button:hover {
+  background: color-mix(in oklab, var(--paper) 92%, var(--ink));
+}
+.campaign-actions button.primary {
+  background: var(--accent);
+  color: var(--accent-text, var(--paper));
+  border-color: var(--accent);
+}
+.campaign-actions button.primary:hover {
+  background: color-mix(in oklab, var(--accent) 85%, var(--ink));
 }

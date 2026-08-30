@@ -9,7 +9,7 @@ import { VehicleSection } from "../components/VehicleSection";
 import { downloadJson } from "../downloadJson";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
-import type { Campaign, System, SystemSection } from "../types";
+import type { Campaign, System, SystemGroup, SystemSection } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 
@@ -21,6 +21,8 @@ export function SystemDetailPage() {
   const [system, setSystem] = useState<System | null>(null);
   const [sections, setSections] = useState<SystemSection[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [allGroups, setAllGroups] = useState<SystemGroup[]>([]);
+  const [systemGroupIds, setSystemGroupIds] = useState<Set<number>>(new Set());
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [tidying, setTidying] = useState(false);
@@ -41,9 +43,18 @@ export function SystemDetailPage() {
   function refreshSections() {
     api.get<SystemSection[]>(`/systems/${systemId}/sections`).then(setSections);
   }
+  async function refreshGroups() {
+    const [all, mine] = await Promise.all([
+      api.get<SystemGroup[]>("/system-groups"),
+      api.get<SystemGroup[]>(`/system-groups/by-system/${systemId}`),
+    ]);
+    setAllGroups(all);
+    setSystemGroupIds(new Set(mine.map((g) => g.id)));
+  }
   useEffect(() => {
     refreshSystem();
     refreshSections();
+    refreshGroups();
     api.get<Campaign[]>(`/campaigns?system_id=${systemId}`).then(setCampaigns);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemId]);
@@ -198,11 +209,42 @@ export function SystemDetailPage() {
                обещала искать «в текстах системы», а сканировать нечего. Код оставлен
                по решению владельца — см. ToDo.md П1.10. */}
            {/* <CrossLinksWizard
-             ownerKind="system"
-             ownerId={systemId}
-             help="Ищет имена сущностей сеттинга и записей компендиума в текстах системы — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
-           /> */}
-           <details className="sys-card">
+              ownerKind="system"
+              ownerId={systemId}
+              help="Ищет имена сущностей сеттинга и записей компендиума в текстах системы — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+            /> */}
+            <div className="card">
+              <div className="campaign-overview-header">Группы</div>
+              <div style={{ padding: "8px 0" }}>
+                {allGroups.length > 0 ? (
+                  <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
+                    {allGroups.map((g) => {
+                      const isIn = systemGroupIds.has(g.id);
+                      return (
+                        <label key={g.id} className={`campaign-group-chip${isIn ? " selected" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={isIn}
+                            onChange={async () => {
+                              if (isIn) {
+                                await api.del(`/system-groups/${g.id}/members?systemIds=${systemId}`);
+                              } else {
+                                await api.post(`/system-groups/${g.id}/members`, { systemIds: [systemId] });
+                              }
+                              refreshGroups();
+                            }}
+                          />
+                          {g.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 4 }}>Групп пока нет — создайте на странице систем.</div>
+                )}
+              </div>
+            </div>
+            <details className="sys-card">
              <summary className="sys-card-head">Кампании с этой системой ({campaigns.length})</summary>
             <div className="sys-card-body">
               <div className="grid-cards">
