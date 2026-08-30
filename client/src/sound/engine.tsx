@@ -233,7 +233,7 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
       bgTarget.current = target;
       if (from === null || ms <= 0 || Math.abs(target - from) < 0.01) {
         lastBgGainRef.current = target;
-        background.setVolume(target);
+        background.setBackgroundGain(target);
         return;
       }
       const steps = Math.max(1, Math.round(ms / 100));
@@ -242,7 +242,7 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
         step += 1;
         const value = from + ((target - from) * step) / steps;
         lastBgGainRef.current = Math.max(0, Math.min(1, value));
-        background.setVolume(lastBgGainRef.current);
+        background.setBackgroundGain(lastBgGainRef.current);
         if (step >= steps && bgRamp.current) {
           window.clearInterval(bgRamp.current);
           bgRamp.current = null;

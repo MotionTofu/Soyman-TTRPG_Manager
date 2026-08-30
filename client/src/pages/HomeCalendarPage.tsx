@@ -283,7 +283,11 @@ export function HomeCalendarPage() {
             // Ведёт в карточку сессии, а не в пульт: с главной ныряют
             // ГОТОВИТЬ ближайшую игру. Кнопка в пульт есть в навигационном
             // виджете из любой точки приложения.
-            <Link to={`/sessions/${nearestSession.id}`} className="card home-hero">
+            <Link
+              to={`/sessions/${nearestSession.id}`}
+              className="card home-hero"
+              aria-label={`Ближайшая сессия: ${nearestSession.campaign_name}${nearestSession.title ? `, ${nearestSession.title}` : ""}`}
+            >
               <div className="home-hero-cover cover-halftone">
                 {bgStyle(bgUrl, authBgBlob) ? (
                   <div className="cover-art cover-photo">

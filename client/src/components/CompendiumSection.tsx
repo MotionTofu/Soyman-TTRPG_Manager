@@ -429,7 +429,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     const raw = localStorage.getItem(`compendium-sort-${section.id}`);
     const stored = raw?.split(":")[0] as SortMode | null;
     const valid: SortMode[] = ["manual", "alpha", "level", "school", "type", "rarity"];
-    return stored && valid.includes(stored) ? stored : "manual";
+    return stored && valid.includes(stored) ? stored : (section.kind === "spell" ? "level" : "manual");
   });
   const [sortDir, setSortDir] = useState<SortDir>(() => {
     const raw = localStorage.getItem(`compendium-sort-${section.id}`);

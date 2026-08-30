@@ -2677,6 +2677,23 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec(`ALTER TABLE settings ADD COLUMN genres TEXT`);
   }
 
+  // ─── Группы игроков ────────────────────────────────────────────────────────
+  if (!tableExists(database, "player_groups")) {
+    database.exec(`CREATE TABLE player_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+  if (!tableExists(database, "player_group_members")) {
+    database.exec(`CREATE TABLE player_group_members (
+      group_id INTEGER NOT NULL REFERENCES player_groups(id) ON DELETE CASCADE,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      PRIMARY KEY (group_id, player_id)
+    )`);
+  }
+
   compactIfBloated(database);
   return database;
 }

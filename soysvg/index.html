@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoySVG — SVG Pattern Studio 95</title>
+<style>
+  :root{
+    --gray:#c0c0c0; --dark:#808080; --darker:#404040; --light:#ffffff; --teal:#008080;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--teal);
+    font-family:"MS Sans Serif",Tahoma,Geneva,Verdana,sans-serif;
+    font-size:12px; color:#000; overflow:hidden;
+  }
+  .w95{
+    background:var(--gray);
+    border:2px solid; border-color:var(--light) var(--darker) var(--darker) var(--light);
+    box-shadow:inset 1px 1px 0 var(--gray), inset -1px -1px 0 var(--dark);
+  }
+  .titlebar{
+    background:linear-gradient(90deg,#000080,#1084d0);
+    color:#fff; font-weight:bold; padding:2px 4px; display:flex; align-items:center;
+    text-shadow:1px 1px 0 #000;
+  }
+  button,select,input{font-family:inherit; font-size:12px;}
+  button{
+    background:var(--gray); border:2px solid; border-color:var(--light) var(--darker) var(--darker) var(--light);
+    padding:2px 8px; cursor:pointer; min-width:20px;
+  }
+  button:active{border-color:var(--darker) var(--light) var(--light) var(--darker);}
+  .panel{background:var(--gray); border:2px solid; border-color:var(--light) var(--darker) var(--darker) var(--light); padding:4px;}
+  .row{display:flex; align-items:center; gap:4px; margin:3px 0;}
+  .row label{flex:0 0 110px;}
+  .row .ctrl{flex:1; display:flex; align-items:center; gap:4px;}
+  .row input[type=range]{flex:1;}
+  .row select,.row input[type=color]{flex:1;}
+  .row .val{flex:0 0 42px; text-align:right; font-family:"Courier New",monospace;}
+  .group{border:1px solid var(--dark); margin:4px 0; padding:3px;}
+  .group>.ghead{background:var(--gray); padding:1px 4px; font-weight:bold; border:1px solid var(--dark); margin:-8px 0 4px 6px; display:inline-block;}
+  .presetbar{display:flex; flex-wrap:wrap; gap:3px; padding:3px;}
+  .pill{font-size:11px; padding:2px 6px;}
+  .app{display:flex; height:100vh; gap:2px; padding:2px;}
+  .left{width:330px; overflow-y:auto; display:flex; flex-direction:column;}
+  .right{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .stage{flex:1; overflow:auto; background:var(--teal); border:2px solid; border-color:var(--darker) var(--light) var(--light) var(--darker); position:relative;}
+  #preview{position:absolute; inset:0; background-repeat:repeat;}
+  .codewrap{height:200px; display:flex; flex-direction:column;}
+  textarea#code{flex:1; font-family:"Courier New",monospace; font-size:11px; white-space:pre; resize:none;
+    border:2px solid; border-color:var(--darker) var(--light) var(--light) var(--darker); background:#fff;}
+  .toolbar{display:flex; align-items:center; gap:6px; padding:3px; flex-wrap:wrap;}
+  .spacer{flex:1;}
+  canvas#curve{background:#fff; border:1px solid var(--dark); cursor:crosshair; display:block;}
+  .hk{font-family:"Courier New",monospace; background:#fff; border:1px solid var(--dark); padding:0 2px;}
+  ::-webkit-scrollbar{width:16px;height:16px;}
+  ::-webkit-scrollbar-track{background:var(--gray);}
+  ::-webkit-scrollbar-thumb{background:var(--gray); border:2px solid; border-color:var(--light) var(--darker) var(--darker) var(--light);}
+  .stat{font-family:"Courier New",monospace; padding:1px 4px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- LEFT: controls -->
+  <div class="left w95">
+    <div class="titlebar"><span data-i18n="app_title">SoySVG — генератор SVG-паттернов</span></div>
+
+    <div class="toolbar">
+      <button id="langBtn" title="RU/EN">RU</button>
+      <span class="spacer"></span>
+      <button id="saveBtn" data-i18n="save">Сохранить</button>
+      <button id="randBtn" data-i18n="random">Случайно</button>
+    </div>
+
+    <div class="panel">
+      <div class="ghead" data-i18n="presets">Пресеты</div>
+      <div class="presetbar" id="presets"></div>
+    </div>
+
+    <div class="panel" id="controls"><!-- generated --></div>
+  </div>
+
+  <!-- RIGHT: stage + code -->
+  <div class="right">
+    <div class="toolbar w95">
+      <button id="copySvg" data-i18n="copy_svg">Копировать SVG</button>
+      <button id="dlSvg" data-i18n="dl_svg">Скачать .svg</button>
+      <span class="spacer"></span>
+      <button id="dlPng" data-i18n="dl_png">Скачать .png</button>
+      <span class="stat" id="stat"></span>
+    </div>
+    <div class="stage"><div id="preview"></div></div>
+    <div class="codewrap panel">
+      <div class="ghead" data-i18n="code">SVG-код</div>
+      <textarea id="code" readonly spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------------- i18n ---------------- */
+const I18N = {
+  ru:{
+    app_title:"SoySVG — генератор SVG-паттернов", save:"Сохранить", random:"Случайно",
+    presets:"Пресеты", copy_svg:"Копировать SVG", dl_svg:"Скачать .svg", dl_png:"Скачать .png",
+    code:"SVG-код",
+    g_noise:"Шум", g_tone:"Тон и цвет", g_tonecurve:"Кривая тона", g_extra:"Эффекты",
+    g_export:"Экспорт / холст",
+    c_type:"Тип шума", fractalNoise:"фрактал", turbulence:"турбулентность",
+    c_freq:"Частота зерна", c_link:"Связать X/Y", c_octaves:"Октавы", c_seed:"Зерно",
+    c_stitch:"Бесшовный tile",
+    c_displace:"Смещение", c_blur:"Размытие", c_morph:"Морфология", c_morphOp:"Операция",
+    c_morphRadius:"Радиус морф.", dilate:"наращивание", erode:"эрозия",
+    c_light:"Освещение", c_lightType:"Вид света", diffuse:"диффузное", specular:"зеркальное",
+    c_lightColor:"Цвет света", c_surface:"Рельеф", c_blend:"Смешать", c_blendMode:"Режим",
+    c_contrast:"Контраст", c_brightness:"Яркость", c_saturation:"Насыщенность",
+    c_colorMode:"Цвет", color:"цветной", grayscale:"серый", duotone:"дуотон",
+    c_duoShadow:"Тень", c_duoHigh:"Свет", c_advTone:"Кривая (вкл)", c_halftone:"Халфтон-точки",
+    c_tile:"Размер тайла", c_repeat:"Повторять", c_bg:"Фон", c_transparent:"Прозрачный фон",
+    c_pngScale:"Масштаб PNG",
+    confirm_save:"Имя пресета:", copied:"Скопировано!", saved:"Сохранено",
+    load_recent:"Недавние:", clear_recent:"Очистить"
+  },
+  en:{
+    app_title:"SoySVG — SVG Pattern Studio", save:"Save", random:"Random",
+    presets:"Presets", copy_svg:"Copy SVG", dl_svg:"Download .svg", dl_png:"Download .png",
+    code:"SVG code",
+    g_noise:"Noise", g_tone:"Tone & Color", g_tonecurve:"Tone curve", g_extra:"Effects",
+    g_export:"Export / Canvas",
+    c_type:"Noise type", fractalNoise:"fractal", turbulence:"turbulence",
+    c_freq:"Grain frequency", c_link:"Link X/Y", c_octaves:"Octaves", c_seed:"Seed",
+    c_stitch:"Seamless tile",
+    c_displace:"Displacement", c_blur:"Blur", c_morph:"Morphology", c_morphOp:"Operator",
+    c_morphRadius:"Morph radius", dilate:"dilate", erode:"erode",
+    c_light:"Lighting", c_lightType:"Light type", diffuse:"diffuse", specular:"specular",
+    c_lightColor:"Light color", c_surface:"Surface", c_blend:"Blend", c_blendMode:"Mode",
+    c_contrast:"Contrast", c_brightness:"Brightness", c_saturation:"Saturation",
+    c_colorMode:"Color", color:"color", grayscale:"gray", duotone:"duotone",
+    c_duoShadow:"Shadow", c_duoHigh:"Light", c_advTone:"Curve (on)", c_halftone:"Halftone dots",
+    c_tile:"Tile size", c_repeat:"Repeat", c_bg:"Background", c_transparent:"Transparent bg",
+    c_pngScale:"PNG scale",
+    confirm_save:"Preset name:", copied:"Copied!", saved:"Saved",
+    load_recent:"Recent:", clear_recent:"Clear"
+  }
+};
+let LANG="ru";
+const t = k => (I18N[LANG]&&I18N[LANG][k])||k;
+
+/* ---------------- state ---------------- */
+const baseCfg = {
+  type:"fractalNoise", freqX:0.05, freqY:0.05, link:true, octaves:3, seed:7, stitch:true,
+  displace:0, blur:0, morph:false, morphOp:"dilate", morphRadius:1,
+  light:false, lightType:"diffuse", lightColor:"#ffffff", surface:4, blend:false, blendMode:"screen",
+  advTone:false, curve:[{x:0,y:0},{x:.25,y:.25},{x:.5,y:.5},{x:.75,y:.75},{x:1,y:1}],
+  contrast:0, brightness:0, saturation:100, colorMode:"color",
+  duoShadow:"#1a1206", duoHigh:"#e8d9a8",
+  tile:256, repeat:true, bg:"#ffffff", transparent:false, pngScale:1, halftone:false
+};
+let S = structuredClone(baseCfg);
+
+/* ---------------- presets ---------------- */
+const PRESETS = {
+  "Облака":     {type:"fractalNoise",freqX:0.018,freqY:0.018,link:true,octaves:6,stitch:true,colorMode:"color",saturation:0,contrast:15,brightness:5,blend:false},
+  "Металл":     {type:"fractalNoise",freqX:0.08,freqY:0.08,octaves:2,blur:0.3,light:true,lightType:"diffuse",lightColor:"#cfcfcf",surface:6,blend:true,blendMode:"screen",colorMode:"color",saturation:0},
+  "Бумага":     {type:"fractalNoise",freqX:0.9,freqY:0.9,octaves:2,colorMode:"color",saturation:0,contrast:-15,brightness:45,bg:"#f0e6d2"},
+  "Плазма":     {type:"turbulence",freqX:0.03,freqY:0.03,octaves:4,blur:0.5,displace:30,colorMode:"color",saturation:200},
+  "Террейн":    {type:"fractalNoise",freqX:0.012,freqY:0.012,octaves:6,light:true,lightType:"diffuse",lightColor:"#ffffff",surface:9,blend:true,blendMode:"multiply",colorMode:"duotone",duoShadow:"#241405",duoHigh:"#d8c89a"},
+  "Космос":     {type:"turbulence",freqX:0.02,freqY:0.02,octaves:4,displace:20,colorMode:"color",saturation:150,bg:"#05030f"},
+  "Войлок":     {type:"turbulence",freqX:0.6,freqY:0.6,octaves:3,morph:true,morphOp:"dilate",morphRadius:1,blur:0.2,colorMode:"color",saturation:0,contrast:5},
+  "Халфтон":    {halftone:true,freqX:0.05,freqY:0.05,octaves:2,displace:18,colorMode:"color",saturation:0,bg:"#ffffff"},
+  "Царапины":   {type:"fractalNoise",freqX:0.005,freqY:0.5,link:false,octaves:2,colorMode:"color",saturation:0,advTone:true,curve:[{x:0,y:0},{x:.36,y:0},{x:.5,y:0},{x:.62,y:0},{x:1,y:1}],morph:true,morphOp:"erode",morphRadius:1,bg:"#141414"},
+  "Волосы":     {type:"fractalNoise",freqX:0.35,freqY:0.04,link:false,octaves:3,blur:0.15,colorMode:"color",saturation:0,advTone:true,curve:[{x:0,y:0},{x:.4,y:0},{x:.5,y:0},{x:.6,y:0},{x:1,y:1}],bg:"#241a22"},
+  "Звёзды":     {type:"fractalNoise",freqX:0.2,freqY:0.2,octaves:1,colorMode:"color",saturation:0,advTone:true,curve:[{x:0,y:0},{x:.9,y:0},{x:.94,y:0},{x:.97,y:0},{x:1,y:1}],bg:"#000000"}
+};
+
+/* ---------------- helpers ---------------- */
+function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255};}
+function sampleCurve(pts,n){const out=[];for(let i=0;i<n;i++){const x=i/(n-1);let a=pts[0],b=pts[pts.length-1];for(let k=0;k<pts.length-1;k++){if(pts[k].x<=x&&pts[k+1].x>=x){a=pts[k];b=pts[k+1];break;}}const d=(b.x-a.x)||1;const tt=(x-a.x)/d;out.push(+(a.y+(b.y-a.y)*tt).toFixed(3));}return out;}
+
+/* ---------------- build SVG ---------------- */
+function buildSVG(){
+  const c=S;
+  const fb = c.link ? `${c.freqX}` : `${c.freqX} ${c.freqY}`;
+  const fid="f"+Math.random().toString(36).slice(2,7);
+  let inner, body;
+  if(c.halftone){
+    const s=8;
+    inner = `<pattern id="${fid}_dots" width="${s}" height="${s}" patternUnits="userSpaceOnUse">
+        <rect width="${s}" height="${s}" fill="#ffffff"/>
+        <circle cx="${s/2}" cy="${s/2}" r="${s/2-1}" fill="#000000"/>
+      </pattern>
+      <filter id="${fid}" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence type="${c.type}" baseFrequency="${fb}" numOctaves="${c.octaves}" seed="${c.seed}" stitchTiles="${c.stitch?'stitch':'noStitch'}" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="${c.displace}" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>`;
+    body = `<rect width="100%" height="100%" fill="url(#${fid}_dots)" filter="url(#${fid})"/>`;
+  } else {
+    const f=[];
+    f.push(`<feTurbulence type="${c.type}" baseFrequency="${fb}" numOctaves="${c.octaves}" seed="${c.seed}" stitchTiles="${c.stitch?'stitch':'noStitch'}" result="n"/>`);
+    let cur="n";
+    if(c.displace>0){f.push(`<feDisplacementMap in="${cur}" in2="n" scale="${c.displace}" xChannelSelector="R" yChannelSelector="G" result="d"/>`);cur="d";}
+    if(c.blur>0){f.push(`<feGaussianBlur in="${cur}" stdDeviation="${c.blur}" result="b"/>`);cur="b";}
+    if(c.morph){f.push(`<feMorphology in="${cur}" operator="${c.morphOp}" radius="${c.morphRadius}" result="m"/>`);cur="m";}
+    if(c.light){
+      if(c.lightType==="diffuse")
+        f.push(`<feDiffuseLighting in="${cur}" lighting-color="${c.lightColor}" surfaceScale="${c.surface}" diffuseConstant="1" result="lit"><feDistantLight azimuth="45" elevation="50"/></feDiffuseLighting>`);
+      else
+        f.push(`<feSpecularLighting in="${cur}" lighting-color="${c.lightColor}" surfaceScale="${c.surface}" specularConstant="1" specularExponent="20" result="lit"><feDistantLight azimuth="45" elevation="50"/></feSpecularLighting>`);
+      if(c.blend){f.push(`<feBlend in="${cur}" in2="lit" mode="${c.blendMode}" result="bl"/>`);cur="bl";}
+      else cur="lit";
+    }
+    if(c.advTone){
+      const tv=sampleCurve(c.curve,9).join(" ");
+      f.push(`<feComponentTransfer in="${cur}" result="t"><funcR type="table" tableValues="${tv}"/><funcG type="table" tableValues="${tv}"/><funcB type="table" tableValues="${tv}"/></feComponentTransfer>`);cur="t";
+    } else {
+      const slope=(1+c.contrast/100).toFixed(3);
+      const inter=(c.brightness/100*0.5).toFixed(3);
+      f.push(`<feComponentTransfer in="${cur}" result="t"><funcR type="linear" slope="${slope}" intercept="${inter}"/><funcG type="linear" slope="${slope}" intercept="${inter}"/><funcB type="linear" slope="${slope}" intercept="${inter}"/></feComponentTransfer>`);cur="t";
+    }
+    if(c.colorMode==="grayscale"){
+      f.push(`<feColorMatrix in="${cur}" type="saturate" values="0" result="col"/>`);cur="col";
+    } else if(c.colorMode==="duotone"){
+      f.push(`<feColorMatrix in="${cur}" type="saturate" values="0" result="g"/>`);
+      const s=hexToRgb(c.duoShadow),h=hexToRgb(c.duoHigh);
+      const m=[(h.r-s.r),0,0,0,s.r,(h.g-s.g),0,0,0,s.g,(h.b-s.b),0,0,0,s.b,0,0,0,1,0].map(v=>v.toFixed(3));
+      f.push(`<feColorMatrix in="g" type="matrix" values="${m.join(" ")}" result="col"/>`);cur="col";
+    } else {
+      f.push(`<feColorMatrix in="${cur}" type="saturate" values="${(c.saturation/100).toFixed(3)}" result="col"/>`);cur="col";
+    }
+    inner=`<filter id="${fid}" x="0" y="0" width="100%" height="100%">${f.join("")}</filter>`;
+    body=`<rect width="100%" height="100%" filter="url(#${fid})"/>`;
+  }
+  const bg = c.transparent ? "" : `<rect width="100%" height="100%" fill="${c.bg}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${c.tile}" height="${c.tile}" viewBox="0 0 ${c.tile} ${c.tile}"><defs>${inner}</defs>${bg}${body}</svg>`;
+}
+
+/* ---------------- render ---------------- */
+const $ = s=>document.querySelector(s);
+const preview=$("#preview"), code=$("#code"), stat=$("#stat");
+function render(){
+  const svg=buildSVG();
+  const url="data:image/svg+xml;utf8,"+encodeURIComponent(svg);
+  if(S.repeat){
+    preview.style.backgroundImage=`url("${url}")`;
+    preview.style.backgroundSize=S.tile+"px "+S.tile+"px";
+    preview.style.backgroundRepeat="repeat";
+  } else {
+    preview.style.backgroundImage=`url("${url}")`;
+    preview.style.backgroundSize="contain";
+    preview.style.backgroundRepeat="no-repeat";
+    preview.style.backgroundPosition="center";
+  }
+  code.value=svg;
+  stat.textContent=S.tile+"px · "+(svg.length)+"b";
+  syncHash();
+}
+function syncHash(){ location.hash = "p="+btoa(unescape(encodeURIComponent(JSON.stringify(S)))); }
+
+/* ---------------- controls UI ---------------- */
+const SCHEMA=[
+  {g:"g_noise",items:[
+    {k:"type",kind:"select",opts:[["fractalNoise","c_type_f"],["turbulence","c_type_t"]]},
+    {k:"freqX",kind:"range",min:0.001,max:1,step:0.001,label:"c_freq"},
+    {k:"link",kind:"check",label:"c_link"},
+    {k:"freqY",kind:"range",min:0.001,max:1,step:0.001,label:"c_freq_y",hideIf:s=>s.link},
+    {k:"octaves",kind:"range",min:1,max:8,step:1,label:"c_octaves"},
+    {k:"seed",kind:"range",min:0,max:100,step:1,label:"c_seed"},
+    {k:"stitch",kind:"check",label:"c_stitch"},
+  ]},
+  {g:"g_extra",items:[
+    {k:"displace",kind:"range",min:0,max:200,step:1,label:"c_displace"},
+    {k:"blur",kind:"range",min:0,max:20,step:0.1,label:"c_blur"},
+    {k:"morph",kind:"check",label:"c_morph"},
+    {k:"morphOp",kind:"select",opts:[["dilate","c_mop_d"],["erode","c_mop_e"]],hideIf:s=>!s.morph},
+    {k:"morphRadius",kind:"range",min:0,max:20,step:0.5,label:"c_morphRadius",hideIf:s=>!s.morph},
+    {k:"light",kind:"check",label:"c_light"},
+    {k:"lightType",kind:"select",opts:[["diffuse","c_lt_d"],["specular","c_lt_s"]],hideIf:s=>!s.light},
+    {k:"lightColor",kind:"color",label:"c_lightColor",hideIf:s=>!s.light},
+    {k:"surface",kind:"range",min:0,max:20,step:0.5,label:"c_surface",hideIf:s=>!s.light},
+    {k:"blend",kind:"check",label:"c_blend",hideIf:s=>!s.light},
+    {k:"blendMode",kind:"select",opts:[["screen","screen"],["multiply","multiply"],["overlay","overlay"],["darken","darken"],["lighten","lighten"]],hideIf:s=>!(s.light&&s.blend)},
+    {k:"halftone",kind:"check",label:"c_halftone"},
+  ]},
+  {g:"g_tone",items:[
+    {k:"colorMode",kind:"select",opts:[["color","c_cm_c"],["grayscale","c_cm_g"],["duotone","c_cm_d"]]},
+    {k:"saturation",kind:"range",min:0,max:200,step:1,label:"c_saturation",hideIf:s=>s.colorMode!=="color"},
+    {k:"duoShadow",kind:"color",label:"c_duoShadow",hideIf:s=>s.colorMode!=="duotone"},
+    {k:"duoHigh",kind:"color",label:"c_duoHigh",hideIf:s=>s.colorMode!=="duotone"},
+    {k:"advTone",kind:"check",label:"c_advTone"},
+    {k:"contrast",kind:"range",min:-100,max:100,step:1,label:"c_contrast",hideIf:s=>s.advTone},
+    {k:"brightness",kind:"range",min:-100,max:100,step:1,label:"c_brightness",hideIf:s=>s.advTone},
+  ]},
+  {g:"g_export",items:[
+    {k:"tile",kind:"range",min:16,max:1024,step:1,label:"c_tile"},
+    {k:"repeat",kind:"check",label:"c_repeat"},
+    {k:"bg",kind:"color",label:"c_bg",hideIf:s=>s.transparent},
+    {k:"transparent",kind:"check",label:"c_transparent"},
+    {k:"pngScale",kind:"select",opts:[["1","1x"],["2","2x"],["4","4x"]]},
+  ]},
+];
+// extended i18n keys used in schema opts
+Object.assign(I18N.ru,{
+  c_type_f:"фрактал",c_type_t:"турбулентность",c_freq_y:"Частота Y",
+  c_mop_d:"наращивание",c_mop_e:"эрозия",c_lt_d:"диффузное",c_lt_s:"зеркальное",
+  c_cm_c:"цветной",c_cm_g:"серый",c_cm_d:"дуотон"
+});
+Object.assign(I18N.en,{
+  c_type_f:"fractal",c_type_t:"turbulence",c_freq_y:"Freq Y",
+  c_mop_d:"dilate",c_mop_e:"erode",c_lt_d:"diffuse",c_lt_s:"specular",
+  c_cm_c:"color",c_cm_g:"gray",c_cm_d:"duotone"
+});
+
+function buildControls(){
+  const root=$("#controls"); root.innerHTML="";
+  for(const grp of SCHEMA){
+    const g=document.createElement("div"); g.className="group";
+    const h=document.createElement("div"); h.className="ghead"; h.dataset.i18n=grp.g; h.textContent=t(grp.g);
+    g.appendChild(h);
+    for(const it of grp.items){
+      const row=document.createElement("div"); row.className="row"; row.dataset.item=it.k;
+      const lab=document.createElement("label"); lab.dataset.i18n=it.label; lab.textContent=t(it.label);
+      const ctrl=document.createElement("div"); ctrl.className="ctrl";
+      if(it.kind==="range"){
+        const inp=document.createElement("input"); inp.type="range"; inp.min=it.min; inp.max=it.max; inp.step=it.step; inp.dataset.key=it.k;
+        const val=document.createElement("span"); val.className="val"; val.dataset.val=it.k;
+        inp.addEventListener("input",onCtrl);
+        ctrl.appendChild(inp); ctrl.appendChild(val);
+      } else if(it.kind==="select"){
+        const sel=document.createElement("select"); sel.dataset.key=it.k;
+        for(const [v,lk] of it.opts){const o=document.createElement("option");o.value=v;o.dataset.i18n=lk;o.textContent=t(lk);sel.appendChild(o);}
+        sel.addEventListener("change",onCtrl); ctrl.appendChild(sel);
+      } else if(it.kind==="check"){
+        const cb=document.createElement("input"); cb.type="checkbox"; cb.dataset.key=it.k;
+        cb.addEventListener("change",onCtrl); ctrl.appendChild(cb);
+      } else if(it.kind==="color"){
+        const col=document.createElement("input"); col.type="color"; col.dataset.key=it.k;
+        col.addEventListener("input",onCtrl); ctrl.appendChild(col);
+      }
+      row.appendChild(lab); row.appendChild(ctrl); g.appendChild(row);
+    }
+    root.appendChild(g);
+  }
+  // tone curve editor
+  const g2=document.createElement("div"); g2.className="group";
+  const h2=document.createElement("div"); h2.className="ghead"; h2.dataset.i18n="g_tonecurve"; h2.textContent=t("g_tonecurve");
+  g2.appendChild(h2);
+  const cv=document.createElement("canvas"); cv.id="curve"; cv.width=300; cv.height=120;
+  g2.appendChild(cv);
+  g2.insertAdjacentHTML("beforeend",`<div class="row"><button id="curveReset" data-i18n="c_advTone">Сброс</button><span class="spacer"></span><span class="stat">drag = правка кривой тона</span></div>`);
+  root.appendChild(g2);
+  $("#curveReset").onclick=()=>{S.curve=[{x:0,y:0},{x:.25,y:.25},{x:.5,y:.5},{x:.75,y:.75},{x:1,y:1}];drawCurve();render();};
+  initCurve();
+}
+function onCtrl(e){
+  const el=e.target; const k=el.dataset.key;
+  if(!k) return;
+  if(el.type==="checkbox") S[k]=el.checked;
+  else if(el.type==="range") S[k]=parseFloat(el.value);
+  else if(el.type==="color") S[k]=el.value;
+  else S[k]=el.value;
+  syncControls(); render();
+}
+function syncControls(){
+  document.querySelectorAll("#controls [data-key]").forEach(el=>{
+    const k=el.dataset.key;
+    if(el.type==="checkbox") el.checked=!!S[k];
+    else if(el.type==="range") el.value=S[k];
+    else if(el.type==="color") el.value=S[k];
+    else el.value=S[k];
+  });
+  document.querySelectorAll("#controls [data-val]").forEach(el=>{el.textContent=fmt(S[el.dataset.val]);});
+  document.querySelectorAll("#controls .row").forEach(row=>{
+    const k=row.dataset.item; const it=findItem(k);
+    if(it&&it.hideIf) row.style.display = it.hideIf(S) ? "none" : "";
+  });
+}
+function findItem(k){for(const g of SCHEMA)for(const it of g.items)if(it.k===k)return it;return null;}
+function fmt(v){return (typeof v==="number")?(v%1===0?v:v.toFixed(3)):v;}
+
+/* ---------------- tone curve editor ---------------- */
+let dragIdx=-1;
+function initCurve(){
+  const cv=$("#curve"); const ctx=cv.getContext("2d");
+  const W=cv.width,H=cv.height,pad=6;
+  cv.onmousedown=e=>{const p=pos(e);dragIdx=nearest(p);};
+  cv.onmousemove=e=>{if(dragIdx<0)return;const p=pos(e);const x=clamp((p.x-pad)/(W-2*pad),0,1);const y=clamp(1-(p.y-pad)/(H-2*pad),0,1);
+    if(dragIdx>0&&dragIdx<S.curve.length-1){S.curve[dragIdx].x=clamp(x,S.curve[dragIdx-1].x+0.02,S.curve[dragIdx+1].x-0.02);}
+    else if(dragIdx===0)S.curve[0].x=0; else S.curve[S.curve.length-1].x=1;
+    S.curve[dragIdx].y=y; drawCurve(); render();};
+  window.addEventListener("mouseup",()=>dragIdx=-1);
+  drawCurve();
+}
+function pos(e){const r=$("#curve").getBoundingClientRect();return {x:(e.clientX-r.left)*(300/r.width),y:(e.clientY-r.top)*(120/r.height)};}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function nearest(p){let bi=0,bd=1e9;S.curve.forEach((pt,i)=>{const qx=pad+(pt.x)*(W-2*pad),qy=pad+(1-pt.y)*(H-2*pad);const d=Math.hypot(qx-p.x,qy-p.y);if(d<bd){bd=d;bi=i;}});return bi;}
+let W=300,H=120,pad=6;
+function drawCurve(){
+  const cv=$("#curve"); if(!cv)return; const ctx=cv.getContext("2d");
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle="#c0c0c0";ctx.strokeRect(0,0,W,H);
+  ctx.strokeStyle="#000";ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.strokeStyle="#000080";ctx.beginPath();
+  for(let i=0;i<=40;i++){const x=i/40;let a=S.curve[0],b=S.curve[S.curve.length-1];for(let k=0;k<S.curve.length-1;k++){if(S.curve[k].x<=x&&S.curve[k+1].x>=x){a=S.curve[k];b=S.curve[k+1];break;}}const d=(b.x-a.x)||1;const y=a.y+(b.y-a.y)*((x-a.x)/d);
+    const px=pad+x*(W-2*pad),py=pad+(1-y)*(H-2*pad);i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);}
+  ctx.stroke();
+  ctx.fillStyle="#ff0000";S.curve.forEach(pt=>{const px=pad+pt.x*(W-2*pad),py=pad+(1-pt.y)*(H-2*pad);ctx.beginPath();ctx.arc(px,py,3,0,7);ctx.fill();});
+}
+
+/* ---------------- presets ---------------- */
+function buildPresetBar(){
+  const bar=$("#presets"); bar.innerHTML="";
+  for(const name of Object.keys(PRESETS)){
+    const b=document.createElement("button"); b.className="pill"; b.textContent=name;
+    b.onclick=()=>{S=Object.assign(structuredClone(baseCfg),structuredClone(PRESETS[name]));syncControls();drawCurve();render();};
+    bar.appendChild(b);
+  }
+  const sep=document.createElement("span");sep.style.flexBasis="100%";sep.style.height="1px";bar.appendChild(sep);
+  const rh=document.createElement("span");rh.dataset.i18n="load_recent";rh.textContent=t("load_recent");rh.style.alignSelf="center";bar.appendChild(rh);
+  const recent=loadRecent();
+  recent.forEach((r,i)=>{const b=document.createElement("button");b.className="pill";b.textContent=r.name;b.title=JSON.stringify(r.cfg).slice(0,60);
+    b.onclick=()=>{S=Object.assign(structuredClone(baseCfg),structuredClone(r.cfg));syncControls();drawCurve();render();};bar.appendChild(b);});
+  if(recent.length){const cl=document.createElement("button");cl.className="pill";cl.dataset.i18n="clear_recent";cl.textContent=t("clear_recent");cl.onclick=()=>{localStorage.removeItem("soysvg_recent");buildPresetBar();};bar.appendChild(cl);}
+}
+function loadRecent(){try{return JSON.parse(localStorage.getItem("soysvg_recent")||"[]");}catch(e){return[];}}
+function saveRecent(name,cfg){const r=loadRecent();r.unshift({name,cfg});localStorage.setItem("soysvg_recent",JSON.stringify(r.slice(0,12)));}
+
+/* ---------------- export ---------------- */
+function svgDataUrl(){return "data:image/svg+xml;utf8,"+encodeURIComponent(buildSVG());}
+async function copySVG(){try{await navigator.clipboard.writeText(buildSVG());flash(t("copied"));}catch(e){code.select();document.execCommand("copy");flash(t("copied"));}}
+function dlSVG(){const a=document.createElement("a");a.href=svgDataUrl();a.download="soysvg_"+Date.now()+".svg";a.click();}
+function dlPNG(){
+  const scale=parseInt(S.pngScale,10)||1; const size=S.tile*scale;
+  const img=new Image();
+  img.onload=()=>{
+    const cv=document.createElement("canvas");cv.width=size;cv.height=size;
+    const ctx=cv.getContext("2d");
+    if(!S.transparent){ctx.fillStyle=S.bg;ctx.fillRect(0,0,size,size);}
+    ctx.drawImage(img,0,0,size,size);
+    cv.toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="soysvg_"+Date.now()+".png";a.click();});
+  };
+  img.src=svgDataUrl();
+}
+function flash(msg){const s=$("#stat");const old=s.textContent;s.textContent=msg;setTimeout(()=>s.textContent=old,1200);}
+
+/* ---------------- lang ---------------- */
+function applyLang(){
+  document.querySelectorAll("[data-i18n]").forEach(el=>{const k=el.dataset.i18n;if(I18N[LANG][k]!==undefined)el.textContent=I18N[LANG][k];});
+  $("#langBtn").textContent=LANG==="ru"?"RU":"EN";
+  buildControls(); syncControls(); drawCurve(); buildPresetBar();
+}
+
+/* ---------------- init ---------------- */
+function fromHash(){
+  if(location.hash.startsWith("#p=")){
+    try{const o=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(3)))));S=Object.assign(structuredClone(baseCfg),o);}catch(e){}
+  }
+}
+function randomize(){
+  S.type=Math.random()<0.5?"fractalNoise":"turbulence";
+  S.freqX=+(0.005+Math.random()*0.4).toFixed(3);
+  if(!S.link)S.freqY=+(0.005+Math.random()*0.4).toFixed(3);
+  S.octaves=1+Math.floor(Math.random()*6);
+  S.seed=Math.floor(Math.random()*100);
+  S.colorMode=["color","grayscale","duotone"][Math.floor(Math.random()*3)];
+  S.saturation=Math.floor(Math.random()*200);
+  syncControls();drawCurve();render();
+}
+
+fromHash();
+buildControls(); syncControls(); drawCurve(); buildPresetBar(); render();
+
+$("#langBtn").onclick=()=>{LANG=LANG==="ru"?"en":"ru";applyLang();};
+$("#saveBtn").onclick=()=>{const name=prompt(t("confirm_save"),"preset");if(name){saveRecent(name,structuredClone(S));buildPresetBar();flash(t("saved"));}};
+$("#randBtn").onclick=randomize;
+$("#copySvg").onclick=copySVG;
+$("#dlSvg").onclick=dlSVG;
+$("#dlPng").onclick=dlPNG;
+window.addEventListener("resize",()=>{});
+</script>
+</body>
+</html>

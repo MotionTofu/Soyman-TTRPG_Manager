@@ -34,7 +34,7 @@ import { EntityWizard } from "../components/entityWizard/EntityWizard";
 import { AdventuresTab } from "../components/AdventuresTab";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { RelationGraph } from "../components/RelationGraph";
-import { GraphTypeFilters, SETTING_SCOPED_TYPES } from "../components/GraphTypeFilters";
+import { SETTING_SCOPED_TYPES } from "../components/GraphTypeFilters";
 import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
 import type { GraphData } from "../graphTypes";
 import { NAMED_BEING_CATEGORIES } from "../beingCategories";
@@ -51,6 +51,7 @@ import type {
   SettingCalendarEvent,
   SettingCommunity,
   SettingCycle,
+  SettingGroup,
   SettingLocation,
 } from "../types";
 
@@ -179,6 +180,8 @@ export function SettingDetailPage() {
     important: boolean;
   } | null>(null);
   const [genrePickerOpen, setGenrePickerOpen] = useState(false);
+  const [allGroups, setAllGroups] = useState<SettingGroup[]>([]);
+  const [settingGroupIds, setSettingGroupIds] = useState<number[]>([]);
 
   function refreshCalendarEvents() {
     api.get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`).then(setCalendarEvents);
@@ -221,6 +224,10 @@ export function SettingDetailPage() {
       .then(setResources);
     api.get<Character[]>(`/characters?setting_id=${settingId}`).then(setCharacters);
     api.get<Campaign[]>(`/campaigns?setting_id=${settingId}`).then(setCampaigns);
+    api.get<SettingGroup[]>("/setting-groups").then(setAllGroups);
+    api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`).then((groups) => {
+      setSettingGroupIds(groups.map((g) => g.id));
+    });
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [settingId]);
@@ -538,12 +545,10 @@ export function SettingDetailPage() {
               },
             ]}
             onSaveFields={(v) => saveName(v.name, v.code)}
-          />
-
-          <div className="card">
-            <div className="genre-display">
+          >
+            <div className="genre-display" style={{ marginTop: 8 }}>
               <div className="genre-display-header">
-                <h3>Жанры</h3>
+                <strong>Жанры</strong>
                 <button className="genre-add-btn" onClick={() => setGenrePickerOpen(true)}>+</button>
               </div>
               {setting.genres && setting.genres.length > 0 ? (
@@ -563,18 +568,60 @@ export function SettingDetailPage() {
                   })}
                 </div>
               ) : (
-                <p className="muted">Жанры не выбраны</p>
+                <span className="muted">Жанры не выбраны</span>
               )}
             </div>
-          </div>
 
-          {genrePickerOpen && (
-            <GenrePicker
-              selected={setting.genres ?? []}
-              onSave={saveGenres}
-              onClose={() => setGenrePickerOpen(false)}
-            />
-          )}
+            {genrePickerOpen && (
+              <GenrePicker
+                selected={setting.genres ?? []}
+                onSave={saveGenres}
+                onClose={() => setGenrePickerOpen(false)}
+              />
+            )}
+
+            {allGroups.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <strong>Группы сеттингов</strong>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                  {allGroups.map((g) => {
+                    const isIn = settingGroupIds.includes(g.id);
+                    return (
+                      <label
+                        key={g.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          cursor: "pointer",
+                          padding: "4px 8px",
+                          borderRadius: "var(--card-radius)",
+                          border: `1px solid ${isIn ? "var(--accent)" : "var(--line)"}`,
+                          background: isIn ? "var(--accent-bg, rgba(79, 140, 255, 0.08))" : "transparent",
+                          fontSize: "var(--fs-meta)",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isIn}
+                          onChange={async () => {
+                            if (isIn) {
+                              await api.del(`/setting-groups/${g.id}/members`, { settingIds: [settingId] });
+                            } else {
+                              await api.post(`/setting-groups/${g.id}/members`, { settingIds: [settingId] });
+                            }
+                            const groups = await api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`);
+                            setSettingGroupIds(groups.map((gr) => gr.id));
+                          }}
+                        />
+                        {g.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </EditableTextCard>
 
           <CrossLinksWizard
             ownerKind="setting"
@@ -971,6 +1018,7 @@ function ImageSlot({
 // mention-links can connect to them too).
 function SettingGraphTab({ settingId }: { settingId: number }) {
   const [data, setData] = useState<GraphData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   // Раньше вкладка звала три захардкоженных типа: артефакты, сцены и
   // приключения сеттинга в его же граф не попадали, и переключить это было
   // нечем. Теперь тот же отбор, что и на общей странице, но из типов, у
@@ -980,20 +1028,28 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
   );
 
   useEffect(() => {
+    const controller = new AbortController();
     const params = new URLSearchParams({
       types: Array.from(activeTypes).join(","),
       setting_id: String(settingId),
     });
-    api.get<GraphData>(`/links/graph?${params.toString()}`).then(setData);
+    api.get<GraphData>(`/links/graph?${params.toString()}`, { signal: controller.signal })
+      .then((d) => { setData(d); setError(null); })
+      .catch((e: unknown) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setError(e instanceof Error ? e.message : "Ошибка загрузки графа");
+      });
+    return () => controller.abort();
   }, [settingId, activeTypes]);
 
   return (
     <div className="card stack">
-      <GraphTypeFilters
-        activeTypes={activeTypes}
-        setActiveTypes={setActiveTypes}
-        types={SETTING_SCOPED_TYPES}
-      />
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button type="button" onClick={() => setError(null)}>Повторить</button>
+        </div>
+      )}
       <RelationGraph
         data={data}
         layoutKey={`setting:${settingId}`}

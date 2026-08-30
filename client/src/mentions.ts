@@ -320,12 +320,13 @@ export async function syncMentionLinks(
   }
 
   if (toRemove.length > 0) {
-    const existing = await api.get<GenericLink[]>(
-      `/links?type=${entityType}&id=${entityId}&section=mention`
-    );
     for (const m of toRemove) {
       const id = resolveMention(m.type, m.uid);
       if (id == null) continue;
+      // Re-read before each delete to avoid race condition with concurrent calls
+      const existing = await api.get<GenericLink[]>(
+        `/links?type=${entityType}&id=${entityId}&section=mention`
+      );
       const match = existing.find(
         (l) =>
           (l.to_type === m.type && l.to_id === id) || (l.from_type === m.type && l.from_id === id)

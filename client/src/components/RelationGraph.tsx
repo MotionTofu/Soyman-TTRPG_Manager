@@ -14,9 +14,7 @@ import { EntityPreviewModal } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
 import {
   DEFAULT_EDGE_KINDS,
-  EDGE_KINDS,
   EDGE_KIND_STYLE,
-  GROUP_MODES,
   buildIsolation,
   findPath,
   foldGroups,
@@ -33,13 +31,16 @@ import {
   type GraphNode,
   type NodePositions,
 } from "../graphTypes";
-import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
+import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import type { RelationTone } from "../types";
 
 const ARROW_PAN_STEP = 90; // на сколько единиц холста двигают стрелки
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 6;
 const FOCUS_ZOOM = 2.2;
+
+// Типы, которые никогда не попадают на граф связей.
+const EXCLUDED_GRAPH_TYPES = new Set(["player", "resource"]);
 
 interface View {
   zoom: number;
@@ -94,6 +95,8 @@ interface Props {
   // Под каким ключом хранить расставленные руками узлы. Разные графы —
   // разные карты: у сеттинга своя, у общей страницы своя.
   layoutKey?: string;
+  // Скоуп (сеттинг/кампания) — в Row 0, после поиска.
+  scopeBar?: React.ReactNode;
 }
 
 interface ManualLayout {
@@ -116,12 +119,13 @@ function loadLayout(key: string | undefined): ManualLayout {
 // (dims everyone else and centers/zooms on it), search box to jump straight
 // to a node without hunting for it visually. Used both by the global
 // "Граф связей" page and a setting-scoped graph tab.
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [view, setView] = useState<View>({ zoom: 1, panX: 0, panY: 0 });
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   // Расставленное руками переживает перезагрузку: карта мира, которую мастер
   // разложил под себя, — это его работа, а не временное состояние экрана.
@@ -141,28 +145,37 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // а всё остальное — членство, обитание, вложенность, сцены — рисовалось
   // одинаковой серой линией и не отключалось.
   const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
+  // Типы сущностей, скрытые из графа через легенду (клик по точке).
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set());
   const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
     null
   );
   const justPannedRef = useRef(false);
+  const rafRef = useRef(0);
 
   // World-space canvas size — grows with the node count so a large setting's
   // graph has room to spread out instead of everything piling up along the
   // clamped edges of a fixed-size canvas.
   const baseCanvas = data ? canvasSizeFor(data.nodes.length) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
 
-  // Отбор по видам -> свёртка в группы -> изоляция. Считается здесь, до
-  // раннего выхода: размеры холста и позиции зависят от результата, а ими
-  // пользуются обработчики колеса и панорамирования.
+  // Отбор по видам -> отбор по типам -> свёртка в группы -> изоляция.
+  // Считается здесь, до раннего выхода: размеры холста и позиции зависят от
+  // результата, а ими пользуются обработчики колеса и панорамирования.
   const pipeline = useMemo(() => {
     if (!data) return null;
     const kindEdges = data.edges.filter((e) => activeKinds.has(e.kind));
-    const grouped = foldGroups(data.nodes, kindEdges, groupMode, expandedGroups);
+    // Исключаем типы, которые не участвуют в графе, плюс скрытые через легенду.
+    const visibleNodes = data.nodes.filter(
+      (n) => !EXCLUDED_GRAPH_TYPES.has(n.type) && !hiddenTypes.has(n.type)
+    );
+    const visibleKeys = new Set(visibleNodes.map((n) => n.key));
+    const typeEdges = kindEdges.filter((e) => visibleKeys.has(e.from) && visibleKeys.has(e.to));
+    const grouped = foldGroups(visibleNodes, typeEdges, groupMode, expandedGroups);
     const isolationView = isolation
       ? buildIsolation(grouped.nodes, grouped.edges, isolation.key, isolation.depth)
       : null;
     return { grouped, isolationView };
-  }, [data, activeKinds, groupMode, expandedGroups, isolation]);
+  }, [data, activeKinds, hiddenTypes, groupMode, expandedGroups, isolation]);
 
   const isolationView = pipeline?.isolationView ?? null;
   const canvasSize = isolationView
@@ -189,8 +202,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     );
     lastPositions.current = next;
     return next;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [data, baseCanvas.width, baseCanvas.height]);
 
   // Позиции для отрисовки: расставленное руками поверх посчитанного. Держится
   // отдельно от simulated, чтобы перетаскивание не гоняло раскладку заново.
@@ -214,14 +226,19 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setPathTo(null);
     // Новые данные — другая область или другой запрос: изолированного узла в
     // них может не быть вовсе, и вид повис бы без панели выхода.
+    if (isolation) console.debug("[RelationGraph] data changed, clearing isolation");
     setIsolation(null);
     setView({ zoom: 1, panX: 0, panY: 0 });
   }, [data]);
 
   useEffect(() => {
     if (!layoutKey) return;
-    if (Object.keys(manual).length === 0) localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
-    else localStorage.setItem(LAYOUT_STORE_PREFIX + layoutKey, JSON.stringify(manual));
+    try {
+      if (Object.keys(manual).length === 0) localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
+      else localStorage.setItem(LAYOUT_STORE_PREFIX + layoutKey, JSON.stringify(manual));
+    } catch (e) {
+      console.warn("Graph layout not saved:", e);
+    }
   }, [manual, layoutKey]);
 
   useEffect(() => {
@@ -232,6 +249,11 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [fullscreen]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   // Deps include `data`: the wrap <div> (and wrapRef.current) only exists
   // once data has loaded — with `data` left out of the deps list, this
@@ -381,24 +403,28 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
 
   function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     if (dragState.current && dragOrigin.current && wrapRef.current) {
+      const origin = dragOrigin.current;
       const rect = wrapRef.current.getBoundingClientRect();
       // Экранные пиксели -> единицы холста (svg вписан по ширине) -> мировые
       // координаты (внутри <g> всё ещё умножено на зум).
       const scale = (rect.width / canvasSize.width) * view.zoom;
-      const dx = (e.clientX - dragOrigin.current.clientX) / scale;
-      const dy = (e.clientY - dragOrigin.current.clientY) / scale;
+      const dx = (e.clientX - origin.clientX) / scale;
+      const dy = (e.clientY - origin.clientY) / scale;
       // Дрожание руки на клике — не перестановка: пока порог не пройден, узел
       // не попадает в ручную раскладку и не закрепляется в ней.
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.current.moved = true;
       if (!dragState.current.moved) return;
       const key = dragState.current.key;
-      setManual((prev) => ({
-        ...prev,
-        [key]: {
-          x: Math.max(30, Math.min(canvasSize.width - 30, dragOrigin.current!.x + dx)),
-          y: Math.max(30, Math.min(canvasSize.height - 30, dragOrigin.current!.y + dy)),
-        },
-      }));
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        setManual((prev) => ({
+          ...prev,
+          [key]: {
+            x: Math.max(30, Math.min(canvasSize.width - 30, origin.x + dx)),
+            y: Math.max(30, Math.min(canvasSize.height - 30, origin.y + dy)),
+          },
+        }));
+      });
       return;
     }
     if (!panState.current || !wrapRef.current) return;
@@ -414,7 +440,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       canvasSize.width,
       canvasSize.height
     );
-    setView((v) => ({ ...v, panX: clamped.x, panY: clamped.y }));
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      setView((v) => ({ ...v, panX: clamped.x, panY: clamped.y }));
+    });
   }
 
   function handlePointerUp() {
@@ -463,18 +492,37 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   }
 
   const searchMatches = useMemo(() => {
-    if (!data || !query.trim()) return [];
-    const q = query.trim().toLowerCase();
+    if (!data || !debouncedQuery.trim()) return [];
+    const q = debouncedQuery.trim().toLowerCase();
     return data.nodes.filter((n) => n.title.toLowerCase().includes(q)).slice(0, 8);
-  }, [data, query]);
+  }, [data, debouncedQuery]);
+
+  const nodesByKey = useMemo(() => {
+    if (!data) return new Map<string, GraphNode>();
+    return new Map(data.nodes.map((n) => [n.key, n]));
+  }, [data]);
+
+  const visibleNodes = isolationView ? isolationView.nodes : pipeline?.grouped.nodes ?? [];
+  const visibleEdges = isolationView ? isolationView.edges : pipeline?.grouped.edges ?? [];
+
+  const visibleKeys = useMemo(() => new Set(visibleNodes.map((n) => n.key)), [visibleNodes]);
+
+  const pairCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of visibleEdges) {
+      const k = pairKey(e.from, e.to);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return counts;
+  }, [visibleEdges]);
 
   if (!data) return <p className="muted">Загрузка…</p>;
+  // pipeline depends on data — if data is non-null, pipeline is too.
+  if (!pipeline) return <p className="muted">Загрузка…</p>;
 
   // Конвейер посчитан выше (см. pipeline): отбор по видам -> свёртка в группы
   // -> изоляция. В изоляции рисуется только окрестность выбранного узла.
-  const grouped = pipeline!.grouped;
-  const visibleNodes = isolationView ? isolationView.nodes : grouped.nodes;
-  const visibleEdges = isolationView ? isolationView.edges : grouped.edges;
+  const grouped = pipeline.grouped;
 
   // Путь между двумя выбранными узлами — по тем же видимым связям.
   const path =
@@ -492,97 +540,99 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       )
     : null;
 
-  const focusedNode = focusedKey ? data.nodes.find((n) => n.key === focusedKey) : null;
-  const nodesByKey = new Map(data.nodes.map((n) => [n.key, n]));
+  const focusedNode = data.nodes.find((n) => n.key === focusedKey) ?? null;
   // Искать имеет смысл только среди нарисованного: свёрнутый внутрь группы
   // узел найдётся, но прыгать будет некуда.
-  const visibleKeys = new Set(visibleNodes.map((n) => n.key));
   // Метка «поставлен руками» имеет смысл, пока такие узлы — исключение. После
   // «Сохранить раскладку» закреплены все, и метка на каждом узле перестаёт
   // что-либо различать, оставаясь просто рябью.
   const showPins = Object.keys(manual).length < visibleNodes.length;
   const shownMatches = searchMatches.filter((n) => visibleKeys.has(n.key));
-  const pairCounts = new Map<string, number>();
-  for (const e of visibleEdges) {
-    const k = pairKey(e.from, e.to);
-    pairCounts.set(k, (pairCounts.get(k) ?? 0) + 1);
-  }
 
   const counterScale = labelScale(view.zoom) / view.zoom;
 
   const toolbar = (
-    <div className="row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
-      <div className="row" style={{ position: "relative" }}>
-        <input
-          placeholder={pathFrom && !pathTo ? "…и до кого прокладывать путь" : "Найти сущность…"}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {shownMatches.length > 0 && (
-          <div className="entity-search-results">
-            {shownMatches.map((n) => (
-              <div
-                key={n.key}
-                className="entity-search-item"
-                onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key))}
-              >
-                <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
-                {n.title}
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="graph-toolbar">
+      {/* Row 0: search | filters | scope | group */}
+      <div className="graph-toolbar-row">
+        <div className="row" style={{ position: "relative" }}>
+          <input
+            placeholder={pathFrom && !pathTo ? "…и до кого прокладывать путь" : "Найти сущность…"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {shownMatches.length > 0 && (
+            <div className="entity-search-results">
+              {shownMatches.map((n) => (
+                <div
+                  key={n.key}
+                  className="entity-search-item"
+                  onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key))}
+                >
+                  <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
+                  {n.title}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-      <label className="row" style={{ gap: 6 }}>
-        Группировать
-        <select value={groupMode} onChange={(e) => setGroupMode(e.target.value as GroupMode)}>
-          {GROUP_MODES.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="button" onClick={() => zoomBy(1.3)} title="Приблизить">
-        <NavIcon name="plus" />
-      </button>
-      <button type="button" onClick={() => zoomBy(1 / 1.3)} title="Отдалить">
-        <NavIcon name="minus" />
-      </button>
-      <button type="button" onClick={resetView}>
-        Сбросить вид ({Math.round(view.zoom * 100)}%)
-      </button>
-      {!isolationView && (
+      {scopeBar && (
+        <>
+          <span className="graph-toolbar-sep" />
+          <div className="graph-toolbar-row">{scopeBar}</div>
+        </>
+      )}
+      <span className="graph-toolbar-sep" />
+      <div className="graph-toolbar-row">
         <button
           type="button"
-          onClick={saveLayout}
-          title="Закрепить всё, что сейчас на экране: узлы перестанут переезжать при пересчёте"
+          className={`graph-tb-btn${groupMode === "community" ? " active" : ""}`}
+          onClick={() => setGroupMode(groupMode === "community" ? "none" : "community")}
+          title="Свернуть членов фракций внутрь: персонажи и существа спрячутся под узлом фракции"
         >
-          Сохранить раскладку
+          Фракции
         </button>
-      )}
-      {Object.keys(manual).length > 0 && (
         <button
           type="button"
-          onClick={() => setManual({})}
-          title="Вернуть все узлы туда, куда их кладёт автоматическая раскладка"
+          className={`graph-tb-btn${groupMode === "location" ? " active" : ""}`}
+          onClick={() => setGroupMode(groupMode === "location" ? "none" : "location")}
+          title="Свернуть обитателей внутрь локаций: существа спрячутся под узлом места"
         >
-          Сбросить свою раскладку ({Object.keys(manual).length})
+          Локации
         </button>
-      )}
-      <button
-        type="button"
-        onClick={() => setFullscreen((v) => !v)}
-        title={fullscreen ? "Закрыть (Esc)" : "На весь экран"}
-      >
-        {fullscreen ? (
-          "Свернуть"
-        ) : (
-          <>
-            <NavIcon name="fullscreen" /> На весь экран
-          </>
+      </div>
+      {/* Row 1: fullscreen | zoom | save | reset */}
+      <span className="graph-toolbar-sep" />
+      <div className="graph-toolbar-row">
+        <button
+          type="button"
+          className="graph-tb-btn"
+          onClick={() => setFullscreen((v) => !v)}
+          title={fullscreen ? "Закрыть (Esc)" : "На весь экран"}
+        >
+          {fullscreen ? "Свернуть" : <><NavIcon name="fullscreen" /> Весь экран</>}
+        </button>
+        <button type="button" className="graph-tb-btn" onClick={() => zoomBy(1 / 1.3)} title="Отдалить">
+          <NavIcon name="minus" />
+        </button>
+        <button type="button" className="graph-tb-btn" onClick={() => zoomBy(1.3)} title="Приблизить">
+          <NavIcon name="plus" />
+        </button>
+        {!isolationView && (
+          <button
+            type="button"
+            className="graph-tb-btn"
+            onClick={saveLayout}
+            title="Закрепить всё, что сейчас на экране"
+          >
+            Сохранить раскладку
+          </button>
         )}
-      </button>
+        <button type="button" className="graph-tb-btn" onClick={resetView}>
+          Сбросить вид ({Math.round(view.zoom * 100)}%)
+        </button>
+      </div>
       {focusedNode && (
         <div className="row relation-graph-focus-panel">
           <span className={`entity-type-chip ${focusedNode.type}`}>
@@ -676,64 +726,67 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     </div>
   );
 
-  // Сколько рёбер каждого вида есть в этих данных — галочка без числа не
-  // говорит, стоит ли её вообще трогать.
-  const kindCounts = new Map<EdgeKind, number>();
-  for (const e of data.edges) kindCounts.set(e.kind, (kindCounts.get(e.kind) ?? 0) + 1);
-
-  const legend = (
-    <div className="relation-graph-legend">
-      {RELATION_TONES.map((t) => (
-        <span key={t.key} className="row" style={{ gap: 4 }}>
-          <span
-            style={{
-              display: "inline-block",
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              background: t.color,
-            }}
-          />
-          {t.label}
-        </span>
-      ))}
-      <span className="relation-graph-legend-sep" />
-      {EDGE_KINDS.map((k) => {
-        const count = kindCounts.get(k.key) ?? 0;
-        return (
-          <label key={k.key} className="row" style={{ gap: 4, opacity: count ? 1 : 0.45 }}>
-            <input
-              type="checkbox"
-              checked={activeKinds.has(k.key)}
-              disabled={count === 0}
-              onChange={() =>
-                setActiveKinds((prev) => {
+  const legend = (() => {
+    // Считаем типы по ВСЕМ узлам данных (не только видимым), чтобы легенда
+    // показывала все доступные типы и давала включать/выключать.
+    // Исключены типы, которые не участвуют в графе (player, resource).
+    const typesInData = new Map<string, number>();
+    for (const n of data?.nodes ?? []) {
+      if (!EXCLUDED_GRAPH_TYPES.has(n.type)) typesInData.set(n.type, (typesInData.get(n.type) ?? 0) + 1);
+    }
+    const allTypeKeys = [...typesInData.keys()];
+    const allVisible = hiddenTypes.size === 0;
+    return (
+      <div className="relation-graph-legend">
+        <button
+          type="button"
+          className="graph-tb-btn"
+          onClick={() =>
+            setHiddenTypes((prev) => {
+              if (prev.size === 0) return new Set(allTypeKeys);
+              return new Set();
+            })
+          }
+        >
+          {allVisible ? "Выкл" : "Вкл"}
+        </button>
+        {[...typesInData.entries()].map(([type, count]) => {
+          const hidden = hiddenTypes.has(type);
+          return (
+            <button
+              key={type}
+              type="button"
+              className="graph-tb-btn"
+              style={{ opacity: hidden ? 0.4 : 1 }}
+              onClick={() =>
+                setHiddenTypes((prev) => {
                   const next = new Set(prev);
-                  if (next.has(k.key)) next.delete(k.key);
-                  else next.add(k.key);
+                  if (next.has(type)) next.delete(type);
+                  else next.add(type);
                   return next;
                 })
               }
-            />
-            <svg width="18" height="8" aria-hidden>
-              <line
-                x1="1"
-                y1="4"
-                x2="17"
-                y2="4"
-                stroke="var(--ink)"
-                strokeWidth={k.width}
-                strokeDasharray={k.dash}
+              title={hidden ? `Показать ${TYPE_LABELS[type] ?? type}` : `Скрыть ${TYPE_LABELS[type] ?? type}`}
+            >
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: TYPE_COLORS[type] ?? "#888",
+                  flexShrink: 0,
+                }}
               />
-            </svg>
-            {k.label} <span className="muted">{count}</span>
-          </label>
-        );
-      })}
-    </div>
-  );
+              {TYPE_LABELS[type] ?? type}
+            </button>
+          );
+        })}
+      </div>
+    );
+  })();
 
-  const isolated = data.isolated ?? [];
+  const isolated = (data.isolated ?? []).filter((n) => !EXCLUDED_GRAPH_TYPES.has(n.type));
   const isolatedPanel = isolated.length > 0 && (
     <details className="card relation-graph-isolated">
       <summary>
@@ -899,6 +952,9 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                   transform={`translate(${p.x},${p.y})`}
                   style={{ cursor: "grab" }}
                   opacity={offPath ? 0.15 : dim ? 0.25 : 1}
+                  role="button"
+                  aria-label={`${TYPE_LABELS[n.type] ?? n.type}: ${n.title}`}
+                  tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleNodeClick(n, foldedCount > 0);
@@ -906,6 +962,12 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     isolate(n.key);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleNodeClick(n, foldedCount > 0);
+                    }
                   }}
                   onContextMenu={(e) => handleNodeContextMenu(e, n)}
                 >
@@ -919,6 +981,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                     // Кружок внутри — метка «стоит там, где поставили руками».
                     <circle r={3} fill="var(--paper)" opacity={0.9} />
                   )}
+                  {/* React escapes {n.title} automatically — safe from XSS */}
                   <text x={radius + 5} y={4} fontSize={11} fill="var(--ink)">
                     {n.title}
                     {foldedCount > 0 && <tspan className="muted"> +{foldedCount}</tspan>}

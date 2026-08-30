@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { toLocalDateKey } from "../utils/date";
+import { toLocalDateKey, formatDateKeyRu } from "../utils/date";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
@@ -24,6 +24,8 @@ import {
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
+  CAMPAIGN_STATUS_LABELS,
+  CAMPAIGN_STATUS_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
   PAYMENT_FREQUENCY_LABELS,
   RATE_SPLIT_OPTIONS,
@@ -45,6 +47,7 @@ import { loadHideFinance } from "../financePrivacy";
 import type {
   CampaignCalendarEvent,
   CampaignDetail,
+  CampaignGroup,
   CampaignGrouped,
   CampaignType,
   Character,
@@ -86,7 +89,7 @@ const GM_TABS = [
 
 // Сохранённые ссылки на прежнее имя вкладки не должны падать на «Обзор».
 const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки" } as const;
-const PLAYER_TABS = ["Персонаж", "Заметки", "Клёвые цитаты", "Трекер задач", "Хроника игр", "Исследование Мира"] as const;
+const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Трекер задач", "Хроника игр", "Исследование Мира"] as const;
 
 export function CampaignDetailPage() {
   const { id } = useParams();
@@ -100,7 +103,7 @@ export function CampaignDetailPage() {
   const tabs = campaign?.role === "player" ? PLAYER_TABS : GM_TABS;
   const [tab, selectTab] = useTabState(
     tabs,
-    campaign?.role === "player" ? "Персонаж" : "Обзор",
+    "Обзор",
     campaign?.role === "player" ? undefined : GM_TAB_ALIASES
   );
   // Третий вид рядом с сеткой и списком: сетка показывает месяц, список —
@@ -119,6 +122,7 @@ export function CampaignDetailPage() {
   }, [campaign?.setting_id]);
 
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
+  const [creatingSession, setCreatingSession] = useState(false);
   const [newStatus, setNewStatus] = useState<SessionStatus>("planned");
   const [newPaymentOverride, setNewPaymentOverride] = useState<"" | PaymentType>("");
   const [newStake, setNewStake] = useState("");
@@ -126,25 +130,8 @@ export function CampaignDetailPage() {
   const [repeatCount, setRepeatCount] = useState("4");
   const [newCopyFromSessionId, setNewCopyFromSessionId] = useState("");
 
-  const [editing, setEditing] = useState(false);
   const [systems, setSystems] = useState<System[]>([]);
   const [settingsList, setSettingsList] = useState<Setting[]>([]);
-  const [bgFile, setBgFile] = useState<File | null>(null);
-  const bgCrop = useImageCrop("background", setBgFile);
-  const [thumbFile, setThumbFile] = useState<File | null>(null);
-  const thumbCrop = useImageCrop("thumbnail", setThumbFile);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    type: "campaign" as CampaignType,
-    payment_type: "free" as PaymentType,
-    payment_frequency: "per_session" as PaymentFrequency,
-    rate_split: "per_person" as RateSplit,
-    session_rate: "0",
-    currency: "RUB",
-    status: "active",
-    system_id: "",
-    setting_id: "",
-  });
 
   const [menu, setMenu] = useState<{ x: number; y: number; event: CalendarEvent } | null>(
     null
@@ -180,21 +167,7 @@ export function CampaignDetailPage() {
   }, [campaign?.setting_id]);
 
   function refreshCampaign() {
-    api.get<CampaignDetail>(`/campaigns/${campaignId}`).then((c) => {
-      setCampaign(c);
-      setEditForm({
-        name: c.name,
-        type: c.type,
-        payment_type: c.payment_type,
-        payment_frequency: c.payment_frequency,
-        rate_split: c.rate_split,
-        session_rate: String(c.session_rate),
-        currency: c.currency,
-        status: c.status,
-        system_id: c.system_id ? String(c.system_id) : "",
-        setting_id: c.setting_id ? String(c.setting_id) : "",
-      });
-    });
+    api.get<CampaignDetail>(`/campaigns/${campaignId}`).then(setCampaign);
   }
   function refreshSessions() {
     api
@@ -366,63 +339,39 @@ export function CampaignDetailPage() {
   }
 
   async function createSession() {
-    if (!creatingDate) return;
-    const total = repeatInterval === "none" ? 1 : Math.max(1, Number(repeatCount) || 1);
-    const step = repeatInterval === "none" ? 0 : Number(repeatInterval);
-    const base = new Date(creatingDate + "T00:00:00");
-    for (let i = 0; i < total; i++) {
-      const d = new Date(base);
-      d.setDate(d.getDate() + i * step);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const created = await api.post<{ id: number }>("/sessions", {
-        campaign_id: campaignId,
-        date: dateStr,
-        status: newStatus,
-        payment_override: newPaymentOverride || null,
-        stake_override: newStake ? Number(newStake) : undefined,
-      });
-      if (newCopyFromSessionId) {
-        await copySessionPrep(Number(newCopyFromSessionId), created.id);
+    if (!creatingDate || creatingSession) return;
+    setCreatingSession(true);
+    try {
+      const total = repeatInterval === "none" ? 1 : Math.max(1, Number(repeatCount) || 1);
+      const step = repeatInterval === "none" ? 0 : Number(repeatInterval);
+      const base = new Date(creatingDate + "T00:00:00");
+      for (let i = 0; i < total; i++) {
+        const d = new Date(base);
+        d.setDate(d.getDate() + i * step);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const created = await api.post<{ id: number }>("/sessions", {
+          campaign_id: campaignId,
+          date: dateStr,
+          status: newStatus,
+          payment_override: newPaymentOverride || null,
+          stake_override: newStake ? Number(newStake) : undefined,
+        });
+        if (newCopyFromSessionId) {
+          await copySessionPrep(Number(newCopyFromSessionId), created.id);
+        }
       }
+      setCreatingDate(null);
+      setNewStatus("planned");
+      setNewPaymentOverride("");
+      setNewStake("");
+      setRepeatInterval("none");
+      setRepeatCount("4");
+      setNewCopyFromSessionId("");
+      refreshSessions();
+      refreshCampaign();
+    } finally {
+      setCreatingSession(false);
     }
-    setCreatingDate(null);
-    setNewStatus("planned");
-    setNewPaymentOverride("");
-    setNewStake("");
-    setRepeatInterval("none");
-    setRepeatCount("4");
-    setNewCopyFromSessionId("");
-    refreshSessions();
-    refreshCampaign();
-  }
-
-  async function saveCampaignEdit() {
-    await api.put(`/campaigns/${campaignId}`, {
-      name: editForm.name,
-      type: editForm.type,
-      payment_type: editForm.payment_type,
-      payment_frequency: editForm.payment_frequency,
-      rate_split: editForm.rate_split,
-      session_rate: Number(editForm.session_rate) || 0,
-      currency: editForm.currency,
-      status: editForm.status,
-      system_id: editForm.system_id ? Number(editForm.system_id) : null,
-      setting_id: editForm.setting_id ? Number(editForm.setting_id) : null,
-    });
-    if (bgFile) {
-      const form = new FormData();
-      form.append("file", bgFile);
-      await api.post(`/campaigns/${campaignId}/background`, form);
-      setBgFile(null);
-    }
-    if (thumbFile) {
-      const form = new FormData();
-      form.append("file", thumbFile);
-      await api.post(`/campaigns/${campaignId}/thumbnail`, form);
-      setThumbFile(null);
-    }
-    setEditing(false);
-    refreshCampaign();
   }
 
   async function archiveCampaign() {
@@ -495,18 +444,14 @@ export function CampaignDetailPage() {
         <div>
           <div className="row" style={{ alignItems: "center" }}>
             <h1>
-              {campaign.role === "player" ? (
-                campaign.name
-              ) : (
                 <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
                   {campaign.name}
                 </button>
-              )}
             </h1>
             <EntityTypeChip type="campaign" />
           </div>
           <div className="muted">
-            {campaign.system_name ?? "система не выбрана"} · {campaign.status}
+            {campaign.system_name ?? "система не выбрана"} · {CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}
           </div>
         </div>
         <div className="row">
@@ -515,12 +460,11 @@ export function CampaignDetailPage() {
           ) : (
             !loadHideFinance() && (
               <div className="badge tag">
-                {campaign.finance.earned} {campaign.currency}
+                <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned}</span> {campaign.currency}
               </div>
             )
           )}
           <div className="entity-header-actions">
-            <button onClick={() => setEditing(true)}>Редактировать</button>
             <button className="danger" onClick={archiveCampaign}>
               <NavIcon name="archive" /> Архивировать
             </button>
@@ -536,7 +480,9 @@ export function CampaignDetailPage() {
         ))}
       </div>
 
-      {tab === "Персонаж" && <PlayerCharacterTab campaignId={campaignId} />}
+      {tab === "Обзор" && campaign.role === "player" && (
+        <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} onRefresh={refreshCampaign} />
+      )}
 
       {tab === "Заметки" && campaign.role === "player" && (
         <CampaignEntryList
@@ -584,15 +530,15 @@ export function CampaignDetailPage() {
         <CampaignSecrets campaignId={campaignId} settingId={campaign.setting_id} />
       )}
 
-       {tab === "Обзор" && (
-         <>
-           <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} />
-           <CrossLinksWizard
-             ownerKind="campaign"
-             ownerId={campaignId}
-             help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
-           />
-         </>
+       {tab === "Обзор" && campaign.role !== "player" && (
+          <>
+            <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} onRefresh={refreshCampaign} />
+            <CrossLinksWizard
+              ownerKind="campaign"
+              ownerId={campaignId}
+              help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+            />
+          </>
        )}
 
       {tab === "Для игроков" && (
@@ -627,7 +573,7 @@ export function CampaignDetailPage() {
             {campaign.role === "player" || loadHideFinance() ? (
               <div className="card stack">
                 <h3>Сессии</h3>
-                <div>Проведено сессий: {campaign.finance.heldSessions}</div>
+                <div>Проведено сессий: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.heldSessions}</span></div>
               </div>
             ) : (
               <div className="card stack">
@@ -640,10 +586,10 @@ export function CampaignDetailPage() {
                     {RATE_SPLIT_LABELS[campaign.rate_split].toLowerCase()})
                   </div>
                 )}
-                <div>Проведено сессий: {campaign.finance.heldSessions}</div>
-                <strong>
-                  Заработано: {campaign.finance.earned} {campaign.currency}
-                </strong>
+                <div>Проведено сессий: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.heldSessions}</span></div>
+                <div>
+                  Заработано: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned} {campaign.currency}</span>
+                </div>
               </div>
             )}
           </div>
@@ -705,7 +651,7 @@ export function CampaignDetailPage() {
                     {!loadHideFinance() && <td>{PAYMENT_TYPE_LABELS[s.effective_payment_type]}</td>}
                     <td className="row">
                       <Link to={`/sessions/${s.id}`}>Открыть →</Link>
-                      <button onClick={() => archiveSession(s.id)}>✕</button>
+                      <button onClick={() => archiveSession(s.id)} aria-label="Архивировать сессию">✕</button>
                     </td>
                   </tr>
                 ))}
@@ -968,7 +914,7 @@ export function CampaignDetailPage() {
 
       {creatingDate && (
         <Modal onClose={() => setCreatingDate(null)}>
-          <h2>Сессия {creatingDate}</h2>
+          <h2>Сессия — {formatDateKeyRu(creatingDate)}</h2>
           <div className="stack">
             <label>
               Статус
@@ -1039,158 +985,9 @@ export function CampaignDetailPage() {
               </label>
             )}
             <div className="row" style={{ justifyContent: "flex-end" }}>
-              <button onClick={() => setCreatingDate(null)}>Отмена</button>
-              <button className="primary" onClick={createSession}>
-                Сохранить
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {editing && (
-        <Modal onClose={() => setEditing(false)}>
-          <h2>Редактировать кампанию</h2>
-          <div className="stack">
-            <label>
-              Название
-              <input
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              />
-            </label>
-            <label>
-              Тип
-              <select
-                value={editForm.type}
-                onChange={(e) => setEditForm({ ...editForm, type: e.target.value as CampaignType })}
-              >
-                {CAMPAIGN_TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Система
-              <select
-                value={editForm.system_id}
-                onChange={(e) => setEditForm({ ...editForm, system_id: e.target.value })}
-              >
-                <option value="">—</option>
-                {systems.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Сеттинг
-              <select
-                value={editForm.setting_id}
-                onChange={(e) => setEditForm({ ...editForm, setting_id: e.target.value })}
-              >
-                <option value="">—</option>
-                {settingsList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Статус
-              <select
-                value={editForm.status}
-                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-              >
-                <option value="active">active</option>
-                <option value="paused">paused</option>
-                <option value="completed">completed</option>
-              </select>
-            </label>
-            <label>
-              Оплата
-              <select
-                value={editForm.payment_type}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, payment_type: e.target.value as PaymentType })
-                }
-              >
-                {PAYMENT_TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {editForm.payment_type === "paid" && (
-              <>
-                <label>
-                  Периодичность
-                  <select
-                    value={editForm.payment_frequency}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, payment_frequency: e.target.value as PaymentFrequency })
-                    }
-                  >
-                    {PAYMENT_FREQUENCY_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Тип ставки
-                  <select
-                    value={editForm.rate_split}
-                    onChange={(e) => setEditForm({ ...editForm, rate_split: e.target.value as RateSplit })}
-                  >
-                    {RATE_SPLIT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Ставка{" "}
-                  {editForm.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
-                  {editForm.rate_split === "per_person" ? " (с человека)" : " (со стола)"}
-                  <input
-                    type="number"
-                    value={editForm.session_rate}
-                    onChange={(e) => setEditForm({ ...editForm, session_rate: e.target.value })}
-                  />
-                </label>
-              </>
-            )}
-            <label>
-              Валюта
-              <input
-                value={editForm.currency}
-                onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
-              />
-            </label>
-            <label>
-              Фоновая картинка
-              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => bgCrop.onSelect(e.target.files?.[0] ?? null)} />
-              <span className="muted image-hint">{IMAGE_HINT}</span>
-            </label>
-            {bgCrop.modal}
-            <label>
-              Тамбнейл (для списка кампаний)
-              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
-              <span className="muted image-hint">{IMAGE_HINT}</span>
-            </label>
-            {thumbCrop.modal}
-            <div className="row" style={{ justifyContent: "flex-end" }}>
-              <button onClick={() => setEditing(false)}>Отмена</button>
-              <button className="primary" onClick={saveCampaignEdit}>
-                Сохранить
+              <button onClick={() => setCreatingDate(null)} disabled={creatingSession}>Отмена</button>
+              <button className="primary" onClick={createSession} disabled={creatingSession}>
+                {creatingSession ? "Создаю…" : "Сохранить"}
               </button>
             </div>
           </div>
@@ -1642,6 +1439,228 @@ const PREPRODUCTION_FIELDS: { key: keyof Preproduction; label: string; help?: st
 ];
 
 // Обзор = Препродакшен (design doc, written before play starts) + Продакшен
+// Player-role overview: "Основное" (editable info) + "Персонажи" (the player's
+// own character card). Same collapsible-section pattern as the GM overview.
+function PlayerOverviewTab({
+  campaign,
+  systems,
+  settingsList,
+  onRefresh,
+}: {
+  campaign: CampaignDetail;
+  systems: System[];
+  settingsList: Setting[];
+  onRefresh: () => void;
+}) {
+  const campaignId = campaign.id;
+  const [editingMain, setEditingMain] = useState(false);
+  const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
+  const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
+  const [form, setForm] = useState({
+    name: campaign.name,
+    type: campaign.type,
+    payment_type: campaign.payment_type,
+    payment_frequency: campaign.payment_frequency,
+    rate_split: campaign.rate_split,
+    session_rate: String(campaign.session_rate ?? 0),
+    currency: campaign.currency,
+    status: campaign.status,
+    system_id: campaign.system_id ? String(campaign.system_id) : "",
+    setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
+  });
+
+  async function save(partial: Record<string, unknown>) {
+    await api.put(`/campaigns/${campaignId}`, partial);
+    onRefresh();
+  }
+
+  useEffect(() => {
+    api.get<CampaignGroup[]>("/campaign-groups").then(setAllGroups).catch(() => {});
+    api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`).then((groups) => {
+      setCampaignGroupIds(groups.map((g) => g.id));
+    }).catch(() => {});
+  }, [campaignId]);
+
+  function startEdit() {
+    setForm({
+      name: campaign.name,
+      type: campaign.type,
+      payment_type: campaign.payment_type,
+      payment_frequency: campaign.payment_frequency,
+      rate_split: campaign.rate_split,
+      session_rate: String(campaign.session_rate ?? 0),
+      currency: campaign.currency,
+      status: campaign.status,
+      system_id: campaign.system_id ? String(campaign.system_id) : "",
+      setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
+    });
+    setEditingMain(true);
+  }
+
+  const systemName = systems.find((s) => s.id === campaign.system_id)?.name ?? "—";
+  const settingName = settingsList.find((s) => s.id === campaign.setting_id)?.name ?? "—";
+
+  return (
+    <div className="stack">
+      <details className="card" open>
+        <summary className="campaign-overview-header">Основное</summary>
+        <div style={{ padding: "8px 0" }}>
+          {!editingMain ? (
+            <div className="stack">
+              <table className="detail-table">
+                <tbody>
+                  <tr><td className="detail-label">Название</td><td>{campaign.name}</td></tr>
+                  <tr><td className="detail-label">Тип</td><td>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</td></tr>
+                  <tr><td className="detail-label">Система</td><td>{systemName}</td></tr>
+                  <tr><td className="detail-label">Сеттинг</td><td>{settingName}</td></tr>
+                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status] ?? campaign.status}</td></tr>
+                  <tr><td className="detail-label">Оплата</td><td>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</td></tr>
+                  {campaign.payment_type === "paid" && (
+                    <>
+                      <tr><td className="detail-label">Периодичность</td><td>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</td></tr>
+                      <tr><td className="detail-label">Тип ставки</td><td>{RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}</td></tr>
+                      <tr><td className="detail-label">Ставка</td><td><span className="detail-value-mono">{campaign.session_rate ?? 0}</span> {campaign.currency}</td></tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+              <div className="campaign-actions">
+                <button onClick={startEdit}>Редактировать</button>
+              </div>
+            </div>
+          ) : (
+            <div className="campaign-edit-form">
+              <label>
+                <span className="campaign-field-label">Название</span>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </label>
+              <label>
+                <span className="campaign-field-label">Тип</span>
+                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CampaignType })}>
+                  {CAMPAIGN_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Система</span>
+                <select value={form.system_id} onChange={(e) => setForm({ ...form, system_id: e.target.value })}>
+                  <option value="">—</option>
+                  {systems.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Сеттинг</span>
+                <select value={form.setting_id} onChange={(e) => setForm({ ...form, setting_id: e.target.value })}>
+                  <option value="">—</option>
+                  {settingsList.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Статус</span>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  {CAMPAIGN_STATUS_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Оплата</span>
+                <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
+                  {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+              </label>
+              {form.payment_type === "paid" && (
+                <>
+                  <label>
+                    <span className="campaign-field-label">Периодичность</span>
+                    <select value={form.payment_frequency} onChange={(e) => setForm({ ...form, payment_frequency: e.target.value as PaymentFrequency })}>
+                      {PAYMENT_FREQUENCY_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="campaign-field-label">Тип ставки</span>
+                    <select value={form.rate_split} onChange={(e) => setForm({ ...form, rate_split: e.target.value as RateSplit })}>
+                      {RATE_SPLIT_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="campaign-field-label">Ставка{" "}
+                      {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
+                      {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}</span>
+                    <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} />
+                  </label>
+                </>
+              )}
+              <label>
+                <span className="campaign-field-label">Валюта</span>
+                <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+              </label>
+              <div className="campaign-actions">
+                <button onClick={() => setEditingMain(false)}>Отмена</button>
+                <button className="primary" onClick={() => {
+                  save({
+                    name: form.name,
+                    type: form.type,
+                    payment_type: form.payment_type,
+                    payment_frequency: form.payment_frequency,
+                    rate_split: form.rate_split,
+                    session_rate: Number(form.session_rate) || 0,
+                    currency: form.currency,
+                    status: form.status,
+                    system_id: form.system_id ? Number(form.system_id) : null,
+                    setting_id: form.setting_id ? Number(form.setting_id) : null,
+                  });
+                  setEditingMain(false);
+                }}>Сохранить</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 8 }}>
+            <span className="campaign-field-label" style={{ fontSize: 11 }}>Группы кампаний</span>
+            {allGroups.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                {allGroups.map((g) => {
+                  const isIn = campaignGroupIds.includes(g.id);
+                  return (
+                    <label
+                      key={g.id}
+                      className={`campaign-group-chip${isIn ? " is-in" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isIn}
+                        onChange={async () => {
+                          if (isIn) {
+                            await api.del(`/campaign-groups/${g.id}/members?campaignIds=${campaignId}`);
+                          } else {
+                            await api.post(`/campaign-groups/${g.id}/members`, { campaignIds: [campaignId] });
+                          }
+                          const groups = await api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`);
+                          setCampaignGroupIds(groups.map((gr) => gr.id));
+                        }}
+                      />
+                      {g.name}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="muted" style={{ marginTop: 4 }}>Групп пока нет — создайте на странице кампаний.</div>
+            )}
+          </div>
+        </div>
+      </details>
+
+      <details className="card">
+        <summary>
+          <strong className="entry-title">Персонаж</strong>
+        </summary>
+        <div style={{ marginTop: 8 }}>
+          <PlayerCharacterTab campaignId={campaignId} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
 // (a live dashboard for an ongoing campaign) + Пост-продакшен (retrospective
 // once it's done) — three phases of the same campaign's life, so the section
 // that's actually relevant right now opens by default while the other two
@@ -1651,20 +1670,230 @@ function OverviewTab({
   systems,
   settingsList,
   sessions,
+  onRefresh,
 }: {
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
   sessions: SessionSummary[];
+  onRefresh: () => void;
 }) {
+  const campaignId = campaign.id;
+  const [editingMain, setEditingMain] = useState(false);
+  const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
+  const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
+  const [form, setForm] = useState({
+    name: campaign.name,
+    type: campaign.type,
+    payment_type: campaign.payment_type,
+    payment_frequency: campaign.payment_frequency,
+    rate_split: campaign.rate_split,
+    session_rate: String(campaign.session_rate ?? 0),
+    currency: campaign.currency,
+    status: campaign.status,
+    system_id: campaign.system_id ? String(campaign.system_id) : "",
+    setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
+  });
+  const bgCrop = useImageCrop("background", async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    await api.post(`/campaigns/${campaignId}/background`, fd);
+    onRefresh();
+  });
+  const thumbCrop = useImageCrop("thumbnail", async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    await api.post(`/campaigns/${campaignId}/thumbnail`, fd);
+    onRefresh();
+  });
+
+  async function save(partial: Record<string, unknown>) {
+    await api.put(`/campaigns/${campaignId}`, partial);
+    onRefresh();
+  }
+
+  useEffect(() => {
+    api.get<CampaignGroup[]>("/campaign-groups").then(setAllGroups).catch(() => {});
+    api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`).then((groups) => {
+      setCampaignGroupIds(groups.map((g) => g.id));
+    }).catch(() => {});
+  }, [campaignId]);
+
+  function startEdit() {
+    setForm({
+      name: campaign.name,
+      type: campaign.type,
+      payment_type: campaign.payment_type,
+      payment_frequency: campaign.payment_frequency,
+      rate_split: campaign.rate_split,
+      session_rate: String(campaign.session_rate ?? 0),
+      currency: campaign.currency,
+      status: campaign.status,
+      system_id: campaign.system_id ? String(campaign.system_id) : "",
+      setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
+    });
+    setEditingMain(true);
+  }
+
   const hasSessions = sessions.length > 0;
   const isCompleted = campaign.status === "completed";
 
+  const systemName = systems.find((s) => s.id === campaign.system_id)?.name ?? "—";
+  const settingName = settingsList.find((s) => s.id === campaign.setting_id)?.name ?? "—";
+
+  const bgUrl = campaign.background_image_url ?? null;
+  const thumbUrl = campaign.thumbnail_image_url ?? null;
+
   return (
     <div className="stack">
-      {/* Приключения идут первым блоком: с них начинается разговор о кампании,
-          а препродакшен, продакшен и пост-продакшен — это уже её жизнь. */}
       <details className="card" open>
+        <summary className="campaign-overview-header">Основное</summary>
+        <div style={{ padding: "8px 0" }}>
+          {!editingMain ? (
+            <div className="stack">
+              <table className="detail-table">
+                <tbody>
+                  <tr><td className="detail-label">Название</td><td>{campaign.name}</td></tr>
+                  <tr><td className="detail-label">Тип</td><td>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</td></tr>
+                  <tr><td className="detail-label">Система</td><td>{systemName}</td></tr>
+                  <tr><td className="detail-label">Сеттинг</td><td>{settingName}</td></tr>
+                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status] ?? campaign.status}</td></tr>
+                  <tr><td className="detail-label">Оплата</td><td>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</td></tr>
+                  {campaign.payment_type === "paid" && (
+                    <>
+                      <tr><td className="detail-label">Периодичность</td><td>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</td></tr>
+                      <tr><td className="detail-label">Тип ставки</td><td>{RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}</td></tr>
+                      <tr><td className="detail-label">Ставка</td><td><span className="detail-value-mono">{campaign.session_rate ?? 0}</span> {campaign.currency}</td></tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+              <div className="campaign-actions">
+                <button onClick={startEdit}>Редактировать</button>
+              </div>
+            </div>
+          ) : (
+            <div className="campaign-edit-form">
+              <label>
+                <span className="campaign-field-label">Название</span>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </label>
+              <label>
+                <span className="campaign-field-label">Тип</span>
+                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CampaignType })}>
+                  {CAMPAIGN_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Система</span>
+                <select value={form.system_id} onChange={(e) => setForm({ ...form, system_id: e.target.value })}>
+                  <option value="">—</option>
+                  {systems.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Сеттинг</span>
+                <select value={form.setting_id} onChange={(e) => setForm({ ...form, setting_id: e.target.value })}>
+                  <option value="">—</option>
+                  {settingsList.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Статус</span>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  {CAMPAIGN_STATUS_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+              </label>
+              <label>
+                <span className="campaign-field-label">Оплата</span>
+                <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
+                  {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+              </label>
+              {form.payment_type === "paid" && (
+                <>
+                  <label>
+                    <span className="campaign-field-label">Периодичность</span>
+                    <select value={form.payment_frequency} onChange={(e) => setForm({ ...form, payment_frequency: e.target.value as PaymentFrequency })}>
+                      {PAYMENT_FREQUENCY_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="campaign-field-label">Тип ставки</span>
+                    <select value={form.rate_split} onChange={(e) => setForm({ ...form, rate_split: e.target.value as RateSplit })}>
+                      {RATE_SPLIT_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="campaign-field-label">Ставка{" "}
+                      {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
+                      {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}</span>
+                    <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} />
+                  </label>
+                </>
+              )}
+              <label>
+                <span className="campaign-field-label">Валюта</span>
+                <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+              </label>
+              <div className="campaign-actions">
+                <button onClick={() => setEditingMain(false)}>Отмена</button>
+                <button className="primary" onClick={() => {
+                  save({
+                    name: form.name,
+                    type: form.type,
+                    payment_type: form.payment_type,
+                    payment_frequency: form.payment_frequency,
+                    rate_split: form.rate_split,
+                    session_rate: Number(form.session_rate) || 0,
+                    currency: form.currency,
+                    status: form.status,
+                    system_id: form.system_id ? Number(form.system_id) : null,
+                    setting_id: form.setting_id ? Number(form.setting_id) : null,
+                  });
+                  setEditingMain(false);
+                }}>Сохранить</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 8 }}>
+            <span className="campaign-field-label" style={{ fontSize: 11 }}>Группы кампаний</span>
+            {allGroups.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                {allGroups.map((g) => {
+                  const isIn = campaignGroupIds.includes(g.id);
+                  return (
+                    <label
+                      key={g.id}
+                      className={`campaign-group-chip${isIn ? " is-in" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isIn}
+                        onChange={async () => {
+                          if (isIn) {
+                            await api.del(`/campaign-groups/${g.id}/members?campaignIds=${campaignId}`);
+                          } else {
+                            await api.post(`/campaign-groups/${g.id}/members`, { campaignIds: [campaignId] });
+                          }
+                          const groups = await api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`);
+                          setCampaignGroupIds(groups.map((gr) => gr.id));
+                        }}
+                      />
+                      {g.name}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="muted" style={{ marginTop: 4 }}>Групп пока нет — создайте на странице кампаний.</div>
+            )}
+          </div>
+        </div>
+      </details>
+
+      <details className="card">
         <summary>
           <strong className="entry-title">Приключения</strong>
         </summary>
@@ -1673,21 +1902,21 @@ function OverviewTab({
         </div>
       </details>
 
-      <details className="card" open={!hasSessions}>
+      <details className="card">
         <summary>
           <strong className="entry-title">Препродакшен</strong>
         </summary>
         <PreproductionTab campaign={campaign} systems={systems} settingsList={settingsList} />
       </details>
 
-      <details className="card" open={hasSessions && !isCompleted}>
+      <details className="card">
         <summary>
           <strong className="entry-title">Продакшен</strong>
         </summary>
         <ProductionDashboard campaign={campaign} sessions={sessions} />
       </details>
 
-      <details className="card" open={isCompleted}>
+      <details className="card">
         <summary>
           <strong className="entry-title">Пост-продакшен</strong>
         </summary>
@@ -1703,6 +1932,42 @@ function OverviewTab({
             emptyLabel="Итогов пока нет."
             defaultSettingId={campaign.setting_id ?? undefined}
           />
+        </div>
+      </details>
+
+      <details className="card">
+        <summary>
+          <strong className="entry-title">Изображения</strong>
+        </summary>
+        <div className="row" style={{ marginTop: 8, gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 0", minWidth: 200 }}>
+            {bgUrl && (
+              <div style={{ marginBottom: 8 }}>
+                <div className="muted" style={{ marginBottom: 4 }}>Фон:</div>
+                <img src={bgUrl} alt="Фон кампании" style={{ maxWidth: "100%", maxHeight: 160, borderRadius: "var(--card-radius)" }} />
+              </div>
+            )}
+            <label>
+              Заменить фон
+              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => bgCrop.onSelect(e.target.files?.[0] ?? null)} />
+              <span className="muted image-hint">{IMAGE_HINT}</span>
+            </label>
+            {bgCrop.modal}
+          </div>
+          <div style={{ flex: "1 1 0", minWidth: 200 }}>
+            {thumbUrl && (
+              <div style={{ marginBottom: 8 }}>
+                <div className="muted" style={{ marginBottom: 4 }}>Тамбнейл:</div>
+                <img src={thumbUrl} alt="Тамбнейл кампании" style={{ maxWidth: "100%", maxHeight: 120, borderRadius: "var(--card-radius)" }} />
+              </div>
+            )}
+            <label>
+              Заменить тамбнейл
+              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
+              <span className="muted image-hint">{IMAGE_HINT}</span>
+            </label>
+            {thumbCrop.modal}
+          </div>
         </div>
       </details>
     </div>

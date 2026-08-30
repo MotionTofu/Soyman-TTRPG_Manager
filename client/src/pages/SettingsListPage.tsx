@@ -3,14 +3,17 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { SettingWizard } from "../components/SettingWizard";
+import { SettingGroupTabs } from "../components/SettingGroupTabs";
+import { GroupMembersModal } from "../components/GroupMembersModal";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
 import { ZineGraphic } from "../components/ZineGraphics";
 import { GENRE_CATEGORIES } from "../genreData";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
+import { NavIcon } from "../components/NavIcons";
 
-import type { Setting } from "../types";
+import type { Setting, SettingGroup } from "../types";
 
 function SettingCoverTile({ setting: s }: { setting: Setting }) {
   const rawUrl = s.thumbnail_image_url ?? s.background_image_url ?? null;
@@ -67,6 +70,10 @@ export function SettingsListPage() {
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [groups, setGroups] = useState<SettingGroup[]>([]);
+  const [groupMemberships, setGroupMemberships] = useState<Record<number, number[]>>({});
+  const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
 
   async function loadSettings(signal?: AbortSignal) {
     setLoading(true);
@@ -82,17 +89,49 @@ export function SettingsListPage() {
     }
   }
 
+  async function loadGroupMemberships(signal?: AbortSignal) {
+    try {
+      const fetchedGroups = await api.get<SettingGroup[]>("/setting-groups", signal ? { signal } : undefined);
+      setGroups(fetchedGroups);
+      const memberships: Record<number, number[]> = {};
+      for (const g of fetchedGroups) {
+        const members = await api.get<Setting[]>(
+          `/setting-groups/${g.id}/members`,
+          signal ? { signal } : undefined
+        );
+        for (const m of members) {
+          if (!memberships[m.id]) memberships[m.id] = [];
+          memberships[m.id].push(g.id);
+        }
+      }
+      setGroupMemberships(memberships);
+    } catch {
+      // silent
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     loadSettings(controller.signal);
+    loadGroupMemberships(controller.signal);
     return () => controller.abort();
   }, []);
 
   function refresh() {
     void loadSettings();
+    void loadGroupMemberships();
   }
 
   useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
+
+  const filteredSettings = (() => {
+    if (activeTab === null) return settings;
+    if (activeTab === "ungrouped") {
+      return settings.filter((s) => !groupMemberships[s.id]?.length);
+    }
+    const groupId = Number(activeTab);
+    return settings.filter((s) => groupMemberships[s.id]?.includes(groupId));
+  })();
 
   return (
     <div className="stack">
@@ -105,6 +144,12 @@ export function SettingsListPage() {
           </button>
         </div>
       </div>
+
+      <SettingGroupTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onGroupsChanged={refresh}
+      />
 
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -121,9 +166,28 @@ export function SettingsListPage() {
         </div>
       ) : (
         <div className="grid-cards">
-          {settings.map((s) => (
+          {filteredSettings.map((s) => (
             <SettingCoverTile key={s.id} setting={s} />
           ))}
+          {activeTab !== null && activeTab !== "ungrouped" && (
+            <button
+              className="card campaign-tile setting-group-empty-add"
+              onClick={() => {
+                const g = groups.find((gr) => gr.id === Number(activeTab));
+                if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+              }}
+            >
+              <div className="campaign-tile-cover cover-halftone">
+                <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+                <div className="campaign-tile-scrim" />
+                <span className="group-add-icon"><NavIcon name="galaxy" /></span>
+                <h3 className="campaign-tile-name">+</h3>
+              </div>
+              <div className="campaign-tile-meta">
+                <div className="campaign-tile-system muted">нажми, чтобы добавить сеттинг в группу</div>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
@@ -141,6 +205,15 @@ export function SettingsListPage() {
       )}
 
       {creating && <SettingWizard onClose={() => { setCreating(false); refresh(); }} />}
+
+      {groupMembersModal && (
+        <GroupMembersModal
+          groupId={groupMembersModal.groupId}
+          groupName={groupMembersModal.groupName}
+          onClose={() => setGroupMembersModal(null)}
+          onUpdated={refresh}
+        />
+      )}
     </div>
   );
 }

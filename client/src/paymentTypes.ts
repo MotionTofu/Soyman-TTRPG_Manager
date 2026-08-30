@@ -1,5 +1,19 @@
 import type { CampaignType, PaymentFrequency, PaymentType, RateSplit } from "./types";
 
+export type CampaignStatus = "active" | "paused" | "completed";
+
+export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
+  active: "Активна",
+  paused: "Приостановлена",
+  completed: "Завершена",
+};
+
+export const CAMPAIGN_STATUS_OPTIONS: { value: CampaignStatus; label: string }[] = [
+  { value: "active", label: CAMPAIGN_STATUS_LABELS.active },
+  { value: "paused", label: CAMPAIGN_STATUS_LABELS.paused },
+  { value: "completed", label: CAMPAIGN_STATUS_LABELS.completed },
+];
+
 export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
   free: "Бесплатная",
   paid: "Платная",

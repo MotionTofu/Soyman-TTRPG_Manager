@@ -56,6 +56,7 @@ interface AudioPlayerContextValue {
   halt: () => void;
   seek: (time: number) => void;
   setVolume: (volume: number) => void;
+  setBackgroundGain: (gain: number) => void;
   setRepeatMode: (mode: RepeatMode) => void;
   setShuffleMode: (on: boolean) => void;
 }
@@ -151,6 +152,19 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const [repeatMode, setRepeatModeState] = useState<RepeatMode>(loadStoredRepeatMode);
   const [shuffleMode, setShuffleModeState] = useState<boolean>(loadStoredShuffleMode);
 
+  // Множитель фоновой громкости от sound engine (дакинг, тишина).
+  // Реальная громкость audio-элемента = volume * bgGain.
+  // Это позволяет пульту управлять дакингом, не ломая пользовательский ползунок.
+  const bgGainRef = useRef(1);
+
+  function applyVolume(v: number, bg: number) {
+    const effective = Math.min(1, Math.max(0, v * bg));
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    if (a) a.volume = effective;
+    if (b) b.volume = effective;
+  }
+
   // The configurable gap between tracks (Настройки → Внешний вид). 0 (the
   // default) skips the ramp entirely — a plain, instant switch.
   const fadeMsRef = useRef(0);
@@ -161,6 +175,12 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       fadeMsRef.current = s.fade_duration_ms || 0;
     });
   }, []);
+
+  // Синхронизация громкости с audio-элементами при изменении volume.
+  // Реальная громкость = volume * bgGain (множитель от sound engine).
+  useEffect(() => {
+    applyVolume(volume, bgGainRef.current);
+  }, [volume]);
 
   function getActive(): HTMLAudioElement | null {
     return activeSlotRef.current === "a" ? audioARef.current : audioBRef.current;
@@ -192,7 +212,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     getInactive()?.pause();
     active.src = track.src;
     active.currentTime = 0;
-    active.volume = volume;
+    active.volume = volume * bgGainRef.current;
     if (startAt > 0) {
       const seekOnce = () => {
         active.removeEventListener("loadedmetadata", seekOnce);
@@ -357,9 +377,14 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(VOLUME_STORAGE_KEY, String(clamped));
     // Mid-crossfade, the ramp owns both elements' volume — don't fight it.
     if (!isFadingRef.current) {
-      const active = getActive();
-      if (active) active.volume = clamped;
+      applyVolume(clamped, bgGainRef.current);
     }
+  }
+
+  function setBackgroundGain(g: number) {
+    const clamped = Math.min(1, Math.max(0, g));
+    bgGainRef.current = clamped;
+    applyVolume(volume, clamped);
   }
 
   function setRepeatMode(mode: RepeatMode) {
@@ -405,6 +430,34 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
 
   const current = state.index >= 0 ? (state.tracks[state.index] ?? null) : null;
 
+  // Global keyboard shortcuts for the player bar. Only when no input/textarea
+  // is focused, no modal is open, and no contentEditable element is active.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((e.target as HTMLElement)?.isContentEditable) return;
+      if (document.querySelector(".modal-backdrop")) return;
+      const shift = e.shiftKey;
+      if (e.code === "Space" && !shift) { e.preventDefault(); toggle(); return; }
+      if (shift) {
+        if (e.code === "KeyS") { e.preventDefault(); stop(); return; }
+        if (e.code === "KeyM") { e.preventDefault(); setVolume(volume > 0 ? 0 : 1); return; }
+        if (e.code === "ArrowLeft") { e.preventDefault(); prev(); return; }
+        if (e.code === "ArrowRight") { e.preventDefault(); next(); return; }
+        if (e.code === "KeyR") {
+          e.preventDefault();
+          const modes: RepeatMode[] = ["off", "playlist", "track"];
+          setRepeatMode(modes[(modes.indexOf(repeatMode) + 1) % modes.length]);
+          return;
+        }
+        if (e.code === "KeyX") { e.preventDefault(); setShuffleMode(!shuffleMode); return; }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [toggle, stop, volume, setVolume, prev, next, repeatMode, setRepeatMode, shuffleMode, setShuffleMode]);
+
   return (
     <AudioPlayerContext.Provider
       value={{
@@ -428,6 +481,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         halt,
         seek,
         setVolume,
+        setBackgroundGain,
         setRepeatMode,
         setShuffleMode,
       }}
@@ -473,13 +527,40 @@ export function AudioPlayerBar({
     isPlaying,
     currentTime,
     duration,
+    volume,
     repeatMode,
     shuffleMode,
     toggle,
     next,
     prev,
+    stop,
     seek,
+    setVolume,
+    setRepeatMode,
+    setShuffleMode,
   } = useAudioPlayer();
+
+  const [showRemaining, setShowRemaining] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+
+  // Shift+? toggles keyboard shortcuts overlay
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.shiftKey && (e.key === "?" || e.code === "Slash")) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if ((e.target as HTMLElement)?.isContentEditable) return;
+        if (document.querySelector(".modal-backdrop")) return;
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Раскладка одна и та же независимо от того, играет что-то или нет:
   // кнопки справа не должны переезжать по панели, когда трек кончился.
@@ -488,48 +569,76 @@ export function AudioPlayerBar({
     return (
       <div className="audio-player-bar">
         <span className="audio-player-now">
-          {empty ?? <span className="muted">Ничего не играет</span>}
+          {empty ?? (
+            <span className="audio-player-empty" role="status">
+              <span className="muted">Ничего не играет</span>
+              <span className="audio-player-empty-hint">· Нажмите «Включить набор» или выберите в пульте</span>
+            </span>
+          )}
         </span>
         <span className="audio-player-divider" />
         {extras}
+        <button
+          type="button"
+          className="audio-player-btn audio-player-help"
+          onClick={() => setShowShortcuts((v) => !v)}
+          aria-label="Горячие клавиши"
+          title="Горячие клавиши (Shift+?)"
+        >
+          ?
+        </button>
       </div>
     );
   }
 
-  // Панель по макету пульта: транспорт, что играет с полосой времени,
-  // состояние трёх остальных каналов и вход в пульт. Шаффл, повтор и
-  // громкость Бэкграунда переехали в пульт — панель видна на каждой
-  // странице, и держать в ней всё подряд значит мешать всему остальному.
-  // Папка с плейлистами осталась здесь по просьбе владельца.
+  const elapsedOrRemaining = showRemaining
+    ? `-${formatTime(duration - currentTime)}`
+    : formatTime(currentTime);
+
   return (
-    <div className="audio-player-bar">
+    <div
+      className="audio-player-bar"
+      onWheel={(e) => {
+        const delta = e.deltaY > 0 ? -0.05 : 0.05;
+        setVolume(Math.min(1, Math.max(0, volumeRef.current + delta)));
+      }}
+    >
       <span className="audio-player-transport">
-        <button type="button" onClick={prev} disabled={!shuffleMode && index <= 0} title="Предыдущий трек">
+        <button type="button" onClick={prev} disabled={!shuffleMode && index <= 0} aria-label="Предыдущий трек" title="Предыдущий трек (Shift+←)">
           <NavIcon name="prev" />
         </button>
-        <button type="button" onClick={toggle} title={isPlaying ? "Пауза" : "Играть"}>
+        <button type="button" onClick={toggle} aria-label={isPlaying ? "Пауза" : "Играть"} title={isPlaying ? "Пауза (Пробел)" : "Играть (Пробел)"}>
           <NavIcon name={isPlaying ? "pause" : "play"} />
         </button>
         <button
           type="button"
           onClick={next}
           disabled={!shuffleMode && index >= count - 1 && repeatMode !== "playlist"}
-          title="Следующий трек"
+          aria-label="Следующий трек"
+          title="Следующий трек (Shift+→)"
         >
           <NavIcon name="next" />
+        </button>
+        <button type="button" onClick={stop} aria-label="Стоп" title="Стоп (Shift+S)">
+          <NavIcon name="stop" />
         </button>
       </span>
 
       <span className="audio-player-now">
         <span className="audio-player-now-line">
           <span className="audio-player-track">{current.name}</span>
-          <span className="audio-player-time">
-            {formatTime(currentTime)} / {formatTime(duration)}
+          <span className="audio-player-counter">{index + 1}/{count}</span>
+          <span
+            className="audio-player-time"
+            role="button"
+            tabIndex={0}
+            onClick={() => setShowRemaining((v) => !v)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowRemaining((v) => !v); } }}
+            title="Нажмите, чтобы показать оставшееся время"
+          >
+            {elapsedOrRemaining} / {formatTime(duration)}
           </span>
         </span>
-        {/* Полоса времени осталась полосой, а не крутилкой: она показывает
-            время, а не громкость, и второй круг рядом с каналами читался бы
-            как ещё один регулятор. Клик по ней перематывает. */}
         <span
           className="audio-player-progress"
           role="slider"
@@ -542,6 +651,10 @@ export function AudioPlayerBar({
             const rect = e.currentTarget.getBoundingClientRect();
             if (duration) seek(((e.clientX - rect.left) / rect.width) * duration);
           }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") { seek(Math.min(duration, currentTime + 5)); e.preventDefault(); }
+            else if (e.key === "ArrowLeft") { seek(Math.max(0, currentTime - 5)); e.preventDefault(); }
+          }}
         >
           <span
             className="audio-player-progress-fill"
@@ -552,7 +665,90 @@ export function AudioPlayerBar({
 
       <span className="audio-player-divider" />
 
+      <span className="audio-player-transport">
+        <span className="audio-player-volume">
+          <button
+            type="button"
+            onClick={() => setVolume(volume > 0 ? 0 : 1)}
+            className="audio-player-btn"
+            aria-label={`Громкость: ${Math.round(volume * 100)}%`}
+            title={`Громкость: ${Math.round(volume * 100)}%`}
+          >
+            <NavIcon name="volume" />
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={(e) => setVolume(Number(e.target.value))}
+            onWheel={(e) => {
+              e.stopPropagation();
+              const d = e.deltaY > 0 ? -0.05 : 0.05;
+              setVolume(Math.min(1, Math.max(0, volume + d)));
+            }}
+            className="audio-player-volume-range"
+            aria-label="Громкость"
+          />
+        </span>
+        <button
+          type="button"
+          onClick={() => setShuffleMode(!shuffleMode)}
+          aria-label={shuffleMode ? "Выключить случайный порядок" : "Случайный порядок"}
+          title={shuffleMode ? "Случайный порядок: вкл" : "Случайный порядок: выкл"}
+          className={shuffleMode ? "audio-player-btn active" : "audio-player-btn"}
+        >
+          <NavIcon name="shuffle" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const modes: RepeatMode[] = ["off", "playlist", "track"];
+            const next = modes[(modes.indexOf(repeatMode) + 1) % modes.length];
+            setRepeatMode(next);
+          }}
+          aria-label={
+            repeatMode === "off" ? "Повтор: выкл" :
+            repeatMode === "track" ? "Повтор трека" : "Повтор плейлиста"
+          }
+          title={
+            repeatMode === "off" ? "Повтор: выкл" :
+            repeatMode === "track" ? "Повтор трека" : "Повтор плейлиста"
+          }
+          className={repeatMode !== "off" ? "audio-player-btn active" : "audio-player-btn"}
+        >
+          <NavIcon name={repeatMode === "track" ? "repeatTrack" : "repeatPlaylist"} />
+        </button>
+      </span>
+
       {extras}
+
+      <button
+        type="button"
+        className="audio-player-btn audio-player-help"
+        onClick={() => setShowShortcuts((v) => !v)}
+        aria-label="Горячие клавиши"
+        title="Горячие клавиши (Shift+?)"
+      >
+        ?
+      </button>
+
+      {showShortcuts && (
+        <div className="audio-player-shortcuts">
+          <div className="audio-player-shortcuts-title">Горячие клавиши</div>
+          <div className="audio-player-shortcuts-list">
+            <span><kbd>Пробел</kbd> Играть / Пауза</span>
+            <span><kbd>Shift+S</kbd> Стоп</span>
+            <span><kbd>Shift+←</kbd> Предыдущий</span>
+            <span><kbd>Shift+→</kbd> Следующий</span>
+            <span><kbd>Shift+M</kbd> Звук / Тишина</span>
+            <span><kbd>Shift+R</kbd> Повтор</span>
+            <span><kbd>Shift+X</kbd> Случайный порядок</span>
+            <span><kbd>Shift+?</kbd> Эта подсказка</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

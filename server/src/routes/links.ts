@@ -11,6 +11,11 @@ import {
 
 export const linksRouter = Router();
 
+const SAFE_IDENTIFIER = /^[a-z_][a-z_0-9]*$/;
+function assertSafeIdent(kind: string, value: string): asserts value is string {
+  if (!SAFE_IDENTIFIER.test(value)) throw new Error(`Unsafe SQL identifier (${kind}): "${value}"`);
+}
+
 // archivable: false — у таблицы нет колонки archived_at (записи компендиума
 // удаляются насовсем), и запрос узлов не должен по ней фильтровать.
 const NODE_TABLES: Record<string, { table: string; nameCol: string; archivable?: boolean }> = {
@@ -32,6 +37,7 @@ const NODE_TABLES: Record<string, { table: string; nameCol: string; archivable?:
   compendium_entry: { table: "compendium_entries", nameCol: "name", archivable: false },
 };
 
+// Mirror of client/src/graphTypes.ts:GraphNode — keep in sync.
 interface GraphNode {
   key: string;
   type: string;
@@ -103,6 +109,11 @@ interface ScopeQuery {
  * просто его собственные строки; для кампании — её строки (персонажи, игроки,
  * сцены) поверх строк сеттинга, которому она принадлежит. Возвращает null,
  * если область не задана: тогда граф глобальный и не сужается.
+ *
+ * Если у кампании setting_id = NULL, граф будет содержать только
+ * CAMPAIGN_SCOPE_QUERIES (персонажи, игроки, сцены) — сущности сеттинга
+ * (существа, фракции, локации) не попадут, т.к. у них нет дома в рамках
+ * этой кампании.
  */
 function buildScope(campaignId?: string, settingId?: string): Map<string, ScopeQuery> | null {
   const scope = new Map<string, ScopeQuery>();
@@ -139,6 +150,10 @@ linksRouter.get("/graph", (req, res) => {
     focus?: string; // "being:416" — центр окрестности
     depth?: string; // сколько шагов от центра, 1..3
   };
+  // Валидация focus: формат "type:id", где type — известный тип, id — число.
+  if (focus && !/^[a-z_]+:\d+$/.test(focus)) {
+    return res.status(400).json({ error: "Invalid focus format, expected 'type:id'" });
+  }
   // Пустая строка — это «типы не выбраны», а не «фильтра нет»: снятые
   // галочки должны давать пустой граф, а не молча весь.
   const allowedTypes = types === undefined ? null : new Set(types.split(",").filter(Boolean));
@@ -230,6 +245,8 @@ linksRouter.get("/graph", (req, res) => {
   for (const [type, ids] of byType) {
     if (scopeQueries && !scopeQueries.has(type)) continue; // type has no defined home within this scope
     const { table, nameCol, archivable = true } = NODE_TABLES[type];
+    assertSafeIdent("table", table);
+    assertSafeIdent("nameCol", nameCol);
     const placeholders = ids.map(() => "?").join(",");
     const rows = db
       .prepare(
@@ -303,6 +320,8 @@ linksRouter.get("/graph", (req, res) => {
       if (!NODE_TABLES[type]) continue;
       if (allowedTypes && !allowedTypes.has(type)) continue;
       const { table, nameCol, archivable = true } = NODE_TABLES[type];
+      assertSafeIdent("table", table);
+      assertSafeIdent("nameCol", nameCol);
       const rows = db
         .prepare(
           `SELECT id, ${nameCol} as name FROM ${table} WHERE id IN (${query.sql})` +

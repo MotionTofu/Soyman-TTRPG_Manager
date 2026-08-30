@@ -106,6 +106,11 @@ export const TYPE_ROUTES: Record<string, string> = {
  * «а как этот вообще связан с той фракцией», на который ни поиск, ни вкладки
  * связей не отвечают. Обход в ширину: рёбра ненаправленные, потому что для
  * «как связаны» сторона связи значения не имеет.
+ *
+ * @returns Массив узлов и рёбер на пути, или null если:
+ *   - from === to (один и тот же узел)
+ *   - from или to не существуют в графе
+ *   - пути между узлами не существует
  */
 export function findPath(
   edges: GraphEdge[],
@@ -242,8 +247,8 @@ export function buildIsolation(
   }
 
   const maxRadius = Math.max(...radii.values());
-  const width = Math.round((maxRadius + 220) * 2);
-  const height = Math.round((maxRadius + 160) * 2);
+  const width = Math.round((maxRadius + ISOLATION_MARGIN_H) * 2);
+  const height = Math.round((maxRadius + ISOLATION_MARGIN_V) * 2);
   const positions: NodePositions = new Map();
   for (const [key, d] of depthOf) {
     const radius = radii.get(d) ?? 0;
@@ -341,6 +346,20 @@ export function foldGroups(
 export const GRAPH_WIDTH = 900;
 export const GRAPH_HEIGHT = 640;
 const BASE_NODE_COUNT = 25; // node count the base 900x640 canvas is comfortable for
+
+// Canvas edge padding — nodes clamp to this distance from the canvas boundary.
+const CANVAS_EDGE_PADDING = 30;
+// Layout padding — used when fitting seed positions into a smaller canvas.
+const CANVAS_LAYOUT_PADDING = 60;
+// Isolation view margins — extra space around the radial layout for labels.
+const ISOLATION_MARGIN_H = 220;
+const ISOLATION_MARGIN_V = 160;
+// Packing density coefficient — how tightly nodes can be packed (0..1).
+const PACKING_DENSITY = 0.87;
+// Friction — velocity damping factor per iteration (0..1).
+const FRICTION = 0.85;
+// Spring force multiplier — how strongly edges pull nodes together.
+const SPRING_FORCE = 0.02;
 
 // A canvas sized only for ~25 nodes gets cramped once a setting accumulates
 // a few dozen beings/factions/locations — nodes pile up along the clamped
@@ -443,7 +462,7 @@ export function simulateGraph(
     if (minX > maxX) return null;
     const boxW = Math.max(1, maxX - minX);
     const boxH = Math.max(1, maxY - minY);
-    const scale = Math.min(1, (width - 60) / boxW, (height - 60) / boxH);
+    const scale = Math.min(1, (width - CANVAS_LAYOUT_PADDING) / boxW, (height - CANVAS_LAYOUT_PADDING) / boxH);
     if (scale > 0.999) return null;
     return { scale, midX: (minX + maxX) / 2, midY: (minY + maxY) / 2 };
   })();
@@ -456,8 +475,8 @@ export function simulateGraph(
       const x = fit ? cx + (known.x - fit.midX) * fit.scale : known.x;
       const y = fit ? cy + (known.y - fit.midY) * fit.scale : known.y;
       pos.set(n.key, {
-        x: Math.max(30, Math.min(width - 30, x)),
-        y: Math.max(30, Math.min(height - 30, y)),
+        x: Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, x)),
+        y: Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, y)),
         vx: 0,
         vy: 0,
       });
@@ -535,7 +554,7 @@ export function simulateGraph(
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-      const force = (dist - idealLength) * 0.02;
+      const force = (dist - idealLength) * SPRING_FORCE;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       a.vx += fx;
@@ -552,12 +571,12 @@ export function simulateGraph(
       }
       p.vx += (cx - p.x) * CENTERING_PULL;
       p.vy += (cy - p.y) * CENTERING_PULL;
-      p.vx *= 0.85;
-      p.vy *= 0.85;
+      p.vx *= FRICTION;
+      p.vy *= FRICTION;
       p.x += p.vx * alpha;
       p.y += p.vy * alpha;
-      p.x = Math.max(30, Math.min(width - 30, p.x));
-      p.y = Math.max(30, Math.min(height - 30, p.y));
+      p.x = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, p.x));
+      p.y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, p.y));
     }
     alpha *= decay;
   }
@@ -589,15 +608,15 @@ export function simulateGraph(
     const boxW = Math.max(1, maxX - minX);
     const boxH = Math.max(1, maxY - minY);
     // Площадь на узел при плотной укладке кружков с шагом MIN_NODE_DISTANCE.
-    const needed = points.length * MIN_NODE_DISTANCE * MIN_NODE_DISTANCE * 0.87;
-    const fits = Math.min((width - 60) / boxW, (height - 60) / boxH);
+    const needed = points.length * MIN_NODE_DISTANCE * MIN_NODE_DISTANCE * PACKING_DENSITY;
+    const fits = Math.min((width - CANVAS_LAYOUT_PADDING) / boxW, (height - CANVAS_LAYOUT_PADDING) / boxH);
     const scale = Math.min(Math.sqrt(needed / (boxW * boxH)), fits);
     if (scale > 1.01) {
       const midX = (minX + maxX) / 2;
       const midY = (minY + maxY) / 2;
       for (const p of points) {
-        p.x = Math.max(30, Math.min(width - 30, cx + (p.x - midX) * scale));
-        p.y = Math.max(30, Math.min(height - 30, cy + (p.y - midY) * scale));
+        p.x = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, cx + (p.x - midX) * scale));
+        p.y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, cy + (p.y - midY) * scale));
       }
     }
   }
@@ -649,10 +668,10 @@ export function simulateGraph(
             // второй.
             const aShare = isPinned[i] ? 0 : isPinned[j] ? 1 : 0.5;
             const bShare = 1 - aShare;
-            a.x = Math.max(30, Math.min(width - 30, a.x + ux * aShare));
-            a.y = Math.max(30, Math.min(height - 30, a.y + uy * aShare));
-            b.x = Math.max(30, Math.min(width - 30, b.x - ux * bShare));
-            b.y = Math.max(30, Math.min(height - 30, b.y - uy * bShare));
+            a.x = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, a.x + ux * aShare));
+            a.y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, a.y + uy * aShare));
+            b.x = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, b.x - ux * bShare));
+            b.y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, b.y - uy * bShare));
           }
         }
       }

@@ -64,7 +64,7 @@ export function SoundBarExtras() {
         {setsMenuOpen && <SoundSetNavMenu onClose={() => setSetsMenuOpen(false)} />}
       </span>
 
-      <button type="button" className="audio-player-action accent" onClick={openConsole}>
+      <button type="button" className={`audio-player-action${state.data ? " accent" : ""}`} onClick={openConsole}>
         <NavIcon name="sliders" />
         <span>Пульт</span>
       </button>

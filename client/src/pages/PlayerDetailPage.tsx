@@ -8,7 +8,7 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { useCurrentUser } from "../api/currentUser";
-import type { Campaign, PlayerDetail } from "../types";
+import type { Campaign, PlayerDetail, PlayerGroup } from "../types";
 import { NavIcon } from "../components/NavIcons";
 
 export function PlayerDetailPage() {
@@ -30,6 +30,8 @@ export function PlayerDetailPage() {
   const [passwordDraft, setPasswordDraft] = useState("");
   const [accountEditing, setAccountEditing] = useState(false);
   const [accountError, setAccountError] = useState("");
+  const [allGroups, setAllGroups] = useState<PlayerGroup[]>([]);
+  const [playerGroupIds, setPlayerGroupIds] = useState<number[]>([]);
 
   function refreshAccount() {
     api
@@ -100,6 +102,10 @@ export function PlayerDetailPage() {
     refresh();
     refreshAccount();
     api.get<Campaign[]>("/campaigns").then(setCampaigns);
+    api.get<PlayerGroup[]>("/player-groups").then(setAllGroups);
+    api.get<PlayerGroup[]>(`/player-groups/by-player/${id}`).then((groups) => {
+      setPlayerGroupIds(groups.map((g) => g.id));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -233,6 +239,50 @@ export function PlayerDetailPage() {
       </div>
 
       <RemindersWidget targetType="player" targetId={Number(id)} />
+
+      <div className="card stack">
+        <h3>Группы игроков</h3>
+        {allGroups.length === 0 ? (
+          <span className="muted">Групп пока нет — создайте их на странице списка игроков.</span>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+            {allGroups.map((g) => {
+              const isIn = playerGroupIds.includes(g.id);
+              return (
+                <label
+                  key={g.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                    borderRadius: "var(--card-radius)",
+                    border: `1px solid ${isIn ? "var(--accent)" : "var(--line)"}`,
+                    background: isIn ? "var(--accent-bg, rgba(79, 140, 255, 0.08))" : "transparent",
+                    fontSize: "var(--fs-meta)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isIn}
+                    onChange={async () => {
+                      if (isIn) {
+                        await api.del(`/player-groups/${g.id}/members`, { playerIds: [Number(id)] });
+                      } else {
+                        await api.post(`/player-groups/${g.id}/members`, { playerIds: [Number(id)] });
+                      }
+                      const groups = await api.get<PlayerGroup[]>(`/player-groups/by-player/${id}`);
+                      setPlayerGroupIds(groups.map((gr) => gr.id));
+                    }}
+                  />
+                  {g.name}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="card stack">
         <h3>Персонажи (Игрок | Персонаж)</h3>

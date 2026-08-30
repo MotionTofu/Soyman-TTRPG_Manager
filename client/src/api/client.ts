@@ -53,7 +53,8 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 // here once, centrally, instead of touching every page that renders one.
 // Оптимизация P-09: клонируем только url-поля, не весь объект, и не трогаем description/text.
 function isUrlKey(k: string): boolean {
-  return k.toLowerCase().endsWith("_url");
+  const lower = k.toLowerCase();
+  return lower.endsWith("_url") || lower === "src";
 }
 function withFileTokens<T>(value: T): T {
   if (typeof value === "string") {

@@ -7,10 +7,12 @@ import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
+import { PlayerGroupTabs } from "../components/PlayerGroupTabs";
+import { PlayerGroupMembersModal } from "../components/PlayerGroupMembersModal";
 import { formatNearestDate } from "../nearestDate";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
-import type { Player } from "../types";
+import type { Player, PlayerGroup } from "../types";
 
 function PlayerCoverTile({ player: p }: { player: Player }) {
   const rawUrl = p.thumbnail_image_url ?? p.avatar_image_url ?? null;
@@ -48,17 +50,6 @@ function PlayerCoverTile({ player: p }: { player: Player }) {
   );
 }
 
-function groupPlayersByLetter(players: Player[]): [string, Player[]][] {
-  const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  const groups = new Map<string, Player[]>();
-  for (const p of sorted) {
-    const letter = (p.name.trim()[0] || "#").toUpperCase();
-    if (!groups.has(letter)) groups.set(letter, []);
-    groups.get(letter)!.push(p);
-  }
-  return [...groups.entries()];
-}
-
 export function PlayersListPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [creating, setCreating] = useState(false);
@@ -66,6 +57,10 @@ export function PlayersListPage() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [groups, setGroups] = useState<PlayerGroup[]>([]);
+  const [groupMemberships, setGroupMemberships] = useState<Record<number, number[]>>({});
+  const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
 
   async function loadPlayers(signal?: AbortSignal) {
     setLoading(true);
@@ -81,17 +76,49 @@ export function PlayersListPage() {
     }
   }
 
+  async function loadGroupMemberships(signal?: AbortSignal) {
+    try {
+      const fetchedGroups = await api.get<PlayerGroup[]>("/player-groups", signal ? { signal } : undefined);
+      setGroups(fetchedGroups);
+      const memberships: Record<number, number[]> = {};
+      for (const g of fetchedGroups) {
+        const members = await api.get<Player[]>(
+          `/player-groups/${g.id}/members`,
+          signal ? { signal } : undefined
+        );
+        for (const m of members) {
+          if (!memberships[m.id]) memberships[m.id] = [];
+          memberships[m.id].push(g.id);
+        }
+      }
+      setGroupMemberships(memberships);
+    } catch {
+      // silent
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     loadPlayers(controller.signal);
+    loadGroupMemberships(controller.signal);
     return () => controller.abort();
   }, []);
 
   function refresh() {
     void loadPlayers();
+    void loadGroupMemberships();
   }
 
   useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
+
+  const filteredPlayers = (() => {
+    if (activeTab === null) return players;
+    if (activeTab === "ungrouped") {
+      return players.filter((p) => !groupMemberships[p.id]?.length);
+    }
+    const groupId = Number(activeTab);
+    return players.filter((p) => groupMemberships[p.id]?.includes(groupId));
+  })();
 
   async function create() {
     if (!name.trim()) return;
@@ -116,6 +143,14 @@ export function PlayersListPage() {
         </button>
       </div>
 
+      {players.length > 0 && (
+        <PlayerGroupTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onGroupsChanged={refresh}
+        />
+      )}
+
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось загрузить игроков: {loadError}</span>
@@ -131,16 +166,40 @@ export function PlayersListPage() {
         </div>
       ) : (
         <div className="stack">
-          {groupPlayersByLetter(players).map(([letter, group]) => (
-            <div key={letter} className="player-list-section">
-              <div className="player-list-letter">{letter}</div>
-              <div className="grid-cards">
-                {group.map((p) => (
-                  <PlayerCoverTile key={p.id} player={p} />
-                ))}
-              </div>
+          <div className="grid-cards">
+            {filteredPlayers.map((p) => (
+              <PlayerCoverTile key={p.id} player={p} />
+            ))}
+            {activeTab !== null && activeTab !== "ungrouped" && (
+              <button
+                className="card campaign-tile setting-group-empty-add"
+                onClick={() => {
+                  const g = groups.find((gr) => gr.id === Number(activeTab));
+                  if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+                }}
+              >
+                <div className="campaign-tile-cover cover-halftone">
+                  <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+                  <div className="campaign-tile-scrim" />
+                  <h3 className="campaign-tile-name">+</h3>
+                </div>
+                <div className="campaign-tile-meta">
+                  <div className="campaign-tile-system muted">нажми, чтобы добавить игрока в группу</div>
+                </div>
+              </button>
+            )}
+          </div>
+          {activeTab !== null && filteredPlayers.length === 0 && (
+            <div className="muted" style={{ padding: "8px 2px" }}>
+              {activeTab === "ungrouped"
+                ? "Все игроки состоят в группах."
+                : (() => {
+                    const g = groups.find((gr) => gr.id === Number(activeTab));
+                    return `В группе «${g?.name ?? "…"}» пока нет игроков.`;
+                  })()
+              }
             </div>
-          ))}
+          )}
         </div>
       )}
 
@@ -177,6 +236,15 @@ export function PlayersListPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {groupMembersModal && (
+        <PlayerGroupMembersModal
+          groupId={groupMembersModal.groupId}
+          groupName={groupMembersModal.groupName}
+          onClose={() => setGroupMembersModal(null)}
+          onUpdated={refresh}
+        />
       )}
     </div>
   );

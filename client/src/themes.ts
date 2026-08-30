@@ -103,6 +103,7 @@ interface ThemeCfg {
   cardClip?: string; // clip-path value
   bandBg?: string; // decorative campaign-card header background (color or gradient)
   bandImage?: string; // decorative campaign-card header background-image/texture
+  playerBarText?: string; // text color for the bottom audio player bar
   pageTexture?: string; // whole-app background-image (very subtle, e.g. paper grain)
   cardBodyTexture?: string; // subtle texture on card bodies (not just the band)
   nameTransform?: string; // text-transform for titles
@@ -182,6 +183,7 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--accent-2": cfg.accent2 || cfg.accent,
     "--primary-bg": primaryBg,
     "--primary-text": primaryText,
+    "--player-bar-text": cfg.playerBarText || primaryText,
     "--font-display": cfg.fontDisplay,
     "--font-body": cfg.fontBody,
     "--font-ui": "'Oswald', var(--font-body)",
@@ -237,6 +239,7 @@ function skinTheme(
     line: string; glow: string; elevated: string;
     fontDisplay: string; fontBody: string;
     bandBg?: string; bandImage?: string; pageTexture?: string; cardBodyTexture?: string;
+    playerBarText?: string;
     semantic: SemanticSet;
   }
 ): Theme {
@@ -269,6 +272,7 @@ function skinTheme(
       "--accent-2": d.accent2,
       "--primary-bg": primaryBg,
       "--primary-text": pickTextOn(primaryBg.startsWith("#") ? primaryBg : d.accent),
+      "--player-bar-text": d.playerBarText || pickTextOn(primaryBg.startsWith("#") ? primaryBg : d.accent),
       "--font-display": d.fontDisplay,
       "--font-body": d.fontBody,
       "--font-ui": "'Oswald', var(--font-body)",
@@ -344,6 +348,7 @@ const NEON_THEME = skinTheme("neon", "Соевый неон", "dark", {
   fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   bandBg: "#0F0F14",
   bandImage: "repeating-linear-gradient(0deg, rgba(182,255,46,.07) 0 2px, transparent 2px 4px)",
+  playerBarText: "#FF2E88",
   semantic: { gm: "#FF2E88", player: "#B6FF2E", paid: "#B6FF2E", free: "#B6FF2E", active: "#B6FF2E", hold: "#6F7A6A", danger: "#FF2E88" },
 });
 
@@ -353,6 +358,7 @@ const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
   bandImage: "repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px)",
   pageTexture: "radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px) 0 0/3px 3px",
   cardBodyTexture: "radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px",
+  playerBarText: "#1c1c1c",
 });
 
 const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация", "dark", {
