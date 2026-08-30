@@ -7,6 +7,7 @@ import App from './App.tsx'
 import { applyTheme, findTheme, loadThemePrefs } from './themes'
 import { applyCanvasPaletteVars } from './canvasPalette'
 import { applyCoverDuotone } from './imagePrefs'
+import { migrateThumbnailStyles } from './thumbnailStyles'
 import { AudioPlayerProvider } from './audioPlayer'
 import { installNativeDialogFocusFix } from './electronApi'
 
@@ -18,6 +19,7 @@ applyCanvasPaletteVars()
 // Тот же довод: флаг дуотона ставится до первой отрисовки, иначе обложки
 // мигнут исходным цветом перед обработкой.
 applyCoverDuotone()
+migrateThumbnailStyles()
 
 // Внутри Electron: вернуть окну фокус после нативного диалога. В браузере
 // ничего не делает.

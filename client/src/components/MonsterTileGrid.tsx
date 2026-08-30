@@ -123,9 +123,9 @@ interface Props {
   grouping: MonsterGrouping;
   sortDir?: MonsterSortDir;
   sectionId: number;
-  /** Поиск раскрывает все группы: свёрнутая группа прячет то, что искали. */
   searchActive: boolean;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
+  systemCode?: string | null;
 }
 
 export function MonsterTileGrid({
@@ -135,6 +135,7 @@ export function MonsterTileGrid({
   sectionId,
   searchActive,
   onToggleFavourite,
+  systemCode,
 }: Props) {
   const [modal, setModal] = useState<{ id: number; view: "card" | "statblock" } | null>(null);
 
@@ -165,6 +166,7 @@ export function MonsterTileGrid({
           forceOpen={searchActive}
           onOpenModal={setModal}
           onToggleFavourite={onToggleFavourite}
+          systemCode={systemCode}
         />
       )}
       {groups.map(([label, list]) => (
@@ -176,6 +178,7 @@ export function MonsterTileGrid({
           forceOpen={searchActive}
           onOpenModal={setModal}
           onToggleFavourite={onToggleFavourite}
+          systemCode={systemCode}
         />
       ))}
       {modal && (
@@ -200,6 +203,7 @@ function MonsterGroup({
   forceOpen,
   onOpenModal,
   onToggleFavourite,
+  systemCode,
 }: {
   label: string;
   list: CompendiumEntry[];
@@ -207,6 +211,7 @@ function MonsterGroup({
   forceOpen: boolean;
   onOpenModal: (m: { id: number; view: "card" | "statblock" }) => void;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
+  systemCode?: string | null;
 }) {
   const key = `bestiary-group-${sectionId}-${label}`;
   const [open, setOpen] = useState(() => localStorage.getItem(key) !== "0");
@@ -250,6 +255,7 @@ function MonsterGroup({
             entry={e}
             onOpenModal={onOpenModal}
             onToggleFavourite={onToggleFavourite}
+            systemCode={systemCode}
           />
         ))}
       </div>
@@ -259,25 +265,24 @@ function MonsterGroup({
 
 // memo — не украшение: щелчок по звезде правит одну запись, а без него
 // перерисовывались все 535 плиток раздела (замерено, см. отчёт шага 5).
-// Обработчики приходят стабильными (useCallback у владельца состояния),
-// иначе memo не срабатывает — ровно та же ловушка, что была с вехами.
 const MonsterTile = memo(function MonsterTile({
   entry,
   onOpenModal,
   onToggleFavourite,
+  systemCode,
 }: {
   entry: CompendiumEntry;
   onOpenModal: (m: { id: number; view: "card" | "statblock" }) => void;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
+  systemCode?: string | null;
 }) {
   const { ru, en } = splitCreatureName(entry.name);
-  // Оригинал в имени устарел (переносится в name_original при сохранении и
-  // миграцией): показывает name_original, иначе ещё не перенесённую скобку.
   const original = entry.name_original || en;
   const type = creatureTypeName(entry);
   const size = sizeName(entry);
   const cr = crName(entry);
   const favourite = !!entry.favourite;
+  const isPhb = systemCode === "phb";
 
   return (
     <article
@@ -334,9 +339,9 @@ const MonsterTile = memo(function MonsterTile({
         <div className="monster-tile__facts">
           {original && <span className="monster-tile__en">{original}</span>}
           <span className="monster-tile__meta">
-            {[type, size].filter(Boolean).join(" · ") || "Тип не указан"}
+            {[type, isPhb ? size : null].filter(Boolean).join(" · ") || "Тип не указан"}
           </span>
-          <span className="monster-tile__cr">{cr ? `КО ${cr}` : "КО —"}</span>
+          {isPhb && <span className="monster-tile__cr">{cr ? `КО ${cr}` : "КО —"}</span>}
         </div>
       </div>
 

@@ -7,6 +7,7 @@ import { SettingGroupTabs } from "../components/SettingGroupTabs";
 import { GroupMembersModal } from "../components/GroupMembersModal";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
+import { SectionBackground } from "../components/SectionBackground";
 import { ZineGraphic } from "../components/ZineGraphics";
 import { GENRE_CATEGORIES } from "../genreData";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
@@ -134,7 +135,8 @@ export function SettingsListPage() {
   })();
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
+      <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="settings" compact>Сеттинги</SectionHeading>
         <div className="row">

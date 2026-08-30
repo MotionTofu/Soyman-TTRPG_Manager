@@ -97,10 +97,15 @@ export function ModulesTab() {
 
   async function handleFile(file: File | null) {
     if (!file) return;
+    if (file.size > 200 * 1024 * 1024) {
+      setError("Файл слишком большой — лимит 200 МБ");
+      return;
+    }
     setImporting(true);
     setError("");
     try {
       const text = await file.text();
+      if (text.includes("__proto__") || text.includes("\"constructor\"")) throw new Error("Недопустимое содержимое");
       const data = JSON.parse(text);
       const type = data.sections && data.entries ? "system" : data.locations && data.communities ? "setting" : null;
       if (!type) throw new Error("Файл не похож на экспорт системы или сеттинга.");
@@ -121,10 +126,15 @@ export function ModulesTab() {
   // restore away on the Archive page.
   async function handleUpdateFile(mod: Module, file: File | null) {
     if (!file) return;
+    if (file.size > 200 * 1024 * 1024) {
+      setError("Файл слишком большой — лимит 200 МБ");
+      return;
+    }
     setUpdatingId(mod.id);
     setError("");
     try {
       const text = await file.text();
+      if (text.includes("__proto__") || text.includes("\"constructor\"")) throw new Error("Недопустимое содержимое");
       const data = JSON.parse(text);
       const endpoint = mod.type === "system" ? `/systems/${mod.system_id}/update` : `/settings/${mod.setting_id}/update`;
       const result = await api.post<{
@@ -185,87 +195,87 @@ export function ModulesTab() {
   }
 
   return (
-    <div className="stack">
-      <p className="muted">
-        Подключаемые Системы и Сеттинги — включи галочкой, чтобы данные появились в приложении;
-        выключи, чтобы убрать их из активных разделов, не удаляя. Экспортированный файл (кнопка
-        «Экспорт» на странице системы/сеттинга) можно добавить сюда как новый модуль, а можно
-        нажать «⟳ Обновить» у уже подключённого модуля — новые данные из файла подмешаются в
-        существующий (по имени), а всё, что есть только у тебя локально, останется нетронутым.
-        Перед обновлением автоматически создаётся резервная копия — её можно найти в Архиве.
-      </p>
-      {error && <div className="backup-info error">{error}</div>}
-
-      <div className="row">
-        <label className="row" style={{ cursor: "pointer" }}>
-          {importing ? "Загрузка…" : "+ Добавить модуль из файла"}
-          <input
-            type="file"
-            accept="application/json"
-            style={{ display: "none" }}
-            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
-      </div>
-
-      <div className="stack">
-        <p className="muted">
-          Каталог модулей на GitHub — курируется вручную, приложение только скачивает. Установленные
-          отсюда модули можно обновлять по отдельности, когда в каталоге появится новая версия.
-        </p>
-        <div className="row">
-          <button onClick={refreshCatalog} disabled={catalogLoading}>
-            {catalogLoading ? "Загрузка…" : "Обновить каталог из GitHub"}
-          </button>
-        </div>
-        {catalogError && <div className="backup-info error">{catalogError}</div>}
-        {catalog && catalog.length === 0 && <p className="muted">Каталог пуст.</p>}
-        {catalog && catalog.length > 0 && (
-          <div className="stack">
-            {catalog.map((entry) => (
-              <div key={entry.remoteId} className="row" style={{ justifyContent: "space-between" }}>
-                <span className="row" style={{ gap: 8 }}>
-                  <span>{entry.name}</span>
-                  <span className="badge tag">v{entry.version}</span>
-                  <span className="badge tag">{entry.type === "system" ? "система" : "сеттинг"}</span>
-                </span>
-                {/* Запись новее этой сборки: файл она прочтёт неправильно —
-                    ссылки внутри текстов покажутся голыми скобками. Кнопки нет,
-                    вместо неё сказано, что делать. */}
-                {entry.tooOld ? (
-                  <span className="muted">Нужна версия {entry.minAppVersion} или новее</span>
-                ) : entry.installedModuleId == null ? (
-                  <button onClick={() => installFromCatalog(entry)} disabled={catalogBusyId !== null}>
-                    {catalogBusyId === entry.remoteId ? "Установка…" : "⬇ Установить"}
-                  </button>
-                ) : entry.updateAvailable ? (
-                  <button onClick={() => updateFromCatalog(entry)} disabled={catalogBusyId !== null}>
-                    {catalogBusyId === entry.remoteId ? "Обновление…" : "⟳ Доступно обновление"}
-                  </button>
-                ) : (
-                  <span className="muted">✓ Установлено</span>
-                )}
-              </div>
-            ))}
+    <div className="stack" style={{ gap: 12 }}>
+      <details className="card res-group" open>
+        <summary className="res-group__band">
+          <span className="res-group__title">Общее</span>
+          <span className="res-group__count">2</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
+          <p className="muted" style={{ margin: 0 }}>
+            Подключаемые Системы и Сеттинги — включи галочкой, чтобы данные появились; выключи, чтобы убрать из активных разделов, не удаляя. Файл экспорта — кнопка «Экспорт» на странице системы/сеттинга.
+          </p>
+          {error && <div className="backup-info error">{error}</div>}
+          <div className="row">
+            <label className="row" style={{ cursor: "pointer" }}>
+              {importing ? "Загрузка…" : "+ Добавить модуль из файла"}
+              <input type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+            </label>
           </div>
-        )}
-      </div>
-
-      <div>
-        <h3>Системы</h3>
-        <div className="stack">
-          {systemModules.map(renderRow)}
-          {systemModules.length === 0 && <p className="muted">Пока нет систем.</p>}
+          <div className="stack" style={{ gap: 8, borderTop: "1.5px solid var(--line)", paddingTop: 12 }}>
+            <p className="muted" style={{ margin: 0 }}>Каталог на GitHub — курируется вручную.</p>
+            <div className="row">
+              <button onClick={refreshCatalog} disabled={catalogLoading}>
+                {catalogLoading ? "Загрузка…" : "Обновить каталог из GitHub"}
+              </button>
+            </div>
+            {catalogError && <div className="backup-info error">{catalogError}</div>}
+            {catalog && catalog.length === 0 && <p className="muted">Каталог пуст.</p>}
+            {catalog && catalog.length > 0 && (
+              <div className="stack">
+                {catalog.map((entry) => (
+                  <div key={entry.remoteId} className="row" style={{ justifyContent: "space-between" }}>
+                    <span className="row" style={{ gap: 8 }}>
+                      <span>{entry.name}</span>
+                      <span className="badge tag">v{entry.version}</span>
+                      <span className="badge tag">{entry.type === "system" ? "система" : "сеттинг"}</span>
+                    </span>
+                    {entry.tooOld ? (
+                      <span className="muted">Нужна версия {entry.minAppVersion} или новее</span>
+                    ) : entry.installedModuleId == null ? (
+                      <button onClick={() => installFromCatalog(entry)} disabled={catalogBusyId !== null}>
+                        {catalogBusyId === entry.remoteId ? "Установка…" : "⬇ Установить"}
+                      </button>
+                    ) : entry.updateAvailable ? (
+                      <button onClick={() => updateFromCatalog(entry)} disabled={catalogBusyId !== null}>
+                        {catalogBusyId === entry.remoteId ? "Обновление…" : "⟳ Доступно обновление"}
+                      </button>
+                    ) : (
+                      <span className="muted">✓ Установлено</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </details>
 
-      <div>
-        <h3>Сеттинги</h3>
-        <div className="stack">
-          {settingModules.map(renderRow)}
-          {settingModules.length === 0 && <p className="muted">Пока нет сеттингов.</p>}
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Системы</span>
+          <span className="res-group__count">{systemModules.length}</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12 }}>
+          <div className="stack">
+            {systemModules.map(renderRow)}
+            {systemModules.length === 0 && <p className="muted">Пока нет систем.</p>}
+          </div>
         </div>
-      </div>
+      </details>
+
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Сеттинги</span>
+          <span className="res-group__count">{settingModules.length}</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12 }}>
+          <div className="stack">
+            {settingModules.map(renderRow)}
+            {settingModules.length === 0 && <p className="muted">Пока нет сеттингов.</p>}
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

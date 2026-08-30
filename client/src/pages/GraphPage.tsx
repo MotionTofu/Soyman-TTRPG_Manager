@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { RelationGraph } from "../components/RelationGraph";
 import { TYPE_LABELS, type GraphData } from "../graphTypes";
 import { SectionHeading } from "../components/SectionHeading";
+import { SectionBackground } from "../components/SectionBackground";
 import type { Campaign, Setting } from "../types";
 
 const DEPTH_OPTIONS = [1, 2, 3];
@@ -55,7 +56,8 @@ export function GraphPage() {
     : campaigns;
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
+      <SectionBackground />
       <SectionHeading section="graph">Граф связей</SectionHeading>
       {error && (
         <div className="error-banner">

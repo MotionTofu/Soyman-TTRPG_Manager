@@ -219,6 +219,40 @@ function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+function isSafeExplorerPath(p) {
+  if (!p || typeof p !== "string" || p.includes("\0") || p.length > 1024) return false;
+  if (p.includes("..")) return false;
+  if (/^[a-zA-Z]:[\\/]/.test(p)) return true;
+  if (p.startsWith("\\\\")) return false;
+  if (p.startsWith("/") || p.startsWith("\\")) return true;
+  return false;
+}
+ipcMain.handle("show-in-explorer", async (_event, folderPath) => {
+  if (!isSafeExplorerPath(folderPath)) return { ok: false, error: "Недопустимый путь" };
+  try {
+    // shell.showItemInFolder хочет файл; для папки — openPath
+    const stat = fs.statSync(folderPath);
+    if (stat.isDirectory()) {
+      await shell.openPath(folderPath);
+    } else {
+      shell.showItemInFolder(folderPath);
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+});
+ipcMain.handle("open-path", async (_event, targetPath) => {
+  if (!isSafeExplorerPath(targetPath)) return { ok: false, error: "Недопустимый путь" };
+  try {
+    const r = await shell.openPath(targetPath);
+    if (r) return { ok: false, error: r };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+});
+
 ipcMain.handle("pick-folder", async () => {
   const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled || result.filePaths.length === 0) return null;

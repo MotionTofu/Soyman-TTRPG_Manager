@@ -20,7 +20,9 @@ import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../d
 import { backfillCompendiumSummaries } from "../services/monsterSummary";
 import { systemPrefixOf, SYSTEM_KEY_PREFIX_TO_KIND } from "./systemFormat";
 import { buildTokenWeights, normalizeName, similarity } from "./names";
+import { splitBracketName } from "../services/compendiumNames";
 import { cleanChallengeRating } from "./creatureMeta";
+import { MENTIONABLE, normUid, idOfUid, scanMentions, rewriteMentions, type RefMention } from "../services/mentions";
 import type {
   ImportClass,
   ImportEquipment,
@@ -60,6 +62,7 @@ interface Ref {
 /** Раздел, в который попадает запись данного вида, и как его назвать, если его нет. */
 const SECTION_FOR_KIND: Record<string, { kind: string; name: string }> = {
   mechanic_item: { kind: "mechanics", name: "Справочник" },
+  bastion: { kind: "bastion", name: "Бастионы" },
   spell: { kind: "spell", name: "Заклинания" },
   class: { kind: "class", name: "Классы" },
   species: { kind: "species", name: "Виды" },
@@ -382,12 +385,22 @@ interface PendingEntry {
   statblock?: Record<string, unknown>;
 }
 
+// П2.6 — фолбэк сплита «Имя [Original]» для файлов без колонок. Модель генерит без name_original, а в name остаётся bracket.
+function splitFields<T extends { name: string; name_original?: string; aliases?: string[] }>(o: T): T {
+  if (!o.name_original && o.name?.includes("[")) {
+    const { name, en } = splitBracketName(o.name);
+    if (en) { o.name = name as T["name"]; o.name_original = en as T["name_original"]; }
+  }
+  if (!Array.isArray(o.aliases)) o.aliases = [];
+  return o;
+}
+
 /** Разворачивает файл в плоский список записей — в порядке, в котором они лягут. */
 function flatten(file: SystemImportFile): PendingEntry[] {
   const out: PendingEntry[] = [];
 
   const feature = (f: ImportFeature, parentKey: string, kind: "feature" | "class_option") =>
-    out.push({
+    out.push(splitFields({
       key: f.key,
       kind,
       name: f.name,
@@ -397,14 +410,17 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       description: f.description,
       parentKey,
       data: (resolve) => featureData(f, resolve),
-    });
+    }));
 
   // Справочник первым: на него ссылаются все остальные, и человеку на экране
   // сверки понятнее видеть основу до того, что на неё опирается.
+  // Бастионы теперь живут в отдельном табе — механика с группой «Бастионы»
+  // сразу кладётся как kind='bastion' в таб Бастионы без группы-обёртки.
   for (const m of file.mechanics) {
+    const isBastion = m.group === "Бастионы";
     out.push({
       key: m.key,
-      kind: "mechanic_item",
+      kind: isBastion ? "bastion" : "mechanic_item",
       name: m.name,
       name_original: m.name_original,
       aliases: m.aliases,
@@ -412,7 +428,7 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       description: m.description,
       // Группа справочника («Типы урона») — не ключ, а название: группы
       // заводятся сами и живут вне ключевого пространства файла.
-      parentKey: `group:${m.group}`,
+      parentKey: isBastion ? null : `group:${m.group}`,
       data: () => ({}),
     });
   }
@@ -577,6 +593,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
       statblock: m.statblock,
     });
   }
+  // П2.6 — все записи через один фолбэк, чтобы не дублировать wrap в каждом out.push
+  for (const e of out) splitFields(e as unknown as { name: string; name_original?: string; aliases?: string[] });
   return out;
 }
 
@@ -826,6 +844,7 @@ function matchDeclared(
 
 const PLAN_TITLES: Record<string, string> = {
   mechanic_item: "Справочник",
+  bastion: "Бастионы",
   equipment: "Снаряжение",
   spell: "Заклинания",
   class: "Классы",
@@ -1265,8 +1284,61 @@ export function applySystemImport(
   // разделу сразу, поэтому дозаполняем после транзакции, а не на каждый GET.
   if (result.systemId != null) {
     backfillCompendiumSummaries(db, result.systemId);
+    // Починка мёртвых UID-ссылок в описаниях: при повторном импорте UID записей
+    // мог измениться, а ссылки из прошлой версии остались со старыми.
+    fixDeadUidMentionsInSystem(result.systemId);
   }
   return result;
+}
+
+/**
+ * Ищет и чинит мёртвые [[type@uid|code|label]] ссылки в описаниях записей системы.
+ * UID восстанавливается по имени метки (label). Неизвестные ссылки схлопываются в текст.
+ */
+function fixDeadUidMentionsInSystem(systemId: number): number {
+  const columns = (
+    db.prepare("PRAGMA table_info(compendium_entries)").all() as { name: string; type: string }[]
+  )
+    .filter((c) => /TEXT|CLOB|CHAR/i.test(c.type))
+    .map((c) => c.name);
+
+  let fixed = 0;
+
+  for (const column of columns) {
+    const rows = db
+      .prepare(`SELECT id, ${column} AS v FROM compendium_entries WHERE system_id = ? AND ${column} LIKE '%[[%@%'`)
+      .all(systemId) as { id: number; v: string }[];
+
+    for (const row of rows) {
+      const next = rewriteMentions(row.v, (m) => {
+        if (m.kind !== "ref") return null;
+        const rm = m as RefMention;
+        if (!MENTIONABLE[rm.type]) return null;
+        if (idOfUid(rm.type, rm.uid) != null) return null; // UID живой
+
+        // Ищем актуальный UID по имени метки внутри этой же системы
+        const table = MENTIONABLE[rm.type];
+        if (!table) return rm.label;
+        const candidates = db
+          .prepare(`SELECT uid, name FROM ${table} WHERE uid IS NOT NULL AND system_id = ?`)
+          .all(systemId) as { uid: string; name: string }[];
+        const lower = rm.label.toLowerCase();
+        const hit = candidates.find(
+          (c) => c.name.toLowerCase() === lower || c.name.toLowerCase().startsWith(lower + " ")
+        );
+        if (hit) {
+          fixed++;
+          return `[[${rm.type}@${normUid(hit.uid)}|${rm.source}|${rm.label}]]`;
+        }
+        return rm.label; // не нашли — схлопнуть в текст
+      });
+
+      if (next !== row.v) {
+        db.prepare(`UPDATE compendium_entries SET ${column} = ? WHERE id = ?`).run(next, row.id);
+      }
+    }
+  }
+  return fixed;
 }
 
 /**

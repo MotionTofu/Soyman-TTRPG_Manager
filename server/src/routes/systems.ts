@@ -13,6 +13,7 @@ import {
   writeBase64File,
   writeReplacingOldFile,
 } from "../services/filesystem";
+import { splitBracketName } from "../services/compendiumNames";
 import { removeOrArchive } from "../services/vaultDedup";
 import { renameEntityFolder } from "../services/vaultPaths";
 import {
@@ -640,13 +641,18 @@ systemsRouter.post("/:id/tidy", (req, res) => {
 systemsRouter.post("/", (req, res) => {
   const { name, description } = req.body as { name: string; description?: string };
   if (!name) return res.status(400).json({ error: "name is required" });
-  const folder = systemFolder(name);
+  // П0.4: папка создавалась ДО INSERT — при дубле имени (UNIQUE) папка
+  // оставалась сиротой, а при INSERT OR IGNORE ещё и двигал seq. Создаём
+  // строку сначала, папку — только после успеха.
   const info = db
     .prepare("INSERT INTO systems (name, description, folder_path, code) VALUES (?, ?, ?, ?)")
-    .run(name, description || "", folder, suggestCode("systems", name));
-  ensureDefaultMechanicsSection(db, Number(info.lastInsertRowid));
-  ensureDefaultVehicleSection(db, Number(info.lastInsertRowid));
-  res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(info.lastInsertRowid));
+    .run(name, description || "", "", suggestCode("systems", name));
+  const newId = Number(info.lastInsertRowid);
+  const folder = systemFolder(name);
+  db.prepare("UPDATE systems SET folder_path = ? WHERE id = ?").run(folder, newId);
+  ensureDefaultMechanicsSection(db, newId);
+  ensureDefaultVehicleSection(db, newId);
+  res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newId));
 });
 
 systemsRouter.put("/:id", (req, res) => {
@@ -700,6 +706,14 @@ export function buildSystemExportData(systemId: number | string, includeImages: 
       .prepare("SELECT * FROM compendium_entries WHERE system_id = ? ORDER BY position, id")
       .all(systemId) as EntryRow[]
   ).map(parseEntry) as unknown as SystemExportData["entries"];
+  // П2.6 — страховка: даже неотмигрированная строка не уедет с brackets
+  for (const e of entries) {
+    if (!e.name_original && typeof e.name === "string" && (e.name as string).includes("[")) {
+      const { name, en } = splitBracketName(e.name as string);
+      if (en) { (e as { name: string }).name = name; (e as { name_original: string }).name_original = en; }
+    }
+    if (!Array.isArray((e as { aliases?: unknown }).aliases)) (e as { aliases?: string[] }).aliases = [];
+  }
 
   // Bestiary/statblock entries (dnd_creature etc.) carry their actual
   // statblock in the separate polymorphic `statblocks` table, not in
@@ -844,7 +858,8 @@ export async function importSystemExport(data: SystemExportData): Promise<number
   for (let n = 2; nameTaken.get(importedName); n++) {
     importedName = `${system.name} (${n})`;
   }
-  const folder = systemFolder(importedName);
+  // П0.4: как в POST / — папку создаём только после успешной вставки,
+  // иначе при коллизии/откате остаётся сирота на диске.
   const sysInfo = db
     .prepare(
       "INSERT INTO systems (name, description, folder_path, code, imported_at) VALUES (?, ?, ?, ?, datetime('now'))"
@@ -852,10 +867,12 @@ export async function importSystemExport(data: SystemExportData): Promise<number
     .run(
       importedName,
       system.description || "",
-      folder,
+      "",
       system.code ? cleanCode(system.code) : suggestCode("systems", importedName)
     );
   const newSystemId = sysInfo.lastInsertRowid as number;
+  const folder = systemFolder(importedName);
+  db.prepare("UPDATE systems SET folder_path = ? WHERE id = ?").run(folder, newSystemId);
 
   if (system.thumbnail_data) {
     const { filename, base64 } = system.thumbnail_data;
@@ -893,6 +910,12 @@ export async function importSystemExport(data: SystemExportData): Promise<number
     );
   }
   for (const e of entries ?? []) {
+    // П2.6 — фолбэк brackets → колонки, чтобы старый файл с «Имя [Original]» не увёз грязь
+    if (!e.name_original && typeof e.name === "string" && e.name.includes("[")) {
+      const { name, en } = splitBracketName(e.name);
+      if (en) { e.name = name; (e as { name_original?: string }).name_original = en; }
+    }
+    if (!Array.isArray((e as { aliases?: unknown }).aliases)) (e as { aliases?: string[] }).aliases = [];
     const newSectionId = sectionIdMap.get(e.section_id);
     if (!newSectionId) continue;
     const info = insertEntry.run(
@@ -1042,6 +1065,14 @@ export async function updateSystemFromExport(
     throw new Error(
       `Неизвестные виды записей в импорте: ${[...new Set(badKinds.map((e) => e.kind))].join(", ")}`
     );
+  }
+  // П2.6 — тот же фолбэк brackets → колонки, что в importSystemExport
+  for (const e of entries ?? []) {
+    if (!e.name_original && typeof e.name === "string" && e.name.includes("[")) {
+      const { name, en } = splitBracketName(e.name);
+      if (en) { (e as { name: string }).name = name; (e as { name_original?: string }).name_original = en; }
+    }
+    if (!Array.isArray((e as { aliases?: unknown }).aliases)) (e as { aliases?: string[] }).aliases = [];
   }
   // При слиянии побеждает uid из файла: он — «издательская» личность записи,
   // общая у всех, кто ставил этот модуль. Локальный ключ такой записи никто

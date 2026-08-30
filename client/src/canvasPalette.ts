@@ -76,12 +76,12 @@ export interface SwatchOption {
 /** Цвета стикера. Порядок — порядок в панели свойств и в меню. */
 export const STICKER_SWATCHES: SwatchOption[] = [
   { key: "paper", label: "Бумага", value: "var(--paper)" },
-  { key: "yellow", label: "Жёлтый", value: "#F2E8C6" },
-  { key: "blue", label: "Голубой", value: "#DDE8F0" },
-  { key: "green", label: "Зелёный", value: "#D8E8D8" },
-  { key: "pink", label: "Розовый", value: "#F0DDE8" },
-  { key: "sand", label: "Песочный", value: "#E8DDD0" },
-  { key: "lavender", label: "Лавандовый", value: "#E0E0E8" },
+  { key: "yellow", label: "Жёлтый", value: "var(--sticker-yellow)" },
+  { key: "blue", label: "Голубой", value: "var(--sticker-blue)" },
+  { key: "green", label: "Зелёный", value: "var(--sticker-green)" },
+  { key: "pink", label: "Розовый", value: "var(--sticker-pink)" },
+  { key: "sand", label: "Песочный", value: "var(--sticker-sand)" },
+  { key: "lavender", label: "Лавандовый", value: "var(--sticker-lavender)" },
 ];
 
 /** Цвета рамки, главы и пина. Хранятся в базе значением, а не ключом. */
@@ -142,6 +142,12 @@ export function canvasPaletteVars(): Record<string, string> {
     "--cv-ink-light": INK_LIGHT,
     "--cv-ink-dark": INK_DARK,
     "--cv-story": STORY_COLOR,
+    "--sticker-yellow": "#F2E8C6",
+    "--sticker-blue": "#DDE8F0",
+    "--sticker-green": "#D8E8D8",
+    "--sticker-pink": "#F0DDE8",
+    "--sticker-sand": "#E8DDD0",
+    "--sticker-lavender": "#E0E0E8",
   };
   for (const [key, v] of Object.entries(NODE_COLORS)) {
     vars[`--cv-node-${key}`] = v.color;

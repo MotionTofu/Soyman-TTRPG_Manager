@@ -50,16 +50,15 @@ const PLAYER_NAV_ITEMS: NavItem[] = [
 
 const GM_NAV_BOTTOM_ITEMS: NavItem[] = [
   { to: "/storages", label: "Настройки", icon: "storages" },
-  { to: "/appearance", label: "Внешний вид", icon: "appearance" },
+  { to: "/health", label: "Здоровье", icon: "health" },
   { to: "/invitations", label: "Приглашения", icon: "invite" },
   { to: "/archive", label: "Архив", icon: "archive" },
-  { to: "/about", label: "О программе", icon: "about" },
+  { to: "/about", label: "Справка", icon: "about" },
 ];
 
 const PLAYER_NAV_BOTTOM_ITEMS: NavItem[] = [
   { to: "/storages", label: "Настройки", icon: "storages" },
-  { to: "/appearance", label: "Внешний вид", icon: "appearance" },
-  { to: "/about", label: "О программе", icon: "about" },
+  { to: "/about", label: "Справка", icon: "about" },
 ];
 
 // Primary destinations promoted to a persistent bottom bar on mobile
@@ -407,7 +406,7 @@ export function AppShell() {
       {boostyOpen && (
         <ExternalLinkConfirmModal
           title="Поддержать проект"
-          message="Вы уверены, что хотите отправиться на Бусти?"
+          message="Откроется в вашем браузере. SoyMan продолжит работу в этом окне."
           confirmLabel="Да, конечно"
           cancelLabel="Пожалуй, нет"
           icon="boosty"

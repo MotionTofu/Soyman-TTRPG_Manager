@@ -322,9 +322,23 @@ CREATE TABLE IF NOT EXISTS entity_relations (
 CREATE INDEX IF NOT EXISTS idx_entity_relations_from ON entity_relations(from_type, from_id);
 CREATE INDEX IF NOT EXISTS idx_entity_relations_to ON entity_relations(to_type, to_id);
 
+-- Сворачиваемые разделы мастерения (один набор на каждую категорию).
+-- Плашка — инверсия (surface/on-surface) как res-group__band; сворачиваемость —
+-- нативный <details>, состояние open — в localStorage по id секции (как у
+-- групп бестиария и плиток кампании). Без секции — «Без раздела» хвост.
+CREATE TABLE IF NOT EXISTS mastering_sections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category TEXT NOT NULL, -- prep | live | knowledge
+  name TEXT NOT NULL,
+  system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS mastering_notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   category TEXT NOT NULL, -- prep | live | knowledge
+  section_id INTEGER REFERENCES mastering_sections(id) ON DELETE SET NULL,
   system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   content TEXT DEFAULT '',

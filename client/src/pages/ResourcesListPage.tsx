@@ -7,6 +7,7 @@ import { SoundSetsTab } from "../components/SoundSetsTab";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
+import { SectionBackground } from "../components/SectionBackground";
 import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } from "../resourceCategories";
 import type { Campaign, Resource, Setting } from "../types";
 
@@ -109,7 +110,8 @@ export function ResourcesListPage() {
   const activeFilters = (campaignFilter ? 1 : 0) + (settingFilter ? 1 : 0);
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
+      <SectionBackground />
       <SectionHeading section="resources">Ресурсы</SectionHeading>
 
       <div className="tabs">

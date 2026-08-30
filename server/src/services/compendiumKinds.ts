@@ -32,6 +32,7 @@ export const COMPENDIUM_KINDS: ReadonlySet<string> = new Set([
   "vehicle",
   "vehicle_post",
   "equipment",
+  "bastion",
   "skill",
   "skill_group",
   "mechanic_group",

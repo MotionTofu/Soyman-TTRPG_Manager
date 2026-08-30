@@ -41,6 +41,7 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
     refresh();
   }
 
+  const isPostProduction = category === "post_production";
   return (
     <div className="stack">
       {entries.map((e) => (
@@ -53,10 +54,22 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
           onRemove={removeEntry}
         />
       ))}
-      <button onClick={addEntry} style={{ alignSelf: "flex-start" }}>
-        {addLabel}
-      </button>
-      {entries.length === 0 && <p className="muted">{emptyLabel}</p>}
+      {entries.length === 0 ? (
+        <div className="card" style={{ borderStyle: "dashed" }}>
+          <p style={{ maxWidth: "62ch" }}>
+            {isPostProduction
+              ? "Итоги появляются после игры — эпилоги, несбывшиеся линии, идеи для сиквела."
+              : emptyLabel}
+          </p>
+          <button className="primary" onClick={addEntry}>
+            {addLabel}
+          </button>
+        </div>
+      ) : (
+        <button onClick={addEntry} style={{ alignSelf: "flex-start" }}>
+          {addLabel}
+        </button>
+      )}
     </div>
   );
 }

@@ -55,9 +55,7 @@ const GraphPage = lazy(() => import("./pages/GraphPage").then((m) => ({ default:
 // зависимость клиента, и грузить её тем, кто на холст не заходит, незачем.
 const CanvasPage = lazy(() => import("./pages/CanvasPage").then((m) => ({ default: m.CanvasPage })));
 const StoragesSettingsPage = lazy(() => import("./pages/StoragesSettingsPage").then((m) => ({ default: m.StoragesSettingsPage })));
-const AppearanceSettingsPage = lazy(() =>
-  import("./pages/AppearanceSettingsPage").then((m) => ({ default: m.AppearanceSettingsPage }))
-);
+const HealthPage = lazy(() => import("./pages/HealthPage").then((m) => ({ default: m.HealthPage })));
 const AboutPage = lazy(() => import("./pages/AboutPage").then((m) => ({ default: m.AboutPage })));
 const InvitationsPage = lazy(() => import("./pages/InvitationsPage").then((m) => ({ default: m.InvitationsPage })));
 const PlayerCabinetPage = lazy(() =>
@@ -171,7 +169,8 @@ function App() {
               <Route path="/canvas" element={<CanvasPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />
-              <Route path="/appearance" element={<AppearanceSettingsPage />} />
+              <Route path="/appearance" element={<Navigate to="/storages" replace />} />
+              <Route path="/health" element={<HealthPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/invitations" element={<InvitationsPage />} />
               <Route path="/archive" element={<ArchivePage />} />

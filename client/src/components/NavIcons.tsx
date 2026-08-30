@@ -78,7 +78,8 @@ export type NavIconName =
   | "galaxy"
   | "adventurers"
   | "boosty"
-  | "telegram";
+  | "telegram"
+  | "health";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -598,6 +599,12 @@ const PATHS: Record<NavIconName, ReactNode> = {
       <path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5" />
       <circle cx="16" cy="8" r="2" />
       <path d="M14 19c0-2.2 1.3-4 3-4.7.5-.2 1-.3 1.5-.3 1.7 0 3 1.3 3 3" />
+    </>
+  ),
+  // Медицинский крест — аптеки, скорая помощь, здоровье персонажей.
+  health: (
+    <>
+      <path d="M9 4h6v6h6v6h-6v6H9v-6H3v-6h6V4Z" />
     </>
   ),
 };

@@ -67,9 +67,12 @@
   position: relative;
 }
 
-/* React Flow рисует фон, рёбра и контролы своими классами. */
+/* React Flow рисует фон, рёбра и контролы своими классами.
+   Прозрачный, чтобы за ним был виден SectionBackground (фон из Настройки >
+   Интерфейс), как на главных страницах. Без фона — тот же var(--paper) из
+   тела страницы просвечивает через gap точно так же. */
 .canvas-flow .react-flow__background {
-  background: var(--paper);
+  background: transparent;
 }
 .canvas-flow .react-flow__edge-path {
   stroke: var(--ink);
@@ -1572,4 +1575,20 @@
   color: var(--ink);
   border-color: var(--line);
   background: var(--paper);
+}
+
+/* Тёмная тема: стикеры не остаются светлыми пастелями на тёмном полотне.
+   Перекрываем инлайн-значения из STICKER_COLORS (ставятся через style) — без
+   !important не перебить style-атрибут. */
+[data-theme-mode="dark"] {
+  --sticker-yellow: #3C3520 !important;
+  --sticker-blue: #25394B !important;
+  --sticker-green: #243B26 !important;
+  --sticker-pink: #3E2A36 !important;
+  --sticker-sand: #3B2E25 !important;
+  --sticker-lavender: #2F3342 !important;
+}
+[data-theme-mode="dark"] .canvas-node--sticker {
+  color: var(--ink);
+  border-color: var(--paper) !important;
 }

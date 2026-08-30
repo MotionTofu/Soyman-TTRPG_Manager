@@ -26,13 +26,20 @@ export function DatabaseSizeCard() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState("");
 
-  function refresh() {
+  function refresh(signal?: AbortSignal) {
     api
-      .get<Fill>("/storages/db-size")
+      .get<Fill>("/storages/db-size", signal ? { signal } : undefined)
       .then(setFill)
-      .catch(() => setFill(null));
+      .catch((e) => {
+        if ((e as Error).name === "AbortError") return;
+        setFill(null);
+      });
   }
-  useEffect(refresh, []);
+  useEffect(() => {
+    const ac = new AbortController();
+    refresh(ac.signal);
+    return () => ac.abort();
+  }, []);
 
   async function compact() {
     setBusy(true);
@@ -46,6 +53,8 @@ export function DatabaseSizeCard() {
           ? `Освобождено ${mb(saved)} МБ: файл был ${mb(r.before.bytes)} МБ, стал ${mb(r.after.bytes)} МБ.`
           : "Сжимать нечего — файл уже плотный."
       );
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setDone("Не удалось сжать — попробуй еще раз");
     } finally {
       setBusy(false);
     }

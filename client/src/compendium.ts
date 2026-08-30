@@ -32,6 +32,7 @@ export const SECTION_KINDS: { value: string; label: string }[] = [
   { value: "equipment", label: "Базовое снаряжение" },
   { value: "magic_item", label: "Магические предметы" },
   { value: "vehicle", label: "Транспорт" },
+  { value: "bastion", label: "Бастионы" },
 ];
 
 // Транспорт делится по среде, а не по размеру: за столом ищут «чем плыть»,
@@ -334,7 +335,12 @@ export const KIND_DEFS: Record<string, KindDef> = {
       { key: "weight", label: "Вес", type: "text" },
     ],
   },
-mechanic_group: {
+  bastion: {
+    label: "Бастион",
+    fields: [],
+    childKinds: [{ kind: "bastion", label: "подраздел" }],
+  },
+  mechanic_group: {
     label: "Список",
     fields: [],
     childKinds: [{ kind: "mechanic_item", label: "пункт" }],
@@ -421,10 +427,23 @@ export function kindLabel(kind: string): string {
   return KIND_DEFS[kind]?.label ?? kind;
 }
 
+// П1.3 — поля, врущие для чужой системы. Размер/КО — механика D&D, у LitM их нет.
+export function isMonsterFieldVisible(key: string, systemCode?: string | null): boolean {
+  if (systemCode === "phb" || systemCode === "dnd55") return true;
+  // Для litm и прочих — скрываем D&D-поля
+  if (key === "size" || key === "cr") return false;
+  return true;
+}
+
+export function visibleMonsterFields(fields: FieldDef[], systemCode?: string | null): FieldDef[] {
+  return fields.filter((f) => isMonsterFieldVisible(f.key, systemCode));
+}
+
 // «[English]»-хвост имени — устаревшее хранилище оригинала (бестиарий писал
 // «Ядовитая змея [Venomous Snake]»). При сохранении сводки переносится в
 // name_original, а из имени убирается; плитки показывают оригинал из
-// name_original. Регекс тот же, что у splitCreatureName (MonsterTileGrid).
+// name_original. Регекс тот же, что у splitBracketName (server/src/services/compendiumNames.ts) и splitCreatureName.
+// П2.6 — сервер режет хвост фолбэком, клиент — при ручном сохранении (VehicleDetailPage:68).
 export function extractEnglishName(name: string): { name: string; en: string } {
   const match = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(name ?? "");
   return match ? { name: match[1].trim(), en: match[2].trim() } : { name: (name ?? "").trim(), en: "" };

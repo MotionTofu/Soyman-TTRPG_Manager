@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "./mentions/MentionText";
+import { EmptyState } from "./EmptyState";
 import { SCENE_KIND_LABELS, SCENE_STATUSES, chapterWord, sceneWord } from "../sceneKinds";
 import type { CampaignAdventureTree, SceneStatus, StoryScene } from "../types";
 
@@ -56,33 +57,50 @@ export function CampaignChaptersScenes({
 
   if (settingId == null) {
     return (
-      <p className="muted">
-        Приключения живут в сеттинге — выберите сеттинг кампании в разделе «Обзор».
-      </p>
+      <div className="card" style={{ borderStyle: "dashed" }}>
+        <p style={{ maxWidth: "62ch" }}>
+          Приключения живут в сеттинге — выберите сеттинг кампании в разделе «Обзор → Основное», и здесь появится дерево глав и сцен.
+        </p>
+        <Link to={`/campaigns/${campaignId}`}><button>К обзору →</button></Link>
+      </div>
+    );
+  }
+
+  if (tree.length === 0) {
+    return (
+      <EmptyState
+        icon="issueStamp"
+        title="ГЛАВЫ ЕЩЁ НЕ ПРИВЯЗАНЫ"
+        hint="Привяжите приключение в разделе «Обзор → Приключения» — его главы и сцены станут планом кампании."
+        action={<Link to={`/campaigns/${campaignId}`}><button className="primary">К приключениям →</button></Link>}
+      />
     );
   }
 
   return (
-    <div className="stack">
-      <p className="muted">
+    <div className="stack campaign-chapters">
+      <p className="muted" style={{ maxWidth: "62ch" }}>
         Приключения кампании со своими главами и сценами. Правка сцены создаёт её версию для этой
         кампании, оригинал в сеттинге не меняется.
       </p>
       {tree.map((adv) => {
         const total =
           adv.scenes.length + adv.chapters.reduce((n, c) => n + c.scenes.length, 0);
+        const { done, skipped, pending } = countByStatus([
+          ...adv.scenes,
+          ...adv.chapters.flatMap((c) => c.scenes),
+        ]);
         return (
           <details key={adv.id} className="card">
-            <summary>
-              <strong className="entry-title">{adv.name}</strong>
-              <span className="muted">
-                {" · "}
-                {!!adv.chapters.length && `${adv.chapters.length} ${chapterWord(adv.chapters.length)} · `}
-                {total} {sceneWord(total)}
+            <summary className="campaign-overview-header">
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adv.name}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, opacity: 0.85, marginLeft: 8, flexShrink: 0 }}>
+                {adv.chapters.length ? `${adv.chapters.length} ${chapterWord(adv.chapters.length)} · ` : ""}{total} {sceneWord(total)}
+                {total > 0 && ` · ✓${done} · ○${pending} · ✕${skipped}`}
               </span>
-              {adv.is_override && <span className="badge tag"> правка кампании</span>}
+              {adv.is_override && <span className="badge tag" style={{ marginLeft: 6 }}>правка кампании</span>}
             </summary>
-            <div className="stack" style={{ marginTop: 8 }}>
+            <div className="stack" style={{ marginTop: 8, gap: 12 }}>
               {/* Сцены, лежащие прямо на приключении: у книжного импорта их
                   почти не бывает, у самодельного — наоборот, все. */}
               {adv.scenes.length > 0 && (
@@ -93,29 +111,47 @@ export function CampaignChaptersScenes({
                   title={adv.chapters.length > 0 ? "Без главы" : null}
                 />
               )}
-              {adv.chapters.map((c) => (
-                <details key={c.id} className="card">
-                  <summary>
-                    <strong className="entry-title">{c.name}</strong>
-                    <span className="muted">
-                      {" · "}
-                      {c.scenes.length} {sceneWord(c.scenes.length)}
-                    </span>
-                    {c.is_override && <span className="badge tag"> правка кампании</span>}
-                  </summary>
-                  <div style={{ marginTop: 8 }}>
-                    <SceneList scenes={c.scenes} campaignId={campaignId} onStatus={applyStatus} title={null} />
-                  </div>
-                </details>
-              ))}
-              {total === 0 && <p className="muted">Сцен пока нет.</p>}
+              {adv.chapters.map((c) => {
+                const chDone = c.scenes.filter((s) => s.state?.status === "done").length;
+                const chSkipped = c.scenes.filter((s) => s.state?.status === "skipped").length;
+                const chPending = c.scenes.length - chDone - chSkipped;
+                return (
+                  <details key={c.id} className="entity-group" open>
+                    <summary className="entity-group-header entity-group-header-toggle">
+                      <strong className="entry-title" style={{ fontSize: "var(--fs-h3)" }}>{c.name}</strong>
+                      <span className="muted" style={{ fontSize: 11 }}>
+                        · {c.scenes.length} {sceneWord(c.scenes.length)}
+                        {c.scenes.length > 0 && ` · ✓${chDone} ○${chPending} ✕${chSkipped}`}
+                      </span>
+                      {c.is_override && <span className="badge tag">правка кампании</span>}
+                    </summary>
+                    <div className="entity-row-list" style={{ marginTop: 6 }}>
+                      <SceneList scenes={c.scenes} campaignId={campaignId} onStatus={applyStatus} title={null} />
+                    </div>
+                  </details>
+                );
+              })}
+              {total === 0 && (
+                <div className="card" style={{ borderStyle: "dashed" }}>
+                  <p className="muted" style={{ maxWidth: "62ch" }}>Сцен пока нет — добавьте первую в сеттинге или создайте «только в кампании».</p>
+                </div>
+              )}
             </div>
           </details>
         );
       })}
-      {tree.length === 0 && <p className="muted">В кампании пока нет приключений.</p>}
     </div>
   );
+}
+
+function countByStatus(scenes: StoryScene[]) {
+  let done = 0, skipped = 0, pending = 0;
+  for (const s of scenes) {
+    if (s.state?.status === "done") done++;
+    else if (s.state?.status === "skipped") skipped++;
+    else pending++;
+  }
+  return { done, skipped, pending };
 }
 
 const SceneList = memo(function SceneList({
@@ -140,12 +176,12 @@ const SceneList = memo(function SceneList({
   );
 
   return (
-    <div className="stack">
-      {title && <span className="muted">{title}</span>}
+    <div className="stack" style={{ gap: 4 }}>
+      {title && <span className="muted" style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase" }}>{title}</span>}
       {scenes.map((s) => (
         <SceneRow key={s.id} scene={s} campaignId={campaignId} onStatus={setStatus} />
       ))}
-      {scenes.length === 0 && <p className="muted">Сцен пока нет.</p>}
+      {scenes.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Сцен пока нет.</span>}
     </div>
   );
 });
@@ -159,33 +195,35 @@ const SceneRow = memo(function SceneRow({
   campaignId: number;
   onStatus: (scene: StoryScene, status: string) => void;
 }) {
+  const statusBadge =
+    s.state?.status === "done" ? <span className="badge held">пройдена</span> :
+    s.state?.status === "skipped" ? <span className="badge cancelled">пропущена</span> : null;
   return (
-    <details className="card">
-      <summary>
-        <span className="entry-title">{s.name}</span>
-        <span className="muted"> · {SCENE_KIND_LABELS[s.kind] ?? s.kind}</span>
-        {s.state?.status === "done" && <span className="badge tag"> пройдена</span>}
-        {s.state?.status === "skipped" && <span className="badge tag"> пропущена</span>}
-        {s.is_override && <span className="badge tag"> правка кампании</span>}
-        {s.campaign_only && <span className="badge tag"> только в кампании</span>}
+    <details className="entity-row" style={{ display: "block", padding: 0, borderBottom: "1px solid var(--line)" }}>
+      <summary className="entity-row" style={{ cursor: "pointer", listStyle: "none", margin: 0, borderBottom: "none" }}>
+        <span className="entity-type-chip" style={{ fontSize: 10 }}>{SCENE_KIND_LABELS[s.kind] ?? s.kind}</span>
+        <span className="entity-row-name" style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-body)", fontWeight: 600 }}>{s.name}</span>
+        {statusBadge}
+        {s.is_override && <span className="badge tag">правка</span>}
+        {s.campaign_only && <span className="badge tag">только в кампании</span>}
       </summary>
-      <div className="stack" style={{ marginTop: 8 }}>
+      <div className="entity-row-expanded" style={{ marginTop: 0 }}>
         {s.summary ? (
           <div style={{ whiteSpace: "pre-wrap" }}>
             <MentionText text={s.summary} />
           </div>
         ) : (
-          <span className="muted">Сводки нет.</span>
+          <span className="muted" style={{ fontSize: 12 }}>Сводки нет — откройте сцену, чтобы добавить.</span>
         )}
-        <div className="row">
-          <select value={s.state?.status ?? "pending"} onChange={(e) => onStatus(s, e.target.value)}>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <select value={s.state?.status ?? "pending"} onChange={(e) => onStatus(s, e.target.value)} style={{ fontSize: 12 }}>
             {SCENE_STATUSES.map((st) => (
               <option key={st.key} value={st.key}>
                 {st.label}
               </option>
             ))}
           </select>
-          <Link to={`/scenes/${s.id}?campaign=${campaignId}`}>Открыть сцену →</Link>
+          <Link to={`/scenes/${s.id}?campaign=${campaignId}`} style={{ fontSize: 12 }}>Открыть сцену →</Link>
         </div>
       </div>
     </details>

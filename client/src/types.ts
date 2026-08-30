@@ -1006,9 +1006,21 @@ export interface PlaylistDetail extends Playlist {
   items: PlaylistItem[];
 }
 
+export interface MasteringSection {
+  id: number;
+  category: "prep" | "live" | "knowledge";
+  name: string;
+  system_id: number | null;
+  system_name?: string | null;
+  position: number;
+  created_at: string;
+}
+
 export interface MasteringNote {
   id: number;
   category: "prep" | "live" | "knowledge";
+  section_id: number | null;
+  section_name?: string | null;
   system_id: number | null;
   system_name?: string;
   title: string;

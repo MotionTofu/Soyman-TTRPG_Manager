@@ -29,10 +29,13 @@ function isValidBagItem(item: unknown): boolean {
 
 export function loadBagItems(): SearchResult[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(ITEMS_KEY) || "[]");
+    const stored = localStorage.getItem(ITEMS_KEY) || "[]";
+    if (stored.includes("__proto__") || stored.includes("constructor")) throw new Error("polluted");
+    const raw = JSON.parse(stored);
     if (!Array.isArray(raw)) return [];
     return raw.filter(isValidBagItem) as SearchResult[];
   } catch {
+    try { localStorage.removeItem(ITEMS_KEY); } catch {}
     return [];
   }
 }

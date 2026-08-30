@@ -277,7 +277,7 @@ function skinTheme(
       "--font-body": d.fontBody,
       "--font-ui": "'Oswald', var(--font-body)",
       "--font-mono": "'JetBrains Mono', ui-monospace, 'PT Mono', monospace",
-      // §6.2: "Радиусы: 0 или 2 px. Скруглений в системе нет." (откат 2026-08-29 — 1px по просьбе)
+      // §1.3: 1px по всему контуру — исправлено 2026-08-30 по решению владельца (2px → 1px)
       "--card-radius": "0px",
       "--card-border-width": "1px",
       "--card-clip": "none",
@@ -313,7 +313,7 @@ const ZINE_THEME = buildTheme("zine", "Соевый панк", "light", {
   bg: "#EDE7D9", text: "#12100E", accent: "#D6321E", border: "#12100E",
   fontDisplay: "'RussianPunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
   textMutedOverride: "#6E675C",
-  cardBorderWidth: 2, cardRadius: 0,
+  cardBorderWidth: 1, cardRadius: 0,
   bandBg: "#12100E",
   bandImage: "radial-gradient(#ffffff33 1.5px, transparent 1.5px) 0 0/8px 8px",
   pageTexture: "radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px) 0 0/3px 3px",
@@ -359,6 +359,7 @@ const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
   pageTexture: "radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px) 0 0/3px 3px",
   cardBodyTexture: "radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px",
   playerBarText: "#1c1c1c",
+  cardBorderWidth: 1,
 });
 
 const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация", "dark", {
@@ -368,9 +369,43 @@ const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация",
   textMutedOverride: "#7fd88a",
   semanticOverrides: { gm: "#b366e8", player: "#7fd88a", paid: "#e0c15f", free: "#7fd88a", active: "#7fd88a", hold: "#6b5a78", danger: "#e05f5f" },
   statusCapsuleOverrides: { planned: { bg: "#2c1c38", fg: "#c9a8e0" } },
+  cardBorderWidth: 1,
 });
 
-export const BUILTIN_THEMES: Theme[] = [ZINE_THEME, RIOT_THEME, NEON_THEME, SOY_NOIR_THEME, ABERRANT_THEME];
+const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
+  bg: "#092328",
+  text: "#E0EDE2",
+  accent: "#8BBB92",
+  accent2: "#2A835F",
+  border: "#12544F",
+  fontDisplay: "'Cormorant SC', serif",
+  fontBody: "'Archivo', sans-serif",
+  // Приглушённый текст — ровно самый светлый из палитры, а не микс
+  // к фону: так вся четвёрка (#092328/#12544F/#2A835F/#8BBB92) живёт
+  // в теме как есть, и при этом muted остаётся читаемым на тёмной бумаге.
+  textMutedOverride: "#8BBB92",
+  bandBg: "#0E3C3C",
+  bandImage: "repeating-linear-gradient(180deg, rgba(139,187,146,.07) 0 3px, transparent 3px 22px)",
+  pageTexture: "radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px) 0 0/3px 3px",
+  cardBodyTexture: "radial-gradient(rgba(139,187,146,.04) 1px, transparent 1px) 0 0/3px 3px",
+  playerBarText: "#E0EDE2",
+  semanticOverrides: { gm: "#8BBB92", player: "#8FD0A8", paid: "#D2C49E", free: "#8BBB92", active: "#8BBB92", hold: "#7A9E8E", danger: "#E08E8E" },
+  statusCapsuleOverrides: {
+    planned: { bg: "#1A3A36", fg: "#8BBB92" },
+    held: { bg: "#143528", fg: "#8BBB92" },
+    cancelled: { bg: "#3A2526", fg: "#D9A8A8" },
+    rescheduled: { bg: "#2F3320", fg: "#C8C9A0" },
+  },
+  cardBorderWidth: 1,
+});
+// Инвертированные плашки в «Покое» — тёмные (#0E3C3C), а не светлый инк, чтобы
+// бестиарий (.creature-card__band), группы ресурсов (.res-group__band),
+// вырезка (.home-article-band) и т.п. были темнее, как просили.
+PEACE_THEME.vars["--surface"] = "#0E3C3C";
+PEACE_THEME.vars["--on-surface"] = "#E0EDE2";
+PEACE_THEME.vars["--on-surface-muted"] = "#8BBB92";
+
+export const BUILTIN_THEMES: Theme[] = [ZINE_THEME, RIOT_THEME, NEON_THEME, SOY_NOIR_THEME, PEACE_THEME, ABERRANT_THEME];
 
 // Тема по умолчанию — «Соевый Нуар»: на неё же настроен предзагрузочный
 // :root в index.css (защита от вспышки чужой палитры до запуска JS).
@@ -384,15 +419,25 @@ export interface StoredThemePrefs {
   customThemes: Theme[];
 }
 
+function isSafeParsedObject(obj: unknown): boolean {
+  if (!obj || typeof obj !== "object") return false;
+  const s = JSON.stringify(obj);
+  return !s.includes("__proto__") && !s.includes("\"constructor\"") && !s.includes("\"prototype\"");
+}
 export function loadThemePrefs(): StoredThemePrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      return { themeId: parsed.themeId || DEFAULT_THEME_ID, customThemes: parsed.customThemes || [] };
+      if (raw.includes("__proto__") || raw.includes("constructor") || raw.includes("prototype")) throw new Error("polluted");
+      const parsed = JSON.parse(raw) as StoredThemePrefs;
+      if (!isSafeParsedObject(parsed)) throw new Error("polluted");
+      const themeId = typeof parsed.themeId === "string" && /^[a-z0-9_-]{1,64}$/i.test(parsed.themeId) ? parsed.themeId : DEFAULT_THEME_ID;
+      const customThemes = Array.isArray(parsed.customThemes) ? parsed.customThemes.filter((t) => t && typeof t.id === "string" && isSafeParsedObject(t)) : [];
+      return { themeId, customThemes };
     }
   } catch {
-    /* ignore */
+    /* ignore — reset to default */
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }
   return { themeId: DEFAULT_THEME_ID, customThemes: [] };
 }

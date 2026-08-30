@@ -13,17 +13,12 @@ export interface NavWidgetPrefs {
   showLabels: boolean;
 }
 
-const DEFAULTS: NavWidgetPrefs = { position: "right", showLabels: true };
+// Единственный вид — сверху по центру без подсказок
+const DEFAULTS: NavWidgetPrefs = { position: "top", showLabels: false };
 const STORAGE_KEY = "rpgManagerNavWidget";
 const CHANGE_EVENT = "nav-widget-prefs-changed";
 
 export function loadNavWidgetPrefs(): NavWidgetPrefs {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch {
-    /* ignore */
-  }
   return { ...DEFAULTS };
 }
 

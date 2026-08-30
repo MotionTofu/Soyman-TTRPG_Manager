@@ -38,9 +38,16 @@ const CHANGE_EVENT = "dnd-prefs-changed";
 export function loadDndPrefs(): DndPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+    if (raw) {
+      if (raw.includes("__proto__") || raw.includes("constructor")) throw new Error("polluted");
+      const parsed = JSON.parse(raw) as Partial<DndPrefs>;
+      const out: DndPrefs = { ...DEFAULTS };
+      if (parsed.skillSortMode === "ability" || parsed.skillSortMode === "alphabet") out.skillSortMode = parsed.skillSortMode;
+      if (parsed.abilityPrimary === "mod" || parsed.abilityPrimary === "score") out.abilityPrimary = parsed.abilityPrimary;
+      return out;
+    }
   } catch {
-    /* ignore */
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }
   return { ...DEFAULTS };
 }

@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
+  showInExplorer: (folderPath) => ipcRenderer.invoke("show-in-explorer", folderPath),
+  openPath: (targetPath) => ipcRenderer.invoke("open-path", targetPath),
   // После нативного confirm/alert окно на Windows остаётся без клавиатурного
   // фокуса, и страница перестаёт принимать ввод до переключения на другое окно
   // и обратно. Клиент дёргает это сразу после диалога — см.

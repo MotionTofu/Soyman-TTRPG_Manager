@@ -763,28 +763,26 @@ export function MiniPlayerBar() {
   if (!current) return null;
 
   return (
-    <Link to="/now-playing" className="mini-player-bar">
-      <span className="mini-player-track">{current.name}</span>
+    <div className="mini-player-bar" role="group" aria-label={`Сейчас играет: ${current.name}`}>
+      <Link to="/now-playing" className="mini-player-link" aria-label={`Развернуть плеер: ${current.name}`}>
+        <span className="mini-player-track">{current.name}</span>
+      </Link>
       <button
         type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          toggle();
-        }}
+        onClick={toggle}
+        aria-label={isPlaying ? "Пауза" : "Играть"}
         title={isPlaying ? "Пауза" : "Играть"}
       >
         <NavIcon name={isPlaying ? "pause" : "play"} />
       </button>
       <button
         type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          next();
-        }}
+        onClick={next}
+        aria-label="Следующий трек"
         title="Следующий трек"
       >
         <NavIcon name="next" />
       </button>
-    </Link>
+    </div>
   );
 }

@@ -295,13 +295,85 @@ h4 { font-size: var(--fs-body); }
   padding: 14px;
 }
 /* A card nested inside another card inherits the parent's frame instead of
-   drawing a second border/background/padding box — one frame per region,
-   never "frame in frame". Applies at every nesting depth. */
+    drawing a second border/background/padding box — one frame per region,
+    never "frame in frame". Applies at every nesting depth. */
 .card .card {
   border: none;
   background: none;
   padding: 0;
   clip-path: none;
+}
+/* Исключение: плитки тем внутри .res-group — самостоятельные карточки выбора,
+   а не вложенный контент. Одной рамкой их душить нельзя (§P0). */
+.res-group .grid-cards .card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  background-image: var(--card-body-texture);
+  padding: 14px;
+  clip-path: none;
+}
+/* Исключение Обзора кампании: блоки Продакшен/Препродакшен внутри details.card
+   — самостоятельные секции, а не вложенный контент. §1.4 требует плашку только
+   у внешней карточки, но внутренние должны сохранять свою рамку (§1.3). */
+.campaign-overview .card .card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  background-image: var(--card-body-texture);
+  padding: 14px;
+  clip-path: none;
+}
+/* Ритм Обзора: внешний gap щедрый (§1.9), внутренние compact. Перебивает
+   глобальный .stack{10px} только на первом уровне Обзора. */
+.campaign-overview {
+  gap: var(--sp-5);
+}
+/* Проза Обзора рвётся только между словами — без разрывов посередине
+   слова (anywhere/break-all приводили к разрыву «посреди строки»). */
+.campaign-overview p,
+.campaign-overview div[style*="pre-wrap"],
+.campaign-overview .detail-value-mono,
+.campaign-overview .muted {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
+}
+.campaign-overview .detail-table td {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+/* Приключения в Обзоре: синопсис и завязка — на всю ширину карточки,
+   без узкой меры 62ch, иначе остаётся пустая полоса справа (см. скрин). */
+.campaign-overview .card .card p,
+.campaign-overview .card .card div[style*="pre-wrap"] {
+  max-width: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+/* Главы и сцены: приключение — card с инверсией-шапкой, главы — плоские
+   entity-group, сцены — entity-row с rail. Без исключения card-в-card
+   главы/сцены теряли рамку (index.css:300). */
+.campaign-chapters .entity-group {
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  padding: 8px 10px;
+}
+.campaign-chapters .entity-row {
+  background: var(--paper);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+.campaign-chapters .entity-row:first-of-type {
+  border-top: 1px solid var(--line);
+}
+/* Сцена: тела статей — на всю ширину карточки, без столбика 62ch */
+.scene-detail .card div[style*="pre-wrap"],
+.scene-detail .card p.muted,
+.scene-detail .entity-row-expanded div[style*="pre-wrap"] {
+  max-width: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
 }
 
 .muted {
@@ -696,24 +768,52 @@ h4 { font-size: var(--fs-body); }
 
 .roster-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.roster-card-body {
+  padding: 14px;
+  gap: 10px;
+}
+.roster-card-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--paper);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+  isolation: isolate;
+}
+.roster-card-cover.campaign-card-band {
+  height: auto;
+  margin-bottom: 0;
+  border-radius: 0;
+}
+.roster-card.is-left {
+  opacity: 0.72;
+}
+.roster-card.is-left .roster-card-name {
+  color: var(--muted);
 }
 
 .roster-card-thumb-btn {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 8px;
+  right: 8px;
   width: 26px;
   height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--bg-elevated);
+  border-radius: var(--card-radius);
+  background: var(--paper);
   border: var(--card-border-width, 1px) solid var(--line);
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.8;
+  opacity: 0.92;
   z-index: 2;
 }
 .roster-card-thumb-btn:hover {
@@ -737,10 +837,16 @@ h4 { font-size: var(--fs-body); }
 }
 
 .roster-card-actions button {
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: 6px 8px;
+  font-size: var(--fs-meta);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   white-space: normal;
   flex: 1 1 auto;
+}
+.roster-card-actions button.danger {
+  flex: 0 0 auto;
 }
 
 .btn-capsule {
@@ -803,7 +909,8 @@ h4 { font-size: var(--fs-body); }
   inset: 0;
   background-size: cover;
   background-position: center;
-  opacity: 0.15;
+  opacity: 0.30;
+  filter: grayscale(0.30);
   z-index: -1;
   pointer-events: none;
 }
@@ -864,6 +971,15 @@ h4 { font-size: var(--fs-body); }
   text-transform: var(--name-transform);
   line-height: 0.96;
 }
+/* Соевый покой — тёмный градиент под названием на плитке (вместо
+   общего светлого `var(--ink)`), чтобы обложка уходила в глубокий
+   тёмно-изумрудный низ, а не в выбеленный, и текст остаётся светлым. */
+[data-theme-id="peace"] .campaign-tile-scrim {
+  background: linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--paper) 92%, transparent) 100%);
+}
+[data-theme-id="peace"] .campaign-tile-name {
+  color: var(--ink);
+}
 /* Иконка на плейсхолдере плитки «добавить в группу» — крупная, тёмная,
    центрирована в зоне обложки. */
 .group-add-icon {
@@ -909,6 +1025,32 @@ h4 { font-size: var(--fs-body); }
   height: 7px;
   background: var(--ink);
   transform: rotate(45deg);
+}
+/* Плитка «Новая кампания» — занимает четвёртый слот. */
+.campaign-tile-create {
+  cursor: pointer;
+  background: var(--paper);
+  border: var(--card-border-width, 1px) dashed var(--line);
+}
+.campaign-tile-create:hover {
+  border-color: var(--accent);
+}
+.campaign-tile-create-cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-2);
+}
+.campaign-tile-create-icon {
+  color: var(--muted);
+  transition: color 0.15s;
+}
+.campaign-tile-create:hover .campaign-tile-create-icon {
+  color: var(--accent);
+}
+.campaign-tile-create-icon .nav-icon {
+  width: 48px;
+  height: 48px;
 }
 
 /* App shell layout */
@@ -1140,6 +1282,7 @@ h4 { font-size: var(--fs-body); }
 [data-theme-id="neon"] .section-heading h1[data-section="home"] { color: #FF2E88; }
 [data-theme-id="neon"] .section-heading h1[data-section="campaigns"] { color: #39FF6A; }
 [data-theme-id="neon"] .section-heading h1[data-section="settings"] { color: #00E5FF; }
+[data-theme-id="neon"] .section-heading h1[data-section="storages"] { color: #00E5FF; }
 [data-theme-id="neon"] .section-heading h1[data-section="systems"] { color: #C400FF; }
 [data-theme-id="neon"] .section-heading h1[data-section="players"] { color: #FFF200; }
 [data-theme-id="neon"] .section-heading h1[data-section="mastering"],
@@ -2206,13 +2349,21 @@ th, td {
 .tabs {
   display: flex;
   gap: 0;
-  border-bottom: 1.5px solid var(--line);
-  margin-bottom: 16px;
-}
-.tabs button {
-  background: transparent;
-  border: 1.5px solid transparent;
   border-bottom: none;
+  box-shadow: inset 0 calc(-1 * var(--card-border-width)) 0 var(--line);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  flex: 0 0 auto;
+  background: transparent;
+  border: var(--card-border-width) solid transparent;
+  border-bottom: var(--card-border-width) solid var(--line);
   padding: 6px 14px;
   color: var(--muted);
   font-family: var(--font-ui);
@@ -2221,9 +2372,9 @@ th, td {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   position: relative;
-  top: 1.5px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
 }
 .tabs button:hover {
   color: var(--ink);
@@ -2231,6 +2382,7 @@ th, td {
 .tabs button.active {
   color: var(--ink);
   border-color: var(--line);
+  border-bottom: var(--card-border-width) solid var(--paper);
   background: var(--paper);
 }
 /* Mobile-only stand-in for DndCharacterView's .tabs row (7 sections don't
@@ -2397,6 +2549,10 @@ details.card summary {
 }
 details.card summary:hover {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+}
+details.card summary.campaign-overview-header:hover {
+  background: var(--ink);
+  color: var(--paper);
 }
 details.card[open] summary {
   margin-bottom: 10px;
@@ -2743,7 +2899,20 @@ details.card[open] summary {
     border: var(--card-border-width, 1px) solid var(--line);
     border-radius: var(--card-radius);
     color: inherit;
+  }
+  .mini-player-link {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    color: inherit;
     text-decoration: none;
+    overflow: hidden;
+  }
+  .mini-player-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
   .mini-player-track {
     flex: 1;
@@ -2762,6 +2931,11 @@ details.card[open] summary {
     line-height: 1;
     color: inherit;
     padding: 2px 4px;
+  }
+  .mini-player-bar button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 
 }
@@ -3593,6 +3767,7 @@ details.card[open] summary {
   display: block;
   text-decoration: none;
   color: inherit;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 511.989 511.989'%3E%3Cg transform='scale(-1,1) translate(-511.989,0)'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M48.641,496.629c-2.726,0-5.46-1.031-7.539-3.123L18.47,470.881c-2-2-3.125-4.703-3.125-7.531s1.125-5.547,3.125-7.547l79.194-79.201c2-2,4.719-3.125,7.546-3.125c2.828,0,5.539,1.125,7.539,3.125l22.625,22.623c4.172,4.172,4.172,10.922,0,15.096l-79.193,79.186C54.102,495.598,51.368,496.629,48.641,496.629z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M63.727,448.256c-7.055-7.047-16.429-10.938-26.398-10.938c-9.976,0-19.351,3.891-26.398,10.938c-14.554,14.562-14.554,38.25,0,52.795c7.047,7.047,16.422,10.938,26.398,10.938c9.969,0,19.344-3.891,26.398-10.938C78.282,486.506,78.282,462.818,63.727,448.256z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M161.779,406.131c-2.835,0-5.546-1.125-7.546-3.125l-45.249-45.264c-2.008-2-3.125-4.703-3.125-7.531s1.117-5.547,3.125-7.547L355.649,95.998c1.625-1.625,3.75-2.688,6.031-3.016l52.797-7.547c3.328-0.469,6.672,0.641,9.047,3.016s3.499,5.734,3.016,9.062l-7.547,52.795c-0.312,2.281-1.375,4.391-3.016,6.031L169.318,403.006C167.318,405.006,164.607,406.131,161.779,406.131z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M139.147,383.506c-2.727,0-5.461-1.047-7.539-3.123c-4.164-4.172-4.164-10.922,0-15.094l186.324-186.324c4.172-4.172,10.922-4.172,15.077,0c4.172,4.157,4.172,10.922,0,15.078l-186.316,186.34C144.608,382.459,141.882,383.506,139.147,383.506z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M199.49,418.086L93.898,312.492c-2.43-2.422-5.867-3.531-9.257-2.984c-3.383,0.547-6.297,2.688-7.828,5.766L61.728,345.43c-2.055,4.109-1.25,9.078,2,12.312l90.505,90.514c2.047,2.047,4.781,3.125,7.546,3.125c1.617,0,3.25-0.359,4.766-1.125l30.172-15.078c3.062-1.547,5.21-4.453,5.757-7.844C203.021,423.959,201.912,420.506,199.49,418.086z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath d='M48.641,496.629c-2.726,0-5.46-1.031-7.539-3.123L18.47,470.881c-2-2-3.125-4.703-3.125-7.531s1.125-5.547,3.125-7.547l79.194-79.201c2-2,4.719-3.125,7.546-3.125c2.828,0,5.539,1.125,7.539,3.125l22.625,22.623c4.172,4.172,4.172,10.922,0,15.096l-79.193,79.186C54.102,495.598,51.368,496.629,48.641,496.629z' fill='%23965353'/%3E%3Cpath d='M63.727,448.256c-7.055-7.047-16.429-10.938-26.398-10.938c-9.976,0-19.351,3.891-26.398,10.938c-14.554,14.562-14.554,38.25,0,52.795c7.047,7.047,16.422,10.938,26.398,10.938c9.969,0,19.344-3.891,26.398-10.938C78.282,486.506,78.282,462.818,63.727,448.256z' fill='%23FFCE54'/%3E%3Cpolygon points='59.954,414.32 97.664,452.021 112.749,436.943 75.039,399.224' fill='%237F4545'/%3E%3Cpath d='M161.779,406.131c-2.835,0-5.546-1.125-7.546-3.125l-45.249-45.264c-2.008-2-3.125-4.703-3.125-7.531s1.117-5.547,3.125-7.547L355.649,95.998c1.625-1.625,3.75-2.688,6.031-3.016l52.797-7.547c3.328-0.469,6.672,0.641,9.047,3.016s3.499,5.734,3.016,9.062l-7.547,52.795c-0.312,2.281-1.375,4.391-3.016,6.031L169.318,403.006C167.318,405.006,164.607,406.131,161.779,406.131z' fill='%23FFCE54'/%3E%3Cpath d='M139.147,383.506c-2.727,0-5.461-1.047-7.539-3.123c-4.164-4.172-4.164-10.922,0-15.094l186.324-186.324c4.172-4.172,10.922-4.172,15.077,0c4.172,4.157,4.172,10.922,0,15.078l-186.316,186.34C144.608,382.459,141.882,383.506,139.147,383.506z' fill='%23F6BB42'/%3E%3Cpath d='M199.49,418.086L93.898,312.492c-2.43-2.422-5.867-3.531-9.257-2.984c-3.383,0.547-6.297,2.688-7.828,5.766L61.728,345.43c-2.055,4.109-1.25,9.078,2,12.312l90.505,90.514c2.047,2.047,4.781,3.125,7.546,3.125c1.617,0,3.25-0.359,4.766-1.125l30.172-15.078c3.062-1.547,5.21-4.453,5.757-7.844C203.021,423.959,201.912,420.506,199.49,418.086z' fill='%23ED5564'/%3E%3C/g%3E%3C/svg%3E") 2 2, pointer;
 }
 .home-hero-cover {
   position: relative;
@@ -3616,11 +3791,162 @@ details.card[open] summary {
 .home-hero-empty .empty-state {
   padding: var(--sp-5, 24px);
 }
+/* Onboarding Hero — 5 горизонтальных шагов. */
+.home-hero-onboarding {
+  min-height: 220px;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.onboarding-header {
+  text-align: center;
+}
+.onboarding-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  text-transform: var(--name-transform);
+  line-height: 0.96;
+}
+.onboarding-hint {
+  margin: var(--sp-1) 0 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.onboarding-steps {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: center;
+}
+.onboarding-step {
+  flex: 1;
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: 0;
+  background: var(--paper-2);
+  cursor: pointer;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+.onboarding-step:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.onboarding-step:disabled {
+  cursor: default;
+}
+.onboarding-step-active {
+  border-color: var(--accent);
+}
+.onboarding-step-done {
+  opacity: 0.4;
+  border-style: dashed;
+}
+.onboarding-step-num {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1;
+}
+.onboarding-step-done .onboarding-step-num {
+  background: var(--muted);
+}
+.onboarding-step-num .nav-icon {
+  width: 24px;
+  height: 24px;
+}
+.onboarding-step-title {
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+/* Модалка создания игроков — drafting rows. */
+.player-draft {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+}
+.player-draft-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.player-draft-num {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.player-draft-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.player-draft-remove:hover {
+  color: var(--accent);
+}
+.player-draft-add {
+  background: none;
+  border: var(--card-border-width, 1px) dashed var(--line);
+  padding: var(--sp-2);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+}
+.player-draft-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.error-text {
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  margin: 0;
+}
 .home-hero-scrim {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background: linear-gradient(180deg, transparent 35%, color-mix(in srgb, var(--ink) 85%, transparent) 100%);
+}
+[data-theme-id="peace"] .home-hero-scrim {
+  background: linear-gradient(180deg, transparent 35%, color-mix(in srgb, var(--paper) 92%, transparent) 100%);
+}
+[data-theme-id="peace"] .home-hero-title {
+  color: var(--ink);
+}
+[data-theme-id="peace"] .home-hero-session {
+  color: color-mix(in srgb, var(--ink) 90%, transparent);
+}
+[data-theme-id="peace"] .home-hero-eyebrow,
+[data-theme-id="peace"] .home-hero-date {
+  color: var(--muted);
 }
 .home-hero-content {
   position: absolute;
@@ -5168,6 +5494,9 @@ input.litm-theme-title {
   color: var(--accent);
   font-weight: 600;
 }
+[data-theme-id="peace"] .mention-link {
+  color: color-mix(in srgb, var(--accent) 80%, white 20%);
+}
 
 /* Уровни уверенности в визарде расстановки ссылок. Цвет — быстрый сигнал,
    но не единственный: рядом всегда стоит подпись с количеством, потому что
@@ -5266,7 +5595,7 @@ input.litm-theme-title {
   font-weight: 600;
   text-decoration: underline;
 }
-/* Ссылки-кнопки в списке контактов раздела «Автор» (страница «О программе»):
+/* Ссылки-кнопки в списке контактов раздела «Автор» (страница «Справка»):
    снимают с button его обычный вид (заливка, контур, паддинги) и оставляют
    подчёркнутый текст поверх остальных строк-контактов. Внешний ресурс не
    открывается сразу — сначала та же модалка подтверждения, что и в навигации. */
@@ -5284,6 +5613,129 @@ input.litm-theme-title {
 .author-contact-link:hover {
   border-color: transparent;
 }
+
+/* --- Справка --------------------------------------------------------- */
+
+/* Первый текстовый элемент — без верхнего отступа. */
+.about-hint {
+  margin-top: 0;
+}
+
+/* Таблица горячих клавиш — своя, не rt-table.
+   §1.5: заголовки — Label (Oswald капс), значения — Data (JetBrains Mono),
+   проза — Body (Archivo). */
+.about-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.about-table th,
+.about-table td {
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: 5px 10px;
+  text-align: left;
+}
+.about-table th {
+  background: var(--bg-elevated);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+}
+.about-table td {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+}
+/* Data-голос: комбинации клавиш моноширинным (§1.5). */
+.about-table__combo {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* На мобильном колонка «Где» скрывается — текст слишком длинный для
+   390px, а контент и так читается из колонки «Что делает». */
+@media (max-width: 600px) {
+  .about-table__where { display: none; }
+}
+
+/* Блок контактов автора — вертикальный стек с иконкой, подписью и
+   значением в каждой строке. Паттерн: иконка слева, Label-подпись
+   (Oswald капс), Data-значение (JetBrains Mono) по правому краю. */
+.about-author-intro {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  margin: 0;
+}
+.about-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.about-contact {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: none;
+  border: none;
+  padding: 6px var(--sp-2);
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+}
+.about-contact:hover {
+  background: var(--bg-elevated);
+}
+.about-contact:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.about-contact__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.about-contact__label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  min-width: 70px;
+}
+.about-contact__value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* Вложенный аккордеон внутри «Фишек» — подразделы. */
+.about-sub {
+  margin: 2px 0 0;
+}
+.about-sub summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 1px 0;
+}
+.about-sub summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.about-sub__body {
+  padding-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.about-sub__body ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
 .rt-h {
   display: inline-block;
   font-weight: 700;
@@ -6138,7 +6590,7 @@ input.litm-theme-title {
   gap: 10px;
   padding: 8px 16px;
   background: var(--card-band-bg, var(--bg-elevated));
-  background-image: var(--card-band-image, none);
+  background-image: none;
   color: var(--player-bar-text, var(--primary-text, var(--text-bright)));
   border-top: var(--card-border-width) solid var(--line);
   border-radius: 0;
@@ -7301,6 +7753,13 @@ details[open] > .res-group__band .chevron-icon {
   display: flex;
   flex-direction: column;
 }
+.res-group.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+.res-row.is-dragging {
+  opacity: 0.5;
+}
 
 /* --- Строка ресурса --------------------------------------------------- */
 .res-row {
@@ -7439,6 +7898,53 @@ details[open] > .res-group__band .chevron-icon {
 .res-row.is-editing {
   background: var(--bg-elevated);
 }
+/* Активное хранилище — инверсия, а не полупрозрачный accent (§1.7: в noir accent===ink). */
+.res-row.is-active {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-left: 3px solid var(--surface);
+}
+.res-row.is-active .res-row__name { color: var(--on-surface); }
+.res-row.is-active .muted { color: var(--on-surface-muted); }
+.res-row.is-active:hover { background: var(--surface); }
+/* Плитки тем — 1px всегда, выбранная — инверсией, а не 2px (§1.3). */
+.theme-card { cursor: pointer; transition: border-color 120ms, background 120ms; }
+.theme-card.is-selected {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
+}
+.theme-card.is-selected .muted { color: var(--on-surface-muted); }
+/* Свотчи темы — квадраты 1:1, без радиусов (§1.1). */
+.theme-swatches { display: flex; gap: 6px; margin-bottom: 10px; }
+.theme-swatch {
+  width: 18px; height: 18px;
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.theme-swatch--ink { border-color: var(--line); }
+.theme-swatch--accent { border: 1px solid transparent; }
+/* Drop-зона импорта бэкапа */
+.import-drop-zone {
+  border: 1px dashed var(--line);
+  background: var(--paper);
+  transition: border-color 120ms, background 120ms;
+}
+.import-drop-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.settings-toast {
+  background: var(--surface);
+  color: var(--on-surface);
+  border: 1px solid var(--surface);
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.04em;
+}
 
 @media (max-width: 760px) {
   .res-toolbar__search {
@@ -7463,6 +7969,48 @@ details[open] > .res-group__band .chevron-icon {
   }
 }
 
+/* Статья мастерения — лонгрид как у Long Story Short, во всю ширину, без разрыва посередине слова */
+.mastering-article {
+  padding: 12px 16px 12px 44px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ink);
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  max-width: none;
+}
+.mastering-article .rt-h1,
+.mastering-article .rt-h2,
+.mastering-article .rt-h3 {
+  font-family: var(--font-display);
+  line-height: 1.15;
+  margin: 1.1em 0 0.45em;
+}
+.mastering-article .rt-h1 { font-size: 22px; }
+.mastering-article .rt-h2 { font-size: 19px; }
+.mastering-article .rt-h3 { font-size: 16px; }
+.mastering-article .rt-ul {
+  margin: 0.6em 0;
+  padding-left: 1.4em;
+}
+.mastering-article .rt-table-wrap {
+  margin: 0.8em 0;
+  overflow-x: auto;
+}
+.mastering-article .rt-table th,
+.mastering-article .rt-table td {
+  font-size: 14px;
+}
+@media (max-width: 760px) {
+  .mastering-article {
+    padding: 10px 12px 10px 12px;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+}
+
 
 /* --- Карточка существа (design_revision.md, шаг 4) ---------------------
    Быстрый взгляд: то, чем существо отличается от других. Одна колоночная
@@ -7476,6 +8024,12 @@ details[open] > .res-group__band .chevron-icon {
   color: var(--ink);
   display: flex;
   flex-direction: column;
+}
+[data-theme-id="peace"] .creature-card {
+  border-color: var(--paper) !important;
+}
+[data-theme-id="peace"] .creature-card:hover {
+  border-color: var(--accent-2) !important;
 }
 .creature-card--page {
   max-width: 420px;
@@ -7674,7 +8228,10 @@ details[open] > .res-group__band .chevron-icon {
   font-family: var(--font-body);
   font-size: 12px;
   line-height: 1.4;
-  max-width: 62ch;
+  max-width: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
 }
 .creature-card__secret > .creature-card__sublabel,
 .creature-card__tactics > .creature-card__sublabel {
@@ -7802,6 +8359,12 @@ details[open] > .res-group__band .chevron-icon {
   display: flex;
   flex-direction: column;
   cursor: pointer;
+}
+[data-theme-id="peace"] .monster-tile {
+  border-color: var(--paper) !important;
+}
+[data-theme-id="peace"] .monster-tile:hover {
+  border-color: var(--accent-2) !important;
 }
 .monster-tile:hover {
   border-color: var(--accent);
@@ -8147,7 +8710,7 @@ details[open] > .res-group__band .chevron-icon {
 .detail-table td {
   padding: 4px 8px;
   vertical-align: top;
-  border-bottom: 1.5px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 .detail-table tr:last-child td {
   border-bottom: none;
@@ -8173,11 +8736,29 @@ details[open] > .res-group__band .chevron-icon {
   padding: 6px 10px;
   margin: 0;
   font-family: var(--font-ui);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   cursor: pointer;
   list-style: none;
+}
+[data-theme-id="peace"] .campaign-overview-header {
+  background: #0E3C3C;
+  color: var(--ink);
+}
+[data-theme-id="peace"] details.card summary.campaign-overview-header:hover {
+  background: #104846;
+  color: var(--ink);
+}
+/* Глобально для «Покоя» все инвертированные плашки (бестиарий .creature-card__band,
+   группы ресурсов .res-group__band, вырезка .home-article-band и т.п., везде где
+   используется --surface) — тот же тёмный #0E3C3C вместо светлого var(--ink).
+   Дублирует правку в themes.ts (inline vars выше по приоритету), !important
+   нужен чтобы перебить inline при хот-релоаде. */
+[data-theme-id="peace"] {
+  --surface: #0E3C3C !important;
+  --on-surface: #E0EDE2 !important;
+  --on-surface-muted: #8BBB92 !important;
 }
 .campaign-overview-header::-webkit-details-marker {
   display: none;
@@ -8214,7 +8795,7 @@ details[open] > .res-group__band .chevron-icon {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 0;
-  border: 1.5px solid var(--line);
+  border: 1px solid var(--line);
   background: transparent;
   font-size: var(--fs-meta);
   font-family: var(--font-ui);
@@ -8237,11 +8818,11 @@ details[open] > .res-group__band .chevron-icon {
 }
 .campaign-actions button {
   font-family: var(--font-ui);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   text-transform: uppercase;
   letter-spacing: 0.10em;
   padding: 6px 12px;
-  border: 1.5px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   color: var(--ink);

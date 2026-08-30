@@ -59,6 +59,7 @@ import { storyRouter } from "./routes/story";
 import { canvasRouter } from "./routes/canvas";
 import { adventureImportRouter } from "./routes/adventureImport";
 import { systemImportRouter } from "./routes/systemImport";
+import { healthRouter } from "./routes/health";
 import { sweepOrphans } from "./services/orphans";
 import { backfillCompendiumSummaries } from "./services/monsterSummary";
 import { attachUser, requireAuth, bootstrapGmAccount, verifyToken, type AuthedRequest } from "./services/auth";
@@ -267,6 +268,7 @@ app.use("/api/story", storyRouter);
 app.use("/api/canvas", canvasRouter);
 app.use("/api/import", adventureImportRouter);
 app.use("/api/system-import", systemImportRouter);
+app.use("/api/health", healthRouter);
 
 // In the packaged app (and when a built client exists next to the server),
 // serve the compiled React app and fall back to it for any non-API route

@@ -541,62 +541,62 @@ export function SessionDetailPage() {
               капсом над значением (макет владельца, 2026-08-21). */}
           {!isPlayer && (
             <div className="sp-deal">
-              <label className="sp-deal__cell">
-                <span className="sp-deal__label">Статус</span>
-                <span className="sp-deal__body">
-                  <select
-                    value={session.status}
-                    onChange={(e) => setStatus(e.target.value as SessionStatus)}
-                  >
-                    {/* Подписи берутся из того же словаря, что и значок в
+                  <label className="sp-deal__cell">
+                    <span className="sp-deal__label">Статус</span>
+                    <span className="sp-deal__body">
+                      <select
+                        value={session.status}
+                        onChange={(e) => setStatus(e.target.value as SessionStatus)}
+                      >
+                        {/* Подписи берутся из того же словаря, что и значок в
                         шапке: раньше список говорил «Отмена», а значок —
                         «Отменена». */}
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                  <i className="sp-deal__caret" />
-                </span>
-              </label>
-              {!hideFinance && (
-                <label className="sp-deal__cell">
-                  <span className="sp-deal__label">Оплата</span>
-                  <span className="sp-deal__body">
-                    <select
-                      value={session.payment_override ?? ""}
-                      onChange={(e) => setPaymentOverride(e.target.value as "" | PaymentType)}
-                    >
-                      <option value="">
-                        Как в кампании (
-                        {PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})
-                      </option>
-                      {PAYMENT_TYPE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                    <i className="sp-deal__caret" />
-                  </span>
-                </label>
-              )}
-              {!hideFinance && isPaidEffective && (
-                <label className="sp-deal__cell">
-                  <span className="sp-deal__label">Ставка</span>
-                  <span className="sp-deal__body">
-                    <input
-                      value={stakeDraft}
-                      placeholder={String(campaign.session_rate)}
-                      onChange={(e) => setStakeDraft(e.target.value)}
-                      onBlur={saveStake}
-                    />
-                    <span className="sp-deal__unit">{campaign.currency}</span>
-                  </span>
-                </label>
-              )}
-            </div>
+                        {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <i className="sp-deal__caret" />
+                    </span>
+                  </label>
+                  {!hideFinance && (
+                    <label className="sp-deal__cell">
+                      <span className="sp-deal__label">Оплата</span>
+                      <span className="sp-deal__body">
+                        <select
+                          value={session.payment_override ?? ""}
+                          onChange={(e) => setPaymentOverride(e.target.value as "" | PaymentType)}
+                        >
+                          <option value="">
+                            Как в кампании (
+                            {PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})
+                          </option>
+                          {PAYMENT_TYPE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        <i className="sp-deal__caret" />
+                      </span>
+                    </label>
+                  )}
+                  {!hideFinance && isPaidEffective && (
+                    <label className="sp-deal__cell">
+                      <span className="sp-deal__label">Ставка</span>
+                      <span className="sp-deal__body">
+                        <input
+                          value={stakeDraft}
+                          placeholder={String(campaign.session_rate)}
+                          onChange={(e) => setStakeDraft(e.target.value)}
+                          onBlur={saveStake}
+                        />
+                        <span className="sp-deal__unit">{campaign.currency}</span>
+                      </span>
+                    </label>
+                  )}
+                </div>
           )}
 
           {/* Два времени, а не одно поле на четыре значения: слева когда
@@ -663,19 +663,19 @@ export function SessionDetailPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="stack" style={{ width: "100%" }}>
-                    <div className="row">
-                      <label className="row">
-                        Год
+                  <div className="sp-inworld-edit">
+                    <div className="sp-inworld-edit__grid">
+                      <span className="sp-inworld-edit__label">Год</span>
+                      <div className="sp-inworld-edit__field">
                         <input
                           type="number"
-                          style={{ width: 90 }}
                           value={inworldYearDraft}
                           onChange={(e) => setInworldYearDraft(e.target.value)}
+                          placeholder="—"
                         />
-                      </label>
-                      <label className="row">
-                        месяц
+                      </div>
+                      <span className="sp-inworld-edit__label">Месяц</span>
+                      <div className="sp-inworld-edit__field">
                         <select
                           value={inworldMonthDraft}
                           onChange={(e) => setInworldMonthDraft(e.target.value)}
@@ -688,70 +688,70 @@ export function SessionDetailPage() {
                             </option>
                           ))}
                         </select>
-                      </label>
-                      <label className="row">
-                        день
+                      </div>
+                      <span className="sp-inworld-edit__label">День</span>
+                      <div className="sp-inworld-edit__field">
                         <input
                           type="number"
-                          style={{ width: 70 }}
                           value={inworldDayDraft}
                           onChange={(e) => setInworldDayDraft(e.target.value)}
+                          placeholder="—"
                         />
-                      </label>
-                      <label className="row">
-                        <input
-                          type="checkbox"
-                          checked={showEndDate}
-                          onChange={(e) => setShowEndDate(e.target.checked)}
-                        />
-                        указать дату окончания
-                      </label>
-                    </div>
-                    {showEndDate && (
-                      <div className="row">
-                        <label className="row">
-                          Конец: год
-                          <input
-                            type="number"
-                            style={{ width: 90 }}
-                            value={inworldYearEndDraft}
-                            onChange={(e) => setInworldYearEndDraft(e.target.value)}
-                          />
-                        </label>
-                        <label className="row">
-                          месяц
-                          <select
-                            value={inworldMonthEndDraft}
-                            onChange={(e) => setInworldMonthEndDraft(e.target.value)}
-                            disabled={calendar.months.length === 0}
-                          >
-                            <option value="">—</option>
-                            {calendar.months.map((m) => (
-                              <option key={m.id} value={m.position}>
-                                {m.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="row">
-                          день
-                          <input
-                            type="number"
-                            style={{ width: 70 }}
-                            value={inworldDayEndDraft}
-                            onChange={(e) => setInworldDayEndDraft(e.target.value)}
-                          />
-                        </label>
                       </div>
-                    )}
-                    <div className="row">
+                      {showEndDate && (
+                        <>
+                          <span className="sp-inworld-edit__label">Конец — год</span>
+                          <div className="sp-inworld-edit__field">
+                            <input
+                              type="number"
+                              value={inworldYearEndDraft}
+                              onChange={(e) => setInworldYearEndDraft(e.target.value)}
+                              placeholder="—"
+                            />
+                          </div>
+                          <span className="sp-inworld-edit__label">Конец — месяц</span>
+                          <div className="sp-inworld-edit__field">
+                            <select
+                              value={inworldMonthEndDraft}
+                              onChange={(e) => setInworldMonthEndDraft(e.target.value)}
+                              disabled={calendar.months.length === 0}
+                            >
+                              <option value="">—</option>
+                              {calendar.months.map((m) => (
+                                <option key={m.id} value={m.position}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <span className="sp-inworld-edit__label">Конец — день</span>
+                          <div className="sp-inworld-edit__field">
+                            <input
+                              type="number"
+                              value={inworldDayEndDraft}
+                              onChange={(e) => setInworldDayEndDraft(e.target.value)}
+                              placeholder="—"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <label className="sp-inworld-edit__check">
+                      <input
+                        type="checkbox"
+                        checked={showEndDate}
+                        onChange={(e) => setShowEndDate(e.target.checked)}
+                      />
+                      указать дату окончания
+                    </label>
+                    <div className="sp-inworld-edit__actions">
                       <button className="primary" onClick={saveInworldDate}>
                         Сохранить дату
                       </button>
                       <button onClick={() => setEditingInworldDate(false)}>Отмена</button>
                     </div>
                     {calendar.months.length === 0 && (
-                      <span className="muted">
+                      <span className="muted sp-inworld-edit__hint">
                         Настройте месяцы в{" "}
                         <Link to={`/settings/${campaign.setting_id}`}>календаре сеттинга</Link>,
                         чтобы выбирать месяц из списка.
@@ -793,10 +793,10 @@ export function SessionDetailPage() {
                         g.items.map((s) => (
                           <label key={s.id} className="sp-secret">
                             <input type="checkbox" onChange={() => markSecretRevealed(s.id)} />
-                            <span>
-                              <strong>{s.title}</strong>
+                            <span style={{ minWidth: 0 }}>
+                              <span className="sp-secret__title">{s.title}</span>
                               {s.content && (
-                                <div className="muted" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                                <div className="sp-secret__content">
                                   <MentionText text={s.content} />
                                 </div>
                               )}
@@ -814,8 +814,6 @@ export function SessionDetailPage() {
 
       {tab === "Подготовка" && (
         <div className="stack">
-          {!isPlayer && <SessionSceneTree sessionId={sessionId} />}
-
           <EditableTextCard
             key={`idea-${session.id}`}
             title="Задумка на сессию"
@@ -828,8 +826,8 @@ export function SessionDetailPage() {
             {/* Боевая тема задаётся здесь же, рядом с задумкой: её выбирают
                 на подготовке к конкретному вечеру, и она главнее темы
                 набора — набор заготовлен на всю кампанию. */}
-            <label className="row" style={{ gap: 6, alignItems: "center" }}>
-              Боевая тема:
+            <label className="sp-idea-battle">
+              <span className="sp-idea-battle__label">Боевая тема</span>
               <select
                 value={session.battle_playlist_id ?? ""}
                 onChange={(e) => setBattlePlaylist(e.target.value ? Number(e.target.value) : null)}
@@ -844,11 +842,13 @@ export function SessionDetailPage() {
             </label>
           </EditableTextCard>
 
-          <div className="row" style={{ alignItems: "flex-start" }}>
+          {!isPlayer && <SessionSceneTree sessionId={sessionId} />}
+
+          <div className="sp-prep-row">
             <LazyDetails
               title="Сюжетные персонажи"
-              className="card stack"
-              style={{ flex: 1, minWidth: 260 }}
+              className="card stack sp-card--plot"
+              style={{ flex: "1 1 280px", minWidth: 260 }}
               defaultOpen
             >
               <SectionDropZone
@@ -864,8 +864,8 @@ export function SessionDetailPage() {
 
             <LazyDetails
               title="Локации"
-              className="card stack"
-              style={{ flex: 1, minWidth: 260 }}
+              className="card stack sp-card--location"
+              style={{ flex: "1 1 280px", minWidth: 260 }}
               defaultOpen
             >
               <SectionDropZone
@@ -881,15 +881,15 @@ export function SessionDetailPage() {
           </div>
 
           {!isPlayer && (
-            <div className="row" style={{ alignItems: "flex-start" }}>
-              <LazyDetails title="Препятствия" className="card stack" style={{ flex: 1, minWidth: 260 }}>
+            <div className="sp-prep-row">
+              <LazyDetails title="Препятствия" className="card stack sp-card--enemies" style={{ flex: "1 1 280px", minWidth: 260 }}>
                 <ObstacleDropZone sessionId={sessionId} />
               </LazyDetails>
 
               <LazyDetails
                 title="Потенциальный лут"
-                className="card stack"
-                style={{ flex: 1, minWidth: 260 }}
+                className="card stack sp-card--loot"
+                style={{ flex: "1 1 280px", minWidth: 260 }}
               >
                 <SectionDropZone
                   entityType="session"
@@ -957,7 +957,7 @@ export function SessionDetailPage() {
             entityId={sessionId}
             collapsible
           >
-            <label className="row muted" style={{ gap: 6, alignItems: "center" }}>
+            <label className="sp-visibility-row">
               <input
                 type="checkbox"
                 checked={!!session.main_events_visible}

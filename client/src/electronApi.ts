@@ -19,6 +19,9 @@ export interface ElectronAPI {
   openExternal: (url: string) => void;
   /** Открыть Telegram автора: сначала установленный клиент (tg://), фолбэк — браузер. */
   openTelegram: () => void;
+  /** Показать папку в проводнике / открыть путь — только безопасные абсолютные пути. */
+  showInExplorer: (folderPath: string) => Promise<{ ok: boolean; error?: string }>;
+  openPath: (targetPath: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 declare global {
@@ -43,6 +46,16 @@ export function hasElectronAPI(): boolean {
 function isSafeRoute(route: string): boolean {
   return route.startsWith("/") && !route.startsWith("//") && !route.includes("..") && !route.includes("\\") && !route.toLowerCase().startsWith("javascript:");
 }
+function isSafeAbsolutePath(p: string): boolean {
+  if (!p || typeof p !== "string" || p.includes("\0") || p.length > 1024) return false;
+  if (p.includes("..")) return false;
+  // Windows абсолютный: C:\ или C:/ или \\server\share
+  if (/^[a-zA-Z]:[\\/]/.test(p)) return true;
+  if (p.startsWith("\\\\")) return false; // UNC — не открываем из настроек (просит сеть)
+  if (p.startsWith("/") || p.startsWith("\\")) return true;
+  return false;
+}
+export function isPathSafeForExplorer(p: string): boolean { return isSafeAbsolutePath(p); }
 export function openSecondWindow(route: string = window.location.pathname + window.location.search): void {
   const safe = isSafeRoute(route) ? route : "/";
   if (window.electronAPI?.openWindow) {

@@ -6,9 +6,11 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SectionDropZone } from "../components/SectionDropZone";
+import { LazyDetails } from "../components/LazyDetails";
 import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
 import type { Setting, StoryScene, StorySceneDetail } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import "../session.css";
 
 // Stable references — SectionDropZone is memoized and would re-render on
 // every parent render if these were inline literals.
@@ -124,13 +126,14 @@ export function SceneDetailPage() {
   async function archiveScene() {
     if (!confirm("Отправить сцену в архив?")) return;
     await api.del(`/story/scenes/${sceneId}`);
-    navigate(`/settings/${scene?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
+    if (campaignId) navigate(`/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}`);
+    else navigate(`/settings/${scene?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
   }
 
   return (
-    <div className="stack">
+    <div className="stack scene-detail">
       {/* Из кампании крошки ведут обратно в её раздел «Главы и сцены», а не
-          в сеттинг: мастер пришёл сюда оттуда и туда же возвращается. */}
+           в сеттинг: мастер пришёл сюда оттуда и туда же возвращается. */}
       <Breadcrumbs
         items={
           campaignId
@@ -154,64 +157,61 @@ export function SceneDetailPage() {
       />
 
       <div className="entity-header">
-        <div className="stack">
-          {/* Имя и вид сцены правятся в карточке «Описание для мастера». */}
-          <div className="stack">
-              <div className="row" style={{ alignItems: "center" }}>
-                <h2>{scene.name}</h2>
-                <EntityTypeChip type="scene" />
-                <Link
-                  to={`/canvas?setting=${scene.setting_id}&arc=${scene.arc_id ?? ""}&focus=scene:${scene.id}`}
-                  className="graph-neighbourhood-link"
-                  title="Показать на полотне"
-                >
-                  <NavIcon name="canvas" /> На полотне
-                </Link>
-              </div>
-              <div className="row">
-                {/* The chip already reads "Сцена" — only a non-default kind
-                     adds information worth a second badge. */}
-                {scene.kind !== "scene" && (
-                  <span className="badge tag">
-                    {SCENE_KINDS.find((k) => k.key === scene.kind)?.label}
-                  </span>
-                )}
-                {scene.is_override && <span className="badge tag">изменено в этой кампании</span>}
-                {scene.campaign_only && <span className="badge tag">только в этой кампании</span>}
-                {scene.hidden_from_players === 1 && (
-                  <span className="muted">скрыта от игроков</span>
-                )}
-              </div>
-              {campaignId && (
-                <div className="row">
-                  <span className="muted">Статус прохождения:</span>
-                  <select value={scene.state?.status ?? "pending"} onChange={(e) => setStatus(e.target.value)}>
-                    {SCENE_STATUSES.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+        <div className="stack" style={{ flex: 1, minWidth: 0 }}>
+          <div className="row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <h1 style={{ margin: 0, flex: "1 1 auto", minWidth: 0 }}>{scene.name}</h1>
+            <EntityTypeChip type="scene" />
+            <Link
+              to={`/canvas?setting=${scene.setting_id}&arc=${scene.arc_id ?? ""}&focus=scene:${scene.id}`}
+              className="graph-neighbourhood-link"
+              title="Показать на полотне"
+            >
+              <NavIcon name="canvas" /> На полотне
+            </Link>
+            <button className="danger" onClick={archiveScene} style={{ marginLeft: "auto" }}>
+              <NavIcon name="archive" /> Архивировать
+            </button>
+          </div>
+          {(scene.kind !== "scene" || scene.is_override || scene.campaign_only) && (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              {scene.kind !== "scene" && (
+                <span className="badge tag">
+                  {SCENE_KINDS.find((k) => k.key === scene.kind)?.label}
+                </span>
               )}
+              {scene.is_override && <span className="badge tag">правка кампании</span>}
+              {scene.campaign_only && <span className="badge tag">только в кампании</span>}
+            </div>
+          )}
+          <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            {campaignId && (
+              <>
+                <span className="campaign-field-label" style={{ margin: 0 }}>Статус:</span>
+                <select value={scene.state?.status ?? "pending"} onChange={(e) => setStatus(e.target.value)}>
+                  {SCENE_STATUSES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ width: 1, height: 18, background: "var(--line)", display: "inline-block" }} aria-hidden="true" />
+              </>
+            )}
+            <label className="row" style={{ gap: 6, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={scene.hidden_from_players === 1}
+                onChange={(e) => save({ hidden_from_players: e.target.checked })}
+              />
+              <span className="campaign-field-label" style={{ margin: 0, textTransform: "none", letterSpacing: 0, color: "var(--ink)" }}>Скрыта от игроков</span>
+            </label>
           </div>
         </div>
-        <div className="entity-header-actions">
-          <label className="row">
-            <input
-              type="checkbox"
-              checked={scene.hidden_from_players === 1}
-              onChange={(e) => save({ hidden_from_players: e.target.checked })}
-            />
-            Скрыта от игроков
-          </label>
-          {scene.is_override && (
+        {scene.is_override && (
+          <div className="entity-header-actions" style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 4, justifyContent: "flex-end" }}>
             <button onClick={revert}>Вернуть к оригиналу</button>
-          )}
-          <button className="danger" onClick={archiveScene}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       <EditableTextCard
@@ -281,50 +281,50 @@ export function SceneDetailPage() {
       />
 
       <details className="card" open>
-        <summary className="sb-section" style={{ margin: 0 }}>
-          Проверки ({scene.checks.length})
-        </summary>
+        <summary className="campaign-overview-header">Проверки · {scene.checks.length}</summary>
         <div className="stack" style={{ marginTop: 8 }}>
           {scene.checks.map((c) => (
-            <div key={c.id} className="row" style={{ justifyContent: "space-between" }}>
-              <span>
+            <div key={c.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+              <span style={{ maxWidth: "62ch" }}>
                 <strong>
                   <MentionText text={c.what} />
                 </strong>
-                {c.difficulty && <span className="muted"> · {c.difficulty}</span>}
+                {c.difficulty && <span className="detail-value-mono" style={{ marginLeft: 6 }}>{c.difficulty}</span>}
                 {/* Исходы, а не пара «успех/провал»: последствий у проверки
                     столько, сколько назвала система, и правятся они на
                     «Полотне». Здесь список только показывается — иначе
                     страница сцены и холст разошлись бы текстами. */}
                 {c.outcomes.map((o) => (
-                  <div key={o.id} className="muted">
-                    {o.label}
-                    {o.consequence ? (
-                      <>
-                        : <MentionText text={o.consequence} />
-                      </>
-                    ) : null}
-                    {o.target_name && <span> → {o.target_name}</span>}
+                  <div key={o.id} style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                    <span className="campaign-field-label" style={{ margin: 0 }}>{o.label}</span>
+                    {o.consequence ? <span style={{ maxWidth: "56ch" }}><MentionText text={o.consequence} /></span> : null}
+                    {o.target_name && <span className="muted">→ {o.target_name}</span>}
                   </div>
                 ))}
               </span>
               <button
-                className="danger"
+                className="danger comp-mini"
                 onClick={async () => {
                   await api.del(`/story/checks/${c.id}`);
                   refresh();
                 }}
+                aria-label="Удалить"
               >
                 ✕
               </button>
             </div>
           ))}
-          {scene.checks.length === 0 && <p className="muted">Проверок нет.</p>}
-          <div className="row">
+          {scene.checks.length === 0 && (
+            <div className="card" style={{ borderStyle: "dashed" }}>
+              <p className="muted" style={{ maxWidth: "62ch" }}>Проверок нет — добавьте «что проверяем» и сложность. Исходы с последствиями правятся на Полотне.</p>
+            </div>
+          )}
+          <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
             <input
               placeholder="Что проверяем"
               value={check.what}
               onChange={(e) => setCheck({ ...check, what: e.target.value })}
+              style={{ flex: "1 1 160px" }}
             />
             <input
               placeholder="Сложность"
@@ -336,27 +336,28 @@ export function SceneDetailPage() {
               placeholder="При успехе"
               value={check.on_success}
               onChange={(e) => setCheck({ ...check, on_success: e.target.value })}
+              style={{ flex: "1 1 140px" }}
             />
             <input
               placeholder="При провале"
               value={check.on_failure}
               onChange={(e) => setCheck({ ...check, on_failure: e.target.value })}
+              style={{ flex: "1 1 140px" }}
             />
-            <button className="primary" onClick={addCheck}>
+            <button className="primary" onClick={addCheck} disabled={!check.what.trim()}>
               Добавить
             </button>
           </div>
+          <span className="muted" style={{ fontSize: 11, maxWidth: "62ch" }}>Два поля «При успехе/при провале» создадут исходы «Успех/Провал» — остальные (3–4) добавляются на Полотне.</span>
         </div>
       </details>
 
       <details className="card" open>
-        <summary className="sb-section" style={{ margin: 0 }}>
-          Награды и лут ({scene.rewards.length})
-        </summary>
+        <summary className="campaign-overview-header">Награды и лут · {scene.rewards.length}</summary>
         <div className="stack" style={{ marginTop: 8 }}>
           {scene.rewards.map((r) => (
-            <div key={r.id} className="row" style={{ justifyContent: "space-between" }}>
-              <span>
+            <div key={r.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+              <span style={{ maxWidth: "62ch" }}>
                 <strong>
                   <MentionText text={r.what} />
                 </strong>
@@ -367,101 +368,117 @@ export function SceneDetailPage() {
                   </span>
                 )}
                 {r.notes && (
-                  <div className="muted">
+                  <div className="muted" style={{ maxWidth: "62ch" }}>
                     <MentionText text={r.notes} />
                   </div>
                 )}
               </span>
               <button
-                className="danger"
+                className="danger comp-mini"
                 onClick={async () => {
                   await api.del(`/story/rewards/${r.id}`);
                   refresh();
                 }}
+                aria-label="Удалить"
               >
                 ✕
               </button>
             </div>
           ))}
-          {scene.rewards.length === 0 && <p className="muted">Наград нет.</p>}
-          <div className="row">
+          {scene.rewards.length === 0 && (
+            <div className="card" style={{ borderStyle: "dashed" }}>
+              <p className="muted" style={{ maxWidth: "62ch" }}>Наград нет — что находят и где, с заметкой.</p>
+            </div>
+          )}
+          <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
             <input
               placeholder="Что"
               value={reward.what}
               onChange={(e) => setReward({ ...reward, what: e.target.value })}
+              style={{ flex: "1 1 140px" }}
             />
             <input
               placeholder="Где / у кого"
               value={reward.where_found}
               onChange={(e) => setReward({ ...reward, where_found: e.target.value })}
+              style={{ flex: "1 1 140px" }}
             />
             <input
               placeholder="Заметка"
               value={reward.notes}
               onChange={(e) => setReward({ ...reward, notes: e.target.value })}
+              style={{ flex: "1 1 140px" }}
             />
-            <button className="primary" onClick={addReward}>
+            <button className="primary" onClick={addReward} disabled={!reward.what.trim()}>
               Добавить
             </button>
           </div>
         </div>
       </details>
 
-      <div className="card stack">
-        <strong className="entry-title">Участники, места и предметы</strong>
-        <SectionDropZone
-          entityType="scene"
-          entityId={sceneId}
-          section="scene_location"
-          acceptTypes={LOCATION_TYPES}
-          placeholder="Перетащите локации сцены"
-        />
-        <SectionDropZone
-          entityType="scene"
-          entityId={sceneId}
-          section="scene_plot_characters"
-          acceptTypes={PLOT_TYPES}
-          placeholder="Перетащите сюжетных персонажей"
-        />
-        <SectionDropZone
-          entityType="scene"
-          entityId={sceneId}
-          section="scene_obstacles"
-          acceptTypes={OBSTACLE_TYPES}
-          placeholder="Перетащите препятствия"
-        />
-        <SectionDropZone
-          entityType="scene"
-          entityId={sceneId}
-          section="scene_loot"
-          acceptTypes={LOOT_TYPES}
-          placeholder="Перетащите предметы и материалы сцены (лут)"
-        />
-        <SectionDropZone
-          entityType="scene"
-          entityId={sceneId}
-          section="scene_audio"
-          acceptTypes={["sound_set"]}
-          placeholder="Перетащите аудионабор"
-        />
-        <SectionDropZone
-          entityType="scene"
-          entityId={sceneId}
-          section="scene_battle"
-          acceptTypes={["playlist"]}
-          placeholder="Перетащите боевой плейлист"
-        />
+      <div className="sp-prep-row">
+        <LazyDetails
+          title="Сюжетные персонажи"
+          className="card stack sp-card--plot"
+          defaultOpen
+          style={{ flex: "1 1 280px", minWidth: 260 }}
+        >
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_plot_characters"
+            acceptTypes={PLOT_TYPES}
+            placeholder="Перетащите сюда существо или персонажа из поиска"
+          />
+        </LazyDetails>
+        <LazyDetails
+          title="Локации"
+          className="card stack sp-card--location"
+          style={{ flex: "1 1 280px", minWidth: 260 }}
+          defaultOpen
+        >
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_location"
+            acceptTypes={LOCATION_TYPES}
+            placeholder="Перетащите сюда локацию из поиска"
+          />
+        </LazyDetails>
+      </div>
+      <div className="sp-prep-row">
+        <LazyDetails title="Препятствия" className="card stack sp-card--enemies" style={{ flex: "1 1 280px", minWidth: 260 }} defaultOpen>
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_obstacles"
+            acceptTypes={OBSTACLE_TYPES}
+            placeholder="Перетащите сюда препятствие — существо, локацию, артефакт…"
+          />
+        </LazyDetails>
+        <LazyDetails
+          title="Потенциальный лут"
+          className="card stack sp-card--loot"
+          style={{ flex: "1 1 280px", minWidth: 260 }}
+          defaultOpen
+        >
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_loot"
+            acceptTypes={LOOT_TYPES}
+            placeholder="Перетащите сюда ресурс, артефакт или предмет из компендиума"
+          />
+        </LazyDetails>
       </div>
       <SceneAudioCard sceneId={sceneId} />
 
       <details className="card" open>
-        <summary className="sb-section" style={{ margin: 0 }}>
-          Переходы ({scene.transitions.length})
-        </summary>
+        <summary className="campaign-overview-header">Переходы · {scene.transitions.length}</summary>
         <div className="stack" style={{ marginTop: 8 }}>
           {scene.transitions.map((t) => (
-            <div key={t.id} className="row" style={{ justifyContent: "space-between" }}>
-              <span>
+            <div key={t.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+              <span style={{ maxWidth: "62ch" }}>
                 Дальше:{" "}
                 <a href={`/scenes/${t.to_scene_id}${campaignId ? `?campaign=${campaignId}` : ""}`}>
                   {t.to_scene_name}
@@ -469,19 +486,24 @@ export function SceneDetailPage() {
                 {t.label && <span className="muted"> — {t.label}</span>}
               </span>
               <button
-                className="danger"
+                className="danger comp-mini"
                 onClick={async () => {
                   await api.del(`/story/transitions/${t.id}`);
                   refresh();
                 }}
+                aria-label="Удалить"
               >
                 ✕
               </button>
             </div>
           ))}
-          {scene.transitions.length === 0 && <p className="muted">Переходов нет.</p>}
-          <div className="row">
-            <select value={transitionTarget} onChange={(e) => setTransitionTarget(e.target.value)}>
+          {scene.transitions.length === 0 && (
+            <div className="card" style={{ borderStyle: "dashed" }}>
+              <p className="muted" style={{ maxWidth: "62ch" }}>Переходов нет — куда ведёт эта сцена дальше, и на каком условии.</p>
+            </div>
+          )}
+          <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+            <select value={transitionTarget} onChange={(e) => setTransitionTarget(e.target.value)} style={{ flex: "1 1 160px" }}>
               <option value="">Следующая сцена…</option>
               {siblings
                 .filter((s) => s.id !== sceneId)
@@ -495,8 +517,9 @@ export function SceneDetailPage() {
               placeholder="Условие перехода"
               value={transitionLabel}
               onChange={(e) => setTransitionLabel(e.target.value)}
+              style={{ flex: "1 1 140px" }}
             />
-            <button className="primary" onClick={addTransition}>
+            <button className="primary" onClick={addTransition} disabled={!transitionTarget}>
               Добавить
             </button>
           </div>
@@ -520,18 +543,18 @@ function SceneAudioCard({ sceneId }: { sceneId: number }) {
   }
   return (
     <details className="card" open>
-      <summary className="sb-section" style={{ margin: 0 }}>Аудионабор</summary>
+      <summary className="campaign-overview-header">Аудионабор</summary>
       <div className="stack" style={{ marginTop: 8 }}>
-        <div className="row" style={{ alignItems: "center", gap: 8 }}>
-          <select value={current?.id ?? ""} onChange={(e) => setSound(e.target.value ? Number(e.target.value) : null)} style={{ flex: 1 }}>
+        <div className="row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <select value={current?.id ?? ""} onChange={(e) => setSound(e.target.value ? Number(e.target.value) : null)} style={{ flex: "1 1 160px" }}>
             <option value="">— без звука —</option>
             {sets.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          {current && <span className="muted">{current.name}</span>}
+          {current && <span className="muted" style={{ fontSize: 11 }}>{current.name}</span>}
         </div>
-        <p className="muted" style={{ fontSize: "var(--fs-meta)" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
+        <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
       </div>
     </details>
   );

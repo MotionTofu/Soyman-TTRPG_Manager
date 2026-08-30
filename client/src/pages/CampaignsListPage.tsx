@@ -7,6 +7,7 @@ import { CampaignWizard } from "../components/CampaignWizard";
 import { CampaignGroupTabs } from "../components/CampaignGroupTabs";
 import { CampaignGroupMembersModal } from "../components/CampaignGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
+import { SectionBackground } from "../components/SectionBackground";
 import type { Campaign, CampaignGroup, Setting, System } from "../types";
 
 export function CampaignsListPage() {
@@ -79,7 +80,8 @@ export function CampaignsListPage() {
   }, [campaigns, activeTab, groupMemberIds]);
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
+      <SectionBackground />
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <SectionHeading section="campaigns" compact>Кампании</SectionHeading>
         <button className="primary" onClick={openCreate}>

@@ -21,6 +21,11 @@ interface Props {
 export function MonsterSection({ systemId, section }: Props) {
   const [entries, setEntries] = useState<CompendiumEntry[]>([]);
   const [creatureTypes, setCreatureTypes] = useState<MechanicsOption[]>([]);
+  const [systemCode, setSystemCode] = useState<string | null>(null);
+  useEffect(() => {
+    api.get<{ code: string | null }>(`/systems/${systemId}`).then((s) => setSystemCode(s.code)).catch(() => setSystemCode(null));
+  }, [systemId]);
+  const isPhb = systemCode === "phb";
   const [filterCreatureType, setFilterCreatureType] = useState("");
   const [filterCR, setFilterCR] = useState("");
   const [filterSize, setFilterSize] = useState("");
@@ -173,18 +178,22 @@ export function MonsterSection({ systemId, section }: Props) {
         >
           По типу{sortMode === "creature_type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
         </button>
-        <button
-          className={sortMode === "cr" ? "active-sort" : ""}
-          onClick={() => changeSortMode("cr")}
-        >
-          По КО{sortMode === "cr" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-        </button>
-        <button
-          className={sortMode === "size" ? "active-sort" : ""}
-          onClick={() => changeSortMode("size")}
-        >
-          По размеру{sortMode === "size" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-        </button>
+        {isPhb && (
+          <button
+            className={sortMode === "cr" ? "active-sort" : ""}
+            onClick={() => changeSortMode("cr")}
+          >
+            По КО{sortMode === "cr" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+          </button>
+        )}
+        {isPhb && (
+          <button
+            className={sortMode === "size" ? "active-sort" : ""}
+            onClick={() => changeSortMode("size")}
+          >
+            По размеру{sortMode === "size" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+          </button>
+        )}
       </div>
       <div className="row" style={{ gap: 4 }}>
         <input
@@ -209,22 +218,26 @@ export function MonsterSection({ systemId, section }: Props) {
             </option>
           ))}
         </select>
-        <select value={filterCR} onChange={(e) => setFilterCR(e.target.value)}>
-          <option value="">Все классы опасности</option>
-          {CHALLENGE_RATINGS.map((cr) => (
-            <option key={cr} value={cr}>
-              {cr}
-            </option>
-          ))}
-        </select>
-        <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
-          <option value="">Все размеры</option>
-          {CREATURE_SIZES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        {isPhb && (
+          <select value={filterCR} onChange={(e) => setFilterCR(e.target.value)}>
+            <option value="">Все классы опасности</option>
+            {CHALLENGE_RATINGS.map((cr) => (
+              <option key={cr} value={cr}>
+                {cr}
+              </option>
+            ))}
+          </select>
+        )}
+        {isPhb && (
+          <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
+            <option value="">Все размеры</option>
+            {CREATURE_SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        )}
         {/* Кнопки нет, пока сбрасывать нечего (§1.11): пустая кнопка в
             ряду фильтров — это лишний орган управления за столом. */}
         {monsterFiltersActive && (
@@ -241,6 +254,7 @@ export function MonsterSection({ systemId, section }: Props) {
           sectionId={section.id}
           searchActive={searchQuery.trim() !== ""}
           onToggleFavourite={toggleFavourite}
+          systemCode={systemCode}
         />
         {topLevel.length === 0 && (
           <p className="muted">

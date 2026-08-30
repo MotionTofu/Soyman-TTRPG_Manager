@@ -10,6 +10,7 @@ import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { SystemGroupTabs } from "../components/SystemGroupTabs";
 import { SystemGroupMembersModal } from "../components/SystemGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
+import { SectionBackground } from "../components/SectionBackground";
 
 import type { System, SystemGroup } from "../types";
 
@@ -144,7 +145,8 @@ export function SystemsListPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
+      <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="systems" compact>Системы</SectionHeading>
         <div className="row">

@@ -152,11 +152,11 @@ export function EditableTextCard({
 
   if (collapsible) {
     return (
-      <details className="card stack" open={defaultOpen}>
-        <summary>
-          <strong className="entry-title">{title}</strong>
-        </summary>
-        {body}
+      <details className="card" open={defaultOpen}>
+        <summary className="campaign-overview-header">{title}</summary>
+        <div className="stack" style={{ marginTop: 8 }}>
+          {body}
+        </div>
       </details>
     );
   }

@@ -16,6 +16,7 @@ import { CampaignMilestones } from "../components/CampaignMilestones";
 import { CampaignChaptersScenes } from "../components/CampaignChaptersScenes";
 import { CampaignAdventuresCard } from "../components/CampaignAdventuresCard";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
+import { EmptyState } from "../components/EmptyState";
 import { ResourceCard } from "../components/ResourceCard";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { NavIcon } from "../components/NavIcons";
@@ -47,6 +48,7 @@ import { loadHideFinance } from "../financePrivacy";
 import type {
   CampaignCalendarEvent,
   CampaignDetail,
+  CampaignEntry,
   CampaignGroup,
   CampaignGrouped,
   CampaignType,
@@ -550,14 +552,26 @@ export function CampaignDetailPage() {
       )}
 
       {tab === "Игроки и персонажи" && (
-        <div className="stack">
-          <PlayersAndCharactersTab
-            campaignId={campaignId}
-            roster={campaign.roster}
-            allPlayers={allPlayers}
-            onRosterChange={refreshCampaign}
-          />
-          <RemindersWidget targetType="campaign" targetId={campaignId} />
+        <div className="stack" style={{ gap: 24 }}>
+          <section className="stack">
+            <div className="section-heading-sub">
+              <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◆</span> Состав</h3>
+              <span className="muted" style={{ fontSize: 11 }}>{campaign.roster.length} в игре</span>
+            </div>
+            <PlayersAndCharactersTab
+              campaignId={campaignId}
+              roster={campaign.roster}
+              allPlayers={allPlayers}
+              onRosterChange={refreshCampaign}
+            />
+          </section>
+          <section className="stack">
+            <div className="section-heading-sub">
+              <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">✦</span> Напоминания игрокам</h3>
+              <span className="muted" style={{ fontSize: 11 }}>видны на Главной игроков</span>
+            </div>
+            <RemindersWidget targetType="campaign" targetId={campaignId} />
+          </section>
         </div>
       )}
 
@@ -1170,7 +1184,7 @@ function PlayersAndCharactersTab({
 }) {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [addingFor, setAddingFor] = useState<number | null>(null);
-  const [charNameDraft, setCharNameDraft] = useState("");
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
   const thumbnailStyles = loadThumbnailStyles();
 
   function refresh() {
@@ -1178,12 +1192,14 @@ function PlayersAndCharactersTab({
   }
   useEffect(refresh, [campaignId]);
 
-  async function addToRoster(playerId: string) {
+  async function addToRoster(playerId: string, e: React.ChangeEvent<HTMLSelectElement>) {
     if (!playerId) return;
     await api.post(`/campaigns/${campaignId}/roster/${playerId}`);
+    e.target.value = "";
     onRosterChange();
   }
   async function removeFromRoster(playerId: number) {
+    if (!confirm(`Убрать игрока из состава кампании? Персонажи сохранятся.`)) return;
     await api.del(`/campaigns/${campaignId}/roster/${playerId}`);
     onRosterChange();
   }
@@ -1195,61 +1211,75 @@ function PlayersAndCharactersTab({
   }
 
   async function addCharacter(playerId: number) {
-    if (!charNameDraft.trim()) return;
+    const name = (drafts[playerId] ?? "").trim();
+    if (!name) return;
+    if (characters.some((c) => c.player_id === playerId && c.character_name.toLowerCase() === name.toLowerCase())) {
+      alert("Персонаж с таким именем уже есть у этого игрока.");
+      return;
+    }
     await api.post("/characters", {
       player_id: playerId,
       campaign_id: campaignId,
-      character_name: charNameDraft,
+      character_name: name,
     });
-    setCharNameDraft("");
+    setDrafts((d) => ({ ...d, [playerId]: "" }));
     setAddingFor(null);
     refresh();
   }
 
+  const available = allPlayers.filter((p) => !roster.some((r) => r.id === p.id));
+
   return (
-    <div className="stack">
-      <div className="row">
-        <select defaultValue="" onChange={(e) => addToRoster(e.target.value)}>
-          <option value="">Добавить игрока в состав…</option>
-          {allPlayers
-            .filter((p) => !roster.some((r) => r.id === p.id))
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+    <div className="stack" style={{ gap: 16 }}>
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <select value="" onChange={(e) => addToRoster(e.target.value, e)} disabled={available.length === 0}>
+          <option value="">{available.length === 0 ? "Все игроки уже в составе" : "Добавить игрока в состав…"}</option>
+          {available.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
         </select>
+        <span className="muted" style={{ fontSize: 11 }}>{roster.length} в составе{available.length ? ` · ещё ${available.length} вне` : ""}</span>
       </div>
-      <div className="grid-cards roster-grid">
-        {roster.map((p) => {
-          const playerCharacters = characters.filter((c) => c.player_id === p.id);
-          const firstAvatar = playerCharacters.find((c) => c.avatar_image_url)?.avatar_image_url;
-          return (
-            <RosterCard
-              key={p.id}
-              player={p}
-              fallbackAvatar={firstAvatar ?? null}
-              thumbnailStyle={thumbnailStyles.roster}
-              addingCharacter={addingFor === p.id}
-              charNameDraft={charNameDraft}
-              onCharNameDraftChange={setCharNameDraft}
-              onStartAddCharacter={() => setAddingFor(p.id)}
-              onCancelAddCharacter={() => setAddingFor(null)}
-              onAddCharacter={() => addCharacter(p.id)}
-              onToggleLeft={() => toggleLeft(p.id, p.roster_status)}
-              onRemove={() => removeFromRoster(p.id)}
-              onThumbnailChanged={onRosterChange}
-            >
-              {playerCharacters.map((c) => (
-                <Link key={c.id} to={`/characters/${c.id}`} className="badge planned">
-                  {c.character_name}
-                </Link>
-              ))}
-            </RosterCard>
-          );
-        })}
-        {roster.length === 0 && <p className="muted">Состав кампании пуст.</p>}
-      </div>
+      {roster.length === 0 ? (
+        <EmptyState
+          icon="skullDie"
+          title="КОМАНДА ЕЩЁ НЕ СОБРАНА"
+          hint="Добавьте первого игрока — его персонажи появятся здесь же, на карточке."
+          action={available.length > 0 ? <span className="muted" style={{ fontSize: 12 }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
+        />
+      ) : (
+        <div className="grid-cards roster-grid">
+          {roster.map((p) => {
+            const playerCharacters = characters.filter((c) => c.player_id === p.id);
+            const firstAvatar = playerCharacters.find((c) => c.avatar_image_url)?.avatar_image_url;
+            return (
+              <RosterCard
+                key={p.id}
+                player={p}
+                fallbackAvatar={firstAvatar ?? null}
+                thumbnailStyle={thumbnailStyles.roster}
+                addingCharacter={addingFor === p.id}
+                charNameDraft={drafts[p.id] ?? ""}
+                onCharNameDraftChange={(v) => setDrafts((d) => ({ ...d, [p.id]: v }))}
+                onStartAddCharacter={() => setAddingFor(p.id)}
+                onCancelAddCharacter={() => { setAddingFor(null); setDrafts((d) => ({ ...d, [p.id]: "" })); }}
+                onAddCharacter={() => addCharacter(p.id)}
+                onToggleLeft={() => toggleLeft(p.id, p.roster_status)}
+                onRemove={() => removeFromRoster(p.id)}
+                onThumbnailChanged={onRosterChange}
+              >
+                {playerCharacters.map((c) => (
+                  <Link key={c.id} to={`/characters/${c.id}`} className="badge tag">
+                    {c.character_name}
+                  </Link>
+                ))}
+              </RosterCard>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1294,9 +1324,10 @@ function RosterCard({
 
   const thumb = cardThumbnailProps(thumbnailStyle, player.thumbnail_image_url ?? fallbackAvatar);
 
+  const isLeft = player.roster_status === "left";
   return (
-    <div className={`card stack roster-card ${thumb.className}`} style={thumb.style}>
-      <label className="roster-card-thumb-btn" title="Изменить тамбнейл">
+    <div className={`card roster-card ${thumb.className}${isLeft ? " is-left" : ""}`} style={thumb.style}>
+      <label className="roster-card-thumb-btn" title="Изменить тамбнейл" aria-label="Изменить тамбнейл">
         <NavIcon name="image" />
         <input
           type="file"
@@ -1308,44 +1339,54 @@ function RosterCard({
       {thumbnailCrop.modal}
       {thumb.showBanner && (
         thumb.bannerUrl ? (
-          <img src={thumb.bannerUrl} alt="" className="campaign-thumb" />
+          <div className="roster-card-cover cover-halftone">
+            <div className="cover-art cover-photo">
+              <div className="cover-art-image" style={{ backgroundImage: `url("${thumb.bannerUrl}")` }} aria-hidden="true" />
+            </div>
+          </div>
         ) : (
-          <div className="campaign-card-band zine-grain zine-torn-bottom-b" />
+          <div className="roster-card-cover campaign-card-band zine-grain zine-torn-bottom-b" />
         )
       )}
-      <div className="row" style={{ flexWrap: "wrap" }}>
-        <Link to={`/players/${player.id}`} className="roster-card-name">
-          {player.name}
-        </Link>
-        {player.roster_status === "left" && <span className="badge cancelled">Покинул(а) кампанию</span>}
-      </div>
-      <div className="row" style={{ flexWrap: "wrap" }}>
-        {children}
-        {addingCharacter ? (
-          <>
-            <input
-              autoFocus
-              placeholder="Имя персонажа"
-              value={charNameDraft}
-              onChange={(e) => onCharNameDraftChange(e.target.value)}
-              style={{ maxWidth: 140 }}
-            />
-            <button className="primary" onClick={onAddCharacter}>
-              ОК
+      <div className="roster-card-body stack">
+        <div className="row" style={{ flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          <Link to={`/players/${player.id}`} className="roster-card-name">
+            {player.name}
+          </Link>
+          {isLeft && <span className="badge cancelled">Покинул</span>}
+        </div>
+        <div className="row" style={{ flexWrap: "wrap", gap: 6, minHeight: 22 }}>
+          {children}
+          {addingCharacter ? (
+            <>
+              <input
+                autoFocus
+                placeholder="Имя персонажа"
+                value={charNameDraft}
+                onChange={(e) => onCharNameDraftChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onAddCharacter();
+                  if (e.key === "Escape") onCancelAddCharacter();
+                }}
+                style={{ minWidth: 120, flex: "1 1 120px" }}
+              />
+              <button className="primary" onClick={onAddCharacter} disabled={!charNameDraft.trim()}>
+                ОК
+              </button>
+              <button onClick={onCancelAddCharacter} aria-label="Отмена">✕</button>
+            </>
+          ) : (
+            <button className="btn-capsule" onClick={onStartAddCharacter}>
+              + Персонаж
             </button>
-            <button onClick={onCancelAddCharacter}>✕</button>
-          </>
-        ) : (
-          <button className="btn-capsule" onClick={onStartAddCharacter}>
-            + Персонаж
+          )}
+        </div>
+        <div className="row roster-card-actions" style={{ flexWrap: "wrap", gap: 6 }}>
+          <button className={isLeft ? "primary" : ""} onClick={onToggleLeft}>
+            {isLeft ? "Вернуть в состав" : "Покинул"}
           </button>
-        )}
-      </div>
-      <div className="row roster-card-actions" style={{ flexWrap: "wrap" }}>
-        <button onClick={onToggleLeft}>
-          {player.roster_status === "left" ? "Вернуть в состав" : "Покинул(а) кампанию"}
-        </button>
-        <button onClick={onRemove}>Убрать из состава</button>
+          <button className="danger" onClick={onRemove}>Убрать</button>
+        </div>
       </div>
     </div>
   );
@@ -1502,9 +1543,11 @@ function PlayerOverviewTab({
 
   return (
     <div className="stack">
-      <details className="card" open>
-        <summary className="campaign-overview-header">Основное</summary>
-        <div style={{ padding: "8px 0" }}>
+      <details className="card res-group" open>
+        <summary className="res-group__band">
+          <span className="res-group__title">Основное</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
           {!editingMain ? (
             <div className="stack">
               <table className="detail-table">
@@ -1649,11 +1692,11 @@ function PlayerOverviewTab({
         </div>
       </details>
 
-      <details className="card">
-        <summary>
-          <strong className="entry-title">Персонаж</strong>
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Персонаж</span>
         </summary>
-        <div style={{ marginTop: 8 }}>
+        <div className="res-group__body" style={{ padding: 12 }}>
           <PlayerCharacterTab campaignId={campaignId} />
         </div>
       </details>
@@ -1742,25 +1785,27 @@ function OverviewTab({
   const thumbUrl = campaign.thumbnail_image_url ?? null;
 
   return (
-    <div className="stack">
-      <details className="card" open>
-        <summary className="campaign-overview-header">Основное</summary>
-        <div style={{ padding: "8px 0" }}>
+    <div className="stack campaign-overview">
+      <details className="card res-group" open>
+        <summary className="res-group__band">
+          <span className="res-group__title">Основное</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
           {!editingMain ? (
             <div className="stack">
               <table className="detail-table">
                 <tbody>
-                  <tr><td className="detail-label">Название</td><td>{campaign.name}</td></tr>
-                  <tr><td className="detail-label">Тип</td><td>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</td></tr>
-                  <tr><td className="detail-label">Система</td><td>{systemName}</td></tr>
-                  <tr><td className="detail-label">Сеттинг</td><td>{settingName}</td></tr>
-                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</td></tr>
-                  <tr><td className="detail-label">Оплата</td><td>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</td></tr>
+                  <tr><td className="detail-label">Название</td><td><span className="detail-value-mono">{campaign.name}</span></td></tr>
+                  <tr><td className="detail-label">Тип</td><td><span className="detail-value-mono">{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</span></td></tr>
+                  <tr><td className="detail-label">Система</td><td><span className="detail-value-mono">{systemName}</span></td></tr>
+                  <tr><td className="detail-label">Сеттинг</td><td><span className="detail-value-mono">{settingName}</span></td></tr>
+                  <tr><td className="detail-label">Статус</td><td><span className="detail-value-mono">{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</span></td></tr>
+                  <tr><td className="detail-label">Оплата</td><td><span className="detail-value-mono">{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</span></td></tr>
                   {campaign.payment_type === "paid" && (
                     <>
-                      <tr><td className="detail-label">Периодичность</td><td>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</td></tr>
-                      <tr><td className="detail-label">Тип ставки</td><td>{RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}</td></tr>
-                      <tr><td className="detail-label">Ставка</td><td><span className="detail-value-mono">{campaign.session_rate ?? 0}</span> {campaign.currency}</td></tr>
+                      <tr><td className="detail-label">Периодичность</td><td><span className="detail-value-mono">{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</span></td></tr>
+                      <tr><td className="detail-label">Тип ставки</td><td><span className="detail-value-mono">{RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}</span></td></tr>
+                      <tr><td className="detail-label">Ставка</td><td><span className="detail-value-mono">{campaign.session_rate ?? 0} {campaign.currency}</span></td></tr>
                     </>
                   )}
                 </tbody>
@@ -1890,59 +1935,52 @@ function OverviewTab({
         </div>
       </details>
 
-      <details className="card">
-        <summary>
-          <strong className="entry-title">Приключения</strong>
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Приключения</span>
         </summary>
-        <div style={{ marginTop: 8 }}>
+        <div className="res-group__body" style={{ padding: 12 }}>
           <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} />
         </div>
       </details>
 
-      <details className="card">
-        <summary>
-          <strong className="entry-title">Препродакшен</strong>
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Препродакшен</span>
         </summary>
-        <PreproductionTab campaign={campaign} systems={systems} settingsList={settingsList} />
-      </details>
-
-      <details className="card">
-        <summary>
-          <strong className="entry-title">Продакшен</strong>
-        </summary>
-        <ProductionDashboard campaign={campaign} sessions={sessions} />
-      </details>
-
-      <details className="card">
-        <summary>
-          <strong className="entry-title">Пост-продакшен</strong>
-        </summary>
-        <div className="stack">
-          <p className="muted">
-            Итоги кампании: что получилось, что нет, эпилоги персонажей, несбывшиеся сюжетные
-            линии, идеи для сиквела — свободные записи, как и в остальных списках заметок.
-          </p>
-          <CampaignEntryList
-            campaignId={campaign.id}
-            category="post_production"
-            addLabel="+ Добавить запись"
-            emptyLabel="Итогов пока нет."
-            defaultSettingId={campaign.setting_id ?? undefined}
-          />
+        <div className="res-group__body" style={{ padding: 12 }}>
+          <PreproductionTab campaign={campaign} systems={systems} settingsList={settingsList} />
         </div>
       </details>
 
-      <details className="card">
-        <summary>
-          <strong className="entry-title">Изображения</strong>
+      <details className="card res-group" open>
+        <summary className="res-group__band">
+          <span className="res-group__title">Продакшен</span>
         </summary>
-        <div className="row" style={{ marginTop: 8, gap: 16, flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 0", minWidth: 200 }}>
-            {bgUrl && (
-              <div style={{ marginBottom: 8 }}>
-                <div className="muted" style={{ marginBottom: 4 }}>Фон:</div>
-                <img src={bgUrl} alt="Фон кампании" style={{ maxWidth: "100%", maxHeight: 160, borderRadius: "var(--card-radius)" }} />
+        <div className="res-group__body" style={{ padding: 12 }}>
+          <ProductionDashboard campaign={campaign} sessions={sessions} />
+        </div>
+      </details>
+
+      <PostProductionSection campaign={campaign} sessions={sessions} />
+
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Изображения</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12 }}>
+          <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div style={{ flex: "1 1 0", minWidth: 220 }}>
+            <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Фон страницы — на всю ширину, приглушён на 30 % (как в плитке):</div>
+            {bgUrl ? (
+              <div className="campaign-tile-cover cover-halftone" style={{ border: "1px solid var(--line)", marginBottom: 8, aspectRatio: "16 / 10", background: "var(--paper-2)" }}>
+                <div className="cover-art cover-photo">
+                  <div className="cover-art-image" style={{ backgroundImage: `url("${bgUrl}")` }} aria-hidden="true" />
+                </div>
+                <div className="campaign-tile-scrim" style={{ opacity: 0.35 }} />
               </div>
+            ) : (
+              <div className="campaign-tile-cover campaign-card-band zine-grain" style={{ border: "1px solid var(--line)", marginBottom: 8, aspectRatio: "16 / 10" }} aria-hidden="true" />
             )}
             <label>
               Заменить фон
@@ -1951,11 +1989,26 @@ function OverviewTab({
             </label>
             {bgCrop.modal}
           </div>
-          <div style={{ flex: "1 1 0", minWidth: 200 }}>
-            {thumbUrl && (
-              <div style={{ marginBottom: 8 }}>
-                <div className="muted" style={{ marginBottom: 4 }}>Тамбнейл:</div>
-                <img src={thumbUrl} alt="Тамбнейл кампании" style={{ maxWidth: "100%", maxHeight: 120, borderRadius: "var(--card-radius)" }} />
+          <div style={{ flex: "1 1 0", minWidth: 220 }}>
+            <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Тамбнейл — 16×10, так в сетке «Кампании» и на Главной:</div>
+            {thumbUrl ? (
+              <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
+                <div className="campaign-tile-cover cover-halftone">
+                  <div className="cover-art cover-photo">
+                    <div className="cover-art-image" style={{ backgroundImage: `url("${thumbUrl}")` }} aria-hidden="true" />
+                  </div>
+                  <div className="campaign-tile-scrim" />
+                  <h3 className="campaign-tile-name" style={{ fontSize: "var(--fs-h3)" }}>{campaign.name}</h3>
+                </div>
+                <div className="campaign-tile-meta">
+                  <div className="campaign-tile-system" style={{ fontSize: "var(--fs-meta)" }}>{systems.find((s) => s.id === campaign.system_id)?.name ?? "система не выбрана"}</div>
+                  <div className="campaign-tile-next" style={{ fontSize: "var(--fs-meta)" }}><span className="campaign-tile-next-mark" aria-hidden="true" /><span>превью 16×10</span></div>
+                </div>
+              </div>
+            ) : (
+              <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
+                <div className="campaign-tile-cover campaign-card-band zine-grain" style={{ aspectRatio: "16 / 10" }} aria-hidden="true" />
+                <div className="campaign-tile-meta"><span className="muted" style={{ fontSize: 11 }}>Без тамбнейла — показывается полоса темы</span></div>
               </div>
             )}
             <label>
@@ -1965,6 +2018,7 @@ function OverviewTab({
             </label>
             {thumbCrop.modal}
           </div>
+        </div>
         </div>
       </details>
     </div>
@@ -2000,17 +2054,20 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
   return (
     <div className="stack">
       <div className="card stack">
-        <strong>Ближайшая сессия</strong>
+        <span className="campaign-field-label">Ближайшая сессия</span>
         {nextSession ? (
-          <Link to={`/sessions/${nextSession.id}`}>
+          <Link to={`/sessions/${nextSession.id}`} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>
             {nextSession.date} — {nextSession.title || `Сессия №${nextSession.session_number ?? ""}`}
           </Link>
         ) : (
-          <span className="muted">Сессий не запланировано.</span>
+          <div className="card" style={{ borderStyle: "dashed" }}>
+            <p style={{ maxWidth: "62ch" }}>Сессий не запланировано — время наметить следующую игру.</p>
+            <Link to="/sessions" className="campaign-actions"><button className="primary">Запланировать сессию</button></Link>
+          </div>
         )}
       </div>
       <div className="card stack">
-        <strong>Недавние события</strong>
+        <span className="campaign-field-label">Недавние события</span>
         {recentChronicle.length > 0 ? (
           recentChronicle.map((s) => (
             <div key={s.id} className="stack" style={{ gap: 2 }}>
@@ -2023,11 +2080,11 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
             </div>
           ))
         ) : (
-          <span className="muted">Пока нет записанных событий.</span>
+          <span className="muted">Пока нет записанных событий — появятся из «Хроники игр».</span>
         )}
       </div>
       <div className="card row" style={{ justifyContent: "space-between" }}>
-        <span>Нераскрытых тайн: {secretsCount ?? "…"}</span>
+        <span><span className="campaign-field-label" style={{ display: "inline", marginRight: 6 }}>Нераскрытых тайн:</span> <span style={{ fontFamily: "var(--font-mono)" }}>{secretsCount ?? "…"}</span></span>
       </div>
       {campaign.setting_id && (
         <div className="row">
@@ -2040,6 +2097,45 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
         </div>
       )}
     </div>
+  );
+}
+
+function PostProductionSection({ campaign, sessions }: { campaign: CampaignDetail; sessions: SessionSummary[] }) {
+  const [postCount, setPostCount] = useState<number | null>(null);
+  useEffect(() => {
+    api.get<CampaignEntry[]>(`/campaign-entries?campaign_id=${campaign.id}&category=post_production`).then((rows) => setPostCount(rows.length)).catch(() => setPostCount(0));
+  }, [campaign.id]);
+  const hasHeld = sessions.some((s) => s.status === "held");
+  if (postCount === null) {
+    return (
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Пост-продакшен</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12 }}><span className="muted">Загрузка…</span></div>
+      </details>
+    );
+  }
+  if (!hasHeld && postCount === 0) return null;
+  return (
+    <details className="card res-group">
+      <summary className="res-group__band">
+        <span className="res-group__title">Пост-продакшен</span>
+      </summary>
+      <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
+        <p className="muted" style={{ maxWidth: "62ch" }}>
+          Итоги кампании: что получилось, что нет, эпилоги персонажей, несбывшиеся сюжетные
+          линии, идеи для сиквела — свободные записи, как и в остальных списках заметок.
+        </p>
+        <CampaignEntryList
+          campaignId={campaign.id}
+          category="post_production"
+          addLabel="+ Добавить запись"
+          emptyLabel="Итогов пока нет."
+          defaultSettingId={campaign.setting_id ?? undefined}
+        />
+      </div>
+    </details>
   );
 }
 
@@ -2126,7 +2222,7 @@ function PreproductionTab({
             (f) =>
               pre[f.key] && (
                 <div key={f.key} className="card stack">
-                  <strong>{f.label}</strong>
+                  <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
                   <div style={{ whiteSpace: "pre-wrap" }}>
                     <MentionText text={pre[f.key] as string} />
                   </div>
@@ -2135,7 +2231,7 @@ function PreproductionTab({
           )}
           {pre.adventure_stakes_hooks && (
             <div className="card stack">
-              <strong>Adventure Stakes and Hooks</strong>
+              <span className="campaign-field-label" style={{ color: "var(--ink)" }}>Adventure Stakes and Hooks</span>
               <div style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={pre.adventure_stakes_hooks} />
               </div>
@@ -2150,8 +2246,8 @@ function PreproductionTab({
         <div className="stack">
           {PREPRODUCTION_FIELDS.map((f) => (
             <div key={f.key} className="card stack">
-              <strong>{f.label}</strong>
-              {f.help && <span className="muted">{f.help}</span>}
+              <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
+              {f.help && <span className="muted" style={{ fontSize: "11px", maxWidth: "62ch" }}>{f.help}</span>}
               <MentionTextarea
                 value={pre[f.key] as string}
                 onChange={(v) => setPre({ ...pre, [f.key]: v })}
@@ -2160,8 +2256,8 @@ function PreproductionTab({
             </div>
           ))}
           <div className="card stack">
-            <strong>Adventure Stakes and Hooks</strong>
-            <span className="muted">
+            <span className="campaign-field-label" style={{ color: "var(--ink)" }}>Adventure Stakes and Hooks</span>
+            <span className="muted" style={{ fontSize: "11px", maxWidth: "62ch" }}>
               Как эта проблема связана с героями приключения. Перетащите сюда персонажей игроков
               из поиска — появится связь в разделе «Отношения» персонажа.
             </span>

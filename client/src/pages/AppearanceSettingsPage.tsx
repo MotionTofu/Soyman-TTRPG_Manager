@@ -6,11 +6,6 @@ import {
 } from "../themes";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
-import {
-  THUMBNAIL_SECTIONS, THUMBNAIL_STYLE_OPTIONS, loadThumbnailStyles, saveThumbnailStyles,
-  type ThumbnailSectionKey, type ThumbnailStyle,
-} from "../thumbnailStyles";
-import { useNavWidgetPrefs, type NavWidgetPosition } from "../navWidgetPrefs";
 import { loadCoverDuotone, saveCoverDuotone } from "../imagePrefs";
 import { loadHideFinance, saveHideFinance } from "../financePrivacy";
 import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
@@ -21,21 +16,12 @@ import {
 } from "../dndPrefs";
 import type { AppSettings } from "../types";
 
-const NAV_WIDGET_POSITIONS: { key: NavWidgetPosition; label: string }[] = [
-  { key: "left", label: "Слева по центру" },
-  { key: "top", label: "Сверху по центру" },
-  { key: "bottom", label: "Снизу по центру" },
-  { key: "right", label: "Справа по центру" },
-];
-
 const DEFAULT_RADIUS = 6;
 
 export function AppearanceSettingsPage() {
   const [prefs, setPrefs] = useState(loadThemePrefs());
   const [radius, setRadius] = useState(() => loadRadiusOverride() ?? DEFAULT_RADIUS);
   const [duotone, setDuotone] = useState(loadCoverDuotone);
-  const [thumbStyles, setThumbStyles] = useState(loadThumbnailStyles());
-  const { prefs: navWidgetPrefs, update: updateNavWidgetPrefs } = useNavWidgetPrefs();
 
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [uploadingHomeBg, setUploadingHomeBg] = useState(false);
@@ -83,12 +69,6 @@ export function AppearanceSettingsPage() {
     applyTheme(findTheme(prefs.themeId, prefs.customThemes));
   }
 
-  function changeThumbStyle(section: ThumbnailSectionKey, style: ThumbnailStyle) {
-    const next = { ...thumbStyles, [section]: style };
-    setThumbStyles(next);
-    saveThumbnailStyles(next);
-  }
-
   function changeHideFinance(hide: boolean) {
     setHideFinance(hide);
     saveHideFinance(hide);
@@ -115,13 +95,6 @@ export function AppearanceSettingsPage() {
     const next = { ...dndPrefs, abilityPrimary: mode };
     setDndPrefs(next);
     saveDndPrefs(next);
-  }
-
-  function selectAllInColumn(style: ThumbnailStyle) {
-    const next = { ...thumbStyles };
-    for (const s of THUMBNAIL_SECTIONS) next[s.key] = style;
-    setThumbStyles(next);
-    saveThumbnailStyles(next);
   }
 
   const themes = allThemes(prefs.customThemes);
@@ -288,50 +261,6 @@ export function AppearanceSettingsPage() {
 
       <details className="card stack">
         <summary>
-          <strong className="entry-title">Тамбнейлы</strong>
-        </summary>
-        <p className="muted">
-          Как показывать превью-изображение на карточках списков. Можно задать один вид для всех
-          разделов сразу (кнопки в шапке столбца) или настроить каждый раздел отдельно.
-        </p>
-        <div style={{ overflowX: "auto" }}>
-          <table className="thumbnail-style-table">
-            <thead>
-              <tr>
-                <th></th>
-                {THUMBNAIL_STYLE_OPTIONS.map((opt) => (
-                  <th key={opt.key}>
-                    <div className="stack" style={{ gap: 4, alignItems: "flex-start" }}>
-                      <span>{opt.label}</span>
-                      <button onClick={() => selectAllInColumn(opt.key)}>Отметить всё</button>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {THUMBNAIL_SECTIONS.map((section) => (
-                <tr key={section.key}>
-                  <td>{section.label}</td>
-                  {THUMBNAIL_STYLE_OPTIONS.map((opt) => (
-                    <td key={opt.key} style={{ textAlign: "center" }}>
-                      <input
-                        type="radio"
-                        name={`thumb-${section.key}`}
-                        checked={thumbStyles[section.key] === opt.key}
-                        onChange={() => changeThumbStyle(section.key, opt.key)}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
-
-      <details className="card stack">
-        <summary>
           <strong className="entry-title">ДнД 5.5</strong>
         </summary>
         <div>
@@ -377,41 +306,6 @@ export function AppearanceSettingsPage() {
         </div>
       </details>
 
-      <details className="card stack">
-        <summary>
-          <strong className="entry-title">Навигационный виджет</strong>
-        </summary>
-        <p className="muted">
-          Плавающая панель навигации (наверх / вниз / назад / закрепить страницу), видна на каждой
-          странице. Внешний вид подстраивается под выбранную тему.
-        </p>
-        <div>
-          <div className="muted" style={{ marginBottom: 4 }}>
-            Расположение
-          </div>
-          <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
-            {NAV_WIDGET_POSITIONS.map((p) => (
-              <label key={p.key} className="row" style={{ gap: 6 }}>
-                <input
-                  type="radio"
-                  name="nav-widget-position"
-                  checked={navWidgetPrefs.position === p.key}
-                  onChange={() => updateNavWidgetPrefs({ position: p.key })}
-                />
-                {p.label}
-              </label>
-            ))}
-          </div>
-        </div>
-        <label className="row" style={{ gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={navWidgetPrefs.showLabels}
-            onChange={(e) => updateNavWidgetPrefs({ showLabels: e.target.checked })}
-          />
-          Показывать подсказки (иконка + название, а не только иконка)
-        </label>
-      </details>
     </div>
   );
 }

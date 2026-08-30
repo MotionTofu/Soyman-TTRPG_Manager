@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { entryImageFolder, systemFolder, vaultAbs } from "../services/filesystem";
-import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections } from "./defaultSections";
+import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -287,6 +287,24 @@ export function openDatabase(dbDir: string): Database.Database {
   for (const table of archivableTables) {
     if (!columnExists(database, table, "archived_at")) {
       database.exec(`ALTER TABLE ${table} ADD COLUMN archived_at TEXT`);
+    }
+  }
+  // Мастерение: сворачиваемые разделы (плашка — инверсия §1.4). Живая база могла
+  // быть заведена до появления таблицы, поэтому column/table создаются отдельно.
+  if (!columnExists(database, "mastering_notes", "section_id")) {
+    database.exec(
+      "ALTER TABLE mastering_notes ADD COLUMN section_id INTEGER REFERENCES mastering_sections(id) ON DELETE SET NULL"
+    );
+  }
+  if (!columnExists(database, "mastering_sections", "system_id")) {
+    // Старую таблицу (без системы) догнать — система теперь на всех категориях.
+    if (tableExists(database, "mastering_sections")) {
+      database.exec("ALTER TABLE mastering_sections ADD COLUMN system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL");
+    }
+  }
+  if (!columnExists(database, "mastering_sections", "position")) {
+    if (tableExists(database, "mastering_sections")) {
+      database.exec("ALTER TABLE mastering_sections ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
     }
   }
   for (const [column, def] of [
@@ -897,10 +915,14 @@ export function openDatabase(dbDir: string): Database.Database {
   // подкручивала счётчик systems без создания реальной системы. За месяц
   // разработки это раздуло seq до ~6900 при 4 живых системах. Флаг замыкает
   // сид на первую инициализацию — дальше он пропускается и счётчик не растёт.
+  // П0.4: INSERT OR IGNORE с AUTOINCREMENT двигает sqlite_sequence даже при
+  // игноре дубликата — 4× каждый перезапуск = тысячи за месяц. Проверяем
+  // существование явно, чтобы не трогать последовательность впустую.
   if (process.env.SEED_DEFAULT_SYSTEMS !== "false" && !appSettingFlag(database, "default_systems_seeded")) {
-    const seedSystems = database.prepare("INSERT OR IGNORE INTO systems (name) VALUES (?)");
+    const exists = database.prepare("SELECT id FROM systems WHERE name = ?");
+    const insert = database.prepare("INSERT INTO systems (name) VALUES (?)");
     for (const name of ["D&D 5.5", "Legend in the Mist", "City of Mist", "Daggerheart"]) {
-      seedSystems.run(name);
+      if (!exists.get(name)) insert.run(name);
     }
     setAppSettingFlag(database, "default_systems_seeded");
   }
@@ -2356,6 +2378,28 @@ export function openDatabase(dbDir: string): Database.Database {
       database.exec(`ALTER TABLE compendium_entries ADD COLUMN ${column} ${def}`);
     }
   }
+  // П2.6 — разрез «Имя [Original]» по колонкам. Импорт бестиария вклеивал
+  // оригинал в name, поиск по name_original/aliases не находил. Миграция
+  // одноразовая и идемпотентна: режет bracket-хвост только если он есть.
+  for (const table of ["compendium_entries", "setting_beings", "setting_locations", "setting_communities", "artifacts"] as const) {
+    if (!tableExists(database, table) || !columnExists(database, table, "name_original")) continue;
+    const rows = database
+      .prepare(`SELECT id, name, name_original FROM ${table} WHERE name LIKE '%[%'`)
+      .all() as { id: number; name: string; name_original: string }[];
+    if (rows.length === 0) continue;
+    const upd = database.prepare(`UPDATE ${table} SET name = ?, name_original = ? WHERE id = ?`);
+    let fixed = 0;
+    for (const r of rows) {
+      const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(r.name ?? "");
+      if (!m) continue;
+      const clean = m[1].trim();
+      const en = m[2].trim();
+      const keepEn = r.name_original && r.name_original.trim() ? r.name_original : en;
+      upd.run(clean, keepEn, r.id);
+      fixed++;
+    }
+    if (fixed) console.log(`[migrate] ${table}: split bracket names ${fixed}`);
+  }
 
   // Своё изображение записи компендиума. Раньше портрет записи брался из её
   // статблока — тогда у записи без статблока картинки не могло быть вовсе, а
@@ -2498,6 +2542,7 @@ export function openDatabase(dbDir: string): Database.Database {
   // он добавляется один раз (см. defaultSections.ts).
   backfillDefaultMechanicsSections(database);
   backfillDefaultVehicleSections(database);
+  migrateBastionsToOwnSection(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");

@@ -25,24 +25,26 @@ export type ThumbnailSectionKey = (typeof THUMBNAIL_SECTIONS)[number]["key"];
 
 const DEFAULTS: Record<ThumbnailSectionKey, ThumbnailStyle> = {
   campaigns: "banner",
-  settings: "background",
-  systems: "none",
+  settings: "banner",
+  systems: "banner",
   beings: "banner",
-  roster: "none",
-  communities: "none",
+  roster: "banner",
+  communities: "banner",
   locations: "banner",
 };
 
 const STORAGE_KEY = "rpgManagerThumbnailStyles";
 
 export function loadThumbnailStyles(): Record<ThumbnailSectionKey, ThumbnailStyle> {
+  // Настройка убрана из интерфейса (2026-08-30): везде «тамбнейл шапкой».
+  return { ...DEFAULTS };
+}
+export function migrateThumbnailStyles(): void {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+    if (localStorage.getItem(STORAGE_KEY) != null) localStorage.removeItem(STORAGE_KEY);
   } catch {
     /* ignore */
   }
-  return { ...DEFAULTS };
 }
 
 export function saveThumbnailStyles(styles: Record<ThumbnailSectionKey, ThumbnailStyle>) {

@@ -12,6 +12,7 @@ import { PlayerGroupMembersModal } from "../components/PlayerGroupMembersModal";
 import { formatNearestDate } from "../nearestDate";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
+import { SectionBackground } from "../components/SectionBackground";
 import type { Player, PlayerGroup } from "../types";
 
 function PlayerCoverTile({ player: p }: { player: Player }) {
@@ -135,7 +136,8 @@ export function PlayersListPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
+      <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="players" compact>Игроки</SectionHeading>
         <button className="primary" onClick={() => setCreating(true)}>

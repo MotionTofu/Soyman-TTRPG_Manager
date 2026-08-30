@@ -264,13 +264,13 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
         на сессию — все строчки можно отредактировать после генерации.
       </p>
 
-      <div className="card stack">
-        <strong>Шпаргалка сессии</strong>
-        <p className="muted" style={{ margin: 0 }}>
+      <div className="sp-subcard stack">
+        <strong className="sp-title">Шпаргалка сессии</strong>
+        <p className="muted" style={{ margin: 0, fontSize: "var(--fs-meta)", maxWidth: "68ch" }}>
           Локации, неписи и квесты (нераскрытые секреты) на первой странице; заметки, улики и
           потенциальный лут — на второй. Строчки редактируются прямо на листе.
         </p>
-        <div className="row">
+        <div className="row" style={{ flexWrap: "wrap" }}>
           <button type="button" onClick={generateSheet}>
             {sheet ? "Обновить из заготовки" : "Сгенерировать"}
           </button>
@@ -295,8 +295,8 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
         )}
       </div>
 
-      <div className="card stack">
-        <strong>Шпаргалка по персонажам ДнД</strong>
+      <div className="sp-subcard stack">
+        <strong className="sp-title">Шпаргалка по персонажам ДнД</strong>
         <p className="muted" style={{ margin: 0 }}>
           Имя, КЗ, пассивное восприятие, вид, класс/подкласс и владения навыками — из статблоков
           персонажей кампании. Предметы, цели и заметки пока генерируются пустыми.
@@ -326,9 +326,9 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
         )}
       </div>
 
-      <div className="card stack">
-        <strong>Боевая шпаргалка</strong>
-        <p className="muted" style={{ margin: 0 }}>
+      <div className="sp-subcard stack">
+        <strong className="sp-title">Боевая шпаргалка</strong>
+        <p className="muted" style={{ margin: 0, fontSize: "var(--fs-meta)", maxWidth: "68ch" }}>
           Строка на каждого противника: КД, инициатива, ХП и клетки для учёта урона.
         </p>
         <div className="row">

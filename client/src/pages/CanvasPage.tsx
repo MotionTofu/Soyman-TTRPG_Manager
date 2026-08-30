@@ -22,6 +22,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { api } from "../api/client";
 import { SectionHeading } from "../components/SectionHeading";
+import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SCENE_KINDS, SCENE_KIND_LABELS, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
@@ -5209,7 +5210,8 @@ export function CanvasPage() {
   const boardMode = freeId > 0 || campaignMapId > 0 || settingMapId > 0 || arcId > 0;
 
   return (
-    <div className={`stack canvas-page ${boardMode ? "canvas-page--board" : "canvas-page--index"}`}>
+    <div className={`stack canvas-page ${boardMode ? "canvas-page--board" : "canvas-page--index"}`} style={{ position: "relative" }}>
+      <SectionBackground />
       {/* Шапка. В списке к ней же прижата «Открыть доску…»: отдельной строкой
           она стоила ещё одного пустого ряда под потолком. */}
       <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>

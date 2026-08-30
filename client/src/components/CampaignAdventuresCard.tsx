@@ -94,7 +94,17 @@ export function CampaignAdventuresCard({
       {adventures.map((arc) => (
         <AdventureBlock key={arc.id} arc={arc} campaignId={campaignId} onChange={refresh} onDetach={detach} />
       ))}
-      {adventures.length === 0 && <p className="muted">В кампании пока нет приключений.</p>}
+      {adventures.length === 0 && !adding && (
+        <div className="card" style={{ borderStyle: "dashed" }}>
+          <p>
+            Привяжите первое приключение из сеттинга — его главы и сцены станут планом кампании.
+            Правка здесь создаст версию для кампании, оригинал не тронется.
+          </p>
+          <button className="primary" onClick={openAdd}>
+            + Привязать приключение
+          </button>
+        </div>
+      )}
 
       {adding ? (
         <div className="card stack">
@@ -186,27 +196,31 @@ function AdventureBlock({
 
   return (
     <details className="card">
-      <summary>
-        <strong className="entry-title">{arc.name}</strong>
-        {arc.is_override && <span className="badge tag"> правка кампании</span>}
+      <summary style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <strong className="entry-title" style={{ fontSize: "var(--fs-h3)", fontWeight: 600 }}>{arc.name}</strong>
+        {arc.is_override && <span className="badge tag">правка кампании</span>}
       </summary>
       <div className="stack" style={{ marginTop: 8 }}>
         {!editMode ? (
           <>
             {filledSummary.length > 0 && (
-              <div className="card stack">
-                <strong>Сводка</strong>
-                {filledSummary.map((f) => (
-                  <div key={f.key} className="row" style={{ justifyContent: "space-between" }}>
-                    <span className="muted">{f.label}</span>
-                    <span>{(arc as unknown as Record<string, string>)[f.key]}</span>
-                  </div>
-                ))}
+              <div className="stack" style={{ gap: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                <span className="campaign-field-label" style={{ color: "var(--ink)" }}>Сводка</span>
+                <table className="detail-table">
+                  <tbody>
+                    {filledSummary.map((f) => (
+                      <tr key={f.key}>
+                        <td className="detail-label">{f.label}</td>
+                        <td><span className="detail-value-mono">{(arc as unknown as Record<string, string>)[f.key]}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
             {filledTexts.map((f) => (
-              <div key={f.key} className="card stack">
-                <strong>{f.label}</strong>
+              <div key={f.key} className="stack" style={{ gap: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
                 <div style={{ whiteSpace: "pre-wrap" }}>
                   <MentionText text={(arc as unknown as Record<string, string>)[f.key]} />
                 </div>
@@ -220,29 +234,30 @@ function AdventureBlock({
                 Редактировать
               </button>
               {arc.is_override && <button onClick={revert}>Вернуть как в сеттинге</button>}
-              <button className="danger" onClick={() => onDetach(arc)}>
+              <button onClick={() => onDetach(arc)}>
                 Убрать из кампании
               </button>
             </div>
           </>
         ) : (
           <>
-            <div className="card stack">
-              <strong>Сводка</strong>
-              {SUMMARY_FIELDS.map((f) => (
-                <div key={f.key} className="row" style={{ justifyContent: "space-between" }}>
-                  <span className="muted">{f.label}</span>
-                  <input
-                    value={draft[f.key] ?? ""}
-                    onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                  />
-                </div>
-              ))}
+            <div className="stack" style={{ gap: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+              <span className="campaign-field-label" style={{ color: "var(--ink)" }}>Сводка</span>
+              <table className="detail-table">
+                <tbody>
+                  {SUMMARY_FIELDS.map((f) => (
+                    <tr key={f.key}>
+                      <td className="detail-label">{f.label}</td>
+                      <td><input value={draft[f.key] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))} style={{ width: "100%" }} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             {TEXT_FIELDS.map((f) => (
-              <div key={f.key} className="card stack">
-                <strong>{f.label}</strong>
-                <span className="muted">{f.help}</span>
+              <div key={f.key} className="stack" style={{ gap: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
+                <span className="muted" style={{ fontSize: "11px", display: "block" }}>{f.help}</span>
                 <MentionTextarea
                   value={draft[f.key] ?? ""}
                   onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}

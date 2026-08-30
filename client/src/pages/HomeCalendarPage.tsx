@@ -7,7 +7,8 @@ import { Modal } from "../components/Modal";
 import { copySessionPrep } from "../sessionCopy";
 import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
-import { EmptyState } from "../components/EmptyState";
+import { CreateCampaignTile } from "../components/CreateCampaignTile";
+import { OnboardingHero } from "../components/OnboardingHero";
 import { HomeArticleCard } from "../components/HomeArticleCard";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
@@ -16,7 +17,7 @@ import { parseDateKey, toLocalDateKey } from "../utils/date";
 import { safeBackgroundImage } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { LocalClock } from "../components/LocalClock";
-import type { AppSettings, Campaign, SessionSummary } from "../types";
+import type { AppSettings, Campaign, SessionSummary, Setting, System } from "../types";
 
 interface FinanceSummary {
   earned: number;
@@ -28,6 +29,8 @@ interface FinanceSummary {
 export function HomeCalendarPage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [systems, setSystems] = useState<System[]>([]);
+  const [settings, setSettings] = useState<Setting[]>([]);
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [homeBgUrl, setHomeBgUrl] = useState<string | null>(null);
@@ -77,6 +80,8 @@ export function HomeCalendarPage() {
       api.get<FinanceSummary>("/finance/summary").then(guarded(setFinance)).catch(() => {}),
       api.get<AppSettings>("/app-settings").then((s) => { if (loadIdRef.current === cur) setHomeBgUrl(s.home_background_url); }).catch(() => {}),
       api.get<Campaign[]>("/campaigns").then(guarded(setCampaigns)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCampaignsError(String(e)); throw e; }),
+      api.get<System[]>("/systems").then(guarded(setSystems)).catch(() => {}),
+      api.get<Setting[]>("/settings").then(guarded(setSettings)).catch(() => {}),
     ]).finally(() => { if (loadIdRef.current === cur) setInitialLoad(true); });
   }
 
@@ -321,36 +326,28 @@ export function HomeCalendarPage() {
               </div>
             </Link>
           ) : (
-            <div className="card home-hero home-hero-empty">
-              <EmptyState
-                icon="issueStamp"
-                title="Сессий пока не запланировано"
-                hint="Ближайшая сессия появится здесь, как только вы её создадите."
-                action={
-                  <button className="primary" onClick={() => openCreateModal(today)}>
-                    + Создать сессию
-                  </button>
-                }
-              />
-            </div>
+            <OnboardingHero
+              systems={systems}
+              settings={settings}
+              campaigns={campaigns}
+              onRefresh={loadInitial}
+            />
           )}
 
           {/* Tiles — quick campaign row. */}
-          {/* Блок, которому нечего показать, не показывает пустоту — он не
-              показывается вовсе. Пустое состояние оставлено только герою:
-              он главный блок экрана и обязан объяснить, что здесь будет. */}
-          {campaigns.length > 0 && (
-            <div className="home-section home-section-campaigns">
-              <SectionHeading level="section" icon="campaigns" action={{ label: "все кампании", to: "/campaigns" }}>
-                Кампании
-              </SectionHeading>
-              <div className="home-tiles">
-                {campaigns.slice(0, 4).map((c) => (
-                  <CampaignCoverTile key={c.id} campaign={c} />
-                ))}
-              </div>
+          {/* Пустое состояние: вместо скрытия entire блока показываем
+              плитку создания — она служит и CTA, и объяснением, что тут будет. */}
+          <div className="home-section home-section-campaigns">
+            <SectionHeading level="section" icon="campaigns" action={{ label: "все кампании", to: "/campaigns" }}>
+              Кампании
+            </SectionHeading>
+            <div className="home-tiles">
+              {campaigns.slice(0, 3).map((c) => (
+                <CampaignCoverTile key={c.id} campaign={c} />
+              ))}
+              <CreateCampaignTile />
             </div>
-          )}
+          </div>
 
           {/* Случайная статья из справочника — «Напомню!». Сама не
               отрисуется, пока справочники пусты. */}

@@ -24,6 +24,7 @@ import {
   FEAT_CATEGORIES,
   KIND_DEFS,
   kindLabel,
+  visibleMonsterFields,
   MAGIC_ITEM_RARITIES,
   MAGIC_ITEM_TYPES,
   MECHANICS_TOOL_GROUP,
@@ -437,6 +438,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     return dir === "desc" ? "desc" : "asc";
   });
   const [dragId, setDragId] = useState<number | null>(null);
+  const [systemCode, setSystemCode] = useState<string | null>(null);
+  useEffect(() => {
+    api.get<{ code: string | null }>(`/systems/${systemId}`).then((s) => setSystemCode(s.code)).catch(() => setSystemCode(null));
+  }, [systemId]);
 
   const isSpellSection = section.kind === "spell";
   const isMagicItemSection = section.kind === "magic_item";
@@ -625,7 +630,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   function startEdit(entry: CompendiumEntry) {
     const parent = entries.find((e) => e.id === entry.parent_id);
     const data: Record<string, string> = {};
-    for (const f of [...(KIND_DEFS[entry.kind]?.fields ?? []), ...getExtraFields(entry, parent?.name)]) {
+    const rawFields = [...(KIND_DEFS[entry.kind]?.fields ?? []), ...getExtraFields(entry, parent?.name)];
+    const fields = entry.kind === "monster" ? visibleMonsterFields(rawFields, systemCode) : rawFields;
+    for (const f of fields) {
       data[f.key] = entry.data[f.key] != null ? String(entry.data[f.key]) : "";
     }
     const legacyComponents = parseLegacyComponents(entry.data.components as string | undefined);
@@ -936,6 +943,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     onDragStartEntry: setDragId,
     onDropEntry: reorderWithinGroup,
     sortForDisplay,
+    systemCode,
   };
 
   const magicItemGroups: [string, CompendiumEntry[]][] | null = !isMagicItemSection
@@ -1242,10 +1250,8 @@ interface NodeProps {
   onDragStartEntry: (id: number) => void;
   onDropEntry: (group: CompendiumEntry[], draggedId: number, targetId: number) => void;
   sortForDisplay: (list: CompendiumEntry[]) => CompendiumEntry[];
-  // Set only for direct children rendered inside a "Владения инструментами"
-  // mechanic_group, so EntryNode can offer the Характеристика field without
-  // adding "ability" to every other mechanics list (Языки, Типы урона, …).
   parentGroupName?: string;
+  systemCode?: string | null;
 }
 
 // Drop target for one row when the section is in manual sort mode — shared
@@ -1295,6 +1301,7 @@ function EntryNode(props: NodeProps) {
     setTimeout(() => setLinkCopied(false), 1500);
   }
   const def = KIND_DEFS[entry.kind];
+  const systemCode = props.systemCode;
   const isOpen = expanded.has(entry.id);
   const isEditing = editing?.id === entry.id;
   const isSpecies = entry.kind === "species";
@@ -1321,7 +1328,8 @@ function EntryNode(props: NodeProps) {
     ? (entry.data.granted_spells as { id: number; name: string; grantLevel?: number }[])
     : [];
   const kids = childrenOf(entry.id);
-  const effectiveFields = [...(def?.fields ?? []), ...getExtraFields(entry, props.parentGroupName)];
+  const rawFields = [...(def?.fields ?? []), ...getExtraFields(entry, props.parentGroupName)];
+  const effectiveFields = entry.kind === "monster" ? visibleMonsterFields(rawFields, systemCode) : rawFields;
   const filledFields = effectiveFields.filter(
     // option_section_title is rendered as the options list's own header, so
     // repeating it in the fields summary would be noise.

@@ -35,21 +35,26 @@ export function RemindersWidget({ targetType, targetId }: Props) {
 
   return (
     <div className="card stack">
-      <h3>Напоминания игроку{targetType === "campaign" ? "ам кампании" : ""}</h3>
-      {reminders.length === 0 && <span className="muted">Нет активных напоминаний.</span>}
-      {reminders.map((r) => (
-        <div key={r.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <span style={{ whiteSpace: "pre-wrap" }}>{r.message}</span>
-          <button onClick={() => remove(r.id)}>✕</button>
+      {reminders.length === 0 ? (
+        <div className="card" style={{ borderStyle: "dashed", padding: "12px" }}>
+          <p className="muted" style={{ margin: 0, paddingLeft: 2, whiteSpace: "nowrap" }}>Нет активных напоминаний — напишите первое, оно появится у игроков на&nbsp;Главной.</p>
         </div>
-      ))}
+      ) : (
+        reminders.map((r) => (
+          <div key={r.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+            <span style={{ whiteSpace: "pre-wrap", maxWidth: "62ch" }}>{r.message}</span>
+            <button className="danger comp-mini" onClick={() => remove(r.id)} aria-label="Удалить">✕</button>
+          </div>
+        ))
+      )}
       <div className="row">
         <input
           placeholder="Новое напоминание…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") add(); }}
         />
-        <button className="primary" onClick={add}>
+        <button className="primary" onClick={add} disabled={!draft.trim()}>
           Добавить
         </button>
       </div>

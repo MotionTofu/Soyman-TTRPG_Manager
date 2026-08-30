@@ -97,10 +97,12 @@ export function MonsterDetailPage({
   const size = typeof entry.data.size === "string" ? entry.data.size : "";
   const alignment = typeof entry.data.alignment === "string" ? entry.data.alignment : "";
   const aliases = entry.aliases ?? [];
+  const isPhb = system?.code === "phb";
 
   // Класс опасности в сводку не входит: он — механика конкретных правил и
   // живёт в статблоке и в фильтрах раздела. Сводка — лор существа, то, что
   // переживает перекладывание на другую систему.
+  // П1.3 — Размер — механика D&D, у LitM его нет: не показываем поле вовсе, а не «пусто».
   const fields: EntityField[] = [
     { key: "name", label: "Имя", value: entry.name, required: true },
     { key: "name_original", label: "Оригинальное название", value: entry.name_original ?? "" },
@@ -119,12 +121,16 @@ export function MonsterDetailPage({
         ...lists.types.map((t) => ({ value: t.name, label: t.name })),
       ],
     },
-    {
-      key: "size",
-      label: "Размер",
-      value: size,
-      options: [{ value: "", label: "—" }, ...CREATURE_SIZES.map((s) => ({ value: s, label: s }))],
-    },
+    ...(isPhb
+      ? [
+          {
+            key: "size",
+            label: "Размер",
+            value: size,
+            options: [{ value: "", label: "—" }, ...CREATURE_SIZES.map((s) => ({ value: s, label: s }))],
+          } as EntityField,
+        ]
+      : []),
     {
       key: "alignment",
       label: "Мировоззрение",
