@@ -16,7 +16,7 @@ export function GraphPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const focus = searchParams.get("focus");
   const depth = Number(searchParams.get("depth")) || 2;
-  const [activeTypes, setActiveTypes] = useState<Set<string>>(
+  const [activeTypes] = useState<Set<string>>(
     () => new Set(Object.keys(TYPE_LABELS))
   );
   const [settings, setSettings] = useState<Setting[]>([]);

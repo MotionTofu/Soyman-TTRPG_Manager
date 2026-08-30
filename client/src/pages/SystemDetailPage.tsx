@@ -95,8 +95,12 @@ export function SystemDetailPage() {
 
   async function archiveSystem() {
     if (!confirm("Отправить систему в архив?")) return;
-    await api.del(`/systems/${systemId}`);
-    navigate("/systems");
+    try {
+      await api.del(`/systems/${systemId}`);
+      navigate("/systems");
+    } catch (e) {
+      alert(`Не удалось архивировать: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   async function exportSystem(withImages: boolean) {

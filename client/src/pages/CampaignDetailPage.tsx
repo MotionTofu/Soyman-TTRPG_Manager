@@ -1513,7 +1513,7 @@ function PlayerOverviewTab({
                   <tr><td className="detail-label">Тип</td><td>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</td></tr>
                   <tr><td className="detail-label">Система</td><td>{systemName}</td></tr>
                   <tr><td className="detail-label">Сеттинг</td><td>{settingName}</td></tr>
-                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status] ?? campaign.status}</td></tr>
+                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</td></tr>
                   <tr><td className="detail-label">Оплата</td><td>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</td></tr>
                   {campaign.payment_type === "paid" && (
                     <>
@@ -1735,9 +1735,6 @@ function OverviewTab({
     setEditingMain(true);
   }
 
-  const hasSessions = sessions.length > 0;
-  const isCompleted = campaign.status === "completed";
-
   const systemName = systems.find((s) => s.id === campaign.system_id)?.name ?? "—";
   const settingName = settingsList.find((s) => s.id === campaign.setting_id)?.name ?? "—";
 
@@ -1757,7 +1754,7 @@ function OverviewTab({
                   <tr><td className="detail-label">Тип</td><td>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</td></tr>
                   <tr><td className="detail-label">Система</td><td>{systemName}</td></tr>
                   <tr><td className="detail-label">Сеттинг</td><td>{settingName}</td></tr>
-                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status] ?? campaign.status}</td></tr>
+                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</td></tr>
                   <tr><td className="detail-label">Оплата</td><td>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</td></tr>
                   {campaign.payment_type === "paid" && (
                     <>

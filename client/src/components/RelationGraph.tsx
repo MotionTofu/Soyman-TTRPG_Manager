@@ -144,7 +144,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // Какие виды связей показывать. Раньше здесь был один чекбокс «упоминания»,
   // а всё остальное — членство, обитание, вложенность, сцены — рисовалось
   // одинаковой серой линией и не отключалось.
-  const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
+  const [activeKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
   // Типы сущностей, скрытые из графа через легенду (клик по точке).
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set());
   const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
@@ -750,7 +750,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         >
           {allVisible ? "Выкл" : "Вкл"}
         </button>
-        {[...typesInData.entries()].map(([type, count]) => {
+        {[...typesInData.entries()].map(([type, _count]) => {
           const hidden = hiddenTypes.has(type);
           return (
             <button

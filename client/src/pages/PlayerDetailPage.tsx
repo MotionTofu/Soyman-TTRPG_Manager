@@ -268,7 +268,7 @@ export function PlayerDetailPage() {
                     checked={isIn}
                     onChange={async () => {
                       if (isIn) {
-                        await api.del(`/player-groups/${g.id}/members`, { playerIds: [Number(id)] });
+                        await api.del(`/player-groups/${g.id}/members?playerIds=${Number(id)}`);
                       } else {
                         await api.post(`/player-groups/${g.id}/members`, { playerIds: [Number(id)] });
                       }

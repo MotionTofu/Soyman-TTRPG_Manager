@@ -606,7 +606,7 @@ export function SettingDetailPage() {
                           checked={isIn}
                           onChange={async () => {
                             if (isIn) {
-                              await api.del(`/setting-groups/${g.id}/members`, { settingIds: [settingId] });
+                              await api.del(`/setting-groups/${g.id}/members?settingIds=${settingId}`);
                             } else {
                               await api.post(`/setting-groups/${g.id}/members`, { settingIds: [settingId] });
                             }
@@ -1023,7 +1023,7 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
   // приключения сеттинга в его же граф не попадали, и переключить это было
   // нечем. Теперь тот же отбор, что и на общей странице, но из типов, у
   // которых внутри сеттинга есть дом.
-  const [activeTypes, setActiveTypes] = useState<Set<string>>(
+  const [activeTypes] = useState<Set<string>>(
     () => new Set(SETTING_SCOPED_TYPES)
   );
 

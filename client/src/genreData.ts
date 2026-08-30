@@ -1,4 +1,4 @@
-import type { ZineGraphicName } from "../components/ZineGraphics";
+import type { ZineGraphicName } from "./components/ZineGraphics";
 
 export interface GenreCategory {
   name: string;

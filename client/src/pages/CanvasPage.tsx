@@ -44,8 +44,6 @@ import {
   FRAME_SWATCHES,
   DEFAULT_FRAME_COLOR,
   INK_LIGHT,
-  INK_DARK,
-  STORY_COLOR,
   CANVAS_LEGEND_IN,
   CANVAS_LEGEND_OUT,
   type LegendItem,
@@ -660,38 +658,6 @@ const PIN_SHAPE_LABEL: Record<string, string> = {
 
 /** Виды реального ребра, которое рвёт рераут («Маршрут»). */
 type RouteKind = "transition" | "outcome" | "cast" | "member" | "thread";
-
-/**
- * Роль = цвет разъёма. Рераут перенимает роль от ребра, которое рвёт: переход —
- * ромб «истории», исход — «последствия», участник набора — «участники»,
- * каст-сущность — свою роль (location/being/…), нить — нейтральный ромб.
- * Ключ должен лежать в HANDLE_COLORS; для неизвестного — story.
- */
-const ROUTE_ROLE_KEY: Record<string, string> = {
-  location: "location",
-  plot_characters: "plot_characters",
-  obstacles: "obstacles",
-  loot: "loot",
-  consequences: "consequences",
-  being: "being",
-  artifact: "artifact",
-  members: "members",
-  in: "in",
-  audio: "audio",
-  battle: "battle",
-};
-
-/** Цвет текста на плашке роли: 4.5:1 от яркости фона. */
-function routeInk(bg: string): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(bg);
-  if (!m) return INK_DARK;
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return lum > 150 ? INK_DARK : INK_LIGHT;
-}
 
 /**
  * Имя хендла-выхода рераута-хаба, к которому цеплять сегмент.
