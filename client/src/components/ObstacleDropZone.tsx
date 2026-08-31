@@ -6,6 +6,7 @@ import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
 import type { SearchResult, SessionUnionRow, SettingBeing } from "../types";
 import { ToInitiativeButton } from "./ToInitiativeButton";
+import { Modal } from "./Modal";
 
 // "Препятствия" — broader than the old "Противники" (enemies-only, beings-only)
 // block: any existing entity can represent an obstacle (a creature, an NPC,
@@ -66,6 +67,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   async function load() {
     const links = await api.get<GenericLink[]>(
@@ -124,7 +126,12 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
     setDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
+    let result: SearchResult;
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      return;
+    }
     if (!ACCEPT_TYPES.includes(result.type)) return;
     if (result.type === "compendium_entry" && result.kind !== "monster") return;
     await api.post("/links", {
@@ -138,9 +145,11 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
     load();
   }
 
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+
   async function remove(linkId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/links/${linkId}`);
+    setPendingDelete(null);
     load();
   }
 
@@ -162,7 +171,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       <div className="stack" style={{ gap: 0 }}>
         {entries.map((entry) => (
           <div
-            key={entry.linkId}
+            key={`${entry.type}:${entry.id}:${entry.linkId ?? "union"}`}
             className="resource-row row"
             style={{
               justifyContent: "space-between",
@@ -218,14 +227,90 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
             {/* Строку объединения удалить нельзя: она не связь сессии, а состав
                 сцены — правится в приключении, а не на пульте. */}
             {entry.linkId !== null && (
-              <button className="comp-mini" onClick={() => remove(entry.linkId!)}>
+              <button className="comp-mini" onClick={() => setPendingDelete(entry.linkId!)}>
                 ✕
               </button>
             )}
           </div>
         ))}
       </div>
+      <button type="button" className="comp-mini" style={{ marginTop: 8 }} onClick={() => setPickerOpen(true)}>
+        + Добавить
+      </button>
+      {pendingDelete !== null && (
+        <Modal onClose={() => setPendingDelete(null)}>
+          <div className="stack">
+            <h3 style={{ margin: 0 }}>Удалить связь?</h3>
+            <p className="muted" style={{ margin: 0 }}>Связь будет удалена.</p>
+            <div className="row">
+              <button className="danger" onClick={() => remove(pendingDelete)}>Удалить</button>
+              <button onClick={() => setPendingDelete(null)}>Отмена</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {pickerOpen && (
+        <ObstaclePicker
+          onPick={async (result) => {
+            await api.post("/links", {
+              from_type: "session",
+              from_id: sessionId,
+              to_type: result.type,
+              to_id: result.id,
+              section: "enemies",
+              origin,
+            });
+            setPickerOpen(false);
+            load();
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
     </div>
   );
 });
+
+function ObstaclePicker({ onPick, onClose }: { onPick: (r: SearchResult) => void; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (q.trim().length < 2) { setItems([]); return; }
+    setLoading(true);
+    const handle = setTimeout(() => {
+      const types = ACCEPT_TYPES.join(",");
+      api.get<SearchResult[]>(`/search?q=${encodeURIComponent(q.trim())}&types=${types}`)
+        .then((rows) => {
+          const filtered = rows.filter((r) => {
+            if (!ACCEPT_TYPES.includes(r.type)) return false;
+            if (r.type === "compendium_entry" && r.kind !== "monster") return false;
+            return true;
+          });
+          setItems(filtered.slice(0, 20));
+        })
+        .catch(() => setItems([]))
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [q]);
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack">
+        <h3 style={{ margin: 0 }}>Добавить препятствие</h3>
+        <input autoFocus placeholder="Поиск — 2+ символа" value={q} onChange={(e) => setQ(e.target.value)} />
+        {loading && <span className="muted">Поиск…</span>}
+        {!loading && q.trim().length >= 2 && items.length === 0 && <span className="muted">Ничего не найдено.</span>}
+        <div className="stack" style={{ maxHeight: 320, overflowY: "auto", gap: 4 }}>
+          {items.map((r) => (
+            <button key={`${r.type}:${r.id}`} type="button" className="row" style={{ justifyContent: "space-between", textAlign: "left" }} onClick={() => onPick(r)}>
+              <span><strong>{r.title}</strong>{r.context && <span className="muted"> — {r.context}</span>}</span>
+              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>{r.type}</span>
+            </button>
+          ))}
+        </div>
+        <div className="row"><button type="button" onClick={onClose}>Закрыть</button></div>
+      </div>
+    </Modal>
+  );
+}

@@ -7,6 +7,7 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { MentionText } from "./mentions/MentionText";
 import { StatblockIcon, statblockBadgeTitle } from "./StatblockIcon";
+import { isSafeImageUrl } from "../utils/safeUrl";
 
 // Three overlapping circles — flags a being that belongs to more than one
 // faction, so a list scoped to a single faction still shows it isn't the
@@ -27,6 +28,20 @@ function formatMeta(meta: SettingBeing["creature_meta"]): string | null {
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
+function Highlight({ text, query }: { text: string; query?: string }) {
+  if (!query?.trim()) return <>{text}</>;
+  const q = query.trim();
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{ background: "color-mix(in srgb, var(--accent) 22%, transparent)", padding: 0 }}>{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+}
+
 // Shared row-list rendering used by Население (the setting-wide list), the
 // embedded being lists on a Location's "Обитатели" tab and a Community's
 // "Представители" tab, so all three read identically. A row's body toggles
@@ -45,6 +60,7 @@ export function BeingEntityRowList<B extends SettingBeing>({
   getLocationSuffix,
   hideDelete,
   asLinks,
+  highlight,
 }: {
   beings: B[];
   onDelete: (id: number) => void;
@@ -74,6 +90,7 @@ export function BeingEntityRowList<B extends SettingBeing>({
   // Существа list so the two subsections of that tab look and act alike.
   // Обитатели/Представители embeds keep the richer expand-in-place default.
   asLinks?: boolean;
+  highlight?: string;
 }) {
   const navigate = useNavigate();
   const [menu, setMenu] = useState<{ x: number; y: number; being: B } | null>(null);
@@ -90,9 +107,9 @@ export function BeingEntityRowList<B extends SettingBeing>({
   return (
     <div className="entity-row-list">
       {beings.map((b) => {
-        const url = b.thumbnail_image_url || b.avatar_image_url;
+        const rawUrl = b.thumbnail_image_url || b.avatar_image_url;
+        const safeUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
         const mode = thumbnailStyles.beings;
-        const isBg = mode === "background" && !!url;
         const factions = getFactions?.(b);
         const factionCount = factions?.length ?? getFactionCount?.(b) ?? 0;
         const locationSuffix = getLocationSuffix?.(b);
@@ -102,7 +119,16 @@ export function BeingEntityRowList<B extends SettingBeing>({
         const rowProps = asLinks
           ? { to: `/beings/${b.id}` }
           : {
+              role: "button",
+              tabIndex: 0,
+              "aria-expanded": isOpen,
               onClick: () => setExpandedId(isOpen ? null : b.id),
+              onKeyDown: (e: React.KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setExpandedId(isOpen ? null : b.id);
+                }
+              },
               onContextMenu: (e: React.MouseEvent) => {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, being: b });
@@ -111,17 +137,21 @@ export function BeingEntityRowList<B extends SettingBeing>({
         return (
           <div key={b.id}>
             <RowTag
-              className={`entity-row${isBg ? " entity-row-bg" : ""}`}
-              style={{ ...(isBg ? { backgroundImage: `url("${url}")` } : undefined), cursor: "pointer" }}
+              className="entity-row"
+              style={{ cursor: "pointer" }}
               {...(rowProps as object)}
             >
-              {mode === "banner" && url && <img src={url} alt="" className="entity-row-thumb" />}
+              {mode === "banner" && safeUrl ? (
+                <img src={safeUrl} alt="" className="entity-row-thumb" />
+              ) : mode === "banner" ? (
+                <span className="entity-row-thumb" aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontSize: "14px", fontWeight: 700, color: "var(--muted)", background: "var(--bg-elevated)", border: "1px solid var(--line)" }}>{b.name.trim().charAt(0).toUpperCase() || "•"}</span>
+              ) : null}
               <span className="entity-row-name">
-                {b.name}
+                <Highlight text={b.name} query={highlight} />
                 {locationSuffix && <span className="muted"> ({locationSuffix})</span>}
-                {meta && <span className="entity-row-meta muted">{meta}</span>}
+                {meta && <span className="entity-row-meta">{meta}</span>}
               </span>
-              <span className="muted">{BEING_CATEGORIES.find((c) => c.key === b.category)?.label}</span>
+              <span className="badge tag" style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{BEING_CATEGORIES.find((c) => c.key === b.category)?.label}</span>
               {(b.statblock_count ?? 0) > 0 && (
                 <span
                   className="entity-row-badge"
@@ -136,7 +166,8 @@ export function BeingEntityRowList<B extends SettingBeing>({
                 </span>
               )}
               <span className="entity-row-tags">
-                <TagChips tags={b.tags} />
+                <TagChips tags={(b.tags ?? []).slice(0, 3)} />
+                {(b.tags ?? []).length > 3 && <span className="badge tag">+{b.tags.length - 3}</span>}
               </span>
               <span className="entity-row-actions" onClick={(e) => e.stopPropagation()}>
                 {/* В режиме asLinks вся строка — ссылка, а <a> внутри <a>

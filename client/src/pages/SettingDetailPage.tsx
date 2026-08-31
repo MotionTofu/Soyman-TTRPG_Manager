@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { LinkDropZone } from "../components/LinkDropZone";
@@ -18,7 +18,6 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { Timeline } from "../components/Timeline";
 import { SettingCycles } from "../components/SettingCycles";
 import { formatEventDate } from "../inworldCalendar";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { downloadJson } from "../downloadJson";
 import { loadThumbnailStyles } from "../thumbnailStyles";
@@ -30,6 +29,7 @@ import type { SettingGenre } from "../types";
 import { LocationFilter } from "../components/LocationCascadePicker";
 import { SettingEntryList } from "../components/SettingEntryList";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
+import { SettingBeingTileGrid, SettingCommunityTileGrid } from "../components/SettingBeingTileGrid";
 import { EntityWizard } from "../components/entityWizard/EntityWizard";
 import { AdventuresTab } from "../components/AdventuresTab";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
@@ -39,6 +39,12 @@ import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
 import type { GraphData } from "../graphTypes";
 import { NAMED_BEING_CATEGORIES } from "../beingCategories";
 import { NavIcon } from "../components/NavIcons";
+import { EmptyState } from "../components/EmptyState";
+import { isSafeImageUrl, safeBackgroundImage } from "../utils/safeUrl";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { CampaignWizard } from "../components/CampaignWizard";
+import { EntityImageSlot } from "../components/EntityImageSlot";
+import type { System } from "../types";
 import type {
   Artifact,
   BeingCategory,
@@ -178,84 +184,266 @@ export function SettingDetailPage() {
     title: string;
     description: string;
     important: boolean;
+    precision: import("../types").DatePrecision;
+    status: import("../types").EventStatus;
+    year_end: string;
+    month_end: string;
+    day_end: string;
+    cancel_note: string;
   } | null>(null);
   const [genrePickerOpen, setGenrePickerOpen] = useState(false);
   const [allGroups, setAllGroups] = useState<SettingGroup[]>([]);
   const [settingGroupIds, setSettingGroupIds] = useState<number[]>([]);
 
-  function refreshCalendarEvents() {
-    api.get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`).then(setCalendarEvents);
-    api.get<SettingCycle[]>(`/settings/${settingId}/cycles`).then(setCycles);
+  // Фаза 0: надёжность загрузки — AbortController + loading/error как в SettingsListPage
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
+  const [campaignWizardOpen, setCampaignWizardOpen] = useState(false);
+  const [wizardSystems, setWizardSystems] = useState<System[]>([]);
+  const [wizardSettings, setWizardSettings] = useState<Setting[]>([]);
+
+  async function openCampaignWizard() {
+    try {
+      const [sys, sets] = await Promise.all([
+        api.get<System[]>("/systems"),
+        api.get<Setting[]>("/settings"),
+      ]);
+      setWizardSystems(sys);
+      setWizardSettings(sets);
+    } catch {
+      setWizardSystems([]);
+      setWizardSettings([]);
+    }
+    setCampaignWizardOpen(true);
   }
-  useEffect(refreshCalendarEvents, [settingId]);
 
   const [eras, setEras] = useState<SettingCalendarEra[]>([]);
   const [addingEra, setAddingEra] = useState(false);
   const [eraName, setEraName] = useState("");
   const [eraStartYear, setEraStartYear] = useState("");
+  const [worldFilter, setWorldFilter] = useState("");
+  const filteredCalendarEvents = useMemo(() => {
+    const q = worldFilter.trim().toLowerCase();
+    if (!q) return calendarEvents;
+    return calendarEvents.filter((ev) => ev.title.toLowerCase().includes(q) || (ev.description ?? "").toLowerCase().includes(q));
+  }, [calendarEvents, worldFilter]);
+  const eraBuckets = useMemo(() => buildEraBuckets(eras, filteredCalendarEvents), [eras, filteredCalendarEvents]);
+
+  function refreshCalendarEvents() {
+    const controller = new AbortController();
+    const opts = { signal: controller.signal };
+    api
+      .get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`, opts)
+      .then(setCalendarEvents)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        console.error(e);
+      });
+    api
+      .get<SettingCycle[]>(`/settings/${settingId}/cycles`, opts)
+      .then(setCycles)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        console.error(e);
+      });
+    return () => controller.abort();
+  }
+  useEffect(refreshCalendarEvents, [settingId]);
 
   function refreshEras() {
-    api.get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`).then(setEras);
+    const controller = new AbortController();
+    api
+      .get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`, { signal: controller.signal })
+      .then(setEras)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        console.error(e);
+      });
+    return () => controller.abort();
   }
   useEffect(refreshEras, [settingId]);
 
   async function createEra() {
     if (!eraName.trim() || !eraStartYear.trim()) return;
+    const y = Number(eraStartYear);
+    if (!Number.isFinite(y)) { alert("Год — число"); return; }
+    if (eras.some((er) => er.name.trim().toLowerCase() === eraName.trim().toLowerCase())) { alert("Эпоха с таким названием уже есть"); return; }
+    if (eras.some((er) => er.start_year === y)) { alert("Эпоха с таким годом уже есть"); return; }
     await api.post(`/settings/${settingId}/calendar-eras`, {
       name: eraName.trim(),
-      start_year: Number(eraStartYear),
+      start_year: y,
     });
     setEraName("");
     setEraStartYear("");
     setAddingEra(false);
-    refreshEras();
+    // refreshEras создаст новый AbortController внутри
+    const ctrl = new AbortController();
+    api
+      .get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`, { signal: ctrl.signal })
+      .then(setEras)
+      .catch(() => {});
   }
 
   async function deleteEra(eraId: number) {
-    if (!confirm("Удалить эпоху? События внутри неё не удалятся, просто перестанут быть сгруппированы.")) return;
+    const ok = await confirm({
+      title: "Удалить эпоху?",
+      message: "События внутри неё не удалятся, просто перестанут быть сгруппированы.",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/settings/calendar-eras/${eraId}`);
-    refreshEras();
+    const ctrl = new AbortController();
+    api
+      .get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`, { signal: ctrl.signal })
+      .then(setEras)
+      .catch(() => {});
+  }
+
+  async function loadOverview(signal?: AbortSignal) {
+    setLoading(true);
+    setLoadError(null);
+    const opts = signal ? { signal } : undefined;
+    try {
+      const [s, res, chars, camps, groups, bySetting] = await Promise.all([
+        api.get<Setting>(`/settings/${settingId}`, opts),
+        api.get<Resource[]>(`/resources?scope=setting&setting_id=${settingId}`, opts),
+        api.get<Character[]>(`/characters?setting_id=${settingId}`, opts),
+        api.get<Campaign[]>(`/campaigns?setting_id=${settingId}`, opts),
+        api.get<SettingGroup[]>("/setting-groups", opts),
+        api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`, opts),
+      ]);
+      setSetting(s);
+      setResources(res);
+      setCharacters(chars);
+      setCampaigns(camps);
+      setAllGroups(groups);
+      setSettingGroupIds(bySetting.map((g) => g.id));
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setLoadError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setLoading(false);
+    }
   }
 
   function refresh() {
-    api.get<Setting>(`/settings/${settingId}`).then(setSetting);
-    api
-      .get<Resource[]>(`/resources?scope=setting&setting_id=${settingId}`)
-      .then(setResources);
-    api.get<Character[]>(`/characters?setting_id=${settingId}`).then(setCharacters);
-    api.get<Campaign[]>(`/campaigns?setting_id=${settingId}`).then(setCampaigns);
-    api.get<SettingGroup[]>("/setting-groups").then(setAllGroups);
-    api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`).then((groups) => {
-      setSettingGroupIds(groups.map((g) => g.id));
-    });
+    void loadOverview();
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [settingId]);
 
-  if (!setting) return <p className="muted">Загрузка…</p>;
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadOverview(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingId]);
+
+  if (loadError && !setting) {
+    return (
+      <div className="stack" style={{ position: "relative" }}>
+        <div
+          className="card"
+          style={{
+            borderLeft: "3px solid var(--status-cancelled)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span>Не удалось загрузить сеттинг: {loadError}</span>
+          <button className="primary" onClick={() => refresh()}>
+            Повторить
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // loading используется и как флаг первоначальной загрузки (пока setting===null)
+  // и как индикатор обновления уже загруженных данных (saving для точечных сохранений)
+  if (loading && !setting) {
+    return (
+      <div className="stack" aria-busy="true" aria-label="Загрузка сеттинга">
+        <div
+          className="card"
+          style={{
+            height: 140,
+            opacity: 0.45,
+            background: "var(--bg-elevated)",
+            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
+          }}
+        />
+        <div
+          className="card"
+          style={{
+            height: 220,
+            opacity: 0.45,
+            background: "var(--bg-elevated)",
+            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
+            animationDelay: "120ms",
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (!setting) {
+    return (
+      <div className="stack" aria-busy="true" aria-label="Загрузка сеттинга">
+        <div
+          className="card"
+          style={{
+            height: 140,
+            opacity: 0.45,
+            background: "var(--bg-elevated)",
+            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
+          }}
+        />
+      </div>
+    );
+  }
 
   async function saveDescription(value: string) {
-    await api.put(`/settings/${settingId}`, { description: value });
-    refresh();
+    setSaving(true);
+    try {
+      await api.put(`/settings/${settingId}`, { description: value });
+      await loadOverview();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveName(name: string, code: string) {
     // Двойник кода не запрещается, а называется: код — подсказка человеку в
     // окне неработающей ссылки, а не ключ, по которому что-то ищется.
-    const saved = await api.put<{ code_taken_by: string | null }>(`/settings/${settingId}`, {
-      name,
-      code,
-    });
-    if (saved.code_taken_by) {
-      alert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
+    setSaving(true);
+    try {
+      const saved = await api.put<{ code_taken_by: string | null }>(`/settings/${settingId}`, {
+        name,
+        code,
+      });
+      if (saved.code_taken_by) {
+        showAlert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
+      }
+      await loadOverview();
+    } finally {
+      setSaving(false);
     }
-    refresh();
   }
 
   async function saveGenres(genres: SettingGenre[]) {
-    await api.put(`/settings/${settingId}`, { genres });
-    setGenrePickerOpen(false);
-    refresh();
+    setSaving(true);
+    try {
+      await api.put(`/settings/${settingId}`, { genres });
+      setGenrePickerOpen(false);
+      await loadOverview();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function uploadImage(kind: "background" | "thumbnail", file: File) {
@@ -265,14 +453,42 @@ export function SettingDetailPage() {
       const form = new FormData();
       form.append("file", file);
       await api.post(`/settings/${settingId}/${kind}`, form);
-      refresh();
+      await loadOverview();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteImage(kind: "background" | "thumbnail") {
+    const ok = await confirm({
+      title: kind === "background" ? "Удалить фон?" : "Удалить тамбнейл?",
+      message: "Изображение будет удалено с диска.",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
+    const setUploading = kind === "background" ? setUploadingBg : setUploadingThumb;
+    setUploading(true);
+    try {
+      await api.del(`/settings/${settingId}/${kind}`);
+      await loadOverview();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
     } finally {
       setUploading(false);
     }
   }
 
   async function archiveSetting() {
-    if (!confirm("Отправить сеттинг в архив?")) return;
+    const ok = await confirm({
+      title: "Архивировать сеттинг?",
+      message: "Отправить сеттинг в архив?",
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/settings/${settingId}`);
     navigate("/settings");
   }
@@ -283,12 +499,16 @@ export function SettingDetailPage() {
     // не гоняем флаг через маршрут молча: раскладывать их по хранилищу человек
     // не обязан, а всё остальное содержимое приезжает в любом случае.
     const heavy = file.size > 5 * 1024 * 1024;
-    const withImages =
-      !heavy ||
-      confirm(
-        `Файл весит ${(file.size / 1024 / 1024).toFixed(0)} МБ — похоже, в нём есть изображения.\n\n` +
-          "ОК — поставить вместе с картинками.\nОтмена — только тексты и связи, без картинок."
-      );
+    let withImages = true;
+    if (heavy) {
+      const ok = await confirm({
+        title: "Импорт с изображениями?",
+        message: `Файл весит ${(file.size / 1024 / 1024).toFixed(0)} МБ — похоже, в нём есть изображения.\n\nОК — поставить вместе с картинками.\nОтмена — только тексты и связи, без картинок.`,
+        confirmLabel: "С картинками",
+        cancelLabel: "Без картинок",
+      });
+      withImages = ok;
+    }
     const created = await api.post<Setting>(
       `/settings/import${withImages ? "" : "?images=0"}`,
       data
@@ -331,7 +551,7 @@ export function SettingDetailPage() {
   }));
 
   function openCreateEventModal(year: number, month: number, day: number) {
-    setEventModal({ year, month, day, title: "", description: "", important: false });
+    setEventModal({ year, month, day, title: "", description: "", important: false, precision: "day", status: "happened", year_end: "", month_end: "", day_end: "", cancel_note: "" });
     setCalendarMenu(null);
   }
 
@@ -344,12 +564,24 @@ export function SettingDetailPage() {
       title: ev.title,
       description: ev.description,
       important: !!ev.important,
+      precision: ev.date_precision ?? "day",
+      status: ev.status ?? "happened",
+      year_end: ev.inworld_year_end != null ? String(ev.inworld_year_end) : "",
+      month_end: ev.inworld_month_end != null ? String(ev.inworld_month_end) : "",
+      day_end: ev.inworld_day_end != null ? String(ev.inworld_day_end) : "",
+      cancel_note: ev.cancel_note ?? "",
     });
     setCalendarMenu(null);
   }
 
   async function deleteCalendarEvent(eventId: number) {
-    if (!confirm("Удалить событие из хроники мира? Это удалит его и из всех кампаний, куда оно было перенесено.")) return;
+    const ok = await confirm({
+      title: "Удалить событие?",
+      message: "Это удалит его и из всех кампаний, куда оно было перенесено.",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/settings/calendar-events/${eventId}`);
     setCalendarMenu(null);
     refreshCalendarEvents();
@@ -367,14 +599,22 @@ export function SettingDetailPage() {
 
   async function saveEventModal() {
     if (!eventModal || !eventModal.title.trim()) return;
-    const payload = {
+    const hasPeriod = eventModal.year_end.trim() !== "" || eventModal.month_end.trim() !== "" || eventModal.day_end.trim() !== "";
+    const payload: Record<string, unknown> = {
       title: eventModal.title,
       description: eventModal.description,
       inworld_year: eventModal.year,
       inworld_month: eventModal.month,
       inworld_day: eventModal.day,
       important: eventModal.important,
+      date_precision: eventModal.precision,
+      status: eventModal.status,
+      cancel_note: eventModal.cancel_note,
+      inworld_year_end: hasPeriod && eventModal.year_end.trim() !== "" ? Number(eventModal.year_end) : hasPeriod ? eventModal.year : null,
+      inworld_month_end: hasPeriod && eventModal.month_end.trim() !== "" ? Number(eventModal.month_end) : hasPeriod ? eventModal.month : null,
+      inworld_day_end: hasPeriod && eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : hasPeriod ? eventModal.day : null,
     };
+    if (!hasPeriod) { payload.inworld_year_end = null; payload.inworld_month_end = null; payload.inworld_day_end = null; }
     if (eventModal.id) {
       const original = calendarEvents.find((e) => e.id === eventModal.id);
       await api.put(`/settings/calendar-events/${eventModal.id}`, payload);
@@ -419,46 +659,49 @@ export function SettingDetailPage() {
 
   function EventRow({ ev }: { ev: SettingCalendarEvent }) {
     const expanded = expandedEvents.has(ev.id);
+    const mentionChips = (() => {
+      const out: string[] = [];
+      const seen = new Set<string>();
+      for (const m of (ev.description ?? "").matchAll(/\[\[(\w+):\d+\|([^\]]+)\]\]/g)) {
+        const label = m[2];
+        if (!seen.has(label)) { seen.add(label); out.push(label); if (out.length >= 3) break; }
+      }
+      return out;
+    })();
     return (
-      <div className="stack" style={{ gap: 2 }}>
+      <div className="stack" style={{ gap: "var(--sp-2)" }}>
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <span className="row" style={{ alignItems: "center" }}>
+          <span className="row chronicle-row" style={{ alignItems: "center", flexWrap: "wrap", gap: "var(--sp-2)" }}>
             {ev.description && (
               <button style={{ padding: "2px 6px" }} onClick={() => toggleEventExpanded(ev.id)}>
                 {expanded ? "▾" : "▸"}
               </button>
             )}
-            <span>
-              {formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar?.months ?? [])}
-              {" — "}
-              {/* Название ведёт в профиль события: в хронике живёт только
-                  дата и краткая строка, всё остальное — там. */}
-              <Link to={`/events/${ev.id}`}>
-                <strong>{ev.title}</strong>
-              </Link>
-            </span>
+            <span className="chronicle-date">{calendar ? formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar.months) : `${ev.inworld_year}.${ev.inworld_month}.${ev.inworld_day}`}</span>
+            <span className={`chronicle-status is-${ev.status}`}>{ev.status === "cancelled" ? "Отменено" : ev.status === "upcoming" ? "Предстоит" : "Случилось"}</span>
+            <Link to={`/events/${ev.id}`} className="chronicle-title">{ev.title}</Link>
+            {mentionChips.length > 0 && (
+              <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                {mentionChips.slice(0, 2).map((label) => <span key={label} className="badge tag" style={{ fontSize: "var(--fs-micro)" }}>{label}</span>)}
+                {mentionChips.length > 2 && <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>+{mentionChips.length - 2}</span>}
+              </span>
+            )}
           </span>
-          <div className="row">
-            <label className="row">
+          <div className="row" style={{ gap: "var(--sp-2)" }}>
+            <label className="row" style={{ fontSize: "var(--fs-meta)" }}>
               <input type="checkbox" checked={!!ev.important} onChange={() => toggleEventImportant(ev)} />
               Важно
             </label>
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={!!ev.visible_to_players}
-                onChange={() => toggleEventVisible(ev)}
-              />
+            <label className="row" style={{ fontSize: "var(--fs-meta)" }}>
+              <input type="checkbox" checked={!!ev.visible_to_players} onChange={() => toggleEventVisible(ev)} />
               Видно игрокам
             </label>
             <button onClick={() => openEditEventModal(ev)}>Редактировать</button>
-            <button className="danger" onClick={() => deleteCalendarEvent(ev.id)}>
-              Удалить
-            </button>
+            <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
           </div>
         </div>
         {expanded && ev.description && (
-          <div style={{ whiteSpace: "pre-wrap", marginLeft: 28 }}>
+          <div className="chronicle-row__expanded" style={{ whiteSpace: "pre-wrap" }}>
             <MentionText text={ev.description} />
           </div>
         )}
@@ -466,26 +709,40 @@ export function SettingDetailPage() {
     );
   }
 
+  // C-P0-2: гвард для background — аналог SettingsListPage (safeBackgroundImage + isSafeImageUrl)
+  const safeBg = safeBackgroundImage(
+    setting.background_image_url && isSafeImageUrl(setting.background_image_url)
+      ? setting.background_image_url
+      : null
+  );
+
   return (
     <div className="stack" style={{ position: "relative" }}>
-      {setting.background_image_url && (
-        <div
-          className="campaign-bg-layer"
-          style={{ backgroundImage: `url("${setting.background_image_url}")` }}
-        />
+      {confirmDialog}
+      {alertDialog}
+      {safeBg && (
+        <div className="campaign-bg-layer cover-photo cover-halftone" aria-hidden="true">
+          <div className="cover-art-image" style={{ backgroundImage: safeBg }} />
+        </div>
       )}
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row" style={{ alignItems: "center" }}>
-          <h1>
-            <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
-              {setting.name}
-            </button>
+          <h1 id="section-overview-title" style={{ scrollMarginTop: 16 }}>
+            {tab === "Обзор" ? (
+              setting.name
+            ) : (
+              <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
+                {setting.name}
+              </button>
+            )}
           </h1>
           <EntityTypeChip type="setting" />
+          {(setting as any).archived_at && <span className="badge cancelled">Архивировано</span>}
         </div>
         <div className="entity-header-actions">
           {/* Имя правится в карточке «Описание» на «Обзоре» — вместе с самим
               описанием, одной кнопкой «Сохранить». */}
+          {saving && <span className="muted" aria-live="polite">Сохранение…</span>}
           <button onClick={() => setShowExport(true)}>Экспорт</button>
           <label className="row" style={{ cursor: "pointer" }}>
             Импорт
@@ -515,8 +772,26 @@ export function SettingDetailPage() {
         />
       )}
 
+      {loadError && setting && (
+        <div
+          className="card"
+          style={{
+            borderLeft: "3px solid var(--status-cancelled)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span>Ошибка загрузки: {loadError}</span>
+          <button className="primary" onClick={() => refresh()}>
+            Повторить
+          </button>
+        </div>
+      )}
+
       <div className="tabs">
-        {TABS.filter((t) => t !== "Обзор").map((t) => (
+        {TABS.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
             {t}
           </button>
@@ -524,7 +799,60 @@ export function SettingDetailPage() {
       </div>
 
       {tab === "Обзор" && (
-        <div className="stack">
+        <div className="stack setting-overview">
+          {(() => {
+            const hasDesc = !!setting.description?.trim();
+            const hasGenres = !!(setting.genres && setting.genres.length > 0);
+            const hasCampaigns = campaigns.length > 0;
+            const done = (hasDesc ? 1 : 0) + (hasGenres ? 1 : 0) + (hasCampaigns ? 1 : 0);
+            if (done === 3) return null;
+            return (
+              <div className="card stack" style={{ borderLeft: "3px solid var(--accent)" }}>
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ margin: 0 }}>Начните с этих 3 шагов</h3>
+                  <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                    {done}/3
+                  </span>
+                </div>
+                <span className="muted">Заполните базу, чтобы сеттинг ожил в списках и кампаниях.</span>
+                <div className="stack">
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", opacity: hasDesc ? 0.6 : 1 }}>
+                    <span className="row" style={{ gap: 6 }}>
+                      <span>{hasDesc ? "✓" : "○"}</span> Заполнить описание
+                    </span>
+                    {!hasDesc && (
+                      <button
+                        className="small"
+                        onClick={() => document.getElementById("section-overview-title")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      >
+                        Заполнить →
+                      </button>
+                    )}
+                  </div>
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", opacity: hasGenres ? 0.6 : 1 }}>
+                    <span className="row" style={{ gap: 6 }}>
+                      <span>{hasGenres ? "✓" : "○"}</span> Выбрать жанры {hasGenres ? `· ${setting.genres!.length}` : ""}
+                    </span>
+                    {!hasGenres && (
+                      <button className="small primary" onClick={() => setGenrePickerOpen(true)}>
+                        Выбрать →
+                      </button>
+                    )}
+                  </div>
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", opacity: hasCampaigns ? 0.6 : 1 }}>
+                    <span className="row" style={{ gap: 6 }}>
+                      <span>{hasCampaigns ? "✓" : "○"}</span> Привязать кампанию {hasCampaigns ? `· ${campaigns.length}` : ""}
+                    </span>
+                    {!hasCampaigns && (
+                      <button className="small primary" onClick={openCampaignWizard}>
+                        Создать →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <EditableTextCard
             key={`description-${setting.id}`}
             title="Описание"
@@ -541,7 +869,8 @@ export function SettingDetailPage() {
                 label: "Код",
                 value: setting.code ?? "",
                 placeholder: "wdh",
-                title: 'Короткое сокращение модуля — «wdh», «phb». Подставляется в ссылки внутри текстов вместо полного имени: токен Мастер видит при каждой правке, и короткий читается заметно легче. Его же увидит тот, у кого этого модуля нет.',
+                pattern: "^[a-z0-9-]{2,8}$",
+                title: 'Пример: wdh → Waterdeep: Dragon Heist. Короткое сокращение для ссылок [[wdh:…]]. Латиница, 2–8 символов.',
               },
             ]}
             onSaveFields={(v) => saveName(v.name, v.code)}
@@ -549,10 +878,11 @@ export function SettingDetailPage() {
             <div className="genre-display" style={{ marginTop: 8 }}>
               <div className="genre-display-header">
                 <strong>Жанры</strong>
-                <button className="genre-add-btn" onClick={() => setGenrePickerOpen(true)}>+</button>
+                <button className="genre-add-btn" onClick={() => setGenrePickerOpen(true)} title="Выбрать жанры" aria-label="Выбрать жанры">+</button>
               </div>
+              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>До 3 жанров — помогают фильтровать в списке сеттингов.</span>
               {setting.genres && setting.genres.length > 0 ? (
-                <div className="genre-chips">
+                <div className="genre-chips" style={{ marginTop: 4 }}>
                   {setting.genres.map((g, i) => {
                     const cat = GENRE_CATEGORIES.find((c) => c.name === g.genre);
                     return (
@@ -582,7 +912,11 @@ export function SettingDetailPage() {
 
             {allGroups.length > 0 && (
               <div style={{ marginTop: 8 }}>
-                <strong>Группы сеттингов</strong>
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <strong>Группы сеттингов</strong>
+                  <Link to="/settings" style={{ fontSize: "var(--fs-micro)", textDecoration: "underline" }}>Настроить группы →</Link>
+                </div>
+                <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Папки-группы из списка сеттингов — отметьте, куда входит этот сеттинг.</span>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
                   {allGroups.map((g) => {
                     const isIn = settingGroupIds.includes(g.id);
@@ -623,70 +957,112 @@ export function SettingDetailPage() {
             )}
           </EditableTextCard>
 
-          <CrossLinksWizard
-            ownerKind="setting"
-            ownerId={settingId}
-            help="Ищет имена в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Шаг за шагом, по одному типу цели: у каждого своя строгость. Сцены размечает такой же проход на странице приключения. Ничего не пишет, пока вы не подтвердите."
-          />
-
-          <div className="card stack">
-            <h3>Кампании</h3>
-            <div className="grid-cards">
-              {campaigns.map((c) => (
-                <Link key={c.id} to={`/campaigns/${c.id}`} className="card">
-                  <h3>{c.name}</h3>
-                  <div className="muted">{c.system_name ?? "Система не указана"}</div>
-                </Link>
-              ))}
-              {campaigns.length === 0 && (
-                <p className="muted">Пока нет кампаний с этим сеттингом.</p>
-              )}
+          <div className="card stack" id="section-campaigns">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>Кампании · {campaigns.length}</h3>
+              <button className="primary small" onClick={openCampaignWizard}>
+                + Новая кампания
+              </button>
             </div>
+            {campaigns.length === 0 ? (
+              <EmptyState
+                title="Кампаний нет"
+                hint="Привяжите кампанию к этому сеттингу — и она появится здесь."
+                action={
+                  <button className="primary" onClick={openCampaignWizard}>
+                    + Новая кампания в этом сеттинге
+                  </button>
+                }
+              />
+            ) : (
+              <div className="grid-cards">
+                {campaigns.map((c) => (
+                  <Link key={c.id} to={`/campaigns/${c.id}`} className="card">
+                    <h3>{c.name}</h3>
+                    <div className="muted">{c.system_name ?? "Система не указана"}</div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="card stack">
-            <h3>Персонажи игроков</h3>
-            <div className="grid-cards">
-              {characters.map((c) => (
-                <Link key={c.id} to={`/characters/${c.id}`} className="card">
-                  <h3>{c.character_name}</h3>
-                  <div className="muted">
-                    {c.player_name} · {c.campaign_name}
-                  </div>
-                </Link>
-              ))}
-              {characters.length === 0 && (
-                <p className="muted">Пока нет персонажей в кампаниях этого сеттинга.</p>
-              )}
+          <div className="card stack" id="section-characters">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>Персонажи игроков · {characters.length}</h3>
+              <Link to="/campaigns" className="muted" style={{ fontSize: "var(--fs-meta)", textDecoration: "underline" }}>
+                К кампаниям →
+              </Link>
             </div>
+            {characters.length === 0 ? (
+              <EmptyState
+                title="Персонажей нет"
+                hint="Персонажи появятся, когда в кампаниях этого сеттинга заведут игроков."
+                action={
+                  <Link to="/campaigns" style={{ display: "inline-block", padding: "6px 12px", border: "1px solid var(--line)", background: "var(--bg-elevated)", borderRadius: "var(--card-radius)", textDecoration: "none" }}>
+                    К кампаниям
+                  </Link>
+                }
+              />
+            ) : (
+              <div className="grid-cards">
+                {characters.map((c) => (
+                  <Link key={c.id} to={`/characters/${c.id}`} className="card">
+                    <h3>{c.character_name}</h3>
+                    <div className="muted">
+                      {c.player_name} · {c.campaign_name}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
+          {campaignWizardOpen && (
+            <CampaignWizard
+              systems={wizardSystems}
+              settings={wizardSettings}
+              defaultSettingId={settingId}
+              onClose={() => setCampaignWizardOpen(false)}
+              onCreated={() => {
+                setCampaignWizardOpen(false);
+                refresh();
+              }}
+            />
+          )}
 
-          <div className="card">
+          <div className="card" id="section-related">
             <LinkDropZone entityType="setting" entityId={settingId} title="Связанные сущности" />
           </div>
 
-          <div className="card stack">
+          <div className="card stack" id="section-images">
             <h3>Изображения сеттинга</h3>
             <div className="entity-image-slots">
-              <ImageSlot
+              <EntityImageSlot
                 title="Фон профиля"
-                hint="Подложка на всех страницах сеттинга."
+                hint="Подложка на всех страницах сеттинга. Рекомендуем 1920×1080, до 15 MB, JPG/PNG/GIF/WebP/AVIF."
                 url={setting.background_image_url}
                 wide
                 uploading={uploadingBg}
                 onSelect={bgCrop.onSelect}
+                onDelete={() => deleteImage("background")}
               />
-              <ImageSlot
-                title="Тамбнейл"
-                hint="Карточка в списке сеттингов."
+              <EntityImageSlot
+                title="Тамбнейл — 16×10"
+                hint="Карточка в списке сеттингов. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF."
                 url={setting.thumbnail_image_url}
                 uploading={uploadingThumb}
                 onSelect={thumbCrop.onSelect}
+                onDelete={() => deleteImage("thumbnail")}
               />
             </div>
             {bgCrop.modal}
             {thumbCrop.modal}
           </div>
+
+          <CrossLinksWizard
+            ownerKind="setting"
+            ownerId={settingId}
+            help="Ищет имена в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Шаг за шагом, по одному типу цели: у каждого своя строгость. Сцены размечает такой же проход на странице приключения. Ничего не пишет, пока вы не подтвердите."
+          />
         </div>
       )}
 
@@ -731,20 +1107,10 @@ export function SettingDetailPage() {
           <SettingCycles settingId={settingId} />
 
           <div className="card stack">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <div className="row sort-toggle" style={{ gap: 4 }}>
-                <button
-                  className={chronicleView === "list" ? "active-sort" : ""}
-                  onClick={() => setChronicleView("list")}
-                >
-                  Списком
-                </button>
-                <button
-                  className={chronicleView === "axis" ? "active-sort" : ""}
-                  onClick={() => setChronicleView("axis")}
-                >
-                  Осью
-                </button>
+            <div className="tabs" style={{ justifyContent: "space-between", width: "100%" }}>
+              <div className="row" style={{ gap: 0 }}>
+                <button className={chronicleView === "list" ? "active" : ""} onClick={() => setChronicleView("list")}>Список</button>
+                <button className={chronicleView === "axis" ? "active" : ""} onClick={() => setChronicleView("axis")}>Ось</button>
               </div>
               <div className="row">
                 {/* Создание события через общий визард; правка существующего
@@ -778,9 +1144,15 @@ export function SettingDetailPage() {
               </div>
             )}
 
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }} hidden={chronicleView === "axis"}>
+              <input placeholder="Поиск по хроноике: название, описание" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 220px" }} />
+              {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
+              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>{filteredCalendarEvents.length} из {calendarEvents.length}</span>
+            </div>
+
             {chronicleView === "axis" && (
               <Timeline
-                events={calendarEvents.map((e) => ({
+                events={filteredCalendarEvents.map((e) => ({
                   id: e.id,
                   title: e.title,
                   year: e.inworld_year,
@@ -807,9 +1179,9 @@ export function SettingDetailPage() {
               />
             )}
 
-            <div className="stack" hidden={chronicleView === "axis"}>
-              {buildEraBuckets(eras, calendarEvents).map((bucket) => (
-                <details key={bucket.era?.id ?? "no-era"} className="card" open>
+            <div className="stack chronicle-stack" hidden={chronicleView === "axis"}>
+              {eraBuckets.map((bucket) => (
+                <details key={bucket.era?.id ?? "no-era"} className="card">
                   <summary className="row" style={{ justifyContent: "space-between" }}>
                     <span>
                       <strong>{bucket.era ? bucket.era.name : "Без эпохи"}</strong>{" "}
@@ -942,6 +1314,41 @@ export function SettingDetailPage() {
               />
               Важно
             </label>
+            <div className="row" style={{ flexWrap: "wrap" }}>
+              <label className="row">
+                Точность
+                <select value={eventModal.precision} onChange={(e) => setEventModal({ ...eventModal, precision: e.target.value as import("../types").DatePrecision })}>
+                  <option value="day">День</option>
+                  <option value="month">Месяц</option>
+                  <option value="year">Год</option>
+                  <option value="decade">Десятилетие</option>
+                  <option value="century">Век</option>
+                </select>
+              </label>
+              <label className="row">
+                Статус
+                <select value={eventModal.status} onChange={(e) => setEventModal({ ...eventModal, status: e.target.value as import("../types").EventStatus })}>
+                  <option value="happened">Случилось</option>
+                  <option value="upcoming">Предстоит</option>
+                  <option value="cancelled">Отменено</option>
+                </select>
+              </label>
+            </div>
+            {eventModal.status === "cancelled" && (
+              <label className="stack" style={{ gap: 4 }}>
+                Чем отменилось
+                <input placeholder="Что игроки сделали, чтобы этого не произошло" value={eventModal.cancel_note} onChange={(e) => setEventModal({ ...eventModal, cancel_note: e.target.value })} />
+              </label>
+            )}
+            <details className="card" style={{ padding: 10 }}>
+              <summary>Период (если событие растянуто)</summary>
+              <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>
+                <label className="row">Год до <input type="number" style={{ width: 90 }} placeholder="—" value={eventModal.year_end} onChange={(e) => setEventModal({ ...eventModal, year_end: e.target.value })} /></label>
+                <label className="row">Мес. до <input type="number" style={{ width: 70 }} placeholder="—" value={eventModal.month_end} onChange={(e) => setEventModal({ ...eventModal, month_end: e.target.value })} /></label>
+                <label className="row">День до <input type="number" style={{ width: 70 }} placeholder="—" value={eventModal.day_end} onChange={(e) => setEventModal({ ...eventModal, day_end: e.target.value })} /></label>
+              </div>
+              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Оставьте пустым — событие точечное. Заполните — период («осада март–май»).</span>
+            </details>
             <div className="row">
               <button className="primary" onClick={saveEventModal}>
                 Сохранить
@@ -950,7 +1357,7 @@ export function SettingDetailPage() {
             </div>
           </div>
         </Modal>
-      )}
+       )}
 
       {tab === "Заметки" && (
         <SettingEntryList
@@ -960,53 +1367,6 @@ export function SettingDetailPage() {
           emptyLabel="Заметок пока нет."
         />
       )}
-    </div>
-  );
-}
-
-// Одна ячейка карточки «Изображения сеттинга»: текущая картинка (или пустая
-// рамка, если её нет) плюс кнопка замены. Сама рамка и есть кнопка — клик по
-// превью открывает выбор файла, как у аватарок существ.
-function ImageSlot({
-  title,
-  hint,
-  url,
-  wide,
-  uploading,
-  onSelect,
-}: {
-  title: string;
-  hint: string;
-  url: string | null;
-  wide?: boolean;
-  uploading: boolean;
-  onSelect: (file: File | null) => void;
-}) {
-  return (
-    <div className="stack entity-image-slot">
-      <strong>{title}</strong>
-      <label
-        className={`entity-image-frame${wide ? " wide" : ""}${uploading ? " uploading" : ""}`}
-        title={IMAGE_HINT}
-      >
-        {url ? (
-          <img src={url} alt="" />
-        ) : (
-          // Оверлей «Загрузить» виден только по наведению, а на тач-экране
-          // наведения нет — поэтому пустая рамка сама говорит, что делать.
-          <span className="muted entity-image-empty">Нажмите, чтобы загрузить</span>
-        )}
-        <span className="avatar-upload-hint">
-          {uploading ? "Загрузка…" : url ? "Заменить" : "Загрузить"}
-        </span>
-        <input
-          type="file"
-          accept={IMAGE_ACCEPT}
-          style={{ display: "none" }}
-          onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
-        />
-      </label>
-      <span className="muted image-hint">{hint}</span>
     </div>
   );
 }
@@ -1065,7 +1425,7 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
 
 function GeographyTab({ settingId }: { settingId: number }) {
   return (
-    <div className="card stack">
+    <div className="card stack geography-tree">
       <LocationTree settingId={settingId} />
     </div>
   );
@@ -1077,20 +1437,51 @@ function GeographyTab({ settingId }: { settingId: number }) {
 const POPULATION_SECTIONS = ["Личности", "Бестиарий", "Сообщества"] as const;
 
 function PopulationTab({ settingId }: { settingId: number }) {
-  const [section, setSection] = useState<(typeof POPULATION_SECTIONS)[number]>("Личности");
+  const [section, setSection] = useState<(typeof POPULATION_SECTIONS)[number]>(() => {
+    const p = new URLSearchParams(window.location.search).get("population");
+    return (POPULATION_SECTIONS as readonly string[]).includes(p ?? "") ? (p as typeof POPULATION_SECTIONS[number]) : "Личности";
+  });
+  const [counts, setCounts] = useState<{ beings: number | null; bestiary: number | null; communities: number | null }>({ beings: null, bestiary: null, communities: null });
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("population", section);
+    window.history.replaceState(null, "", url.toString());
+  }, [section]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const opts = { signal: controller.signal } as const;
+    // Батч счётчиков — лёгкие COUNT-запросы, без общей транзакции
+    Promise.all([
+      api.get<SettingBeing[]>(`/setting-beings?setting_id=${settingId}&exclude_category=bestiary`, opts).then(r => r.length).catch(() => null),
+      api.get<SettingBeing[]>(`/setting-beings?setting_id=${settingId}&category=bestiary`, opts).then(r => r.length).catch(() => null),
+      api.get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}&parent_id=null`, opts).then(r => r.length).catch(() => null),
+    ]).then(([b, best, c]) => {
+      if (controller.signal.aborted) return;
+      setCounts({ beings: b, bestiary: best, communities: c });
+    });
+    return () => controller.abort();
+  }, [settingId]);
+
+  const label = (s: typeof POPULATION_SECTIONS[number]) => {
+    if (s === "Личности" && counts.beings != null) return `Личности · ${counts.beings}`;
+    if (s === "Бестиарий" && counts.bestiary != null) return `Бестиарий · ${counts.bestiary}`;
+    if (s === "Сообщества" && counts.communities != null) return `Сообщества · ${counts.communities}`;
+    return s;
+  };
 
   return (
-    <div className="card stack">
-      <div className="tabs">
+    <div className="card stack population-tab" id="population">
+      <div className="tabs" role="tablist">
         {POPULATION_SECTIONS.map((s) => (
-          <button key={s} className={section === s ? "active" : ""} onClick={() => setSection(s)}>
-            {s}
+          <button key={s} role="tab" aria-selected={section === s} className={section === s ? "active" : ""} onClick={() => setSection(s)}>
+            {label(s)}
           </button>
         ))}
       </div>
-      {section === "Личности" && <BeingsSection settingId={settingId} />}
-      {section === "Бестиарий" && <BestiarySection settingId={settingId} />}
-      {section === "Сообщества" && <CommunitiesSection settingId={settingId} />}
+      {section === "Личности" && <div id="population-beings"><BeingsSection settingId={settingId} /></div>}
+      {section === "Бестиарий" && <div id="population-bestiary"><BestiarySection settingId={settingId} /></div>}
+      {section === "Сообщества" && <div id="population-communities"><CommunitiesSection settingId={settingId} /></div>}
     </div>
   );
 }
@@ -1098,63 +1489,195 @@ function PopulationTab({ settingId }: { settingId: number }) {
 function BeingsSection({ settingId }: { settingId: number }) {
   const [category, setCategory] = useState<BeingCategory | "all">("all");
   const [locationFilter, setLocationFilter] = useState("");
+  const [communityFilter, setCommunityFilter] = useState("");
   const [creating, setCreating] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [sort, setSort] = useState<"name" | "recent" | "category" | "community">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [beings, setBeings] = useState<SettingBeing[]>([]);
   const [locations, setLocations] = useState<SettingLocation[]>([]);
+  const [allCommunities, setAllCommunities] = useState<SettingCommunity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
+  const [presetName, setPresetName] = useState("");
+  const [presets, setPresets] = useState<{ id: string; name: string; filters: { category: string; locationFilter: string; communityFilter: string; query: string; sort: string; sortDir: string } }[]>(() => {
+    try { return JSON.parse(localStorage.getItem(`population-presets-${settingId}`) || "[]"); } catch { return []; }
+  });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkFaction, setBulkFaction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
-  function refresh() {
+  // debounce 250ms — шлём q не на каждый символ
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function handleSort(next: typeof sort) {
+    if (sort === next) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSort(next); setSortDir("asc"); }
+  }
+
+  function refresh(signal?: AbortSignal) {
+    setLoading(true);
+    setLoadError(null);
     const params = new URLSearchParams({ setting_id: String(settingId) });
     if (category !== "all") params.set("category", category);
     else params.set("exclude_category", "bestiary");
     if (locationFilter) params.set("location_id", locationFilter);
-    if (query.trim()) params.set("q", query.trim());
-    api.get<SettingBeing[]>(`/setting-beings?${params.toString()}`).then(setBeings);
+    if (communityFilter) params.set("community_id", communityFilter);
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    if (sort !== "name" && sort !== "community") params.set("sort", sort);
+    if (sortDir === "desc") params.set("dir", "desc");
+    const opts = signal ? { signal } : undefined;
+    api
+      .get<SettingBeing[]>(`/setting-beings?${params.toString()}`, opts)
+      .then((rows) => {
+        setBeings(rows);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setLoadError(String(e instanceof Error ? e.message : e));
+        setLoading(false);
+      });
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [settingId, category, locationFilter, query]);
+  useEffect(() => {
+    const controller = new AbortController();
+    refresh(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingId, category, locationFilter, communityFilter, debouncedQuery, sort, sortDir]);
 
   useEffect(() => {
-    api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`).then(setLocations);
+    const controller = new AbortController();
+    api
+      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
+      .then(setLocations)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+      });
+    return () => controller.abort();
   }, [settingId]);
 
-  async function duplicateBeing(being: SettingBeing) {
-    await api.post("/setting-beings", {
-      setting_id: settingId,
-      name: `${being.name}_`,
-      category: being.category,
-      location_id: being.location_id,
-      statblock_short: being.statblock_short,
-      statblock_full: being.statblock_full,
-      history: being.history,
-      behavior: being.behavior,
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}`, { signal: controller.signal })
+      .then(setAllCommunities)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+      });
+    return () => controller.abort();
+  }, [settingId]);
+
+  useEffect(() => {
+    localStorage.setItem(`population-presets-${settingId}`, JSON.stringify(presets));
+  }, [presets, settingId]);
+
+  function savePreset() {
+    if (!presetName.trim()) return;
+    const newPreset = { id: Date.now().toString(), name: presetName.trim(), filters: { category, locationFilter, communityFilter, query, sort, sortDir } };
+    setPresets((prev) => [...prev, newPreset]);
+    setPresetName("");
+  }
+  function applyPreset(p: typeof presets[0]) {
+    setCategory(p.filters.category as BeingCategory | "all");
+    setLocationFilter(p.filters.locationFilter);
+    setCommunityFilter(p.filters.communityFilter);
+    setQuery(p.filters.query);
+    setSort(p.filters.sort as typeof sort);
+    setSortDir(p.filters.sortDir as typeof sortDir);
+  }
+  function deletePreset(id: string) {
+    setPresets((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-    refresh();
+  }
+  async function bulkAddToFaction() {
+    if (!bulkFaction || selectedIds.size === 0) return;
+    setBulkSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map((id) => api.post(`/setting-communities/${bulkFaction}/members`, { being_id: id })));
+      setSelectedIds(new Set());
+      refresh();
+    } catch (e) {
+      setLoadError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setBulkSaving(false);
+    }
+  }
+
+  async function duplicateBeing(being: SettingBeing) {
+    try {
+      await api.post("/setting-beings", {
+        setting_id: settingId,
+        name: `Копия — ${being.name}`,
+        category: being.category,
+        location_id: being.location_id,
+        statblock_short: being.statblock_short,
+        statblock_full: being.statblock_full,
+        history: being.history,
+        behavior: being.behavior,
+        description: being.description,
+        tags: being.tags,
+        // Копируем связи через отдельный шаг? Пока базовые поля — остальное дотянет профиль
+      });
+      refresh();
+    } catch (e) {
+      setLoadError(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function deleteBeing(beingId: number) {
-    if (!confirm("Удалить это существо?")) return;
+    const ok = await confirm({
+      title: "Архивировать личность?",
+      message: "Будет скрыта из списков, связи останутся. Можно восстановить в архиве.",
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/setting-beings/${beingId}`);
     refresh();
   }
 
   return (
-    <div className="stack">
-      <div className="tabs">
+    <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+      {confirmDialog}
+      <div className="sort-toggle" role="tablist" aria-label="Категории личностей">
         {NAMED_BEING_CATEGORIES.map((c) => (
           <button
             key={c.key}
-            className={category === c.key ? "active" : ""}
+            role="tab"
+            aria-selected={category === c.key}
+            className={category === c.key ? "active-sort" : ""}
             onClick={() => setCategory(c.key)}
           >
             {c.label}
           </button>
         ))}
       </div>
+      <div className="row sort-toggle" role="tablist" aria-label="Сортировка">
+        <span className="muted" style={{ fontSize: "11px", alignSelf: "center" }}>Сортировка:</span>
+        <button className={sort === "name" ? "active-sort" : ""} onClick={() => handleSort("name")}>А-Я{sort === "name" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+        <button className={sort === "recent" ? "active-sort" : ""} onClick={() => handleSort("recent")}>Недавние{sort === "recent" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+        <button className={sort === "category" ? "active-sort" : ""} onClick={() => handleSort("category")}>По типу{sort === "category" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+        <button className={sort === "community" ? "active-sort" : ""} onClick={() => handleSort("community")}>По фракциям{sort === "community" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+      </div>
       <div className="row">
         <button className="primary" onClick={() => setCreating(true)}>
-          Создать
+          Создать личность
         </button>
       </div>
       {creating && (
@@ -1162,34 +1685,128 @@ function BeingsSection({ settingId }: { settingId: number }) {
           initialType="being"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={refresh}
+          onCreated={() => refresh()}
         />
       )}
-      <div className="row">
+      <div className="row" style={{ gap: 8 }}>
         <input
           placeholder="Поиск: имя, связанное существо или сообщество…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          aria-label="Поиск личностей"
+          style={{ flex: 1 }}
         />
         {/* Фильтр спрятан, поэтому кнопка сама говорит, что он включён —
             иначе непонятно, почему список короче, чем ожидаешь. */}
         <button
-          className={`toggle-button${filtersOpen || locationFilter ? " active" : ""}`}
+          className={`toggle-button${filtersOpen || locationFilter || communityFilter ? " active" : ""}`}
           onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
         >
-          Фильтры{locationFilter ? " (1)" : ""}
+          Фильтры{(locationFilter || communityFilter) ? ` (${(locationFilter ? 1 : 0) + (communityFilter ? 1 : 0)})` : ""}
         </button>
       </div>
       {filtersOpen && (
-        <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+        <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center", padding: "8px 0" }}>
+          <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+          <div className="row" style={{ gap: 8, alignItems: "center", flex: "1 1 220px" }}>
+            <label className="muted" style={{ fontSize: "11px", minWidth: 60 }}>Фракция:</label>
+            <select value={communityFilter} onChange={(e) => setCommunityFilter(e.target.value)} style={{ flex: 1, minWidth: 140 }}>
+              <option value="">Все фракции</option>
+              <option value="none">Без фракции</option>
+              {allCommunities.map((c) => (
+                <option key={c.id} value={String(c.id)}>{c.name}</option>
+              ))}
+            </select>
+            {communityFilter && <button onClick={() => setCommunityFilter("")}>Сбросить</button>}
+          </div>
+        </div>
       )}
-      {query.trim() && (
+      {locationFilter && (
+        <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          Фильтр по локации активен — показаны вложенные тоже
+        </span>
+      )}
+      {communityFilter && (
+        <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          Фильтр по фракции: {communityFilter === "none" ? "без фракции" : allCommunities.find((c) => String(c.id) === communityFilter)?.name ?? communityFilter}
+        </span>
+      )}
+      {debouncedQuery.trim() && (
         <span className="muted">
-          Показаны существа с этим именем, а также связанные с ним через отношения,
+          Показаны существа с этим именем, описанием, тегами, а также связанные с ним через отношения,
           сообщества/народы/культуры или общую локацию.
         </span>
       )}
-      <BeingEntityRowList beings={beings} onDelete={deleteBeing} onDuplicate={duplicateBeing} asLinks />
+      <div className="stack" style={{ gap: 6, paddingTop: 8, borderTop: "1px solid var(--line)" }} title="Пресет сохраняет: категория, локация, фракция, поиск, сортировка. Клик по чипу — применить.">
+        <span className="muted" style={{ fontSize: "11px", lineHeight: 1.3 }} title="Наведите на чип — покажет что внутри, на × — удалить">
+          💾 Пресет — это сохранённый вид списка (фильтры + поиск + сортировка). Сохраните текущий набор, чтобы вернуться к нему одним кликом.
+        </span>
+        {presets.length > 0 && (
+          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="muted" style={{ fontSize: "11px" }}>Пресеты:</span>
+            {presets.map((p) => (
+              <span key={p.id} className="badge tag" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }} title={`Применить: ${p.filters.category} · ${p.filters.sort} ${p.filters.sortDir} · ${p.filters.query || "без поиска"}`}>
+                <span onClick={() => applyPreset(p)} style={{ cursor: "pointer" }}>{p.name}</span>
+                <button type="button" className="tag-chip-remove" onClick={() => deletePreset(p.id)} title="Удалить пресет">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          <input placeholder="Имя пресета — напр. Вотердип · Орден" value={presetName} onChange={(e) => setPresetName(e.target.value)} style={{ width: 220, fontSize: "12px" }} title="Напишите имя и нажмите Сохранить — текущий набор фильтров запомнится" />
+          <button disabled={!presetName.trim()} onClick={savePreset} style={{ fontSize: "12px" }} title="Сохранит категорию, локацию, фракцию, поиск и сортировку">Сохранить вид</button>
+        </div>
+      </div>
+      {selectedIds.size > 0 && (
+        <div className="row" style={{ gap: 8, alignItems: "center", padding: "8px", background: "var(--bg-elevated)", border: "1px solid var(--line)", flexWrap: "wrap" }}>
+          <span className="muted" style={{ fontSize: "11px" }}>Выбрано {selectedIds.size}</span>
+          <select value={bulkFaction} onChange={(e) => setBulkFaction(e.target.value)} style={{ flex: "1 1 200px", minWidth: 160 }}>
+            <option value="">Выберите фракцию</option>
+            {allCommunities.map((c) => (
+              <option key={c.id} value={String(c.id)}>{c.name}</option>
+            ))}
+          </select>
+          <button className="primary" disabled={!bulkFaction || bulkSaving} onClick={bulkAddToFaction}>{bulkSaving ? "Добавляю…" : "Добавить в фракцию"}</button>
+          <button onClick={() => setSelectedIds(new Set())}>Сбросить</button>
+          <button onClick={() => { const all = new Set(beings.map((b) => b.id)); setSelectedIds(all); }}>Выбрать всех</button>
+        </div>
+      )}
+      {loadError && (
+        <div
+          className="card"
+          style={{
+            borderLeft: "3px solid var(--status-cancelled)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span>Не удалось загрузить личностей: {loadError}</span>
+          <button className="primary" onClick={() => refresh()}>
+            Повторить
+          </button>
+        </div>
+      )}
+      {loading && beings.length === 0 && !loadError ? (
+        <div className="stack" aria-busy="true" aria-label="Загрузка личностей">
+          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
+          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: "120ms" }} />
+        </div>
+      ) : beings.length === 0 && !loading && !loadError ? (
+        <EmptyState
+          title="Личностей пока нет"
+          hint="Ключевые фигуры, влиятельные и примечательные — начните с первой."
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              Создать личность
+            </button>
+          }
+        />
+      ) : (
+        <SettingBeingTileGrid beings={beings} grouping={sort === "category" ? "category" : sort === "community" ? "community" : "alpha"} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+      )}
     </div>
   );
 }
@@ -1203,52 +1820,107 @@ function BeingsSection({ settingId }: { settingId: number }) {
 function BestiarySection({ settingId }: { settingId: number }) {
   const [beings, setBeings] = useState<SettingBeing[]>([]);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [creating, setCreating] = useState(false);
   const [locationFilter, setLocationFilter] = useState("");
+  const [sort, setSort] = useState<"name" | "recent">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [locations, setLocations] = useState<SettingLocation[]>([]);
-
-  function refresh() {
-    const params = new URLSearchParams({ setting_id: String(settingId), category: "bestiary" });
-    if (query.trim()) params.set("q", query.trim());
-    if (locationFilter) params.set("location_id", locationFilter);
-    api.get<SettingBeing[]>(`/setting-beings?${params.toString()}`).then(setBeings);
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [settingId, query, locationFilter]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
 
   useEffect(() => {
-    api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`).then(setLocations);
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function handleSort(next: typeof sort) {
+    if (sort === next) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSort(next); setSortDir("asc"); }
+  }
+
+  function refresh(signal?: AbortSignal) {
+    setLoading(true);
+    setLoadError(null);
+    const params = new URLSearchParams({ setting_id: String(settingId), category: "bestiary" });
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    if (locationFilter) params.set("location_id", locationFilter);
+    if (sort !== "name") params.set("sort", sort);
+    if (sortDir === "desc") params.set("dir", "desc");
+    const opts = signal ? { signal } : undefined;
+    api
+      .get<SettingBeing[]>(`/setting-beings?${params.toString()}`, opts)
+      .then((rows) => {
+        setBeings(rows);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setLoadError(String(e instanceof Error ? e.message : e));
+        setLoading(false);
+      });
+  }
+  useEffect(() => {
+    const controller = new AbortController();
+    refresh(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingId, debouncedQuery, locationFilter, sort, sortDir]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
+      .then(setLocations)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+      });
+    return () => controller.abort();
   }, [settingId]);
 
   async function duplicateBeing(being: SettingBeing) {
-    await api.post("/setting-beings", {
-      setting_id: settingId,
-      name: `${being.name}_`,
-      category: "bestiary",
-      statblock_short: being.statblock_short,
-      statblock_full: being.statblock_full,
-      history: being.history,
-      behavior: being.behavior,
-    });
-    refresh();
+    try {
+      await api.post("/setting-beings", {
+        setting_id: settingId,
+        name: `Копия — ${being.name}`,
+        category: "bestiary",
+        statblock_short: being.statblock_short,
+        statblock_full: being.statblock_full,
+        history: being.history,
+        behavior: being.behavior,
+        description: being.description,
+        tags: being.tags,
+      });
+      refresh();
+    } catch (e) {
+      setLoadError(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function deleteBeing(beingId: number) {
-    if (!confirm("Удалить эту запись бестиария?")) return;
+    const ok = await confirm({
+      title: "Архивировать запись бестиария?",
+      message: "Будет скрыта из списков. Можно восстановить в архиве.",
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/setting-beings/${beingId}`);
     refresh();
   }
 
   return (
-    <div className="stack">
-      <p className="muted">
+    <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+      {confirmDialog}
+      <p className="muted" style={{ maxWidth: "none" }}>
         Бестиарий сеттинга — виды и типы существ без имени, населяющие этот мир. Именные
         персонажи живут в разделе «Личности». Запись бестиария можно связать с монстрами из
         компендиумов систем на её собственной странице.
       </p>
       <div className="row">
         <button className="primary" onClick={() => setCreating(true)}>
-          Создать
+          Создать запись бестиария
         </button>
       </div>
       {creating && (
@@ -1256,12 +1928,57 @@ function BestiarySection({ settingId }: { settingId: number }) {
           initialType="bestiary"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={refresh}
+          onCreated={() => refresh()}
         />
       )}
-      <input placeholder="Поиск по бестиарию…" value={query} onChange={(e) => setQuery(e.target.value)} />
-      <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
-      <BeingEntityRowList beings={beings} onDelete={deleteBeing} onDuplicate={duplicateBeing} asLinks />
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="row sort-toggle" style={{ gap: 4 }}>
+          <button className={sort === "name" ? "active-sort" : ""} onClick={() => handleSort("name")}>А-Я{sort === "name" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+          <button className={sort === "recent" ? "active-sort" : ""} onClick={() => handleSort("recent")}>Недавние{sort === "recent" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+        </div>
+        <input
+          placeholder="Поиск по бестиарию…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Поиск по бестиарию"
+          style={{ flex: 1 }}
+        />
+        <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+      </div>
+      {loadError && (
+        <div
+          className="card"
+          style={{
+            borderLeft: "3px solid var(--status-cancelled)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span>Не удалось загрузить бестиарий: {loadError}</span>
+          <button className="primary" onClick={() => refresh()}>
+            Повторить
+          </button>
+        </div>
+      )}
+      {loading && beings.length === 0 && !loadError ? (
+        <div className="stack" aria-busy="true" aria-label="Загрузка бестиария">
+          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
+        </div>
+      ) : beings.length === 0 && !loading && !loadError ? (
+        <EmptyState
+          title="Бестиарий пока пуст"
+          hint="Виды без имени — гоблины, утопленники, духи леса. Добавьте первый."
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              Создать запись бестиария
+            </button>
+          }
+        />
+      ) : (
+        <SettingBeingTileGrid beings={beings} grouping="alpha" searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} />
+      )}
     </div>
   );
 }
@@ -1271,34 +1988,84 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
   const [communities, setCommunities] = useState<SettingCommunity[]>([]);
   const [creating, setCreating] = useState(false);
   const [locationFilter, setLocationFilter] = useState("");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [sort, setSort] = useState<"name" | "recent">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const thumbnailStyles = loadThumbnailStyles();
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
 
-  function refresh() {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function handleSort(next: typeof sort) {
+    if (sort === next) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSort(next); setSortDir("asc"); }
+  }
+
+  function refresh(signal?: AbortSignal) {
+    setLoading(true);
+    setLoadError(null);
     const params = new URLSearchParams({ setting_id: String(settingId) });
     // Без фильтра список остаётся витриной верхнего уровня (вложенные живут на
     // странице родителя). С фильтром это бессмысленно: вложенное сообщество
     // без локации иначе просто не покажется — поэтому ищем по всем уровням.
     if (locationFilter) params.set("location_id", locationFilter);
-    else params.set("parent_id", "null");
-    api.get<SettingCommunity[]>(`/setting-communities?${params.toString()}`).then(setCommunities);
+    else if (!debouncedQuery.trim()) params.set("parent_id", "null");
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    if (sort !== "name") params.set("sort", sort);
+    if (sortDir === "desc") params.set("dir", "desc");
+    const opts = signal ? { signal } : undefined;
+    api
+      .get<SettingCommunity[]>(`/setting-communities?${params.toString()}`, opts)
+      .then((rows) => {
+        setCommunities(rows);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setLoadError(String(e instanceof Error ? e.message : e));
+        setLoading(false);
+      });
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [settingId, locationFilter]);
+  useEffect(() => {
+    const controller = new AbortController();
+    refresh(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingId, locationFilter, debouncedQuery, sort, sortDir]);
 
   useEffect(() => {
-    api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`).then(setLocations);
+    const controller = new AbortController();
+    api
+      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
+      .then(setLocations)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+      });
+    return () => controller.abort();
   }, [settingId]);
 
   async function deleteCommunity(id: number) {
-    if (!confirm("Удалить это сообщество?")) return;
+    const ok = await confirm({
+      title: "Архивировать сообщество?",
+      message: "Будет скрыто из списков, личности останутся. Можно восстановить в архиве.",
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/setting-communities/${id}`);
     refresh();
   }
 
   return (
-    <div className="stack">
-      <p className="muted">
+    <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+      {confirmDialog}
+      <p className="muted" style={{ maxWidth: "none" }}>
         Сообщества — любые объединения (народы, культуры, фракции, гильдии), к которым можно
         отнести личностей из раздела «Личности». Здесь показаны верхнеуровневые — вложенные
         (например, отдельный город внутри королевства) создаются на странице родительского
@@ -1306,7 +2073,7 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
       </p>
       <div className="row">
         <button className="primary" onClick={() => setCreating(true)}>
-          Создать
+          Создать сообщество
         </button>
       </div>
       {creating && (
@@ -1314,61 +2081,63 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
           initialType="community"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={refresh}
+          onCreated={() => refresh()}
         />
       )}
-      <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
-      {locationFilter && (
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="row sort-toggle" style={{ gap: 4 }}>
+          <button className={sort === "name" ? "active-sort" : ""} onClick={() => handleSort("name")}>А-Я{sort === "name" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+          <button className={sort === "recent" ? "active-sort" : ""} onClick={() => handleSort("recent")}>Недавние{sort === "recent" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+        </div>
+        <input
+          placeholder="Поиск по сообществам…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Поиск по сообществам"
+          style={{ flex: 1, minWidth: 160 }}
+        />
+        <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+      </div>
+      {locationFilter && !debouncedQuery.trim() && (
         <span className="muted">
           С фильтром показаны и вложенные сообщества, не только верхнеуровневые.
         </span>
       )}
-      <div className="entity-row-list">
-        {communities.map((c) => {
-          const url = c.thumbnail_image_url;
-          const mode = thumbnailStyles.communities;
-          const isBg = mode === "background" && !!url;
-          return (
-            <Link
-              key={c.id}
-              to={`/communities/${c.id}`}
-              className={`entity-row${isBg ? " entity-row-bg" : ""}`}
-              style={isBg ? { backgroundImage: `url("${url}")` } : undefined}
-            >
-              {mode === "banner" && url && <img src={url} alt="" className="entity-row-thumb" />}
-              <span className="entity-row-name">{c.name}</span>
-              <span className="entity-row-tags">
-                <TagChips tags={c.tags} />
-              </span>
-              <span className="entity-row-actions">
-                {/* Не <a> внутри <a> — строка целиком уже ссылка. */}
-                <button
-                  type="button"
-                  className="entity-row-action-link"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    navigate(`/communities/${c.id}`);
-                  }}
-                >
-                  Изменить
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    deleteCommunity(c.id);
-                  }}
-                >
-                  Удалить
-                </button>
-              </span>
-            </Link>
-          );
-        })}
-        {communities.length === 0 && <p className="muted">Сообществ пока нет.</p>}
-      </div>
+      {debouncedQuery.trim() && <span className="muted">Поиск по имени — {communities.length} найдено</span>}
+      {loadError && (
+        <div
+          className="card"
+          style={{
+            borderLeft: "3px solid var(--status-cancelled)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span>Не удалось загрузить сообщества: {loadError}</span>
+          <button className="primary" onClick={() => refresh()}>
+            Повторить
+          </button>
+        </div>
+      )}
+      {loading && communities.length === 0 && !loadError ? (
+        <div className="stack" aria-busy="true" aria-label="Загрузка сообществ">
+          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
+        </div>
+      ) : communities.length === 0 && !loading && !loadError ? (
+        <EmptyState
+          title="Сообществ пока нет"
+          hint="Народы, культуры, фракции, гильдии — начните с первого объединения."
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              Создать сообщество
+            </button>
+          }
+        />
+      ) : (
+        <SettingCommunityTileGrid communities={communities} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} />
+      )}
     </div>
   );
 }
@@ -1377,6 +2146,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
   const navigate = useNavigate();
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [creating, setCreating] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
 
   function refresh() {
     api.get<Artifact[]>(`/artifacts?setting_id=${settingId}`).then(setArtifacts);
@@ -1384,13 +2154,15 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
   useEffect(refresh, [settingId]);
 
   async function deleteArtifact(id: number) {
-    if (!confirm("Отправить артефакт в архив?")) return;
+    const ok = await confirm({ message: "Отправить артефакт в архив?", confirmLabel: "Архивировать", danger: true });
+    if (!ok) return;
     await api.del(`/artifacts/${id}`);
     refresh();
   }
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="row">
         <button className="primary" onClick={() => setCreating(true)}>
           Создать

@@ -13,6 +13,7 @@ export interface EntityField {
   required?: boolean;
   placeholder?: string;
   title?: string;
+  pattern?: string;
   // Если задано — select вместо однострочного поля.
   options?: { value: string; label: string }[];
   // Если задано — обычное поле с подсказками: значение остаётся свободным
@@ -59,6 +60,7 @@ export function EntityFieldInputs({
               <input
                 value={values[f.key] ?? ""}
                 placeholder={f.placeholder}
+                pattern={f.pattern}
                 list={f.suggestions?.length ? `field-suggestions-${f.key}` : undefined}
                 onChange={(e) => onChange(f.key, e.target.value)}
               />
@@ -71,6 +73,7 @@ export function EntityFieldInputs({
               ) : null}
             </>
           )}
+          {f.title && <span className="muted" style={{ fontSize: "var(--fs-micro)", lineHeight: "1.3" }}>{f.title}</span>}
         </label>
       ))}
     </>

@@ -322,10 +322,180 @@ h4 { font-size: var(--fs-body); }
   padding: 14px;
   clip-path: none;
 }
+/* Исключение Обзора сеттинга — плитки Кампаний/Персонажей и дерево Географии.
+   Без него generic .card .card снимает рамку (D-P0-1 География, D-P0-1 Обзор). */
+.setting-overview .card .card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  background-image: var(--card-body-texture);
+  padding: 14px;
+  clip-path: none;
+}
+.geography-tree .card .card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  background-image: var(--card-body-texture);
+  padding: 14px;
+  clip-path: none;
+}
 /* Ритм Обзора: внешний gap щедрый (§1.9), внутренние compact. Перебивает
    глобальный .stack{10px} только на первом уровне Обзора. */
 .campaign-overview {
   gap: var(--sp-5);
+}
+.setting-overview {
+  gap: var(--sp-5);
+}
+.geography-tree {
+  gap: var(--sp-5);
+}
+/* Дети узла географии — визуальный рейл иерархии (U-P0-4, D-P1-4). */
+.geography-children {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  margin-left: 4px;
+}
+/* Шапка узла географии — плашка-инверсия §1.4 (D-P0-3).
+   Тёмная полоса внутри светлой карточки, а не жирный текст на бумаге. */
+.geography-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -14px -14px 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+.geography-node-header strong {
+  color: var(--on-surface);
+  font-weight: 700;
+}
+.geography-node-header .muted {
+  color: var(--on-surface-muted);
+}
+.geography-node-header .geography-kind {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+}
+/* Нейтрализуем generic details.card summary:hover для инверсии — иначе
+   hover красит плашку в sb-paper микс, ломая контраст. */
+.geography-tree details.card > summary.geography-node-header:hover {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+.geography-node-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.geography-node-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--on-surface-muted);
+  white-space: nowrap;
+}
+/* Проза Обзора сеттинга — мера 62ch и не рвёт слова (D-P1-3) */
+.setting-overview p,
+.setting-overview div[style*="pre-wrap"],
+.setting-overview .detail-value-mono,
+.setting-overview .muted {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
+}
+.setting-overview .detail-table td {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.setting-overview .card div[style*="pre-wrap"] {
+  max-width: 62ch;
+}
+.setting-overview .card .card div[style*="pre-wrap"],
+.setting-overview .card .card p {
+  max-width: none;
+}
+.setting-overview .card > h3:first-child {
+  margin: -14px -14px 12px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--fs-meta);
+  line-height: 1.2;
+}
+.setting-overview .genre-display {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 12px !important;
+}
+.setting-overview .genre-display + div {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 12px !important;
+}
+.editable-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 8;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.editable-clamp-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.setting-overview [id^="section-"] {
+  scroll-margin-top: 16px;
+}
+.setting-overview-toc {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.setting-overview-toc a {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--card-radius);
+}
+.setting-overview-toc a.active {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--bg-elevated);
 }
 /* Проза Обзора рвётся только между словами — без разрывов посередине
    слова (anywhere/break-all приводили к разрыву «посреди строки»). */
@@ -909,8 +1079,8 @@ h4 { font-size: var(--fs-body); }
   inset: 0;
   background-size: cover;
   background-position: center;
-  opacity: 0.30;
-  filter: grayscale(0.30);
+  opacity: 0.13;
+  filter: grayscale(0.13);
   z-index: -1;
   pointer-events: none;
 }
@@ -3270,9 +3440,7 @@ details.card[open] summary {
 }
 .entity-image-slot {
   gap: 6px;
-  /* Без этого flex сжимает ячейки под ширину строки, и рамка теряет
-     пропорции картинки, которую в неё положат. */
-  flex: 0 0 auto;
+  flex: 1 1 280px;
   max-width: 100%;
 }
 .entity-image-frame {
@@ -3280,9 +3448,11 @@ details.card[open] summary {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 288px;
-  max-width: 100%;
-  height: 104px;
+  width: 100%;
+  max-width: 288px;
+  aspect-ratio: 16 / 10;
+  height: auto;
+  min-height: 104px;
   overflow: hidden;
   border-radius: var(--card-radius);
   border: var(--card-border-width, 1px) solid var(--line);
@@ -3290,8 +3460,20 @@ details.card[open] summary {
   cursor: pointer;
 }
 .entity-image-frame.wide {
-  width: 320px;
-  height: 180px;
+  max-width: 320px;
+  aspect-ratio: 16 / 10;
+  min-height: 180px;
+}
+@media (max-width: 700px) {
+  .entity-image-slot {
+    flex: 1 1 100%;
+  }
+  .entity-image-slot:first-child {
+    order: 2;
+  }
+  .entity-image-slot:last-child {
+    order: 1;
+  }
 }
 .entity-image-frame img {
   width: 100%;
@@ -3308,6 +3490,39 @@ details.card[open] summary {
 }
 .entity-image-empty {
   font-size: 12px;
+}
+.entity-image-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--card-radius);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.entity-image-delete:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger-bg);
+  color: var(--danger-text);
+}
+.entity-image-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.entity-image-frame.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft, rgba(214, 50, 30, 0.08));
 }
 
 /* This block must stay AFTER the base .character-avatar-col/.character-avatar
@@ -8534,9 +8749,9 @@ details[open] > .res-group__band .chevron-icon {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border: 1.5px solid var(--genre-color);
-  background: color-mix(in oklab, var(--genre-color) 15%, transparent);
-  color: var(--text);
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   text-transform: uppercase;

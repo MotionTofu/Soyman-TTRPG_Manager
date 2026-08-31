@@ -20,12 +20,27 @@ import {
 } from "./settingBeings";
 
 export const settingLocationsRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|gif|webp|avif)$/.test(file.mimetype)) cb(null, true);
+    else cb(null, false);
+  },
+});
+
+function isSafeStoredPath(p: string | null | undefined): boolean {
+  if (!p) return false;
+  if (/["'\n\r\\]/.test(p)) return false;
+  if (p.includes("..")) return false;
+  return true;
+}
 
 function withMapUrl<T extends { map_image_path?: string | null }>(row: T) {
   return {
     ...row,
-    map_image_url: row.map_image_path ? toFileUrl(row.map_image_path) : null,
+    map_image_url: row.map_image_path && isSafeStoredPath(row.map_image_path) ? toFileUrl(row.map_image_path) : null,
   };
 }
 
@@ -34,21 +49,67 @@ function withImageUrls<
 >(row: T) {
   return {
     ...row,
-    avatar_image_url: row.avatar_image_path ? toFileUrl(row.avatar_image_path) : null,
-    thumbnail_image_url: row.thumbnail_image_path ? toFileUrl(row.thumbnail_image_path) : null,
+    avatar_image_url: row.avatar_image_path && isSafeStoredPath(row.avatar_image_path) ? toFileUrl(row.avatar_image_path) : null,
+    thumbnail_image_url:
+      row.thumbnail_image_path && isSafeStoredPath(row.thumbnail_image_path) ? toFileUrl(row.thumbnail_image_path) : null,
   };
 }
 
-function archiveDescendants(locationId: number) {
-  const children = db
-    .prepare("SELECT id FROM setting_locations WHERE parent_id = ? AND archived_at IS NULL")
-    .all(locationId) as { id: number }[];
-  for (const child of children) {
-    db.prepare(
-      "UPDATE setting_locations SET archived_at = datetime('now') WHERE id = ?"
-    ).run(child.id);
-    archiveDescendants(child.id);
+const MAX_NAME = 120;
+const MAX_KIND = 40;
+const MAX_SHORT = 20;
+const MAX_ALIAS = 40;
+const MAX_ALIASES = 10;
+const MAX_ORIGINAL = 120;
+const MAX_DESC = 4000;
+
+function validateLocationPayload(body: {
+  name?: string;
+  kind?: string;
+  description?: string;
+  short_name?: string;
+  aliases?: string[];
+  name_original?: string;
+}): string | null {
+  if (body.name !== undefined) {
+    const n = body.name.trim();
+    if (!n) return "name must not be empty";
+    if (n.length > MAX_NAME) return `name must be ≤${MAX_NAME} chars`;
   }
+  if (body.kind !== undefined && body.kind !== null) {
+    if (String(body.kind).length > MAX_KIND) return `kind must be ≤${MAX_KIND} chars`;
+  }
+  if (body.short_name !== undefined && body.short_name !== null) {
+    if (String(body.short_name).length > MAX_SHORT) return `short_name must be ≤${MAX_SHORT} chars`;
+  }
+  if (body.name_original !== undefined && body.name_original !== null) {
+    if (String(body.name_original).length > MAX_ORIGINAL) return `name_original must be ≤${MAX_ORIGINAL} chars`;
+  }
+  if (body.description !== undefined && body.description !== null) {
+    if (String(body.description).length > MAX_DESC) return `description must be ≤${MAX_DESC} chars`;
+  }
+  if (body.aliases !== undefined && body.aliases !== null) {
+    if (!Array.isArray(body.aliases)) return "aliases must be an array";
+    if (body.aliases.length > MAX_ALIASES) return `aliases must be ≤${MAX_ALIASES} items`;
+    for (const a of body.aliases) {
+      if (typeof a !== "string") return "aliases must be strings";
+      if (a.length > MAX_ALIAS) return `alias must be ≤${MAX_ALIAS} chars`;
+    }
+  }
+  return null;
+}
+
+function archiveSubtree(rootId: number) {
+  // One atomic recursive update — no JS recursion, no partial state on failure (C-P1-2).
+  db.prepare(
+    `WITH RECURSIVE descendants(id) AS (
+       SELECT id FROM setting_locations WHERE id = ?
+       UNION ALL
+       SELECT sl.id FROM setting_locations sl JOIN descendants d ON sl.parent_id = d.id
+     )
+     UPDATE setting_locations SET archived_at = datetime('now')
+     WHERE id IN (SELECT id FROM descendants) AND archived_at IS NULL`
+  ).run(rootId);
 }
 
 settingLocationsRouter.get("/", (req, res) => {
@@ -68,15 +129,15 @@ settingLocationsRouter.get("/", (req, res) => {
         ...(parent_id === "null" || parent_id === ""
           ? [setting_id]
           : [setting_id, parent_id])
-      ) as { avatar_image_path: string | null; thumbnail_image_path: string | null }[];
-    return res.json(rows.map(withImageUrls));
+      ) as { avatar_image_path: string | null; thumbnail_image_path: string | null; map_image_path: string | null }[];
+    return res.json(rows.map((r) => withMapUrl(withImageUrls(r))));
   }
   const rows = db
     .prepare(
       "SELECT * FROM setting_locations WHERE setting_id = ? AND archived_at IS NULL ORDER BY name"
     )
-    .all(setting_id) as { avatar_image_path: string | null; thumbnail_image_path: string | null }[];
-  res.json(rows.map(withImageUrls));
+    .all(setting_id) as { avatar_image_path: string | null; thumbnail_image_path: string | null; map_image_path: string | null }[];
+  res.json(rows.map((r) => withMapUrl(withImageUrls(r))));
 });
 
 settingLocationsRouter.get("/:id", (req, res) => {
@@ -342,7 +403,8 @@ settingLocationsRouter.post("/:id/avatar", upload.single("file"), async (req, re
   if (!location) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(ext)) return res.status(400).json({ error: "Unsupported image type" });
   const target = path.join(location.folder_path, `avatar${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, location.avatar_image_path, "avatar");
 
@@ -362,7 +424,8 @@ settingLocationsRouter.post("/:id/thumbnail", upload.single("file"), async (req,
   if (!location) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(ext)) return res.status(400).json({ error: "Unsupported image type" });
   const target = path.join(location.folder_path, `thumbnail${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, location.thumbnail_image_path, "thumbnail");
 
@@ -373,16 +436,17 @@ settingLocationsRouter.post("/:id/thumbnail", upload.single("file"), async (req,
   res.json(withImageUrls({ thumbnail_image_path: target }));
 });
 
-settingLocationsRouter.post("/:id/map", upload.single("file"), (req, res) => {
+settingLocationsRouter.post("/:id/map", upload.single("file"), async (req, res) => {
   const location = db
     .prepare("SELECT folder_path, map_image_path FROM setting_locations WHERE id = ?")
     .get(req.params.id) as { folder_path: string; map_image_path: string | null } | undefined;
   if (!location) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(ext)) return res.status(400).json({ error: "Unsupported image type" });
   const target = path.join(location.folder_path, `map${ext}`);
-  writeReplacingOldFile(target, req.file.buffer, location.map_image_path);
+  await writeReplacingOldFile(target, req.file.buffer, location.map_image_path);
 
   db.prepare("UPDATE setting_locations SET map_image_path = ? WHERE id = ?").run(
     target,
@@ -587,6 +651,9 @@ settingLocationsRouter.post("/", (req, res) => {
   };
   if (!setting_id || !name)
     return res.status(400).json({ error: "setting_id and name are required" });
+  const err = validateLocationPayload({ name, kind });
+  if (err) return res.status(400).json({ error: err });
+  if (!String(name).trim()) return res.status(400).json({ error: "name must not be empty" });
 
   let baseFolder: string;
   if (parent_id) {
@@ -630,6 +697,8 @@ settingLocationsRouter.put("/:id", (req, res) => {
     aliases?: string[];
     name_original?: string;
   };
+  const err = validateLocationPayload({ name, kind, description, short_name, aliases, name_original });
+  if (err) return res.status(400).json({ error: err });
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
@@ -716,10 +785,10 @@ settingLocationsRouter.put("/:id/parent", (req, res) => {
 });
 
 settingLocationsRouter.delete("/:id", (req, res) => {
-  db.prepare(
-    "UPDATE setting_locations SET archived_at = datetime('now') WHERE id = ?"
-  ).run(req.params.id);
-  archiveDescendants(Number(req.params.id));
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid id" });
+  const tx = db.transaction(() => archiveSubtree(id));
+  tx();
   res.json({ ok: true });
 });
 

@@ -18,15 +18,23 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
   const [open, setOpen] = useState(false);
   const [grants, setGrants] = useState<PlayerVisibilityGrant[] | null>(null);
 
-  function refresh() {
+  function refresh(signal?: AbortSignal) {
     api
       .get<PlayerVisibilityGrant[]>(
-        `/visibility-grants?campaign_id=${campaignId}&target_type=${targetType}&target_id=${targetId}`
+        `/visibility-grants?campaign_id=${campaignId}&target_type=${targetType}&target_id=${targetId}`,
+        { signal } as any
       )
-      .then(setGrants);
+      .then(setGrants)
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        // keep previous grants on error — silent retry on next open
+      });
   }
   useEffect(() => {
-    if (open && grants === null) refresh();
+    if (!open || grants !== null) return;
+    const c = new AbortController();
+    refresh(c.signal);
+    return () => c.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

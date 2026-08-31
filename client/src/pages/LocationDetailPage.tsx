@@ -22,6 +22,7 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { formatImportantDate } from "../inworldCalendar";
 import { NavIcon } from "../components/NavIcons";
+import { useConfirm } from "../hooks/useConfirm";
 import type {
   DateRecurrence,
   SearchResult,
@@ -82,6 +83,7 @@ export function LocationDetailPage() {
   const [dateDay, setDateDay] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
   const calendar = useSettingCalendar(location?.setting_id);
   const avatarCrop = useImageCrop("square", handleAvatarChange);
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
@@ -192,7 +194,13 @@ export function LocationDetailPage() {
 
   async function archiveLocation() {
     if (!location) return;
-    if (!confirm("Отправить локацию (и все вложенные) в архив?")) return;
+    const ok = await confirm({
+      title: "Архивировать локацию?",
+      message: "Отправить локацию (и все вложенные) в архив?",
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/setting-locations/${locationId}`);
     navigate(
       location.parent_id ? `/locations/${location.parent_id}` : `/settings/${location.setting_id}`
@@ -251,13 +259,20 @@ export function LocationDetailPage() {
   }
 
   async function removeImportantDate(dateId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    const ok = await confirm({
+      title: "Удалить важную дату?",
+      message: "Вы уверены, что хотите удалить эту дату?",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/setting-locations/important-dates/${dateId}`);
     refresh();
   }
 
   return (
     <div className={`stack${tab === "Карта" ? " page-fill" : ""}`}>
+      {confirmDialog}
       <Breadcrumbs
         items={[
           { label: "Сеттинг", to: `/settings/${location.setting_id}` },

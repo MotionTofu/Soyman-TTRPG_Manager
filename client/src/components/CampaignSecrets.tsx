@@ -134,15 +134,12 @@ const SecretGroup = memo(function SecretGroup({
   const revealed = items.filter((s) => s.state?.revealed === 1).length;
 
   return (
-    <details className="card">
-      <summary>
-        <strong className="entry-title">{title}</strong>
-        <span className="muted">
-          {" · раскрыто "}
-          {revealed} из {items.length}
-        </span>
+    <details className="card res-group">
+      <summary className="res-group__band">
+        <span className="res-group__title">{title}</span>
+        <span className="res-group__count">раскрыто {revealed} из {items.length}</span>
       </summary>
-      <div className="stack" style={{ marginTop: 8 }}>
+      <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
         {items.map((s) => (
           <SecretRow key={s.id} secret={s} onToggle={toggle} onRemove={remove} />
         ))}

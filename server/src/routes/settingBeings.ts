@@ -7,7 +7,16 @@ import { beingFolder, toFileUrl, writeReplacingOldFile } from "../services/files
 import { renameEntityFolder } from "../services/vaultPaths";
 
 export const settingBeingsRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 export function withAvatarUrl<
   T extends {
@@ -46,6 +55,29 @@ export function getLocations(beingId: string | number) {
        WHERE bl.being_id = ? AND l.archived_at IS NULL ORDER BY l.name`
     )
     .all(beingId);
+}
+
+export function getCommunities(beingId: string | number) {
+  return db
+    .prepare(
+      `SELECT c.id, c.name FROM being_communities bc
+       JOIN setting_communities c ON c.id = bc.community_id
+       WHERE bc.being_id = ? AND c.archived_at IS NULL ORDER BY c.name`
+    )
+    .all(beingId);
+}
+
+export function getCommunityCountsByOwner(ownerIds: (number | string)[]): Map<number, number> {
+  const map = new Map<number, number>();
+  if (ownerIds.length === 0) return map;
+  const placeholders = ownerIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT being_id, COUNT(*) as cnt FROM being_communities WHERE being_id IN (${placeholders}) GROUP BY being_id`
+    )
+    .all(...ownerIds) as { being_id: number; cnt: number }[];
+  for (const r of rows) map.set(r.being_id, r.cnt);
+  return map;
 }
 
 // Monster templates this being points at, across every system's compendium
@@ -123,12 +155,15 @@ export function getCreatureMetaByOwner(ownerType: string, ownerIds: (number | st
 }
 
 settingBeingsRouter.get("/", (req, res) => {
-  const { setting_id, category, exclude_category, location_id, q } = req.query as {
+  const { setting_id, category, exclude_category, location_id, community_id, q, sort, dir } = req.query as {
     setting_id?: string;
     category?: string;
     exclude_category?: string;
     location_id?: string;
+    community_id?: string;
     q?: string;
+    sort?: string;
+    dir?: string;
   };
   if (!setting_id) return res.status(400).json({ error: "setting_id is required" });
   const clauses = ["b.setting_id = @setting_id", "b.archived_at IS NULL"];
@@ -169,54 +204,92 @@ settingBeingsRouter.get("/", (req, res) => {
     )`);
     params.location_id = location_id;
   }
+  if (community_id === "none") {
+    clauses.push(`b.id NOT IN (SELECT being_id FROM being_communities)`);
+  } else if (community_id) {
+    clauses.push(`b.id IN (
+      SELECT being_id FROM being_communities WHERE community_id IN (
+        WITH RECURSIVE descendants(id) AS (
+          SELECT id FROM setting_communities WHERE id = @community_id
+          UNION ALL
+          SELECT sc.id FROM setting_communities sc JOIN descendants d ON sc.parent_id = d.id
+        )
+        SELECT id FROM descendants
+      )
+    )`);
+    params.community_id = community_id;
+  }
   if (q && q.trim()) {
+    // Экранируем % _ \ чтобы пользовательский ввод не стал wildcard
+    const escapeLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+    const safeQ = escapeLike(q.trim().toLowerCase());
     // "Connected in some way": direct name match, related to a matching
     // being (either direction), a member of a matching community, or
     // sharing a location with a matching being.
     clauses.push(`(
-      lower_u(b.name) LIKE @q
+      lower_u(b.name) LIKE @q ESCAPE '\\'
+      OR lower_u(COALESCE(b.description,'')) LIKE @q ESCAPE '\\'
+      OR lower_u(COALESCE(b.tags,'')) LIKE @q ESCAPE '\\'
+      OR lower_u(COALESCE(b.aliases,'')) LIKE @q ESCAPE '\\'
+      OR lower_u(COALESCE(b.name_original,'')) LIKE @q ESCAPE '\\'
       OR b.id IN (
         SELECT r.being_b_id FROM being_relations r
-        JOIN setting_beings mb ON mb.id = r.being_a_id WHERE lower_u(mb.name) LIKE @q
+        JOIN setting_beings mb ON mb.id = r.being_a_id WHERE lower_u(mb.name) LIKE @q ESCAPE '\\'
         UNION
         SELECT r.being_a_id FROM being_relations r
-        JOIN setting_beings mb ON mb.id = r.being_b_id WHERE lower_u(mb.name) LIKE @q
+        JOIN setting_beings mb ON mb.id = r.being_b_id WHERE lower_u(mb.name) LIKE @q ESCAPE '\\'
       )
       OR b.id IN (
         SELECT bc.being_id FROM being_communities bc
-        JOIN setting_communities mc ON mc.id = bc.community_id WHERE lower_u(mc.name) LIKE @q
+        JOIN setting_communities mc ON mc.id = bc.community_id WHERE lower_u(mc.name) LIKE @q ESCAPE '\\'
       )
       OR b.id IN (
         SELECT bl.being_id FROM being_locations bl
         WHERE bl.location_id IN (
           SELECT bl2.location_id FROM being_locations bl2
-          JOIN setting_beings mb ON mb.id = bl2.being_id WHERE lower_u(mb.name) LIKE @q
+          JOIN setting_beings mb ON mb.id = bl2.being_id WHERE lower_u(mb.name) LIKE @q ESCAPE '\\'
         )
       )
     )`);
     // lower_u — юникодный lower из db.ts: встроенные LIKE и LOWER в SQLite
     // приводят регистр только у латиницы, и «мирт» не находил «Мирт».
-    params.q = `%${q.trim().toLowerCase()}%`;
+    params.q = `%${safeQ}%`;
   }
+  const d = dir === "desc" ? "DESC" : "ASC";
+  const orderBy = sort === "recent" ? `b.id ${d}` : sort === "category" ? `b.category COLLATE NOCASE ${d}, b.name COLLATE NOCASE ${d}` : `b.name COLLATE NOCASE ${d}`;
   const rows = db
     .prepare(
       `SELECT b.*, m.name as base_monster_name FROM setting_beings b
        LEFT JOIN compendium_entries m ON m.id = b.base_monster_id
-       WHERE ${clauses.join(" AND ")} ORDER BY b.name`
+       WHERE ${clauses.join(" AND ")} ORDER BY ${orderBy}`
     )
     .all(params) as { id: number }[];
-  const creatureMeta = getCreatureMetaByOwner(
-    "being",
-    rows.map((r) => r.id)
-  );
-  const statblockCounts = getStatblockCountsByOwner(
-    "being",
-    rows.map((r) => r.id)
-  );
+  const ids = rows.map((r) => r.id);
+  const creatureMeta = getCreatureMetaByOwner("being", ids);
+  const statblockCounts = getStatblockCountsByOwner("being", ids);
+  const communityCounts = getCommunityCountsByOwner(ids);
+  const communitiesByBeing = new Map<number, { id: number; name: string }[]>();
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => "?").join(",");
+    const commRows = db
+      .prepare(
+        `SELECT bc.being_id, c.id, c.name FROM being_communities bc
+         JOIN setting_communities c ON c.id = bc.community_id
+         WHERE bc.being_id IN (${placeholders}) AND c.archived_at IS NULL ORDER BY c.name`
+      )
+      .all(...ids) as { being_id: number; id: number; name: string }[];
+    for (const cr of commRows) {
+      const arr = communitiesByBeing.get(cr.being_id) ?? [];
+      arr.push({ id: cr.id, name: cr.name });
+      communitiesByBeing.set(cr.being_id, arr);
+    }
+  }
   res.json(
     rows.map((r) => ({
       ...withAvatarUrl(r as { avatar_image_path?: string | null }),
       locations: getLocations(r.id),
+      communities: communitiesByBeing.get(r.id) ?? [],
+      community_count: communityCounts.get(r.id) ?? 0,
       creature_meta: creatureMeta.get(r.id) ?? null,
       statblock_count: statblockCounts.get(r.id) ?? 0,
     }))
@@ -294,7 +367,9 @@ settingBeingsRouter.post("/:id/avatar", upload.single("file"), async (req, res) 
   if (!being) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+  const ext = rawExt;
   const target = path.join(being.folder_path, `avatar${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, being.avatar_image_path, "avatar");
 
@@ -314,7 +389,9 @@ settingBeingsRouter.post("/:id/thumbnail", upload.single("file"), async (req, re
   if (!being) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+  const ext = rawExt;
   const target = path.join(being.folder_path, `thumbnail${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, being.thumbnail_image_path, "thumbnail");
 
@@ -478,14 +555,20 @@ settingBeingsRouter.post("/", (req, res) => {
     community_ids?: number[];
     base_monster_id?: number | null;
   };
-  if (!setting_id || !name)
+  if (!setting_id || !name || !String(name).trim())
     return res.status(400).json({ error: "setting_id and name are required" });
+  const trimmedName = String(name).trim();
+  if (trimmedName.length > 120) return res.status(400).json({ error: "name too long (max 120)" });
+  const allowedCategories = new Set(["key_figure", "influential", "notable", "bestiary"]);
+  if (category && !allowedCategories.has(category)) return res.status(400).json({ error: "invalid category" });
+  if (Array.isArray(tags) && tags.length > 12) return res.status(400).json({ error: "too many tags (max 12)" });
   const setting = db
     .prepare("SELECT folder_path FROM settings WHERE id = ?")
     .get(setting_id) as { folder_path: string } | undefined;
   if (!setting) return res.status(404).json({ error: "setting not found" });
-  const folder = beingFolder(setting.folder_path, name);
+  const folder = beingFolder(setting.folder_path, trimmedName);
 
+  const sanitizedTags = Array.isArray(tags) ? tags.filter((t) => typeof t === "string").slice(0, 12).map((t) => String(t).slice(0, 24)) : [];
   const info = db
     .prepare(
       `INSERT INTO setting_beings
@@ -494,7 +577,7 @@ settingBeingsRouter.post("/", (req, res) => {
     )
     .run(
       setting_id,
-      name,
+      trimmedName,
       category ?? "bestiary",
       location_id ?? null,
       statblock_short ?? "",
@@ -502,7 +585,7 @@ settingBeingsRouter.post("/", (req, res) => {
       history ?? "",
       behavior ?? "",
       folder,
-      JSON.stringify(tags ?? []),
+      JSON.stringify(sanitizedTags),
       base_monster_id ?? null
     );
   if (location_id) {

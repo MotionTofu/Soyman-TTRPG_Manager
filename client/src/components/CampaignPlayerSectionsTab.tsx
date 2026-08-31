@@ -5,6 +5,9 @@ import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
+import { EmptyState } from "./EmptyState";
+import { NavIcon } from "./NavIcons";
+import { useConfirm } from "../hooks/useConfirm";
 import type { CampaignPlayerArticle, CampaignPlayerSection, CampaignPlayerSectionKind, RosterPlayer } from "../types";
 
 interface Props {
@@ -17,41 +20,102 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   const [sections, setSections] = useState<CampaignPlayerSection[]>([]);
   const [newName, setNewName] = useState("");
   const [newKind, setNewKind] = useState<CampaignPlayerSectionKind>("articles");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
+
+  function load(signal?: AbortSignal) {
+    setLoading(true);
+    setError(null);
+    api
+      .get<CampaignPlayerSection[]>(`/campaign-player-sections?campaign_id=${campaignId}`, { signal } as any)
+      .then((data) => {
+        setSections(data);
+        setLoading(false);
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        setError(e?.message ?? "Ошибка загрузки");
+        setLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [campaignId]);
 
   function refresh() {
-    api.get<CampaignPlayerSection[]>(`/campaign-player-sections?campaign_id=${campaignId}`).then(setSections);
+    load();
   }
-  useEffect(refresh, [campaignId]);
 
   async function addSection() {
-    if (!newName.trim()) return;
-    await api.post("/campaign-player-sections", { campaign_id: campaignId, name: newName, kind: newKind });
-    setNewName("");
-    refresh();
+    if (!newName.trim() || saving) return;
+    setSaving(true);
+    try {
+      await api.post("/campaign-player-sections", { campaign_id: campaignId, name: newName.trim(), kind: newKind });
+      setNewName("");
+      refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось создать подраздел");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function removeSection(id: number) {
-    if (!confirm("Удалить подраздел? Все статьи/изображения внутри будут удалены.")) return;
-    await api.del(`/campaign-player-sections/${id}`);
-    refresh();
+    const ok = await confirm({
+      title: "Удалить подраздел?",
+      message: "Все статьи и изображения внутри будут удалены безвозвратно.",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/campaign-player-sections/${id}`);
+      refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось удалить подраздел");
+    }
   }
 
   return (
-    <div className="stack">
-      <p className="muted">
+    <div className="stack campaign-player-overview">
+      <p className="muted" style={{ maxWidth: "62ch" }}>
         Подразделы этого раздела не видны игрокам, пока вы явно не откроете их (или отдельные
         статьи внутри) конкретным игрокам кнопкой-глазом.
       </p>
-      <div className="row">
-        <input placeholder="Название подраздела" value={newName} onChange={(e) => setNewName(e.target.value)} />
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <input placeholder="Название подраздела" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ flex: "1 1 200px", minWidth: 0 }} />
         <select value={newKind} onChange={(e) => setNewKind(e.target.value as CampaignPlayerSectionKind)}>
           <option value="articles">Статьи</option>
           <option value="gallery">Галерея</option>
         </select>
-        <button className="primary" onClick={addSection}>
-          + Добавить подраздел
+        <button className="primary" onClick={addSection} disabled={!newName.trim() || saving}>
+          {saving ? "Создание…" : "+ Добавить подраздел"}
         </button>
       </div>
+      {loading && <p className="muted">Загрузка…</p>}
+      {error && (
+        <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{error}</span>
+          <button onClick={() => load()}>Повторить</button>
+        </div>
+      )}
+      {!loading && !error && sections.length === 0 && (
+        <EmptyState
+          icon="skullDie"
+          title="ПОДРАЗДЕЛОВ НЕТ"
+          hint="Создайте первый — статьи или галерею — и откройте игрокам глазом «Кому видно»."
+          action={
+            <span className="muted" style={{ fontSize: 12 }}>
+              Введите название выше и нажмите «+ Добавить подраздел»
+            </span>
+          }
+        />
+      )}
       {sections.map((s) => (
         <SectionCard
           key={s.id}
@@ -63,7 +127,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
           onRenamed={refresh}
         />
       ))}
-      {sections.length === 0 && <p className="muted">Подразделов пока нет.</p>}
+      {confirmDialog}
     </div>
   );
 }
@@ -89,7 +153,7 @@ function SectionCard({
 
   async function saveName() {
     if (!nameDraft.trim()) return;
-    await api.put(`/campaign-player-sections/${section.id}`, { name: nameDraft });
+    await api.put(`/campaign-player-sections/${section.id}`, { name: nameDraft.trim() });
     setRenaming(false);
     onRenamed();
   }
@@ -102,14 +166,16 @@ function SectionCard({
         onClick={() => !renaming && setExpanded((v) => !v)}
       >
         <span className="row" style={{ alignItems: "center" }}>
-          <span className="comp-toggle" aria-hidden="true">
-            {expanded ? "▾" : "▸"}
-          </span>
+          <NavIcon name="chevron" className={`chevron-icon${expanded ? " is-open" : ""}`} />
           {renaming ? (
             <input
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveName();
+                if (e.key === "Escape") setRenaming(false);
+              }}
               autoFocus
             />
           ) : (
@@ -129,8 +195,8 @@ function SectionCard({
             <button onClick={() => setRenaming(true)}>Переименовать</button>
           )}
           <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_section" targetId={section.id} roster={roster} />
-          <button className="danger" onClick={onRemove}>
-            ✕
+          <button className="danger" onClick={onRemove} aria-label="Удалить подраздел">
+            <NavIcon name="delete" />
           </button>
         </span>
       </div>
@@ -156,28 +222,90 @@ function ArticlesList({
   defaultSettingId?: number;
 }) {
   const [articles, setArticles] = useState<CampaignPlayerArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
+
+  function load(signal?: AbortSignal) {
+    setLoading(true);
+    setError(null);
+    api
+      .get<CampaignPlayerArticle[]>(`/campaign-player-sections/${sectionId}/articles`, { signal } as any)
+      .then((data) => {
+        setArticles(data);
+        setLoading(false);
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        setError(e?.message ?? "Ошибка загрузки статей");
+        setLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [sectionId]);
 
   function refresh() {
-    api.get<CampaignPlayerArticle[]>(`/campaign-player-sections/${sectionId}/articles`).then(setArticles);
+    load();
   }
-  useEffect(refresh, [sectionId]);
 
   async function addArticle() {
-    await api.post(`/campaign-player-sections/${sectionId}/articles`, {
-      title: `Статья ${articles.length + 1}`,
-      content: "",
-    });
-    refresh();
+    if (saving) return;
+    setSaving(true);
+    try {
+      await api.post(`/campaign-player-sections/${sectionId}/articles`, {
+        title: `Статья ${articles.length + 1}`,
+        content: "",
+      });
+      refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось создать статью");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function removeArticle(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
-    await api.del(`/campaign-player-sections/articles/${id}`);
-    refresh();
+    const ok = await confirm({
+      title: "Удалить статью?",
+      message: "Статья будет удалена безвозвратно.",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/campaign-player-sections/articles/${id}`);
+      refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось удалить статью");
+    }
   }
 
   return (
     <div className="stack">
+      {loading && <p className="muted">Загрузка статей…</p>}
+      {error && (
+        <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{error}</span>
+          <button onClick={() => load()}>Повторить</button>
+        </div>
+      )}
+      {!loading && !error && articles.length === 0 && (
+        <EmptyState
+          icon="skullDie"
+          title="СТАТЕЙ НЕТ"
+          hint="Добавьте первую статью — она откроется сразу в режиме редактирования."
+          action={
+            <button className="primary" onClick={addArticle} disabled={saving}>
+              + Добавить статью
+            </button>
+          }
+        />
+      )}
       {articles.map((a) => (
         <ArticleCard
           key={a.id}
@@ -189,10 +317,12 @@ function ArticlesList({
           onRemove={() => removeArticle(a.id)}
         />
       ))}
-      <button onClick={addArticle} style={{ alignSelf: "flex-start" }}>
-        + Добавить статью
-      </button>
-      {articles.length === 0 && <p className="muted">Статей пока нет.</p>}
+      {!loading && !error && articles.length > 0 && (
+        <button onClick={addArticle} style={{ alignSelf: "flex-start" }} disabled={saving}>
+          {saving ? "Создание…" : "+ Добавить статью"}
+        </button>
+      )}
+      {confirmDialog}
     </div>
   );
 }
@@ -233,11 +363,7 @@ function ArticleCard({
         onClick={() => !editMode && setExpanded((v) => !v)}
       >
         <span className="row" style={{ alignItems: "center" }}>
-          {!editMode && (
-            <span className="comp-toggle" aria-hidden="true">
-              {expanded ? "▾" : "▸"}
-            </span>
-          )}
+          {!editMode && <NavIcon name="chevron" className={`chevron-icon${expanded ? " is-open" : ""}`} />}
           {editMode ? (
             <input
               value={title}
@@ -251,8 +377,8 @@ function ArticleCard({
         </span>
         <span className="row" onClick={(e) => e.stopPropagation()}>
           <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_article" targetId={article.id} roster={roster} />
-          <button className="danger" onClick={onRemove}>
-            ✕
+          <button className="danger" onClick={onRemove} aria-label="Удалить статью">
+            <NavIcon name="delete" />
           </button>
         </span>
       </div>

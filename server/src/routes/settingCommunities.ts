@@ -13,7 +13,16 @@ import {
 } from "./settingBeings";
 
 export const settingCommunitiesRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 function withThumbUrl<
   T extends {
@@ -54,10 +63,13 @@ function archiveDescendants(communityId: number) {
 }
 
 settingCommunitiesRouter.get("/", (req, res) => {
-  const { setting_id, parent_id, location_id } = req.query as {
+  const { setting_id, parent_id, location_id, q, sort, dir } = req.query as {
     setting_id?: string;
     parent_id?: string;
     location_id?: string;
+    q?: string;
+    sort?: string;
+    dir?: string;
   };
   if (!setting_id) return res.status(400).json({ error: "setting_id is required" });
   const clauses = ["setting_id = @setting_id", "archived_at IS NULL"];
@@ -92,8 +104,15 @@ settingCommunitiesRouter.get("/", (req, res) => {
     )`);
     params.location_id = location_id;
   }
+  if (q && q.trim()) {
+    const escapeLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+    clauses.push(`(lower_u(name) LIKE @q ESCAPE '\\' OR lower_u(COALESCE(description,'')) LIKE @q ESCAPE '\\' OR lower_u(COALESCE(tags,'')) LIKE @q ESCAPE '\\')`);
+    params.q = `%${escapeLike(q.trim().toLowerCase())}%`;
+  }
+  const d = dir === "desc" ? "DESC" : "ASC";
+  const orderBy = sort === "recent" ? `id ${d}` : `name COLLATE NOCASE ${d}`;
   const rows = db
-    .prepare(`SELECT * FROM setting_communities WHERE ${clauses.join(" AND ")} ORDER BY name`)
+    .prepare(`SELECT * FROM setting_communities WHERE ${clauses.join(" AND ")} ORDER BY ${orderBy}`)
     .all(params);
   res.json((rows as { thumbnail_image_path: string | null }[]).map(withThumbUrl));
 });
@@ -188,7 +207,9 @@ settingCommunitiesRouter.post("/:id/thumbnail", upload.single("file"), async (re
   if (!community) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+  const ext = rawExt;
   const target = path.join(community.folder_path, `thumbnail${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, community.thumbnail_image_path, "thumbnail");
 
@@ -206,7 +227,9 @@ settingCommunitiesRouter.post("/:id/avatar", upload.single("file"), async (req, 
   if (!community) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+  const ext = rawExt;
   const target = path.join(community.folder_path, `avatar${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, community.avatar_image_path, "avatar");
 

@@ -30,6 +30,7 @@ export function EntityWizard({
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createAnother, setCreateAnother] = useState(false);
 
   const spec = WIZARD_SPECS[type];
   const steps = spec.steps(ctx);
@@ -56,10 +57,17 @@ export function EntityWizard({
       const id = await spec.create(draft, ctx);
       if (then === "profile") {
         navigate(spec.profilePath(id, ctx));
+        onClose();
       } else {
         onCreated?.(id, type);
+        if (createAnother) {
+          // оставить визард открытым для следующего — чистим только имя
+          setDraft((prev) => ({ ...prev, name: "" }));
+          setStepIndex(0);
+        } else {
+          onClose();
+        }
       }
-      onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -121,9 +129,13 @@ export function EntityWizard({
             Далее
           </button>
         </div>
+        <label className="row" style={{ gap: 6, fontSize: "12px", cursor: "pointer" }}>
+          <input type="checkbox" checked={createAnother} onChange={(e) => setCreateAnother(e.target.checked)} />
+          Создать ещё одного
+        </label>
         <div className="row wizard-actions">
           <button className="primary" disabled={!canCreate} onClick={() => create("close")}>
-            Создать и вернуться
+            {createAnother ? "Создать" : "Создать и вернуться"}
           </button>
           <button disabled={!canCreate} onClick={() => create("profile")}>
             {spec.gotoLabel ?? `Создать и перейти в профиль ${spec.labelGenitive}`}

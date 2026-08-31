@@ -114,6 +114,19 @@
   color: var(--muted);
   font-weight: 400;
 }
+.sp-value--cta {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--on-surface);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sp-value--cta:hover {
+  color: var(--on-surface);
+  filter: brightness(1.15);
+}
 
 .sp-title {
   font-family: var(--font-ui);
@@ -251,8 +264,8 @@
   letter-spacing: 0.12em;
 }
 .sp-time__head .nav-icon {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
 }
 .sp-time__body {
   display: flex;
@@ -293,7 +306,7 @@
   background: var(--paper);
   color: var(--muted);
   border-color: var(--line);
-  border-style: dashed;
+  border-style: solid;
 }
 .sp-inworld:hover {
   background: var(--surface);
@@ -335,14 +348,37 @@
   container-type: inline-size;
 }
 
-/* Drag-over — 1px solid, а не 2px dashed (инвариант §1.3).
+/* Drag-over — 1px solid (инвариант §1.3: 1px везде, без outline).
    Перебивает index.css .drop-zone.drag-over { border-color: accent } */
 .session-profile .drop-zone.drag-over {
   border-color: var(--ink) !important;
-  background: var(--paper) !important;
-  outline: var(--card-border-width) solid var(--ink);
-  outline-offset: 1px;
+  background: var(--paper-2) !important;
 }
+.sp-reveal-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: var(--card-border-width) solid var(--ink);
+  background: var(--paper);
+  font-size: var(--fs-meta);
+}
+.sp-reveal-toast button {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+}
+.sp-reveal-toast__close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+}
+
 .sp-secrets__head {
   display: flex;
   align-items: center;
@@ -419,7 +455,9 @@
   align-items: flex-start;
   gap: 8px;
   padding: 6px 12px;
-  max-width: 78ch;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 .sp-secret + .sp-secret {
   border-top: var(--card-border-width) solid var(--line);
@@ -434,7 +472,8 @@
   margin: 2px 0 0 0;
   font-size: var(--fs-meta);
   color: var(--muted);
-  max-width: 68ch;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 /* ------------------------------------------------------- сцены на вечер */
@@ -531,7 +570,7 @@
   height: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
-  border-left: 7px solid var(--ink);
+  border-left: 6px solid var(--ink);
   transition: transform var(--dur-2) var(--ease);
 }
 .sp-turn.is-small {
@@ -649,10 +688,10 @@
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   color: var(--muted);
   border: var(--card-border-width) solid var(--line);
-  padding: 0 4px;
+  padding: 1px 5px;
   white-space: nowrap;
 }
 
@@ -663,7 +702,6 @@
   padding: 0;
   background: var(--paper-2);
   min-width: 0;
-  border-left: var(--card-border-width) solid transparent;
 }
 .sp-union__card {
   border: none;
@@ -822,6 +860,12 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.sp-inworld-edit__error {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: #8A453E;
+  letter-spacing: 0.04em;
+}
 .sp-inworld-edit__hint {
   font-size: var(--fs-micro);
   max-width: 68ch;
@@ -850,6 +894,9 @@
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
 }
+.sp-stats {
+  container-type: inline-size;
+}
 .sp-stat {
   display: flex;
   flex-direction: column;
@@ -857,6 +904,11 @@
   padding: 12px 14px;
   border: var(--card-border-width) solid var(--line);
   background: var(--paper);
+}
+@container (max-width: 500px) {
+  .sp-stat.is-lead {
+    grid-column: 1 / -1;
+  }
 }
 /* Одно крупное число на карточку и одна инверсия на ряд: система требует на
    каждом экране одно крупное, ряд среднего и плотный список мелкого (§10.5). */
@@ -890,21 +942,23 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border: var(--card-border-width) dashed var(--line);
+  border: var(--card-border-width) solid var(--line);
   color: var(--muted);
   font-size: var(--fs-meta);
 }
 
 /* Резюме — заголовки details: Display 26px слишком громко для карточки,
-   здесь нужен Label UI 12px caps, как у sp-title */
-.session-profile details > summary .entry-title {
+   здесь нужен Label UI 12px caps, как у sp-title.
+   Узкий селектор — только карточные details профиля, чтобы не ломать
+   ResourcesSection (details.stack) и другие вложенные списки. */
+.session-profile details.card > summary .entry-title {
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-.session-profile details > summary {
+.session-profile details.card > summary {
   list-style: none;
   cursor: pointer;
   display: flex;
@@ -912,13 +966,13 @@
   gap: 8px;
   justify-content: flex-start !important;
 }
-.session-profile details > summary.row {
+.session-profile details.card > summary.row {
   justify-content: flex-start !important;
 }
-.session-profile details > summary::-webkit-details-marker {
+.session-profile details.card > summary::-webkit-details-marker {
   display: none;
 }
-.session-profile details > summary::before {
+.session-profile details.card > summary::before {
   content: "";
   flex-shrink: 0;
   width: 0;
@@ -928,20 +982,30 @@
   border-left: 6px solid var(--ink);
   transition: transform var(--dur-2) var(--ease);
 }
-.session-profile details[open] > summary::before {
+.session-profile details.card[open] > summary::before {
   transform: rotate(90deg);
 }
 
 /* Приглушённо-тёмные плашки подготовки — темнее и глуше ярких нод Полотна,
-   но не пастель. На Полотне остаются яркие (canvasPalette.ts), здесь — s×0.6 l×0.85. */
+   но не пастель. На Полотне остаются яркие (canvasPalette.ts), здесь — s×0.6 l×0.85.
+   Намеренное исключение из инварианта §1/§6: 4 цвета согласованы с владельцем. */
+.session-profile details.sp-card--plot,
+.session-profile details.sp-card--location,
+.session-profile details.sp-card--enemies,
+.session-profile details.sp-card--loot,
+.scene-detail details.sp-card--plot,
+.scene-detail details.sp-card--location,
+.scene-detail details.sp-card--enemies,
+.scene-detail details.sp-card--loot {
+  padding: 0;
+  overflow: hidden;
+}
 .session-profile details.sp-card--plot > summary,
 .scene-detail details.sp-card--plot > summary {
   background: #8A453E;
   color: #F8F6F1;
   border-bottom-color: #8A453E;
   padding: 7px 12px;
-  margin: -14px -14px 0 -14px;
-  width: calc(100% + 28px);
 }
 .session-profile details.sp-card--plot > summary::before,
 .scene-detail details.sp-card--plot > summary::before { border-left-color: #F8F6F1; }
@@ -951,8 +1015,6 @@
   color: #F8F6F1;
   border-bottom-color: #345B75;
   padding: 7px 12px;
-  margin: -14px -14px 0 -14px;
-  width: calc(100% + 28px);
 }
 .session-profile details.sp-card--location > summary::before,
 .scene-detail details.sp-card--location > summary::before { border-left-color: #F8F6F1; }
@@ -962,8 +1024,6 @@
   color: #F8F6F1;
   border-bottom-color: #563A62;
   padding: 7px 12px;
-  margin: -14px -14px 0 -14px;
-  width: calc(100% + 28px);
 }
 .session-profile details.sp-card--enemies > summary::before,
 .scene-detail details.sp-card--enemies > summary::before { border-left-color: #F8F6F1; }
@@ -973,8 +1033,6 @@
   color: #F8F6F1;
   border-bottom-color: #7E6D27;
   padding: 7px 12px;
-  margin: -14px -14px 0 -14px;
-  width: calc(100% + 28px);
 }
 .session-profile details.sp-card--loot > summary::before,
 .scene-detail details.sp-card--loot > summary::before { border-left-color: #F8F6F1; }
@@ -986,6 +1044,19 @@
 .scene-detail details.sp-card--location .entry-title,
 .scene-detail details.sp-card--enemies .entry-title,
 .scene-detail details.sp-card--loot .entry-title { color: inherit; }
+/* Внутренний отступ тела карточки после хака — иначе drop-zone прилипает к рамке */
+.session-profile details.sp-card--plot > .drop-zone,
+.session-profile details.sp-card--location > .drop-zone,
+.session-profile details.sp-card--enemies > .drop-zone,
+.session-profile details.sp-card--loot > .drop-zone {
+  margin: 12px;
+}
+.session-profile details.sp-card--plot > .drop-zone:empty,
+.session-profile details.sp-card--location > .drop-zone:empty,
+.session-profile details.sp-card--enemies > .drop-zone:empty,
+.session-profile details.sp-card--loot > .drop-zone:empty {
+  margin: 12px;
+}
 
 /* sp-revealed — плотный список, а не stack с gap10. Иконка — коорд. отметка */
 .sp-revealed .sp-secrets__body {
@@ -1024,6 +1095,36 @@
   accent-color: var(--ink);
 }
 
+.sp-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sp-nav__btn {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: var(--paper);
+  border: var(--card-border-width) solid var(--line);
+  padding: 5px 10px;
+  cursor: pointer;
+  max-width: 48%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-nav__btn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.sp-nav__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* Таблица посещений — шапка Label, а не body bold */
 .session-attendance-table thead th {
   font-family: var(--font-ui);
@@ -1035,6 +1136,31 @@
   padding: 6px 8px;
   border-bottom: var(--card-border-width) solid var(--line);
   white-space: nowrap;
+}
+.sp-check-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.sp-check-head input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--ink);
+}
+.sp-head-btn {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sp-head-btn:hover {
+  color: var(--ink);
 }
 .session-attendance-table tbody td {
   padding: 6px 8px;

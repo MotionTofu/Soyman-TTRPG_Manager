@@ -8,7 +8,7 @@ import sharp from "sharp";
 // full-resolution.
 export const IMAGE_SIZE_PRESETS = {
   avatar: { width: 700, height: 700 },
-  thumbnail: { width: 900, height: 675 },
+  thumbnail: { width: 900, height: 562 },
   background: { width: 1920, height: 1080 },
   gallery: { width: 1500, height: 844 },
 } as const;

@@ -121,17 +121,18 @@ async function loadCharacterCards(campaignId: number): Promise<CharacterCardData
   const characters = await api.get<Character[]>(`/characters?campaign_id=${campaignId}`);
   const cards = await Promise.all(
     characters.map(async (c) => {
-      const statblocks = await api.get<Statblock[]>(
-        `/statblocks?owner_type=character&owner_id=${c.id}`
-      );
-      const row = statblocks.find((s) => s.format === "dnd_character");
-      if (!row) return null;
-      let data: DndCharacterData;
       try {
-        data = JSON.parse(row.content);
-      } catch {
-        return null;
-      }
+        const statblocks = await api.get<Statblock[]>(
+          `/statblocks?owner_type=character&owner_id=${c.id}`
+        );
+        const row = statblocks.find((s) => s.format === "dnd_character");
+        if (!row) return null;
+        let data: DndCharacterData;
+        try {
+          data = JSON.parse(row.content);
+        } catch {
+          return null;
+        }
       const dexMod = abilityModifier(data.abilities.dex);
       const ac = computeArmorClass(dexMod, data.equipmentSections, parseBonus(data.manualAcBonus));
       const profBonus = parseBonus(data.proficiencyBonus);
@@ -152,6 +153,9 @@ async function loadCharacterCards(campaignId: number): Promise<CharacterCardData
         subclassName,
         skills,
       };
+      } catch {
+        return null;
+      }
     })
   );
   return cards.filter((c): c is CharacterCardData => c !== null);
@@ -216,7 +220,11 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
     }
     window.addEventListener("afterprint", cleanup);
     const raf = requestAnimationFrame(() => window.print());
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      // Если диалог закрыли Esc или компонент размонтировался до afterprint — чистим
+      if (document.body.classList.contains("printing-cheatsheet")) cleanup();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printJob]);
 

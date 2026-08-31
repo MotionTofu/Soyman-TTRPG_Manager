@@ -53,6 +53,7 @@ export function GenrePicker({
               style={{ "--genre-color": cat.color } as React.CSSProperties}
               onClick={() => toggle(cat.name)}
               disabled={atLimit && !isCategoryOnlySelected(cat.name)}
+              title={atLimit && !isCategoryOnlySelected(cat.name) ? "Лимит 3 жанра — снимите один перед добавлением" : undefined}
             >
               <ZineGraphic name={cat.icon} className="genre-category-icon" />
               <span>{cat.name}</span>
@@ -66,6 +67,7 @@ export function GenrePicker({
                   style={{ "--genre-color": cat.color } as React.CSSProperties}
                   onClick={() => toggle(cat.name, sub)}
                   disabled={atLimit && !isSelected(cat.name, sub)}
+                  title={atLimit && !isSelected(cat.name, sub) ? "Лимит 3 жанра" : undefined}
                 >
                   {sub}
                 </button>

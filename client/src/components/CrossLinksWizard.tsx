@@ -155,7 +155,7 @@ export function CrossLinksWizard({
   return (
     <details className="card">
       <summary className="sb-section" style={{ margin: 0 }}>
-        Расставить ссылки
+        Автолинковка упоминаний <span className="badge tag" style={{ marginLeft: 8, fontSize: "var(--fs-micro)" }}>beta</span>
       </summary>
       <div className="stack" style={{ marginTop: 8 }}>
         <span className="muted">{help}</span>

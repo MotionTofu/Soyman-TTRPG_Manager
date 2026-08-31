@@ -238,6 +238,12 @@ export async function writeReplacingOldFile(
   resize?: ImageSizePreset
 ): Promise<void> {
   const absNew = vaultAbs(newPath);
+  // C-P1-6: путь обязан лежать внутри VAULT_ROOT, иначе — испорченная запись БД (../../Windows)
+  const root = path.resolve(VAULT_ROOT);
+  const resolvedNew = path.resolve(absNew);
+  if (resolvedNew === root || !resolvedNew.startsWith(root + path.sep)) {
+    throw new Error(`Refusing to write outside vault: ${newPath}`);
+  }
   const absOld = oldPath ? vaultAbs(oldPath) : null;
   if (absOld && absOld !== absNew && fs.existsSync(absOld)) {
     try {

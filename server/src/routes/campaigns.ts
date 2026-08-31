@@ -4,14 +4,23 @@ import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
-import { campaignFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
+import { campaignFolder, toFileUrl, VAULT_ROOT, vaultAbs, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { campaignEarnings } from "../services/finance";
 import { requireAuth } from "../services/auth";
 import { broadcastToCampaign } from "../services/realtime";
 
 export const campaignsRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) cb(null, true);
+    else cb(new Error("Недопустимый тип файла — разрешены только JPG/PNG/GIF/WebP/AVIF"));
+  },
+});
 
 function withBgUrl<T extends { background_image_path?: string | null; thumbnail_image_path?: string | null }>(
   row: T
@@ -86,7 +95,9 @@ campaignsRouter.post("/:id/background", upload.single("file"), async (req, res) 
   if (!campaign) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Недопустимое расширение файла" });
+  const ext = rawExt;
   const target = path.join(campaign.folder_path, `background${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, campaign.background_image_path, "background");
 
@@ -104,7 +115,9 @@ campaignsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) =
   if (!campaign) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Недопустимое расширение файла" });
+  const ext = rawExt;
   const target = path.join(campaign.folder_path, `thumbnail${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, campaign.thumbnail_image_path, "thumbnail");
 
@@ -113,6 +126,38 @@ campaignsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) =
     req.params.id
   );
   res.json(withBgUrl({ thumbnail_image_path: target }));
+});
+
+campaignsRouter.delete("/:id/background", (req, res) => {
+  const campaign = db.prepare("SELECT background_image_path FROM campaigns WHERE id = ?").get(req.params.id) as
+    | { background_image_path: string | null }
+    | undefined;
+  if (!campaign) return res.status(404).json({ error: "not found" });
+  if (campaign.background_image_path) {
+    try {
+      const abs = path.resolve(vaultAbs(campaign.background_image_path));
+      const root = path.resolve(VAULT_ROOT);
+      if (abs !== root && abs.startsWith(root + path.sep) && fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {}
+    db.prepare("UPDATE campaigns SET background_image_path = NULL WHERE id = ?").run(req.params.id);
+  }
+  res.json({ ok: true });
+});
+
+campaignsRouter.delete("/:id/thumbnail", (req, res) => {
+  const campaign = db.prepare("SELECT thumbnail_image_path FROM campaigns WHERE id = ?").get(req.params.id) as
+    | { thumbnail_image_path: string | null }
+    | undefined;
+  if (!campaign) return res.status(404).json({ error: "not found" });
+  if (campaign.thumbnail_image_path) {
+    try {
+      const abs = path.resolve(vaultAbs(campaign.thumbnail_image_path));
+      const root = path.resolve(VAULT_ROOT);
+      if (abs !== root && abs.startsWith(root + path.sep) && fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {}
+    db.prepare("UPDATE campaigns SET thumbnail_image_path = NULL WHERE id = ?").run(req.params.id);
+  }
+  res.json({ ok: true });
 });
 
 campaignsRouter.post("/", (req, res) => {
@@ -392,15 +437,23 @@ campaignsRouter.post("/:id/calendar-events", (req, res) => {
       inworld_day: number;
       important?: boolean;
     };
-  if (!title || inworld_year == null || inworld_month == null || inworld_day == null) {
+  const trimmedTitle = typeof title === "string" ? title.trim() : "";
+  if (!trimmedTitle || inworld_year == null || inworld_month == null || inworld_day == null) {
     return res
       .status(400)
       .json({ error: "title, inworld_year, inworld_month, inworld_day are required" });
   }
+  if (trimmedTitle.length > 200 || (description && description.length > 5000)) {
+    return res.status(400).json({ error: "title or description too long" });
+  }
+  const y = Number(inworld_year); const m = Number(inworld_month); const d = Number(inworld_day);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || m < 1 || m > 36 || d < 1 || d > 60) {
+    return res.status(400).json({ error: "invalid inworld date" });
+  }
   // «Сейчас» кампании — закреплённая дата, а без неё последняя проведённая
   // сессия: у расписания будущее и есть основной случай, и ставить всему
   // «случилось» значило бы врать почти каждой записи.
-  const status = defaultStatus(inworld_year, inworld_month, campaignNow(Number(req.params.id)));
+  const status = defaultStatus(y, m, campaignNow(Number(req.params.id)));
   const info = db
     .prepare(
       `INSERT INTO campaign_calendar_events
@@ -409,11 +462,11 @@ campaignsRouter.post("/:id/calendar-events", (req, res) => {
     )
     .run(
       req.params.id,
-      title,
+      trimmedTitle,
       description ?? "",
-      inworld_year,
-      inworld_month,
-      inworld_day,
+      y,
+      m,
+      d,
       important ? 1 : 0,
       status
     );
@@ -432,6 +485,25 @@ campaignsRouter.put("/calendar-events/:eventId", (req, res) => {
       inworld_day?: number;
       important?: boolean;
     };
+  const existing = db.prepare("SELECT campaign_id FROM campaign_calendar_events WHERE id = ?").get(req.params.eventId) as { campaign_id: number } | undefined;
+  if (!existing) return res.status(404).json({ error: "not found" });
+  if (title !== undefined && typeof title === "string" && title.trim().length === 0) {
+    return res.status(400).json({ error: "title cannot be empty" });
+  }
+  if (title !== undefined && typeof title === "string" && title.trim().length > 200) {
+    return res.status(400).json({ error: "title too long" });
+  }
+  if (description !== undefined && typeof description === "string" && description.length > 5000) {
+    return res.status(400).json({ error: "description too long" });
+  }
+  for (const [k, v] of [["inworld_month", inworld_month], ["inworld_day", inworld_day]] as const) {
+    if (v !== undefined && v !== null) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || (k === "inworld_month" && (n < 1 || n > 36)) || (k === "inworld_day" && (n < 1 || n > 60))) {
+        return res.status(400).json({ error: `invalid ${k}` });
+      }
+    }
+  }
   db.prepare(
     `UPDATE campaign_calendar_events SET
        title = COALESCE(?, title),
@@ -442,7 +514,7 @@ campaignsRouter.put("/calendar-events/:eventId", (req, res) => {
        important = COALESCE(?, important)
      WHERE id = ?`
   ).run(
-    title ?? null,
+    title !== undefined ? (title === null ? null : String(title).trim() || null) : null,
     description ?? null,
     inworld_year ?? null,
     inworld_month ?? null,
@@ -461,6 +533,8 @@ campaignsRouter.put("/calendar-events/:eventId", (req, res) => {
 });
 
 campaignsRouter.delete("/calendar-events/:eventId", (req, res) => {
+  const existing = db.prepare("SELECT id FROM campaign_calendar_events WHERE id = ?").get(req.params.eventId) as { id: number } | undefined;
+  if (!existing) return res.status(404).json({ error: "not found" });
   db.prepare("DELETE FROM campaign_calendar_events WHERE id = ?").run(req.params.eventId);
   res.json({ ok: true });
 });

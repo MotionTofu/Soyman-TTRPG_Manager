@@ -7,11 +7,12 @@ import { CompendiumSection } from "../components/CompendiumSection";
 import { MonsterSection } from "../components/MonsterSection";
 import { VehicleSection } from "../components/VehicleSection";
 import { downloadJson } from "../downloadJson";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemGroup, SystemSection } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
+import { EntityImageSlot } from "../components/EntityImageSlot";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -26,6 +27,8 @@ export function SystemDetailPage() {
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [tidying, setTidying] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
   // Уборка справочника правит записи мимо экрана: раздел читает их один раз
   // при монтировании и о правке не узнаёт, поэтому после неё показывал старое
   // — пустые поля и фильтр, которому не по чему фильтровать. Ключ раздела
@@ -62,13 +65,40 @@ export function SystemDetailPage() {
   async function handleThumbnailChange(file: File | null) {
     if (!file) return;
     setUploadingThumbnail(true);
-    const form = new FormData();
-    form.append("file", file);
-    await api.post(`/systems/${systemId}/thumbnail`, form);
-    setUploadingThumbnail(false);
-    refreshSystem();
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await api.post(`/systems/${systemId}/thumbnail`, form);
+      // Форс-обновление без кэша — иначе F5 нужен, т.к. ?v= может совпасть в пределах секунды
+      const updated = await api.get<System>(`/systems/${systemId}?t=${Date.now()}`);
+      setSystem(updated);
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setUploadingThumbnail(false);
+    }
   }
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
+
+  async function deleteThumbnail() {
+    const ok = await confirm({
+      title: "Удалить тамбнейл?",
+      message: "Изображение будет удалено с диска.",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
+    setUploadingThumbnail(true);
+    try {
+      await api.del(`/systems/${systemId}/thumbnail`);
+      const updated = await api.get<System>(`/systems/${systemId}?t=${Date.now()}`);
+      setSystem(updated);
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  }
 
   if (!system) return <p className="muted">Загрузка…</p>;
 
@@ -83,7 +113,7 @@ export function SystemDetailPage() {
       code,
     });
     if (saved.code_taken_by) {
-      alert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
+      showAlert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
     }
     refreshSystem();
   }
@@ -94,12 +124,18 @@ export function SystemDetailPage() {
   }
 
   async function archiveSystem() {
-    if (!confirm("Отправить систему в архив?")) return;
+    const ok = await confirm({
+      title: "Архивировать систему?",
+      message: "Отправить систему в архив?",
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.del(`/systems/${systemId}`);
       navigate("/systems");
     } catch (e) {
-      alert(`Не удалось архивировать: ${e instanceof Error ? e.message : String(e)}`);
+      showAlert(`Не удалось архивировать: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -168,23 +204,22 @@ export function SystemDetailPage() {
 
       {activeTab === "overview" && (
         <div className="stack">
+          {confirmDialog}
+          {alertDialog}
           <section className="sys-card">
-            <div className="sys-card-head">Тамбнейл</div>
+            <div className="sys-card-head">Тамбнейл — 16×10</div>
             <div className="sys-card-body">
-              {system.thumbnail_image_url && (
-                <img src={system.thumbnail_image_url} alt="" />
-              )}
-              <label>
-                {uploadingThumbnail ? "Загрузка…" : "Выбрать изображение"}
-                <input
-                  type="file"
-                  accept={IMAGE_ACCEPT}
-                  style={{ display: "none" }}
-                  onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)}
+              <div className="entity-image-slots">
+                <EntityImageSlot
+                  title="Тамбнейл системы"
+                  hint="Карточка в списке систем. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF."
+                  url={system.thumbnail_image_url}
+                  uploading={uploadingThumbnail}
+                  onSelect={thumbnailCrop.onSelect}
+                  onDelete={system.thumbnail_image_url ? deleteThumbnail : undefined}
                 />
-              </label>
+              </div>
               {thumbnailCrop.modal}
-              <span className="muted image-hint">{IMAGE_HINT}</span>
             </div>
           </section>
           <EditableTextCard
@@ -203,7 +238,8 @@ export function SystemDetailPage() {
                 label: "Код",
                 value: system.code ?? "",
                 placeholder: "phb",
-                title: 'Короткое сокращение модуля — «phb», «dh». Подставляется в ссылки внутри текстов вместо полного имени: токен Мастер видит при каждой правке, и короткий читается заметно легче. Его же увидит тот, у кого этого модуля нет.',
+                pattern: "^[a-z0-9-]{2,8}$",
+                title: 'Пример: phb → Player’s Handbook. Короткое сокращение для ссылок [[phb:…]]. Латиница, 2–8 символов.',
               },
             ]}
             onSaveFields={(v) => saveName(v.name, v.code)}

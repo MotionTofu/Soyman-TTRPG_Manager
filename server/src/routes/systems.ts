@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { AuthedRequest } from "../services/auth";
+import fs from "fs";
 import multer from "multer";
 import path from "path";
 import { db } from "../db/db";
@@ -10,6 +11,8 @@ import {
   readFileAsBase64,
   systemFolder,
   toFileUrl,
+  VAULT_ROOT,
+  vaultAbs,
   writeBase64File,
   writeReplacingOldFile,
 } from "../services/filesystem";
@@ -32,7 +35,16 @@ import { isCompendiumKind } from "../services/compendiumKinds";
 import { applyTidy, planTidy } from "../services/tidyCompendium";
 
 export const systemsRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) cb(null, true);
+    else cb(new Error("Недопустимый тип файла — разрешены только JPG/PNG/GIF/WebP/AVIF"));
+  },
+});
 
 function withThumbUrl<T extends { thumbnail_image_path?: string | null }>(row: T) {
   return {
@@ -614,12 +626,30 @@ systemsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) => 
   if (!system) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Недопустимое расширение файла" });
+  const ext = rawExt;
   const target = path.join(system.folder_path, `thumbnail${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, system.thumbnail_image_path, "thumbnail");
 
   db.prepare("UPDATE systems SET thumbnail_image_path = ? WHERE id = ?").run(target, req.params.id);
   res.json(withThumbUrl({ thumbnail_image_path: target }));
+});
+
+systemsRouter.delete("/:id/thumbnail", (req, res) => {
+  const system = db.prepare("SELECT thumbnail_image_path FROM systems WHERE id = ?").get(req.params.id) as
+    | { thumbnail_image_path: string | null }
+    | undefined;
+  if (!system) return res.status(404).json({ error: "not found" });
+  if (system.thumbnail_image_path) {
+    try {
+      const abs = path.resolve(vaultAbs(system.thumbnail_image_path));
+      const root = path.resolve(VAULT_ROOT);
+      if (abs !== root && abs.startsWith(root + path.sep) && fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {}
+    db.prepare("UPDATE systems SET thumbnail_image_path = NULL WHERE id = ?").run(req.params.id);
+  }
+  res.json({ ok: true });
 });
 
 // «Привести справочник в порядок»: сперва план — сколько работы нашлось и что

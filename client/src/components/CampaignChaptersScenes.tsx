@@ -79,9 +79,8 @@ export function CampaignChaptersScenes({
 
   return (
     <div className="stack campaign-chapters">
-      <p className="muted" style={{ maxWidth: "62ch" }}>
-        Приключения кампании со своими главами и сценами. Правка сцены создаёт её версию для этой
-        кампании, оригинал в сеттинге не меняется.
+      <p className="muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+        Приключения кампании со своими главами и сценами. Правка сцены создаёт её версию для этой кампании, оригинал в сеттинге не меняется.
       </p>
       {tree.map((adv) => {
         const total =
@@ -91,16 +90,16 @@ export function CampaignChaptersScenes({
           ...adv.chapters.flatMap((c) => c.scenes),
         ]);
         return (
-          <details key={adv.id} className="card">
-            <summary className="campaign-overview-header">
-              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adv.name}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, opacity: 0.85, marginLeft: 8, flexShrink: 0 }}>
+          <details key={adv.id} className="card res-group">
+            <summary className="res-group__band">
+              <span className="res-group__title" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adv.name}</span>
+              <span className="res-group__count">
                 {adv.chapters.length ? `${adv.chapters.length} ${chapterWord(adv.chapters.length)} · ` : ""}{total} {sceneWord(total)}
                 {total > 0 && ` · ✓${done} · ○${pending} · ✕${skipped}`}
               </span>
               {adv.is_override && <span className="badge tag" style={{ marginLeft: 6 }}>правка кампании</span>}
             </summary>
-            <div className="stack" style={{ marginTop: 8, gap: 12 }}>
+            <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
               {/* Сцены, лежащие прямо на приключении: у книжного импорта их
                   почти не бывает, у самодельного — наоборот, все. */}
               {adv.scenes.length > 0 && (
@@ -116,16 +115,16 @@ export function CampaignChaptersScenes({
                 const chSkipped = c.scenes.filter((s) => s.state?.status === "skipped").length;
                 const chPending = c.scenes.length - chDone - chSkipped;
                 return (
-                  <details key={c.id} className="entity-group" open>
-                    <summary className="entity-group-header entity-group-header-toggle">
-                      <strong className="entry-title" style={{ fontSize: "var(--fs-h3)" }}>{c.name}</strong>
-                      <span className="muted" style={{ fontSize: 11 }}>
-                        · {c.scenes.length} {sceneWord(c.scenes.length)}
+                  <details key={c.id} className="card res-group" open>
+                    <summary className="res-group__band">
+                      <span className="res-group__title" style={{ fontSize: "var(--fs-h3)" }}>{c.name}</span>
+                      <span className="res-group__count">
+                        {c.scenes.length} {sceneWord(c.scenes.length)}
                         {c.scenes.length > 0 && ` · ✓${chDone} ○${chPending} ✕${chSkipped}`}
                       </span>
-                      {c.is_override && <span className="badge tag">правка кампании</span>}
+                      {c.is_override && <span className="badge tag" style={{ marginLeft: 6 }}>правка кампании</span>}
                     </summary>
-                    <div className="entity-row-list" style={{ marginTop: 6 }}>
+                    <div className="res-group__body" style={{ padding: 12 }}>
                       <SceneList scenes={c.scenes} campaignId={campaignId} onStatus={applyStatus} title={null} />
                     </div>
                   </details>

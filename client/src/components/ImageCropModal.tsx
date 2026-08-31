@@ -4,12 +4,11 @@ import { Modal } from "./Modal";
 export type CropShape = "background" | "square" | "thumbnail";
 
 // Container box each shape crops into — background is a 16:9 banner,
-// square is used for avatars/item photos, thumbnail is the wide strip used
-// on campaign/setting list cards.
+// square is used for avatars/item photos, thumbnail is 16:10 as campaign-tile.
 const BOX: Record<CropShape, { w: number; h: number; outW: number; outH: number; label: string }> = {
   background: { w: 480, h: 270, outW: 1600, outH: 900, label: "фон (16:9)" },
   square: { w: 320, h: 320, outW: 640, outH: 640, label: "квадрат 1:1" },
-  thumbnail: { w: 360, h: 130, outW: 1080, outH: 390, label: "тамбнейл (широкий)" },
+  thumbnail: { w: 360, h: 225, outW: 900, outH: 562, label: "тамбнейл (16:10)" },
 };
 
 interface Props {

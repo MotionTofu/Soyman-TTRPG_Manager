@@ -104,8 +104,18 @@ export function timePatch(body: Record<string, unknown>): { sets: string[]; valu
   }
   for (const column of ["inworld_year_end", "inworld_month_end", "inworld_day_end"] as const) {
     if (body[column] === undefined) continue;
+    if (body[column] === null) {
+      sets.push(`${column} = ?`);
+      values.push(null);
+      continue;
+    }
+    const n = Number(body[column]);
+    if (!Number.isFinite(n)) continue;
+    // Года могут быть отрицательными (до эры), месяцы/дни — только положительные.
+    if (column === "inworld_month_end" && (n < 1 || n > 36)) continue;
+    if (column === "inworld_day_end" && (n < 1 || n > 60)) continue;
     sets.push(`${column} = ?`);
-    values.push(body[column] === null ? null : Number(body[column]));
+    values.push(n);
   }
   return { sets, values };
 }

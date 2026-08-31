@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { CalendarMonth, CalendarWeekday, ImportantDate } from "../types";
 import { weekdayIndexFor } from "../inworldCalendar";
 
@@ -87,6 +87,10 @@ export function InworldCalendar({
     }
   }
 
+  const longPress = useRef<number | null>(null);
+  function clearLongPress() {
+    if (longPress.current != null) { clearTimeout(longPress.current); longPress.current = null; }
+  }
   const cells: { day: number | null }[] = [];
   for (let i = 0; i < startWeekday; i++) cells.push({ day: null });
   for (let d = 1; d <= dayCount; d++) cells.push({ day: d });
@@ -111,10 +115,10 @@ export function InworldCalendar({
           />
           {onPin &&
             (pinned?.year === cursor.year && pinned?.month === cursor.month ? (
-              <button onClick={() => onPin(null)}>Открепить месяц</button>
+              <button onClick={() => onPin(null)} title="Сейчас в мире — отсюда считается статус предстоящее/случилось и центрируется ось">📌 Открепить месяц</button>
             ) : (
-              <button onClick={() => onPin({ year: cursor.year, month: cursor.month })}>
-                Закрепить месяц
+              <button onClick={() => onPin({ year: cursor.year, month: cursor.month })} title="Сейчас в мире — отсюда считается статус предстоящее/случилось и центрируется ось">
+                📌 Закрепить месяц
               </button>
             ))}
         </div>
@@ -129,19 +133,30 @@ export function InworldCalendar({
             {w.name}
           </div>
         ))}
-        {cells.map((c, i) =>
-          c.day === null ? (
-            <div key={`empty-${i}`} className="day empty" />
-          ) : (
+        {cells.map((c, i) => {
+          if (c.day === null) return <div key={`empty-${i}`} className="day empty" />;
+          const dayItems = visibleItems.filter((it) => it.day === c.day);
+          const hasSession = dayItems.some((it) => it.kind === "session");
+          const hasEvent = dayItems.some((it) => it.kind === "event");
+          return (
             <div
               key={c.day}
-              className="day"
+              className={`day${hasSession ? " has-session" : ""}${hasEvent ? " has-event" : ""}`}
               onClick={() => onDayClick?.(cursor.year, cursor.month, c.day!)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onDayContextMenu?.(cursor.year, cursor.month, c.day!, e.clientX, e.clientY);
               }}
+              onTouchStart={(e) => {
+                const touch = e.touches[0];
+                clearLongPress();
+                longPress.current = window.setTimeout(() => {
+                  onDayContextMenu?.(cursor.year, cursor.month, c.day!, touch.clientX, touch.clientY);
+                }, 520);
+              }}
+              onTouchEnd={clearLongPress}
+              onTouchMove={clearLongPress}
             >
               <span className="num">{c.day}</span>
               {visibleItems
@@ -182,7 +197,8 @@ export function InworldCalendar({
                   </span>
                 ))}
             </div>
-          )
+          );
+        }
         )}
       </div>
     </div>

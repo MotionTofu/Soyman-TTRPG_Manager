@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -63,6 +63,20 @@ export function EditableTextCard({
   const [fieldValues, setFieldValues] = useState<EntityFieldValues>(() =>
     toFieldValues(fields ?? [])
   );
+  const [expandedText, setExpandedText] = useState(false);
+
+  // U-P2-3: Ctrl+S в режиме правки — как в Notion/Obsidian
+  useEffect(() => {
+    if (!editMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void handleSave();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  });
 
   function startEdit() {
     setDraft(value);
@@ -132,9 +146,26 @@ export function EditableTextCard({
         </>
       ) : (
         <>
-          <div style={{ whiteSpace: "pre-wrap" }}>
-            {value ? <MentionText text={value} /> : <span className="muted">Пусто</span>}
-          </div>
+          {(() => {
+            const isLong = value.length > 600 || value.split("\n").length > 8;
+            const clampClass = isLong && !expandedText ? "editable-clamp" : "";
+            return (
+              <>
+                <div className={clampClass} style={{ whiteSpace: "pre-wrap" }}>
+                  {value ? <MentionText text={value} /> : <span className="muted">Пусто</span>}
+                </div>
+                {isLong && (
+                  <button
+                    type="button"
+                    className="editable-clamp-toggle"
+                    onClick={() => setExpandedText((v) => !v)}
+                  >
+                    {expandedText ? "Свернуть" : "Показать полностью"}
+                  </button>
+                )}
+              </>
+            );
+          })()}
           <div className="row">
             <button onClick={startEdit}>Редактировать</button>
             {extraAction && (

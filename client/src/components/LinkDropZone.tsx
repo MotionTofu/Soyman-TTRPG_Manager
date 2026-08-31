@@ -4,6 +4,7 @@ import { useUnloadTarget } from "../unloadTargets";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import type { SearchResult } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface GenericLink {
   id: number;
@@ -31,6 +32,7 @@ export const SEARCH_DRAG_MIME = "application/x-rpg-search-result";
 export function LinkDropZone({ entityType, entityId, title = "Связанное" }: Props) {
   const [items, setItems] = useState<LinkedItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
 
   async function load() {
     const links = await api.get<GenericLink[]>(
@@ -76,14 +78,19 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
   }
 
   async function removeLink(linkId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    const ok = await confirm({ message: "Удалить связь?", confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     await api.del(`/links/${linkId}`);
     load();
   }
 
   return (
-    <div className="stack">
+    <div className="stack" id={`section-${entityType}-${entityId}-${title.replace(/\s+/g, "-")}`}>
+      {confirmDialog}
       <strong>{title}</strong>
+      <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
+        Перетащите сюда результат поиска (правая панель) или выгрузите из Мешка. Совет: Ctrl+K — поиск.
+      </span>
       <div
         className={`drop-zone${dragOver ? " drag-over" : ""}`}
         onDragOver={(e) => {
@@ -94,7 +101,7 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
         onDrop={handleDrop}
       >
         {items.length === 0 && (
-          <span className="muted">Перетащите сюда результат поиска</span>
+          <span className="muted">Пока нет связей — перетащите сюда</span>
         )}
         <div className="stack">
           {items.map((it) => (

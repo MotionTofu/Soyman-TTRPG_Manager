@@ -101,59 +101,55 @@ function EntryCard({
   }
 
   return (
-    <div className="card stack">
-      <div
-        className="row collapsible-header"
-        style={{ justifyContent: "space-between", cursor: editMode ? "default" : "pointer" }}
-        onClick={() => !editMode && setExpanded((v) => !v)}
-      >
-        <span className="row" style={{ alignItems: "center" }}>
-          {!editMode && (
-            <span className="comp-toggle" aria-hidden="true">
-              {expanded ? "▾" : "▸"}
-            </span>
-          )}
-          {editMode ? (
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Заголовок"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <strong className="entry-title">{entry.title}</strong>
-          )}
-        </span>
+    <details className="card res-group" open={open} onToggle={(e) => { if (!editMode) setExpanded((e.currentTarget as HTMLDetailsElement).open); }}>
+      <summary className="res-group__band" onClick={(e) => { if (editMode) e.preventDefault(); }}>
+        {editMode ? (
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Заголовок"
+            onClick={(e) => e.stopPropagation()}
+            style={{ flex: 1, minWidth: 0 }}
+          />
+        ) : (
+          <span className="res-group__title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.title}</span>
+        )}
+        <span style={{ flex: 1 }} />
         <button
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onRemove(entry.id);
           }}
+          style={{ flexShrink: 0 }}
+          aria-label="Удалить"
         >
           ✕
         </button>
-      </div>
-      {open &&
-        (editMode ? (
-          <>
-            <MentionTextarea value={content} onChange={setContent} rows={4} defaultSettingId={defaultSettingId} />
-            <div className="row">
-              <button className="primary" onClick={save}>
-                Сохранить
+      </summary>
+      <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
+        {open &&
+          (editMode ? (
+            <>
+              <MentionTextarea value={content} onChange={setContent} rows={4} defaultSettingId={defaultSettingId} />
+              <div className="row">
+                <button className="primary" onClick={save}>
+                  Сохранить
+                </button>
+                <button onClick={() => setEditMode(false)}>Отмена</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ whiteSpace: "pre-wrap" }}>
+                <MentionText text={entry.content} />
+              </div>
+              <button onClick={() => setEditMode(true)} style={{ alignSelf: "flex-start" }}>
+                Редактировать
               </button>
-              <button onClick={() => setEditMode(false)}>Отмена</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ whiteSpace: "pre-wrap" }}>
-              <MentionText text={entry.content} />
-            </div>
-            <button onClick={() => setEditMode(true)} style={{ alignSelf: "flex-start" }}>
-              Редактировать
-            </button>
-          </>
-        ))}
-    </div>
+            </>
+          ))}
+      </div>
+    </details>
   );
 }

@@ -8,6 +8,7 @@ import { NavIcon } from "../components/NavIcons";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { ResourcesSection } from "../components/ResourcesSection";
 import { CheatSheetsSection } from "../components/CheatSheetsSection";
+import { Modal } from "../components/Modal";
 import { SessionSceneTree } from "../components/SessionSceneTree";
 import { LazyDetails } from "../components/LazyDetails";
 import { MentionText } from "../components/mentions/MentionText";
@@ -90,7 +91,9 @@ export function SessionDetailPage() {
   const calendar = useSettingCalendar(campaign?.setting_id);
 
   const refresh = useCallback(() => {
+    let cancelled = false;
     api.get<SessionDetail>(`/sessions/${sessionId}`).then((s) => {
+      if (cancelled) return;
       setSession(s);
       setStakeDraft(s.stake_override != null ? String(s.stake_override) : "");
       setDateDraft(s.date);
@@ -103,22 +106,26 @@ export function SessionDetailPage() {
       setInworldMonthEndDraft(s.inworld_month_end != null ? String(s.inworld_month_end) : "");
       setInworldDayEndDraft(s.inworld_day_end != null ? String(s.inworld_day_end) : "");
       if (s.inworld_year_end != null) setShowEndDate(true);
-      api.get<Campaign>(`/campaigns/${s.campaign_id}`).then(setCampaign);
+      api.get<Campaign>(`/campaigns/${s.campaign_id}`).then((c) => { if (!cancelled) setCampaign(c); }).catch(() => {});
       api
         .get<SessionSummary[]>(`/campaigns/${s.campaign_id}/sessions`)
-        .then(setCampaignSessions);
+        .then((v) => { if (!cancelled) setCampaignSessions(v); }).catch(() => {});
       // Ответ хранится как есть, разложенным по приключениям: за столом
       // нераскрытая тайна почти всегда вспоминается вместе с приключением, из
       // которого тянется, и плоский список на семь десятков строк не давал
       // понять, где какая ветка.
       api
         .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${s.campaign_id}`)
-        .then(setSecretData);
-    });
-    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then(setReport).catch(() => setReport(null));
+        .then((v) => { if (!cancelled) setSecretData(v); }).catch(() => {});
+    }).catch(() => {});
+    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then((r) => { if (!cancelled) setReport(r); }).catch(() => { if (!cancelled) setReport(null); });
+    return () => { cancelled = true; };
   }, [sessionId]);
 
-  useEffect(refresh, [refresh]);
+  useEffect(() => {
+    const cleanup = refresh();
+    return cleanup;
+  }, [refresh]);
 
   useEffect(() => {
     api.get<Playlist[]>("/playlists").then(setBattles).catch(() => setBattles([]));
@@ -160,8 +167,12 @@ export function SessionDetailPage() {
     );
   }
 
+  const [pendingReveal, setPendingReveal] = useState<StorySecret | null>(null);
+  const [justRevealed, setJustRevealed] = useState<StorySecret | null>(null);
+
   async function markSecretRevealed(secretId: number) {
     if (!session) return;
+    const secret = [...secretData.own, ...secretData.groups.flatMap((g) => g.items)].find((x) => x.id === secretId) ?? null;
     // Сессия уезжает вместе с отметкой: «Раскрылось в этот вечер» в резюме
     // строится по ней, а не по дате правки.
     await api.put(`/story/secrets/${secretId}/state`, {
@@ -185,7 +196,35 @@ export function SessionDetailPage() {
         return items === g.items ? g : { ...g, items };
       }),
     }));
-    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then(setReport);
+    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then((r) => setReport(r)).catch(() => {});
+    if (secret) {
+      setJustRevealed(secret);
+      setTimeout(() => setJustRevealed((cur) => (cur?.id === secretId ? null : cur)), 5000);
+    }
+  }
+
+  async function undoReveal(secretId: number) {
+    if (!session) return;
+    await api.put(`/story/secrets/${secretId}/state`, {
+      campaign_id: session.campaign_id,
+      revealed: false,
+    });
+    const patch = (list: StorySecret[]) => {
+      const i = list.findIndex((x) => x.id === secretId);
+      if (i === -1) return list;
+      const next = list.slice();
+      next[i] = { ...list[i], state: { revealed: 0, note: list[i].state?.note ?? "" } };
+      return next;
+    };
+    setSecretData((prev) => ({
+      own: patch(prev.own),
+      groups: prev.groups.map((g) => {
+        const items = patch(g.items);
+        return items === g.items ? g : { ...g, items };
+      }),
+    }));
+    setJustRevealed(null);
+    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then((r) => setReport(r)).catch(() => {});
   }
 
   // useMemo (not a plain filter) so ResourcesSection's React.memo sees a
@@ -265,14 +304,69 @@ export function SessionDetailPage() {
     refresh();
   }
 
+  function parseDraftInt(v: string): number | null {
+    if (!v.trim()) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.trunc(n);
+  }
+
+  function validateInworldDraft(): string | null {
+    const y = parseDraftInt(inworldYearDraft);
+    const m = parseDraftInt(inworldMonthDraft);
+    const d = parseDraftInt(inworldDayDraft);
+    // Если указана часть даты — проверяем диапазоны
+    if (m !== null && (m < 1 || (calendar && calendar.months.length > 0 && m > calendar.months.length))) return "Месяц вне диапазона";
+    if (d !== null) {
+      if (d < 1 || d > 31) return "День должен быть 1–31";
+      if (m !== null && calendar) {
+        const month = calendar.months.find((x) => x.position === m);
+        if (month && d > month.days) return `В месяце «${month.name}» только ${month.days} дней`;
+      }
+    }
+    if (showEndDate) {
+      const ye = parseDraftInt(inworldYearEndDraft);
+      const me = parseDraftInt(inworldMonthEndDraft);
+      const de = parseDraftInt(inworldDayEndDraft);
+      if (me !== null && (me < 1 || (calendar && calendar.months.length > 0 && me > calendar.months.length))) return "Месяц окончания вне диапазона";
+      if (de !== null) {
+        if (de < 1 || de > 31) return "День окончания должен быть 1–31";
+        if (me !== null && calendar) {
+          const month = calendar.months.find((x) => x.position === me);
+          if (month && de > month.days) return `В месяце «${month.name}» только ${month.days} дней`;
+        }
+      }
+      // Конец не раньше начала (если оба заданы)
+      if (y !== null && m !== null && d !== null && ye !== null && me !== null && de !== null && calendar) {
+        try {
+          const a = elapsedDays(y, m, d, calendar.months);
+          const b = elapsedDays(ye, me, de, calendar.months);
+          if (b < a) return "Дата окончания раньше начала";
+        } catch {}
+      }
+      void ye; void me; void de;
+    }
+    void y;
+    return null;
+  }
+
+  const inworldValidationError = editingInworldDate ? validateInworldDraft() : null;
+
   async function saveInworldDate() {
+    if (validateInworldDraft()) return;
+    const y = parseDraftInt(inworldYearDraft);
+    const m = parseDraftInt(inworldMonthDraft);
+    const d = parseDraftInt(inworldDayDraft);
+    const ye = showEndDate ? parseDraftInt(inworldYearEndDraft) : null;
+    const me = showEndDate ? parseDraftInt(inworldMonthEndDraft) : null;
+    const de = showEndDate ? parseDraftInt(inworldDayEndDraft) : null;
     await api.put(`/sessions/${sessionId}`, {
-      inworld_year: inworldYearDraft ? Number(inworldYearDraft) : null,
-      inworld_month: inworldMonthDraft ? Number(inworldMonthDraft) : null,
-      inworld_day: inworldDayDraft ? Number(inworldDayDraft) : null,
-      inworld_year_end: showEndDate && inworldYearEndDraft ? Number(inworldYearEndDraft) : null,
-      inworld_month_end: showEndDate && inworldMonthEndDraft ? Number(inworldMonthEndDraft) : null,
-      inworld_day_end: showEndDate && inworldDayEndDraft ? Number(inworldDayEndDraft) : null,
+      inworld_year: y,
+      inworld_month: m,
+      inworld_day: d,
+      inworld_year_end: ye,
+      inworld_month_end: me,
+      inworld_day_end: de,
     });
     setEditingInworldDate(false);
     refresh();
@@ -433,14 +527,16 @@ export function SessionDetailPage() {
         )
       : null;
 
+  const allAttended = session.attendance.length > 0 && session.attendance.every((a) => !!a.attended);
+
   return (
     <div className="stack session-profile">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <button disabled={!prevSession} onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}>
-          ← Пред. сессия
+      <div className="sp-nav">
+        <button className="sp-nav__btn" disabled={!prevSession} title={prevSession ? `${prevSession.title || `Сессия №${prevSession.session_number ?? ""}`} — ${prevSession.date}` : "Это первая сессия кампании"} onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}>
+          ← {prevSession ? (prevSession.title || `№${prevSession.session_number ?? ""} · ${prevSession.date}`) : "Пред. сессия"}
         </button>
-        <button disabled={!nextSession} onClick={() => nextSession && navigate(`/sessions/${nextSession.id}`)}>
-          След. сессия →
+        <button className="sp-nav__btn" disabled={!nextSession} title={nextSession ? `${nextSession.title || `Сессия №${nextSession.session_number ?? ""}`} — ${nextSession.date}` : "Это последняя сессия кампании"} onClick={() => nextSession && navigate(`/sessions/${nextSession.id}`)}>
+          {nextSession ? (nextSession.title || `№${nextSession.session_number ?? ""} · ${nextSession.date}`) : "След. сессия"} →
         </button>
       </div>
 
@@ -512,7 +608,11 @@ export function SessionDetailPage() {
         {campaign.setting_id && (
           <div className="sp-strip__cell">
             <span className="sp-label">В мире</span>
-            <span className="sp-value">{worldLabel}</span>
+            {worldLabel === "не указана" && !editingInworldDate ? (
+              <button className="sp-value sp-value--cta" onClick={() => { selectTab("Обзор"); setEditingInworldDate(true); }}>указать →</button>
+            ) : (
+              <span className="sp-value">{worldLabel}</span>
+            )}
           </div>
         )}
         <div className="sp-strip__cell">
@@ -530,7 +630,7 @@ export function SessionDetailPage() {
       <div className="tabs">
         {SESSION_TABS.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
+            {t}{t === "Ресурсы" && linkResources.length > 0 ? ` · ${linkResources.length}` : ""}
           </button>
         ))}
       </div>
@@ -546,6 +646,7 @@ export function SessionDetailPage() {
                     <span className="sp-deal__body">
                       <select
                         value={session.status}
+                        title={STATUS_LABELS[session.status] ?? session.status}
                         onChange={(e) => setStatus(e.target.value as SessionStatus)}
                       >
                         {/* Подписи берутся из того же словаря, что и значок в
@@ -566,6 +667,7 @@ export function SessionDetailPage() {
                       <span className="sp-deal__body">
                         <select
                           value={session.payment_override ?? ""}
+                          title={session.payment_override ? PAYMENT_TYPE_LABELS[session.payment_override as PaymentType] ?? "" : `Как в кампании (${PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})`}
                           onChange={(e) => setPaymentOverride(e.target.value as "" | PaymentType)}
                         >
                           <option value="">
@@ -698,43 +800,6 @@ export function SessionDetailPage() {
                           placeholder="—"
                         />
                       </div>
-                      {showEndDate && (
-                        <>
-                          <span className="sp-inworld-edit__label">Конец — год</span>
-                          <div className="sp-inworld-edit__field">
-                            <input
-                              type="number"
-                              value={inworldYearEndDraft}
-                              onChange={(e) => setInworldYearEndDraft(e.target.value)}
-                              placeholder="—"
-                            />
-                          </div>
-                          <span className="sp-inworld-edit__label">Конец — месяц</span>
-                          <div className="sp-inworld-edit__field">
-                            <select
-                              value={inworldMonthEndDraft}
-                              onChange={(e) => setInworldMonthEndDraft(e.target.value)}
-                              disabled={calendar.months.length === 0}
-                            >
-                              <option value="">—</option>
-                              {calendar.months.map((m) => (
-                                <option key={m.id} value={m.position}>
-                                  {m.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <span className="sp-inworld-edit__label">Конец — день</span>
-                          <div className="sp-inworld-edit__field">
-                            <input
-                              type="number"
-                              value={inworldDayEndDraft}
-                              onChange={(e) => setInworldDayEndDraft(e.target.value)}
-                              placeholder="—"
-                            />
-                          </div>
-                        </>
-                      )}
                     </div>
                     <label className="sp-inworld-edit__check">
                       <input
@@ -744,8 +809,49 @@ export function SessionDetailPage() {
                       />
                       указать дату окончания
                     </label>
+                    {showEndDate && (
+                      <div className="sp-inworld-edit__grid">
+                        <span className="sp-inworld-edit__label">Конец — год</span>
+                        <div className="sp-inworld-edit__field">
+                          <input
+                            type="number"
+                            value={inworldYearEndDraft}
+                            onChange={(e) => setInworldYearEndDraft(e.target.value)}
+                            placeholder="—"
+                          />
+                        </div>
+                        <span className="sp-inworld-edit__label">Конец — месяц</span>
+                        <div className="sp-inworld-edit__field">
+                          <select
+                            value={inworldMonthEndDraft}
+                            onChange={(e) => setInworldMonthEndDraft(e.target.value)}
+                            disabled={calendar.months.length === 0}
+                          >
+                            <option value="">—</option>
+                            {calendar.months.map((m) => (
+                              <option key={m.id} value={m.position}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <span className="sp-inworld-edit__label">Конец — день</span>
+                        <div className="sp-inworld-edit__field">
+                          <input
+                            type="number"
+                            value={inworldDayEndDraft}
+                            onChange={(e) => setInworldDayEndDraft(e.target.value)}
+                            placeholder="—"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {showEndDate && !inworldValidationError && draftYear !== null && draftMonth !== null && draftDay !== null && draftYearEnd !== null && draftMonthEnd !== null && draftDayEnd !== null && calendar && (() => { try { const d = elapsedDays(draftYearEnd, draftMonthEnd, draftDayEnd, calendar.months) - elapsedDays(draftYear, draftMonth, draftDay, calendar.months); return d >= 0 ? <span className="sp-inworld-edit__hint">Пройдёт {d} {plural(d, "день", "дня", "дней")}</span> : null; } catch { return null; } })()}
+                    {inworldValidationError && (
+                      <span className="sp-inworld-edit__error">{inworldValidationError}</span>
+                    )}
                     <div className="sp-inworld-edit__actions">
-                      <button className="primary" onClick={saveInworldDate}>
+                      <button className="primary" onClick={saveInworldDate} disabled={!!inworldValidationError}>
                         Сохранить дату
                       </button>
                       <button onClick={() => setEditingInworldDate(false)}>Отмена</button>
@@ -792,7 +898,7 @@ export function SessionDetailPage() {
                       {open &&
                         g.items.map((s) => (
                           <label key={s.id} className="sp-secret">
-                            <input type="checkbox" onChange={() => markSecretRevealed(s.id)} />
+                            <input type="checkbox" onChange={() => setPendingReveal(s)} />
                             <span style={{ minWidth: 0 }}>
                               <span className="sp-secret__title">{s.title}</span>
                               {s.content && (
@@ -809,6 +915,36 @@ export function SessionDetailPage() {
               </div>
             </div>
           )}
+          {justRevealed && (
+            <div className="sp-reveal-toast">
+              <span>«{justRevealed.title}» — отмечена раскрытой</span>
+              <button onClick={() => undoReveal(justRevealed.id)}>Отменить</button>
+              <button className="sp-reveal-toast__close" onClick={() => setJustRevealed(null)}>✕</button>
+            </div>
+          )}
+          {pendingReveal && (
+            <Modal onClose={() => setPendingReveal(null)}>
+              <div className="stack">
+                <h3 style={{ margin: 0 }}>Раскрыть тайну?</h3>
+                <p className="muted" style={{ margin: 0 }}>
+                  «{pendingReveal.title}» отметится как раскрытая в этой сессии и попадёт в «Раскрылось в этот вечер». Отменить можно в течение 5 секунд.
+                </p>
+                <div className="row">
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      const id = pendingReveal.id;
+                      setPendingReveal(null);
+                      markSecretRevealed(id);
+                    }}
+                  >
+                    Раскрыть
+                  </button>
+                  <button onClick={() => setPendingReveal(null)}>Отмена</button>
+                </div>
+              </div>
+            </Modal>
+          )}
         </div>
       )}
 
@@ -822,6 +958,7 @@ export function SessionDetailPage() {
             entityType="session"
             entityId={sessionId}
             collapsible
+            defaultOpen
           >
             {/* Боевая тема задаётся здесь же, рядом с задумкой: её выбирают
                 на подготовке к конкретному вечеру, и она главнее темы
@@ -1014,20 +1151,21 @@ export function SessionDetailPage() {
                 <thead>
                   <tr>
                     <th>Игрок</th>
-                    <th
-                      style={{ cursor: "pointer" }}
-                      title="Отметить/снять всех"
-                      onClick={toggleAllAttendance}
-                    >
-                      Пришёл
+                    <th>
+                      <label className="sp-check-head" title="Отметить/снять всех">
+                        <input type="checkbox" checked={allAttended} onChange={toggleAllAttendance} />
+                        Пришёл
+                      </label>
                     </th>
                     {!isPlayer && !hideFinance && (
-                      <th
-                        style={isPaidEffective ? { cursor: "pointer" } : undefined}
-                        title={isPaidEffective ? "Оплатить всем по умолчанию" : undefined}
-                        onClick={isPaidEffective ? payAllDefault : undefined}
-                      >
-                        Оплачено
+                      <th>
+                        {isPaidEffective ? (
+                          <button type="button" className="sp-head-btn" title="Оплатить всем по умолчанию" onClick={payAllDefault}>
+                            Оплачено · всем
+                          </button>
+                        ) : (
+                          "Оплачено"
+                        )}
                       </th>
                     )}
                     {!isPlayer && !hideFinance && isPaidEffective && <th></th>}

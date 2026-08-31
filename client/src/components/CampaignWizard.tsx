@@ -33,11 +33,12 @@ import type { Campaign, CampaignRole, CampaignType, PaymentFrequency, PaymentTyp
 interface Props {
   systems: System[];
   settings: Setting[];
+  defaultSettingId?: number | string;
   onClose: () => void;
   onCreated?: () => void;
 }
 
-export function CampaignWizard({ systems, settings, onClose, onCreated }: Props) {
+export function CampaignWizard({ systems, settings, defaultSettingId, onClose, onCreated }: Props) {
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -52,7 +53,7 @@ export function CampaignWizard({ systems, settings, onClose, onCreated }: Props)
   const [sessionRate, setSessionRate] = useState("0");
   const [currency, setCurrency] = useState("RUB");
   const [systemId, setSystemId] = useState("");
-  const [settingId, setSettingId] = useState("");
+  const [settingId, setSettingId] = useState(defaultSettingId ? String(defaultSettingId) : "");
 
   // Динамический список шагов — §1.11: блока, которому нечего показать, нет.
   const steps = (() => {

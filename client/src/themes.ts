@@ -374,7 +374,7 @@ const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация",
 
 const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
   bg: "#092328",
-  text: "#E0EDE2",
+  text: "#CEDAD0",
   accent: "#8BBB92",
   accent2: "#2A835F",
   border: "#12544F",
@@ -388,12 +388,12 @@ const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
   bandImage: "repeating-linear-gradient(180deg, rgba(139,187,146,.07) 0 3px, transparent 3px 22px)",
   pageTexture: "radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px) 0 0/3px 3px",
   cardBodyTexture: "radial-gradient(rgba(139,187,146,.04) 1px, transparent 1px) 0 0/3px 3px",
-  playerBarText: "#E0EDE2",
+  playerBarText: "#CEDAD0",
   semanticOverrides: { gm: "#8BBB92", player: "#8FD0A8", paid: "#D2C49E", free: "#8BBB92", active: "#8BBB92", hold: "#7A9E8E", danger: "#E08E8E" },
   statusCapsuleOverrides: {
     planned: { bg: "#1A3A36", fg: "#8BBB92" },
     held: { bg: "#143528", fg: "#8BBB92" },
-    cancelled: { bg: "#3A2526", fg: "#D9A8A8" },
+    cancelled: { bg: "#3A2526", fg: "#F08080" },
     rescheduled: { bg: "#2F3320", fg: "#C8C9A0" },
   },
   cardBorderWidth: 1,
@@ -402,7 +402,7 @@ const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
 // бестиарий (.creature-card__band), группы ресурсов (.res-group__band),
 // вырезка (.home-article-band) и т.п. были темнее, как просили.
 PEACE_THEME.vars["--surface"] = "#0E3C3C";
-PEACE_THEME.vars["--on-surface"] = "#E0EDE2";
+PEACE_THEME.vars["--on-surface"] = "#CEDAD0";
 PEACE_THEME.vars["--on-surface-muted"] = "#8BBB92";
 
 export const BUILTIN_THEMES: Theme[] = [ZINE_THEME, RIOT_THEME, NEON_THEME, SOY_NOIR_THEME, PEACE_THEME, ABERRANT_THEME];

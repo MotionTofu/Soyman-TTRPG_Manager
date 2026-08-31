@@ -7,6 +7,7 @@ import { DETAIL_ROUTES } from "../entityTypes";
 import { parseMentions, resolveMention } from "../mentions";
 import type { SearchResult, SessionUnionRow } from "../types";
 import { ToInitiativeButton } from "./ToInitiativeButton";
+import { Modal } from "./Modal";
 
 interface GenericLink {
   id: number;
@@ -87,21 +88,29 @@ export const SectionDropZone = memo(function SectionDropZone({
   const [mentionEntries, setMentionEntries] = useState<Entry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   async function load() {
     const links = await api.get<GenericLink[]>(
       `/links?type=${entityType}&id=${entityId}&section=${section}`
     );
-    const resolved = await Promise.all(
+    const settled = await Promise.allSettled(
       links.map(async (l) => {
         const other =
           l.from_type === entityType && l.from_id === entityId
             ? { type: l.to_type, id: l.to_id }
             : { type: l.from_type, id: l.from_id };
-        const label = await resolveEntityLabel(other.type, other.id);
-        return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin, qty: l.qty ?? null };
+        try {
+          const label = await resolveEntityLabel(other.type, other.id);
+          return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin, qty: l.qty ?? null } as Entry;
+        } catch {
+          return null;
+        }
       })
     );
+    const resolved = settled
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((e): e is Entry => e !== null);
     setLinkEntries(resolved);
   }
 
@@ -163,7 +172,12 @@ export const SectionDropZone = memo(function SectionDropZone({
     setDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw) return;
-    const result: SearchResult = JSON.parse(raw);
+    let result: SearchResult;
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      return;
+    }
     if (!acceptTypes.includes(result.type)) return;
     if (
       result.type === "compendium_entry" &&
@@ -182,9 +196,11 @@ export const SectionDropZone = memo(function SectionDropZone({
     load();
   }
 
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+
   async function remove(linkId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
     await api.del(`/links/${linkId}`);
+    setPendingDelete(null);
     load();
   }
 
@@ -261,14 +277,102 @@ export const SectionDropZone = memo(function SectionDropZone({
               )}
             </div>
             {entry.linkId !== null && (
-              <button className="comp-mini" onClick={() => remove(entry.linkId!)}>
+              <button className="comp-mini" onClick={() => setPendingDelete(entry.linkId!)}>
                 ✕
               </button>
             )}
           </div>
         ))}
       </div>
+      <button type="button" className="comp-mini" style={{ marginTop: 8 }} onClick={() => setPickerOpen(true)}>
+        + Добавить
+      </button>
+      {pendingDelete !== null && (
+        <Modal onClose={() => setPendingDelete(null)}>
+          <div className="stack">
+            <h3 style={{ margin: 0 }}>Удалить связь?</h3>
+            <p className="muted" style={{ margin: 0 }}>Связь будет удалена. Это можно вернуть только повторным добавлением.</p>
+            <div className="row">
+              <button className="danger" onClick={() => remove(pendingDelete)}>Удалить</button>
+              <button onClick={() => setPendingDelete(null)}>Отмена</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {pickerOpen && (
+        <DropZonePicker
+          acceptTypes={acceptTypes}
+          acceptCompendiumKinds={acceptCompendiumKinds}
+          onPick={async (result) => {
+            await api.post("/links", {
+              from_type: entityType,
+              from_id: entityId,
+              to_type: result.type,
+              to_id: result.id,
+              section,
+              origin,
+            });
+            setPickerOpen(false);
+            load();
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
     </div>
   );
 });
+
+function DropZonePicker({
+  acceptTypes,
+  acceptCompendiumKinds,
+  onPick,
+  onClose,
+}: {
+  acceptTypes: string[];
+  acceptCompendiumKinds?: string[];
+  onPick: (r: SearchResult) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (q.trim().length < 2) { setItems([]); return; }
+    setLoading(true);
+    const handle = setTimeout(() => {
+      const types = acceptTypes.join(",");
+      api.get<SearchResult[]>(`/search?q=${encodeURIComponent(q.trim())}&types=${types}`)
+        .then((rows) => {
+          const filtered = rows.filter((r) => {
+            if (!acceptTypes.includes(r.type)) return false;
+            if (r.type === "compendium_entry" && acceptCompendiumKinds && !acceptCompendiumKinds.includes(r.kind ?? "")) return false;
+            return true;
+          });
+          setItems(filtered.slice(0, 20));
+        })
+        .catch(() => setItems([]))
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [q, acceptTypes, acceptCompendiumKinds]);
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack">
+        <h3 style={{ margin: 0 }}>Добавить</h3>
+        <input autoFocus placeholder="Поиск — 2+ символа" value={q} onChange={(e) => setQ(e.target.value)} />
+        {loading && <span className="muted">Поиск…</span>}
+        {!loading && q.trim().length >= 2 && items.length === 0 && <span className="muted">Ничего не найдено.</span>}
+        <div className="stack" style={{ maxHeight: 320, overflowY: "auto", gap: 4 }}>
+          {items.map((r) => (
+            <button key={`${r.type}:${r.id}`} type="button" className="row" style={{ justifyContent: "space-between", textAlign: "left" }} onClick={() => onPick(r)}>
+              <span><strong>{r.title}</strong>{r.context && <span className="muted"> — {r.context}</span>}</span>
+              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>{r.type}</span>
+            </button>
+          ))}
+        </div>
+        <div className="row"><button type="button" onClick={onClose}>Закрыть</button></div>
+      </div>
+    </Modal>
+  );
+}

@@ -14,6 +14,8 @@ import {
   settingFolder,
   settingGeographyRoot,
   toFileUrl,
+  VAULT_ROOT,
+  vaultAbs,
   writeBase64File,
   writeReplacingOldFile,
 } from "../services/filesystem";
@@ -35,17 +37,36 @@ import {
 } from "../services/mentions";
 
 export const settingsRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+// Фаза 1: лимит 15 MB + строгий fileFilter + allowlist расширений (C-P0-2). Клиентский accept недостаточен.
+const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) cb(null, true);
+    else cb(new Error("Недопустимый тип файла — разрешены только JPG/PNG/GIF/WebP/AVIF"));
+  },
+});
 
 function withBgUrl<T extends { background_image_path?: string | null; thumbnail_image_path?: string | null; genres?: string | null }>(
   row: T
 ) {
   const { genres: rawGenres, ...rest } = row;
+  let genres: unknown = null;
+  if (rawGenres) {
+    try {
+      genres = JSON.parse(rawGenres);
+    } catch {
+      // Повреждённая колонка genres — не валим весь GET 500 (C-P0-5)
+      genres = null;
+    }
+  }
   return {
     ...rest,
     background_image_url: row.background_image_path ? toFileUrl(row.background_image_path) : null,
     thumbnail_image_url: row.thumbnail_image_path ? toFileUrl(row.thumbnail_image_path) : null,
-    genres: rawGenres ? JSON.parse(rawGenres) : null,
+    genres,
   };
 }
 
@@ -349,21 +370,26 @@ function syncImportantDatesFromMentions(
   month: number,
   day: number
 ) {
-  db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(eventId);
-  const seen = new Set<string>();
-  const insert = db.prepare(
-    `INSERT INTO important_dates (owner_type, owner_id, title, recurrence, year, month, day, source_event_id)
-     VALUES (?, ?, ?, 'once', ?, ?, ?, ?)`
-  );
-  for (const m of description.matchAll(MENTION_RE)) {
-    const type = m[1];
-    const id = Number(m[2]);
-    if (type !== "being" && type !== "location" && type !== "community") continue;
-    const key = `${type}:${id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    insert.run(type, id, title, year, month, day, eventId);
-  }
+  // C-P1-2: транзакция + лимит 100 уникальных упоминаний, чтобы половина не записалась
+  const run = db.transaction(() => {
+    db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(eventId);
+    const seen = new Set<string>();
+    const insert = db.prepare(
+      `INSERT INTO important_dates (owner_type, owner_id, title, recurrence, year, month, day, source_event_id)
+        VALUES (?, ?, ?, 'once', ?, ?, ?, ?)`
+    );
+    for (const m of description.matchAll(MENTION_RE)) {
+      if (seen.size >= 100) break;
+      const type = m[1];
+      const id = Number(m[2]);
+      if (type !== "being" && type !== "location" && type !== "community") continue;
+      const key = `${type}:${id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      insert.run(type, id, title, year, month, day, eventId);
+    }
+  });
+  run();
 }
 
 settingsRouter.post("/:id/calendar-events", (req, res) => {
@@ -377,71 +403,63 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
       inworld_month: number;
       inworld_day: number;
       important?: boolean;
-      // Профиль события: развёрнутый текст и последствия. В хронике по-прежнему
-      // показывается только краткое description.
       full_description?: string;
       consequences?: string;
     };
-  if (!title || inworld_year == null || inworld_month == null || inworld_day == null) {
+  const trimmedTitle = typeof title === "string" ? title.trim() : "";
+  if (!trimmedTitle || inworld_year == null || inworld_month == null || inworld_day == null) {
     return res
       .status(400)
       .json({ error: "title, inworld_year, inworld_month, inworld_day are required" });
   }
-  // Статус вычисляется по «сейчас» в мире, а не ставится «случилось» всем
-  // подряд: в хронику пишут и будущее — пророчество, затмение, коронацию.
-  const status = defaultStatus(inworld_year, inworld_month, settingNow(Number(req.params.id)));
-  const info = db
-    .prepare(
-      `INSERT INTO setting_calendar_events
-         (setting_id, title, description, full_description, consequences,
-          inworld_year, inworld_month, inworld_day, important, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      req.params.id,
-      title,
-      description ?? "",
-      full_description ?? "",
-      consequences ?? "",
-      inworld_year,
-      inworld_month,
-      inworld_day,
-      important ? 1 : 0,
-      status
-    );
-
-  const campaigns = db
-    .prepare("SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL")
-    .all(req.params.id) as { id: number }[];
-  const insertIntoCampaign = db.prepare(
-    `INSERT INTO campaign_calendar_events
-       (campaign_id, title, description, inworld_year, inworld_month, inworld_day, important)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const c of campaigns) {
-    insertIntoCampaign.run(
-      c.id,
-      title,
-      description ?? "",
-      inworld_year,
-      inworld_month,
-      inworld_day,
-      important ? 1 : 0
-    );
+  if (trimmedTitle.length > 200 || (description && description.length > 5000)) {
+    return res.status(400).json({ error: "title or description too long" });
   }
-
-  syncImportantDatesFromMentions(
-    Number(info.lastInsertRowid),
-    title,
-    description ?? "",
-    inworld_year,
-    inworld_month,
-    inworld_day
-  );
-
+  const y = Number(inworld_year); const m = Number(inworld_month); const d = Number(inworld_day);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || m < 1 || m > 36 || d < 1 || d > 60) {
+    return res.status(400).json({ error: "invalid inworld date" });
+  }
+  const status = defaultStatus(y, m, settingNow(Number(req.params.id)));
+  // Транзакция: событие мира + копии в кампании + important_dates должны встать атомарно.
+  const run = db.transaction(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO setting_calendar_events
+           (setting_id, title, description, full_description, consequences,
+            inworld_year, inworld_month, inworld_day, important, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        req.params.id,
+        trimmedTitle,
+        description ?? "",
+        full_description ?? "",
+        consequences ?? "",
+        y,
+        m,
+        d,
+        important === true ? 1 : 0,
+        status
+      );
+    const newId = Number(info.lastInsertRowid);
+    const campaigns = db
+      .prepare("SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL")
+      .all(req.params.id) as { id: number }[];
+    const insertIntoCampaign = db.prepare(
+      `INSERT INTO campaign_calendar_events
+         (campaign_id, title, description, inworld_year, inworld_month, inworld_day, important, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const c of campaigns) {
+      insertIntoCampaign.run(c.id, trimmedTitle, description ?? "", y, m, d, important === true ? 1 : 0, status);
+    }
+    syncImportantDatesFromMentions(newId, trimmedTitle, description ?? "", y, m, d);
+    return newId;
+  });
+  const newId = run();
   res
     .status(201)
-    .json(db.prepare("SELECT * FROM setting_calendar_events WHERE id = ?").get(info.lastInsertRowid));
+    .json(db.prepare("SELECT * FROM setting_calendar_events WHERE id = ?").get(newId));
 });
 
 settingsRouter.put("/calendar-events/:eventId", (req, res) => {
@@ -459,6 +477,25 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
       full_description?: string;
       consequences?: string;
     };
+  if (title !== undefined && typeof title === "string" && title.trim().length === 0) {
+    return res.status(400).json({ error: "title cannot be empty" });
+  }
+  if (title !== undefined && typeof title === "string" && title.trim().length > 200) {
+    return res.status(400).json({ error: "title too long" });
+  }
+  if (description !== undefined && typeof description === "string" && description.length > 5000) {
+    return res.status(400).json({ error: "description too long" });
+  }
+  for (const [k, v] of [["inworld_month", inworld_month], ["inworld_day", inworld_day]] as const) {
+    if (v !== undefined && v !== null) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || (k === "inworld_month" && (n < 1 || n > 36)) || (k === "inworld_day" && (n < 1 || n > 60))) {
+        return res.status(400).json({ error: `invalid ${k}` });
+      }
+    }
+  }
+  const existing = db.prepare("SELECT id FROM setting_calendar_events WHERE id = ?").get(req.params.eventId) as { id: number } | undefined;
+  if (!existing) return res.status(404).json({ error: "not found" });
   db.prepare(
     `UPDATE setting_calendar_events SET
        title = COALESCE(?, title),
@@ -472,13 +509,13 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
        consequences = COALESCE(?, consequences)
      WHERE id = ?`
   ).run(
-    title ?? null,
+    title !== undefined ? (title === null ? null : String(title).trim() || null) : null,
     description ?? null,
     inworld_year ?? null,
     inworld_month ?? null,
     inworld_day ?? null,
-    important === undefined ? null : important ? 1 : 0,
-    visible_to_players === undefined ? null : visible_to_players ? 1 : 0,
+    important === undefined ? null : important === true ? 1 : 0,
+    visible_to_players === undefined ? null : visible_to_players === true ? 1 : 0,
     full_description ?? null,
     consequences ?? null,
     req.params.eventId
@@ -618,14 +655,18 @@ settingsRouter.delete("/cycle-points/:pointId", (req, res) => {
 });
 
 settingsRouter.delete("/calendar-events/:eventId", (req, res) => {
-  db.prepare("DELETE FROM setting_calendar_events WHERE id = ?").run(req.params.eventId);
-  // Связи с участниками внешним ключом не держатся (граф полиморфный), а
-  // осиротев, показываются в чужих профилях как «setting_event #40 (не
-  // найдено)» — поэтому убираются вместе с событием.
-  db.prepare(
-    `DELETE FROM generic_links
-     WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`
-  ).run(req.params.eventId, req.params.eventId);
+  const event = db.prepare("SELECT setting_id, title, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE id = ?").get(req.params.eventId) as { setting_id: number; title: string; inworld_year: number; inworld_month: number; inworld_day: number } | undefined;
+  const del = db.transaction(() => {
+    db.prepare("DELETE FROM setting_calendar_events WHERE id = ?").run(req.params.eventId);
+    db.prepare(`DELETE FROM generic_links WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`).run(req.params.eventId, req.params.eventId);
+    db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(req.params.eventId);
+    // Каскад в кампании — копии, созданные при POST /:id/calendar-events, не имеют FK, но совпадают по титулу/дате и принадлежат кампаниям того же сеттинга.
+    // Удаляем только такие копии, чтобы «удалить из мира» не оставляло висячих дубликатов в кампаниях (C-P0-3). Ручные события кампаний с другим титулом/датой не трогаем.
+    if (event) {
+      db.prepare(`DELETE FROM campaign_calendar_events WHERE campaign_id IN (SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL) AND title = ? AND inworld_year = ? AND inworld_month = ? AND inworld_day = ?`).run(event.setting_id, event.title, event.inworld_year, event.inworld_month, event.inworld_day);
+    }
+  });
+  del();
   res.json({ ok: true });
 });
 
@@ -681,7 +722,11 @@ settingsRouter.post("/:id/background", upload.single("file"), async (req, res) =
   if (!setting) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) {
+    return res.status(400).json({ error: "Недопустимое расширение файла" });
+  }
+  const ext = rawExt;
   const target = path.join(setting.folder_path, `background${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, setting.background_image_path, "background");
 
@@ -699,7 +744,11 @@ settingsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) =>
   if (!setting) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const rawExt = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) {
+    return res.status(400).json({ error: "Недопустимое расширение файла" });
+  }
+  const ext = rawExt;
   const target = path.join(setting.folder_path, `thumbnail${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, setting.thumbnail_image_path, "thumbnail");
 
@@ -708,6 +757,38 @@ settingsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) =>
     req.params.id
   );
   res.json(withBgUrl({ thumbnail_image_path: target }));
+});
+
+settingsRouter.delete("/:id/background", (req, res) => {
+  const setting = db.prepare("SELECT background_image_path FROM settings WHERE id = ?").get(req.params.id) as
+    | { background_image_path: string | null }
+    | undefined;
+  if (!setting) return res.status(404).json({ error: "not found" });
+  if (setting.background_image_path) {
+    try {
+      const abs = path.resolve(vaultAbs(setting.background_image_path));
+      const root = path.resolve(VAULT_ROOT);
+      if (abs !== root && abs.startsWith(root + path.sep) && fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {}
+    db.prepare("UPDATE settings SET background_image_path = NULL WHERE id = ?").run(req.params.id);
+  }
+  res.json({ ok: true });
+});
+
+settingsRouter.delete("/:id/thumbnail", (req, res) => {
+  const setting = db.prepare("SELECT thumbnail_image_path FROM settings WHERE id = ?").get(req.params.id) as
+    | { thumbnail_image_path: string | null }
+    | undefined;
+  if (!setting) return res.status(404).json({ error: "not found" });
+  if (setting.thumbnail_image_path) {
+    try {
+      const abs = path.resolve(vaultAbs(setting.thumbnail_image_path));
+      const root = path.resolve(VAULT_ROOT);
+      if (abs !== root && abs.startsWith(root + path.sep) && fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {}
+    db.prepare("UPDATE settings SET thumbnail_image_path = NULL WHERE id = ?").run(req.params.id);
+  }
+  res.json({ ok: true });
 });
 
 settingsRouter.put("/:id", (req, res) => {
@@ -725,7 +806,24 @@ settingsRouter.put("/:id", (req, res) => {
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
-  const genresJson = genres !== undefined ? JSON.stringify(genres) : null;
+  // C-P0-5: валидация жанров — MAX 3, форма, обрезка мусора
+  let genresJson: string | null = null;
+  if (genres !== undefined) {
+    if (!Array.isArray(genres)) {
+      return res.status(400).json({ error: "genres must be array" });
+    }
+    if (genres.length > 3) {
+      return res.status(400).json({ error: "слишком много жанров — максимум 3" });
+    }
+    const cleaned = genres
+      .filter((g) => g && typeof g.genre === "string" && g.genre.trim())
+      .map((g) => ({
+        genre: g.genre.trim(),
+        ...(g.subgenre && typeof g.subgenre === "string" && g.subgenre.trim() ? { subgenre: g.subgenre.trim() } : {}),
+      }))
+      .slice(0, 3);
+    genresJson = JSON.stringify(cleaned);
+  }
   db.prepare(
     "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code), genres = COALESCE(?, genres) WHERE id = ?"
   ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), genresJson, req.params.id);

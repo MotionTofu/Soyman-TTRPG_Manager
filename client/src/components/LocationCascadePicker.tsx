@@ -131,10 +131,14 @@ export function LocationFilter({
 
 function ancestorChain(locations: SettingLocation[], id: number | null): number[] {
   const chain: number[] = [];
+  const byId = new Map<number, SettingLocation>();
+  for (const l of locations) byId.set(l.id, l);
+  const visited = new Set<number>();
   let current = id;
-  while (current != null) {
+  while (current != null && !visited.has(current)) {
+    visited.add(current);
     chain.unshift(current);
-    const loc = locations.find((l) => l.id === current);
+    const loc = byId.get(current);
     current = loc?.parent_id ?? null;
   }
   return chain;

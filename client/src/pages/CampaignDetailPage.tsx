@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { toLocalDateKey, formatDateKeyRu } from "../utils/date";
@@ -153,7 +153,28 @@ export function CampaignDetailPage() {
     title: string;
     description: string;
     important: boolean;
+    precision: import("../types").DatePrecision;
+    status: import("../types").EventStatus;
+    year_end: string;
+    month_end: string;
+    day_end: string;
+    cancel_note: string;
   } | null>(null);
+  const [worldFilter, setWorldFilter] = useState("");
+  const [worldSort, setWorldSort] = useState<"asc" | "desc">("asc");
+  const sortedCalendarEvents = useMemo(() => [...calendarEvents].sort((a, b) => {
+    if (!!a.important !== !!b.important) return a.important ? -1 : 1;
+    if (a.inworld_year !== b.inworld_year) return a.inworld_year - b.inworld_year;
+    if (a.inworld_month !== b.inworld_month) return a.inworld_month - b.inworld_month;
+    return a.inworld_day - b.inworld_day;
+  }), [calendarEvents]);
+  const worldFiltered = useMemo(() => {
+    const q = worldFilter.trim().toLowerCase();
+    let list = sortedCalendarEvents;
+    if (q) list = list.filter((ev) => ev.title.toLowerCase().includes(q) || (ev.description ?? "").toLowerCase().includes(q));
+    if (worldSort === "desc") list = [...list].reverse();
+    return list;
+  }, [sortedCalendarEvents, worldFilter, worldSort]);
 
   function refreshCalendarEvents() {
     api.get<CampaignCalendarEvent[]>(`/campaigns/${campaignId}/calendar-events`).then(setCalendarEvents);
@@ -219,7 +240,7 @@ export function CampaignDetailPage() {
   ];
 
   function openCreateEventModal(year: number, month: number, day: number) {
-    setEventModal({ year, month, day, title: "", description: "", important: false });
+    setEventModal({ year, month, day, title: "", description: "", important: false, precision: "day", status: "happened", year_end: "", month_end: "", day_end: "", cancel_note: "" });
     setCalendarMenu(null);
   }
 
@@ -232,6 +253,12 @@ export function CampaignDetailPage() {
       title: ev.title,
       description: ev.description,
       important: !!ev.important,
+      precision: ev.date_precision ?? "day",
+      status: ev.status ?? "happened",
+      year_end: ev.inworld_year_end != null ? String(ev.inworld_year_end) : "",
+      month_end: ev.inworld_month_end != null ? String(ev.inworld_month_end) : "",
+      day_end: ev.inworld_day_end != null ? String(ev.inworld_day_end) : "",
+      cancel_note: ev.cancel_note ?? "",
     });
     setCalendarMenu(null);
   }
@@ -276,14 +303,22 @@ export function CampaignDetailPage() {
 
   async function saveEventModal() {
     if (!eventModal || !eventModal.title.trim()) return;
-    const payload = {
+    const hasPeriod = eventModal.year_end.trim() !== "" || eventModal.month_end.trim() !== "" || eventModal.day_end.trim() !== "";
+    const payload: Record<string, unknown> = {
       title: eventModal.title,
       description: eventModal.description,
       inworld_year: eventModal.year,
       inworld_month: eventModal.month,
       inworld_day: eventModal.day,
       important: eventModal.important,
+      date_precision: eventModal.precision,
+      status: eventModal.status,
+      cancel_note: eventModal.cancel_note,
+      inworld_year_end: hasPeriod && eventModal.year_end.trim() !== "" ? Number(eventModal.year_end) : hasPeriod ? eventModal.year : null,
+      inworld_month_end: hasPeriod && eventModal.month_end.trim() !== "" ? Number(eventModal.month_end) : hasPeriod ? eventModal.month : null,
+      inworld_day_end: hasPeriod && eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : hasPeriod ? eventModal.day : null,
     };
+    if (!hasPeriod) { payload.inworld_year_end = null; payload.inworld_month_end = null; payload.inworld_day_end = null; }
     if (eventModal.id) {
       const original = calendarEvents.find((e) => e.id === eventModal.id);
       await api.put(`/campaigns/calendar-events/${eventModal.id}`, payload);
@@ -323,13 +358,6 @@ export function CampaignDetailPage() {
       navigate(`/sessions/${item.id.replace("session-", "")}`);
     }
   }
-
-  const sortedCalendarEvents = [...calendarEvents].sort((a, b) => {
-    if (!!a.important !== !!b.important) return a.important ? -1 : 1;
-    if (a.inworld_year !== b.inworld_year) return a.inworld_year - b.inworld_year;
-    if (a.inworld_month !== b.inworld_month) return a.inworld_month - b.inworld_month;
-    return a.inworld_day - b.inworld_day;
-  });
 
   function toggleEventExpanded(eventId: number) {
     setExpandedEvents((prev) => {
@@ -685,32 +713,13 @@ export function CampaignDetailPage() {
       {tab === "Исследование Мира" && <WorldExplorationTab campaignId={campaignId} />}
 
       {tab === "Хроника мира" && (
-        <div className="card stack">
-          <div className="row sort-toggle" style={{ gap: 4, justifyContent: "space-between" }}>
-            <div className="row" style={{ gap: 4 }}>
-              <button
-                className={worldView === "calendar" ? "active-sort" : ""}
-                onClick={() => changeWorldView("calendar")}
-              >
-                Сетка
-              </button>
-              <button className={worldView === "list" ? "active-sort" : ""} onClick={() => changeWorldView("list")}>
-                Список
-              </button>
-              <button className={worldView === "axis" ? "active-sort" : ""} onClick={() => changeWorldView("axis")}>
-                Ось
-              </button>
+        <div className="stack" style={{ gap: "var(--sp-5)" }}>
+          <div className="card stack">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>Ось времени</h3>
+              <button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>+ Создать событие</button>
             </div>
-            <button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>
-              + Создать событие
-            </button>
-          </div>
-
-          {worldView === "axis" ? (
             <Timeline
-              // События кампании и сессии вместе: без «где были» и «сейчас»
-              // ось отвечает на «когда что случится», но не на «сколько у них
-              // осталось», а давить на игроков сроками можно только вторым.
               events={[
                 ...sortedCalendarEvents.map((ev) => ({
                   id: ev.id,
@@ -729,7 +738,7 @@ export function CampaignDetailPage() {
                 ...sessions
                   .filter((s) => s.inworld_year != null && s.status !== "cancelled")
                   .map((s) => ({
-                    id: -s.id, // отрицательные — чтобы не столкнуться с id событий
+                    id: -s.id,
                     title: s.title || `Сессия №${s.session_number ?? ""}`,
                     year: s.inworld_year as number,
                     month: s.inworld_month ?? 1,
@@ -754,91 +763,106 @@ export function CampaignDetailPage() {
               onMoveEvent={moveCampaignEvent}
               onNowChange={(date) => pinCampaignCalendar(date)}
               onEventClick={(id) => {
-                // Сессии на оси лежат с отрицательным id — по ним открывается
-                // сама сессия, а не событие.
                 if (id < 0) navigate(`/sessions/${-id}`);
               }}
             />
-          ) : worldView === "calendar" ? (
-            <>
-              {!campaign.setting_id ? (
-                <p className="muted">У кампании не привязан сеттинг — календарь недоступен.</p>
-              ) : !calendar ? (
-                <p className="muted">Загрузка…</p>
-              ) : calendar.months.length === 0 ? (
-                <p className="muted">
-                  В сеттинге не настроен календарь.{" "}
-                  <Link to={`/settings/${campaign.setting_id}?tab=${encodeURIComponent("Календарь")}`}>
-                    Настроить →
-                  </Link>
-                </p>
-              ) : (
-                <InworldCalendar
-                  months={calendar.months}
-                  weekdays={calendar.weekdays}
-                  items={inworldItems}
-                  importantDates={settingImportantDates}
-                  pinned={
-                    campaign.pinned_calendar_year != null && campaign.pinned_calendar_month != null
-                      ? { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month }
-                      : null
-                  }
-                  onPin={pinCampaignCalendar}
-                  onDayContextMenu={handleCalendarDayContextMenu}
-                  onItemClick={handleCalendarItemClick}
-                  onItemContextMenu={handleCalendarItemContextMenu}
-                />
-              )}
-              <span className="muted">
-                Правый клик по дню — создать событие; по событию — редактировать или удалить. Серые
-                метки — важные даты, перенесённые из профилей существ и сообществ сеттинга.
-              </span>
-            </>
-          ) : (
-            <div className="stack">
-              {sortedCalendarEvents.map((ev) => {
-                const expanded = expandedEvents.has(ev.id);
-                return (
-                  <div key={ev.id} className="stack" style={{ gap: 2 }}>
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <span className="row" style={{ alignItems: "center" }}>
-                        {ev.description && (
-                          <button style={{ padding: "2px 6px" }} onClick={() => toggleEventExpanded(ev.id)}>
-                            {expanded ? "▾" : "▸"}
-                          </button>
-                        )}
-                        <span>
-                          {formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar?.months ?? [])}
-                          {" — "}
-                          <strong>{ev.title}</strong>
-                        </span>
-                      </span>
-                      <div className="row">
-                        <label className="row">
-                          <input
-                            type="checkbox"
-                            checked={!!ev.important}
-                            onChange={() => toggleEventImportant(ev)}
-                          />
-                          Важно
-                        </label>
-                        <button onClick={() => openEditEventModal(ev)}>Редактировать</button>
-                        <button className="danger" onClick={() => deleteCalendarEvent(ev.id)}>
-                          Удалить
-                        </button>
-                      </div>
-                    </div>
-                    {expanded && ev.description && (
-                      <div style={{ whiteSpace: "pre-wrap", marginLeft: 28 }}>
-                        <MentionText text={ev.description} />
-                      </div>
-                    )}
+          </div>
+          <div className="chronicle-split">
+            <div className="chronicle-left">
+              <details className="card res-group" open style={{ margin: 0 }}>
+                <summary className="res-group__band">
+                  <span className="res-group__title">События</span>
+                  <span className="res-group__count">{worldFiltered.length} из {sortedCalendarEvents.length}</span>
+                </summary>
+                <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
+                  <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                    <input placeholder="Поиск по хроноике мира" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 200px" }} />
+                    <button onClick={() => setWorldSort((s) => (s === "asc" ? "desc" : "asc"))}>{worldSort === "asc" ? "↑ Старые → новые" : "↓ Новые → старые"}</button>
+                    {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
                   </div>
-                );
-              })}
-              {calendarEvents.length === 0 && <p className="muted">Событий пока нет.</p>}
+                  {worldFiltered.length === 0 && sortedCalendarEvents.length > 0 ? <p className="muted">Ничего не найдено.</p> : null}
+                  <div className="stack">
+                    {worldFiltered.map((ev) => {
+                      const expanded = expandedEvents.has(ev.id);
+                      return (
+                        <div key={ev.id} className="stack" style={{ gap: 2 }}>
+                          <div className="row" style={{ justifyContent: "space-between" }}>
+                            <span className="row" style={{ alignItems: "center" }}>
+                              {ev.description && (
+                                <button style={{ padding: "2px 6px" }} onClick={() => toggleEventExpanded(ev.id)}>
+                                  {expanded ? "▾" : "▸"}
+                                </button>
+                              )}
+                              <span className="row chronicle-row" style={{ alignItems: "center" }}>
+                                <span className="chronicle-date">{calendar ? formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar.months) : `${ev.inworld_year}.${ev.inworld_month}.${ev.inworld_day}`}</span>
+                                <span className={`chronicle-status is-${ev.status}`}>{ev.status === "cancelled" ? "Отменено" : ev.status === "upcoming" ? "Предстоит" : "Случилось"}</span>
+                                <span className="chronicle-title">{ev.title}</span>
+                              </span>
+                            </span>
+                            <div className="row" style={{ gap: "var(--sp-2)" }}>
+                              <label className="row" style={{ fontSize: "var(--fs-meta)" }}>
+                                <input type="checkbox" checked={!!ev.important} onChange={() => toggleEventImportant(ev)} />
+                                Важно
+                              </label>
+                              <button onClick={() => openEditEventModal(ev)}>Редактировать</button>
+                              <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
+                            </div>
+                          </div>
+                          {expanded && ev.description && (
+                            <div className="chronicle-row__expanded" style={{ whiteSpace: "pre-wrap" }}>
+                              <MentionText text={ev.description} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {calendarEvents.length === 0 && <EmptyState icon="issueStamp" title="ХРОНИКА ПУСТА" hint="Первое событие задаёт летоисчисление мира" action={<button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>+ Создать событие</button>} />}
+                  </div>
+                </div>
+              </details>
             </div>
-          )}
+            <div className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
+              <details className="card res-group" open>
+                <summary className="res-group__band">
+                  <span className="res-group__title">Календарь</span>
+                  <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{calendar ? `${calendar.months.length} мес.` : "—"}</span>
+                </summary>
+                <div className="res-group__body" style={{ padding: 12 }}>
+                  {!campaign.setting_id ? (
+                    <p className="muted">У кампании не привязан сеттинг — календарь недоступен.</p>
+                  ) : !calendar ? (
+                    <p className="muted">Загрузка…</p>
+                  ) : calendar.months.length === 0 ? (
+                    <p className="muted">
+                      В сеттинге не настроен календарь.{" "}
+                      <Link to={`/settings/${campaign.setting_id}?tab=${encodeURIComponent("Календарь")}`}>
+                        Настроить →
+                      </Link>
+                    </p>
+                  ) : (
+                    <InworldCalendar
+                      months={calendar.months}
+                      weekdays={calendar.weekdays}
+                      items={inworldItems}
+                      importantDates={settingImportantDates}
+                      pinned={
+                        campaign.pinned_calendar_year != null && campaign.pinned_calendar_month != null
+                          ? { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month }
+                          : null
+                      }
+                      onPin={pinCampaignCalendar}
+                      onDayContextMenu={handleCalendarDayContextMenu}
+                      onItemClick={handleCalendarItemClick}
+                      onItemContextMenu={handleCalendarItemContextMenu}
+                    />
+                  )}
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                    Правый клик / долгое нажатие по дню — создать событие; по событию — редактировать или удалить. Серые метки — важные даты из профилей сеттинга.
+                  </span>
+                </div>
+              </details>
+            </div>
+          </div>
         </div>
       )}
 
@@ -916,6 +940,41 @@ export function CampaignDetailPage() {
               />
               Важно
             </label>
+            <div className="row" style={{ flexWrap: "wrap" }}>
+              <label className="row">
+                Точность
+                <select value={eventModal.precision} onChange={(e) => setEventModal({ ...eventModal, precision: e.target.value as import("../types").DatePrecision })}>
+                  <option value="day">День</option>
+                  <option value="month">Месяц</option>
+                  <option value="year">Год</option>
+                  <option value="decade">Десятилетие</option>
+                  <option value="century">Век</option>
+                </select>
+              </label>
+              <label className="row">
+                Статус
+                <select value={eventModal.status} onChange={(e) => setEventModal({ ...eventModal, status: e.target.value as import("../types").EventStatus })}>
+                  <option value="happened">Случилось</option>
+                  <option value="upcoming">Предстоит</option>
+                  <option value="cancelled">Отменено</option>
+                </select>
+              </label>
+            </div>
+            {eventModal.status === "cancelled" && (
+              <label className="stack" style={{ gap: 4 }}>
+                Чем отменилось
+                <input placeholder="Что игроки сделали, чтобы этого не произошло" value={eventModal.cancel_note} onChange={(e) => setEventModal({ ...eventModal, cancel_note: e.target.value })} />
+              </label>
+            )}
+            <details className="card" style={{ padding: 10 }}>
+              <summary>Период (если событие растянуто)</summary>
+              <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>
+                <label className="row">Год до <input type="number" style={{ width: 90 }} placeholder="—" value={eventModal.year_end} onChange={(e) => setEventModal({ ...eventModal, year_end: e.target.value })} /></label>
+                <label className="row">Мес. до <input type="number" style={{ width: 70 }} placeholder="—" value={eventModal.month_end} onChange={(e) => setEventModal({ ...eventModal, month_end: e.target.value })} /></label>
+                <label className="row">День до <input type="number" style={{ width: 70 }} placeholder="—" value={eventModal.day_end} onChange={(e) => setEventModal({ ...eventModal, day_end: e.target.value })} /></label>
+              </div>
+              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Оставьте пустым — событие точечное. Заполните — период («осада март–май»).</span>
+            </details>
             <div className="row">
               <button className="primary" onClick={saveEventModal}>
                 Сохранить
@@ -924,7 +983,7 @@ export function CampaignDetailPage() {
             </div>
           </div>
         </Modal>
-      )}
+       )}
 
       {creatingDate && (
         <Modal onClose={() => setCreatingDate(null)}>
