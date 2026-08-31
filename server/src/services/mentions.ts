@@ -110,7 +110,7 @@ const NEVER_REWRITE = new Set([
 // Код модуля стоит раньше подписи, потому что подпись пишет человек и в ней
 // может оказаться «|», а код мы чистим при записи.
 const MENTION_RE =
-  /\[\[(\w+)@([0-9a-fA-F][0-9a-fA-F-]{7,})\|([^|\]]*)\|([^\]]*)\]\]|\[\[(\w+):(\d+)\|([^\]]*)\]\]/g;
+  /\[\[(\w+)@([0-9a-fA-F][0-9a-fA-F-]{7,31})\|([^|\]]*)\|([^\]]*)\]\]|\[\[(\w+):(\d+)\|([^\]]*)\]\]/g;
 
 export interface RefMention {
   kind: "ref";
@@ -562,7 +562,11 @@ export interface TextColumn {
  * Токен внутри JSON правится тем же текстовым способом: кавычек и обратных
  * слэшей в нём нет, так что подстановка не ломает разметку.
  */
+let cachedMentionColumns: TextColumn[] | null = null;
+let cachedMentionColumnsAt = 0;
 export function mentionTextColumns(): TextColumn[] {
+  const now = Date.now();
+  if (cachedMentionColumns && now - cachedMentionColumnsAt < 10000) return cachedMentionColumns;
   const tables = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
     .all() as { name: string }[];
@@ -578,7 +582,12 @@ export function mentionTextColumns(): TextColumn[] {
       if (/TEXT|CLOB|CHAR/i.test(c.type)) out.push({ table: name, column: c.name });
     }
   }
+  cachedMentionColumns = out;
+  cachedMentionColumnsAt = now;
   return out;
+}
+export function invalidateMentionColumnsCache() {
+  cachedMentionColumns = null;
 }
 
 /** Текстовые колонки одной таблицы — с кэшем, потому что импорт зовёт это часто. */

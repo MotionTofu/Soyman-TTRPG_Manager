@@ -33,10 +33,22 @@ archiveRouter.get("/", (_req, res) => {
   const items: ArchiveItem[] = [];
 
   const campaigns = db
-    .prepare("SELECT id, name, archived_at FROM campaigns WHERE archived_at IS NOT NULL")
-    .all() as { id: number; name: string; archived_at: string }[];
+    .prepare(
+      `SELECT c.id, c.name, c.archived_at, sy.name as system_name, se.name as setting_name
+         FROM campaigns c
+         LEFT JOIN systems sy ON sy.id = c.system_id
+         LEFT JOIN settings se ON se.id = c.setting_id
+        WHERE c.archived_at IS NOT NULL`
+    )
+    .all() as { id: number; name: string; archived_at: string; system_name: string | null; setting_name: string | null }[];
   items.push(
-    ...campaigns.map((r) => ({ type: "campaign", id: r.id, title: r.name, archived_at: r.archived_at }))
+    ...campaigns.map((r) => ({
+      type: "campaign",
+      id: r.id,
+      title: r.name,
+      subtitle: [r.system_name, r.setting_name].filter(Boolean).join(" · ") || undefined,
+      archived_at: r.archived_at,
+    }))
   );
 
   const systems = db
@@ -62,118 +74,140 @@ archiveRouter.get("/", (_req, res) => {
 
   const characters = db
     .prepare(
-      "SELECT id, character_name, archived_at FROM characters WHERE archived_at IS NOT NULL"
+      `SELECT ch.id, ch.character_name, ch.archived_at, p.name as player_name, ca.name as campaign_name
+         FROM characters ch
+         JOIN players p ON p.id = ch.player_id
+         LEFT JOIN campaigns ca ON ca.id = ch.campaign_id
+        WHERE ch.archived_at IS NOT NULL`
     )
-    .all() as { id: number; character_name: string; archived_at: string }[];
+    .all() as { id: number; character_name: string; archived_at: string; player_name: string; campaign_name: string | null }[];
   items.push(
     ...characters.map((r) => ({
       type: "character",
       id: r.id,
       title: r.character_name,
+      subtitle: [r.player_name, r.campaign_name].filter(Boolean).join(" · ") || undefined,
       archived_at: r.archived_at,
     }))
   );
 
   const sessions = db
     .prepare(
-      `SELECT s.id, s.date, c.name as campaign_name, s.archived_at FROM sessions s
+      `SELECT s.id, s.date, s.title as session_title, c.name as campaign_name, s.archived_at FROM sessions s
        JOIN campaigns c ON c.id = s.campaign_id
        WHERE s.archived_at IS NOT NULL`
     )
-    .all() as { id: number; date: string; campaign_name: string; archived_at: string }[];
+    .all() as { id: number; date: string; session_title: string | null; campaign_name: string; archived_at: string }[];
   items.push(
     ...sessions.map((r) => ({
       type: "session",
       id: r.id,
-      title: `${r.campaign_name} — ${r.date}`,
+      title: r.session_title ? `${r.campaign_name} — ${r.date} — ${r.session_title}` : `${r.campaign_name} — ${r.date}`,
+      subtitle: r.session_title || undefined,
       archived_at: r.archived_at,
     }))
   );
 
   const resources = db
     .prepare(
-      "SELECT id, name, scope, archived_at FROM resources WHERE archived_at IS NOT NULL"
+      `SELECT r.id, r.name, r.scope, r.archived_at,
+              sy.name as system_name, se.name as setting_name, ca.name as campaign_name
+         FROM resources r
+         LEFT JOIN systems sy ON sy.id = r.system_id
+         LEFT JOIN settings se ON se.id = r.setting_id
+         LEFT JOIN campaigns ca ON ca.id = r.campaign_id
+        WHERE r.archived_at IS NOT NULL`
     )
-    .all() as { id: number; name: string; scope: string; archived_at: string }[];
+    .all() as { id: number; name: string; scope: string; archived_at: string; system_name: string | null; setting_name: string | null; campaign_name: string | null }[];
   items.push(
-    ...resources.map((r) => ({
-      type: "resource",
-      id: r.id,
-      title: r.name,
-      subtitle: r.scope,
-      archived_at: r.archived_at,
-    }))
+    ...resources.map((r) => {
+      const owner = r.system_name || r.setting_name || r.campaign_name || null;
+      const sub = [r.scope, owner].filter(Boolean).join(" · ");
+      return { type: "resource", id: r.id, title: r.name, subtitle: sub || undefined, archived_at: r.archived_at };
+    })
   );
 
   const mastering = db
     .prepare(
-      "SELECT id, title, category, archived_at FROM mastering_notes WHERE archived_at IS NOT NULL"
+      `SELECT m.id, m.title, m.category, m.archived_at, sy.name as system_name
+         FROM mastering_notes m LEFT JOIN systems sy ON sy.id = m.system_id
+        WHERE m.archived_at IS NOT NULL`
     )
-    .all() as { id: number; title: string; category: string; archived_at: string }[];
+    .all() as { id: number; title: string; category: string; archived_at: string; system_name: string | null }[];
   items.push(
     ...mastering.map((r) => ({
       type: "mastering",
       id: r.id,
       title: r.title,
-      subtitle: r.category,
+      subtitle: [r.category, r.system_name].filter(Boolean).join(" · ") || undefined,
       archived_at: r.archived_at,
     }))
   );
 
   const locations = db
     .prepare(
-      "SELECT id, name, kind, archived_at FROM setting_locations WHERE archived_at IS NOT NULL"
+      `SELECT l.id, l.name, l.kind, l.archived_at, s.name as setting_name
+         FROM setting_locations l JOIN settings s ON s.id = l.setting_id
+        WHERE l.archived_at IS NOT NULL`
     )
-    .all() as { id: number; name: string; kind: string; archived_at: string }[];
+    .all() as { id: number; name: string; kind: string; archived_at: string; setting_name: string }[];
   items.push(
     ...locations.map((r) => ({
       type: "location",
       id: r.id,
       title: r.name,
-      subtitle: r.kind,
+      subtitle: [r.kind, r.setting_name].filter(Boolean).join(" · ") || undefined,
       archived_at: r.archived_at,
     }))
   );
 
   const beings = db
     .prepare(
-      "SELECT id, name, category, archived_at FROM setting_beings WHERE archived_at IS NOT NULL"
+      `SELECT b.id, b.name, b.category, b.archived_at, s.name as setting_name
+         FROM setting_beings b JOIN settings s ON s.id = b.setting_id
+        WHERE b.archived_at IS NOT NULL`
     )
-    .all() as { id: number; name: string; category: string; archived_at: string }[];
+    .all() as { id: number; name: string; category: string; archived_at: string; setting_name: string }[];
   items.push(
     ...beings.map((r) => ({
       type: "being",
       id: r.id,
       title: r.name,
-      subtitle: r.category,
+      subtitle: [r.category, r.setting_name].filter(Boolean).join(" · ") || undefined,
       archived_at: r.archived_at,
     }))
   );
 
   const artifacts = db
     .prepare(
-      "SELECT id, name, archived_at FROM artifacts WHERE archived_at IS NOT NULL"
+      `SELECT a.id, a.name, a.archived_at, s.name as setting_name
+         FROM artifacts a JOIN settings s ON s.id = a.setting_id
+        WHERE a.archived_at IS NOT NULL`
     )
-    .all() as { id: number; name: string; archived_at: string }[];
+    .all() as { id: number; name: string; archived_at: string; setting_name: string }[];
   items.push(
     ...artifacts.map((r) => ({
       type: "artifact",
       id: r.id,
       title: r.name,
+      subtitle: r.setting_name || undefined,
       archived_at: r.archived_at,
     }))
   );
 
   const communities = db
     .prepare(
-      "SELECT id, name, archived_at FROM setting_communities WHERE archived_at IS NOT NULL"
+      `SELECT c.id, c.name, c.archived_at, s.name as setting_name
+         FROM setting_communities c JOIN settings s ON s.id = c.setting_id
+        WHERE c.archived_at IS NOT NULL`
     )
-    .all() as { id: number; name: string; archived_at: string }[];
+    .all() as { id: number; name: string; archived_at: string; setting_name: string }[];
   items.push(
     ...communities.map((r) => ({
       type: "community",
       id: r.id,
       title: r.name,
+      subtitle: r.setting_name || undefined,
       archived_at: r.archived_at,
     }))
   );
@@ -234,7 +268,7 @@ function systemPurgeImpact(systemId: string | number): PurgeImpact {
   return {
     detachedCampaigns: (
       db
-        .prepare("SELECT name FROM campaigns WHERE system_id = ? ORDER BY name")
+        .prepare("SELECT name FROM campaigns WHERE system_id = ? AND archived_at IS NULL ORDER BY name")
         .all(systemId) as { name: string }[]
     ).map((r) => r.name),
     compendiumLinks:
@@ -251,11 +285,11 @@ function systemPurgeImpact(systemId: string | number): PurgeImpact {
     baseMonsters: count(
       `SELECT COUNT(*) AS c FROM setting_beings b
          JOIN compendium_entries e ON e.id = b.base_monster_id
-        WHERE e.system_id = ?`
+        WHERE e.system_id = ? AND b.archived_at IS NULL`
     ),
-    resources: count("SELECT COUNT(*) AS c FROM resources WHERE system_id = ?"),
-    characters: count("SELECT COUNT(*) AS c FROM characters WHERE system_id = ?"),
-    masteringNotes: count("SELECT COUNT(*) AS c FROM mastering_notes WHERE system_id = ?"),
+    resources: count("SELECT COUNT(*) AS c FROM resources WHERE system_id = ? AND archived_at IS NULL"),
+    characters: count("SELECT COUNT(*) AS c FROM characters WHERE system_id = ? AND archived_at IS NULL"),
+    masteringNotes: count("SELECT COUNT(*) AS c FROM mastering_notes WHERE system_id = ? AND archived_at IS NULL"),
     modules: count("SELECT COUNT(*) AS c FROM modules WHERE system_id = ?"),
   };
 }
@@ -307,10 +341,18 @@ archiveRouter.delete("/:type/:id", (req, res) => {
   const table = ARCHIVE_TABLES[req.params.type];
   if (!table) return res.status(400).json({ error: "unknown type" });
   const key = ARCHIVE_KEYS[req.params.type] ?? "id";
+  // id из параметра — строка; для canvas_board это scope_id (число). Валидируем
+  // как число, чтобы не пропустить NaN/Infinity в SQLite (placeholder защитит
+  // от инъекции, но тип должен быть осмысленным).
+  const rawId = req.params.id;
+  const numericId = Number(rawId);
+  if (!Number.isFinite(numericId) || !Number.isInteger(numericId) || numericId <= 0) {
+    return res.status(400).json({ error: "некорректный id" });
+  }
 
   const row = db
     .prepare(`SELECT archived_at FROM ${table} WHERE ${key} = ?`)
-    .get(req.params.id) as { archived_at: string | null } | undefined;
+    .get(numericId) as { archived_at: string | null } | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
   if (row.archived_at == null) {
     return res.status(400).json({ error: "можно удалить навсегда только из архива" });
@@ -322,47 +364,34 @@ archiveRouter.delete("/:type/:id", (req, res) => {
   if (FOLDER_OWNED_TYPES.has(req.params.type)) {
     const withFolder = db
       .prepare(`SELECT folder_path FROM ${table} WHERE ${key} = ?`)
-      .get(req.params.id) as { folder_path: string | null } | undefined;
+      .get(numericId) as { folder_path: string | null } | undefined;
     folderPath = withFolder?.folder_path ?? null;
   }
 
-  // Drop any module wrapper pointing at a system/setting we're deleting, so it
-  // doesn't linger as a dangling row (its FK is ON DELETE SET NULL, not cascade).
-  if (req.params.type === "system") {
-    db.prepare("DELETE FROM modules WHERE system_id = ?").run(req.params.id);
-    // Кампании — единственная ссылка на систему без каскада (NO ACTION), так
-    // что без этого удаление упало бы на FK. Отвязываем: кампания без системы
-    // хуже кампании с системой, но лучше удалённой кампании, а Мастер уже
-    // видел в предупреждении, каких именно кампаний это коснётся.
-    db.prepare("UPDATE campaigns SET system_id = NULL WHERE system_id = ?").run(req.params.id);
-  } else if (req.params.type === "setting") {
-    db.prepare("DELETE FROM modules WHERE setting_id = ?").run(req.params.id);
-    // Заготовки полки переживают свой сеттинг: у них он метка «где написана»,
-    // а не владелец. Без этого каскад унёс бы не только саму заготовку, но и
-    // все ещё не отвязанные вставки в ЧУЖИХ приключениях (source-каскад по
-    // library_scene_id) — Мастер удалил старый мир и обнаружил дыры в
-    // приключениях, которые к нему отношения не имели.
-    //
-    // Снимается и arc_id: приключение уйдёт каскадом вместе с сеттингом, и
-    // строка, оставшаяся в нём, ушла бы следом. Заготовка становится
-    // бездомной — тем, чем она по смыслу и была.
-    // archived_at IS NULL — иначе уже удалённая заготовка пережила бы свой
-    // сеттинг и осталась висеть в базе бездомной строкой, которую больше
-    // ниоткуда не видно.
-    db.prepare(
-      `UPDATE story_scenes SET setting_id = NULL, arc_id = NULL
-       WHERE setting_id = ? AND in_library = 1 AND archived_at IS NULL`
-    ).run(req.params.id);
+  // Все мутации БД — в одной транзакции: либо всё прошло (отвязки + DELETE
+  // + sweepOrphans), либо ничего не изменилось. ФС-удаление — вне транзакции,
+  // последним шагом после коммита.
+  const runDeleteTx = db.transaction(() => {
+    if (req.params.type === "system") {
+      db.prepare("DELETE FROM modules WHERE system_id = ?").run(numericId);
+      db.prepare("UPDATE campaigns SET system_id = NULL WHERE system_id = ?").run(numericId);
+    } else if (req.params.type === "setting") {
+      db.prepare("DELETE FROM modules WHERE setting_id = ?").run(numericId);
+      db.prepare(
+        `UPDATE story_scenes SET setting_id = NULL, arc_id = NULL
+         WHERE setting_id = ? AND in_library = 1 AND archived_at IS NULL`
+      ).run(numericId);
+    }
+    db.prepare(`DELETE FROM ${table} WHERE ${key} = ?`).run(numericId);
+    sweepOrphans();
+  });
+
+  try {
+    runDeleteTx();
+  } catch (e) {
+    console.error(`DELETE /archive/${req.params.type}/${rawId} transaction failed:`, e);
+    return res.status(500).json({ error: "не удалось удалить — попробуйте ещё раз" });
   }
-  db.prepare(`DELETE FROM ${table} WHERE ${key} = ?`).run(req.params.id);
-  // The delete above (and any FK cascade it triggered) may have removed owners
-  // of polymorphic statblocks/gallery/dates — reconcile those away too.
-  sweepOrphans();
-  // Ссылки в текстах трогать не нужно: в них лежит глобальный ключ, а не
-  // локальный id, и ссылка на исчезнувшую строку зачёркивается сама — просто
-  // потому, что ключ больше ни во что не резолвится.
-  // Finally, remove the entity's folder tree on disk (nested children's folders
-  // live inside it, so this one recursive delete matches the DB cascade).
   deleteVaultFolder(folderPath);
   res.json({ ok: true });
 });

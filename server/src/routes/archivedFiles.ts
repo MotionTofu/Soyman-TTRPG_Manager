@@ -1,3 +1,4 @@
+import path from "path";
 import { Router } from "express";
 import fs from "fs";
 import { db } from "../db/db";
@@ -24,10 +25,21 @@ archivedFilesRouter.delete("/:id", (req, res) => {
     | { archive_path: string }
     | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
-  try {
-    fs.unlinkSync(vaultAbs(row.archive_path));
-  } catch {
-    // already gone — proceed with removing the DB row regardless
+  // Хард-перила как в filesystem.deleteVaultFolder / vaultDedup.removeOrArchive:
+  // путь обязан лежать строго внутри VAULT_ROOT, иначе битая БД могла бы
+  // удалить файл вне хранилища. Отказ — тихий, строку БД всё равно чистим.
+  const abs = vaultAbs(row.archive_path);
+  const resolved = path.resolve(abs);
+  const root = path.resolve(VAULT_ROOT);
+  const insideVault = resolved === root || resolved.startsWith(root + path.sep);
+  if (insideVault) {
+    try {
+      fs.unlinkSync(abs);
+    } catch {
+      // already gone — proceed with removing the DB row regardless
+    }
+  } else {
+    console.error(`archivedFiles DELETE refused: path outside vault: ${row.archive_path}`);
   }
   db.prepare("DELETE FROM archived_files WHERE id = ?").run(req.params.id);
   res.json({ ok: true });

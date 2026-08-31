@@ -259,6 +259,15 @@ ipcMain.handle("pick-folder", async () => {
   return result.filePaths[0];
 });
 
+ipcMain.handle("pick-save-file", async (_event, defaultPath) => {
+  const result = await dialog.showSaveDialog({
+    defaultPath: typeof defaultPath === "string" && defaultPath.length > 0 ? defaultPath : undefined,
+    filters: [{ name: "Zip архив", extensions: ["zip"] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  return result.filePath;
+});
+
 ipcMain.handle("get-app-version", () => app.getVersion());
 
 ipcMain.handle("check-for-updates", () => {

@@ -22,7 +22,7 @@ import { systemPrefixOf, SYSTEM_KEY_PREFIX_TO_KIND } from "./systemFormat";
 import { buildTokenWeights, normalizeName, similarity } from "./names";
 import { splitBracketName } from "../services/compendiumNames";
 import { cleanChallengeRating } from "./creatureMeta";
-import { MENTIONABLE, normUid, idOfUid, scanMentions, rewriteMentions, type RefMention } from "../services/mentions";
+import { MENTIONABLE, normUid, idOfUid, scanMentions, rewriteMentions, formatRef, prefixOf, sourceCodeOf, type RefMention } from "../services/mentions";
 import type {
   ImportClass,
   ImportEquipment,
@@ -192,14 +192,14 @@ function filled(data: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * Упоминания внутри текста: файл пишет их ключом — `[[spell.mending|Починка]]`,
- * потому что id записи в момент сборки файла ещё не существует. Карточка же
- * умеет только `[[compendium_entry:1234|Починка]]`, и ключ в ней выводился
- * буквально, скобками наружу. Подменяем ключ на id вторым проходом, когда id
- * есть у всех.
+ * потому что id записи в момент сборки файла ещё не существует. Подменяем ключ
+ * на глобальный uid вторым проходом, когда id есть у всех:
+ * `[[compendium_entry@8f3c1a2e|phb|Починка]]`. Локальный id в тексте не пишется —
+ * он верен ровно в пределах одного файла базы (см. services/mentions.ts).
  *
- * Уже готовые упоминания (`[[тип:число|…]]`) не трогаем: их поставил человек в
- * редакторе. Неизвестный ключ разворачиваем в обычный текст — лучше слово без
- * ссылки, чем скобки в описании.
+ * Уже готовые упоминания (`[[тип:число|…]]` и `[[тип@uid|код|…]]`) не трогаем:
+ * их поставил человек в редакторе. Неизвестный ключ разворачиваем в обычный
+ * текст — лучше слово без ссылки, чем скобки в описании.
  */
 function linkMentions(
   text: string,
@@ -208,13 +208,20 @@ function linkMentions(
 ): string {
   return text.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (whole, target: string, label: string) => {
     if (/^\w+:\d+$/.test(target)) return whole;
+    if (/^\w+@[0-9a-fA-F-]+$/.test(target)) return whole;
+    if (target.includes("@")) return whole;
     if (!systemPrefixOf(target)) return whole;
     const ref = resolve(target);
     if (!ref) {
       onMissing(target);
       return label;
     }
-    return `[[compendium_entry:${ref.id}|${label}]]`;
+    const prefix = prefixOf("compendium_entry", ref.id);
+    if (!prefix) {
+      onMissing(target);
+      return label;
+    }
+    return formatRef("compendium_entry", prefix, sourceCodeOf("compendium_entry", ref.id), label);
   });
 }
 

@@ -33,10 +33,11 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     // Фокус на первый интерактив внутри модалки только при монтировании — иначе каждый ререндер (набор текста) прыгал бы на первое поле
-    const focusable = modalRef.current?.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    const first = focusable?.[0];
+    const getFocusable = () =>
+      modalRef.current?.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+    const first = getFocusable()?.[0];
     if (first) first.focus();
     else modalRef.current?.focus();
 
@@ -46,8 +47,10 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
         onCloseRef.current();
         return;
       }
-      if (e.key !== "Tab" || !modalRef.current || !focusable || focusable.length === 0) return;
-      const list = Array.from(focusable).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
+      if (e.key !== "Tab" || !modalRef.current) return;
+      const focusable = getFocusable();
+      if (!focusable || focusable.length === 0) return;
+      const list = Array.from(focusable).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1 && (el as HTMLElement).offsetParent !== null);
       if (list.length === 0) return;
       const firstEl = list[0];
       const lastEl = list[list.length - 1];

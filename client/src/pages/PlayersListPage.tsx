@@ -140,9 +140,31 @@ export function PlayersListPage() {
       <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="players" compact>Игроки</SectionHeading>
-        <button className="primary" onClick={() => setCreating(true)}>
-          + Новый игрок
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          <Link
+            to="/invitations"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 12px",
+              border: "1px solid var(--line)",
+              borderRadius: "var(--card-radius)",
+              fontFamily: "var(--font-ui)",
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              textDecoration: "none",
+              color: "var(--ink)",
+              background: "var(--paper)",
+            }}
+          >
+            Пригласить →
+          </Link>
+          <button className="primary" onClick={() => setCreating(true)}>
+            + Новый игрок
+          </button>
+        </div>
       </div>
 
       {players.length > 0 && (

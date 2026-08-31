@@ -23,6 +23,14 @@
 
 import { db } from "../db/db";
 import { parseAliases } from "./names";
+import {
+  scanMentions,
+  rewriteMentions,
+  idOfUid,
+  prefixOf,
+  sourceCodeOf,
+  formatRef,
+} from "../services/mentions";
 
 /** Где какие текстовые поля и как они называются для человека. */
 const OWNER_TEXT: Record<string, { table: string; label: string; fields: Record<string, string> }> = {
@@ -539,10 +547,16 @@ export function planCrossLinks(req: PlanRequest): CrossLinkProposal[] {
         // Ссылка сущности на саму себя смысла не имеет.
         if (candidate.ref === `${doc.ownerType}:${doc.ownerId}`) continue;
         // Одна ссылка на сущность в поле — правило, которое должно держаться и
-        // между запусками. Без этой проверки второй проход предлагал следующее
-        // вхождение того же имени, третий — ещё одно, и текст постепенно
-        // покрывался ссылками на одно и то же.
-        if (text.includes(`[[${candidate.ref}|`)) continue;
+        // между запусками. Проверяем и legacy, и uid-форму через разбор, а не
+        // подстрокой: после миграции текст содержит [[type@uid|...]], а не [[type:id|.
+        const [candType, candIdRaw] = candidate.ref.split(":");
+        const candId = Number(candIdRaw);
+        const alreadyLinked = scanMentions(text).some((m) => {
+          if (m.type !== candType) return false;
+          const curId = m.kind === "legacy" ? m.id : idOfUid(m.type, m.uid);
+          return curId === candId;
+        });
+        if (alreadyLinked) continue;
         for (const spelling of candidate.spellings) {
           const hits = findSpelling(text, spelling.text);
           if (!hits.length) continue;
@@ -650,10 +664,12 @@ export function applyCrossLinks(req: PlanRequest, chosen: CrossLinkChoice[]): { 
         (h) => !busy.some((b) => h.start < b.end && b.start < h.end)
       );
       if (!hit) continue;
-      const next =
-        row.value.slice(0, hit.start) +
-        `[[${proposal.ref}|${row.value.slice(hit.start, hit.end)}]]` +
-        row.value.slice(hit.end);
+      const [type, rawId] = proposal.ref.split(":");
+      const numId = Number(rawId);
+      const prefix = prefixOf(type, numId);
+      if (!prefix) continue;
+      const token = formatRef(type, prefix, sourceCodeOf(type, numId), row.value.slice(hit.start, hit.end));
+      const next = row.value.slice(0, hit.start) + token + row.value.slice(hit.end);
       db.prepare(`UPDATE ${meta.table} SET ${proposal.field} = ? WHERE id = ?`).run(
         next,
         proposal.ownerId
@@ -662,8 +678,7 @@ export function applyCrossLinks(req: PlanRequest, chosen: CrossLinkChoice[]): { 
       // «mention» — здесь то же самое, иначе текст и карточка «Связи»
       // разъедутся. Уже существующую связь INSERT OR IGNORE не трогает:
       // ключ таблицы не включает section.
-      const [type, id] = proposal.ref.split(":");
-      linkMention.run(proposal.ownerType, proposal.ownerId, type, Number(id));
+      linkMention.run(proposal.ownerType, proposal.ownerId, type, numId);
       written++;
     }
     return { written };
@@ -681,11 +696,14 @@ export function stripCrossLinks(ownerKind: string, ownerId: number): { removed: 
       for (const field of Object.keys(meta.fields)) {
         const text = doc.text[field] ?? "";
         if (!text.includes("[[")) continue;
-        // Подвешенные ссылки не трогаем: у них четыре поля, и «снять все» тут
-        // означает снять расставленное, а не то, что ждёт своего модуля.
-        const next = text.replace(/\[\[(\w+):(\d+)\|([^\]]*)\]\]/g, (_, __, ___, label: string) => {
+        // Подвешенные uid-ссылки не трогаем: у них четыре поля и цель на этом
+        // устройстве не найдена — «снять все» означает снять расставленное, а
+        // не то, что ждёт своего модуля.
+        const next = rewriteMentions(text, (m) => {
+          if (!LINKABLE_BY_KEY.has(m.type)) return null;
+          if (m.kind === "ref" && idOfUid(m.type, m.uid) == null) return null;
           removed++;
-          return label;
+          return m.label;
         });
         if (next !== text) {
           db.prepare(`UPDATE ${meta.table} SET ${field} = ? WHERE id = ?`).run(next, doc.ownerId);

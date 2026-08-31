@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 // not speculatively.
 contextBridge.exposeInMainWorld("electronAPI", {
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
+  pickSaveFile: (defaultPath) => ipcRenderer.invoke("pick-save-file", defaultPath),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),

@@ -5,6 +5,7 @@ import os from "os";
 import path from "path";
 import { db } from "../db/db";
 import { ensureSubfolder, toFileUrl, VAULT_ROOT, writeReplacingOldFile } from "../services/filesystem";
+import { requireAuth } from "../services/auth";
 
 export const appSettingsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -64,13 +65,29 @@ appSettingsRouter.delete("/home-background", (_req, res) => {
 // chosen over a custom url scheme). Lists every non-internal IPv4 the OS
 // reports so the GM can pick whichever interface their players are actually
 // reachable on (Wi-Fi vs Ethernet vs VPN).
-appSettingsRouter.get("/network-addresses", (_req, res) => {
+function scoreAddr(addr: string): number {
+  if (addr.startsWith("192.168.")) return 0;
+  if (addr.startsWith("10.")) return 1;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(addr)) return 2;
+  if (addr.startsWith("169.254.")) return 100;
+  return 3;
+}
+appSettingsRouter.get("/network-addresses", requireAuth("gm"), (_req, res) => {
   const nets = os.networkInterfaces();
-  const addresses: string[] = [];
-  for (const iface of Object.values(nets)) {
+  type Entry = { address: string; name: string };
+  const entries: Entry[] = [];
+  for (const [name, iface] of Object.entries(nets)) {
     for (const net of iface ?? []) {
-      if (net.family === "IPv4" && !net.internal) addresses.push(net.address);
+      if (net.family === "IPv4" && !net.internal) entries.push({ address: net.address, name });
     }
   }
-  res.json({ addresses, port: process.env.PORT || 3001 });
+  entries.sort((a, b) => {
+    const sa = scoreAddr(a.address);
+    const sb = scoreAddr(b.address);
+    if (sa !== sb) return sa - sb;
+    return a.address.localeCompare(b.address);
+  });
+  // Backward compat: keep `addresses: string[]` for old clients, plus typed `entries`.
+  const addresses = entries.map((e) => e.address);
+  res.json({ addresses, entries, port: Number(process.env.PORT) || 3001 });
 });

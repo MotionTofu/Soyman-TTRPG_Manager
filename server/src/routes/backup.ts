@@ -21,19 +21,55 @@ const loadArchiver = () => nativeImport("archiver");
 const BACKUP_DIR =
   process.env.BACKUP_DIR || path.join(path.dirname(VAULT_ROOT), "RPG-Backups");
 
-backupRouter.post("/", async (_req, res) => {
+function isValidBackupPath(p: string): boolean {
+  if (!p || typeof p !== "string" || p.includes("\0") || p.length > 1024) return false;
+  if (p.split(/[\\/]/).includes("..")) return false;
+  if (!path.isAbsolute(p)) return false;
+  if (p.startsWith("\\\\")) return false;
+  return true;
+}
+
+backupRouter.get("/info", (_req, res) => {
+  res.json({ defaultDir: BACKUP_DIR });
+});
+
+backupRouter.post("/", async (req, res) => {
   try {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    // Optional custom destination: { dir } (folder) or { filePath / path } (exact zip file)
+    const body = (req.body ?? {}) as { dir?: string; filePath?: string; path?: string };
+    const rawDir = typeof body.dir === "string" ? body.dir.trim() : "";
+    const rawFile = typeof body.filePath === "string" ? body.filePath.trim() : typeof body.path === "string" ? body.path.trim() : "";
+
+    let targetDir = BACKUP_DIR;
+    let targetFile: string | null = null;
+
+    if (rawFile) {
+      if (!isValidBackupPath(rawFile)) {
+        return res.status(400).json({ error: "Недопустимый путь файла" });
+      }
+      if (path.extname(rawFile).toLowerCase() !== ".zip") {
+        return res.status(400).json({ error: "Путь должен указывать на .zip файл" });
+      }
+      targetFile = rawFile;
+      targetDir = path.dirname(rawFile);
+    } else if (rawDir) {
+      if (!isValidBackupPath(rawDir)) {
+        return res.status(400).json({ error: "Недопустимый путь папки" });
+      }
+      targetDir = rawDir;
+    }
+
+    fs.mkdirSync(targetDir, { recursive: true });
 
     const stamp = new Date()
       .toISOString()
       .slice(0, 16)
       .replace("T", "_")
       .replace(":", "-");
-    const zipPath = path.join(BACKUP_DIR, `rpg-backup-${stamp}.zip`);
+    const zipPath = targetFile ?? path.join(targetDir, `rpg-backup-${stamp}.zip`);
 
     // Consistent DB snapshot even while the app is running (WAL mode)
-    const dbSnapshotPath = path.join(BACKUP_DIR, `app-snapshot-${stamp}.db`);
+    const dbSnapshotPath = path.join(targetDir, `app-snapshot-${stamp}.db`);
     await db.backup(dbSnapshotPath);
 
     const output = fs.createWriteStream(zipPath);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, getAuthToken, setAuthToken } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
+import { Modal } from "../components/Modal";
 import { SearchPanel } from "./SearchPanel";
 import { NavWidget } from "./NavWidget";
 import { PreviewDock } from "./PreviewDock";
@@ -140,11 +141,68 @@ function MobileBottomNav({
 function BackupButton() {
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
   const [info, setInfo] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [backupPath, setBackupPath] = useState("");
+  const [defaultDir, setDefaultDir] = useState<string | null>(null);
+
+  async function openConfirm() {
+    setConfirmOpen(true);
+    if (defaultDir === null) {
+      try {
+        const res = await api.get<{ defaultDir: string }>("/backup/info");
+        setDefaultDir(res.defaultDir);
+      } catch {
+        // leave defaultDir null — fallback placeholder will be used
+      }
+    }
+  }
+
+  async function handlePickPath() {
+    const electron = window.electronAPI as unknown as { pickSaveFile?: (p: string) => Promise<string | null>; pickFolder?: () => Promise<string | null> } | undefined;
+    if (electron?.pickSaveFile) {
+      const stamp = new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
+      const suggestedName = `rpg-backup-${stamp}.zip`;
+      let defaultPath: string | undefined;
+      const trimmed = backupPath.trim();
+      if (trimmed.toLowerCase().endsWith(".zip")) {
+        defaultPath = trimmed;
+      } else if (trimmed) {
+        const sep = trimmed.includes("\\") ? "\\" : "/";
+        defaultPath = trimmed.replace(/[\\/]+$/, "") + sep + suggestedName;
+      } else if (defaultDir) {
+        const sep = defaultDir.includes("\\") ? "\\" : "/";
+        defaultPath = defaultDir.replace(/[\\/]+$/, "") + sep + suggestedName;
+      } else {
+        defaultPath = suggestedName;
+      }
+      const picked = await electron.pickSaveFile(defaultPath);
+      if (picked) setBackupPath(picked);
+      return;
+    }
+    if (electron?.pickFolder) {
+      const picked = await electron.pickFolder();
+      if (picked) setBackupPath(picked);
+      return;
+    }
+    // Браузер без Electron — ручной ввод через prompt
+    const fallback = window.prompt("Укажите путь сохранения (папка или полный путь к .zip):", backupPath || defaultDir || "");
+    if (fallback !== null) setBackupPath(fallback.trim());
+  }
 
   async function runBackup() {
+    setConfirmOpen(false);
     setState("working");
     try {
-      const res = await api.post<{ path: string; size: number }>("/backup");
+      const trimmed = backupPath.trim();
+      let body: Record<string, string> | undefined;
+      if (trimmed) {
+        if (trimmed.toLowerCase().endsWith(".zip")) body = { filePath: trimmed };
+        else body = { dir: trimmed };
+      }
+      const res = await api.post<{ path: string; size: number }>(
+        "/backup",
+        body ?? {}
+      );
       setInfo(`${res.path} (${(res.size / 1024 / 1024).toFixed(1)} МБ)`);
       setState("done");
     } catch (e) {
@@ -153,14 +211,87 @@ function BackupButton() {
     }
   }
 
+  const displayPath = backupPath.trim() || defaultDir || "RPG-Backups (по умолчанию)";
+
   return (
     <div className="backup-block">
-      <button className="nav-bottom-button" onClick={runBackup} disabled={state === "working"}>
+      <button
+        className="nav-bottom-button"
+        onClick={openConfirm}
+        disabled={state === "working"}
+      >
         <NavIcon name="backup" />
         {state === "working" ? "Архивирую…" : "Бэкап"}
       </button>
       {state === "done" && <div className="backup-info">Готово: {info}</div>}
       {state === "error" && <div className="backup-info error">Ошибка: {info}</div>}
+      {confirmOpen && (
+        <Modal onClose={() => setConfirmOpen(false)} closeOnBackdropClick={false}>
+          <div className="external-confirm">
+            <div className="external-confirm__head" role="heading" aria-level={2}>
+              <NavIcon name="backup" />
+              <span>Бэкап</span>
+            </div>
+            <p className="external-confirm__text" style={{ marginBottom: 12 }}>
+              Желаете сделать бэкап?
+            </p>
+
+            {/* Путь — не инпут, а текст; меняется сразу после «Изменить путь» */}
+            <div
+              title={displayPath}
+              style={{
+                marginBottom: 14,
+                padding: "8px 10px",
+                background: "var(--paper)",
+                border: "1px solid var(--line)",
+                textAlign: "left",
+                // Длинный Windows-путь не должен рвать модалку: режем только внутри слова
+                overflowWrap: "anywhere",
+                wordBreak: "break-word",
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "var(--muted)",
+                  marginBottom: 3,
+                }}
+              >
+                Сохраняем в:
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  lineHeight: 1.35,
+                  color: "var(--ink)",
+                  overflowWrap: "anywhere",
+                  wordBreak: "break-word",
+                }}
+              >
+                {displayPath}
+              </div>
+            </div>
+
+            <div className="external-confirm__actions">
+              <button type="button" className="primary" onClick={runBackup}>
+                Да
+              </button>
+              <button type="button" onClick={handlePickPath}>
+                Изменить путь
+              </button>
+              <button type="button" onClick={() => setConfirmOpen(false)}>
+                Нет
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

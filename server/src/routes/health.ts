@@ -6,7 +6,7 @@ import { vaultAbs, VAULT_ROOT } from "../services/filesystem";
 import { findMissingFiles, relinkResource } from "../services/fileHealth";
 import { sweepOrphans } from "../services/orphans";
 import { openInFileExplorer } from "../services/filesystem";
-import { MENTIONABLE, mentionTextColumns, scanMentions, exists, rewriteAllMentions, idOfUid, normUid, rewriteMentions, type Mention, type RefMention } from "../services/mentions";
+import { MENTIONABLE, mentionTextColumns, scanMentions, exists, rewriteAllMentions, idOfUid, normUid, rewriteMentions, prefixOf, sourceCodeOf, formatRef, type Mention, type RefMention, type LegacyMention } from "../services/mentions";
 
 export const healthRouter = Router();
 
@@ -47,32 +47,28 @@ const PATH_TABLES: { table: string; column: string; idCol?: string }[] = [
   { table: "archived_files", column: "archive_path" },
 ];
 
-function scanBrokenPaths(): { table: string; column: string; id: number; path: string }[] {
+function scanBrokenPaths(): { entries: { table: string; column: string; id: number; path: string }[]; total: number; truncated: boolean } {
   const out: { table: string; column: string; id: number; path: string }[] = [];
+  let total = 0;
   for (const { table, column } of PATH_TABLES) {
     try {
       const rows = db.prepare(`SELECT id, ${column} as p FROM ${table} WHERE ${column} IS NOT NULL AND ${column} != ''`).all() as { id: number; p: string }[];
       for (const r of rows) {
         const p = r.p;
-        // Внешние файлы (вне vault) — пропускаем, они не обязаны лежать в vault
-        // fileHealth уже проверяет resources.file_path отдельно
+        let broken = false;
         try {
-          if (!fs.existsSync(vaultAbs(p))) {
-            // Если путь абсолютный и вне vault — не считаем битым (ресурсы вне хранилища)
-            // vaultAbs для внешнего вернёт его же, existsSync проверит честно
-            out.push({ table, column, id: r.id, path: p });
-          }
-        } catch {
-          out.push({ table, column, id: r.id, path: p });
+          if (!fs.existsSync(vaultAbs(p))) broken = true;
+        } catch { broken = true; }
+        if (broken) {
+          total++;
+          if (out.length < 200) out.push({ table, column, id: r.id, path: p });
         }
-        if (out.length > 200) break;
       }
     } catch {
       // таблица/колонка может отсутствовать в старых БД
     }
-    if (out.length > 200) break;
   }
-  return out;
+  return { entries: out, total, truncated: total > out.length };
 }
 
 function countOrphans(): Record<string, number> {
@@ -145,11 +141,12 @@ function seqDrift(): { table: string; seq: number; maxId: number | null; drift: 
   return out.sort((a, b) => b.drift - a.drift);
 }
 
-function scanBrokenLinks(): { count: number; samples: { type: string; label: string }[] } {
+function scanBrokenLinks(cols?: ReturnType<typeof mentionTextColumns>): { count: number; samples: { type: string; label: string }[] } {
+  const columns = cols ?? mentionTextColumns();
   const samples: { type: string; label: string }[] = [];
   const seen = new Set<string>();
   let count = 0;
-  for (const { table, column } of mentionTextColumns()) {
+  for (const { table, column } of columns) {
     const rows = db.prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%'`).all() as { v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
@@ -163,6 +160,66 @@ function scanBrokenLinks(): { count: number; samples: { type: string; label: str
     }
   }
   return { count, samples };
+}
+
+interface LegacyEntry {
+  type: string;
+  id: number;
+  label: string;
+  table: string;
+  column: string;
+  hostId: number;
+  hostRoute: string | null;
+  hostLabel: string | null;
+  resolvable: boolean;
+  preview: string;
+}
+
+function scanLegacyMentions(cols?: ReturnType<typeof mentionTextColumns>): { entries: LegacyEntry[]; count: number; total: number; resolvable: number; broken: number; truncated: boolean } {
+  const columns = cols ?? mentionTextColumns();
+  const entries: LegacyEntry[] = [];
+  let total = 0;
+  let resolvable = 0;
+  let broken = 0;
+  for (const { table, column } of columns) {
+    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%:%|%'`).all() as { id: number; v: string | null }[];
+    for (const row of rows) {
+      if (!row.v || !row.v.includes("[[")) continue;
+      for (const m of scanMentions(row.v)) {
+        if (m.kind !== "legacy" || !MENTIONABLE[m.type]) continue;
+        const lm = m as LegacyMention;
+        const ok = exists(lm.type, lm.id);
+        if (ok) resolvable++; else broken++;
+        const host = resolveHost(table, row.id);
+        let preview = lm.label;
+        if (ok) {
+          const prefix = prefixOf(lm.type, lm.id);
+          if (prefix) preview = formatRef(lm.type, prefix, sourceCodeOf(lm.type, lm.id), lm.label);
+        }
+        if (entries.length < 100) {
+          entries.push({
+            type: lm.type,
+            id: lm.id,
+            label: lm.label,
+            table,
+            column,
+            hostId: row.id,
+            hostRoute: host.route,
+            hostLabel: host.label,
+            resolvable: ok,
+            preview,
+          });
+        }
+        total++;
+        // продолжаем считать total даже после 100 shown
+      }
+    }
+  }
+  return { entries, count: total, total, resolvable, broken, truncated: total > entries.length };
+}
+
+function collectLegacyMentionsDetailed(): LegacyEntry[] {
+  return scanLegacyMentions().entries;
 }
 
 interface DanglingEntry {
@@ -289,9 +346,10 @@ function resolveHost(table: string, id: number): { route: string | null; label: 
   return { route: null, label: null };
 }
 
-function scanDanglingModules(): { code: string; label: string; count: number; samples: DanglingEntry[] }[] {
+function scanDanglingModules(cols?: ReturnType<typeof mentionTextColumns>): { code: string; label: string; count: number; samples: DanglingEntry[] }[] {
+  const columns = cols ?? mentionTextColumns();
   const byCode = new Map<string, { label: string; count: number; samples: DanglingEntry[] }>();
-  for (const { table, column } of mentionTextColumns()) {
+  for (const { table, column } of columns) {
     const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%'`).all() as { id: number; v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
@@ -318,9 +376,10 @@ function scanDanglingModules(): { code: string; label: string; count: number; sa
  * Подробный список всех мёртвых UID-ссылок: тип, uid, таблица, колонка.
  * Используется repair-эндпоинтом для починки и кликабельным списком здоровья.
  */
-function collectDeadUidMentions(): DanglingEntry[] {
+function collectDeadUidMentions(cols?: ReturnType<typeof mentionTextColumns>): DanglingEntry[] {
+  const columns = cols ?? mentionTextColumns();
   const out: DanglingEntry[] = [];
-  for (const { table, column } of mentionTextColumns()) {
+  for (const { table, column } of columns) {
     const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%'`).all() as { id: number; v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
@@ -333,6 +392,145 @@ function collectDeadUidMentions(): DanglingEntry[] {
     }
   }
   return out;
+}
+
+const hostScopePragmaCache = new Map<string, Set<string>>();
+function getHostScope(table: string, id: number): { system_id?: number; setting_id?: number } {
+  try {
+    let colSet = hostScopePragmaCache.get(table);
+    if (!colSet) {
+      const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+      colSet = new Set(cols.map((c) => c.name));
+      hostScopePragmaCache.set(table, colSet);
+    }
+    const has = (c: string) => colSet!.has(c);
+    if (has("system_id")) {
+      const r = db.prepare(`SELECT system_id FROM ${table} WHERE id = ?`).get(id) as { system_id: number | null } | undefined;
+      if (r?.system_id) return { system_id: r.system_id };
+    }
+    if (has("setting_id")) {
+      const r = db.prepare(`SELECT setting_id FROM ${table} WHERE id = ?`).get(id) as { setting_id: number | null } | undefined;
+      if (r?.setting_id) return { setting_id: r.setting_id };
+    }
+    if (table === "story_scenes") {
+      const r = db.prepare(`SELECT setting_id FROM story_scenes WHERE id = ?`).get(id) as { setting_id: number | null } | undefined;
+      if (r?.setting_id) return { setting_id: r.setting_id };
+    }
+    if (table === "story_arcs") {
+      const r = db.prepare(`SELECT setting_id FROM story_arcs WHERE id = ?`).get(id) as { setting_id: number | null } | undefined;
+      if (r?.setting_id) return { setting_id: r.setting_id };
+    }
+  } catch {}
+  return {};
+}
+
+interface DeadCandidate {
+  id: number;
+  name: string;
+  uid: string;
+  prefix: string;
+  source: string;
+  tier: "exact" | "likely" | "doubtful";
+  via: string;
+}
+
+function findCandidatesForDead(
+  type: string,
+  label: string,
+  hostTable: string,
+  hostId: number,
+  code: string
+): DeadCandidate[] {
+  const table = MENTIONABLE[type];
+  if (!table) return [];
+  const needle = label.trim().toLowerCase();
+  if (!needle) return [];
+  const hostScope = getHostScope(hostTable, hostId);
+  // Попытка сузить по коду модуля: code → system/setting
+  let scopeSystemId: number | undefined = hostScope.system_id;
+  let scopeSettingId: number | undefined = hostScope.setting_id;
+  if (type === "compendium_entry" && code && code !== "unknown") {
+    const sys = db.prepare(`SELECT id FROM systems WHERE lower(code)=lower(?) OR lower(name)=lower(?)`).get(code, code) as { id: number } | undefined;
+    if (sys) scopeSystemId = sys.id;
+  } else if (["being", "location", "community", "artifact", "setting", "adventure", "scene"].includes(type) && code && code !== "unknown") {
+    const st = db.prepare(`SELECT id FROM settings WHERE lower(code)=lower(?) OR lower(name)=lower(?)`).get(code, code) as { id: number } | undefined;
+    if (st) scopeSettingId = st.id;
+  }
+  let rows: { id: number; uid: string; name: string; name_original: string | null; aliases: string | null }[] = [];
+  try {
+    if (type === "compendium_entry" && scopeSystemId != null) {
+      rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL AND system_id = ?`).all(scopeSystemId) as typeof rows;
+    } else if (scopeSettingId != null && table !== "compendium_entries" && table !== "systems") {
+      // setting-scoped таблицы имеют setting_id
+      const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+      if (cols.some((c) => c.name === "setting_id")) {
+        rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL AND setting_id = ?`).all(scopeSettingId) as typeof rows;
+      } else {
+        rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL`).all() as typeof rows;
+      }
+    } else {
+      rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL`).all() as typeof rows;
+    }
+  } catch {
+    return [];
+  }
+  // Детерминированно режем по алфавиту, иначе отсечётся нужный кандидат за пределами 500
+  if (rows.length > 500) {
+    rows.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    rows = rows.slice(0, 500);
+  }
+  const out: DeadCandidate[] = [];
+  for (const r of rows) {
+    const nameLow = r.name.trim().toLowerCase();
+    const origLow = (r.name_original || "").trim().toLowerCase();
+    let tier: DeadCandidate["tier"] | null = null;
+    let via = "";
+    if (nameLow === needle) { tier = "exact"; via = "имя"; }
+    else if (origLow && origLow === needle) { tier = "likely"; via = "оригинал"; }
+    else {
+      try {
+        const al = r.aliases ? (JSON.parse(r.aliases) as string[]) : [];
+        const hit = al.find((a) => a.trim().toLowerCase() === needle);
+        if (hit) { tier = "likely"; via = `синоним «${hit}»`; }
+      } catch {}
+    }
+    if (!tier && (nameLow.includes(needle) || needle.includes(nameLow))) { tier = "doubtful"; via = "часть названия"; }
+    if (!tier) continue;
+    const prefix = prefixOf(type, r.id) || normUid(r.uid).slice(0, 8);
+    const source = sourceCodeOf(type, r.id);
+    out.push({ id: r.id, name: r.name, uid: normUid(r.uid), prefix, source, tier, via });
+  }
+  const order = { exact: 0, likely: 1, doubtful: 2 } as const;
+  out.sort((a, b) => order[a.tier] - order[b.tier] || a.name.localeCompare(b.name, "ru"));
+  return out.slice(0, 10);
+}
+
+interface DeadUidGroup {
+  type: string;
+  uid: string;
+  code: string;
+  label: string;
+  count: number;
+  samples: DanglingEntry[];
+  candidates: DeadCandidate[];
+}
+
+function getDeadUidGroups(): DeadUidGroup[] {
+  const all = collectDeadUidMentions();
+  const byKey = new Map<string, { type: string; uid: string; code: string; label: string; samples: DanglingEntry[] }>();
+  for (const e of all) {
+    const key = `${e.type}:${normUid(e.uid)}`;
+    const g = byKey.get(key);
+    if (g) g.samples.push(e);
+    else byKey.set(key, { type: e.type, uid: normUid(e.uid), code: e.code, label: e.label, samples: [e] });
+  }
+  const groups: DeadUidGroup[] = [];
+  for (const g of byKey.values()) {
+    const candidates = findCandidatesForDead(g.type, g.label, g.samples[0].table, g.samples[0].id, g.code);
+    groups.push({ type: g.type, uid: g.uid, code: g.code, label: g.label, count: g.samples.length, samples: g.samples.slice(0, 20), candidates });
+  }
+  groups.sort((a, b) => b.count - a.count);
+  return groups.slice(0, 50);
 }
 
 /**
@@ -470,25 +668,28 @@ function scanRelinkCandidates(): { resource_id: number; name: string; old_path: 
   return out;
 }
 
-// GET /api/health/scan — только чтение, по кнопке
+// GET /api/health/scan — только чтение, по кнопке (C-P0-6: 1× mentionTextColumns вместо 4×, C-P1-1: total vs shown)
 healthRouter.get("/scan", (_req, res) => {
-  const brokenPaths = scanBrokenPaths();
+  const cols = mentionTextColumns();
+  const brokenPathsRes = scanBrokenPaths();
   const missingFiles = findMissingFiles();
   const orphans = countOrphans();
   const orphansTotal = Object.values(orphans).reduce((a, b) => a + b, 0);
   const seq = seqDrift();
-  const brokenLinks = scanBrokenLinks();
-  const danglingModules = scanDanglingModules();
-  const deadUidMentions = collectDeadUidMentions();
+  const brokenLinks = scanBrokenLinks(cols);
+  const legacy = scanLegacyMentions(cols);
+  const danglingModules = scanDanglingModules(cols);
+  const deadUidMentions = collectDeadUidMentions(cols);
   const orphanFiles = scanOrphanFiles();
   const relinkCandidates = scanRelinkCandidates();
   const bracketNames = scanBracketNames();
   res.json({
-    brokenPaths, brokenPathsCount: brokenPaths.length,
+    brokenPaths: brokenPathsRes.entries, brokenPathsCount: brokenPathsRes.total, brokenPathsShown: brokenPathsRes.entries.length, brokenPathsTruncated: brokenPathsRes.truncated,
     missingFiles, missingFilesCount: missingFiles.length,
     orphans, orphansTotal,
     seq, seqWorst: seq[0] ?? null,
     brokenLinks, brokenLinksCount: brokenLinks.count,
+    legacy, legacyCount: legacy.count, legacyResolvable: legacy.resolvable, legacyBroken: legacy.broken, legacyShown: legacy.entries.length, legacyTruncated: legacy.truncated,
     danglingModules, danglingModulesCount: danglingModules.reduce((a, b) => a + b.count, 0),
     deadUidMentions, deadUidMentionsCount: deadUidMentions.length,
     orphanFiles, orphanFilesCount: orphanFiles.length,
@@ -511,79 +712,174 @@ healthRouter.post("/links/strip", (_req, res) => {
   res.json({ removed });
 });
 
-// POST /api/health/uid-links/fix — починить мёртвые UID-ссылки, заменив UID на актуальные
+// POST /api/health/uid-links/fix — починить мёртвые UID-ссылки, заменив UID на актуальные (C-P0-7: rewriteAllMentions + ключ type:uid, без коллизий)
 healthRouter.post("/uid-links/fix", (_req, res) => {
   const dead = collectDeadUidMentions();
   if (dead.length === 0) return res.json({ fixed: 0, unresolved: 0 });
 
-  // Группируем по (table, column, id) чтобы править один раз на строку
-  const byRow = new Map<string, { table: string; column: string; entries: DanglingEntry[] }>();
-  for (const d of dead) {
-    const key = `${d.table}:${d.column}`;
-    const group = byRow.get(key) ?? { table: d.table, column: d.column, entries: [] };
-    group.entries.push(d);
-    byRow.set(key, group);
-  }
-
   let fixed = 0;
   let unresolved = 0;
-  const fixMap = new Map<string, string>(); // oldUidNorm → newUidNorm
+  const fixMap = new Map<string, string | null>(); // "type:oldUidNorm" -> newUidNorm | null
 
-  for (const { table, column, entries } of byRow.values()) {
-    const ids = [...new Set(entries.map(e => {
-      const row = db.prepare(`SELECT id FROM ${table} WHERE ${column} LIKE ?`).get(`%${entries[0].uid.slice(0, 8)}%`) as { id: number } | undefined;
-      return row?.id;
-    }).filter(Boolean))] as number[];
+  rewriteAllMentions((m) => {
+    if (m.kind !== "ref") return null;
+    const rm = m as RefMention;
+    if (!MENTIONABLE[rm.type]) return null;
+    if (idOfUid(rm.type, rm.uid) != null) return null; // уже живая
 
-    for (const rowId of ids) {
-      const row = db.prepare(`SELECT ${column} AS v FROM ${table} WHERE id = ?`).get(rowId) as { v: string | null };
-      if (!row?.v || !row.v.includes("[[")) continue;
-
-      const next = rewriteMentions(row.v, (m: Mention) => {
-        if (m.kind !== "ref") return null;
-        const rm = m as RefMention;
-        if (!MENTIONABLE[rm.type]) return null;
-        if (idOfUid(rm.type, rm.uid) != null) return null; // уже живая
-
-        // Ищем актуальный UID по имени метки
-        const oldKey = normUid(rm.uid);
-        let newUid = fixMap.get(oldKey);
-        if (newUid === undefined) {
-          newUid = findBestUidByLabel(rm.type, rm.label) ?? undefined;
-          fixMap.set(oldKey, newUid ?? "");
-        }
-        if (!newUid) { unresolved++; return rm.label; } // не нашли — схлопнуть в текст
-        fixed++;
-        return `[[${rm.type}@${newUid}|${rm.source}|${rm.label}]]`;
-      });
-
-      if (next !== row.v) {
-        db.prepare(`UPDATE ${table} SET ${column} = ? WHERE id = ?`).run(next, rowId);
-      }
+    const key = `${rm.type}:${normUid(rm.uid)}`;
+    let newUid: string | null | undefined = fixMap.get(key);
+    if (newUid === undefined) {
+      const found = findBestUidByLabel(rm.type, rm.label);
+      fixMap.set(key, found ?? null);
+      newUid = found ?? null;
     }
-  }
+    if (!newUid) { unresolved++; return rm.label; } // не нашли — схлопнуть в текст
+    fixed++;
+    const newId = idOfUid(rm.type, newUid);
+    const source = newId ? (sourceCodeOf(rm.type, newId) || rm.source) : rm.source;
+    return `[[${rm.type}@${newUid}|${source}|${rm.label}]]`;
+  });
 
   res.json({ fixed, unresolved });
 });
 
-// POST /api/health/relink — перепривязать один пропавший файл по кандидату
+// GET /api/health/legacy-details — превью id→uid без записи
+healthRouter.get("/legacy-details", (_req, res) => {
+  const data = scanLegacyMentions();
+  res.json(data);
+});
+
+// POST /api/health/legacy-fix — перевести все legacy на uid (resolvable) или схлопнуть (broken)
+healthRouter.post("/legacy-fix", (_req, res) => {
+  let fixed = 0;
+  let stripped = 0;
+  const changed = rewriteAllMentions((m) => {
+    if (m.kind !== "legacy" || !MENTIONABLE[m.type]) return null;
+    const lm = m as LegacyMention;
+    if (!exists(lm.type, lm.id)) { stripped++; return lm.label; }
+    const prefix = prefixOf(lm.type, lm.id);
+    if (!prefix) { stripped++; return lm.label; }
+    fixed++;
+    return formatRef(lm.type, prefix, sourceCodeOf(lm.type, lm.id), lm.label);
+  });
+  res.json({ fixed, stripped, changed });
+});
+
+// GET /api/health/dead-uid-search — ручной поиск кандидата: ?type=being&q=мир&limit=20
+healthRouter.get("/dead-uid-search", (req, res) => {
+  const type = String(req.query.type || "").trim();
+  const q = String(req.query.q || "").trim();
+  const limit = Math.min(30, Math.max(1, Number(req.query.limit) || 20));
+  const table = MENTIONABLE[type];
+  if (!table) return res.status(400).json({ error: "unknown type" });
+  if (q.length < 2) return res.status(400).json({ error: "q too short (≥2)" });
+  if (q.length > 80) return res.status(400).json({ error: "q too long" });
+  const needle = q.toLowerCase();
+  let rows: { id: number; uid: string; name: string; name_original: string | null; aliases: string | null }[] = [];
+  try {
+    // Ищем по имени/оригиналу (LOWER для кириллицы — в JS, а не SQL lower)
+    const all = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL LIMIT 800`).all() as typeof rows;
+    const filtered = all.filter((r) => {
+      const n = r.name.toLowerCase();
+      const o = (r.name_original || "").toLowerCase();
+      if (n.includes(needle) || o.includes(needle)) return true;
+      try {
+        const al = r.aliases ? (JSON.parse(r.aliases) as string[]) : [];
+        return al.some((a) => a.toLowerCase().includes(needle));
+      } catch { return false; }
+    });
+    filtered.sort((a, b) => {
+      const an = a.name.toLowerCase();
+      const bn = b.name.toLowerCase();
+      const aExact = an === needle ? 0 : an.startsWith(needle) ? 1 : 2;
+      const bExact = bn === needle ? 0 : bn.startsWith(needle) ? 1 : 2;
+      return aExact - bExact || a.name.localeCompare(b.name, "ru");
+    });
+    rows = filtered.slice(0, limit);
+  } catch {
+    return res.json({ results: [] });
+  }
+  const results = rows.map((r) => {
+    const prefix = prefixOf(type, r.id) || normUid(r.uid).slice(0, 8);
+    const source = sourceCodeOf(type, r.id);
+    const nl = r.name.toLowerCase();
+    const tier: DeadCandidate["tier"] = nl === needle ? "exact" : nl.startsWith(needle) ? "likely" : "doubtful";
+    const via = tier === "exact" ? "имя" : tier === "likely" ? "начинается" : "часть";
+    return { id: r.id, name: r.name, uid: normUid(r.uid), prefix, source, tier, via };
+  });
+  res.json({ results });
+});
+
+// GET /api/health/dead-uid-details — мёртвые uid с кандидатами для ручной верификации
+healthRouter.get("/dead-uid-details", (_req, res) => {
+  const groups = getDeadUidGroups();
+  res.json({ groups, count: groups.reduce((a, g) => a + g.count, 0) });
+});
+
+// POST /api/health/dead-uid-fix — ручной выбор: fixes=[{type, uid, newId|null}]
+healthRouter.post("/dead-uid-fix", (req, res) => {
+  const fixes = (req.body as { fixes?: { type: string; uid: string; newId: number | null }[] })?.fixes;
+  if (!Array.isArray(fixes) || fixes.length === 0) return res.status(400).json({ error: "fixes required" });
+  if (fixes.length > 100) return res.status(400).json({ error: "too many fixes (max 100)" });
+  const fixMap = new Map<string, { prefix: string; source: string } | null>(); // "type:oldUidNorm" -> {prefix,source}|null
+  for (const f of fixes) {
+    if (!f || typeof f.type !== "string" || typeof f.uid !== "string") continue;
+    const type = f.type.trim();
+    const rawUid = f.uid.trim();
+    if (!MENTIONABLE[type]) continue;
+    if (!/^[0-9a-fA-F-]{8,36}$/.test(rawUid)) continue;
+    if (f.newId != null && (!Number.isInteger(f.newId) || f.newId <= 0 || f.newId > 1_000_000_000)) continue;
+    const key = `${type}:${normUid(rawUid)}`;
+    if (f.newId == null) { fixMap.set(key, null); continue; }
+    const table = MENTIONABLE[type];
+    const uidRow = db.prepare(`SELECT uid FROM ${table} WHERE id = ?`).get(f.newId) as { uid: string } | undefined;
+    if (!uidRow?.uid) { fixMap.set(key, null); continue; }
+    const newUid = normUid(uidRow.uid);
+    const prefix = prefixOf(type, f.newId) || newUid.slice(0, 8);
+    const source = sourceCodeOf(type, f.newId);
+    fixMap.set(key, { prefix, source });
+  }
+  if (fixMap.size === 0) return res.status(400).json({ error: "no valid fixes" });
+  let fixed = 0;
+  let stripped = 0;
+  let changedFields = 0;
+  changedFields = rewriteAllMentions((m) => {
+    if (m.kind !== "ref" || !MENTIONABLE[m.type]) return null;
+    const rm = m as RefMention;
+    if (idOfUid(rm.type, rm.uid) != null) return null;
+    const key = `${rm.type}:${normUid(rm.uid)}`;
+    if (!fixMap.has(key)) return null; // не выбран — не трогаем
+    const choice = fixMap.get(key);
+    if (!choice) { stripped++; return rm.label; }
+    fixed++;
+    return formatRef(rm.type, choice.prefix, choice.source, rm.label);
+  });
+  res.json({ fixed, stripped, changedFields });
+});
+
+// POST /api/health/relink — перепривязать один пропавший файл по кандидату (C-P0-8: проверка существования)
 healthRouter.post("/relink", (req, res) => {
   const { resource_id, new_path } = req.body as { resource_id?: number; new_path?: string };
   if (!resource_id || !new_path) return res.status(400).json({ error: "resource_id и new_path обязательны" });
-  // защита: new_path должен лежать внутри vault или быть внешним — vaultRel нормализует
+  const abs = vaultAbs(new_path);
+  if (!fs.existsSync(abs)) return res.status(400).json({ error: "файл не найден: " + new_path });
   relinkResource(resource_id, new_path);
   res.json({ ok: true });
 });
 
-// POST /api/health/open-folder — открыть папку в проводнике
+// POST /api/health/open-folder — открыть папку в проводнике (C-P0-4: только в Electron, case-insensitive на Windows)
 healthRouter.post("/open-folder", (req, res) => {
   const { path: relPath } = req.body as { path?: string };
   if (!relPath) return res.status(400).json({ error: "path required" });
-  // Защита: только внутри vault
+  // Защита: только внутри vault (case-insensitive на Windows)
   const abs = vaultAbs(relPath);
   const resolved = path.resolve(abs);
   const root = path.resolve(VAULT_ROOT);
-  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+  const isWin = process.platform === "win32";
+  const normResolved = isWin ? resolved.toLowerCase() : resolved;
+  const normRoot = isWin ? root.toLowerCase() : root;
+  if (normResolved !== normRoot && !normResolved.startsWith(normRoot + path.sep.toLowerCase())) {
     return res.status(400).json({ error: "path outside vault" });
   }
   try {
@@ -595,13 +891,16 @@ healthRouter.post("/open-folder", (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/health/seq/reset
+// POST /api/health/seq/reset — C-P0-5: allowlist только AUTOINCREMENT таблицы
 healthRouter.post("/seq/reset", (req, res) => {
   const { table } = req.body as { table?: string };
   if (!table) return res.status(400).json({ error: "table is required" });
-  // защита: только AUTOINCREMENT таблицы
+  if (!/^[a-z_]+$/.test(table)) return res.status(400).json({ error: "invalid table name" });
   const exists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);
   if (!exists) return res.status(404).json({ error: "table not found" });
+  // Только таблицы с AUTOINCREMENT имеют строку в sqlite_sequence
+  const hasSeq = db.prepare("SELECT seq FROM sqlite_sequence WHERE name=?").get(table);
+  if (!hasSeq) return res.status(400).json({ error: "table has no AUTOINCREMENT sequence" });
   const mx = (db.prepare(`SELECT max(id) as m FROM ${table}`).get() as { m: number | null }).m;
   const next = mx ?? 0;
   db.prepare("UPDATE sqlite_sequence SET seq=? WHERE name=?").run(next, table);

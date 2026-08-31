@@ -7,6 +7,7 @@ export interface UpdateStatus {
 
 export interface ElectronAPI {
   pickFolder: () => Promise<string | null>;
+  pickSaveFile: (defaultPath?: string) => Promise<string | null>;
   getAppVersion: () => Promise<string>;
   checkForUpdates: () => Promise<{ ok: boolean; reason?: string }>;
   quitAndInstall: () => Promise<void>;

@@ -397,9 +397,6 @@ export function StoragesSettingsPage() {
       <SectionHeading section="storages" compact>
         Настройки
       </SectionHeading>
-      <p className="muted" style={{ margin: "-12px 0 0 0", maxWidth: "62ch" }}>
-        Хранилище, внешний вид и системные настройки — всё, что меняет само приложение, а не кампании.
-      </p>
       {toast && (
         <div className="settings-toast" role="status" aria-live="polite">
           {toast}

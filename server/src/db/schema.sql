@@ -1702,3 +1702,23 @@ CREATE TABLE IF NOT EXISTS system_group_members (
   system_id INTEGER NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
   PRIMARY KEY (group_id, system_id)
 );
+
+-- Архив: `archived_at IS NOT NULL` — единственный предикат списка Архива
+-- (`/api/archive` делает 13× SELECT по нему). Без индекса — seq scan на
+-- больших базах с сотнями существ. Частичный индекс именно под `IS NOT NULL`
+-- (SQLite умеет `WHERE archived_at IS NOT NULL` partial index).
+CREATE INDEX IF NOT EXISTS idx_systems_archived ON systems(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_settings_archived ON settings(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_campaigns_archived ON campaigns(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_players_archived ON players(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_characters_archived ON characters(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_resources_archived ON resources(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_mastering_notes_archived ON mastering_notes(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_setting_locations_archived ON setting_locations(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_setting_beings_archived ON setting_beings(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_setting_communities_archived ON setting_communities(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_artifacts_archived ON artifacts(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_story_arcs_archived ON story_arcs(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_story_scenes_archived ON story_scenes(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_canvas_boards_archived ON canvas_boards(archived_at) WHERE archived_at IS NOT NULL;

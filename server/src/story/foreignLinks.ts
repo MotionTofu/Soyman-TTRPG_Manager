@@ -13,6 +13,14 @@
 
 import { db } from "../db/db";
 import { parseAliases } from "../import/names";
+import {
+  scanMentions,
+  rewriteMentions,
+  idOfUid,
+  prefixOf,
+  sourceCodeOf,
+  formatRef,
+} from "../services/mentions";
 
 /**
  * Типы, у которых есть однозначный дом-сеттинг. Записи компендиума сюда не
@@ -26,7 +34,7 @@ const SETTING_ENTITIES: Record<string, { table: string; label: string }> = {
   artifact: { table: "artifacts", label: "Предмет" },
 };
 
-// Текстовые поля сцены, в которых живут упоминания вида [[being:41|гоблин]].
+// Текстовые поля сцены, в которых живут упоминания вида [[being@8f3c1a2e|wdh|гоблин]].
 const SCENE_TEXT_FIELDS = [
   "summary",
   "read_aloud",
@@ -62,13 +70,17 @@ function norm(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ").replace(/ё/g, "е");
 }
 
-/** Все упоминания [[type:id|label]] в текстах сцены, по типу и id. */
+/** Все упоминания в текстах сцены, по типу и id (разрешаются через uid). */
 function mentionCounts(scene: Record<string, unknown>): Map<string, number> {
   const counts = new Map<string, number>();
   for (const field of SCENE_TEXT_FIELDS) {
     const text = String(scene[field] ?? "");
-    for (const m of text.matchAll(/\[\[([a-z_]+):(\d+)\|/g)) {
-      const key = `${m[1]}:${m[2]}`;
+    for (const m of scanMentions(text)) {
+      let id: number | null = null;
+      if (m.kind === "legacy") id = m.id;
+      else if (m.kind === "ref") id = idOfUid(m.type, m.uid);
+      if (id == null) continue;
+      const key = `${m.type}:${id}`;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
   }
@@ -245,12 +257,28 @@ export function repointSceneLink(
       unknown
     >;
     let mentions = 0;
+    const targetPrefix = prefixOf(toType, toId);
+    const targetSource = targetPrefix ? sourceCodeOf(toType, toId) : "";
     for (const field of SCENE_TEXT_FIELDS) {
       const text = String(scene[field] ?? "");
-      if (!text.includes(`[[${toType}:${fromId}|`)) continue;
-      const next = text.split(`[[${toType}:${fromId}|`).join(`[[${toType}:${toId}|`);
-      mentions += text.split(`[[${toType}:${fromId}|`).length - 1;
-      db.prepare(`UPDATE story_scenes SET ${field} = ? WHERE id = ?`).run(next, sceneId);
+      if (!text.includes("[[")) continue;
+      const next = rewriteMentions(text, (m) => {
+        if (m.type !== toType) return null;
+        let curId: number | null = null;
+        if (m.kind === "legacy") curId = m.id;
+        else curId = idOfUid(m.type, m.uid);
+        if (curId !== fromId) return null;
+        if (!targetPrefix) return m.label;
+        return formatRef(toType, targetPrefix, targetSource, m.label);
+      });
+      if (next !== text) {
+        const before = scanMentions(text).filter((mm) => {
+          const cid = mm.kind === "legacy" ? mm.id : idOfUid(mm.type, (mm as { uid: string }).uid);
+          return mm.type === toType && cid === fromId;
+        }).length;
+        mentions += before;
+        db.prepare(`UPDATE story_scenes SET ${field} = ? WHERE id = ?`).run(next, sceneId);
+      }
     }
     return { links: Math.max(moved.changes, dropped.changes), mentions };
   })();

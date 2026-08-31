@@ -745,7 +745,7 @@ export function LocationNode({
     try {
       text = await buildMentionToken("location", location.id, location.name);
     } catch {}
-    if (!text) text = `[[location:${location.id}|${location.name}]]`;
+    if (!text) text = location.name;
     try {
       await navigator.clipboard.writeText(text);
     } catch {

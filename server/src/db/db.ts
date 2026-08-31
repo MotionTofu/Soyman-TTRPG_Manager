@@ -256,6 +256,82 @@ function migrateMentionTokens(database: Database.Database, dbDir: string): boole
   return true;
 }
 
+/**
+ * Добивка остатков `[[type:id|label]]` без снимка и без флага.
+ * После первой миграции `systemApply` и `crossLinks` ещё писали `id` — эти
+ * хвосты надо перевести тем же правилом, иначе DnD-компендиум остаётся с legacy.
+ */
+function fixResidualLegacyMentions(database: Database.Database): void {
+  const prefixes = new Map<string, Map<number, string>>();
+  const sources = new Map<string, Map<number, string>>();
+  for (const [type, table] of Object.entries(MENTION_TABLES)) {
+    if (!tableExists(database, table) || !columnExists(database, table, "uid")) continue;
+    prefixes.set(type, mentionPrefixes(database, table));
+    sources.set(type, mentionSources(database, type));
+  }
+  if (!prefixes.size) return;
+  const clean = (s: string) => s.replace(/[|\]\[]/g, " ").trim();
+  let fields = 0;
+  let tokens = 0;
+  let dropped = 0;
+  const run = database.transaction(() => {
+    const tables = database
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .all() as { name: string }[];
+    for (const { name } of tables) {
+      if (MENTION_FROZEN.has(name)) continue;
+      const cols = database.prepare(`PRAGMA table_info(${name})`).all() as {
+        name: string;
+        type: string;
+      }[];
+      if (!cols.some((c) => c.name === "id")) continue;
+      for (const col of cols) {
+        if (!/TEXT|CLOB|CHAR/i.test(col.type)) continue;
+        const rows = database
+          .prepare(`SELECT id, "${col.name}" AS value FROM ${name} WHERE "${col.name}" LIKE '%[[%:%|%'`)
+          .all() as { id: number; value: string | null }[];
+        if (!rows.length) continue;
+        const update = database.prepare(`UPDATE ${name} SET "${col.name}" = ? WHERE id = ?`);
+        for (const row of rows) {
+          if (!row.value || !row.value.includes("[[")) continue;
+          LEGACY_MENTION_RE.lastIndex = 0;
+          if (!LEGACY_MENTION_RE.test(row.value)) continue;
+          LEGACY_MENTION_RE.lastIndex = 0;
+          const next = row.value.replace(
+            LEGACY_MENTION_RE,
+            (whole, type: string, rawId: string, label: string) => {
+              const prefix = prefixes.get(type)?.get(Number(rawId));
+              if (!prefix) {
+                if (MENTION_TABLES[type]) {
+                  dropped++;
+                  return label;
+                }
+                return whole;
+              }
+              tokens++;
+              const source = sources.get(type)?.get(Number(rawId)) ?? "";
+              return `[[${type}@${prefix}|${clean(source)}|${label}]]`;
+            }
+          );
+          if (next !== row.value) {
+            update.run(next, row.id);
+            fields++;
+          }
+        }
+      }
+    }
+  });
+  try {
+    run();
+  } catch (e) {
+    console.error("Добивка legacy-меншенов не удалась:", e);
+    return;
+  }
+  if (fields) {
+    console.log(`Меншены-добивка: переведено ссылок ${tokens} в ${fields} полях${dropped ? `, снято ${dropped}` : ""}.`);
+  }
+}
+
 // Opens (creating if needed) the SQLite database at dbDir/app.db and brings
 // it up to the current schema. Used both at startup and whenever the active
 // storage profile changes, so it must be safe to run repeatedly and against
@@ -2269,6 +2345,10 @@ export function openDatabase(dbDir: string): Database.Database {
       .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
       .run(tokensKey);
   }
+  // Остатки legacy от systemApply/crossLinks до фикса — добиваем каждый запуск.
+  if (appSettingFlag(database, tokensKey)) {
+    fixResidualLegacyMentions(database);
+  }
 
   // Пульт звука: роль аудиоресурса и его вид на кнопке.
   //
@@ -2715,6 +2795,19 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec(
       `CREATE INDEX IF NOT EXISTS idx_compendium_favourites_entry ON compendium_favourites(entry_id)`
     );
+  }
+
+  // Архив — индексы под `archived_at IS NOT NULL` (GET /archive делает
+  // 13× SELECT по этому предикату). schema.sql уже заводит их для свежих БД,
+  // здесь — для живых баз, заведённых до появления индексов.
+  for (const [table] of [
+    ["systems"], ["settings"], ["campaigns"], ["players"], ["characters"],
+    ["sessions"], ["resources"], ["mastering_notes"], ["setting_locations"],
+    ["setting_beings"], ["setting_communities"], ["artifacts"],
+    ["story_arcs"], ["story_scenes"], ["canvas_boards"],
+  ] as const) {
+    if (!tableExists(database, table) || !columnExists(database, table, "archived_at")) continue;
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_archived ON ${table}(archived_at) WHERE archived_at IS NOT NULL`);
   }
 
   // Жанры сеттинга — JSON-массив объектов { genre, subgenre? }.
