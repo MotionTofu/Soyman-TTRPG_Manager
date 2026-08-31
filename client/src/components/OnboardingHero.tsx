@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { api } from "../api/client";
 import { NavIcon } from "./NavIcons";
 import { CampaignWizard } from "./CampaignWizard";
-import { SettingWizard } from "./SettingWizard";
 import { PlayerCreationModal } from "./PlayerCreationModal";
-import type { Campaign, Setting, System } from "../types";
+import { SystemOnboardingModal } from "./SystemOnboardingModal";
+import { SettingOnboardingModal } from "./SettingOnboardingModal";
+import { Modal } from "./Modal";
+import type { Campaign, Setting, System, Player } from "../types";
 
 // Onboarding Hero — показывается на главной, пока не создана первая сессия.
 // Пять горизонтальных шагов: Система → Сеттинг → Кампания → Игроки → Сессия.
@@ -33,19 +35,26 @@ interface Props {
   systems: System[];
   settings: Setting[];
   campaigns: Campaign[];
+  players?: Player[];
   onRefresh: () => void;
 }
 
-export function OnboardingHero({ systems, settings, campaigns, onRefresh }: Props) {
-  const navigate = useNavigate();
-  const [showSettingWizard, setShowSettingWizard] = useState(false);
+export function OnboardingHero({ systems, settings, campaigns, players = [], onRefresh }: Props) {
+  const [showSystemModal, setShowSystemModal] = useState(false);
+  const [showSettingModal, setShowSettingModal] = useState(false);
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [sessionDate, setSessionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sessionTime, setSessionTime] = useState("");
+  const [sessionCreating, setSessionCreating] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   // Определяем, какие шаги выполнены
   const hasSystem = systems.length > 0;
   const hasSetting = settings.length > 0;
   const hasCampaign = campaigns.length > 0;
+  const hasPlayer = players.length > 0;
   // Сессии не проверяем — hero исчезает, как только появляется первая сессия
 
   function isCompleted(step: Step): boolean {
@@ -53,8 +62,8 @@ export function OnboardingHero({ systems, settings, campaigns, onRefresh }: Prop
       case "system": return hasSystem;
       case "setting": return hasSetting;
       case "campaign": return hasCampaign;
-      case "players": return false; // всегда можно добавить ещё
-      case "session": return false; // всегда можно создать ещё
+      case "players": return hasPlayer;
+      case "session": return false;
       default: return false;
     }
   }
@@ -72,10 +81,10 @@ export function OnboardingHero({ systems, settings, campaigns, onRefresh }: Prop
 
     switch (step.key) {
       case "system":
-        navigate("/systems");
+        setShowSystemModal(true);
         break;
       case "setting":
-        setShowSettingWizard(true);
+        setShowSettingModal(true);
         break;
       case "campaign":
         setShowCampaignWizard(true);
@@ -84,11 +93,36 @@ export function OnboardingHero({ systems, settings, campaigns, onRefresh }: Prop
         setShowPlayerModal(true);
         break;
       case "session":
-        // Пока нет кампании — ничего
         if (hasCampaign) {
-          navigate(`/campaigns/${campaigns[0].id}`);
+          setSessionDate(new Date().toISOString().slice(0, 10));
+          setSessionTime("");
+          setSessionError(null);
+          setShowSessionModal(true);
         }
         break;
+    }
+  }
+
+  async function createSession() {
+    if (!hasCampaign || sessionCreating) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+      setSessionError("Неверная дата");
+      return;
+    }
+    setSessionCreating(true);
+    setSessionError(null);
+    try {
+      await api.post("/sessions", {
+        campaign_id: campaigns[0].id,
+        date: sessionDate,
+        start_time: sessionTime || null,
+      });
+      setShowSessionModal(false);
+      onRefresh();
+    } catch (e) {
+      setSessionError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setSessionCreating(false);
     }
   }
 
@@ -123,12 +157,17 @@ export function OnboardingHero({ systems, settings, campaigns, onRefresh }: Prop
         })}
       </div>
 
-      {showSettingWizard && (
-        <SettingWizard
-          onClose={() => {
-            setShowSettingWizard(false);
-            onRefresh();
-          }}
+      {showSystemModal && (
+        <SystemOnboardingModal
+          onClose={() => setShowSystemModal(false)}
+          onCreated={onRefresh}
+        />
+      )}
+
+      {showSettingModal && (
+        <SettingOnboardingModal
+          onClose={() => setShowSettingModal(false)}
+          onRefresh={onRefresh}
         />
       )}
 
@@ -149,8 +188,37 @@ export function OnboardingHero({ systems, settings, campaigns, onRefresh }: Prop
           onClose={() => setShowPlayerModal(false)}
           onCreated={() => {
             setShowPlayerModal(false);
+            onRefresh();
           }}
         />
+      )}
+
+      {showSessionModal && (
+        <Modal onClose={() => setShowSessionModal(false)} closeOnBackdropClick={false}>
+          <div className="stack">
+            <h3 style={{ margin: 0 }}>Новая сессия</h3>
+            <p className="muted" style={{ margin: 0 }}>
+              Кампания: {campaigns[0]?.name}
+            </p>
+            <label>
+              Дата
+              <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} />
+            </label>
+            <label>
+              Время начала (необязательно)
+              <input type="time" value={sessionTime} onChange={(e) => setSessionTime(e.target.value)} />
+            </label>
+            {sessionError && <span className="backup-info error">{sessionError}</span>}
+            <div className="row">
+              <button className="primary" onClick={createSession} disabled={sessionCreating}>
+                {sessionCreating ? "Создаю…" : "Создать"}
+              </button>
+              <button onClick={() => setShowSessionModal(false)} disabled={sessionCreating}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

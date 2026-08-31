@@ -657,16 +657,16 @@ export function CampaignDetailPage() {
         <CampaignSecrets campaignId={campaignId} settingId={campaign.setting_id} />
       )}
 
-       {tab === "Обзор" && campaign.role !== "player" && (
-          <>
-            <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} onRefresh={refreshCampaign} />
-            <CrossLinksWizard
-              ownerKind="campaign"
-              ownerId={campaignId}
-              help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
-            />
-          </>
-       )}
+        {tab === "Обзор" && campaign.role !== "player" && (
+           <>
+             <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} onRefresh={refreshCampaign} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />
+             <CrossLinksWizard
+               ownerKind="campaign"
+               ownerId={campaignId}
+               help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+             />
+           </>
+        )}
 
       {tab === "Для игроков" && (
         <CampaignPlayerSectionsTab
@@ -1933,12 +1933,14 @@ function OverviewTab({
   settingsList,
   sessions,
   onRefresh,
+  onSchedule,
 }: {
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
   sessions: SessionSummary[];
   onRefresh: () => void;
+  onSchedule?: () => void;
 }) {
   const campaignId = campaign.id;
   const [editingMain, setEditingMain] = useState(false);
@@ -2202,7 +2204,7 @@ function OverviewTab({
           <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{campaignGroupIds.length} из {allGroups.length} групп</span>
         </summary>
         <div className="res-group__body" style={{ padding: 12 }}>
-          <ProductionDashboard campaign={campaign} sessions={sessions} />
+          <ProductionDashboard campaign={campaign} sessions={sessions} onSchedule={onSchedule} />
         </div>
       </details>
 
@@ -2277,7 +2279,7 @@ function OverviewTab({
 // secrets are still unrevealed — everything a GM might otherwise have to
 // visit three different tabs to piece together. Deliberately lighter than
 // Хроника игр (the full session index) — this is a summary, not a duplicate.
-function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail; sessions: SessionSummary[] }) {
+function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: CampaignDetail; sessions: SessionSummary[]; onSchedule?: () => void }) {
   const [secretsCount, setSecretsCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -2311,7 +2313,7 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
             icon="skullDie"
             title="СЕССИЙ НЕ ЗАПЛАНИРОВАНО"
             hint="Время наметить следующую игру — здесь появится ближайшая сессия."
-            action={<Link to="/sessions"><button className="primary">Запланировать сессию</button></Link>}
+            action={<button className="primary" onClick={() => onSchedule?.()}>Запланировать сессию</button>}
           />
         )}
       </div>

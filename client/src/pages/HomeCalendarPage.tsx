@@ -17,7 +17,7 @@ import { parseDateKey, toLocalDateKey } from "../utils/date";
 import { safeBackgroundImage } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { LocalClock } from "../components/LocalClock";
-import type { AppSettings, Campaign, SessionSummary, Setting, System } from "../types";
+import type { AppSettings, Campaign, Player, SessionSummary, Setting, System } from "../types";
 
 interface FinanceSummary {
   earned: number;
@@ -31,6 +31,7 @@ export function HomeCalendarPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [systems, setSystems] = useState<System[]>([]);
   const [settings, setSettings] = useState<Setting[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [homeBgUrl, setHomeBgUrl] = useState<string | null>(null);
@@ -82,6 +83,7 @@ export function HomeCalendarPage() {
       api.get<Campaign[]>("/campaigns").then(guarded(setCampaigns)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCampaignsError(String(e)); throw e; }),
       api.get<System[]>("/systems").then(guarded(setSystems)).catch(() => {}),
       api.get<Setting[]>("/settings").then(guarded(setSettings)).catch(() => {}),
+      api.get<Player[]>("/players").then(guarded(setPlayers)).catch(() => {}),
     ]).finally(() => { if (loadIdRef.current === cur) setInitialLoad(true); });
   }
 
@@ -330,6 +332,7 @@ export function HomeCalendarPage() {
               systems={systems}
               settings={settings}
               campaigns={campaigns}
+              players={players}
               onRefresh={loadInitial}
             />
           )}

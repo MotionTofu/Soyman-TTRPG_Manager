@@ -139,7 +139,7 @@ app.use(
 // with ?include=images now embed avatar/background/resource files as base64
 // (opt-in, explicitly warned about in the export modal), so imports of those
 // files can legitimately be much larger.
-app.use(express.json({ limit: "500mb" }));
+app.use(express.json({ limit: "1000mb" }));
 app.use(attachUser);
 
 // П2.1: в БД пути хранятся ОТНОСИТЕЛЬНО корня хранилища, но наружу — клиенту —

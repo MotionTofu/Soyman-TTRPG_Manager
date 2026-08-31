@@ -669,7 +669,7 @@ systemsRouter.post("/:id/tidy", (req, res) => {
 });
 
 systemsRouter.post("/", (req, res) => {
-  const { name, description } = req.body as { name: string; description?: string };
+  const { name, description, template } = req.body as { name: string; description?: string; template?: string };
   if (!name) return res.status(400).json({ error: "name is required" });
   // П0.4: папка создавалась ДО INSERT — при дубле имени (UNIQUE) папка
   // оставалась сиротой, а при INSERT OR IGNORE ещё и двигал seq. Создаём
@@ -682,6 +682,58 @@ systemsRouter.post("/", (req, res) => {
   db.prepare("UPDATE systems SET folder_path = ? WHERE id = ?").run(folder, newId);
   ensureDefaultMechanicsSection(db, newId);
   ensureDefaultVehicleSection(db, newId);
+  if (template === "dnd") {
+    // D&D скелет — все разделы, шаблоны и структурные группы справочника без наполнения
+    const dndSections: { name: string; kind: string }[] = [
+      { name: "Заклинания", kind: "spell" },
+      { name: "Классы", kind: "class" },
+      { name: "Виды", kind: "species" },
+      { name: "Предыстории", kind: "background" },
+      { name: "Черты", kind: "feat" },
+      { name: "Снаряжение", kind: "equipment" },
+      { name: "Маг. предметы", kind: "magic_item" },
+      { name: "Бестиарий", kind: "monster" },
+      { name: "Бастионы", kind: "bastion" },
+    ];
+    const existingKinds = new Set(
+      (db.prepare("SELECT kind FROM system_sections WHERE system_id = ?").all(newId) as { kind: string }[]).map(
+        (r) => r.kind,
+      ),
+    );
+    let pos = (
+      db.prepare("SELECT COALESCE(MAX(position), -1) + 1 AS p FROM system_sections WHERE system_id = ?").get(newId) as {
+        p: number;
+      }
+    ).p;
+    const insertSection = db.prepare(
+      "INSERT INTO system_sections (system_id, position, name, kind) VALUES (?, ?, ?, ?)",
+    );
+    for (const s of dndSections) {
+      if (existingKinds.has(s.kind)) continue;
+      insertSection.run(newId, pos++, s.name, s.kind);
+      existingKinds.add(s.kind);
+    }
+    // Структурные группы справочника (типы урона, школы магии и т.д.)
+    const mechSection = db
+      .prepare("SELECT id FROM system_sections WHERE system_id = ? AND kind = 'mechanics' LIMIT 1")
+      .get(newId) as { id: number } | undefined;
+    if (mechSection) seedMechanicsGroups(String(newId), mechSection.id);
+    // Шаблоны статблоков D&D
+    const templates: { name: string; format: string }[] = [
+      { name: "Существо D&D 5.5", format: "dnd_creature" },
+      { name: "Персонаж D&D 5.5", format: "dnd_character" },
+    ];
+    const insertTpl = db.prepare(
+      `INSERT INTO resources (name, type, scope, system_id, template_kind, template_format, tags, notes)
+       VALUES (?, 'statblock_template', 'system', ?, 'full', ?, '', '')`,
+    );
+    for (const t of templates) {
+      const exists = db
+        .prepare("SELECT id FROM resources WHERE system_id = ? AND name = ? AND archived_at IS NULL")
+        .get(newId, t.name);
+      if (!exists) insertTpl.run(newId, t.format);
+    }
+  }
   res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newId));
 });
 
