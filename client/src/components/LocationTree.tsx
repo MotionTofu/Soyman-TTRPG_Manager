@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import type { DragEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "./NavIcons";
@@ -35,16 +35,16 @@ export function LocationTree({ settingId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
   const treeRef = useRef<HTMLDivElement>(null);
 
-  // Persist open branches (U-3)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`geography-open-${settingId}`);
-      if (!raw || !treeRef.current) return;
-      const ids = new Set<number>(JSON.parse(raw) as number[]);
-      treeRef.current.querySelectorAll("details[data-location-id]").forEach((el) => {
-        const id = Number((el as HTMLElement).dataset.locationId);
-        if (ids.has(id)) (el as HTMLDetailsElement).open = true;
-      });
+      if (raw && treeRef.current) {
+        const ids = new Set<number>(JSON.parse(raw) as number[]);
+        treeRef.current.querySelectorAll("details[data-location-id]").forEach((el) => {
+          const id = Number((el as HTMLElement).dataset.locationId);
+          if (ids.has(id)) (el as HTMLDetailsElement).open = true;
+        });
+      }
     } catch {}
   }, [settingId, locations]);
 
@@ -476,6 +476,7 @@ export function LocationNode({
   const [editKind, setEditKind] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const navigate = useNavigate();
   useEffect(() => {
     if ((addingChild || editing) && detailsRef.current) detailsRef.current.open = true;
   }, [addingChild, editing]);
@@ -708,14 +709,17 @@ export function LocationNode({
                 </span>
               )}
             </span>
-            <span className="row" style={{ alignItems: "center" }}>
-              <Link
-                to={`/locations/${location.id}`}
-                onClick={(e) => e.stopPropagation()}
-                style={{ color: "var(--on-surface)", textDecoration: "underline", fontSize: 11 }}
+            <span className="row geography-node-actions" style={{ alignItems: "center" }}>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navigate(`/locations/${location.id}`);
+                }}
+                title="Открыть профиль"
               >
-                Открыть →
-              </Link>
+                Открыть
+              </button>
               <button
                 onClick={(e) => {
                   e.preventDefault();

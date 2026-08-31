@@ -59,6 +59,8 @@ export function Timeline({
   onMoveEvent,
   onNowChange,
   onEventClick,
+  title,
+  action,
 }: {
   events: TimelineEvent[];
   months: CalendarMonth[];
@@ -69,6 +71,8 @@ export function Timeline({
   onMoveEvent?: (id: number, date: { year: number; month: number; day: number; precision: DatePrecision }) => void;
   onNowChange?: (date: { year: number; month: number }) => void;
   onEventClick?: (id: number) => void;
+  title?: string;
+  action?: React.ReactNode;
 }) {
   const [zoom, setZoom] = useState(2); // «Год» по умолчанию
   const [offsetDay, setOffsetDay] = useState(0);
@@ -277,8 +281,9 @@ export function Timeline({
 
   return (
     <div className="tl">
-      <div className="row tl-toolbar">
-        <div className="row" style={{ gap: 4 }}>
+      <div className="row tl-toolbar" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {title ? <h3 style={{ margin: 0 }}>{title}</h3> : <span />}
+        <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
           {ZOOMS.map((z, i) => (
             <button
               key={z.key}
@@ -289,11 +294,14 @@ export function Timeline({
             </button>
           ))}
         </div>
-        {now && (
-          <button onClick={() => setOffsetDay(dayOf(now.year, now.month, 1) - width / 2 / pxPerDay)}>
-            К «сейчас»
-          </button>
-        )}
+        <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+          {now && (
+            <button onClick={() => setOffsetDay(dayOf(now.year, now.month, 1) - width / 2 / pxPerDay)}>
+              К «сейчас»
+            </button>
+          )}
+          {action}
+        </div>
       </div>
 
       <div

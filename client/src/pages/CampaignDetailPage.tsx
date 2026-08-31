@@ -332,11 +332,31 @@ export function CampaignDetailPage() {
   }
 
   function handleCalendarDayContextMenu(year: number, month: number, day: number, x: number, y: number) {
-    setCalendarMenu({
-      x,
-      y,
-      items: [{ label: "Создать событие", onClick: () => openCreateEventModal(year, month, day) }],
-    });
+    const dayEvents = calendarEvents.filter((ev) => ev.inworld_year === year && ev.inworld_month === month && ev.inworld_day === day);
+    const daySessions = sessions.filter((s) => s.inworld_year === year && s.inworld_month === month && s.inworld_day === day);
+    const items: import("../components/ContextMenu").ContextMenuItem[] = [];
+    if (dayEvents.length > 0) {
+      for (const ev of dayEvents) {
+        items.push({ label: `Событие: ${ev.title}`, onClick: () => openEditEventModal(ev) });
+      }
+    }
+    if (daySessions.length > 0) {
+      for (const s of daySessions) {
+        items.push({ label: `Сессия: ${s.title || `№${s.session_number ?? ""}`}`, onClick: () => navigate(`/sessions/${s.id}`) });
+      }
+    }
+    items.push({ label: "Создать событие", onClick: () => openCreateEventModal(year, month, day) });
+    setCalendarMenu({ x, y, items });
+  }
+
+  function handleMonthDayContextMenu(date: string, x: number, y: number) {
+    const daySessions = sessions.filter((s) => s.date === date);
+    const items: import("../components/ContextMenu").ContextMenuItem[] = [];
+    for (const s of daySessions) {
+      items.push({ label: `Сессия: ${s.title || `№${s.session_number ?? ""}`}`, onClick: () => navigate(`/sessions/${s.id}`) });
+    }
+    items.push({ label: "Создать сессию", onClick: () => setCreatingDate(date) });
+    setCalendarMenu({ x, y, items });
   }
 
   function handleCalendarItemContextMenu(item: InworldDatedItem, x: number, y: number) {
@@ -611,6 +631,7 @@ export function CampaignDetailPage() {
               onDayClick={(date) => setCreatingDate(date)}
               onEventClick={(e) => navigate(`/sessions/${e.id}`)}
               onEventContextMenu={(event, x, y) => setMenu({ x, y, event })}
+              onDayContextMenu={(date, x, y) => handleMonthDayContextMenu(date, x, y)}
             />
             {campaign.role === "player" || loadHideFinance() ? (
               <div className="card stack">
@@ -714,12 +735,10 @@ export function CampaignDetailPage() {
 
       {tab === "Хроника мира" && (
         <div className="stack" style={{ gap: "var(--sp-5)" }}>
-          <div className="card stack">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0 }}>Ось времени</h3>
-              <button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>+ Создать событие</button>
-            </div>
+          <div className="card stack" style={{ gap: 8 }}>
             <Timeline
+              title="Ось времени"
+              action={<button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>+ Создать событие</button>}
               events={[
                 ...sortedCalendarEvents.map((ev) => ({
                   id: ev.id,

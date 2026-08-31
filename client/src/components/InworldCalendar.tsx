@@ -97,9 +97,9 @@ export function InworldCalendar({
 
   return (
     <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
+      <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
         <button onClick={goPrev}>← Пред</button>
-        <div className="row">
+        <div className="row" style={{ gap: 8 }}>
           <select value={cursor.month} onChange={(e) => setMonth(Number(e.target.value))}>
             {months.map((m) => (
               <option key={m.id} value={m.position}>
@@ -113,20 +113,23 @@ export function InworldCalendar({
             onChange={(e) => setYear(Number(e.target.value))}
             style={{ width: 90 }}
           />
-          {onPin &&
-            (pinned?.year === cursor.year && pinned?.month === cursor.month ? (
-              <button onClick={() => onPin(null)} title="Сейчас в мире — отсюда считается статус предстоящее/случилось и центрируется ось">📌 Открепить месяц</button>
-            ) : (
-              <button onClick={() => onPin({ year: cursor.year, month: cursor.month })} title="Сейчас в мире — отсюда считается статус предстоящее/случилось и центрируется ось">
-                📌 Закрепить месяц
-              </button>
-            ))}
         </div>
         <button onClick={goNext}>След →</button>
       </div>
+      {onPin && (
+        <div className="row" style={{ justifyContent: "center" }}>
+          {pinned?.year === cursor.year && pinned?.month === cursor.month ? (
+            <button onClick={() => onPin(null)} title="Сейчас в мире — отсюда считается статус предстоящее/случилось и центрируется ось">Открепить месяц</button>
+          ) : (
+            <button onClick={() => onPin({ year: cursor.year, month: cursor.month })} title="Сейчас в мире — отсюда считается статус предстоящее/случилось и центрируется ось">
+              Закрепить месяц
+            </button>
+          )}
+        </div>
+      )}
       <div
         className="month-calendar"
-        style={{ gridTemplateColumns: `repeat(${weekdays.length || 7}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${weekdays.length || 7}, minmax(0, 1fr))` }}
       >
         {weekdays.map((w) => (
           <div key={w.id} className="weekday">
@@ -159,43 +162,6 @@ export function InworldCalendar({
               onTouchMove={clearLongPress}
             >
               <span className="num">{c.day}</span>
-              {visibleItems
-                .filter((it) => it.day === c.day)
-                .map((it) => (
-                  <span
-                    key={it.id}
-                    className={`dot kind-${it.kind}${it.important ? " important" : ""}`}
-                    title={it.label}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onItemClick?.(it);
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onItemContextMenu?.(it, e.clientX, e.clientY);
-                    }}
-                  >
-                    {it.label}
-                  </span>
-                ))}
-              {expandedDates
-                .filter((ed) => ed.day === c.day)
-                .map((ed) => (
-                  <span
-                    key={`date-${ed.date.id}`}
-                    className="dot kind-date"
-                    title={ed.date.title}
-                    onClick={(e) => e.stopPropagation()}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onImportantDateContextMenu?.(ed.date, e.clientX, e.clientY);
-                    }}
-                  >
-                    {ed.date.title}
-                  </span>
-                ))}
             </div>
           );
         }

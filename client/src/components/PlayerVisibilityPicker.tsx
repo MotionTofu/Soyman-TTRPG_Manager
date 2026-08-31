@@ -39,25 +39,52 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
   }, [open]);
 
   async function toggle(playerId: number, granted: boolean) {
-    if (granted) {
-      await api.del(
-        `/visibility-grants?campaign_id=${campaignId}&player_id=${playerId}&target_type=${targetType}&target_id=${targetId}`
-      );
-    } else {
-      await api.post("/visibility-grants", { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId });
+    const prev = grants ? [...grants] : [];
+    const optimistic = granted ? prev.filter((g) => g.player_id !== playerId) : [...prev, { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId } as PlayerVisibilityGrant];
+    setGrants(optimistic as PlayerVisibilityGrant[]);
+    try {
+      if (granted) {
+        await api.del(`/visibility-grants?campaign_id=${campaignId}&player_id=${playerId}&target_type=${targetType}&target_id=${targetId}`);
+      } else {
+        await api.post("/visibility-grants", { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId });
+      }
+      refresh();
+    } catch {
+      setGrants(prev);
     }
-    refresh();
   }
 
   const grantedCount = grants?.length ?? 0;
 
   return (
     <div className="visibility-picker">
-      <button className="btn-capsule" onClick={() => setOpen((v) => !v)} title="Кому видно">
-        <NavIcon name="eye" /> {grantedCount > 0 ? grantedCount : ""}
+      <button className="btn-capsule" onClick={() => setOpen((v) => !v)} title="Кому видно" aria-label={`Кому видно — ${grantedCount} игроков`}>
+        <NavIcon name="eye" /> <span className="btn-capsule-count">{grantedCount > 0 ? grantedCount : ""}</span>
       </button>
       {open && (
         <div className="visibility-picker-panel card stack">
+          {roster.length > 1 && (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              <button
+                onClick={async () => {
+                  const missing = roster.filter((p) => !grants?.some((g) => g.player_id === p.id));
+                  for (const p of missing) await toggle(p.id, false);
+                }}
+                style={{ fontSize: 11, padding: "2px 6px" }}
+              >
+                Выбрать всех
+              </button>
+              <button
+                onClick={async () => {
+                  const present = roster.filter((p) => grants?.some((g) => g.player_id === p.id));
+                  for (const p of present) await toggle(p.id, true);
+                }}
+                style={{ fontSize: 11, padding: "2px 6px" }}
+              >
+                Снять всех
+              </button>
+            </div>
+          )}
           {roster.length === 0 && <span className="muted">В составе кампании нет игроков.</span>}
           {roster.map((p) => {
             const granted = grants?.some((g) => g.player_id === p.id) ?? false;

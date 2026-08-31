@@ -3,6 +3,9 @@ import { api, deleteFileWithChoice } from "../api/client";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import type { GalleryImage } from "../types";
 import { ImageLightbox } from "./ImageLightbox";
+import { EmptyState } from "./EmptyState";
+import { useConfirm } from "../hooks/useConfirm";
+import { ContextMenu } from "./ContextMenu";
 
 // Lets the owning detail page (Character/Being) keep its own useImageCrop
 // state/handler but render the thumbnail-upload control inside the Gallery
@@ -30,30 +33,63 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
   const [uploading, setUploading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
+  const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
 
-  function refresh() {
+  function load(signal?: AbortSignal) {
+    setLoading(true);
+    setError(null);
     api
-      .get<GalleryImage[]>(`/gallery?owner_type=${ownerType}&owner_id=${ownerId}`)
-      .then(setImages);
+      .get<GalleryImage[]>(`/gallery?owner_type=${ownerType}&owner_id=${ownerId}`, { signal } as any)
+      .then((data) => {
+        setImages(data);
+        setLoading(false);
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        setError(e?.message ?? "Ошибка загрузки галереи");
+        setLoading(false);
+      });
   }
-  useEffect(refresh, [ownerType, ownerId]);
+  function refresh() {
+    load();
+  }
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [ownerType, ownerId]);
 
   async function uploadFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
-    for (const file of Array.from(files)) {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("owner_type", ownerType);
-      form.append("owner_id", String(ownerId));
-      await api.post("/gallery", form);
+    setError(null);
+    try {
+      const list = Array.from(files);
+      const results = await Promise.allSettled(
+        list.map(async (file) => {
+          const form = new FormData();
+          form.append("file", file);
+          form.append("owner_type", ownerType);
+          form.append("owner_id", String(ownerId));
+          return api.post("/gallery", form);
+        })
+      );
+      const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+      if (failed.length) setError(failed[0].reason?.message ?? `Не загружено ${failed.length} файлов`);
+    } catch (e: any) {
+      setError(e?.message ?? "Ошибка загрузки");
+    } finally {
+      setUploading(false);
+      refresh();
     }
-    setUploading(false);
-    refresh();
   }
 
   async function removeImage(id: number) {
-    if (!confirm("Удалить изображение?")) return;
+    const ok = await confirm({ title: "Удалить изображение?", message: "Изображение будет удалено.", confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     const deleted = await deleteFileWithChoice(`/gallery/${id}`);
     if (!deleted) return;
     setLightboxIndex(null);
@@ -134,6 +170,16 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
           А-Я
         </button>
       )}
+      {loading && <p className="muted">Загрузка…</p>}
+      {error && (
+        <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{error}</span>
+          <button onClick={() => load()}>Повторить</button>
+        </div>
+      )}
+      {!loading && images.length === 0 && ownerType === "campaign_player_section" && !error && (
+        <EmptyState icon="skullDie" title="ГАЛЕРЕЯ ПУСТА" hint={IMAGE_HINT} action={<label className="primary" style={{ padding: "6px 12px", border: "1px solid var(--primary-bg)", cursor: "pointer" }}>Выбрать файлы<input type="file" accept={IMAGE_ACCEPT} multiple style={{ display: "none" }} onChange={(e) => uploadFiles(e.target.files)} /></label>} />
+      )}
       <div className="gallery-grid">
         {images.map((img, i) => (
           <div
@@ -141,8 +187,18 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
             className="gallery-thumb-wrap"
             draggable
             onDragStart={() => setDragId(img.id)}
+            onDragEnd={() => setDragId(null)}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => dragId != null && reorder(dragId, img.id)}
+            onDrop={() => {
+              if (dragId != null) {
+                reorder(dragId, img.id);
+                setDragId(null);
+              }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, id: img.id });
+            }}
           >
             <img
               src={img.image_url}
@@ -163,7 +219,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
           />
         </label>
       </div>
-      {images.length === 0 && <span className="muted image-hint">{IMAGE_HINT}</span>}
+      {images.length === 0 && ownerType !== "campaign_player_section" && <span className="muted image-hint">{IMAGE_HINT}</span>}
 
       {lightboxIndex != null && images[lightboxIndex] && (
         <ImageLightbox
@@ -175,6 +231,15 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
           onCaptionChange={saveCaption}
         />
       )}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[{ label: "Удалить", danger: true, onClick: () => removeImage(menu.id) }]}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      {confirmDialog}
     </div>
   );
 }

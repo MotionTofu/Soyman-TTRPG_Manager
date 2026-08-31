@@ -9,7 +9,15 @@ import { ensureCharacterFolder } from "./characters";
 import type { AuthedRequest } from "../services/auth";
 
 export const galleryRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) cb(null, true);
+    else cb(new Error("Поддерживаются только изображения JPG/PNG/GIF/WebP/AVIF"));
+  },
+});
 
 const OWNER_TABLES: Record<string, string> = {
   character: "characters",

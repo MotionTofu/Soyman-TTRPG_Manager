@@ -16,12 +16,15 @@
 
 .tl-canvas {
   position: relative;
-  height: clamp(180px, 28vh, 240px);
+  height: 120px;
   overflow: hidden;
   border: var(--card-border-width) solid var(--line);
   background: var(--paper);
   cursor: grab;
   touch-action: none;
+}
+@media (max-width: 900px) {
+  .tl-canvas { height: 100px; }
 }
 .tl-canvas:active {
   cursor: grabbing;

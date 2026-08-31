@@ -1,6 +1,15 @@
 import { Router } from "express";
 import { db } from "../db/db";
-import { campaignPlayerSectionFolder, deleteVaultFolder } from "../services/filesystem";
+import { campaignPlayerSectionFolder, deleteVaultFolder, renameFolder } from "../services/filesystem";
+
+const NAME_MAX = 80;
+function validateName(name: unknown): string | null {
+  if (typeof name !== "string") return "name must be string";
+  const t = name.trim();
+  if (!t) return "name is required";
+  if (t.length > NAME_MAX) return `name must be <= ${NAME_MAX} chars`;
+  return null;
+}
 
 // GM-authored custom subsections under a campaign's "Для игроков" tab, plus
 // the articles inside "articles"-kind sections. Visibility toward players is
@@ -19,9 +28,12 @@ campaignPlayerSectionsRouter.get("/", (req, res) => {
 
 campaignPlayerSectionsRouter.post("/", (req, res) => {
   const { campaign_id, name, kind } = req.body as { campaign_id?: number; name?: string; kind?: string };
-  if (!campaign_id || !name || !kind) {
-    return res.status(400).json({ error: "campaign_id, name and kind are required" });
+  if (!campaign_id || !kind) {
+    return res.status(400).json({ error: "campaign_id and kind are required" });
   }
+  const nameErr = validateName(name);
+  if (nameErr) return res.status(400).json({ error: nameErr });
+  const trimmed = (name as string).trim();
   if (kind !== "gallery" && kind !== "articles") {
     return res.status(400).json({ error: "kind must be 'gallery' or 'articles'" });
   }
@@ -29,7 +41,7 @@ campaignPlayerSectionsRouter.post("/", (req, res) => {
     | { folder_path: string | null }
     | undefined;
   if (!campaign) return res.status(404).json({ error: "campaign not found" });
-  const folder = campaign.folder_path ? campaignPlayerSectionFolder(campaign.folder_path, name) : null;
+  const folder = campaign.folder_path ? campaignPlayerSectionFolder(campaign.folder_path, trimmed) : null;
   const maxPos = db
     .prepare("SELECT COALESCE(MAX(position), -1) as m FROM campaign_player_sections WHERE campaign_id = ?")
     .get(campaign_id) as { m: number };
@@ -37,7 +49,7 @@ campaignPlayerSectionsRouter.post("/", (req, res) => {
     .prepare(
       "INSERT INTO campaign_player_sections (campaign_id, name, kind, folder_path, position) VALUES (?, ?, ?, ?, ?)"
     )
-    .run(campaign_id, name, kind, folder, maxPos.m + 1);
+    .run(campaign_id, trimmed, kind, folder, maxPos.m + 1);
   res.status(201).json(db.prepare("SELECT * FROM campaign_player_sections WHERE id = ?").get(info.lastInsertRowid));
 });
 
@@ -51,10 +63,23 @@ campaignPlayerSectionsRouter.put("/reorder", (req, res) => {
 
 campaignPlayerSectionsRouter.put("/:id", (req, res) => {
   const { name } = req.body as { name?: string };
-  db.prepare("UPDATE campaign_player_sections SET name = COALESCE(?, name) WHERE id = ?").run(
-    name ?? null,
-    req.params.id
-  );
+  if (name !== undefined) {
+    const err = validateName(name);
+    if (err) return res.status(400).json({ error: err });
+    const trimmed = name.trim();
+    const row = db.prepare("SELECT name, folder_path FROM campaign_player_sections WHERE id = ?").get(req.params.id) as { name: string; folder_path: string | null } | undefined;
+    if (!row) return res.status(404).json({ error: "not found" });
+    let newFolder = row.folder_path;
+    if (row.folder_path && row.name !== trimmed) {
+      try {
+        newFolder = renameFolder(row.folder_path, trimmed);
+      } catch (e: any) {
+        return res.status(400).json({ error: e?.message ?? "rename failed" });
+      }
+    }
+    db.prepare("UPDATE campaign_player_sections SET name = ?, folder_path = ? WHERE id = ?").run(trimmed, newFolder, req.params.id);
+    return res.json(db.prepare("SELECT * FROM campaign_player_sections WHERE id = ?").get(req.params.id));
+  }
   res.json(db.prepare("SELECT * FROM campaign_player_sections WHERE id = ?").get(req.params.id));
 });
 
@@ -92,12 +117,18 @@ campaignPlayerSectionsRouter.get("/:sectionId/articles", (req, res) => {
 
 campaignPlayerSectionsRouter.post("/:sectionId/articles", (req, res) => {
   const { title, content } = req.body as { title?: string; content?: string };
+  const section = db.prepare("SELECT id FROM campaign_player_sections WHERE id = ?").get(req.params.sectionId) as { id: number } | undefined;
+  if (!section) return res.status(404).json({ error: "section not found" });
+  // title may be empty initially (Статья N) — but if provided, trim and limit 80
+  let t = title ?? "";
+  if (t && t.trim().length > NAME_MAX) return res.status(400).json({ error: `title must be <= ${NAME_MAX} chars` });
+  if (t) t = t.trim();
   const maxPos = db
     .prepare("SELECT COALESCE(MAX(position), -1) as m FROM campaign_player_articles WHERE section_id = ?")
     .get(req.params.sectionId) as { m: number };
   const info = db
     .prepare("INSERT INTO campaign_player_articles (section_id, title, content, position) VALUES (?, ?, ?, ?)")
-    .run(req.params.sectionId, title ?? "", content ?? "", maxPos.m + 1);
+    .run(req.params.sectionId, t, content ?? "", maxPos.m + 1);
   res.status(201).json(db.prepare("SELECT * FROM campaign_player_articles WHERE id = ?").get(info.lastInsertRowid));
 });
 

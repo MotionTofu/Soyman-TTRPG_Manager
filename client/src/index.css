@@ -339,7 +339,7 @@ h4 { font-size: var(--fs-body); }
   clip-path: none;
 }
 /* Ритм Обзора: внешний gap щедрый (§1.9), внутренние compact. Перебивает
-   глобальный .stack{10px} только на первом уровне Обзора. */
+    глобальный .stack{10px} только на первом уровне Обзора. */
 .campaign-overview {
   gap: var(--sp-5);
 }
@@ -348,6 +348,52 @@ h4 { font-size: var(--fs-body); }
 }
 .geography-tree {
   gap: var(--sp-5);
+}
+/* Для игроков: тот же приём §1.9 — внешний gap 24px, внутренние .card .card
+   не схлопываются (иначе ArticleCard без рамки). R2-CRIT-0 / D-P0-1. */
+.campaign-player-overview {
+  gap: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+}
+.campaign-player-overview .card .card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  background-image: var(--card-body-texture);
+  padding: 14px;
+  clip-path: none;
+}
+.campaign-player-overview .card .card .card {
+  border: none;
+  background: none;
+  padding: 0;
+  clip-path: none;
+}
+/* Шапка подраздела/статьи — плашка-инверсия §1.4 (D-P0-4). */
+.campaign-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -14px -14px 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+.campaign-player-header strong { color: var(--on-surface); }
+.campaign-player-header .muted { color: var(--on-surface-muted); }
+.campaign-player-header .badge.tag { background: var(--paper-2); color: var(--muted); box-shadow: none; }
+.campaign-player-overview details.card > summary.campaign-player-header:hover,
+.campaign-player-overview .collapsible-header.campaign-player-header:hover {
+  background: var(--surface);
+  color: var(--on-surface);
 }
 /* Дети узла географии — визуальный рейл иерархии (U-P0-4, D-P1-4). */
 .geography-children {
@@ -408,6 +454,40 @@ h4 { font-size: var(--fs-body); }
   font-size: 11px;
   color: var(--on-surface-muted);
   white-space: nowrap;
+}
+/* Кнопки на инверсной плашке: Label-голос §1.5, 1px §1.3, прозрачные на тёмном.
+   Единственный primary в дереве — верхний «Создать», в шапке — только ghost. */
+.geography-node-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  border: 1px solid var(--on-surface);
+  background: transparent;
+  color: var(--on-surface);
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.geography-node-actions button:hover {
+  background: var(--on-surface);
+  color: var(--surface);
+  border-color: var(--on-surface);
+}
+.geography-node-actions button:active {
+  transform: scale(0.97);
+}
+.geography-node-actions button .nav-icon {
+  width: 14px;
+  height: 14px;
 }
 /* Проза Обзора сеттинга — мера 62ch и не рвёт слова (D-P1-3) */
 .setting-overview p,
@@ -1020,8 +1100,17 @@ h4 { font-size: var(--fs-body); }
 }
 
 .btn-capsule {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  border: 1px solid var(--line);
+  background: var(--paper);
   padding: 2px 10px;
-  font-size: 12px;
+}
+.btn-capsule .btn-capsule-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
 }
 
 .visibility-picker {
@@ -1032,10 +1121,12 @@ h4 { font-size: var(--fs-body); }
   right: 0;
   top: 100%;
   margin-top: 4px;
-  z-index: 20;
-  min-width: 180px;
+  z-index: 30;
+  min-width: 200px;
   max-height: 240px;
   overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
 }
 /* Card grid titles are entity names (campaign/system/setting/player names),
    not section labels, so they get the Display voice explicitly — the base
@@ -2377,6 +2468,55 @@ th, td {
 .month-calendar .dot.kind-event { background: var(--accent); color: var(--accent-text); }
 .month-calendar .dot.kind-event.important { background: var(--accent); color: var(--paper); font-weight: 600; }
 .month-calendar .dot.kind-date { background: var(--bg-elevated); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.month-calendar .day.has-session {
+  border-color: #15803d !important;
+  border-width: 2.5px !important;
+}
+.month-calendar .day.has-event {
+  background: #1e5a2f !important;
+  border-color: #1e5a2f !important;
+  color: var(--paper) !important;
+}
+.month-calendar .day.has-event .num,
+.month-calendar .day.has-event .dot,
+.month-calendar .day.has-event .single-label,
+.month-calendar .day.has-event .count {
+  color: var(--paper) !important;
+}
+.month-calendar .day.has-session.has-event {
+  border-color: #15803d !important;
+  background: #1e5a2f !important;
+}
+.chronicle-split {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: var(--sp-5);
+  align-items: start;
+}
+.chronicle-left {
+  min-width: 0;
+}
+.chronicle-right {
+  min-width: 0;
+  position: sticky;
+  top: 12px;
+}
+@media (max-width: 700px) {
+  .chronicle-split {
+    grid-template-columns: 1fr;
+  }
+  .chronicle-right {
+    position: static;
+  }
+}
+.chronicle-date { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+.chronicle-title { font-family: var(--font-display); font-weight: 600; }
+.chronicle-row { gap: var(--sp-3); }
+.chronicle-row__expanded { margin-left: var(--sp-5); }
+.chronicle-status { font-family: var(--font-ui); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border: 1px solid var(--line); }
+.chronicle-status.is-upcoming { border-style: dashed; }
+.chronicle-status.is-cancelled { text-decoration: line-through; opacity: 0.7; }
+.chronicle-status.is-happened { border-style: solid; }
 .month-calendar .day.today {
   background: color-mix(in srgb, var(--accent-2) 10%, transparent);
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-2) 35%, transparent);
@@ -7229,7 +7369,7 @@ input.litm-theme-title {
   padding: 4px 6px;
 }
 .collapsible-header:hover {
-  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+  background: color-mix(in oklab, var(--paper-2) 92%, var(--ink));
 }
 .comp-children .comp-row {
   font-size: var(--text-name-sub);
