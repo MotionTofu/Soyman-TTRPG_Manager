@@ -19,7 +19,7 @@ interface Props {
   onDayContextMenu?: (date: string, x: number, y: number) => void;
 }
 
-const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const WEEKDAYS = ["Пон", "Вто", "Сре", "Чет", "Пят", "Суб", "Вос"];
 const MONTH_NAMES = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",

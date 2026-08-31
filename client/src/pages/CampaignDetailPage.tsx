@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { toLocalDateKey, formatDateKeyRu } from "../utils/date";
+import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
@@ -45,6 +45,8 @@ import { EntityTypeChip } from "../components/EntityTypeChip";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { cardThumbnailProps, loadThumbnailStyles, type ThumbnailStyle } from "../thumbnailStyles";
 import { loadHideFinance } from "../financePrivacy";
+import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
+import { useConfirm, useAlert } from "../hooks/useConfirm";
 import type {
   CampaignCalendarEvent,
   CampaignDetail,
@@ -96,9 +98,12 @@ const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Треке�
 export function CampaignDetailPage() {
   const { id } = useParams();
   const campaignId = Number(id);
+  const invalidCampaignId = !Number.isFinite(campaignId);
   const navigate = useNavigate();
 
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const calendar = useSettingCalendar(campaign?.setting_id);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -108,6 +113,8 @@ export function CampaignDetailPage() {
     "Обзор",
     campaign?.role === "player" ? undefined : GM_TAB_ALIASES
   );
+  const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
   // Третий вид рядом с сеткой и списком: сетка показывает месяц, список —
   // порядок, ось — расстояния и «сколько у них осталось».
   const [worldView, setWorldView] = useState<WorldView>(
@@ -120,7 +127,9 @@ export function CampaignDetailPage() {
   const [cycles, setCycles] = useState<SettingCycle[]>([]);
   useEffect(() => {
     if (!campaign?.setting_id) return;
-    api.get<SettingCycle[]>(`/settings/${campaign.setting_id}/cycles`).then(setCycles);
+    const ac = new AbortController();
+    api.get<SettingCycle[]>(`/settings/${campaign.setting_id}/cycles`, { signal: ac.signal }).then(setCycles).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} });
+    return () => ac.abort();
   }, [campaign?.setting_id]);
 
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
@@ -175,38 +184,70 @@ export function CampaignDetailPage() {
     if (worldSort === "desc") list = [...list].reverse();
     return list;
   }, [sortedCalendarEvents, worldFilter, worldSort]);
+  const [chronicleFilter, setChronicleFilter] = useState("");
+  const [showCancelled, setShowCancelled] = useState(false);
+  const [chronicleSort, setChronicleSort] = useState<"asc" | "desc">("desc");
+  const [newStartTime, setNewStartTime] = useState("");
+  const [dragToast, setDragToast] = useState<string | null>(null);
+  const chronicleFiltered = useMemo(() => {
+    let list = sessions.filter((s) => showCancelled || s.status !== "cancelled");
+    if (chronicleFilter.trim()) {
+      const q = chronicleFilter.trim().toLowerCase();
+      list = list.filter((s) => s.title?.toLowerCase().includes(q) || s.date.includes(q) || (s.main_events ?? "").toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => chronicleSort === "asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+  }, [sessions, chronicleFilter, showCancelled, chronicleSort]);
+  const axisRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
+  const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
 
-  function refreshCalendarEvents() {
-    api.get<CampaignCalendarEvent[]>(`/campaigns/${campaignId}/calendar-events`).then(setCalendarEvents);
+  function refreshCalendarEvents(signal?: AbortSignal) {
+    api.get<CampaignCalendarEvent[]>(`/campaigns/${campaignId}/calendar-events`, signal ? { signal } : undefined).then(setCalendarEvents).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} });
   }
-  useEffect(refreshCalendarEvents, [campaignId]);
+  useEffect(() => {
+    if (invalidCampaignId) return;
+    const ac = new AbortController();
+    refreshCalendarEvents(ac.signal);
+    return () => ac.abort();
+  }, [campaignId, invalidCampaignId]);
 
   useEffect(() => {
     if (!campaign?.setting_id) {
       setSettingImportantDates([]);
       return;
     }
-    api.get<ImportantDate[]>(`/settings/${campaign.setting_id}/important-dates`).then(setSettingImportantDates);
+    const ac = new AbortController();
+    api.get<ImportantDate[]>(`/settings/${campaign.setting_id}/important-dates`, { signal: ac.signal }).then(setSettingImportantDates).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} });
+    return () => ac.abort();
   }, [campaign?.setting_id]);
 
-  function refreshCampaign() {
-    api.get<CampaignDetail>(`/campaigns/${campaignId}`).then(setCampaign);
+  function refreshCampaign(signal?: AbortSignal) {
+    return api.get<CampaignDetail>(`/campaigns/${campaignId}`, signal ? { signal } : undefined).then(setCampaign);
   }
-  function refreshSessions() {
-    api
-      .get<SessionSummary[]>(`/campaigns/${campaignId}/sessions`)
+  function refreshSessions(signal?: AbortSignal) {
+    return api
+      .get<SessionSummary[]>(`/campaigns/${campaignId}/sessions`, signal ? { signal } : undefined)
       .then(setSessions);
   }
   useEffect(() => {
-    refreshCampaign();
-    refreshSessions();
-    api.get<Player[]>("/players").then(setAllPlayers);
-    api.get<System[]>("/systems").then(setSystems);
-    api.get<Setting[]>("/settings").then(setSettingsList);
+    if (invalidCampaignId) { setLoading(false); setLoadError("Кампания не найдена"); return; }
+    const ac = new AbortController();
+    setLoading(true); setLoadError(null);
+    Promise.all([
+      refreshCampaign(ac.signal).catch((e) => { if ((e as Error).name !== "AbortError") setLoadError((e as Error).message); }),
+      refreshSessions(ac.signal).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
+      api.get<Player[]>("/players", { signal: ac.signal }).then(setAllPlayers).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
+      api.get<System[]>("/systems", { signal: ac.signal }).then(setSystems).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
+      api.get<Setting[]>("/settings", { signal: ac.signal }).then(setSettingsList).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
+    ]).finally(() => setLoading(false));
+    return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId]);
+  }, [campaignId, invalidCampaignId]);
 
-  if (!campaign) return <p className="muted">Загрузка…</p>;
+  if (invalidCampaignId) return <div className="stack" style={{ padding: 24 }}><p>Кампания не найдена</p><Link to="/campaigns">К списку кампаний →</Link></div>;
+  if (loadError && !campaign) return <div className="stack" style={{ padding: 24 }}><p className="muted">{loadError}</p><button onClick={() => { setLoadError(null); setLoading(true); const ac = new AbortController(); Promise.all([refreshCampaign(ac.signal), refreshSessions(ac.signal)]).finally(()=>setLoading(false)); }}>Повторить</button></div>;
+  if (!campaign) return <p className="muted">{loading ? "Загрузка…" : "Загрузка…"}</p>;
 
   const events: CalendarEvent[] = sessions.map((s) => ({
     id: s.id,
@@ -264,7 +305,8 @@ export function CampaignDetailPage() {
   }
 
   async function deleteCalendarEvent(eventId: number) {
-    if (!confirm("Удалить событие?")) return;
+    const ok = await confirm({ message: "Удалить событие?", confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     await api.del(`/campaigns/calendar-events/${eventId}`);
     setCalendarMenu(null);
     refreshCalendarEvents();
@@ -425,7 +467,8 @@ export function CampaignDetailPage() {
   }
 
   async function archiveCampaign() {
-    if (!confirm("Отправить кампанию в архив? Она пропадёт из основных разделов.")) return;
+    const ok = await confirm({ title: "Архивировать кампанию?", message: "Отправить кампанию в архив? Она пропадёт из основных разделов.", confirmLabel: "Архивировать", danger: true });
+    if (!ok) return;
     await api.del(`/campaigns/${campaignId}`);
     navigate("/campaigns");
   }
@@ -476,18 +519,20 @@ export function CampaignDetailPage() {
   }
 
   async function archiveSession(sessionId: number) {
-    if (!confirm("Отправить сессию в архив?")) return;
+    const ok = await confirm({ message: "Отправить сессию в архив?", confirmLabel: "Архивировать", danger: true });
+    if (!ok) return;
     await api.del(`/sessions/${sessionId}`);
     refreshSessions();
     refreshCampaign();
   }
 
+  const safeBgLayer = safeBackgroundImage(campaign.background_image_url && isSafeImageUrl(campaign.background_image_url) ? campaign.background_image_url : null);
   return (
     <div className="stack" style={{ position: "relative" }}>
-      {campaign.background_image_url && (
+      {safeBgLayer && (
         <div
-          className="campaign-bg-layer"
-          style={{ backgroundImage: `url("${campaign.background_image_url}")` }}
+          className="campaign-bg-layer cover-photo cover-halftone"
+          style={{ backgroundImage: safeBgLayer }}
         />
       )}
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -523,7 +568,7 @@ export function CampaignDetailPage() {
       </div>
 
       <div className="tabs">
-        {tabs.filter((t) => t !== "Обзор").map((t) => (
+        {tabs.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
             {t}
           </button>
@@ -624,110 +669,157 @@ export function CampaignDetailPage() {
       )}
 
       {tab === "Хроника игр" && (
-        <div className="stack">
-          <div className="plane-grid">
-            <MonthCalendar
-              events={events}
-              onDayClick={(date) => setCreatingDate(date)}
-              onEventClick={(e) => navigate(`/sessions/${e.id}`)}
-              onEventContextMenu={(event, x, y) => setMenu({ x, y, event })}
-              onDayContextMenu={(date, x, y) => handleMonthDayContextMenu(date, x, y)}
-            />
-            {campaign.role === "player" || loadHideFinance() ? (
-              <div className="card stack">
-                <h3>Сессии</h3>
-                <div>Проведено сессий: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.heldSessions}</span></div>
-              </div>
-            ) : (
-              <div className="card stack">
-                <h3>Финансы</h3>
-                <div>Оплата: {PAYMENT_TYPE_LABELS[campaign.payment_type]}</div>
-                {campaign.payment_type === "paid" && (
-                  <div>
-                    Ставка: {campaign.session_rate} {campaign.currency}{" "}
-                    ({PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency].toLowerCase()},{" "}
-                    {RATE_SPLIT_LABELS[campaign.rate_split].toLowerCase()})
-                  </div>
-                )}
-                <div>Проведено сессий: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.heldSessions}</span></div>
-                <div>
-                  Заработано: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned} {campaign.currency}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <details className="card">
-            <summary>Хроника кампании</summary>
-            <div className="timeline">
-              {sessions
-                .filter((s) => s.status !== "cancelled")
-                .map((s) => (
-                  <div key={s.id} className="timeline-entry">
-                    <div className="timeline-date">
-                      <Link to={`/sessions/${s.id}`}>
-                        {s.date} — {s.title || `Сессия №${s.session_number ?? ""}`}
-                      </Link>
-                      <span className={`badge ${s.status}`}>{s.status}</span>
-                      {calendar &&
-                        formatInworldDate(s.inworld_year, s.inworld_month, s.inworld_day, calendar.months, calendar.era) && (
-                          <span className="muted">
-                            {formatInworldDate(s.inworld_year, s.inworld_month, s.inworld_day, calendar.months, calendar.era)}
-                          </span>
-                        )}
+        <div className="chronicle-split">
+          <div className="chronicle-left">
+            {(() => {
+              const STATUS_LABEL: Record<string, string> = { planned: "Запланировано", held: "Состоялась", cancelled: "Отменена" };
+              const filtered = chronicleFiltered;
+              return (
+                <details className="card res-group" open style={{ margin: 0 }}>
+                  <summary className="res-group__band">
+                    <span className="res-group__title">Хроника</span>
+                    <span className="res-group__count">
+                      {filtered.length} из {sessions.length}
+                    </span>
+                  </summary>
+                  <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
+                    <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                      <input
+                        placeholder="Поиск по названию, дате, событиям"
+                        value={chronicleFilter}
+                        onChange={(e) => setChronicleFilter(e.target.value)}
+                        style={{ flex: "1 1 220px", minWidth: 180 }}
+                      />
+                      <label className="row" style={{ gap: 6, fontSize: 12, cursor: "pointer" }}>
+                        <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} /> Показать отменённые
+                      </label>
+                      {chronicleFilter && (
+                        <button onClick={() => setChronicleFilter("")}>Сбросить</button>
+                      )}
                     </div>
-                    {s.main_events ? (
-                      <p style={{ whiteSpace: "pre-wrap" }}>
-                        <MentionText text={s.main_events} />
+
+                    {sessions.length === 0 ? (
+                      <EmptyState
+                        icon="skullDie"
+                        title="ХРОНИКА ПОКА ПУСТА"
+                        hint="Запланируйте первую игру — здесь появится лента сыгранных сессий."
+                        action={
+                          <button className="primary" onClick={() => setCreatingDate(toLocalDateKey(new Date()))}>
+                            + Запланировать сессию
+                          </button>
+                        }
+                      />
+                    ) : filtered.length === 0 ? (
+                      <p className="muted">
+                        Ничего не найдено.{" "}
+                        <button
+                          onClick={() => {
+                            setChronicleFilter("");
+                            setShowCancelled(true);
+                          }}
+                        >
+                          Сбросить фильтр
+                        </button>
                       </p>
                     ) : (
-                      <p className="muted">Основные события не записаны.</p>
+                      <div className="timeline">
+                        {filtered.map((s) => (
+                          <div key={s.id} className="timeline-entry">
+                            <div className="timeline-date">
+                              <Link to={`/sessions/${s.id}`}>
+                                {formatDateKeyRu(s.date)} — {s.title || `Сессия №${s.session_number ?? ""}`}
+                              </Link>
+                              <span className={`badge ${s.status}`}>{STATUS_LABEL[s.status] ?? s.status}</span>
+                              {calendar &&
+                                formatInworldDate(s.inworld_year, s.inworld_month, s.inworld_day, calendar.months, calendar.era) && (
+                                  <span className="muted">
+                                    {formatInworldDate(s.inworld_year, s.inworld_month, s.inworld_day, calendar.months, calendar.era)}
+                                  </span>
+                                )}
+                            </div>
+                            {s.main_events ? (
+                              <p style={{ whiteSpace: "pre-wrap" }}>
+                                <MentionText text={s.main_events} />
+                              </p>
+                            ) : (
+                              <p className="muted">
+                                Итоги не записаны. <Link to={`/sessions/${s.id}`}>Записать →</Link>
+                              </p>
+                            )}
+                            <div className="row" style={{ gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                              <Link to={`/sessions/${s.id}`}>Открыть →</Link>
+                              <button onClick={() => archiveSession(s.id)} aria-label="Архивировать сессию">
+                                ✕ в архив
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                ))}
-              {sessions.filter((s) => s.status !== "cancelled").length === 0 && (
-                <p className="muted">Пока нет сессий.</p>
-              )}
-            </div>
-          </details>
+                </details>
+              );
+            })()}
+          </div>
+          <div className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
+            {(() => {
+              const todayKey = toLocalDateKey(new Date());
+              const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
+              const nextPlanned = sorted.find((s) => s.status === "planned" && s.date >= todayKey) || sorted.find((s) => s.status === "planned") || null;
+              const diffDays = nextPlanned ? Math.round((parseDateKey(nextPlanned.date).getTime() - parseDateKey(todayKey).getTime()) / 86400000) : null;
+              const diffLabel = diffDays == null ? null : diffDays === 0 ? "сегодня" : diffDays === 1 ? "завтра" : diffDays > 0 ? `через ${diffDays} дн.` : `${Math.abs(diffDays)} дн. назад`;
+              return (
+                <details className="card res-group" open>
+                  <summary className="res-group__band">
+                    <span className="res-group__title">Календарь игр</span>
+                    <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
+                      {nextPlanned ? (
+                        <span>
+                          след. <span style={{ color: "var(--on-surface)" }}>{formatDateKeyRu(nextPlanned.date)}</span>
+                          {nextPlanned.start_time ? ` ${nextPlanned.start_time}` : ""} · {nextPlanned.title || `№${nextPlanned.session_number ?? ""}`}
+                          {diffLabel ? ` · ${diffLabel}` : ""}
+                        </span>
+                      ) : (
+                        <span>{sessions.filter((s) => s.status !== "cancelled").length} игр · проведено {campaign.finance.heldSessions}</span>
+                      )}
+                    </span>
+                  </summary>
+                  <div className="res-group__body" style={{ padding: 12 }}>
+                    <MonthCalendar
+                      events={events}
+                      onDayClick={(date) => setCreatingDate(date)}
+                      onEventClick={(e) => navigate(`/sessions/${e.id}`)}
+                      onEventContextMenu={(event, x, y) => setMenu({ x, y, event })}
+                    />
 
-          <details className="card">
-            <summary>История сессий ({sessions.length})</summary>
-            <table>
-              <thead>
-                <tr>
-                  <th>Дата</th>
-                  <th>Название</th>
-                  <th>Статус</th>
-                  {!loadHideFinance() && <th>Оплата</th>}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.date}</td>
-                    <td>{s.title || `Сессия №${s.session_number ?? ""}`}</td>
-                    <td>
-                      <span className={`badge ${s.status}`}>{s.status}</span>
-                    </td>
-                    {!loadHideFinance() && <td>{PAYMENT_TYPE_LABELS[s.effective_payment_type]}</td>}
-                    <td className="row">
-                      <Link to={`/sessions/${s.id}`}>Открыть →</Link>
-                      <button onClick={() => archiveSession(s.id)} aria-label="Архивировать сессию">✕</button>
-                    </td>
-                  </tr>
-                ))}
-                {sessions.length === 0 && (
-                  <tr>
-                    <td colSpan={loadHideFinance() ? 4 : 5} className="muted">
-                      Пока нет сессий.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </details>
+
+                  </div>
+                </details>
+              );
+            })()}
+            {campaign.role !== "player" && !loadHideFinance() && (
+              <details className="card res-group" open>
+                <summary className="res-group__band">
+                  <span className="res-group__title">Финансы</span>
+                  <span className="res-group__count">
+                    <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned}</span> {campaign.currency} · {PAYMENT_TYPE_LABELS[campaign.payment_type].toLowerCase()}
+                  </span>
+                </summary>
+                <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
+                  <div>
+                    Проведено сессий: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.heldSessions}</span>
+                  </div>
+                  <div>Оплата: {PAYMENT_TYPE_LABELS[campaign.payment_type]}</div>
+                  {campaign.payment_type === "paid" && (
+                    <div>
+                      Ставка: {campaign.session_rate} {campaign.currency} ({PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency].toLowerCase()},{" "}
+                      {RATE_SPLIT_LABELS[campaign.rate_split].toLowerCase()})
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
+          </div>
         </div>
       )}
 
@@ -735,10 +827,11 @@ export function CampaignDetailPage() {
 
       {tab === "Хроника мира" && (
         <div className="stack" style={{ gap: "var(--sp-5)" }}>
-          <div className="card stack" style={{ gap: 8 }}>
+          <div ref={axisRef} className="card stack" style={{ gap: 8 }}>
             <Timeline
               title="Ось времени"
               action={<button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>+ Создать событие</button>}
+              focusDate={timelineFocus}
               events={[
                 ...sortedCalendarEvents.map((ev) => ({
                   id: ev.id,
@@ -818,13 +911,19 @@ export function CampaignDetailPage() {
                                 <span className="chronicle-title">{ev.title}</span>
                               </span>
                             </span>
-                            <div className="row" style={{ gap: "var(--sp-2)" }}>
-                              <label className="row" style={{ fontSize: "var(--fs-meta)" }}>
-                                <input type="checkbox" checked={!!ev.important} onChange={() => toggleEventImportant(ev)} />
-                                Важно
-                              </label>
-                              <button onClick={() => openEditEventModal(ev)}>Редактировать</button>
+                            <div className="row" style={{ gap: "var(--sp-2)", alignItems: "center" }}>
+                              <button
+                                onClick={() => toggleEventImportant(ev)}
+                                title={ev.important ? "Убрать из избранного" : "В избранное"}
+                                className={`comp-mini ${ev.important ? "primary" : ""}`}
+                                style={{ padding: "2px 6px", fontSize: 14, lineHeight: 1 }}
+                              >
+                                {ev.important ? "★" : "☆"}
+                              </button>
+                              <button className="comp-mini" onClick={() => openEditEventModal(ev)}>Редактировать</button>
                               <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
+                              <button className="comp-mini" onClick={() => { setTimelineFocus({ year: ev.inworld_year, month: ev.inworld_month, day: ev.inworld_day }); axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На оси">Ось</button>
+                              <button className="comp-mini" onClick={() => { setCalendarFocus({ year: ev.inworld_year, month: ev.inworld_month }); calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На календаре">Календарь</button>
                             </div>
                           </div>
                           {expanded && ev.description && (
@@ -840,11 +939,11 @@ export function CampaignDetailPage() {
                 </div>
               </details>
             </div>
-            <div className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
+            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
               <details className="card res-group" open>
                 <summary className="res-group__band">
                   <span className="res-group__title">Календарь</span>
-                  <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{calendar ? `${calendar.months.length} мес.` : "—"}</span>
+                  <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{`Сегодня: ${new Date().getDate()} ${["Января","Февраля","Марта","Апреля","Мая","Июня","Июля","Августа","Сентября","Октября","Ноября","Декабря"][new Date().getMonth()]} ${new Date().getFullYear()}`}</span>
                 </summary>
                 <div className="res-group__body" style={{ padding: 12 }}>
                   {!campaign.setting_id ? (
@@ -869,6 +968,7 @@ export function CampaignDetailPage() {
                           ? { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month }
                           : null
                       }
+                      focusDate={calendarFocus}
                       onPin={pinCampaignCalendar}
                       onDayContextMenu={handleCalendarDayContextMenu}
                       onItemClick={handleCalendarItemClick}
@@ -876,7 +976,7 @@ export function CampaignDetailPage() {
                     />
                   )}
                   <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                    Правый клик / долгое нажатие по дню — создать событие; по событию — редактировать или удалить. Серые метки — важные даты из профилей сеттинга.
+                    ПКМ - меню.
                   </span>
                 </div>
               </details>
@@ -1004,6 +1104,8 @@ export function CampaignDetailPage() {
         </Modal>
        )}
 
+      {confirmDialog}
+      {alertDialog}
       {creatingDate && (
         <Modal onClose={() => setCreatingDate(null)}>
           <h2>Сессия — {formatDateKeyRu(creatingDate)}</h2>
@@ -1092,9 +1194,10 @@ export function CampaignDetailPage() {
 // Not currently rendered — the "Ресурсы" tab was removed (Phase 3), but this
 // stays wired and exported in case the tab comes back.
 export function GroupThemeSection({ campaignId, initial }: { campaignId: number; initial: string | null }) {
-  const [saved, setSaved] = useState<LitMThemeCard>(() =>
-    initial ? normalizeTheme(JSON.parse(initial)) : emptyTheme()
-  );
+  const [saved, setSaved] = useState<LitMThemeCard>(() => {
+    if (!initial) return emptyTheme();
+    try { return normalizeTheme(JSON.parse(initial)); } catch { return emptyTheme(); }
+  });
   const [draft, setDraft] = useState<LitMThemeCard>(saved);
   const [editing, setEditing] = useState(false);
 
@@ -1264,6 +1367,8 @@ function PlayersAndCharactersTab({
   const [addingFor, setAddingFor] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const thumbnailStyles = loadThumbnailStyles();
+  const [pcConfirmDialog, pcConfirm] = useConfirm();
+  const [pcAlertDialog, showPcAlert] = useAlert();
 
   function refresh() {
     api.get<Character[]>(`/characters?campaign_id=${campaignId}`).then(setCharacters);
@@ -1277,7 +1382,8 @@ function PlayersAndCharactersTab({
     onRosterChange();
   }
   async function removeFromRoster(playerId: number) {
-    if (!confirm(`Убрать игрока из состава кампании? Персонажи сохранятся.`)) return;
+    const ok = await pcConfirm({ message: `Убрать игрока из состава кампании? Персонажи сохранятся.`, confirmLabel: "Убрать", danger: true });
+    if (!ok) return;
     await api.del(`/campaigns/${campaignId}/roster/${playerId}`);
     onRosterChange();
   }
@@ -1292,7 +1398,7 @@ function PlayersAndCharactersTab({
     const name = (drafts[playerId] ?? "").trim();
     if (!name) return;
     if (characters.some((c) => c.player_id === playerId && c.character_name.toLowerCase() === name.toLowerCase())) {
-      alert("Персонаж с таким именем уже есть у этого игрока.");
+      showPcAlert("Персонаж с таким именем уже есть у этого игрока.");
       return;
     }
     await api.post("/characters", {
@@ -1356,8 +1462,10 @@ function PlayersAndCharactersTab({
               </RosterCard>
             );
           })}
-        </div>
-      )}
+          </div>
+       )}
+      {pcConfirmDialog}
+      {pcAlertDialog}
     </div>
   );
 }
@@ -1575,6 +1683,7 @@ function PlayerOverviewTab({
   const [editingMain, setEditingMain] = useState(false);
   const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
   const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: campaign.name,
     type: campaign.type,
@@ -1589,8 +1698,9 @@ function PlayerOverviewTab({
   });
 
   async function save(partial: Record<string, unknown>) {
-    await api.put(`/campaigns/${campaignId}`, partial);
-    onRefresh();
+    if (saving) return;
+    setSaving(true);
+    try { await api.put(`/campaigns/${campaignId}`, partial); await onRefresh(); } finally { setSaving(false); }
   }
 
   useEffect(() => {
@@ -1714,9 +1824,9 @@ function PlayerOverviewTab({
                 <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
               </label>
               <div className="campaign-actions">
-                <button onClick={() => setEditingMain(false)}>Отмена</button>
-                <button className="primary" onClick={() => {
-                  save({
+                <button onClick={() => setEditingMain(false)} disabled={saving}>Отмена</button>
+                <button className="primary" disabled={saving} onClick={async () => {
+                  await save({
                     name: form.name,
                     type: form.type,
                     payment_type: form.payment_type,
@@ -1729,7 +1839,7 @@ function PlayerOverviewTab({
                     setting_id: form.setting_id ? Number(form.setting_id) : null,
                   });
                   setEditingMain(false);
-                }}>Сохранить</button>
+                }}>{saving ? "Сохранение…" : "Сохранить"}</button>
               </div>
             </div>
           )}
@@ -1801,6 +1911,7 @@ function OverviewTab({
 }) {
   const campaignId = campaign.id;
   const [editingMain, setEditingMain] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
   const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
   const [form, setForm] = useState({
@@ -1829,8 +1940,9 @@ function OverviewTab({
   });
 
   async function save(partial: Record<string, unknown>) {
-    await api.put(`/campaigns/${campaignId}`, partial);
-    onRefresh();
+    if (saving) return;
+    setSaving(true);
+    try { await api.put(`/campaigns/${campaignId}`, partial); await onRefresh(); } finally { setSaving(false); }
   }
 
   useEffect(() => {
@@ -1859,8 +1971,12 @@ function OverviewTab({
   const systemName = systems.find((s) => s.id === campaign.system_id)?.name ?? "—";
   const settingName = settingsList.find((s) => s.id === campaign.setting_id)?.name ?? "—";
 
-  const bgUrl = campaign.background_image_url ?? null;
-  const thumbUrl = campaign.thumbnail_image_url ?? null;
+  const rawBgUrl = campaign.background_image_url ?? null;
+  const rawThumbUrl = campaign.thumbnail_image_url ?? null;
+  const bgUrl = rawBgUrl && isSafeImageUrl(rawBgUrl) ? rawBgUrl : null;
+  const thumbUrl = rawThumbUrl && isSafeImageUrl(rawThumbUrl) ? rawThumbUrl : null;
+  const safeBg = bgUrl ? safeBackgroundImage(bgUrl) : undefined;
+  const safeThumb = thumbUrl ? safeBackgroundImage(thumbUrl) : undefined;
 
   return (
     <div className="stack campaign-overview">
@@ -1957,9 +2073,9 @@ function OverviewTab({
                 <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
               </label>
               <div className="campaign-actions">
-                <button onClick={() => setEditingMain(false)}>Отмена</button>
-                <button className="primary" onClick={() => {
-                  save({
+                <button onClick={() => setEditingMain(false)} disabled={saving}>Отмена</button>
+                <button className="primary" disabled={saving} onClick={async () => {
+                  await save({
                     name: form.name,
                     type: form.type,
                     payment_type: form.payment_type,
@@ -1972,7 +2088,7 @@ function OverviewTab({
                     setting_id: form.setting_id ? Number(form.setting_id) : null,
                   });
                   setEditingMain(false);
-                }}>Сохранить</button>
+                }}>{saving ? "Сохранение…" : "Сохранить"}</button>
               </div>
             </div>
           )}
@@ -2050,10 +2166,10 @@ function OverviewTab({
           <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
           <div style={{ flex: "1 1 0", minWidth: 220 }}>
             <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Фон страницы — на всю ширину, приглушён на 30 % (как в плитке):</div>
-            {bgUrl ? (
+            {safeBg ? (
               <div className="campaign-tile-cover cover-halftone" style={{ border: "1px solid var(--line)", marginBottom: 8, aspectRatio: "16 / 10", background: "var(--paper-2)" }}>
                 <div className="cover-art cover-photo">
-                  <div className="cover-art-image" style={{ backgroundImage: `url("${bgUrl}")` }} aria-hidden="true" />
+                  <div className="cover-art-image" style={{ backgroundImage: safeBg }} aria-hidden="true" />
                 </div>
                 <div className="campaign-tile-scrim" style={{ opacity: 0.35 }} />
               </div>
@@ -2069,11 +2185,11 @@ function OverviewTab({
           </div>
           <div style={{ flex: "1 1 0", minWidth: 220 }}>
             <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Тамбнейл — 16×10, так в сетке «Кампании» и на Главной:</div>
-            {thumbUrl ? (
+            {safeThumb ? (
               <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
                 <div className="campaign-tile-cover cover-halftone">
                   <div className="cover-art cover-photo">
-                    <div className="cover-art-image" style={{ backgroundImage: `url("${thumbUrl}")` }} aria-hidden="true" />
+                    <div className="cover-art-image" style={{ backgroundImage: safeThumb }} aria-hidden="true" />
                   </div>
                   <div className="campaign-tile-scrim" />
                   <h3 className="campaign-tile-name" style={{ fontSize: "var(--fs-h3)" }}>{campaign.name}</h3>
@@ -2121,13 +2237,13 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
   }, [campaign.id]);
 
   const today = toLocalDateKey();
-  const nextSession = sessions
+  const nextSession = useMemo(() => sessions
     .filter((s) => s.status === "planned" && s.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
-  const recentChronicle = sessions
+    .sort((a, b) => a.date.localeCompare(b.date))[0], [sessions, today]);
+  const recentChronicle = useMemo(() => sessions
     .filter((s) => s.status === "held" && s.main_events)
     .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 2);
+    .slice(0, 2), [sessions]);
 
   return (
     <div className="stack">

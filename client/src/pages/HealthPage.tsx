@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 
 interface ScanResult {
@@ -12,9 +13,9 @@ interface ScanResult {
   seqWorst: { table: string; seq: number; maxId: number | null; drift: number } | null;
   brokenLinks: { count: number; samples: { type: string; label: string }[] };
   brokenLinksCount: number;
-  danglingModules: { code: string; label: string; count: number }[];
+  danglingModules: { code: string; label: string; count: number; samples: { type: string; uid: string; code: string; label: string; table: string; column: string; id: number; hostRoute: string | null; hostLabel: string | null }[] }[];
   danglingModulesCount: number;
-  deadUidMentions: { type: string; uid: string; code: string; label: string; table: string; column: string }[];
+  deadUidMentions: { type: string; uid: string; code: string; label: string; table: string; column: string; id: number; hostRoute: string | null; hostLabel: string | null }[];
   deadUidMentionsCount: number;
   orphanFiles: { path: string; size: number }[];
   orphanFilesCount: number;
@@ -208,27 +209,51 @@ export function HealthPage() {
             </details>
           )}
 
-          {/* Каких модулей не хватает — подвешенные ref */}
+          {/* Каких модулей не хватает — подвешенные ref, кликабельно к месту хранения */}
           {scan.danglingModulesCount > 0 && (
             <details className="card stack" open>
               <summary><strong className="entry-title">Каких модулей не хватает</strong> — подвешенные `[[type@uid|code|label]]`</summary>
-              <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+              <p className="muted">Клик по ошибке ведёт на запись, где она хранится. Поставьте модуль с этим code — ссылки оживут сами (uid-линки).</p>
+              <div className="stack" style={{ gap: 12 }}>
                 {scan.danglingModules.map((m) => (
-                  <li key={m.code}>{m.code} — «{m.label}» ×{m.count}</li>
+                  <div key={m.code} className="stack" style={{ gap: 6, padding: "8px 10px", border: "1.5px solid var(--line)" }}>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}><strong>{m.code}</strong> — «{m.label}» ×{m.count}</div>
+                    <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {(m.samples ?? []).map((s, i) => (
+                        <li key={`${s.table}:${s.column}:${s.id}:${s.uid}:${i}`}>
+                          {s.hostRoute ? (
+                            <Link to={s.hostRoute} style={{ color: "var(--accent)" }}>{s.hostLabel ?? `#${s.id}`}</Link>
+                          ) : (
+                            <span>{s.table} #{s.id}</span>
+                          )}
+                          <span className="muted"> · {s.table}.{s.column} · «{s.label}» ({s.type}:{s.uid.slice(0, 8)}…)</span>
+                        </li>
+                      ))}
+                      {m.count > (m.samples?.length ?? 0) && (
+                        <li className="muted">…и ещё {m.count - (m.samples?.length ?? 0)} в этом модуле</li>
+                      )}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
-              <p className="muted">Поставьте модуль с этим code — ссылки оживут сами (uid-линки), делать ничего не нужно.</p>
+              </div>
             </details>
           )}
 
-          {/* Мёртвые UID-ссылки внутри установленных модулей */}
+          {/* Мёртвые UID-ссылки внутри установленных модулей — кликабельно */}
           {scan.deadUidMentionsCount > 0 && (
             <details className="card stack" open>
               <summary><strong className="entry-title">Мёртвые UID-ссылки</strong> — `[[type@uid|code|label]]` с несуществующим UID</summary>
-              <p className="muted">UID-ссылки指向 записи, которых больше нет (модуль установлен, но UID изменился). Можно починить автоматически по имени.</p>
+              <p className="muted">Клик ведёт на запись, где хранится битая ссылка. Можно починить автоматически по имени.</p>
               <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
                 {scan.deadUidMentions.slice(0, 20).map((m, i) => (
-                  <li key={i}>{m.table}.{m.column} — «{m.label}» ({m.code}: {m.uid.slice(0, 8)}…)</li>
+                  <li key={i}>
+                    {m.hostRoute ? (
+                      <Link to={m.hostRoute} style={{ color: "var(--accent)" }}>{m.hostLabel ?? `#${m.id}`}</Link>
+                    ) : (
+                      <span>{m.table} #{m.id}</span>
+                    )}
+                    <span> · {m.table}.{m.column} — «{m.label}» ({m.code}: {m.uid.slice(0, 8)}…)</span>
+                  </li>
                 ))}
               </ul>
               {scan.deadUidMentionsCount > 20 && <span className="muted" style={{ fontFamily: "var(--font-mono)" }}>…и ещё {scan.deadUidMentionsCount - 20}</span>}

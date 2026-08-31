@@ -172,12 +172,127 @@ interface DanglingEntry {
   label: string;
   table: string;
   column: string;
+  id: number;
+  hostRoute: string | null;
+  hostLabel: string | null;
 }
 
-function scanDanglingModules(): { code: string; label: string; count: number }[] {
-  const byCode = new Map<string, { label: string; count: number }>();
+// Маршруты хозяев для кликабельных ошибок здоровья — зеркало client/src/entityTypes DETAIL_ROUTES + спутники.
+const DIRECT_HOST_ROUTE: Record<string, string> = {
+  campaigns: "/campaigns",
+  settings: "/settings",
+  systems: "/systems",
+  players: "/players",
+  characters: "/characters",
+  setting_locations: "/locations",
+  setting_beings: "/beings",
+  setting_communities: "/communities",
+  artifacts: "/artifacts",
+  story_arcs: "/adventures",
+  story_scenes: "/scenes",
+  sessions: "/sessions",
+  compendium_entries: "/compendium",
+  setting_calendar_events: "/events",
+};
+
+function resolveHost(table: string, id: number): { route: string | null; label: string | null } {
+  try {
+    if (DIRECT_HOST_ROUTE[table]) {
+      const route = `${DIRECT_HOST_ROUTE[table]}/${id}`;
+      let label: string | null = null;
+      const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+      const has = (c: string) => cols.some((x) => x.name === c);
+      if (has("name")) label = (db.prepare(`SELECT name FROM ${table} WHERE id = ?`).get(id) as { name: string } | undefined)?.name ?? null;
+      else if (has("character_name")) label = (db.prepare(`SELECT character_name as name FROM ${table} WHERE id = ?`).get(id) as { name: string } | undefined)?.name ?? null;
+      else if (has("title")) label = (db.prepare(`SELECT title as name FROM ${table} WHERE id = ?`).get(id) as { name: string } | undefined)?.name ?? null;
+      else label = `#${id}`;
+      return { route, label };
+    }
+    if (table === "character_chapters") {
+      const row = db.prepare(`SELECT character_id, title FROM character_chapters WHERE id = ?`).get(id) as { character_id: number; title: string } | undefined;
+      if (row) {
+        const lb = (db.prepare(`SELECT character_name as name FROM characters WHERE id = ?`).get(row.character_id) as { name: string } | undefined)?.name ?? `Персонаж #${row.character_id}`;
+        return { route: `/characters/${row.character_id}`, label: lb };
+      }
+    }
+    if (table === "being_chapters") {
+      const row = db.prepare(`SELECT being_id FROM being_chapters WHERE id = ?`).get(id) as { being_id: number } | undefined;
+      if (row) {
+        const lb = (db.prepare(`SELECT name FROM setting_beings WHERE id = ?`).get(row.being_id) as { name: string } | undefined)?.name ?? `Существо #${row.being_id}`;
+        return { route: `/beings/${row.being_id}`, label: lb };
+      }
+    }
+    if (table === "community_chapters") {
+      const row = db.prepare(`SELECT community_id FROM community_chapters WHERE id = ?`).get(id) as { community_id: number } | undefined;
+      if (row) {
+        const lb = (db.prepare(`SELECT name FROM setting_communities WHERE id = ?`).get(row.community_id) as { name: string } | undefined)?.name ?? `Сообщество #${row.community_id}`;
+        return { route: `/communities/${row.community_id}`, label: lb };
+      }
+    }
+    if (table === "location_chapters") {
+      const row = db.prepare(`SELECT location_id FROM location_chapters WHERE id = ?`).get(id) as { location_id: number } | undefined;
+      if (row) {
+        const lb = (db.prepare(`SELECT name FROM setting_locations WHERE id = ?`).get(row.location_id) as { name: string } | undefined)?.name ?? `Локация #${row.location_id}`;
+        return { route: `/locations/${row.location_id}`, label: lb };
+      }
+    }
+    if (table === "artifact_chapters") {
+      const row = db.prepare(`SELECT artifact_id FROM artifact_chapters WHERE id = ?`).get(id) as { artifact_id: number } | undefined;
+      if (row) {
+        const lb = (db.prepare(`SELECT name FROM artifacts WHERE id = ?`).get(row.artifact_id) as { name: string } | undefined)?.name ?? `Артефакт #${row.artifact_id}`;
+        return { route: `/artifacts/${row.artifact_id}`, label: lb };
+      }
+    }
+    if (table === "statblocks" || table === "gallery_images" || table === "important_dates") {
+      const row = db.prepare(`SELECT owner_type, owner_id FROM ${table} WHERE id = ?`).get(id) as { owner_type: string; owner_id: number } | undefined;
+      if (row?.owner_type && row.owner_id) {
+        const prefixMap: Record<string, string> = { character: "/characters", being: "/beings", community: "/communities", location: "/locations", compendium_entry: "/compendium" };
+        const routePrefix = prefixMap[row.owner_type];
+        if (routePrefix) {
+          const ownerTableMap: Record<string, string> = { character: "characters", being: "setting_beings", community: "setting_communities", location: "setting_locations", compendium_entry: "compendium_entries" };
+          const ownerTable = ownerTableMap[row.owner_type];
+          let lb: string | null = null;
+          if (ownerTable) {
+            const col = row.owner_type === "character" ? "character_name" : "name";
+            try { lb = (db.prepare(`SELECT ${col} as name FROM ${ownerTable} WHERE id = ?`).get(row.owner_id) as { name: string } | undefined)?.name ?? null; } catch {}
+          }
+          return { route: `${routePrefix}/${row.owner_id}`, label: lb ?? `${row.owner_type} #${row.owner_id}` };
+        }
+      }
+    }
+    if (table === "campaign_entries") {
+      const row = db.prepare(`SELECT campaign_id, title FROM campaign_entries WHERE id = ?`).get(id) as { campaign_id: number; title: string } | undefined;
+      if (row) return { route: `/campaigns/${row.campaign_id}`, label: row.title || `Кампания #${row.campaign_id}` };
+    }
+    if (table === "setting_entries") {
+      const row = db.prepare(`SELECT setting_id, title FROM setting_entries WHERE id = ?`).get(id) as { setting_id: number; title: string } | undefined;
+      if (row) return { route: `/settings/${row.setting_id}`, label: row.title || `Сеттинг #${row.setting_id}` };
+    }
+    if (table === "story_scene_checks") {
+      const row = db.prepare(`SELECT scene_id FROM story_scene_checks WHERE id = ?`).get(id) as { scene_id: number } | undefined;
+      if (row) return { route: `/scenes/${row.scene_id}`, label: `Сцена #${row.scene_id}` };
+    }
+    if (table === "story_scene_rewards") {
+      const row = db.prepare(`SELECT scene_id, arc_id FROM story_scene_rewards WHERE id = ?`).get(id) as { scene_id: number | null; arc_id: number | null } | undefined;
+      if (row?.scene_id) return { route: `/scenes/${row.scene_id}`, label: `Сцена #${row.scene_id}` };
+      if (row?.arc_id) return { route: `/adventures/${row.arc_id}`, label: `Приключение #${row.arc_id}` };
+    }
+    if (table === "entity_relations") {
+      const row = db.prepare(`SELECT from_type, from_id FROM entity_relations WHERE id = ?`).get(id) as { from_type: string; from_id: number } | undefined;
+      if (row) {
+        const map: Record<string, string> = { character: "/characters", being: "/beings", community: "/communities", location: "/locations", artifact: "/artifacts", player: "/players", setting: "/settings", campaign: "/campaigns" };
+        const prefix = map[row.from_type];
+        if (prefix) return { route: `${prefix}/${row.from_id}`, label: `${row.from_type} #${row.from_id}` };
+      }
+    }
+  } catch {}
+  return { route: null, label: null };
+}
+
+function scanDanglingModules(): { code: string; label: string; count: number; samples: DanglingEntry[] }[] {
+  const byCode = new Map<string, { label: string; count: number; samples: DanglingEntry[] }>();
   for (const { table, column } of mentionTextColumns()) {
-    const rows = db.prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%'`).all() as { v: string | null }[];
+    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%'`).all() as { id: number; v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
         const kind = (m as unknown as { kind: string }).kind;
@@ -186,18 +301,22 @@ function scanDanglingModules(): { code: string; label: string; count: number }[]
         if (!MENTIONABLE[rm.type] || idOfUid(rm.type, rm.uid) != null) continue;
         const code = rm.source || "unknown";
         const label = rm.label || rm.uid.slice(0, 8);
+        const host = resolveHost(table, row.id);
+        const entry: DanglingEntry = { type: rm.type, uid: rm.uid, code, label, table, column, id: row.id, hostRoute: host.route, hostLabel: host.label };
         const cur = byCode.get(code);
-        if (cur) cur.count++;
-        else byCode.set(code, { label, count: 1 });
+        if (cur) {
+          cur.count++;
+          if (cur.samples.length < 5) cur.samples.push(entry);
+        } else byCode.set(code, { label, count: 1, samples: [entry] });
       }
     }
   }
-  return [...byCode.entries()].map(([code, v]) => ({ code, label: v.label, count: v.count })).sort((a, b) => b.count - a.count).slice(0, 20);
+  return [...byCode.entries()].map(([code, v]) => ({ code, label: v.label, count: v.count, samples: v.samples })).sort((a, b) => b.count - a.count).slice(0, 20);
 }
 
 /**
  * Подробный список всех мёртвых UID-ссылок: тип, uid, таблица, колонка.
- * Используется repair-эндпоинтом для починки.
+ * Используется repair-эндпоинтом для починки и кликабельным списком здоровья.
  */
 function collectDeadUidMentions(): DanglingEntry[] {
   const out: DanglingEntry[] = [];
@@ -208,7 +327,8 @@ function collectDeadUidMentions(): DanglingEntry[] {
         if (m.kind !== "ref") continue;
         const rm = m as RefMention;
         if (!MENTIONABLE[rm.type] || idOfUid(rm.type, rm.uid) != null) continue;
-        out.push({ type: rm.type, uid: rm.uid, code: rm.source, label: rm.label, table, column });
+        const host = resolveHost(table, row.id);
+        out.push({ type: rm.type, uid: rm.uid, code: rm.source, label: rm.label, table, column, id: row.id, hostRoute: host.route, hostLabel: host.label });
       }
     }
   }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { LinkDropZone } from "../components/LinkDropZone";
@@ -231,6 +231,10 @@ export function SettingDetailPage() {
     return calendarEvents.filter((ev) => ev.title.toLowerCase().includes(q) || (ev.description ?? "").toLowerCase().includes(q));
   }, [calendarEvents, worldFilter]);
   const eraBuckets = useMemo(() => buildEraBuckets(eras, filteredCalendarEvents), [eras, filteredCalendarEvents]);
+  const axisRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
+  const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
 
   function refreshCalendarEvents() {
     const controller = new AbortController();
@@ -687,16 +691,22 @@ export function SettingDetailPage() {
               </span>
             )}
           </span>
-          <div className="row" style={{ gap: "var(--sp-2)" }}>
-            <label className="row" style={{ fontSize: "var(--fs-meta)" }}>
-              <input type="checkbox" checked={!!ev.important} onChange={() => toggleEventImportant(ev)} />
-              Важно
-            </label>
+          <div className="row" style={{ gap: "var(--sp-2)", alignItems: "center" }}>
+            <button
+              onClick={() => toggleEventImportant(ev)}
+              title={ev.important ? "Убрать из избранного" : "В избранное"}
+              className={`comp-mini ${ev.important ? "primary" : ""}`}
+              style={{ padding: "2px 6px", fontSize: 14, lineHeight: 1 }}
+            >
+              {ev.important ? "★" : "☆"}
+            </button>
             <label className="row" style={{ fontSize: "var(--fs-meta)" }}>
               <input type="checkbox" checked={!!ev.visible_to_players} onChange={() => toggleEventVisible(ev)} />
               Видно игрокам
             </label>
-            <button onClick={() => openEditEventModal(ev)}>Редактировать</button>
+            <button className="comp-mini" onClick={() => openEditEventModal(ev)}>Редактировать</button>
+            <button className="comp-mini" onClick={() => { setChronicleView("axis"); setTimelineFocus({ year: ev.inworld_year, month: ev.inworld_month, day: ev.inworld_day }); setTimeout(() => axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }} title="На оси">Ось</button>
+            <button className="comp-mini" onClick={() => { calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На календаре">Календарь</button>
             <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
           </div>
         </div>
@@ -1087,7 +1097,7 @@ export function SettingDetailPage() {
 
       {tab === "Хроника мира" && (
         <div className="stack">
-          <div className="card stack">
+          <div ref={calendarRef} className="card stack">
             <SettingCalendarEditor
               settingId={settingId}
               items={calendarItems}
@@ -1106,7 +1116,7 @@ export function SettingDetailPage() {
               заводится один раз при создании сеттинга. */}
           <SettingCycles settingId={settingId} />
 
-          <div className="card stack">
+          <div ref={axisRef} className="card stack">
             <div className="tabs" style={{ justifyContent: "space-between", width: "100%" }}>
               <div className="row" style={{ gap: 0 }}>
                 <button className={chronicleView === "list" ? "active" : ""} onClick={() => setChronicleView("list")}>Список</button>
@@ -1152,6 +1162,7 @@ export function SettingDetailPage() {
 
             {chronicleView === "axis" && (
               <Timeline
+                focusDate={timelineFocus}
                 events={filteredCalendarEvents.map((e) => ({
                   id: e.id,
                   title: e.title,

@@ -2414,16 +2414,18 @@ th, td {
   padding: 4px 4px 8px;
 }
 .month-calendar .day {
-  min-height: 64px;
-  min-width: 0; /* lets the cell actually shrink to its minmax(0,1fr) track */
-  border: var(--card-border-width) solid var(--line);
+  min-height: 0;
+  aspect-ratio: 1;
+  min-width: 0;
+  border: var(--card-border-width) solid transparent;
   border-radius: var(--card-radius);
   padding: 4px;
-  background: var(--paper-2);
+  background: transparent;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
 }
 .month-calendar .day:hover {
   border-color: var(--accent);

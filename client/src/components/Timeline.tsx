@@ -37,6 +37,7 @@ const ZOOMS: { key: DatePrecision; label: string; pxPerDay: number }[] = [
   { key: "year", label: "Год", pxPerDay: 0.22 },
   { key: "month", label: "Месяц", pxPerDay: 2.2 },
   { key: "day", label: "День", pxPerDay: 14 },
+  { key: "day", label: "3 дня", pxPerDay: 280 },
 ];
 
 // Ближе этого события считаются слипшимися и сворачиваются в одну метку.
@@ -61,6 +62,7 @@ export function Timeline({
   onEventClick,
   title,
   action,
+  focusDate,
 }: {
   events: TimelineEvent[];
   months: CalendarMonth[];
@@ -73,6 +75,7 @@ export function Timeline({
   onEventClick?: (id: number) => void;
   title?: string;
   action?: React.ReactNode;
+  focusDate?: { year: number; month: number; day: number } | null;
 }) {
   const [zoom, setZoom] = useState(2); // «Год» по умолчанию
   const [offsetDay, setOffsetDay] = useState(0);
@@ -115,6 +118,13 @@ export function Timeline({
       : dayOf(events[events.length - 1].year, events[events.length - 1].month, events[events.length - 1].day);
     setOffsetDay(anchor - width / 2 / pxPerDay);
   }, [events, now, width, pxPerDay, dayOf]);
+
+  useEffect(() => {
+    if (!focusDate) return;
+    const day = dayOf(focusDate.year, focusDate.month, focusDate.day);
+    setOffsetDay(day - width / 2 / pxPerDay);
+    touched.current = true;
+  }, [focusDate, dayOf, width, pxPerDay]);
 
   const xOf = useCallback((day: number) => (day - offsetDay) * pxPerDay, [offsetDay, pxPerDay]);
   const dayAt = useCallback((x: number) => offsetDay + x / pxPerDay, [offsetDay, pxPerDay]);

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CalendarMonth, CalendarWeekday, ImportantDate } from "../types";
 import { weekdayIndexFor } from "../inworldCalendar";
 
@@ -26,6 +26,7 @@ interface Props {
   onItemClick?: (item: InworldDatedItem) => void;
   onItemContextMenu?: (item: InworldDatedItem, x: number, y: number) => void;
   onImportantDateContextMenu?: (date: ImportantDate, x: number, y: number) => void;
+  focusDate?: { year: number; month: number } | null;
 }
 
 export function InworldCalendar({
@@ -42,11 +43,15 @@ export function InworldCalendar({
   onItemClick,
   onItemContextMenu,
   onImportantDateContextMenu,
+  focusDate,
 }: Props) {
   const [cursor, setCursor] = useState({
     year: initialYear ?? pinned?.year ?? 1,
     month: initialMonth ?? pinned?.month ?? 1,
   });
+  useEffect(() => {
+    if (focusDate) setCursor({ year: focusDate.year, month: focusDate.month });
+  }, [focusDate?.year, focusDate?.month]);
 
   if (months.length === 0) {
     return <p className="muted">Календарь сеттинга не настроен.</p>;
@@ -133,7 +138,7 @@ export function InworldCalendar({
       >
         {weekdays.map((w) => (
           <div key={w.id} className="weekday">
-            {w.name}
+            {w.name.slice(0, 3)}
           </div>
         ))}
         {cells.map((c, i) => {

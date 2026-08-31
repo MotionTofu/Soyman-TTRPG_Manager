@@ -237,38 +237,33 @@ campaignsRouter.put("/:id", (req, res) => {
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
-  db.prepare(
-    `UPDATE campaigns SET
-       name = COALESCE(?, name),
-       role = COALESCE(?, role),
-       system_id = COALESCE(?, system_id),
-       setting_id = COALESCE(?, setting_id),
-       status = COALESCE(?, status),
-       type = COALESCE(?, type),
-       payment_type = COALESCE(?, payment_type),
-       payment_frequency = COALESCE(?, payment_frequency),
-       rate_split = COALESCE(?, rate_split),
-       session_rate = COALESCE(?, session_rate),
-       currency = COALESCE(?, currency),
-       group_theme_litm = COALESCE(?, group_theme_litm),
-       folder_path = ?
-     WHERE id = ?`
-  ).run(
-    name ?? null,
-    role ?? null,
-    system_id ?? null,
-    setting_id ?? null,
-    status ?? null,
-    type ?? null,
-    payment_type ?? null,
-    payment_frequency ?? null,
-    rate_split ?? null,
-    session_rate ?? null,
-    currency ?? null,
-    group_theme_litm ?? null,
-    folderPath,
-    req.params.id
-  );
+  // C-P0-5: COALESCE(NULL, col)=col — нельзя отвязать system_id/setting_id. Собираем SET только по ключам, присутствующим в body (явный null = отвязать).
+  const body = req.body as Record<string, unknown>;
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  function setIfPresent(key: string, col: string) {
+    if (key in body) { sets.push(`${col} = ?`); vals.push(body[key] as unknown); }
+  }
+  // name/role/type/status/payment_* — тоже через presence, чтобы не затирать, но и дать шанс очистить группу тем
+  setIfPresent("name", "name");
+  setIfPresent("role", "role");
+  setIfPresent("system_id", "system_id");
+  setIfPresent("setting_id", "setting_id");
+  setIfPresent("status", "status");
+  setIfPresent("type", "type");
+  setIfPresent("payment_type", "payment_type");
+  setIfPresent("payment_frequency", "payment_frequency");
+  setIfPresent("rate_split", "rate_split");
+  setIfPresent("session_rate", "session_rate");
+  setIfPresent("currency", "currency");
+  setIfPresent("group_theme_litm", "group_theme_litm");
+  sets.push("folder_path = ?");
+  vals.push(folderPath);
+  if (sets.length > 1 || vals.length > 1) {
+    db.prepare(`UPDATE campaigns SET ${sets.join(", ")} WHERE id = ?`).run(...vals, req.params.id);
+  } else {
+    db.prepare(`UPDATE campaigns SET folder_path = ? WHERE id = ?`).run(folderPath, req.params.id);
+  }
   res.json(db.prepare("SELECT * FROM campaigns WHERE id = ?").get(req.params.id));
 });
 

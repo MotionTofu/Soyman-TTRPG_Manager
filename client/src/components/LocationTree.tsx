@@ -32,6 +32,7 @@ export function LocationTree({ settingId }: Props) {
   const [lastArchived, setLastArchived] = useState<{ id: number; name: string } | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [mapFilter, setMapFilter] = useState<"" | "with" | "without">("");
+  const [descFilter, setDescFilter] = useState<"" | "with" | "without">("");
   const [confirmDialog, confirm] = useConfirm();
   const treeRef = useRef<HTMLDivElement>(null);
 
@@ -106,6 +107,8 @@ export function LocationTree({ settingId }: Props) {
     : locations;
   if (mapFilter === "with") filteredLocations = filteredLocations.filter((l) => !!(l.map_image_path || l.map_image_url));
   else if (mapFilter === "without") filteredLocations = filteredLocations.filter((l) => !(l.map_image_path || l.map_image_url));
+  if (descFilter === "with") filteredLocations = filteredLocations.filter((l) => !!(l.description ?? "").trim());
+  else if (descFilter === "without") filteredLocations = filteredLocations.filter((l) => !(l.description ?? "").trim());
 
   const byParent = new Map<number | null, SettingLocation[]>();
   const byParentAll = new Map<number | null, SettingLocation[]>();
@@ -133,6 +136,39 @@ export function LocationTree({ settingId }: Props) {
     }
   }
   const roots = byParent.get(null) ?? [];
+
+  const stats = (() => {
+    const withoutDesc = locations.filter((l) => !(l.description ?? "").trim()).length;
+    const withoutMap = locations.filter((l) => !(l.map_image_path || l.map_image_url)).length;
+    let maxDepth = 0;
+    const queue: Array<{ id: number; d: number }> = roots.map((r) => ({ id: r.id, d: 1 }));
+    const visited = new Set<number>();
+    while (queue.length) {
+      const cur = queue.shift()!;
+      if (visited.has(cur.id)) continue;
+      visited.add(cur.id);
+      maxDepth = Math.max(maxDepth, cur.d);
+      for (const child of byParentAll.get(cur.id) ?? []) queue.push({ id: child.id, d: cur.d + 1 });
+    }
+    return { total: locations.length, withoutDesc, withoutMap, maxDepth };
+  })();
+
+  const minimapItems = (() => {
+    const out: Array<{ id: number; name: string; depth: number; hasMap: boolean }> = [];
+    const stack: Array<{ id: number; depth: number }> = roots.map((r) => ({ id: r.id, depth: 0 })).reverse();
+    const visited = new Set<number>();
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (visited.has(cur.id)) continue;
+      visited.add(cur.id);
+      const loc = byIdAll.get(cur.id);
+      if (!loc) continue;
+      out.push({ id: loc.id, name: loc.name, depth: cur.depth, hasMap: !!(loc.map_image_path || loc.map_image_url) });
+      const kids = (byParentAll.get(cur.id) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, "ru", { numeric: true }));
+      for (let i = kids.length - 1; i >= 0; i--) stack.push({ id: kids[i].id, depth: cur.depth + 1 });
+    }
+    return out;
+  })();
 
   function breadcrumb(loc: SettingLocation): string {
     const parts: string[] = [];
@@ -207,6 +243,30 @@ export function LocationTree({ settingId }: Props) {
     }
   }
 
+  function handleTreeKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const target = e.target as HTMLElement;
+    if (target.tagName !== "SUMMARY") return;
+    const summaries = Array.from(treeRef.current?.querySelectorAll("summary.geography-node-header") ?? []) as HTMLElement[];
+    const idx = summaries.indexOf(target);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      summaries[Math.min(idx + 1, summaries.length - 1)]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      summaries[Math.max(idx - 1, 0)]?.focus();
+    } else if (e.key === "ArrowRight") {
+      const details = target.parentElement as HTMLDetailsElement;
+      if (!details.open) details.open = true;
+    } else if (e.key === "ArrowLeft") {
+      const details = target.parentElement as HTMLDetailsElement;
+      if (details.open) details.open = false;
+      else {
+        const parentDetails = target.closest(".geography-children")?.parentElement as HTMLDetailsElement | null;
+        parentDetails?.querySelector<HTMLElement>("summary.geography-node-header")?.focus();
+      }
+    }
+  }
+
   const q = debouncedQuery.trim().toLowerCase();
   const matches = q
     ? filteredLocations.filter((l) => {
@@ -214,11 +274,37 @@ export function LocationTree({ settingId }: Props) {
         return hay.includes(q);
       })
     : null;
-  const flatFiltered = !q && kindFilterLower ? [...filteredLocations].sort((a, b) => {
+  const flatFiltered = !q && (kindFilterLower || mapFilter || descFilter) ? [...filteredLocations].sort((a, b) => {
     if (sortMode === "kind") return (a.kind ?? "").toLowerCase().localeCompare((b.kind ?? "").toLowerCase(), "ru") || a.name.localeCompare(b.name, "ru", { numeric: true });
     return a.name.localeCompare(b.name, "ru", { numeric: true });
   }) : null;
   const flatList = matches ?? flatFiltered;
+
+  // Auto-expand ancestors of search matches so highlight is visible in tree (when not using flat list)
+  useEffect(() => {
+    const qq = debouncedQuery.trim().toLowerCase();
+    if (!qq || !treeRef.current) return;
+    // When flatList is active, tree is hidden — no need to expand
+    if (flatList) return;
+    const matching = locations.filter((l) => {
+      const hay = [l.name, l.kind ?? "", l.name_original ?? "", ...(l.aliases ?? [])].join(" ").toLowerCase();
+      return hay.includes(qq);
+    });
+    const toOpen = new Set<number>();
+    for (const m of matching) {
+      let cur: SettingLocation | undefined = m;
+      const visited = new Set<number>();
+      while (cur && cur.parent_id != null && !visited.has(cur.id)) {
+        visited.add(cur.id);
+        toOpen.add(cur.parent_id);
+        cur = byIdAll.get(cur.parent_id);
+      }
+    }
+    treeRef.current.querySelectorAll("details[data-location-id]").forEach((el) => {
+      const id = Number((el as HTMLElement).dataset.locationId);
+      if (toOpen.has(id)) (el as HTMLDetailsElement).open = true;
+    });
+  }, [debouncedQuery, locations, flatList]);
 
   if (loading && locations.length === 0 && !loadError) {
     return (
@@ -263,11 +349,29 @@ export function LocationTree({ settingId }: Props) {
         <button onClick={collapseAll} disabled={roots.length === 0}>
           Свернуть все
         </button>
-        <span className="muted" style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 11 }}>
-          Всего: {filteredLocations.length}
-          {kindFilter ? ` / ${locations.length}` : ""}
-        </span>
       </div>
+      {stats.total > 0 && (
+        <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: 11, fontFamily: "var(--font-mono)" }}>
+          <span>
+            Всего: {filteredLocations.length}
+            {filteredLocations.length !== stats.total ? ` / ${stats.total}` : ""}
+          </span>
+          <span>Глубина: {stats.maxDepth}</span>
+          <span style={{ color: stats.withoutDesc ? "var(--status-cancelled-fg)" : undefined }}>Без описания: {stats.withoutDesc}</span>
+          <span style={{ color: stats.withoutMap ? "var(--status-cancelled-fg)" : undefined }}>Без карты: {stats.withoutMap}</span>
+          {(stats.withoutDesc > 0 || stats.withoutMap > 0) && (
+            <button
+              style={{ fontSize: 11, padding: "2px 6px" }}
+              onClick={() => {
+                if (stats.withoutDesc > 0) setDescFilter("without");
+                else setMapFilter("without");
+              }}
+            >
+              Показать долги
+            </button>
+          )}
+        </div>
+      )}
       {lastArchived && (
         <div
           className="card"
@@ -324,56 +428,77 @@ export function LocationTree({ settingId }: Props) {
           }}
         />
       )}
-      <div className="row" style={{ alignItems: "center" }}>
-        <input
-          placeholder="Поиск по названию, типу, алиасам…"
-          value={rawQuery}
-          onChange={(e) => setRawQuery(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        {rawQuery && <button onClick={() => setRawQuery("")}>✕</button>}
-      </div>
-      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-        {uniqueKinds.length > 0 && (
-          <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
-            <option value="">Все типы</option>
-            {uniqueKinds.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
+      <div className="row" style={{ alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="row" style={{ alignItems: "center" }}>
+            <input
+              placeholder="Поиск по названию, типу, алиасам…"
+              value={rawQuery}
+              onChange={(e) => setRawQuery(e.target.value)}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            {rawQuery && <button onClick={() => setRawQuery("")}>✕</button>}
+          </div>
+          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+            {uniqueKinds.length > 0 && (
+              <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
+                <option value="">Все типы</option>
+                {uniqueKinds.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select value={mapFilter} onChange={(e) => setMapFilter(e.target.value as "" | "with" | "without")}>
+              <option value="">Все карты</option>
+              <option value="with">С картой</option>
+              <option value="without">Без карты</option>
+            </select>
+            <select value={descFilter} onChange={(e) => setDescFilter(e.target.value as "" | "with" | "without")}>
+              <option value="">Все описания</option>
+              <option value="with">С описанием</option>
+              <option value="without">Без описания</option>
+            </select>
+            <select value={sortMode} onChange={(e) => setSortMode(e.target.value as "name" | "kind")} title="Сортировка">
+              <option value="name">Сорт: по имени</option>
+              <option value="kind">Сорт: по типу</option>
+            </select>
+            {(kindFilter || mapFilter || descFilter || sortMode !== "name") && (
+              <button
+                onClick={() => {
+                  setKindFilter("");
+                  setMapFilter("");
+                  setDescFilter("");
+                  setSortMode("name");
+                }}
+              >
+                Сбросить
+              </button>
+            )}
+          </div>
+          <datalist id="geo-kind-list">
+            {KIND_SUGGESTIONS.map((k) => (
+              <option key={k} value={k} />
             ))}
-          </select>
-        )}
-        <select value={mapFilter} onChange={(e) => setMapFilter(e.target.value as "" | "with" | "without")}>
-          <option value="">Все карты</option>
-          <option value="with">С картой</option>
-          <option value="without">Без карты</option>
-        </select>
-        <select value={sortMode} onChange={(e) => setSortMode(e.target.value as "name" | "kind")} title="Сортировка">
-          <option value="name">Сорт: по имени</option>
-          <option value="kind">Сорт: по типу</option>
-        </select>
-        {(kindFilter || mapFilter || sortMode !== "name") && (
-          <button
-            onClick={() => {
-              setKindFilter("");
-              setMapFilter("");
-              setSortMode("name");
-            }}
-          >
-            Сбросить
-          </button>
-        )}
-      </div>
-      <datalist id="geo-kind-list">
-        {KIND_SUGGESTIONS.map((k) => (
-          <option key={k} value={k} />
-        ))}
-      </datalist>
-      {flatList ? (
-        <div className="stack" style={{ gap: 4 }}>
+          </datalist>
+          {flatList ? (
+        <div
+          className="stack"
+          style={{
+            gap: 4,
+            maxHeight: flatList.length > 80 ? "60vh" : undefined,
+            overflowY: flatList.length > 80 ? "auto" : undefined,
+            paddingRight: flatList.length > 80 ? 4 : undefined,
+          }}
+        >
           {flatList.map((l) => (
-            <Link key={l.id} to={`/locations/${l.id}`} className="card row" style={{ justifyContent: "space-between" }}>
+            <Link
+              key={l.id}
+              to={`/locations/${l.id}`}
+              className="card row"
+              style={{ justifyContent: "space-between", contentVisibility: flatList.length > 80 ? ("auto" as const) : undefined, containIntrinsicSize: flatList.length > 80 ? "0 48px" : undefined }}
+            >
               <span className="muted">{highlight(breadcrumb(l), debouncedQuery || kindFilter)}</span>
               {l.kind && <span className="muted">{highlight(l.kind, debouncedQuery || kindFilter)}</span>}
             </Link>
@@ -381,12 +506,14 @@ export function LocationTree({ settingId }: Props) {
           {flatList.length === 0 && (
             <EmptyState
               title="Ничего не найдено"
-              hint={`По запросу «${(debouncedQuery || kindFilter).trim()}» локаций нет.`}
+              hint={`По запросу «${(debouncedQuery || kindFilter || mapFilter || descFilter).trim()}» локаций нет.`}
               action={
                 <button
                   onClick={() => {
                     setRawQuery("");
                     setKindFilter("");
+                    setMapFilter("");
+                    setDescFilter("");
                   }}
                 >
                   Сбросить фильтры
@@ -396,9 +523,10 @@ export function LocationTree({ settingId }: Props) {
           )}
         </div>
       ) : (
-        <div
-          className="stack geography-drop-root"
+          <div
+            className="stack geography-drop-root"
           ref={treeRef}
+          onKeyDown={handleTreeKeyDown}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDropRoot}
           onDragLeave={(e) => {
@@ -409,7 +537,7 @@ export function LocationTree({ settingId }: Props) {
             e.preventDefault();
             (e.currentTarget as HTMLElement).classList.add("drag-over");
           }}
-          style={{ minHeight: roots.length === 0 ? 40 : undefined, border: draggedId != null ? "1px dashed var(--line)" : undefined, padding: draggedId != null ? 8 : undefined }}
+          style={{ flex: 1, minWidth: 0, minHeight: roots.length === 0 ? 40 : undefined, border: draggedId != null ? "1px dashed var(--line)" : undefined, padding: draggedId != null ? 8 : undefined }}
         >
           {roots.map((l) => (
             <LocationNode
@@ -423,6 +551,7 @@ export function LocationTree({ settingId }: Props) {
               draggedId={draggedId}
               setDraggedId={setDraggedId}
               isDescendant={isDescendant}
+              highlightQuery={debouncedQuery}
             />
           ))}
           {roots.length === 0 && !loading && !loadError && (
@@ -441,8 +570,48 @@ export function LocationTree({ settingId }: Props) {
               Перетащите на узел чтобы вложить, или сюда чтобы вернуть на верхний уровень
             </p>
           )}
+          </div>
         </div>
-      )}
+        {minimapItems.length > 10 && (
+          <div
+            style={{
+              position: "sticky",
+              top: 12,
+              width: 80,
+              maxHeight: "60vh",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              padding: 4,
+              border: "1px solid var(--line)",
+              background: "var(--paper-2)",
+              flexShrink: 0,
+            }}
+            title="Мини-карта иерархии — клик скроллит к узлу"
+          >
+            {minimapItems.map((it) => (
+              <div
+                key={it.id}
+                onClick={() => {
+                  const el = treeRef.current?.querySelector(`details[data-location-id="${it.id}"]`) as HTMLElement | null;
+                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  if (el && !(el as HTMLDetailsElement).open) (el as HTMLDetailsElement).open = true;
+                }}
+                title={it.name}
+                style={{
+                  height: 6,
+                  marginLeft: it.depth * 6,
+                  background: it.hasMap ? "var(--status-held)" : "var(--muted)",
+                  opacity: it.hasMap ? 1 : 0.55,
+                  borderRadius: 1,
+                  cursor: "pointer",
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -457,6 +626,7 @@ export function LocationNode({
   draggedId,
   setDraggedId,
   isDescendant,
+  highlightQuery,
 }: {
   location: SettingLocation;
   byParent: Map<number | null, SettingLocation[]>;
@@ -467,6 +637,7 @@ export function LocationNode({
   draggedId?: number | null;
   setDraggedId?: (id: number | null) => void;
   isDescendant?: (ancestorId: number, maybeDescendantId: number) => boolean;
+  highlightQuery?: string;
 }) {
   const [addingChild, setAddingChild] = useState(false);
   const [childName, setChildName] = useState("");
@@ -509,6 +680,20 @@ export function LocationNode({
     if (k.includes("таверна") || k.includes("храм") || k.includes("замок") || k.includes("башня") || k.includes("здание") || k.includes("дом")) return "book";
     if (k.includes("город") || k.includes("деревн") || k.includes("селен") || k.includes("посел")) return "map";
     return "map";
+  }
+
+  function hl(text: string): React.ReactNode {
+    const q = (highlightQuery ?? "").trim();
+    if (!q) return text;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark style={{ background: "color-mix(in srgb, var(--accent) 22%, transparent)", padding: "0 1px" }}>{text.slice(idx, idx + q.length)}</mark>
+        {text.slice(idx + q.length)}
+      </>
+    );
   }
 
   async function addChild() {
@@ -665,11 +850,24 @@ export function LocationNode({
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       <details ref={detailsRef} className="card" draggable onDragStart={handleDragStart} onDragEnd={handleDragEnd} data-location-id={location.id}>
         <summary
+          tabIndex={0}
           className={`geography-node-header${dragOver ? " drag-over" : ""}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onContextMenu={openContextMenu}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              navigate(`/locations/${location.id}`);
+            } else if (e.key === "F2") {
+              e.preventDefault();
+              startEdit();
+            } else if (e.key === "Delete") {
+              e.preventDefault();
+              archive();
+            }
+          }}
           style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}
         >
           <span className="row" style={{ justifyContent: "space-between", alignItems: "center", width: "100%" }}>
@@ -685,8 +883,8 @@ export function LocationNode({
               >
                 <NavIcon name={iconForKind(location.kind ?? "")} />
               </span>
-              <strong>{location.name}</strong>
-              {location.kind && <span className="geography-kind"> · {location.kind}</span>}
+              <strong>{hl(location.name)}</strong>
+              {location.kind && <span className="geography-kind"> · {hl(location.kind)}</span>}
               {depthCounts.length > 0 && (
                 <span className="geography-node-count" style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
                   ·
@@ -729,17 +927,6 @@ export function LocationNode({
               >
                 <NavIcon name="plus" /> Вложенная
               </button>
-              {onWizardParent && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onWizardParent(location.id);
-                  }}
-                  title="Создать вложенную через визард (с описанием, алиасами, обитателями)"
-                >
-                  Визард
-                </button>
-              )}
               <button
                 onClick={(e) => {
                   e.preventDefault();
@@ -857,6 +1044,7 @@ export function LocationNode({
               draggedId={draggedId}
               setDraggedId={setDraggedId}
               isDescendant={isDescendant}
+              highlightQuery={highlightQuery}
             />
           ))}
         </div>
