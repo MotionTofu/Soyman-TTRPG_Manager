@@ -143,7 +143,7 @@ export function PlayerDetailPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
         <div className="row" style={{ alignItems: "flex-start" }}>
           <label className="avatar-upload-label" title={IMAGE_HINT}>

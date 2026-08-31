@@ -136,7 +136,7 @@ export function PlayersListPage() {
   }
 
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className="stack" style={{ position: "relative", paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="players" compact>Игроки</SectionHeading>
