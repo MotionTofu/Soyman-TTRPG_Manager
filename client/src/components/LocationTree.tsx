@@ -571,6 +571,7 @@ export function LocationTree({ settingId }: Props) {
             </p>
           )}
           </div>
+        )}
         </div>
         {minimapItems.length > 10 && (
           <div

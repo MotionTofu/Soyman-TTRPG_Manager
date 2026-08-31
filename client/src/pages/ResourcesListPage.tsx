@@ -112,7 +112,7 @@ export function ResourcesListPage() {
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
-      <SectionHeading section="resources">Ресурсы</SectionHeading>
+      <SectionHeading section="resources" compact>Ресурсы</SectionHeading>
 
       <div className="tabs">
         <button className={section === "all" ? "active" : ""} onClick={() => setSection("all")}>

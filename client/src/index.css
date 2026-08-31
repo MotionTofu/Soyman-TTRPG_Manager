@@ -1438,6 +1438,9 @@ h4 { font-size: var(--fs-body); }
   position: relative;
   z-index: 1;
 }
+.section-heading h1[data-section="canvas"] {
+  text-transform: none;
+}
 /* Compact page heading (вар.1 для /campaigns) — сохраняет h1/частицы, но
    срезает воздух. Откат: убрать prop compact → вернётся 6 частиц и inset
    -14px -22px + margin 0 0 8px. */
@@ -9160,8 +9163,16 @@ details[open] > .res-group__band .chevron-icon {
   letter-spacing: 0.08em;
 }
 .campaign-group-chip.is-in {
-  border-color: var(--accent);
-  background: var(--accent-bg, rgba(79, 140, 255, 0.08));
+  border-color: var(--line);
+  background: var(--bg-elevated);
+}
+.campaign-group-chip.is-in::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  flex-shrink: 0;
+  margin-right: 2px;
 }
 .campaign-group-chip input[type="checkbox"] {
   width: auto;

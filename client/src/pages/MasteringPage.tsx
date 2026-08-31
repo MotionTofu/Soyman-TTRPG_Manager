@@ -213,7 +213,7 @@ export function MasteringPage() {
   const unsectioned = bySection.get(null) ?? [];
 
   return (
-    <div className="stack" style={{ gap: 24, position: "relative" }}>
+    <div className="stack" style={{ gap: 10, position: "relative" }}>
       <SectionBackground />
       <SectionHeading section="mastering" compact>
         Мастерение

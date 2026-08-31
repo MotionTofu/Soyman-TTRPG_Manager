@@ -68,7 +68,7 @@ export function Timeline({
   months: CalendarMonth[];
   era: string;
   /** «Сейчас» в мире. Рисуется красной стрелкой, её можно тянуть. */
-  now: { year: number; month: number } | null;
+  now: { year: number; month: number; day?: number } | null;
   cycles?: SettingCycle[];
   onMoveEvent?: (id: number, date: { year: number; month: number; day: number; precision: DatePrecision }) => void;
   onNowChange?: (date: { year: number; month: number }) => void;
@@ -114,7 +114,7 @@ export function Timeline({
   useEffect(() => {
     if (touched.current || events.length === 0) return;
     const anchor = now
-      ? dayOf(now.year, now.month, 1)
+      ? dayOf(now.year, now.month, now.day ?? 1)
       : dayOf(events[events.length - 1].year, events[events.length - 1].month, events[events.length - 1].day);
     setOffsetDay(anchor - width / 2 / pxPerDay);
   }, [events, now, width, pxPerDay, dayOf]);
@@ -255,7 +255,7 @@ export function Timeline({
     return out;
   }, [cycles, precision, offsetDay, width, pxPerDay, dayOf, xOf]);
 
-  const nowX = now ? xOf(dayOf(now.year, now.month, 1)) : null;
+  const nowX = now ? xOf(dayOf(now.year, now.month, now.day ?? 1)) : null;
 
   // Стрелку «сейчас» тянут только на годе и мельче: на столетии один пиксель
   // это несколько лет, и «сейчас» уехало бы от дрожания руки.
@@ -305,11 +305,11 @@ export function Timeline({
           ))}
         </div>
         <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-          {now && (
-            <button onClick={() => setOffsetDay(dayOf(now.year, now.month, 1) - width / 2 / pxPerDay)}>
-              К «сейчас»
-            </button>
-          )}
+        {now && (
+          <button onClick={() => setOffsetDay(dayOf(now.year, now.month, now.day ?? 1) - width / 2 / pxPerDay)}>
+            К «сейчас»
+          </button>
+        )}
           {action}
         </div>
       </div>

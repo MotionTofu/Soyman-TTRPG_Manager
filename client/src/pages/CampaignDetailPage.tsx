@@ -184,6 +184,37 @@ export function CampaignDetailPage() {
     if (worldSort === "desc") list = [...list].reverse();
     return list;
   }, [sortedCalendarEvents, worldFilter, worldSort]);
+  const timelineNow = useMemo(() => {
+    const held = sessions.filter((s) => s.status === "held" && s.inworld_year != null);
+    if (held.length > 0) {
+      const sorted = [...held].sort((a, b) => {
+        const aY = a.inworld_year_end ?? a.inworld_year!;
+        const bY = b.inworld_year_end ?? b.inworld_year!;
+        if (aY !== bY) return aY - bY;
+        const aM = a.inworld_month_end ?? a.inworld_month!;
+        const bM = b.inworld_month_end ?? b.inworld_month!;
+        if (aM !== bM) return aM - bM;
+        const aD = a.inworld_day_end ?? a.inworld_day!;
+        const bD = b.inworld_day_end ?? b.inworld_day!;
+        return aD - bD;
+      });
+      const last = sorted[sorted.length - 1];
+      return {
+        year: last.inworld_year_end ?? last.inworld_year!,
+        month: last.inworld_month_end ?? last.inworld_month!,
+        day: last.inworld_day_end ?? last.inworld_day!,
+      };
+    }
+    if (campaign?.pinned_calendar_year != null && campaign?.pinned_calendar_month != null) {
+      return { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month, day: 1 };
+    }
+    return null;
+  }, [sessions, campaign]);
+  const inworldTodayStr = useMemo(() => {
+    if (!calendar || !timelineNow) return null;
+    const monthName = calendar.months.find((m) => m.position === timelineNow.month)?.name ?? String(timelineNow.month);
+    return "Сегодня: " + timelineNow.day + " " + monthName + " " + timelineNow.year + (calendar.era ? " " + calendar.era : "");
+  }, [calendar, timelineNow]);
   const [chronicleFilter, setChronicleFilter] = useState("");
   const [showCancelled, setShowCancelled] = useState(false);
   const [chronicleSort, setChronicleSort] = useState<"asc" | "desc">("desc");
@@ -530,10 +561,11 @@ export function CampaignDetailPage() {
   return (
     <div className="stack" style={{ position: "relative" }}>
       {safeBgLayer && (
-        <div
-          className="campaign-bg-layer cover-photo cover-halftone"
-          style={{ backgroundImage: safeBgLayer }}
-        />
+        <div className="campaign-bg-layer cover-photo cover-halftone">
+          <div className="cover-art cover-photo">
+            <div className="cover-art-image" style={{ backgroundImage: safeBgLayer }} aria-hidden="true" />
+          </div>
+        </div>
       )}
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
@@ -866,11 +898,7 @@ export function CampaignDetailPage() {
               ]}
               months={calendar?.months ?? []}
               era={calendar?.era ?? ""}
-              now={
-                campaign.pinned_calendar_year != null && campaign.pinned_calendar_month != null
-                  ? { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month }
-                  : null
-              }
+              now={timelineNow}
               cycles={cycles}
               onMoveEvent={moveCampaignEvent}
               onNowChange={(date) => pinCampaignCalendar(date)}
@@ -943,7 +971,7 @@ export function CampaignDetailPage() {
               <details className="card res-group" open>
                 <summary className="res-group__band">
                   <span className="res-group__title">Календарь</span>
-                  <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{`Сегодня: ${new Date().getDate()} ${["Января","Февраля","Марта","Апреля","Мая","Июня","Июля","Августа","Сентября","Октября","Ноября","Декабря"][new Date().getMonth()]} ${new Date().getFullYear()}`}</span>
+                  <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{inworldTodayStr ?? "—"}</span>
                 </summary>
                 <div className="res-group__body" style={{ padding: 12 }}>
                   {!campaign.setting_id ? (
@@ -1796,6 +1824,7 @@ function PlayerOverviewTab({
                 <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
                   {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                 </select>
+                <span className="muted" style={{ fontSize: 11 }}>Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
               </label>
               {form.payment_type === "paid" && (
                 <>
@@ -1815,7 +1844,8 @@ function PlayerOverviewTab({
                     <span className="campaign-field-label">Ставка{" "}
                       {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
                       {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}</span>
-                    <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} />
+                    <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} placeholder="500" />
+                    <span className="muted" style={{ fontSize: 11 }}>С человека — сумма × игроков, со стола — фикс за игру</span>
                   </label>
                 </>
               )}
@@ -1846,6 +1876,7 @@ function PlayerOverviewTab({
 
           <div style={{ marginTop: 8 }}>
             <span className="campaign-field-label" style={{ fontSize: 11 }}>Группы кампаний</span>
+            <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: 11 }}>Настроить группы →</Link>
             {allGroups.length > 0 ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
                 {allGroups.map((g) => {
@@ -1914,6 +1945,7 @@ function OverviewTab({
   const [saving, setSaving] = useState(false);
   const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
   const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
+  const [adventuresCount, setAdventuresCount] = useState<number | null>(null);
   const [form, setForm] = useState({
     name: campaign.name,
     type: campaign.type,
@@ -1938,6 +1970,19 @@ function OverviewTab({
     await api.post(`/campaigns/${campaignId}/thumbnail`, fd);
     onRefresh();
   });
+  const [ovConfirmDialog, ovConfirm] = useConfirm();
+  async function deleteBg() {
+    const ok = await ovConfirm({ message: "Удалить фон кампании?", confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
+    await api.del(`/campaigns/${campaignId}/background`);
+    onRefresh();
+  }
+  async function deleteThumb() {
+    const ok = await ovConfirm({ message: "Удалить тамбнейл?", confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
+    await api.del(`/campaigns/${campaignId}/thumbnail`);
+    onRefresh();
+  }
 
   async function save(partial: Record<string, unknown>) {
     if (saving) return;
@@ -2045,6 +2090,7 @@ function OverviewTab({
                 <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
                   {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                 </select>
+                <span className="muted" style={{ fontSize: 11 }}>Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
               </label>
               {form.payment_type === "paid" && (
                 <>
@@ -2064,7 +2110,8 @@ function OverviewTab({
                     <span className="campaign-field-label">Ставка{" "}
                       {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
                       {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}</span>
-                    <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} />
+                    <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} placeholder="500" />
+                    <span className="muted" style={{ fontSize: 11 }}>С человека — сумма × игроков, со стола — фикс за игру</span>
                   </label>
                 </>
               )}
@@ -2095,6 +2142,7 @@ function OverviewTab({
 
           <div style={{ marginTop: 8 }}>
             <span className="campaign-field-label" style={{ fontSize: 11 }}>Группы кампаний</span>
+            <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: 11 }}>Настроить группы →</Link>
             {allGroups.length > 0 ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
                 {allGroups.map((g) => {
@@ -2132,9 +2180,10 @@ function OverviewTab({
       <details className="card res-group">
         <summary className="res-group__band">
           <span className="res-group__title">Приключения</span>
+          {adventuresCount != null && <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{adventuresCount}</span>}
         </summary>
         <div className="res-group__body" style={{ padding: 12 }}>
-          <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} />
+          <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} onCount={setAdventuresCount} />
         </div>
       </details>
 
@@ -2149,7 +2198,8 @@ function OverviewTab({
 
       <details className="card res-group" open>
         <summary className="res-group__band">
-          <span className="res-group__title">Продакшен</span>
+          <span className="res-group__title">Основное</span>
+          <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{campaignGroupIds.length} из {allGroups.length} групп</span>
         </summary>
         <div className="res-group__body" style={{ padding: 12 }}>
           <ProductionDashboard campaign={campaign} sessions={sessions} />
@@ -2164,7 +2214,7 @@ function OverviewTab({
         </summary>
         <div className="res-group__body" style={{ padding: 12 }}>
           <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ flex: "1 1 0", minWidth: 220 }}>
+          <div style={{ flex: "1 1 280px", minWidth: 260 }}>
             <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Фон страницы — на всю ширину, приглушён на 30 % (как в плитке):</div>
             {safeBg ? (
               <div className="campaign-tile-cover cover-halftone" style={{ border: "1px solid var(--line)", marginBottom: 8, aspectRatio: "16 / 10", background: "var(--paper-2)" }}>
@@ -2179,11 +2229,12 @@ function OverviewTab({
             <label>
               Заменить фон
               <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => bgCrop.onSelect(e.target.files?.[0] ?? null)} />
-              <span className="muted image-hint">{IMAGE_HINT}</span>
+              <span className="muted image-hint">{IMAGE_HINT} · Рекомендуем 1920×1080, до 15MB</span>
             </label>
+            {safeBg && <button className="danger comp-mini" style={{ marginTop: 6 }} onClick={deleteBg}>Удалить фон</button>}
             {bgCrop.modal}
           </div>
-          <div style={{ flex: "1 1 0", minWidth: 220 }}>
+          <div style={{ flex: "1 1 280px", minWidth: 260 }}>
             <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Тамбнейл — 16×10, так в сетке «Кампании» и на Главной:</div>
             {safeThumb ? (
               <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
@@ -2210,11 +2261,13 @@ function OverviewTab({
               <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
               <span className="muted image-hint">{IMAGE_HINT}</span>
             </label>
+            {safeThumb && <button className="danger comp-mini" style={{ marginTop: 6 }} onClick={deleteThumb}>Удалить тамбнейл</button>}
             {thumbCrop.modal}
           </div>
         </div>
         </div>
       </details>
+      {ovConfirmDialog}
     </div>
   );
 }
@@ -2254,10 +2307,12 @@ function ProductionDashboard({ campaign, sessions }: { campaign: CampaignDetail;
             {nextSession.date} — {nextSession.title || `Сессия №${nextSession.session_number ?? ""}`}
           </Link>
         ) : (
-          <div className="card" style={{ borderStyle: "dashed" }}>
-            <p style={{ maxWidth: "62ch" }}>Сессий не запланировано — время наметить следующую игру.</p>
-            <Link to="/sessions" className="campaign-actions"><button className="primary">Запланировать сессию</button></Link>
-          </div>
+          <EmptyState
+            icon="skullDie"
+            title="СЕССИЙ НЕ ЗАПЛАНИРОВАНО"
+            hint="Время наметить следующую игру — здесь появится ближайшая сессия."
+            action={<Link to="/sessions"><button className="primary">Запланировать сессию</button></Link>}
+          />
         )}
       </div>
       <div className="card stack">

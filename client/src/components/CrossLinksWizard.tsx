@@ -153,10 +153,11 @@ export function CrossLinksWizard({
   const picked = proposals?.filter((p) => chosen[proposalId(p)]).length ?? 0;
 
   return (
-    <details className="card">
-      <summary className="sb-section" style={{ margin: 0 }}>
-        Автолинковка упоминаний <span className="badge tag" style={{ marginLeft: 8, fontSize: "var(--fs-micro)" }}>beta</span>
+    <details className="card res-group">
+      <summary className="res-group__band">
+        <span className="res-group__title">Автолинковка упоминаний</span> <span className="badge tag" style={{ marginLeft: 8, fontSize: "var(--fs-micro)" }}>beta</span>
       </summary>
+      <div className="res-group__body" style={{ padding: 12 }}>
       <div className="stack" style={{ marginTop: 8 }}>
         <span className="muted">{help}</span>
 
@@ -300,6 +301,7 @@ export function CrossLinksWizard({
             })}
           </>
         )}
+      </div>
       </div>
     </details>
   );

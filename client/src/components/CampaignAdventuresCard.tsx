@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { MentionText } from "./mentions/MentionText";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
+import { EmptyState } from "./EmptyState";
 import { chapterWord, sceneWord } from "../sceneKinds";
 import type { StoryArc } from "../types";
 
@@ -34,9 +35,11 @@ type Draft = Record<string, string>;
 export function CampaignAdventuresCard({
   campaignId,
   settingId,
+  onCount,
 }: {
   campaignId: number;
   settingId: number | null;
+  onCount?: (n: number) => void;
 }) {
   const [adventures, setAdventures] = useState<StoryArc[]>([]);
   const [available, setAvailable] = useState<StoryArc[]>([]);
@@ -48,10 +51,15 @@ export function CampaignAdventuresCard({
       // «Сцены вне приключений» — служебная корзина сеттинга без синопсиса и
       // завязки; она нужна в разделе «Главы и сцены», а здесь была бы пустым
       // подблоком.
-      .then((rows) => setAdventures(rows.filter((a) => a.is_default !== 1)));
+      .then((rows) => {
+        const filtered = rows.filter((a) => a.is_default !== 1);
+        setAdventures(filtered);
+        onCount?.(filtered.length);
+      });
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [campaignId]);
+  useEffect(() => { onCount?.(adventures.length); }, [adventures.length, onCount]);
 
   async function openAdd() {
     const rows = await api.get<StoryArc[]>(
@@ -95,15 +103,12 @@ export function CampaignAdventuresCard({
         <AdventureBlock key={arc.id} arc={arc} campaignId={campaignId} onChange={refresh} onDetach={detach} />
       ))}
       {adventures.length === 0 && !adding && (
-        <div className="card" style={{ borderStyle: "dashed" }}>
-          <p>
-            Привяжите первое приключение из сеттинга — его главы и сцены станут планом кампании.
-            Правка здесь создаст версию для кампании, оригинал не тронется.
-          </p>
-          <button className="primary" onClick={openAdd}>
-            + Привязать приключение
-          </button>
-        </div>
+        <EmptyState
+          icon="issueStamp"
+          title="ПРИКЛЮЧЕНИЙ ЕЩЁ НЕТ"
+          hint="Привяжите первое из сеттинга — его главы и сцены станут планом кампании. Правка здесь создаст версию для кампании."
+          action={<button className="primary" onClick={openAdd}>+ Привязать приключение</button>}
+        />
       )}
 
       {adding ? (

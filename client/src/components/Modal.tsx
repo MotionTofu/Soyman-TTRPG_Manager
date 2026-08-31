@@ -25,10 +25,14 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
   // without losing the real "click outside to close" behavior.
   const mouseDownOnBackdrop = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    // Фокус на первый интерактив внутри модалки, иначе — на саму модалку
+    // Фокус на первый интерактив внутри модалки только при монтировании — иначе каждый ререндер (набор текста) прыгал бы на первое поле
     const focusable = modalRef.current?.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
@@ -39,7 +43,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !modalRef.current || !focusable || focusable.length === 0) return;
@@ -65,7 +69,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
       // Возврат фокуса на триггер
       prev?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return createPortal(
     <div
