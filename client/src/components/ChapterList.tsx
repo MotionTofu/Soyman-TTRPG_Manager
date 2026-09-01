@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { api } from "../api/client";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -42,6 +42,13 @@ interface Props<T extends ChapterLike> {
   // (routes/player.ts). Only meaningful for location/being chapters, the
   // narrow set of content that gets this treatment for now.
   visibilityToggle?: boolean;
+  // Custom content shown when the chapter list is empty. When omitted, the
+  // default "Пока пусто" muted text is used. Pass an <EmptyState> for
+  // main-screen sections per §11a/11b.
+  emptyState?: ReactNode;
+  // Optional title rendered as <h3> above the chapter list. Provides a
+  // consistent card-header pattern with EntityFieldsCard and AliasesCard.
+  listTitle?: string;
 }
 
 export function ChapterList<T extends ChapterLike>({
@@ -57,6 +64,8 @@ export function ChapterList<T extends ChapterLike>({
   defaultSettingId,
   campaigns,
   visibilityToggle,
+  emptyState,
+  listTitle,
 }: Props<T>) {
   const label = addLabel ?? (allowImage ? "предмет" : "главу");
   const [sortCampaignId, setSortCampaignId] = useState<number | "">("");
@@ -89,6 +98,16 @@ export function ChapterList<T extends ChapterLike>({
 
   return (
     <div className="stack">
+      {listTitle && (
+        <h3>
+          {listTitle}
+          {chapters.length > 0 && (
+            <span className="muted" style={{ fontWeight: 400, fontSize: "var(--fs-meta)", marginLeft: 6 }}>
+              {chapters.length}
+            </span>
+          )}
+        </h3>
+      )}
       {campaigns && chapters.length > 0 && (
         <label className="row" style={{ alignItems: "center", gap: 6 }}>
           <span className="muted">Сортировать по кампании</span>
@@ -123,7 +142,7 @@ export function ChapterList<T extends ChapterLike>({
       <button onClick={addChapter} style={{ alignSelf: "flex-start" }}>
         + Добавить {label}
       </button>
-      {chapters.length === 0 && <p className="muted">Пока пусто.</p>}
+      {chapters.length === 0 && (emptyState ?? <p className="muted">Пока пусто.</p>)}
     </div>
   );
 }

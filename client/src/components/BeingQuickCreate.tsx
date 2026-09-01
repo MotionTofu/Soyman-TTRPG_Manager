@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { CREATABLE_BEING_CATEGORIES } from "../beingCategories";
 import { LocationCascadePicker } from "./LocationCascadePicker";
@@ -35,6 +35,12 @@ export function BeingQuickCreate({
   const [communityIds, setCommunityIds] = useState<Set<number>>(new Set());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [baseMonster, setBaseMonster] = useState<SearchResult | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
   function toggleCommunity(id: number) {
     setCommunityIds((prev) => {
@@ -46,24 +52,42 @@ export function BeingQuickCreate({
   }
 
   async function create() {
-    if (!name.trim()) return;
-    await api.post("/setting-beings", {
-      setting_id: settingId,
-      name,
-      category,
-      location_id: showLocationPicker ? locationId : fixedLocationId,
-      community_ids: [...fixedCommunityIds, ...(showCommunityPicker ? [...communityIds] : [])],
-      base_monster_id: baseMonster?.id ?? null,
-    });
-    setName("");
-    setLocationId(null);
-    setCommunityIds(new Set());
-    setBaseMonster(null);
-    onCreated();
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const dedupIds = Array.from(new Set([...fixedCommunityIds, ...(showCommunityPicker ? [...communityIds] : [])]));
+      await api.post("/setting-beings", {
+        setting_id: settingId,
+        name: name.trim(),
+        category,
+        location_id: showLocationPicker ? locationId : fixedLocationId,
+        community_ids: dedupIds,
+        base_monster_id: baseMonster?.id ?? null,
+      });
+      setName("");
+      setLocationId(null);
+      setCommunityIds(new Set());
+      setBaseMonster(null);
+      setToast(`Личность «${name.trim()}» создана`);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setToast(null), 2000);
+      onCreated();
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="row">
+    <div className="stack" style={{ gap: 6 }}>
+      <span className="inhabitants-quick-label">Быстрое создание</span>
+      {error && (
+        <span style={{ fontSize: 11, color: "var(--danger-bg)", fontFamily: "var(--font-mono)" }}>{error}</span>
+      )}
+      {toast && <div className="settings-toast" role="status" aria-live="polite">{toast}</div>}
+      <div className="row" style={{ flexWrap: "wrap" }}>
       <input
         placeholder="Имя существа/персонажа"
         value={name}
@@ -86,9 +110,10 @@ export function BeingQuickCreate({
           Сообщества{communityIds.size > 0 ? ` (${communityIds.size})` : ""}
         </button>
       )}
-      <button className="primary" onClick={create}>
-        Добавить
+      <button className="primary" onClick={create} disabled={saving || !name.trim()}>
+        {saving ? "…" : "Добавить"}
       </button>
+      </div>
       {pickerOpen && (
         <Modal onClose={() => setPickerOpen(false)}>
           <div className="stack">

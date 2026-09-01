@@ -39,29 +39,32 @@ export function ImageLightbox({ images, index, onIndexChange, onClose, onDelete,
       <div className="lightbox-content">
         <div className="lightbox-image-wrap">
           {index > 0 && (
-            <button className="lightbox-nav lightbox-nav-prev" onClick={() => onIndexChange(index - 1)}>
+            <button className="lightbox-nav lightbox-nav-prev" aria-label="Предыдущее изображение" title="← Стрелка влево" onClick={() => onIndexChange(index - 1)}>
               ‹
             </button>
           )}
-          <img src={img.image_url} alt={img.caption} className="lightbox-image" />
+          <img src={img.image_url} alt={img.caption || `Изображение ${index + 1}`} className="lightbox-image" />
           {index < images.length - 1 && (
-            <button className="lightbox-nav lightbox-nav-next" onClick={() => onIndexChange(index + 1)}>
+            <button className="lightbox-nav lightbox-nav-next" aria-label="Следующее изображение" title="Стрелка вправо →" onClick={() => onIndexChange(index + 1)}>
               ›
             </button>
           )}
         </div>
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <input
             placeholder="Подпись…"
             value={captionDraft}
+            maxLength={500}
             onChange={(e) => setCaptionDraft(e.target.value)}
-            onBlur={() => captionDraft !== img.caption && onCaptionChange(img.id, captionDraft)}
-            style={{ flex: 1 }}
+            onBlur={() => captionDraft.trim().slice(0,500) !== img.caption && onCaptionChange(img.id, captionDraft.trim().slice(0,500))}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setCaptionDraft(img.caption ?? ""); }}
+            style={{ flex: "1 1 200px", minWidth: 200 }}
+            aria-label="Подпись изображения"
           />
-          <span className="muted">
+          <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }} aria-live="polite">
             {index + 1} / {images.length}
           </span>
-          <button className="danger" onClick={() => onDelete(img.id)}>
+          <button className="danger" onClick={() => onDelete(img.id)} aria-label="Удалить текущее изображение">
             Удалить
           </button>
           <button onClick={onClose}>Закрыть</button>

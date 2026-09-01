@@ -424,14 +424,12 @@ export function ArtifactDetailPage() {
       )}
 
       {tab === "Отношения" && (
-        <div className="card stack">
-          <RelationsTab
-            entityType="artifact"
-            entityId={artifact.id}
-            entityName={artifact.name}
-            defaultSettingId={artifact.setting_id}
-          />
-        </div>
+        <RelationsTab
+          entityType="artifact"
+          entityId={artifact.id}
+          entityName={artifact.name}
+          defaultSettingId={artifact.setting_id}
+        />
       )}
 
       {tab === "Галерея" && <GalleryTab ownerType="artifact" ownerId={artifactId} />}

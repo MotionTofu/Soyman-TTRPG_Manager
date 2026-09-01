@@ -13,6 +13,8 @@ interface Props {
   nameOriginal: string;
   /** Подпись под заголовком: у личностей уместнее «Известен также как». */
   title?: string;
+  /** Подсказка под заголовком — видна всегда, даже когда есть алиасы. */
+  help?: string;
   onSave: (aliases: string[], nameOriginal: string) => Promise<void> | void;
 }
 
@@ -31,6 +33,7 @@ export function AliasesCard({
   aliases: rawAliases,
   nameOriginal,
   title = "Другие названия",
+  help,
   onSave,
 }: Props) {
   const aliases = toList(rawAliases);
@@ -56,9 +59,10 @@ export function AliasesCard({
   return (
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <strong>{title}</strong>
+        <h3>{title}</h3>
         {!editing && <button onClick={start}>Редактировать</button>}
       </div>
+      {help && <span className="muted">{help}</span>}
 
       {editing ? (
         <div className="stack">

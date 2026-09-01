@@ -213,6 +213,8 @@ export interface ImportantDate {
   year: number | null;
   month: number | null;
   day: number;
+  /** Связанное событие Хроники мира (только для локации, когда дата ушла в хронику). */
+  source_event_id?: number | null;
   created_at: string;
 }
 

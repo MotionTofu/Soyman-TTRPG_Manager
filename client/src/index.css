@@ -335,7 +335,8 @@ h4 { font-size: var(--fs-body); }
   padding: 14px;
   clip-path: none;
 }
-.geography-tree .card .card {
+.geography-tree .card .card,
+.location-nested .card .card {
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
@@ -362,6 +363,125 @@ h4 { font-size: var(--fs-body); }
 }
 .geography-tree {
   gap: var(--sp-5);
+}
+/* Обитатели локации: внешний gap щедрый (§1.9), как у Обзоров/Географии. D-P0-3 */
+.inhabitants-tab {
+  gap: var(--sp-5);
+}
+.inhabitants-tab .entity-group > .entity-row-list {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+/* Плашка-инверсия для шапки группы Обитателей — §1.4, как .geography-node-header (D-P0-2) */
+.inhabitants-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+.inhabitants-group-header strong,
+.inhabitants-group-header .entry-title {
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inhabitants-group-header span {
+  color: var(--on-surface-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+}
+.inhabitants-group-header .entity-group-actions a,
+.inhabitants-group-header .entity-group-actions button {
+  color: var(--on-surface);
+  text-decoration: underline;
+}
+.inhabitants-group-header .entity-group-actions button:hover {
+  color: var(--on-surface);
+  opacity: 0.85;
+}
+/* Адаптив Обитателей — D-P1-5: строка не разъезжается на 390, hit-area 44px */
+@media (max-width: 700px) {
+  .inhabitants-tab .entity-row {
+    flex-wrap: wrap;
+  }
+  .inhabitants-tab .entity-row-tags {
+    flex-basis: 100%;
+    order: 10;
+  }
+  .inhabitants-tab .entity-row-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+@media (pointer: coarse) {
+  .inhabitants-tab .entity-row-actions button,
+  .inhabitants-tab .entity-row-actions a {
+    padding: 8px 10px;
+    min-height: 44px;
+  }
+}
+.inhabitants-quick-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--muted);
+  line-height: 1;
+}
+.inhabitants-drop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 62ch;
+}
+.inhabitants-drop .muted {
+  /* max-width: 62ch — перенесено на родителя */
+}
+/* Чекбокс вложенных — D2-P1-2: все стили через класс, без инлайна */
+.inhabitants-nested-toggle {
+  gap: 6px;
+  align-items: center;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+/* Стилизованные select — D2-P1-1: вместо нативных коробок */
+.inhabitants-filter {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 4px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.inhabitants-filter:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 /* Здоровье: внешний gap щедрый (§1.9), как у Обзоров. D-P1-1 / U-P0-2 */
 .health-page {
@@ -849,7 +969,8 @@ h4 { font-size: var(--fs-body); }
 }
 /* Нейтрализуем generic details.card summary:hover для инверсии — иначе
    hover красит плашку в sb-paper микс, ломая контраст. */
-.geography-tree details.card > summary.geography-node-header:hover {
+.geography-tree details.card > summary.geography-node-header:hover,
+.location-nested details.card > summary.geography-node-header:hover {
   background: var(--surface);
   color: var(--on-surface);
 }
@@ -1090,7 +1211,7 @@ h4 { font-size: var(--fs-body); }
 
 /* Neutral tag badge for non-status labels (type/category/tag) — never reuse
    the session-status colors above for these. */
-.badge.tag { background: var(--bg-elevated); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.badge.tag { background: var(--bg-elevated); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); letter-spacing: 0.10em; }
 
 /* Borderless "видно игрокам / скрыто" toggle — visible state is blue,
    hidden state stays the neutral muted grey. */
@@ -1291,15 +1412,17 @@ h4 { font-size: var(--fs-body); }
 }
 .entity-row-meta {
   display: block;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
   font-weight: 400;
+  color: var(--muted);
   white-space: normal;
 }
 .entity-row-badge {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  color: var(--accent);
+  color: var(--ink-2);
 }
 /* Inline expansion of an .entity-row above it — same "already inside .card"
    nesting, so no border/background of its own; a bottom divider (matching
@@ -4589,16 +4712,52 @@ details.card[open] summary {
   text-align: center;
 }
 
+.gallery-tab {
+  gap: 16px;
+}
+.gallery-tab-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border: 1px solid var(--line);
+  margin: -1px -1px 0 -1px;
+}
+.gallery-tab-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.gallery-tab-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--on-surface-muted);
+}
+.gallery-tab-hint {
+  max-width: 62ch;
+}
 .gallery-thumbnail-upload {
   gap: 10px;
+  flex-wrap: wrap;
 }
 .gallery-thumbnail-preview {
-  width: 108px;
-  height: 39px;
+  width: min(180px, 100%);
+  height: auto;
+  aspect-ratio: 16 / 10;
   object-fit: cover;
-  border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: 0;
+  border: 1px solid var(--line);
   background: var(--paper-2);
+}
+.gallery-thumbnail-preview[src*="avatar"], .gallery-thumbnail-preview.avatar {
+  aspect-ratio: 1;
+  width: 96px;
 }
 
 .gallery-grid {
@@ -4609,22 +4768,91 @@ details.card[open] summary {
 .gallery-thumb-wrap {
   aspect-ratio: 1;
   cursor: grab;
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
 }
 .gallery-thumb-wrap:active {
   cursor: grabbing;
+}
+.gallery-thumb-wrap:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .gallery-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: var(--card-radius);
-  border: var(--card-border-width, 1px) solid var(--line);
+  border: none;
+  border-radius: 0;
   background: var(--paper-2);
   cursor: pointer;
   display: block;
 }
-.gallery-thumb:hover {
+.gallery-thumb-wrap:hover {
   border-color: var(--accent);
+}
+.gallery-thumb-broken {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 22px;
+}
+.gallery-thumb-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 6px;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: var(--paper);
+  background: color-mix(in srgb, var(--ink) 68%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.gallery-grid.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  background: color-mix(in srgb, var(--paper-2) 80%, var(--accent) 20%);
+}
+.gallery-thumb-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.gallery-thumb-wrap:hover .gallery-thumb-delete,
+.gallery-thumb-wrap:focus-within .gallery-thumb-delete,
+.gallery-thumb-delete:focus {
+  opacity: 1;
+}
+.gallery-thumb-delete:hover {
+  background: var(--danger-bg, #c00);
+  color: #fff;
+  border-color: var(--danger-bg, #c00);
 }
 .gallery-upload-tile {
   aspect-ratio: 1;
@@ -4632,16 +4860,20 @@ details.card[open] summary {
   align-items: center;
   justify-content: center;
   text-align: center;
-  border: var(--card-border-width, 1px) dashed var(--line);
-  border-radius: var(--card-radius);
+  border: 1px dashed var(--line);
+  border-radius: 0;
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   padding: 8px;
 }
 .gallery-upload-tile:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--paper-2);
 }
 
 .modal:has(.lightbox-content) {
@@ -4657,8 +4889,8 @@ details.card[open] summary {
   flex-direction: column;
   gap: 10px;
   background: var(--paper-2);
-  border: var(--card-border-width) solid var(--line);
-  border-radius: var(--card-radius);
+  border: 1px solid var(--line);
+  border-radius: 0;
   padding: 16px;
 }
 .lightbox-image-wrap {
@@ -4671,12 +4903,13 @@ details.card[open] summary {
   max-width: min(80vw, 900px);
   max-height: 75vh;
   object-fit: contain;
-  border-radius: var(--card-radius);
+  border-radius: 0;
 }
 .lightbox-nav {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  font-family: var(--font-ui);
   font-size: 28px;
   line-height: 1;
   padding: 6px 12px;
@@ -5382,6 +5615,104 @@ input.litm-theme-title {
 .relation-summary-delete {
   margin-left: auto;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
+.relation-summary-delete:hover {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+}
+.relation-summary-delete:active {
+  transform: scale(0.97);
+}
+.relation-summary-delete .nav-icon {
+  width: 14px;
+  height: 14px;
+}
+/* Заголовок группы отношений — плашка-инверсия §1.4 как geography-node-header */
+.relation-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -14px -14px 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+.relation-group-header-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--on-surface-muted);
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.relation-group-header-hint {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--on-surface-muted);
+}
+/* Исключение для вложенных карточек отношений: группа — .card, связи — тоже .card.
+   Без этого generic .card .card снимает рамку (§ D-P0-1). Два селектора: :has для
+   новых браузеров + прямой .relation-group для fallback. */
+.card:has(> .relation-group-header) .card,
+.relation-group .card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  background-image: var(--card-body-texture);
+  padding: 14px;
+  clip-path: none;
+}
+
+/* Разделитель тона при сортировке «По типу отношения» — тонкий лейбл, не акцент */
+.relation-tone-separator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px 2px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border-bottom: 1px dashed var(--line);
+  margin-bottom: 2px;
+}
+.relation-drop-zone-mobile-hint {
+  display: none;
+}
+@media (max-width: 760px) {
+  .relation-drop-zone {
+    padding: 6px 8px;
+    min-height: 28px;
+  }
+  .relation-drop-zone .muted {
+    font-size: 11px;
+  }
+  .relation-drop-zone-mobile-hint {
+    display: inline;
+  }
 }
 
 /* Выбранные адресаты связи — чипсы над формой, каждый со снятием. */

@@ -8,6 +8,8 @@ import { NavIcon } from "./NavIcons";
 import { RelationLabelInput } from "./RelationLabelInput";
 import { RELATION_TONES, RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import { DETAIL_ROUTES, ENTITY_TYPE_SINGULAR } from "../entityTypes";
+import { EmptyState } from "./EmptyState";
+import { useConfirm } from "../hooks/useConfirm";
 import type { EntityRelation, EntityRelationsResponse, RelationEntityType, RelationTone, SearchResult } from "../types";
 
 const PICK_TYPES = ["being", "character", "community", "compendium_entry", "location", "artifact"];
@@ -23,28 +25,42 @@ const TONE_ORDER: Record<RelationTone, number> = { positive: 0, mixed: 1, neutra
 
 function sortRelations(list: EntityRelation[], mode: SortMode): EntityRelation[] {
   const copy = [...list];
-  if (mode === "tone") copy.sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || (a.other_name ?? "").localeCompare(b.other_name ?? ""));
-  else if (mode === "alpha") copy.sort((a, b) => (a.other_name ?? "").localeCompare(b.other_name ?? ""));
-  else copy.sort((a, b) => a.label.localeCompare(b.label) || (a.other_name ?? "").localeCompare(b.other_name ?? ""));
+  if (mode === "tone")
+    copy.sort(
+      (a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || (a.other_name ?? "").localeCompare(b.other_name ?? "", "ru", { numeric: true })
+    );
+  else if (mode === "alpha") copy.sort((a, b) => (a.other_name ?? "").localeCompare(b.other_name ?? "", "ru", { numeric: true }));
+  else copy.sort((a, b) => a.label.localeCompare(b.label, "ru", { numeric: true }) || (a.other_name ?? "").localeCompare(b.other_name ?? "", "ru", { numeric: true }));
   return copy;
 }
 
-function ToneDot({ tone }: { tone: RelationTone }) {
+function ToneMark({ tone }: { tone: RelationTone }) {
   return (
     <span
       title={RELATION_TONE_LABELS[tone]}
+      aria-label={RELATION_TONE_LABELS[tone]}
       style={{
-        display: "inline-block",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
         width: 10,
         height: 10,
-        borderRadius: "50%",
+        border: "1px solid var(--line)",
         background: RELATION_TONE_COLORS[tone],
         marginRight: 6,
         flexShrink: 0,
+        fontSize: 7,
+        lineHeight: 1,
+        fontWeight: 700,
+        color: "var(--ink)",
       }}
-    />
+    >
+      {tone === "positive" ? "+" : tone === "negative" ? "–" : tone === "mixed" ? "±" : "·"}
+    </span>
   );
 }
+// Совместимость: старый ToneDot теперь указывает на ToneMark, чтобы не ломать внешние импорты
+const ToneDot = ToneMark;
 
 interface Props {
   entityType: RelationEntityType;
@@ -64,6 +80,7 @@ interface Props {
 export function RelationsTab({ entityType, entityId, entityName, defaultSettingId }: Props) {
   const [data, setData] = useState<EntityRelationsResponse | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("tone");
+  const [relationFilter, setRelationFilter] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -83,6 +100,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   const [editTone, setEditTone] = useState<RelationTone>("neutral");
   const [editLabel, setEditLabel] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [confirmDialog, confirm] = useConfirm();
 
   function load() {
     api
@@ -96,34 +114,70 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
       setSearchResults([]);
       return;
     }
+    const controller = new AbortController();
     const handle = setTimeout(async () => {
-      const res = await api.get<SearchResult[]>(
-        `/search?q=${encodeURIComponent(query)}&types=${PICK_TYPES.join(",")}`
-      );
-      setSearchResults(res.filter((r) => !(r.type === entityType && r.id === entityId)));
+      try {
+        const res = await api.get<SearchResult[]>(
+          `/search?q=${encodeURIComponent(query)}&types=${PICK_TYPES.join(",")}`,
+          { signal: controller.signal }
+        );
+        if (controller.signal.aborted) return;
+        setSearchResults(res.filter((r) => !(r.type === entityType && r.id === entityId)));
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        // сеть упала — оставляем прежние результаты, не шумим
+      }
     }, 200);
-    return () => clearTimeout(handle);
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
   }, [query, entityType, entityId]);
 
-  // Список сущностей сеттинга для выбора галочками — грузится только когда
-  // список раскрыли: на профиле он нужен не каждый раз.
+  // Список сущностей сеттинга для выбора галочками — грузится сразу, если сеттинг
+  // маленький (<80 сущностей) — открываем автоматически (U-P1-1), иначе лениво
+  // по открытию details, чтобы не тянуть 400 записей на каждый просмотр.
   useEffect(() => {
-    if (!listOpen || settingOptions || !defaultSettingId) return;
+    if (settingOptions || !defaultSettingId) return;
+    // ленивая загрузка: если список закрыт, не грузим до открытия, кроме случая автозапуска
+    // автозагрузка — сразу, чтобы решить открывать ли details
+    const shouldAutoLoad = !listOpen;
+    if (shouldAutoLoad) {
+      // пробуем тихо подгрузить для авто-открытия
+      Promise.all([
+        api.get<{ id: number; name: string; category: string }[]>(`/setting-beings?setting_id=${defaultSettingId}`),
+        api.get<{ id: number; name: string }[]>(`/setting-communities?setting_id=${defaultSettingId}`),
+        api.get<{ id: number; name: string }[]>(`/setting-locations?setting_id=${defaultSettingId}`),
+        api.get<{ id: number; name: string }[]>(`/artifacts?setting_id=${defaultSettingId}`),
+      ])
+        .then(([beings, communities, locations, artifacts]) => {
+          const opts = [
+            ...beings.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
+            ...communities.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
+            ...locations.map((l) => ({ type: "location", id: l.id, title: l.name } as SearchResult)),
+            ...artifacts.map((a) => ({ type: "artifact", id: a.id, title: a.name } as SearchResult)),
+          ];
+          setSettingOptions(opts);
+          if (opts.length > 0 && opts.length < 80) setListOpen(true);
+        })
+        .catch(() => setSettingOptions([]));
+      return;
+    }
     Promise.all([
-      api.get<{ id: number; name: string; category: string }[]>(
-        `/setting-beings?setting_id=${defaultSettingId}`
-      ),
+      api.get<{ id: number; name: string; category: string }[]>(`/setting-beings?setting_id=${defaultSettingId}`),
       api.get<{ id: number; name: string }[]>(`/setting-communities?setting_id=${defaultSettingId}`),
       api.get<{ id: number; name: string }[]>(`/setting-locations?setting_id=${defaultSettingId}`),
       api.get<{ id: number; name: string }[]>(`/artifacts?setting_id=${defaultSettingId}`),
-    ]).then(([beings, communities, locations, artifacts]) =>
-      setSettingOptions([
-        ...beings.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
-        ...communities.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
-        ...locations.map((l) => ({ type: "location", id: l.id, title: l.name } as SearchResult)),
-        ...artifacts.map((a) => ({ type: "artifact", id: a.id, title: a.name } as SearchResult)),
-      ])
-    );
+    ])
+      .then(([beings, communities, locations, artifacts]) =>
+        setSettingOptions([
+          ...beings.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
+          ...communities.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
+          ...locations.map((l) => ({ type: "location", id: l.id, title: l.name } as SearchResult)),
+          ...artifacts.map((a) => ({ type: "artifact", id: a.id, title: a.name } as SearchResult)),
+        ])
+      )
+      .catch(() => setSettingOptions([]));
   }, [listOpen, settingOptions, defaultSettingId]);
 
   function isSelf(result: SearchResult) {
@@ -229,8 +283,14 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     load();
   }
 
-  async function removeRelation(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function removeRelation(id: number, otherName: string | null) {
+    const ok = await confirm({
+      title: "Удалить связь?",
+      message: otherName ? `Удалить отношение с «${otherName}»?` : "Удалить связь с удалённой сущностью?",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del(`/entity-relations/${id}`);
     load();
   }
@@ -260,11 +320,12 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
             {toLabel}
           </span>
           <button
-            className="danger relation-summary-delete"
-            title="Удалить"
+            className="relation-summary-delete"
+            title="Удалить связь"
+            aria-label="Удалить связь"
             onClick={(e) => {
               e.preventDefault();
-              removeRelation(r.id);
+              removeRelation(r.id, r.other_name);
             }}
           >
             <NavIcon name="delete" />
@@ -324,9 +385,9 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
                 {!hasReverse(r, side) && (
                   <button
                     onClick={() => mirrorRelation(r, side)}
-                    title="Завести такую же связь в обратную сторону — отдельной записью, её можно будет править отдельно"
+                    title="Создаст независимую копию связи в обратную сторону — её можно будет править отдельно, синхронизации нет"
                   >
-                    Зеркалить
+                    Создать обратную связь (копия) ↔
                   </button>
                 )}
               </div>
@@ -344,6 +405,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="row" style={{ position: "relative" }}>
         <input
           placeholder="Найти существо, персонажа, фракцию, место или предмет…"
@@ -362,7 +424,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
         )}
       </div>
       <div
-        className={`drop-zone${dragOver ? " drag-over" : ""}`}
+        className={`drop-zone relation-drop-zone${dragOver ? " drag-over" : ""}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -372,6 +434,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
       >
         <span className="muted">
           Или перетащите сюда сущность из поиска — она добавится к выбранным
+          <span className="relation-drop-zone-mobile-hint"> · на телефоне — нажмите на результат поиска выше</span>
         </span>
       </div>
 
@@ -475,9 +538,14 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
               />
             </label>
           ) : (
-            <span className="muted">
-              Подробности у каждой связи свои — впишутся потом, в самих связях.
-            </span>
+            <div className="stack" style={{ gap: 4 }}>
+              {draftDescription.trim() && (
+                <span style={{ color: "var(--danger-bg)", fontSize: 11, fontFamily: "var(--font-body)" }}>
+                  ⚠ Текст лора «{draftDescription.slice(0, 32)}…» не сохранится для нескольких связей — он записывается только когда адресат один. ДопИшешь потом в каждой связи отдельно.
+                </span>
+              )}
+              <span className="muted">Подробности у каждой связи свои — впишутся потом, в самих связях.</span>
+            </div>
           )}
           <div className="row">
             <button className="primary" onClick={confirmAdd}>
@@ -490,30 +558,144 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
 
       {resultNote && <p className="muted">{resultNote}</p>}
 
-      <div className="row">
-        <span className="muted">Сортировка:</span>
-        {SORT_OPTIONS.map((o) => (
-          <button
-            key={o.key}
-            className={sortMode === o.key ? "active-sort" : ""}
-            onClick={() => setSortMode(o.key)}
-          >
-            {o.label}
+      <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span
+          style={{
+            fontFamily: "var(--font-ui)",
+            fontSize: "var(--fs-micro)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--muted)",
+          }}
+        >
+          Сортировка:
+        </span>
+        <div className="seg" role="tablist" aria-label="Сортировка отношений">
+          {SORT_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              className={sortMode === o.key ? "is-active" : ""}
+              role="tab"
+              aria-selected={sortMode === o.key}
+              onClick={() => setSortMode(o.key)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <input
+          placeholder="Фильтр: имя, «дружба», тон…"
+          value={relationFilter}
+          onChange={(e) => setRelationFilter(e.target.value)}
+          style={{ flex: "1 1 180px", minWidth: 0 }}
+          aria-label="Фильтр связей"
+        />
+        {relationFilter && (
+          <button onClick={() => setRelationFilter("")} title="Сбросить фильтр">
+            ✕ Сбросить
           </button>
-        ))}
+        )}
       </div>
 
-      <div className="stack">
-        <strong>Отношение {entityName} к другим</strong>
-        {outgoing.length === 0 && <p className="muted">Пока не указано.</p>}
-        {outgoing.map((r) => renderRelation(r, "out"))}
-      </div>
+      {(() => {
+        const q = relationFilter.trim().toLocaleLowerCase();
+        const matches = (r: EntityRelation) =>
+          !q ||
+          r.label.toLocaleLowerCase().includes(q) ||
+          (r.other_name ?? "").toLocaleLowerCase().includes(q) ||
+          RELATION_TONE_LABELS[r.tone].toLocaleLowerCase().includes(q);
+        const fOut = outgoing.filter(matches);
+        const fIn = incoming.filter(matches);
+        const noMatch = q && fOut.length === 0 && fIn.length === 0;
+        const grouped = (list: EntityRelation[]) => {
+          if (sortMode !== "tone") return null;
+          const order: RelationTone[] = ["positive", "mixed", "neutral", "negative"];
+          const buckets = new Map<RelationTone, EntityRelation[]>();
+          for (const r of list) {
+            const arr = buckets.get(r.tone) ?? [];
+            arr.push(r);
+            buckets.set(r.tone, arr);
+          }
+          return order
+            .filter((t) => (buckets.get(t)?.length ?? 0) > 0)
+            .map((t) => ({ tone: t, items: buckets.get(t)! }));
+        };
+        const outGroups = grouped(fOut);
+        const inGroups = grouped(fIn);
+        return (
+          <>
+            {noMatch && <p className="muted">Ничего не нашлось по «{relationFilter}».</p>}
+            <div className="card stack relation-group">
+              <div className="relation-group-header">
+                <span>
+                  {entityName} ⟶ другие
+                  <span className="relation-group-header-count"> · {fOut.length !== outgoing.length ? `${fOut.length}/${outgoing.length}` : outgoing.length}</span>
+                </span>
+                <span className="relation-group-header-hint">исходящие — что {entityName} чувствует к ним</span>
+              </div>
+              {fOut.length === 0 ? (
+                outgoing.length === 0 ? (
+                  <EmptyState
+                    icon="fantasySwords"
+                    title="Связей пока нет"
+                    hint={`Укажите, как ${entityName} относится к другим — союз, долг, страх, торговля.`}
+                    action={
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        Найдите сущность выше и нажмите «Добавить связь»
+                      </span>
+                    }
+                  />
+                ) : (
+                  <p className="muted">Нет подходящих исходящих связей.</p>
+                )
+              ) : outGroups ? (
+                outGroups.map((g) => (
+                  <div key={g.tone} className="stack" style={{ gap: 6 }}>
+                    <div className="relation-tone-separator">
+                      <ToneMark tone={g.tone} /> {RELATION_TONE_LABELS[g.tone]} · {g.items.length}
+                    </div>
+                    {g.items.map((r) => renderRelation(r, "out"))}
+                  </div>
+                ))
+              ) : (
+                fOut.map((r) => renderRelation(r, "out"))
+              )}
+            </div>
 
-      <div className="stack">
-        <strong>Отношение других к {entityName}</strong>
-        {incoming.length === 0 && <p className="muted">Пока никто не указал отношение.</p>}
-        {incoming.map((r) => renderRelation(r, "in"))}
-      </div>
+            <div className="card stack relation-group">
+              <div className="relation-group-header">
+                <span>
+                  другие ⟶ {entityName}
+                  <span className="relation-group-header-count"> · {fIn.length !== incoming.length ? `${fIn.length}/${incoming.length}` : incoming.length}</span>
+                </span>
+                <span className="relation-group-header-hint">входящие — что другие чувствуют к {entityName}</span>
+              </div>
+              {fIn.length === 0 ? (
+                incoming.length === 0 ? (
+                  <EmptyState
+                    icon="anarchyStar"
+                    title="Никто пока не указал отношение"
+                    hint={`Когда другие сущности укажут отношение к ${entityName}, оно появится здесь.`}
+                  />
+                ) : (
+                  <p className="muted">Нет подходящих входящих связей.</p>
+                )
+              ) : inGroups ? (
+                inGroups.map((g) => (
+                  <div key={g.tone} className="stack" style={{ gap: 6 }}>
+                    <div className="relation-tone-separator">
+                      <ToneMark tone={g.tone} /> {RELATION_TONE_LABELS[g.tone]} · {g.items.length}
+                    </div>
+                    {g.items.map((r) => renderRelation(r, "in"))}
+                  </div>
+                ))
+              ) : (
+                fIn.map((r) => renderRelation(r, "in"))
+              )}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

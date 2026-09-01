@@ -1528,6 +1528,16 @@ export function buildSettingExportData(
     payload.calendarEvents = db
       .prepare("SELECT * FROM setting_calendar_events WHERE setting_id = ?")
       .all(settingId) as SettingExportData["calendarEvents"];
+    // Важные даты — частный срез сеттинга (фаза 0): локации/существа/сообщества этого сеттинга.
+    // Экспортируем вместе с календарём (U-P2-3). source_event_id не вывозим — на приёмнике события получат новые id и sync их пересоздаст.
+    const importantRows = db.prepare(`
+      SELECT d.* FROM important_dates d WHERE (d.owner_type='location' AND d.owner_id IN (SELECT id FROM setting_locations WHERE setting_id=? AND archived_at IS NULL))
+      UNION ALL
+      SELECT d.* FROM important_dates d WHERE (d.owner_type='being' AND d.owner_id IN (SELECT id FROM setting_beings WHERE setting_id=? AND archived_at IS NULL))
+      UNION ALL
+      SELECT d.* FROM important_dates d WHERE (d.owner_type='community' AND d.owner_id IN (SELECT id FROM setting_communities WHERE setting_id=? AND archived_at IS NULL))
+    `).all(settingId, settingId, settingId) as SettingExportData["importantDates"];
+    if (importantRows?.length) payload.importantDates = importantRows;
   }
   if (include.includes("resources")) {
     payload.artifacts = db
@@ -1679,6 +1689,7 @@ export interface SettingExportData {
   calendarMonths?: { position: number; name: string; days: number }[];
   calendarWeekdays?: { position: number; name: string }[];
   calendarEvents?: { title: string; description: string; recurrence: string; day: number; month: number | null; year: number | null; important: number }[];
+  importantDates?: { owner_type: string; owner_id: number; title: string; description: string; date_type: string; color: string; recurrence: string; year: number | null; month: number | null; day: number; custom_rule: string }[];
   artifacts?: {
     id: number;
     uid?: string;
@@ -1981,6 +1992,18 @@ export async function importSettingExport(
       "INSERT INTO setting_calendar_weekdays (setting_id, position, name) VALUES (?, ?, ?)"
     );
     for (const w of body.calendarWeekdays) insertWeekday.run(newSettingId, w.position, w.name);
+  }
+  if (body.importantDates && body.importantDates.length) {
+    const ins = db.prepare(`INSERT INTO important_dates (owner_type, owner_id, title, description, date_type, color, recurrence, year, month, day, custom_rule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const d of body.importantDates) {
+      let newOwnerId: number | undefined;
+      if (d.owner_type === "location") newOwnerId = locationIdMap.get(d.owner_id);
+      else if (d.owner_type === "being") newOwnerId = beingIdMap.get(d.owner_id);
+      else if (d.owner_type === "community") newOwnerId = communityIdMap.get(d.owner_id);
+      else continue;
+      if (!newOwnerId) continue;
+      ins.run(d.owner_type, newOwnerId, d.title, d.description ?? "", d.date_type ?? "", d.color ?? "", d.recurrence ?? "once", d.year ?? null, d.month ?? null, d.day, d.custom_rule ?? "");
+    }
   }
 
   if (body.artifacts) {

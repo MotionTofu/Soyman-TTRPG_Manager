@@ -118,12 +118,14 @@ settingLocationsRouter.get("/", (req, res) => {
     parent_id?: string;
   };
   if (!setting_id) return res.status(400).json({ error: "setting_id is required" });
+  const includeArchived = req.query.archived === "include";
+  const archivedClause = includeArchived ? "" : " AND archived_at IS NULL";
   if (parent_id !== undefined) {
     const rows = db
       .prepare(
         parent_id === "null" || parent_id === ""
-          ? "SELECT * FROM setting_locations WHERE setting_id = ? AND parent_id IS NULL AND archived_at IS NULL ORDER BY name"
-          : "SELECT * FROM setting_locations WHERE setting_id = ? AND parent_id = ? AND archived_at IS NULL ORDER BY name"
+          ? `SELECT * FROM setting_locations WHERE setting_id = ? AND parent_id IS NULL${archivedClause} ORDER BY name`
+          : `SELECT * FROM setting_locations WHERE setting_id = ? AND parent_id = ?${archivedClause} ORDER BY name`
       )
       .all(
         ...(parent_id === "null" || parent_id === ""
@@ -134,7 +136,7 @@ settingLocationsRouter.get("/", (req, res) => {
   }
   const rows = db
     .prepare(
-      "SELECT * FROM setting_locations WHERE setting_id = ? AND archived_at IS NULL ORDER BY name"
+      `SELECT * FROM setting_locations WHERE setting_id = ?${archivedClause} ORDER BY name`
     )
     .all(setting_id) as { avatar_image_path: string | null; thumbnail_image_path: string | null; map_image_path: string | null }[];
   res.json(rows.map((r) => withMapUrl(withImageUrls(r))));
@@ -249,15 +251,15 @@ settingLocationsRouter.get("/:id", (req, res) => {
       loc_name: string;
     })[];
     const locationNamesByBeing = new Map<number, string[]>();
+    const dedupMap = new Map<number, (typeof descendantRows)[number]>();
     for (const r of descendantRows) {
       if (directIds.has(r.id)) continue;
       const list = locationNamesByBeing.get(r.id) ?? [];
       if (!list.includes(r.loc_name)) list.push(r.loc_name);
       locationNamesByBeing.set(r.id, list);
+      if (!dedupMap.has(r.id)) dedupMap.set(r.id, r);
     }
-    const dedupedRows = descendantRows.filter(
-      (r, i) => !directIds.has(r.id) && descendantRows.findIndex((r2) => r2.id === r.id) === i
-    );
+    const dedupedRows = Array.from(dedupMap.values());
     nestedInhabitantBeings = withBeingExtras(dedupedRows).map((b) => ({
       ...b,
       location_names: locationNamesByBeing.get(b.id) ?? [],
@@ -289,43 +291,186 @@ settingLocationsRouter.get("/:id", (req, res) => {
   });
 });
 
+const ALLOWED_RECURRENCE = new Set(["once", "annual", "monthly", "weekly", "custom"]);
+
 settingLocationsRouter.post("/:id/important-dates", (req, res) => {
-  const { title, recurrence, year, month, day } = req.body as {
+  const { title, recurrence, year, month, day, description, date_type, color, custom_rule, createChronicleEvent } = req.body as {
     title: string;
     recurrence: string;
     year?: number | null;
     month?: number | null;
     day: number;
+    description?: string;
+    date_type?: string;
+    color?: string;
+    custom_rule?: string;
+    createChronicleEvent?: boolean;
   };
-  if (!title || day == null) return res.status(400).json({ error: "title and day are required" });
+  const trimmed = typeof title === "string" ? title.trim() : "";
+  if (!trimmed) return res.status(400).json({ error: "title is required" });
+  if (trimmed.length > 200) return res.status(400).json({ error: "title too long (max 200)" });
+  if (day == null) return res.status(400).json({ error: "day is required" });
+  const d = Number(day);
+  const m = month != null && (month as unknown) !== "" ? Number(month) : null;
+  const y = year != null && (year as unknown) !== "" ? Number(year) : null;
+  const rec = recurrence || "once";
+  if (!ALLOWED_RECURRENCE.has(rec)) return res.status(400).json({ error: "invalid recurrence" });
+  if (!Number.isFinite(d) || d < 1 || d > 60) return res.status(400).json({ error: "day must be 1..60" });
+  if (m != null && (!Number.isFinite(m) || m < 1 || m > 36)) return res.status(400).json({ error: "month must be 1..36" });
+  if (y != null && (!Number.isFinite(y) || y < 1 || y > 9999)) return res.status(400).json({ error: "year must be 1..9999" });
+  if (rec === "annual" && m == null) return res.status(400).json({ error: "month is required for annual recurrence" });
+  if (rec === "once" && m == null) return res.status(400).json({ error: "month is required for once recurrence" });
+  if (rec === "once" && y == null) return res.status(400).json({ error: "year is required for once recurrence" });
+  if (rec === "weekly" && (m != null || y != null)) {
+    // weekly ignores month/year — warn but allow; store as null
+  }
+  if (description && description.length > 2000) return res.status(400).json({ error: "description too long (max 2000)" });
+  if (date_type && date_type.length > 40) return res.status(400).json({ error: "date_type too long (max 40)" });
+  if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return res.status(400).json({ error: "color must be #RRGGBB" });
+  // кросс-валидация дня с календарём сеттинга (фаза 0 — локация = частный срез сеттинга)
+  const loc = db.prepare("SELECT setting_id FROM setting_locations WHERE id = ?").get(req.params.id) as { setting_id: number } | undefined;
+  if (!loc) return res.status(404).json({ error: "location not found" });
+  const calMonths = db.prepare("SELECT position, days FROM setting_calendar_months WHERE setting_id = ? ORDER BY position").all(loc.setting_id) as { position: number; days: number }[];
+  if (calMonths.length > 0 && m != null) {
+    const monthDef = calMonths.find((mo) => mo.position === m);
+    if (monthDef && d > monthDef.days) return res.status(400).json({ error: `day ${d} exceeds ${monthDef.days} days in month ${monthDef.position}` });
+  }
+  if (custom_rule && custom_rule.length > 2000) return res.status(400).json({ error: "custom_rule too long" });
+  if (custom_rule) {
+    try { JSON.parse(custom_rule); } catch { return res.status(400).json({ error: "custom_rule must be valid JSON" }); }
+  }
+
+  // Двусторонняя связка: once + createChronicleEvent → создаём событие Хроники, sync сам вставит important_dates
+  if (rec === "once" && createChronicleEvent === true) {
+    const locRow = db.prepare("SELECT name FROM setting_locations WHERE id = ?").get(req.params.id) as { name: string } | undefined;
+    const locName = locRow?.name ?? `location:${req.params.id}`;
+    const mention = `[[location:${req.params.id}|${locName}]]`;
+    const eventDesc = description ? `${mention}\n${description}` : mention;
+    // импортируем логику из settings.ts — локально, без циклического импорта: прямой INSERT + syncImportantDatesFromMentions
+    const yNum = y as number;
+    const mNum = m as number;
+    const months = calMonths;
+    // проверка уже сделана выше, просто вставляем
+    const run = db.transaction(() => {
+      // статус события — как в settingsRouter.post calendar-events: upcoming/happened от pinned calendar
+      const nowRow = db.prepare("SELECT pinned_calendar_year, pinned_calendar_month, pinned_calendar_day FROM settings WHERE id = ?").get(loc.setting_id) as { pinned_calendar_year: number | null; pinned_calendar_month: number | null; pinned_calendar_day: number | null } | undefined;
+      let status = "happened";
+      if (nowRow && nowRow.pinned_calendar_year != null) {
+        // упрощённо: если дата в будущем относительно pinned — upcoming
+        const nowMonths = months.length > 0 ? months : [];
+        // Временная оценка через elapsedDays-подобную логику: год приоритетнее месяца
+        if (yNum > nowRow.pinned_calendar_year) status = "upcoming";
+        else if (yNum === nowRow.pinned_calendar_year && mNum > (nowRow.pinned_calendar_month ?? 1)) status = "upcoming";
+        else if (yNum === nowRow.pinned_calendar_year && mNum === (nowRow.pinned_calendar_month ?? 1) && d > (nowRow.pinned_calendar_day ?? 1)) status = "upcoming";
+      }
+      const info = db.prepare(
+        `INSERT INTO setting_calendar_events (setting_id, title, description, inworld_year, inworld_month, inworld_day, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(loc.setting_id, trimmed, eventDesc, yNum, mNum, d, status);
+      const newEventId = Number(info.lastInsertRowid);
+      // копия в кампании — как в settings.ts
+      const campaigns = db.prepare("SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL").all(loc.setting_id) as { id: number }[];
+      const insCamp = db.prepare(`INSERT INTO campaign_calendar_events (campaign_id, title, description, inworld_year, inworld_month, inworld_day, status) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      for (const c of campaigns) insCamp.run(c.id, trimmed, eventDesc, yNum, mNum, d, status);
+      // syncImportantDatesFromMentions — inline копия
+      db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(newEventId);
+      db.prepare(`INSERT INTO important_dates (owner_type, owner_id, title, description, date_type, color, recurrence, year, month, day, custom_rule, source_event_id) VALUES ('location', ?, ?, ?, ?, ?, 'once', ?, ?, ?, ?, ?)`).run(req.params.id, trimmed, description ?? "", date_type ?? "", color ?? "", yNum, mNum, d, custom_rule ?? "", newEventId);
+      return newEventId;
+    });
+    const newEventId = run();
+    const createdDate = db.prepare("SELECT * FROM important_dates WHERE source_event_id = ?").get(newEventId);
+    return res.status(201).json(createdDate);
+  }
+
   const info = db
     .prepare(
-      `INSERT INTO important_dates (owner_type, owner_id, title, recurrence, year, month, day)
-       VALUES ('location', ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO important_dates (owner_type, owner_id, title, description, date_type, color, recurrence, year, month, day, custom_rule)
+       VALUES ('location', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(req.params.id, title, recurrence || "once", year ?? null, month ?? null, day);
+    .run(req.params.id, trimmed, description ?? "", date_type ?? "", color ?? "", rec, y, m, d, custom_rule ?? "");
   res.status(201).json(db.prepare("SELECT * FROM important_dates WHERE id = ?").get(info.lastInsertRowid));
 });
 
 settingLocationsRouter.put("/important-dates/:dateId", (req, res) => {
-  const { title, recurrence, year, month, day } = req.body as {
+  const { title, recurrence, year, month, day, description, date_type, color, custom_rule } = req.body as {
     title?: string;
     recurrence?: string;
     year?: number | null;
     month?: number | null;
     day?: number;
+    description?: string;
+    date_type?: string;
+    color?: string;
+    custom_rule?: string;
   };
+  // защита владения + фикс NULL-бага (COALESCE для year/month)
+  const existing = db.prepare("SELECT * FROM important_dates WHERE id = ? AND owner_type = 'location'").get(req.params.dateId) as { id: number; source_event_id: number | null } | undefined;
+  if (!existing) return res.status(404).json({ error: "not found" });
+  if (title !== undefined) {
+    const t = String(title).trim();
+    if (!t) return res.status(400).json({ error: "title cannot be empty" });
+    if (t.length > 200) return res.status(400).json({ error: "title too long" });
+  }
+  if (recurrence !== undefined && !ALLOWED_RECURRENCE.has(recurrence)) return res.status(400).json({ error: "invalid recurrence" });
+  if (day !== undefined && day !== null && (!Number.isFinite(Number(day)) || Number(day) < 1 || Number(day) > 60)) return res.status(400).json({ error: "day must be 1..60" });
+  if (month !== undefined && month !== null && (!Number.isFinite(Number(month)) || Number(month) < 1 || Number(month) > 36)) return res.status(400).json({ error: "month must be 1..36" });
+  if (year !== undefined && year !== null && (!Number.isFinite(Number(year)) || Number(year) < 1 || Number(year) > 9999)) return res.status(400).json({ error: "year must be 1..9999" });
+  if (description !== undefined && description !== null && String(description).length > 2000) return res.status(400).json({ error: "description too long" });
+  if (date_type !== undefined && date_type !== null && String(date_type).length > 40) return res.status(400).json({ error: "date_type too long" });
+  if (color !== undefined && color !== null && color !== "" && !/^#[0-9a-fA-F]{6}$/.test(String(color))) return res.status(400).json({ error: "color must be #RRGGBB" });
+  if (custom_rule !== undefined && custom_rule !== null && String(custom_rule).length > 2000) return res.status(400).json({ error: "custom_rule too long" });
   db.prepare(
     `UPDATE important_dates SET
-       title = COALESCE(?, title), recurrence = COALESCE(?, recurrence),
-       year = ?, month = ?, day = COALESCE(?, day)
-     WHERE id = ?`
-  ).run(title ?? null, recurrence ?? null, year ?? null, month ?? null, day ?? null, req.params.dateId);
+       title = COALESCE(?, title),
+       description = COALESCE(?, description),
+       date_type = COALESCE(?, date_type),
+       color = COALESCE(?, color),
+       recurrence = COALESCE(?, recurrence),
+       year = COALESCE(?, year),
+       month = COALESCE(?, month),
+       day = COALESCE(?, day),
+       custom_rule = COALESCE(?, custom_rule)
+     WHERE id = ? AND owner_type = 'location'`
+  ).run(
+    title !== undefined ? String(title).trim() : null,
+    description ?? null,
+    date_type ?? null,
+    color ?? null,
+    recurrence ?? null,
+    year ?? null,
+    month ?? null,
+    day ?? null,
+    custom_rule ?? null,
+    req.params.dateId
+  );
+  // если дата привязана к событию Хроники — правим и его (двусторонняя связка)
+  if (existing.source_event_id) {
+    const patchTitle = title !== undefined ? String(title).trim() : undefined;
+    const patchDesc = description !== undefined ? String(description) : undefined;
+    const ev = db.prepare("SELECT id, description FROM setting_calendar_events WHERE id = ?").get(existing.source_event_id) as { id: number; description: string } | undefined;
+    if (ev) {
+      let newDesc = ev.description;
+      if (patchDesc !== undefined) {
+        const mentionMatch = ev.description.match(/^\[\[location:\d+\|[^\]]+\]\]\n?/);
+        const mention = mentionMatch ? mentionMatch[0] : "";
+        newDesc = mention + patchDesc;
+      }
+      db.prepare(`UPDATE setting_calendar_events SET title = COALESCE(?, title), description = COALESCE(?, description), inworld_year = COALESCE(?, inworld_year), inworld_month = COALESCE(?, inworld_month), inworld_day = COALESCE(?, inworld_day) WHERE id = ?`).run(
+        patchTitle ?? null, patchDesc !== undefined ? newDesc : null, year ?? null, month ?? null, day ?? null, existing.source_event_id
+      );
+    }
+  }
   res.json(db.prepare("SELECT * FROM important_dates WHERE id = ?").get(req.params.dateId));
 });
 
 settingLocationsRouter.delete("/important-dates/:dateId", (req, res) => {
-  db.prepare("DELETE FROM important_dates WHERE id = ?").run(req.params.dateId);
+  const existing = db.prepare("SELECT source_event_id FROM important_dates WHERE id = ? AND owner_type = 'location'").get(req.params.dateId) as { source_event_id: number | null } | undefined;
+  if (!existing) return res.status(404).json({ error: "not found" });
+  // двусторонняя связка: если дата была создана из события Хроники — удаляем и событие
+  if (existing.source_event_id) {
+    db.prepare("DELETE FROM setting_calendar_events WHERE id = ?").run(existing.source_event_id);
+  }
+  db.prepare("DELETE FROM important_dates WHERE id = ? AND owner_type = 'location'").run(req.params.dateId);
   res.json({ ok: true });
 });
 
@@ -334,11 +479,29 @@ settingLocationsRouter.delete("/important-dates/:dateId", (req, res) => {
 settingLocationsRouter.post("/:id/inhabitants", (req, res) => {
   const { type, id } = req.body as { type: "being" | "community"; id: number };
   if (!type || !id) return res.status(400).json({ error: "type and id are required" });
+  const loc = db
+    .prepare("SELECT setting_id FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as { setting_id: number } | undefined;
+  if (!loc) return res.status(404).json({ error: "location not found" });
   if (type === "being") {
+    const being = db
+      .prepare("SELECT setting_id, archived_at FROM setting_beings WHERE id = ?")
+      .get(id) as { setting_id: number; archived_at: string | null } | undefined;
+    if (!being) return res.status(404).json({ error: "being not found" });
+    if (being.archived_at) return res.status(400).json({ error: "being is archived" });
+    if (being.setting_id !== loc.setting_id)
+      return res.status(400).json({ error: "being must belong to same setting as location" });
     db.prepare(
       "INSERT OR IGNORE INTO being_locations (being_id, location_id) VALUES (?, ?)"
     ).run(id, req.params.id);
   } else if (type === "community") {
+    const community = db
+      .prepare("SELECT setting_id, archived_at FROM setting_communities WHERE id = ?")
+      .get(id) as { setting_id: number; archived_at: string | null } | undefined;
+    if (!community) return res.status(404).json({ error: "community not found" });
+    if (community.archived_at) return res.status(400).json({ error: "community is archived" });
+    if (community.setting_id !== loc.setting_id)
+      return res.status(400).json({ error: "community must belong to same setting as location" });
     db.prepare(
       "INSERT OR IGNORE INTO community_locations (community_id, location_id) VALUES (?, ?)"
     ).run(id, req.params.id);
@@ -350,6 +513,10 @@ settingLocationsRouter.post("/:id/inhabitants", (req, res) => {
 
 settingLocationsRouter.delete("/:id/inhabitants/:type/:targetId", (req, res) => {
   const { type, targetId } = req.params;
+  const loc = db
+    .prepare("SELECT id FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as { id: number } | undefined;
+  if (!loc) return res.status(404).json({ error: "location not found" });
   if (type === "being") {
     db.prepare("DELETE FROM being_locations WHERE being_id = ? AND location_id = ?").run(
       targetId,
@@ -359,6 +526,8 @@ settingLocationsRouter.delete("/:id/inhabitants/:type/:targetId", (req, res) => 
     db.prepare(
       "DELETE FROM community_locations WHERE community_id = ? AND location_id = ?"
     ).run(targetId, req.params.id);
+  } else {
+    return res.status(400).json({ error: "type must be being or community" });
   }
   res.json({ ok: true });
 });
@@ -434,6 +603,34 @@ settingLocationsRouter.post("/:id/thumbnail", upload.single("file"), async (req,
     req.params.id
   );
   res.json(withImageUrls({ thumbnail_image_path: target }));
+});
+
+settingLocationsRouter.delete("/:id/avatar", (req, res) => {
+  const { mode } = req.query as { mode?: "forever" | "archive" };
+  const location = db
+    .prepare("SELECT name, avatar_image_path FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as { name: string; avatar_image_path: string | null } | undefined;
+  if (!location) return res.status(404).json({ error: "not found" });
+  if (location.avatar_image_path) {
+    const result = removeOrArchive(location.avatar_image_path, mode, "location_avatar", Number(req.params.id), `${location.name} — аватар`);
+    if ("needsChoice" in result) return res.status(409).json({ needsChoice: true });
+  }
+  db.prepare("UPDATE setting_locations SET avatar_image_path = NULL WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+settingLocationsRouter.delete("/:id/thumbnail", (req, res) => {
+  const { mode } = req.query as { mode?: "forever" | "archive" };
+  const location = db
+    .prepare("SELECT name, thumbnail_image_path FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as { name: string; thumbnail_image_path: string | null } | undefined;
+  if (!location) return res.status(404).json({ error: "not found" });
+  if (location.thumbnail_image_path) {
+    const result = removeOrArchive(location.thumbnail_image_path, mode, "location_thumbnail", Number(req.params.id), `${location.name} — тамбнейл`);
+    if ("needsChoice" in result) return res.status(409).json({ needsChoice: true });
+  }
+  db.prepare("UPDATE setting_locations SET thumbnail_image_path = NULL WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
 });
 
 settingLocationsRouter.post("/:id/map", upload.single("file"), async (req, res) => {

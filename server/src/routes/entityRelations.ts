@@ -24,6 +24,8 @@ const ENTITY_TABLES: Record<string, { table: string; nameCol: string }> = {
   player: { table: "players", nameCol: "name" },
 };
 
+const VALID_TONES = new Set(["positive", "negative", "neutral", "mixed"]);
+
 function resolveName(type: string, id: number): string | null {
   const def = ENTITY_TABLES[type];
   if (!def) return null;
@@ -31,6 +33,35 @@ function resolveName(type: string, id: number): string | null {
     | { name: string }
     | undefined;
   return row?.name ?? null;
+}
+
+function batchResolveNames(pairs: { type: string; id: number }[]): Map<string, string | null> {
+  const map = new Map<string, string | null>();
+  const byType = new Map<string, Set<number>>();
+  for (const p of pairs) {
+    if (!ENTITY_TABLES[p.type]) {
+      map.set(`${p.type}:${p.id}`, null);
+      continue;
+    }
+    const set = byType.get(p.type) ?? new Set<number>();
+    set.add(p.id);
+    byType.set(p.type, set);
+  }
+  for (const [type, ids] of byType) {
+    const def = ENTITY_TABLES[type]!;
+    const list = [...ids];
+    // SQLite limit — chunk by 500
+    for (let i = 0; i < list.length; i += 500) {
+      const chunk = list.slice(i, i + 500);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(`SELECT id, ${def.nameCol} as name FROM ${def.table} WHERE id IN (${placeholders})`)
+        .all(...chunk) as { id: number; name: string }[];
+      const found = new Map(rows.map((r) => [r.id, r.name]));
+      for (const id of chunk) map.set(`${type}:${id}`, found.get(id) ?? null);
+    }
+  }
+  return map;
 }
 
 interface RelationRow {
@@ -66,13 +97,21 @@ entityRelationsRouter.get("/", (req, res) => {
     .prepare(`SELECT * FROM entity_relations WHERE to_type = ? AND to_id = ?${sectionFilter} ORDER BY created_at DESC`)
     .all(...inParams) as RelationRow[];
 
+  const allPairs: { type: string; id: number }[] = [];
+  for (const r of outgoing) allPairs.push({ type: r.to_type, id: r.to_id });
+  for (const r of incoming) allPairs.push({ type: r.from_type, id: r.from_id });
+  const nameMap = batchResolveNames(allPairs);
   const withNames = (rows: RelationRow[], otherKey: "to" | "from") =>
-    rows.map((r) => ({
-      ...r,
-      other_type: otherKey === "to" ? r.to_type : r.from_type,
-      other_id: otherKey === "to" ? r.to_id : r.from_id,
-      other_name: resolveName(otherKey === "to" ? r.to_type : r.from_type, otherKey === "to" ? r.to_id : r.from_id),
-    }));
+    rows.map((r) => {
+      const ot = otherKey === "to" ? r.to_type : r.from_type;
+      const oi = otherKey === "to" ? r.to_id : r.from_id;
+      return {
+        ...r,
+        other_type: ot,
+        other_id: oi,
+        other_name: nameMap.get(`${ot}:${oi}`) ?? null,
+      };
+    });
 
   res.json({
     outgoing: withNames(outgoing, "to"),
@@ -86,25 +125,33 @@ entityRelationsRouter.get("/", (req, res) => {
  */
 entityRelationsRouter.get("/labels", (req, res) => {
   const { q } = req.query as { q?: string };
-  const rows = db
-    .prepare("SELECT label FROM entity_relations WHERE TRIM(label) <> ''")
-    .all() as { label: string }[];
-
-  const prefix = (q ?? "").trim().toLocaleLowerCase();
-  const byWord = new Map<string, { label: string; uses: number }>();
-  for (const row of rows) {
-    const label = row.label.trim();
-    const key = label.toLocaleLowerCase();
-    if (prefix && !key.startsWith(prefix)) continue;
-    const found = byWord.get(key);
-    if (found) found.uses++;
-    else byWord.set(key, { label, uses: 1 });
+  const prefix = (q ?? "").trim();
+  if (!prefix) {
+    const rows = db
+      .prepare(
+        `SELECT label as label, COUNT(*) as uses FROM entity_relations WHERE TRIM(label) <> '' GROUP BY lower(label) ORDER BY uses DESC, label ASC LIMIT 12`
+      )
+      .all() as { label: string; uses: number }[];
+    // keep first-cased variant
+    const seen = new Map<string, { label: string; uses: number }>();
+    for (const r of rows) {
+      const key = r.label.trim().toLocaleLowerCase();
+      if (!seen.has(key)) seen.set(key, { label: r.label.trim(), uses: r.uses });
+    }
+    res.json([...seen.values()]);
+    return;
   }
-  res.json(
-    [...byWord.values()]
-      .sort((a, b) => b.uses - a.uses || a.label.localeCompare(b.label))
-      .slice(0, 12)
-  );
+  const rows = db
+    .prepare(
+      `SELECT label as label, COUNT(*) as uses FROM entity_relations WHERE TRIM(label) <> '' AND lower(label) LIKE lower(?) || '%' GROUP BY lower(label) ORDER BY uses DESC, label ASC LIMIT 12`
+    )
+    .all(prefix) as { label: string; uses: number }[];
+  const seen = new Map<string, { label: string; uses: number }>();
+  for (const r of rows) {
+    const key = r.label.trim().toLocaleLowerCase();
+    if (!seen.has(key)) seen.set(key, { label: r.label.trim(), uses: r.uses });
+  }
+  res.json([...seen.values()]);
 });
 
 // POST /entity-relations — create a single relation (supports section + origin).
@@ -124,6 +171,7 @@ entityRelationsRouter.post("/", (req, res) => {
     return res.status(400).json({ error: "from_type, from_id, to_type, to_id are required" });
   if (!ENTITY_TABLES[from_type] || !ENTITY_TABLES[to_type])
     return res.status(400).json({ error: "unsupported entity type" });
+  if (tone && !VALID_TONES.has(tone)) return res.status(400).json({ error: "invalid tone" });
   const created = createRelation(
     { from_type, from_id, to_type, to_id },
     tone || "neutral",
@@ -132,6 +180,7 @@ entityRelationsRouter.post("/", (req, res) => {
     section ?? null,
     origin ?? "planned"
   );
+  graphCache.clear();
   res.status(201).json(created ?? { skipped: true });
 });
 
@@ -189,31 +238,35 @@ entityRelationsRouter.post("/batch", (req, res) => {
   if (!entity_type || !entity_id || !Array.isArray(targets) || targets.length === 0)
     return res.status(400).json({ error: "entity_type, entity_id and targets are required" });
   if (!ENTITY_TABLES[entity_type]) return res.status(400).json({ error: "unsupported entity type" });
+  if (tone && !VALID_TONES.has(tone)) return res.status(400).json({ error: "invalid tone" });
 
   let created = 0;
   let skipped = 0;
-  for (const target of targets) {
-    if (!ENTITY_TABLES[target.type]) continue;
-    const outgoing: RelationEnds = {
-      from_type: entity_type,
-      from_id: entity_id,
-      to_type: target.type,
-      to_id: target.id,
-    };
-    const incoming: RelationEnds = {
-      from_type: target.type,
-      from_id: target.id,
-      to_type: entity_type,
-      to_id: entity_id,
-    };
-    const primary = direction === "incoming" ? incoming : outgoing;
-    const ends = mirror ? [primary, direction === "incoming" ? outgoing : incoming] : [primary];
-    for (const e of ends) {
-      if (e.from_type === e.to_type && e.from_id === e.to_id) continue;
-      if (createRelation(e, tone || "neutral", label ?? "", description ?? "", section ?? null, origin ?? "planned")) created++;
-      else skipped++;
+  const batchTx = db.transaction(() => {
+    for (const target of targets) {
+      if (!ENTITY_TABLES[target.type]) continue;
+      const outgoing: RelationEnds = {
+        from_type: entity_type,
+        from_id: entity_id,
+        to_type: target.type,
+        to_id: target.id,
+      };
+      const incoming: RelationEnds = {
+        from_type: target.type,
+        from_id: target.id,
+        to_type: entity_type,
+        to_id: entity_id,
+      };
+      const primary = direction === "incoming" ? incoming : outgoing;
+      const ends = mirror ? [primary, direction === "incoming" ? outgoing : incoming] : [primary];
+      for (const e of ends) {
+        if (e.from_type === e.to_type && e.from_id === e.to_id) continue;
+        if (createRelation(e, tone || "neutral", label ?? "", description ?? "", section ?? null, origin ?? "planned")) created++;
+        else skipped++;
+      }
     }
-  }
+  });
+  batchTx();
   res.status(201).json({ created, skipped });
   graphCache.clear();
 });
@@ -224,6 +277,7 @@ entityRelationsRouter.put("/:id", (req, res) => {
     label?: string;
     description?: string;
   };
+  if (tone && !VALID_TONES.has(tone)) return res.status(400).json({ error: "invalid tone" });
   db.prepare(
     `UPDATE entity_relations SET
        tone = COALESCE(?, tone), label = COALESCE(?, label), description = COALESCE(?, description)

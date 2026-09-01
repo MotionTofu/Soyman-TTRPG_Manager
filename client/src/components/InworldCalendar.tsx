@@ -151,28 +151,40 @@ export function InworldCalendar({
           const dayItems = visibleItems.filter((it) => it.day === c.day);
           const hasSession = dayItems.some((it) => it.kind === "session");
           const hasEvent = dayItems.some((it) => it.kind === "event");
-          const hasImportant = expandedDates.some((ed) => ed.day === c.day);
+          const dayImportant = expandedDates.filter((ed) => ed.day === c.day);
+          const hasImportant = dayImportant.length > 0;
+          const importantTitle = hasImportant ? dayImportant.map((ed) => `${ed.date.title}${ed.date.owner_name ? ` (${ed.date.owner_name})` : ""}${ed.date.date_type ? ` · ${ed.date.date_type}`: ""}`).join("\n") : undefined;
           return (
             <div
               key={c.day}
               className={`day${hasSession ? " has-session" : ""}${hasEvent ? " has-event" : ""}${hasImportant ? " has-important" : ""}`}
+              title={importantTitle}
               onClick={() => onDayClick?.(cursor.year, cursor.month, c.day!)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (hasImportant && onImportantDateContextMenu && dayImportant.length === 1) {
+                  onImportantDateContextMenu(dayImportant[0].date, e.clientX, e.clientY);
+                  return;
+                }
                 onDayContextMenu?.(cursor.year, cursor.month, c.day!, e.clientX, e.clientY);
               }}
               onTouchStart={(e) => {
                 const touch = e.touches[0];
                 clearLongPress();
                 longPress.current = window.setTimeout(() => {
-                  onDayContextMenu?.(cursor.year, cursor.month, c.day!, touch.clientX, touch.clientY);
+                  if (hasImportant && onImportantDateContextMenu && dayImportant.length === 1) {
+                    onImportantDateContextMenu(dayImportant[0].date, touch.clientX, touch.clientY);
+                  } else {
+                    onDayContextMenu?.(cursor.year, cursor.month, c.day!, touch.clientX, touch.clientY);
+                  }
                 }, 520);
               }}
               onTouchEnd={clearLongPress}
               onTouchMove={clearLongPress}
             >
               <span className="num">{c.day}</span>
+              {hasImportant && <span className="important-dot" title={importantTitle} aria-hidden="true" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: dayImportant[0].date.color || "var(--accent)", marginLeft: 3, verticalAlign: "middle" }} />}
             </div>
           );
         }

@@ -157,7 +157,6 @@ export function SettingDetailPage() {
   const [tab, selectTab] = useTabState(TABS, "Обзор");
   const [showExport, setShowExport] = useState(false);
   const [creatingEvent, setCreatingEvent] = useState(false);
-  const [artifactCount, setArtifactCount] = useState<number | null>(null);
 
   const calendar = useSettingCalendar(settingId);
   const [calendarEvents, setCalendarEvents] = useState<SettingCalendarEvent[]>([]);
@@ -332,14 +331,13 @@ export function SettingDetailPage() {
     setLoadError(null);
     const opts = signal ? { signal } : undefined;
     try {
-      const [s, res, chars, camps, groups, bySetting, artCount] = await Promise.all([
+      const [s, res, chars, camps, groups, bySetting] = await Promise.all([
         api.get<Setting>(`/settings/${settingId}`, opts),
         api.get<Resource[]>(`/resources?scope=setting&setting_id=${settingId}`, opts),
         api.get<Character[]>(`/characters?setting_id=${settingId}`, opts),
         api.get<Campaign[]>(`/campaigns?setting_id=${settingId}`, opts),
         api.get<SettingGroup[]>("/setting-groups", opts),
         api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`, opts),
-        api.get<{ count: number }>(`/artifacts/count?setting_id=${settingId}`, opts),
       ]);
       setSetting(s);
       setResources(res);
@@ -347,7 +345,6 @@ export function SettingDetailPage() {
       setCampaigns(camps);
       setAllGroups(groups);
       setSettingGroupIds(bySetting.map((g) => g.id));
-      setArtifactCount(artCount.count);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       setLoadError(String(e instanceof Error ? e.message : e));
@@ -802,7 +799,7 @@ export function SettingDetailPage() {
       <div className="tabs">
         {TABS.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t === "Сокровищница" && artifactCount != null ? `Сокровищница · ${artifactCount}` : t}
+            {t}
           </button>
         ))}
       </div>
