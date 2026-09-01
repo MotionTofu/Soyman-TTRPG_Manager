@@ -16,7 +16,7 @@ import {
 } from "../dndPrefs";
 import type { AppSettings } from "../types";
 
-const DEFAULT_RADIUS = 6;
+const DEFAULT_RADIUS = 0;
 
 export function AppearanceSettingsPage() {
   const [prefs, setPrefs] = useState(loadThemePrefs());
@@ -65,7 +65,7 @@ export function AppearanceSettingsPage() {
 
   function changeRadius(px: number) {
     setRadius(px);
-    saveRadiusOverride(px === DEFAULT_RADIUS ? null : px);
+    saveRadiusOverride(px === 0 ? null : px);
     applyTheme(findTheme(prefs.themeId, prefs.customThemes));
   }
 
@@ -240,17 +240,17 @@ export function AppearanceSettingsPage() {
 
         <div className="grid-cards" style={{ marginTop: 10 }}>
           {themes.map((t) => (
-            <div
+              <div
               key={t.id}
               className="card"
               onClick={() => select(t.id)}
-              style={{ cursor: "pointer", borderColor: t.id === prefs.themeId ? t.vars["--accent"] : undefined, borderWidth: t.id === prefs.themeId ? 2 : undefined }}
+              style={{ cursor: "pointer", borderColor: t.id === prefs.themeId ? t.vars["--accent"] : undefined, borderWidth: t.id === prefs.themeId ? 1 : undefined }}
             >
               <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--paper"], border: "1px solid " + t.vars["--line"] }} />
-                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--paper-2"], border: "1px solid " + t.vars["--line"] }} />
-                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--accent"] }} />
-                <span style={{ width: 18, height: 18, borderRadius: 5, background: t.vars["--ink"] }} />
+                <span style={{ width: 18, height: 18, borderRadius: 0, background: t.vars["--paper"], border: "1px solid " + t.vars["--line"] }} />
+                <span style={{ width: 18, height: 18, borderRadius: 0, background: t.vars["--paper-2"], border: "1px solid " + t.vars["--line"] }} />
+                <span style={{ width: 18, height: 18, borderRadius: 0, background: t.vars["--accent"] }} />
+                <span style={{ width: 18, height: 18, borderRadius: 0, background: t.vars["--ink"] }} />
               </div>
               <div style={{ fontFamily: t.vars["--font-display"], fontWeight: 600 }}>{t.name}</div>
               {t.id === prefs.themeId && <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.1em", color: t.vars["--accent"], fontWeight: 600, marginTop: 4 }}>Выбрана</div>}

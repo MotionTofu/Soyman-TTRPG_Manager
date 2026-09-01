@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
@@ -64,6 +64,7 @@ export function SystemsListPage() {
   const [groupMembers, setGroupMembers] = useState<Map<number, Set<number>>>(new Map());
   const [groupModalGroupId, setGroupModalGroupId] = useState<number | null>(null);
   const [ungroupedIds, setUngroupedIds] = useState<Set<number>>(new Set());
+  const [q, setQ] = useState("");
 
   async function loadGroups() {
     try {
@@ -116,14 +117,24 @@ export function SystemsListPage() {
     }
   }, [systems, groups]);
 
-  const filteredSystems = (() => {
-    if (activeTab === null) return systems;
-    if (activeTab === "ungrouped") return systems.filter(s => ungroupedIds.has(s.id));
-    const groupId = Number(activeTab);
-    const memberIds = groupMembers.get(groupId);
-    if (!memberIds) return systems.filter(() => false);
-    return systems.filter(s => memberIds.has(s.id));
-  })();
+  const filteredSystems = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    const byTab = (() => {
+      if (activeTab === null) return systems;
+      if (activeTab === "ungrouped") return systems.filter(s => ungroupedIds.has(s.id));
+      const groupId = Number(activeTab);
+      const memberIds = groupMembers.get(groupId);
+      if (!memberIds) return systems.filter(() => false);
+      return systems.filter(s => memberIds.has(s.id));
+    })();
+    if (!qq) return byTab;
+    return byTab.filter(
+      (s) =>
+        s.name.toLowerCase().includes(qq) ||
+        (s.code ?? "").toLowerCase().includes(qq) ||
+        (s.description ?? "").toLowerCase().includes(qq)
+    );
+  }, [systems, activeTab, groupMembers, ungroupedIds, q]);
 
   function refresh() {
     void loadSystems();
@@ -163,6 +174,28 @@ export function SystemsListPage() {
         onGroupsChanged={loadGroups}
       />
 
+      <div className="res-toolbar" style={{ marginTop: 4 }}>
+        <input
+          className="res-toolbar__search"
+          placeholder="Поиск по имени, коду, описанию…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Поиск по системам"
+        />
+        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
+          {filteredSystems.length} / {systems.length}
+        </span>
+        {q && (
+          <button
+            onClick={() => setQ("")}
+            style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+            title="Сбросить поиск"
+          >
+            Сбросить
+          </button>
+        )}
+      </div>
+
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось загрузить системы: {loadError}</span>
@@ -201,6 +234,20 @@ export function SystemsListPage() {
             </button>
           )}
         </div>
+      )}
+
+      {!loading && !loadError && filteredSystems.length === 0 && systems.length > 0 && (
+        <EmptyState
+          icon="barcode"
+          title="Ничего не найдено"
+          hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет систем в этой группе."}
+          action={
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+              {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+              <button onClick={() => setActiveTab(null)}>Показать все</button>
+            </div>
+          }
+        />
       )}
 
       {!loading && !loadError && systems.length === 0 && (

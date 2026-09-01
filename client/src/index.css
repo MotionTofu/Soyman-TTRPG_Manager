@@ -214,7 +214,7 @@ button {
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   color: var(--text-bright);
-  border-radius: var(--card-radius);
+  border-radius: 0;
   padding: 6px 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -256,7 +256,7 @@ button.danger:not(.comp-mini):disabled {
 input, select, textarea {
   background: var(--paper);
   border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: var(--card-radius);
+  border-radius: 0;
   padding: 6px 8px;
 }
 
@@ -367,6 +367,95 @@ h4 { font-size: var(--fs-body); }
 }
 .health-value {
   font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.health-value--badge {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.health-hint {
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.health-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.health-row--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.health-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.health-path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+/* Плашка-инверсия для секций Здоровья — §1.4, как .geography-node-header / .campaign-player-header (D-P0-3) */
+.health-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -14px -14px 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.health-section-header strong,
+.health-section-header .entry-title {
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.health-section-header span {
+  color: var(--on-surface-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+}
+.health-card {
+  overflow: hidden;
+}
+.health-card > summary.health-section-header:hover,
+.health-card[open] > summary.health-section-header:hover {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+.health-card > summary.health-section-header::marker {
+  color: var(--on-surface-muted);
+}
+.health-hint {
+  border-left: 3px solid var(--accent);
+  padding: 6px 10px;
+  margin: 4px 0;
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
   font-size: var(--fs-meta);
 }
 /* Dead UID modal — P0-1/P0-3: плашка-инверсия (§1.4), голоса (§1.5), 1px (§1.3), sticky */
@@ -575,6 +664,86 @@ h4 { font-size: var(--fs-body); }
   .dead-uid-modal__foot .row { width: 100%; justify-content: stretch; }
   .dead-uid-modal__foot .row button { flex: 1 1 auto; }
 }
+/* Orphan browser — ширина как у Dead UID, но шире под 300+280 превью/контролы */
+.modal:has(.orphan-browser) {
+  width: min(860px, calc(100vw - 32px));
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.orphan-browser {
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  min-height: 0;
+  gap: 0;
+}
+.orphan-browser__head,
+.orphan-browser__foot {
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+.orphan-browser__head {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.orphan-browser__foot {
+  border-top: 1px solid var(--line);
+  background: var(--paper-2);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.orphan-browser__body {
+  padding: 10px 14px;
+  overflow-y: auto;
+  min-height: 0;
+}
+/* Attach wizard — 300x450 превью + 280 контролы = 580, на 520 уходит в столбец */
+.modal:has(.orphan-attach-wizard) {
+  width: min(720px, calc(100vw - 32px));
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.orphan-attach-wizard {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.orphan-attach-wizard__preview {
+  width: 300px;
+  min-height: 380px;
+  max-height: 450px;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .orphan-attach-wizard { flex-direction: column; }
+  .orphan-attach-wizard__preview { width: 100%; min-height: 240px; }
+  .modal:has(.orphan-browser) { width: calc(100vw - 16px); }
+}
+.orphan-attach-wizard select option.orphan-occupied { color: #c0392b; font-weight: 600; }
 /* Для игроков: тот же приём §1.9 — внешний gap 24px, внутренние .card .card
    не схлопываются (иначе ArticleCard без рамки). R2-CRIT-0 / D-P0-1. */
 .campaign-player-overview {
@@ -881,6 +1050,7 @@ h4 { font-size: var(--fs-body); }
 .empty-state-hint {
   margin: 0;
   max-width: 32em;
+  line-height: 1.35;
 }
 .empty-state-action {
   margin-top: var(--sp-2, 8px);
@@ -1442,7 +1612,7 @@ h4 { font-size: var(--fs-body); }
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--ink) 85%, transparent) 100%);
+  background: linear-gradient(180deg, transparent 25%, color-mix(in srgb, var(--scrim) 95%, transparent) 100%);
 }
 .campaign-tile-name {
   position: absolute;
@@ -1453,19 +1623,10 @@ h4 { font-size: var(--fs-body); }
      запрещает халфтон под текстом. */
   z-index: 2;
   margin: 0;
-  color: var(--paper);
+  color: var(--accent);
   font-family: var(--font-display);
   text-transform: var(--name-transform);
   line-height: 0.96;
-}
-/* Соевый покой — тёмный градиент под названием на плитке (вместо
-   общего светлого `var(--ink)`), чтобы обложка уходила в глубокий
-   тёмно-изумрудный низ, а не в выбеленный, и текст остаётся светлым. */
-[data-theme-id="peace"] .campaign-tile-scrim {
-  background: linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--paper) 92%, transparent) 100%);
-}
-[data-theme-id="peace"] .campaign-tile-name {
-  color: var(--ink);
 }
 /* Иконка на плейсхолдере плитки «добавить в группу» — крупная, тёмная,
    центрирована в зоне обложки. */
@@ -1538,6 +1699,41 @@ h4 { font-size: var(--fs-body); }
 .campaign-tile-create-icon .nav-icon {
   width: 48px;
   height: 48px;
+}
+
+/* Campaign row: two-column layout — campaign on left, characters on right */
+.campaign-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.campaign-row-main {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.campaign-row-main .campaign-tile {
+  width: 100%;
+}
+.campaign-row-chars {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  min-height: 60px;
+}
+.campaign-row-chars .campaign-tile {
+  font-size: 0.9em;
+}
+@media (max-width: 700px) {
+  .campaign-row {
+    flex-direction: column;
+  }
+  .campaign-row-main {
+    flex: none;
+    width: 100%;
+  }
 }
 
 /* App shell layout */
@@ -1779,6 +1975,7 @@ h4 { font-size: var(--fs-body); }
 [data-theme-id="neon"] .section-heading h1[data-section="mastering"],
 [data-theme-id="neon"] .section-heading h1[data-section="resources"],
 [data-theme-id="neon"] .section-heading h1[data-section="graph"] { color: #00FFC6; }
+[data-theme-id="neon"] .section-heading h1[data-section="health"] { color: #FF3B30; }
 .nav-icon {
   width: 18px;
   height: 18px;
@@ -1801,6 +1998,10 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   flex-direction: column;
   min-width: 0;
+  max-width: 1440px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
 }
 .app-content.has-player {
   padding-bottom: var(--player-bar-height);
@@ -2701,8 +2902,8 @@ th, td {
 .month-calendar .dot.kind-event.important { background: var(--accent); color: var(--paper); font-weight: 600; }
 .month-calendar .dot.kind-date { background: var(--bg-elevated); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
 .month-calendar .day.has-session {
-  border-color: #15803d !important;
-  border-width: 2.5px !important;
+  border-color: var(--status-free, #15803d) !important;
+  border-width: 1px !important;
 }
 .month-calendar .day.has-event {
   background: #1e5a2f !important;
@@ -2806,7 +3007,7 @@ th, td {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  border-bottom: 1.5px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 .external-confirm__head .nav-icon {
   width: 16px;
@@ -3111,12 +3312,14 @@ details.card[open] summary {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
-  /* .tabs is a plain flex row with no wrap — fine on desktop where there's
-     room, but a page with 5-6 tabs (e.g. a character profile) overflows the
-     viewport width on a phone since flex items never wrap by default. Wrap
-     onto multiple rows instead of letting the row force horizontal scroll. */
+  /* .tabs stays single-line with horizontal scroll on all widths (§5).
+     Wrap onto two rows breaks the tab-vs-body seam (the inset line doubles)
+     and the active tab no longer covers its pixel. */
   .tabs {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
   }
   .mobile-topbar {
     display: flex;
@@ -4101,13 +4304,56 @@ details.card[open] summary {
   display: block;
 }
 .player-avatar {
-  width: 228px;
-  height: 228px;
+  width: min(228px, 100%);
+  height: min(228px, 100%);
   object-fit: cover;
   border-radius: var(--card-radius);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
   display: block;
+}
+.player-avatar-placeholder {
+  width: min(228px, 100%);
+  aspect-ratio: 1;
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+}
+.player-profile-header {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 12px 16px;
+  margin: 0;
+  border: var(--card-border-width, 1px) solid var(--ink);
+}
+.player-profile-header h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 0.94;
+}
+.player-profile-notes {
+  margin-top: 6px;
+  color: var(--on-surface-muted);
+  font-size: var(--fs-body);
+}
+.player-cabinet-password {
+  max-width: 400px;
+}
+.player-group-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--line);
+  background: transparent;
+  font-size: var(--fs-meta);
+}
+.player-group-chip--active {
+  border-color: var(--accent);
+  background: var(--accent-bg, rgba(79, 140, 255, 0.08));
 }
 .location-avatar {
   width: 176px;
@@ -4462,6 +4708,40 @@ details.card[open] summary {
   letter-spacing: 0.08em;
   text-align: center;
 }
+/* 2.3 — на 520px шаги онбординга столбиком (тапабельнее, без горизонтального скролла) */
+@media (max-width: 520px) {
+  .onboarding-steps {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .onboarding-steps > button {
+    flex: 1 1 auto !important;
+    flex-direction: row !important;
+    justify-content: flex-start;
+    text-align: left;
+    min-width: 0 !important;
+  }
+}
+/* 2.4 — пустая ячейка календаря кликабельна (тап = новая сессия) */
+.mini-calendar-day.day-empty-clickable {
+  cursor: pointer;
+}
+.mini-calendar-day.day-empty-clickable:hover {
+  background: var(--accent-soft);
+  border-color: var(--line);
+}
+.mini-calendar-day.day-empty-clickable:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+/* 2.1 — серый пункт навигации на пустой БД */
+.app-nav a.nav-empty {
+  opacity: 0.52;
+}
+.app-nav a.nav-empty .badge.tag {
+  background: var(--paper);
+  color: var(--muted);
+}
 /* Модалка создания игроков — drafting rows. */
 .player-draft {
   display: flex;
@@ -4521,13 +4801,7 @@ details.card[open] summary {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 35%, color-mix(in srgb, var(--ink) 85%, transparent) 100%);
-}
-[data-theme-id="peace"] .home-hero-scrim {
-  background: linear-gradient(180deg, transparent 35%, color-mix(in srgb, var(--paper) 92%, transparent) 100%);
-}
-[data-theme-id="peace"] .home-hero-title {
-  color: var(--ink);
+  background: linear-gradient(180deg, transparent 20%, color-mix(in srgb, var(--scrim) 95%, transparent) 100%);
 }
 [data-theme-id="peace"] .home-hero-session {
   color: color-mix(in srgb, var(--ink) 90%, transparent);
@@ -4565,7 +4839,7 @@ details.card[open] summary {
   font-weight: 400;
   text-transform: var(--name-transform);
   line-height: 0.92;
-  color: var(--paper);
+  color: var(--accent);
 }
 /* Название сессии, если задано: второй голос — проза курсивом, между
    титульным и значением. Разрыв ×1.6 держится за счёт смены гарнитуры. */
@@ -5017,8 +5291,8 @@ details.card[open] summary {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg,
-    color-mix(in srgb, var(--ink) 25%, transparent) 0%,
-    color-mix(in srgb, var(--ink) 92%, transparent) 100%);
+    color-mix(in srgb, var(--scrim) 40%, transparent) 0%,
+    color-mix(in srgb, var(--scrim) 96%, transparent) 100%);
   border-radius: var(--card-radius);
 }
 .setting-card-bg > * {
@@ -7760,6 +8034,52 @@ input.litm-theme-title {
 }
 .archive-bulk-bar__actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .archive-bulk-bar__actions button:disabled { opacity: 0.5; }
+.archive-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.archive-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border: 1px solid var(--line);
+  font-family: var(--font-body);
+  font-size: 13px;
+  max-width: min(90vw, 520px);
+}
+.archive-toast__msg { flex: 1 1 auto; }
+.archive-toast__actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
+.archive-toast__undo {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+}
+.archive-toast__close {
+  background: transparent;
+  border: none;
+  color: var(--on-surface-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+}
 
 @media (max-width: 760px) {
   .archive-toolbar__search { flex: 1 1 100%; }
@@ -8397,6 +8717,10 @@ body.printing-cheatsheet #root {
   align-items: center;
   gap: var(--sp-2);
   flex-wrap: wrap;
+}
+.res-toolbar .genre-chips {
+  flex: 0 1 auto;
+  gap: 4px;
 }
 .res-toolbar__search {
   flex: 1 1 220px;
@@ -9364,32 +9688,67 @@ details[open] > .res-group__band .chevron-icon {
   flex-direction: column;
   gap: 6px;
 }
-.genre-category-header {
+.genre-category-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+}
+.genre-category-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   background: none;
   border: none;
-  padding: 0;
   cursor: pointer;
+  color: var(--genre-color, #888);
+  opacity: 0.6;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.genre-category-toggle:hover {
+  opacity: 1;
+}
+.genre-category-triangle {
+  transition: transform 0.15s ease;
+}
+.genre-category-triangle--open {
+  transform: rotate(90deg);
+}
+.genre-category-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
-  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--genre-color);
-  transition: opacity 0.15s;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.genre-category-header:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--genre-color) 30%, transparent);
 }
 .genre-category-header:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
-.genre-category-header--selected {
-  text-decoration: underline;
+.genre-category-header.genre-chip--selected {
+  background: var(--genre-color);
+  color: #fff;
+}
+.genre-category-header.genre-chip--selected .genre-chip-icon {
+  color: #fff;
 }
 .genre-category-icon {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   color: var(--genre-color);
 }
 .genre-subgenres {
@@ -9426,9 +9785,9 @@ details[open] > .res-group__band .chevron-icon {
 
 /* ─── Setting group tabs extras ──────────────────────────────────────────── */
 .setting-group-tab-rename-input {
-  background: var(--bg-elevated);
+  background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 1px 4px;
   font: inherit;
   color: var(--ink);
@@ -9441,9 +9800,9 @@ details[open] > .res-group__band .chevron-icon {
   padding: 8px 0;
 }
 .setting-group-create-input {
-  background: var(--bg-elevated);
+  background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: var(--card-radius);
+  border-radius: 0;
   padding: 4px 8px;
   font: inherit;
   color: var(--ink);
@@ -9452,10 +9811,9 @@ details[open] > .res-group__band .chevron-icon {
 .setting-group-context-menu {
   position: fixed;
   z-index: 1000;
-  background: var(--bg-elevated);
+  background: var(--paper-2);
   border: 1px solid var(--line);
-  border-radius: var(--card-radius);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 0;
   padding: 4px 0;
   min-width: 160px;
 }

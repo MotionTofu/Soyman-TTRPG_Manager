@@ -24,10 +24,17 @@ export function GraphPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [settingId, setSettingId] = useState<number | "">("");
   const [campaignId, setCampaignId] = useState<number | "">("");
+  const [scopeError, setScopeError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<Setting[]>("/settings").then(setSettings).catch(() => {});
-    api.get<Campaign[]>("/campaigns").then(setCampaigns).catch(() => {});
+    let cancelled = false;
+    api.get<Setting[]>("/settings")
+      .then((v) => { if (!cancelled) setSettings(v); })
+      .catch((e: unknown) => { if (!cancelled) setScopeError(e instanceof Error ? e.message : "Не удалось загрузить сеттинги"); });
+    api.get<Campaign[]>("/campaigns")
+      .then((v) => { if (!cancelled) setCampaigns(v); })
+      .catch((e: unknown) => { if (!cancelled) setScopeError(e instanceof Error ? e.message : "Не удалось загрузить кампании"); });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -59,6 +66,12 @@ export function GraphPage() {
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
       <SectionHeading section="graph">Граф связей</SectionHeading>
+      {scopeError && (
+        <div className="error-banner">
+          {scopeError}
+          <button type="button" onClick={() => setScopeError(null)}>Закрыть</button>
+        </div>
+      )}
       {error && (
         <div className="error-banner">
           {error}
@@ -76,12 +89,29 @@ export function GraphPage() {
               key={d}
               type="button"
               className={depth === d ? "active-sort" : ""}
-              onClick={() => setSearchParams({ focus, depth: String(d) })}
+              onClick={() =>
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("focus", focus);
+                  next.set("depth", String(d));
+                  return next;
+                })
+              }
             >
               {d}
             </button>
           ))}
-          <button type="button" onClick={() => setSearchParams({})}>
+          <button
+            type="button"
+            onClick={() =>
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete("focus");
+                next.delete("depth");
+                return next;
+              })
+            }
+          >
             Показать весь граф
           </button>
         </div>
@@ -103,7 +133,7 @@ export function GraphPage() {
                 setCampaignId("");
               }}
             >
-              <option value="">Все сеттинги</option>
+              <option value="">Все сеттинги ({settings.length})</option>
               {settings.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -114,7 +144,7 @@ export function GraphPage() {
               value={campaignId}
               onChange={(e) => setCampaignId(e.target.value ? Number(e.target.value) : "")}
             >
-              <option value="">Все кампании</option>
+              <option value="">Все кампании ({campaignsInScope.length})</option>
               {campaignsInScope.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

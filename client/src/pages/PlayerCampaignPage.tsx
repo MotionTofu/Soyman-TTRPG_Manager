@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";
 import { toLocalDateKey } from "../utils/date";
 import type {
@@ -196,7 +197,7 @@ export function PlayerCampaignPage() {
           key: `section-${s.id}-img-${img.id}`,
           section: s.name,
           title: img.caption || "Изображение",
-          body: <img src={img.image_url} alt={img.caption} style={{ maxWidth: "100%", borderRadius: 6 }} />,
+          body: <img src={img.image_url} alt={img.caption} style={{ maxWidth: "100%" }} />,
         })),
       });
     } else {
@@ -295,6 +296,7 @@ export function PlayerCampaignPage() {
 
   return (
     <div className="stack">
+      <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: content.campaign.name }]} />
       <h1 style={{ margin: 0 }}>{content.campaign.name}</h1>
 
       <div className="tabs">

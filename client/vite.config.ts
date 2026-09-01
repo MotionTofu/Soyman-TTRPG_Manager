@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -6,6 +7,17 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     include: ["@xyflow/react", "react", "react-dom", "react-router-dom"],
+  },
+  build: {
+    rollupOptions: {
+      // @ts-ignore
+      output: {
+        manualChunks(id: string) {
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom") || id.includes("node_modules/react-router")) return "vendor";
+          if (id.includes("node_modules/@xyflow")) return "xyflow";
+        },
+      },
+    },
   },
   server: {
     host: '127.0.0.1',

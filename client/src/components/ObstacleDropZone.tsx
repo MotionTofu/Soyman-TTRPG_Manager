@@ -134,21 +134,24 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
     }
     if (!ACCEPT_TYPES.includes(result.type)) return;
     if (result.type === "compendium_entry" && result.kind !== "monster") return;
-    await api.post("/links", {
+    await api.post("/entity-relations", {
       from_type: "session",
       from_id: sessionId,
       to_type: result.type,
       to_id: result.id,
       section: "enemies",
       origin,
+      tone: "neutral",
+      label: "",
+      description: "",
     });
     load();
   }
 
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
 
-  async function remove(linkId: number) {
-    await api.del(`/links/${linkId}`);
+  async function remove(relationId: number) {
+    await api.del(`/entity-relations/${relationId}`);
     setPendingDelete(null);
     load();
   }
@@ -252,13 +255,16 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       {pickerOpen && (
         <ObstaclePicker
           onPick={async (result) => {
-            await api.post("/links", {
+            await api.post("/entity-relations", {
               from_type: "session",
               from_id: sessionId,
               to_type: result.type,
               to_id: result.id,
               section: "enemies",
               origin,
+              tone: "neutral",
+              label: "",
+              description: "",
             });
             setPickerOpen(false);
             load();

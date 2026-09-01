@@ -75,7 +75,7 @@ export function PlayerHomePage() {
       {reminders.length > 0 && (
         <div className="stack">
           {reminders.map((r) => (
-            <div key={r.id} className="card" style={{ gap: 4, borderLeft: "3px solid var(--accent)" }}>
+            <div key={r.id} className="card" style={{ gap: 4, borderLeft: "1px solid var(--accent)" }}>
               <span className="muted">
                 {r.target_type === "campaign" ? "Напоминание по кампании" : "Напоминание от мастера"}
               </span>
@@ -103,7 +103,7 @@ export function PlayerHomePage() {
         <div className="stack">
           <strong>Не оплачено</strong>
           {unpaidSessions.map((s) => (
-            <div key={s.session_id} className="card stack" style={{ gap: 4, borderLeft: "3px solid var(--accent)" }}>
+            <div key={s.session_id} className="card stack" style={{ gap: 4, borderLeft: "1px solid var(--accent)" }}>
               <Link to={`/campaigns/${s.campaign_id}`}>
                 {s.date} — {s.campaign_name}
                 {s.title && ` (${s.title})`}

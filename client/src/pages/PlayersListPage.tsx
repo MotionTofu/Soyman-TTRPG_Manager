@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
@@ -62,6 +62,7 @@ export function PlayersListPage() {
   const [groups, setGroups] = useState<PlayerGroup[]>([]);
   const [groupMemberships, setGroupMemberships] = useState<Record<number, number[]>>({});
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
+  const [q, setQ] = useState("");
 
   async function loadPlayers(signal?: AbortSignal) {
     setLoading(true);
@@ -112,14 +113,23 @@ export function PlayersListPage() {
 
   useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
 
-  const filteredPlayers = (() => {
-    if (activeTab === null) return players;
-    if (activeTab === "ungrouped") {
-      return players.filter((p) => !groupMemberships[p.id]?.length);
-    }
-    const groupId = Number(activeTab);
-    return players.filter((p) => groupMemberships[p.id]?.includes(groupId));
-  })();
+  const filteredPlayers = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    const byTab = (() => {
+      if (activeTab === null) return players;
+      if (activeTab === "ungrouped") {
+        return players.filter((p) => !groupMemberships[p.id]?.length);
+      }
+      const groupId = Number(activeTab);
+      return players.filter((p) => groupMemberships[p.id]?.includes(groupId));
+    })();
+    if (!qq) return byTab;
+    return byTab.filter(
+      (p) =>
+        p.name.toLowerCase().includes(qq) ||
+        (p.notes ?? "").toLowerCase().includes(qq)
+    );
+  }, [players, activeTab, groupMemberships, q]);
 
   async function create() {
     if (!name.trim()) return;
@@ -175,6 +185,28 @@ export function PlayersListPage() {
         />
       )}
 
+      <div className="res-toolbar" style={{ marginTop: 4 }}>
+        <input
+          className="res-toolbar__search"
+          placeholder="Поиск по имени, заметкам…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Поиск по игрокам"
+        />
+        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
+          {filteredPlayers.length} / {players.length}
+        </span>
+        {q && (
+          <button
+            onClick={() => setQ("")}
+            style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+            title="Сбросить поиск"
+          >
+            Сбросить
+          </button>
+        )}
+      </div>
+
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось загрузить игроков: {loadError}</span>
@@ -213,18 +245,21 @@ export function PlayersListPage() {
               </button>
             )}
           </div>
-          {activeTab !== null && filteredPlayers.length === 0 && (
-            <div className="muted" style={{ padding: "8px 2px" }}>
-              {activeTab === "ungrouped"
-                ? "Все игроки состоят в группах."
-                : (() => {
-                    const g = groups.find((gr) => gr.id === Number(activeTab));
-                    return `В группе «${g?.name ?? "…"}» пока нет игроков.`;
-                  })()
-              }
-            </div>
-          )}
         </div>
+      )}
+
+      {!loading && !loadError && filteredPlayers.length === 0 && players.length > 0 && (
+        <EmptyState
+          icon="barcode"
+          title="Ничего не найдено"
+          hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
+          action={
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+              {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+              {activeTab !== null && <button onClick={() => setActiveTab(null)}>Показать всех</button>}
+            </div>
+          }
+        />
       )}
 
       {!loading && !loadError && players.length === 0 && (

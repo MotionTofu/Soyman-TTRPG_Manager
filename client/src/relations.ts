@@ -1,10 +1,12 @@
 import type { RelationEntityType, RelationTone } from "./types";
 
+// Пастельные тона — та же hue, но s<45 l~80, чтобы не рвать бюджет акцента (15%)
+// и читаться на paper/paper-2 в noir/peace/aberrant.
 export const RELATION_TONES: { key: RelationTone; label: string; color: string }[] = [
-  { key: "positive", label: "Позитивное", color: "#4c9a5b" },
-  { key: "negative", label: "Негативное", color: "#b0454b" },
-  { key: "neutral", label: "Нейтральное", color: "#8a8a95" },
-  { key: "mixed", label: "Смешанное", color: "#8968b0" },
+  { key: "positive", label: "Позитивное", color: "#b7d6bd" },
+  { key: "negative", label: "Негативное", color: "#dfb4b7" },
+  { key: "neutral", label: "Нейтральное", color: "#d0d0d4" },
+  { key: "mixed", label: "Смешанное", color: "#cfc2df" },
 ];
 
 export const RELATION_TONE_LABELS: Record<RelationTone, string> = Object.fromEntries(

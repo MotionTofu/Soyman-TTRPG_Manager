@@ -219,6 +219,11 @@ export function readFileAsBase64(
 // files. Returns the resulting relative path (goes straight into the DB).
 export async function writeBase64File(folder: string, filename: string, base64: string): Promise<string> {
   const target = path.join(vaultAbs(folder), sanitizeName(filename));
+  const root = path.resolve(VAULT_ROOT);
+  const resolved = path.resolve(target);
+  if (resolved === root || !resolved.startsWith(root + path.sep)) {
+    throw new Error(`Refusing to write outside vault: ${folder}/${filename}`);
+  }
   await storeDeduped(Buffer.from(base64, "base64"), target);
   return vaultRel(target);
 }
@@ -290,7 +295,8 @@ export function toFileUrl(storedPath: string): string {
   } catch {
     /* file gone — serve the bare URL */
   }
-  return `/files/${relative}${version}`;
+  const encoded = relative.split("/").map((seg) => encodeURIComponent(seg)).join("/");
+  return `/files/${encoded}${version}`;
 }
 
 // Best-effort recursive removal of an entity's folder, used only by permanent

@@ -46,6 +46,7 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { cardThumbnailProps, loadThumbnailStyles, type ThumbnailStyle } from "../thumbnailStyles";
 import { loadHideFinance } from "../financePrivacy";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
+import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { useConfirm, useAlert } from "../hooks/useConfirm";
 import type {
   CampaignCalendarEvent,
@@ -559,7 +560,7 @@ export function CampaignDetailPage() {
 
   const safeBgLayer = safeBackgroundImage(campaign.background_image_url && isSafeImageUrl(campaign.background_image_url) ? campaign.background_image_url : null);
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className="stack" style={{ position: "relative", paddingBottom: 60 }}>
       {safeBgLayer && (
         <div className="campaign-bg-layer cover-photo cover-halftone">
           <div className="cover-art cover-photo">
@@ -2022,8 +2023,14 @@ function OverviewTab({
   const rawThumbUrl = campaign.thumbnail_image_url ?? null;
   const bgUrl = rawBgUrl && isSafeImageUrl(rawBgUrl) ? rawBgUrl : null;
   const thumbUrl = rawThumbUrl && isSafeImageUrl(rawThumbUrl) ? rawThumbUrl : null;
-  const safeBg = bgUrl ? safeBackgroundImage(bgUrl) : undefined;
-  const safeThumb = thumbUrl ? safeBackgroundImage(thumbUrl) : undefined;
+  const authBgBlob = useAuthenticatedFileUrl(bgUrl);
+  const authThumbBlob = useAuthenticatedFileUrl(thumbUrl);
+  const safeBg = bgUrl?.startsWith("/files/")
+    ? (authBgBlob ? `url("${authBgBlob}")` : undefined)
+    : safeBackgroundImage(bgUrl);
+  const safeThumb = thumbUrl?.startsWith("/files/")
+    ? (authThumbBlob ? `url("${authThumbBlob}")` : undefined)
+    : safeBackgroundImage(thumbUrl);
 
   return (
     <div className="stack campaign-overview">
@@ -2200,7 +2207,7 @@ function OverviewTab({
 
       <details className="card res-group" open>
         <summary className="res-group__band">
-          <span className="res-group__title">Основное</span>
+          <span className="res-group__title">Продакшен</span>
           <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{campaignGroupIds.length} из {allGroups.length} групп</span>
         </summary>
         <div className="res-group__body" style={{ padding: 12 }}>

@@ -25,7 +25,7 @@ export function AboutPage() {
 
   return (
     <div className="stack">
-      <SectionHeading section="about">Справка</SectionHeading>
+      <SectionHeading section="about" compact>Справка</SectionHeading>
 
       <div className="tabs">
         {TABS.map((t) => (

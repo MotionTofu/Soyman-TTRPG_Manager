@@ -85,8 +85,16 @@ export function Timeline({
   const boxRef = useRef<HTMLDivElement | null>(null);
 
   const perYear = daysInYear(months) || 365;
-  const pxPerDay = ZOOMS[zoom].pxPerDay;
-  const precision = ZOOMS[zoom].key;
+
+  // Плавный зум: zoom — вещественное число, интерполируем pxPerDay между соседними уровнями
+  const pxPerDay = useMemo(() => {
+    const lo = Math.max(0, Math.floor(zoom));
+    const hi = Math.min(ZOOMS.length - 1, lo + 1);
+    const t = zoom - lo;
+    return ZOOMS[lo].pxPerDay * (1 - t) + ZOOMS[hi].pxPerDay * t;
+  }, [zoom]);
+  // precision берётся по ближайшему целевому уровню
+  const precision = ZOOMS[Math.round(zoom)].key;
 
   useEffect(() => {
     const el = boxRef.current;
@@ -142,8 +150,13 @@ export function Timeline({
       touched.current = true;
       const x = holdX ?? width / 2;
       const day = dayAt(x);
+      // Интерпелируем pxPerDay для целевого уровня
+      const lo = Math.max(0, Math.floor(clamped));
+      const hi = Math.min(ZOOMS.length - 1, lo + 1);
+      const t = clamped - lo;
+      const targetPxPerDay = ZOOMS[lo].pxPerDay * (1 - t) + ZOOMS[hi].pxPerDay * t;
       setZoom(clamped);
-      setOffsetDay(day - x / ZOOMS[clamped].pxPerDay);
+      setOffsetDay(day - x / targetPxPerDay);
     },
     [zoom, width, dayAt]
   );
@@ -187,9 +200,18 @@ export function Timeline({
     e.preventDefault();
     touched.current = true;
     if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-      // Колесо держит точку под курсором, а не середину: смотрят туда, где
-      // указатель.
-      zoomTo(zoom + (e.deltaY > 0 ? -1 : 1), e.clientX - (boxRef.current?.getBoundingClientRect().left ?? 0));
+      // Плавный зум: шаг 0.15 (~1/7 уровня) для промежуточных значений
+      const delta = e.deltaY > 0 ? -0.15 : 0.15;
+      const holdX = e.clientX - (boxRef.current?.getBoundingClientRect().left ?? 0);
+      const next = Math.max(0, Math.min(ZOOMS.length - 1, zoom + delta));
+      const lo = Math.max(0, Math.floor(next));
+      const hi = Math.min(ZOOMS.length - 1, lo + 1);
+      const t = next - lo;
+      const targetPxPerDay = ZOOMS[lo].pxPerDay * (1 - t) + ZOOMS[hi].pxPerDay * t;
+      touched.current = true;
+      const day = dayAt(holdX);
+      setZoom(next);
+      setOffsetDay(day - holdX / targetPxPerDay);
     } else {
       setOffsetDay((d) => d + e.deltaX / pxPerDay);
     }
@@ -297,7 +319,7 @@ export function Timeline({
           {ZOOMS.map((z, i) => (
             <button
               key={z.key}
-              className={i === zoom ? "active-sort" : ""}
+              className={i === Math.round(zoom) ? "active-sort" : ""}
               onClick={() => zoomTo(i)}
             >
               {z.label}

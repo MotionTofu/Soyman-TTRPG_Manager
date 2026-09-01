@@ -14,6 +14,16 @@ export function GenrePicker({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<SettingGenre[]>(selected);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggleExpand(name: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
 
   function toggle(genre: string, subgenre?: string) {
     const idx = draft.findIndex(
@@ -46,38 +56,70 @@ export function GenrePicker({
           Выберите до трёх основных жанров вашего сеттинга.
         </p>
 
-        {GENRE_CATEGORIES.map((cat) => (
-          <div key={cat.name} className="genre-category">
-            <button
-              className={`genre-category-header${isCategoryOnlySelected(cat.name) ? " genre-category-header--selected" : ""}`}
-              style={{ "--genre-color": cat.color } as React.CSSProperties}
-              onClick={() => toggle(cat.name)}
-              disabled={atLimit && !isCategoryOnlySelected(cat.name)}
-              title={atLimit && !isCategoryOnlySelected(cat.name) ? "Лимит 3 жанра — снимите один перед добавлением" : undefined}
-            >
-              <ZineGraphic name={cat.icon} className="genre-category-icon" />
-              <span>{cat.name}</span>
-            </button>
-
-            <div className="genre-subgenres">
-              {cat.subgenres.map((sub) => (
+        {GENRE_CATEGORIES.map((cat) => {
+          const isExpanded = expanded.has(cat.name);
+          return (
+            <div key={cat.name} className="genre-category">
+              <div className="genre-category-row">
                 <button
-                  key={sub}
-                  className={`genre-chip${isSelected(cat.name, sub) ? " genre-chip--selected" : ""}`}
-                  style={{ "--genre-color": cat.color } as React.CSSProperties}
-                  onClick={() => toggle(cat.name, sub)}
-                  disabled={atLimit && !isSelected(cat.name, sub)}
-                  title={atLimit && !isSelected(cat.name, sub) ? "Лимит 3 жанра" : undefined}
+                  className="genre-category-toggle"
+                  style={{ color: cat.color } as React.CSSProperties}
+                  onClick={() => toggleExpand(cat.name)}
+                  aria-label={isExpanded ? "Свернуть" : "Развернуть"}
                 >
-                  {sub}
+                  <svg
+                    className={`genre-category-triangle${isExpanded ? " genre-category-triangle--open" : ""}`}
+                    viewBox="0 0 12 12"
+                    width="12"
+                    height="12"
+                  >
+                    <path d="M4 2 L9 6 L4 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
-              ))}
+                <button
+                  className={`genre-chip genre-category-header${isCategoryOnlySelected(cat.name) ? " genre-chip--selected" : ""}`}
+                  style={{ "--genre-color": cat.color } as React.CSSProperties}
+                  onClick={() => toggle(cat.name)}
+                  disabled={atLimit && !isCategoryOnlySelected(cat.name)}
+                  title={atLimit && !isCategoryOnlySelected(cat.name) ? "Лимит 3 жанра — снимите один перед добавлением" : undefined}
+                >
+                  <ZineGraphic name={cat.icon} className="genre-chip-icon" />
+                  <span>{cat.name}</span>
+                </button>
+              </div>
+
+              {isExpanded && (
+                <div className="genre-subgenres">
+                  {cat.subgenres.map((sub) => (
+                    <button
+                      key={sub}
+                      className={`genre-chip${isSelected(cat.name, sub) ? " genre-chip--selected" : ""}`}
+                      style={{ "--genre-color": cat.color } as React.CSSProperties}
+                      onClick={() => toggle(cat.name, sub)}
+                      disabled={atLimit && !isSelected(cat.name, sub)}
+                      title={atLimit && !isSelected(cat.name, sub) ? "Лимит 3 жанра" : undefined}
+                    >
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <div className="genre-picker-footer">
-          <span className="muted">{draft.length} / {MAX_GENRES}</span>
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <span className="muted">{draft.length} / {MAX_GENRES}</span>
+            {draft.length > 0 && (
+              <button
+                onClick={() => setDraft([])}
+                style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+              >
+                Сбросить все
+              </button>
+            )}
+          </div>
           <button className="primary" onClick={() => onSave(draft)}>
             Готово
           </button>

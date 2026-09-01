@@ -154,19 +154,24 @@ linksRouter.get("/graph", (req, res) => {
   if (focus && !/^[a-z_]+:\d+$/.test(focus)) {
     return res.status(400).json({ error: "Invalid focus format, expected 'type:id'" });
   }
+  if (setting_id && !/^\d+$/.test(setting_id)) {
+    return res.status(400).json({ error: "Invalid setting_id, expected numeric id" });
+  }
+  if (campaign_id && !/^\d+$/.test(campaign_id)) {
+    return res.status(400).json({ error: "Invalid campaign_id, expected numeric id" });
+  }
   // Пустая строка — это «типы не выбраны», а не «фильтра нет»: снятые
   // галочки должны давать пустой граф, а не молча весь.
   const allowedTypes = types === undefined ? null : new Set(types.split(",").filter(Boolean));
   // campaign_id is the narrower scope, so it wins if both are given.
   const scopeQueries = buildScope(campaign_id, setting_id);
 
-  const rawLinks = db
-    .prepare("SELECT from_type, from_id, to_type, to_id, section FROM generic_links")
-    .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null }[];
-
-  const rawRelations = db
-    .prepare("SELECT from_type, from_id, to_type, to_id, tone, label FROM entity_relations")
-    .all() as { from_type: string; from_id: number; to_type: string; to_id: number; tone: string; label: string }[];
+  // Unified: all relations now live in entity_relations. Rows migrated from
+  // generic_links have section set and tone='neutral'; original entity_relations
+  // rows have tone/label set. We read everything and classify below.
+  const allRelations = db
+    .prepare("SELECT from_type, from_id, to_type, to_id, section, tone, label FROM entity_relations")
+    .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null; tone: string; label: string }[];
 
   // Structural membership (who belongs to a faction) and habitat (who lives
   // where) links — not authored opinions like entity_relations, just
@@ -221,10 +226,15 @@ linksRouter.get("/graph", (req, res) => {
     if (from && to && from !== to) edges.push({ from, to, section, tone, kind });
   };
 
-  for (const l of rawLinks)
-    connect(l.from_type, l.from_id, l.to_type, l.to_id, l.section, null, linkKind(l.section));
-  for (const r of rawRelations)
-    connect(r.from_type, r.from_id, r.to_type, r.to_id, r.label || null, r.tone, "relation");
+  for (const r of allRelations) {
+    // Rows with section set (migrated from generic_links) use linkKind;
+    // rows with label/tone set (original relations) use "relation" kind.
+    if (r.section) {
+      connect(r.from_type, r.from_id, r.to_type, r.to_id, r.section, null, linkKind(r.section));
+    } else {
+      connect(r.from_type, r.from_id, r.to_type, r.to_id, r.label || null, r.tone, "relation");
+    }
+  }
   for (const m of rawMemberships)
     connect("community", m.community_id, "being", m.being_id, "участник", null, "membership");
   for (const h of rawHabitats)
@@ -275,6 +285,7 @@ linksRouter.get("/graph", (req, res) => {
 
   // Окрестность одного узла: за столом нужен не мир целиком, а «кто завязан
   // на этого» — обход в ширину на заданную глубину по уже собранным рёбрам.
+  // 5c: зеркало клиентского buildAdjacency/buildIsolation (graphTypes.ts) — логика одна, глубина 1..3.
   if (focus) {
     const neighbours = new Map<string, string[]>();
     const link = (a: string, b: string) => {

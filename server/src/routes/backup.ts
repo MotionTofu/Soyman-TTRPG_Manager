@@ -23,9 +23,12 @@ const BACKUP_DIR =
 
 function isValidBackupPath(p: string): boolean {
   if (!p || typeof p !== "string" || p.includes("\0") || p.length > 1024) return false;
-  if (p.split(/[\\/]/).includes("..")) return false;
+  if (/[\u202A-\u202E\u200B-\u200F\uFEFF]/.test(p)) return false;
   if (!path.isAbsolute(p)) return false;
-  if (p.startsWith("\\\\")) return false;
+  if (p.startsWith("\\\\") || p.startsWith("//") || p.includes("\\\\?\\")) return false;
+  if (p.split(/[\\/]/).includes("..")) return false;
+  const normalized = path.resolve(path.normalize(p));
+  if (normalized.split(path.sep).includes("..")) return false;
   return true;
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { setUnauthorizedHandler } from "../api/client";
 import { loadMentionIndex } from "../mentions";
 import { LoginScreen } from "./LoginScreen";
+import { clearCachedUser } from "../api/currentUser";
 
 // Wraps the whole routed app. Auth is always on: any 401 (no token yet, or
 // an expired/invalid one) flips this into a full-screen login form — which
@@ -11,7 +12,10 @@ export function LoginGate({ children }: { children: ReactNode }) {
   const [needsLogin, setNeedsLogin] = useState(false);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setNeedsLogin(true));
+    setUnauthorizedHandler(() => {
+      clearCachedUser();
+      setNeedsLogin(true);
+    });
     return () => setUnauthorizedHandler(null);
   }, []);
 
@@ -23,6 +27,6 @@ export function LoginGate({ children }: { children: ReactNode }) {
     void loadMentionIndex();
   }, [needsLogin]);
 
-  if (needsLogin) return <LoginScreen />;
+  if (needsLogin) return <LoginScreen onAuthenticated={() => setNeedsLogin(false)} />;
   return <>{children}</>;
 }

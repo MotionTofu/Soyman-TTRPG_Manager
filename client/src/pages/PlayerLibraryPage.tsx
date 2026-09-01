@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { SectionHeading } from "../components/SectionHeading";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { formatNearestDate } from "../nearestDate";
 
 interface MyCharacter {
@@ -56,6 +57,7 @@ export function PlayerLibraryPage() {
 
   return (
     <div className="stack">
+      <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Библиотека" }]} />
       <SectionHeading>Библиотека</SectionHeading>
 
       {nearestByCampaign.size > 0 && (
@@ -79,7 +81,7 @@ export function PlayerLibraryPage() {
       )}
 
       <div className="stack" style={{ gap: 4 }}>
-        <div className="player-list-letter">Кампании</div>
+        <div className="player-list-letter">Кампании ({campaigns.length})</div>
         <div className="card stack" style={{ gap: 0 }}>
           {campaigns.map((c) => (
             <Link key={c.id} to={`/campaigns/${c.id}`} className="row player-list-row">
@@ -91,7 +93,7 @@ export function PlayerLibraryPage() {
       </div>
 
       <div className="stack" style={{ gap: 4 }}>
-        <div className="player-list-letter">Сеттинги</div>
+        <div className="player-list-letter">Сеттинги ({settings.length})</div>
         <div className="card stack" style={{ gap: 0 }}>
           {settings.map((s) => (
             <Link key={s.id} to={`/settings/${s.id}`} className="row player-list-row">
@@ -103,7 +105,7 @@ export function PlayerLibraryPage() {
       </div>
 
       <div className="stack" style={{ gap: 4 }}>
-        <div className="player-list-letter">Системы</div>
+        <div className="player-list-letter">Системы ({systems.length})</div>
         <div className="card stack" style={{ gap: 0 }}>
           {systems.map((s) => (
             <Link key={s.id} to={`/systems/${s.id}`} className="row player-list-row">

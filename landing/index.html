@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="ru" data-skin="zine">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SoyMan — менеджер платных кампаний. Офлайн. Для стола.</title>
+<meta name="description" content="SoyMan — личный менеджер НРИ-кампаний для платного мастера. Финансы, лор, статблоки, полотно приключений и пульт стола в одном приложении без интернета." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===== TOKENS — точь-в-точь §3.1 zine ===== */
+:root{
+  --paper:#EDE7D9; --paper-2:#E2DAC8; --ink:#12100E; --ink-2:#3A352E; --muted:#6E675C;
+  --accent:#D6321E; --surface:#12100E; --on-surface:#EDE7D9; --on-surface-muted:#A39A88;
+  --line:rgba(18,16,14,.22); --line-strong:#12100E;
+  --font-display:'Anton', sans-serif; --font-ui:'Oswald', sans-serif; --font-body:'Archivo', sans-serif; --font-mono:'JetBrains Mono', monospace;
+  --fs-hero: clamp(38px,6vw,72px); --fs-h1: clamp(26px,3.2vw,38px); --fs-h2:22px; --fs-body:14px; --fs-meta:12px; --fs-micro:10px;
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;--sp-8:64px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--paper);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+img{max-width:100%;display:block}
+
+/* texture */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;opacity:.06;z-index:-1;
+  background-image: radial-gradient(rgba(18,16,14,.9) 1px, transparent 1px);
+  background-size:3px 3px;
+}
+
+/* helpers */
+.mono{font-family:var(--font-mono)}
+.caps{font-family:var(--font-ui);text-transform:uppercase;letter-spacing:.10em;font-weight:600}
+.micro{font-size:var(--fs-micro);letter-spacing:.14em;text-transform:uppercase;font-family:var(--font-ui);color:var(--muted)}
+.btn-primary{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--accent);color:#fff;border:2px solid var(--accent);
+  padding:13px 22px;font-family:var(--font-ui);font-size:13px;letter-spacing:.10em;text-transform:uppercase;font-weight:700;
+  cursor:pointer;transition:transform 120ms cubic-bezier(.2,.8,.2,1);
+}
+.btn-primary:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  background:transparent;color:var(--ink);border:2px solid var(--ink);
+  padding:11px 18px;font-family:var(--font-ui);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+}
+.badge-rotate{
+  display:inline-block;background:var(--accent);color:#fff;padding:3px 9px;
+  font-family:var(--font-ui);font-size:10px;letter-spacing:.12em;text-transform:uppercase;transform:rotate(-1.2deg)
+}
+.stamp{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1.5px solid var(--ink);padding:4px 9px;font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  transform:rotate(-1deg)
+}
+
+/* layout */
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+@media(min-width:960px){.wrap{padding:0 32px}}
+
+/* NAV */
+.nav{
+  position:sticky;top:0;z-index:20;background:var(--paper-2);border-bottom:2px solid var(--ink);
+  display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 20px;
+}
+@media(min-width:1120px){.nav{padding:10px 32px}}
+.nav-logo{font-family:var(--font-display);font-size:22px;letter-spacing:-.02em;line-height:1; text-transform:uppercase}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:none;gap:22px;align-items:center}
+@media(min-width:860px){.nav-links{display:flex}}
+.nav-links a{font-family:var(--font-ui);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);opacity:.8}
+.nav-links a:hover{opacity:1;text-decoration:underline;text-underline-offset:4px}
+.nav-cta{display:flex;gap:8px;align-items:center}
+.nav-cta .btn-primary{padding:9px 16px;font-size:11px}
+@media(max-width:520px){.nav-cta .btn-ghost{display:none}}
+
+/* HERO */
+.hero{
+  display:grid;gap:28px;padding:32px 0 20px;
+  grid-template-columns: 1fr;
+}
+@media(min-width:960px){.hero{grid-template-columns: 1.1fr .9fr;align-items:center;padding:44px 0 28px}}
+.hero-kicker{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hero h1{
+  margin:10px 0 12px;font-family:var(--font-display);font-size:var(--fs-hero);line-height:.88;letter-spacing:-.02em;text-transform:uppercase;
+}
+.hero h1 .hi{background:var(--accent);color:#fff;padding:0 .22em;transform:rotate(-1deg);display:inline-block}
+.hero-lead{font-size:16px;max-width:44ch;color:var(--ink-2)}
+.hero-bullets{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.hero-bullets span{font-family:var(--font-mono);font-size:11px;border:1px solid var(--line);padding:5px 9px;background:var(--paper-2)}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.hero-note{margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.hero-art{
+  position:relative;border:2px solid var(--ink);background:var(--paper-2);overflow:hidden;isolation:isolate;
+  aspect-ratio: 4/3;
+}
+.hero-art img{width:100%;height:100%;object-fit:cover;filter:grayscale(.15)}
+.hero-art::after{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(currentColor 1.1px, transparent 1.3px) 0 0/7px 7px;
+  opacity:.14;color:var(--ink);pointer-events:none;
+}
+.hero-art-label{
+  position:absolute;left:12px;right:12px;bottom:12px;z-index:2;
+  background:var(--surface);color:var(--on-surface);border:1px solid var(--ink);
+  padding:10px 12px;display:flex;justify-content:space-between;gap:12px;align-items:center;
+}
+.hero-art-label strong{font-family:var(--font-ui);letter-spacing:.08em;text-transform:uppercase;font-size:11px}
+.hero-art-label span{font-family:var(--font-mono);font-size:11px;color:var(--on-surface-muted)}
+
+/* STRIP */
+.strip{
+  border-top:2px solid var(--ink);border-bottom:2px solid var(--ink);background:var(--surface);color:var(--on-surface);
+  display:flex;flex-wrap:wrap;gap:0;overflow:hidden;
+}
+.strip div{flex:1 1 160px;display:flex;align-items:center;gap:10px;padding:12px 18px;border-right:1px solid rgba(237,231,217,.18);font-family:var(--font-mono);font-size:11px}
+.strip b{font-size:18px;font-family:var(--font-display);letter-spacing:-.02em}
+.strip small{color:var(--on-surface-muted);font-family:var(--font-ui);letter-spacing:.08em;text-transform:uppercase;font-size:9px;display:block}
+
+/* SECTION header */
+.sec{padding:36px 0 10px}
+.sec-head{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+.sec-head h2{margin:0;font-family:var(--font-display);font-size:26px;letter-spacing:-.02em;text-transform:uppercase;line-height:.9}
+.sec-head h2 i{font-style:normal;color:var(--accent)}
+.sec-head p{margin:0;color:var(--muted);max-width:38ch;font-size:13px}
+
+/* PAIN grid */
+.pain{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:760px){.pain{grid-template-columns:repeat(3,1fr)}}
+.pain .card{border:1.5px solid var(--ink);background:var(--paper-2);padding:16px;position:relative}
+.pain .card::before{content:"✕";position:absolute;right:10px;top:10px;font-family:var(--font-mono);font-size:14px;color:var(--accent);opacity:.9}
+.pain h3{margin:0 0 6px;font-family:var(--font-ui);letter-spacing:.06em;text-transform:uppercase;font-size:13px}
+.pain p{margin:0;color:var(--ink-2);font-size:13px}
+.pain .fix{margin-top:10px;display:inline-flex;font-family:var(--font-mono);font-size:11px;background:var(--surface);color:var(--on-surface);padding:4px 8px}
+
+/* FEATURES */
+.feat-grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:760px){.feat-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1020px){.feat-grid{grid-template-columns:repeat(3,1fr)}}
+.feat{border:1.5px solid var(--ink);background:var(--paper-2);padding:0;overflow:hidden;display:flex;flex-direction:column}
+.feat-head{background:var(--surface);color:var(--on-surface);padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.feat-head strong{font-family:var(--font-ui);letter-spacing:.10em;text-transform:uppercase;font-size:11px}
+.feat-head span{font-family:var(--font-mono);font-size:10px;color:var(--on-surface-muted);border:1px solid rgba(237,231,217,.22);padding:2px 6px}
+.feat-body{padding:14px 14px 12px}
+.feat-body p{margin:0;color:var(--ink-2);font-size:13px}
+.feat-body ul{margin:8px 0 0;padding-left:16px;color:var(--ink-2);font-size:13px}
+.feat-body li{margin:3px 0}
+.feat-foot{margin-top:auto;padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+.feat-foot span{font-family:var(--font-mono);font-size:10px;border:1px solid var(--line);padding:3px 7px;background:var(--paper)}
+
+/* COMPARISON */
+.compare{border:2px solid var(--ink);overflow:hidden;background:var(--paper-2)}
+.compare-row{display:grid;grid-template-columns: 220px 1fr 1fr 1fr;gap:0;font-size:12px}
+.compare-head{background:var(--surface);color:var(--on-surface);font-family:var(--font-ui);letter-spacing:.08em;text-transform:uppercase;font-size:10px}
+.compare-row > div{padding:9px 10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;align-items:center}
+.compare-row > div:last-child{border-right:none}
+.compare-row .yes{color:#0a6b2a;font-weight:600}
+.compare-row .no{color:var(--muted)}
+.compare-row .mid{color:#8a6d00}
+@media(max-width:820px){
+  .compare{overflow:auto}
+  .compare-row{grid-template-columns: 160px 110px 110px 110px;min-width:490px}
+}
+
+/* PRICING */
+.pricing{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
+@media(min-width:900px){.pricing{grid-template-columns:repeat(3,1fr)}}
+.price{border:2px solid var(--ink);background:var(--paper-2);padding:0;position:relative}
+.price.featured{border-color:var(--accent);transform:rotate(0);background:var(--paper)}
+.price.featured::before{content:"ВЫБОР МАСТЕРА";position:absolute;top:-11px;left:50%;transform:translateX(-50%) rotate(-1deg);background:var(--accent);color:#fff;font-family:var(--font-ui);font-size:10px;letter-spacing:.12em;padding:4px 10px}
+.price-head{padding:16px 16px 12px;border-bottom:1px solid var(--line)}
+.price-head h3{margin:0;font-family:var(--font-display);font-size:20px;letter-spacing:-.02em;text-transform:uppercase}
+.price-head p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.price-amount{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.price-amount b{font-family:var(--font-display);font-size:30px;letter-spacing:-.02em}
+.price-amount s{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.price ul{margin:0;padding:14px 16px 12px 22px;color:var(--ink-2);font-size:13px}
+.price li{margin:6px 0}
+.price li::marker{color:var(--accent)}
+.price-cta{padding:0 16px 16px}
+.price-cta .btn-primary,.price-cta .btn-ghost{width:100%;justify-content:center}
+.price small{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+
+/* FAQ */
+.faq{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:860px){.faq{grid-template-columns:1fr 1fr}}
+.faq details{border:1.5px solid var(--ink);background:var(--paper-2);padding:0}
+.faq summary{list-style:none;cursor:pointer;padding:12px 14px;font-family:var(--font-ui);letter-spacing:.04em;font-weight:600;display:flex;justify-content:space-between;gap:12px}
+.faq summary::after{content:"+"}
+.faq details[open] summary::after{content:"—"}
+.faq .a{padding:0 14px 14px;color:var(--ink-2);font-size:13px;border-top:1px solid var(--line)}
+
+/* CTA */
+.cta{
+  margin:22px 0 0;border:2px solid var(--ink);background:var(--surface);color:var(--on-surface);
+  padding:18px;display:grid;grid-template-columns:1fr;gap:16px;
+}
+@media(min-width:860px){.cta{grid-template-columns:1.1fr .9fr;align-items:center;padding:22px}}
+.cta h2{margin:0;font-family:var(--font-display);font-size:28px;letter-spacing:-.02em;text-transform:uppercase;line-height:.9}
+.cta p{margin:6px 0 0;color:var(--on-surface-muted);font-size:13px}
+.cta .btn-primary{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+.cta-actions{display:flex;gap:10px;flex-wrap:wrap}
+.halftone{
+  position:relative;overflow:hidden;
+}
+.halftone::before{
+  content:"";position:absolute;inset:auto 0 0 0;height:38%;
+  background: radial-gradient(currentColor 1.2px, transparent 1.3px) 0 0/6px 6px;
+  opacity:.16;pointer-events:none;
+}
+
+/* FOOTER */
+.foot{padding:22px 0 30px;border-top:2px solid var(--ink);margin-top:28px;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+.foot-links{display:flex;gap:14px;flex-wrap:wrap}
+.foot-links a{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-logo">SOY<span>MAN</span> <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;color:var(--muted);margin-left:6px">TTRPG MANAGER</span></div>
+  <div class="nav-links">
+    <a href="#pain">Боли</a>
+    <a href="#features">Что внутри</a>
+    <a href="#compare">Сравнение</a>
+    <a href="#pricing">Тарифы</a>
+    <a href="#faq">FAQ</a>
+  </div>
+  <div class="nav-cta">
+    <a class="btn-ghost" href="https://github.com/MotionTofu/Soyman-TTRPG_Manager" target="_blank" rel="noreferrer">GitHub</a>
+    <a class="btn-primary" href="https://github.com/MotionTofu/Soyman-TTRPG_Manager/releases" target="_blank" rel="noreferrer">Скачать · Windows</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div>
+      <div class="hero-kicker">
+        <span class="badge-rotate">Офлайн · Без подписки на лор</span>
+        <span class="stamp">Для платного стола</span>
+        <span class="micro">Windows · Русский</span>
+      </div>
+      <h1>Менеджер <br><span class="hi">Платных</span><br>кампаний</h1>
+      <p class="hero-lead">Финансы, лор, статблоки и пульт стола — в одном приложении <b>без интернета</b>. Заменяет Notion + Obsidian + Excel + папку «картинки».</p>
+      <div class="hero-bullets">
+        <span>Финансы в модели</span>
+        <span>Полотно 504 узла</span>
+        <span>3451 запись компендиума</span>
+        <span>Пульт на второй монитор</span>
+      </div>
+      <div class="hero-actions">
+        <a class="btn-primary" href="https://github.com/MotionTofu/Soyman-TTRPG_Manager/releases" target="_blank" rel="noreferrer">Скачать SoyMan — бесплатно →</a>
+        <a class="btn-ghost" href="#pricing">Тарифы и хостед</a>
+      </div>
+      <div class="hero-note">Пустая сборка — 0₽ навсегда. · Обновляется само через GitHub · Флешка-режим для клубов</div>
+    </div>
+    <div class="hero-art">
+      <img src="https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1200&auto=format&fit=crop" alt="Стол с картой и костями" />
+      <div class="hero-art-label">
+        <strong>Пульт сессии · Второй монитор · <span style="color:var(--accent)">●</span> Live</strong>
+        <span>Инициатива / Звук / Показ игрокам</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="strip">
+    <div><b>4</b> <span><small>системы</small>D&D 5.5 · LitM · CoM · Daggerheart</span></div>
+    <div><b>66</b> <span><small>досок полотна</small>сцены · главы · пины · нити</span></div>
+    <div><b>0₽</b> <span><small>за лор</small>офлайн, твоя база — твоя</span></div>
+    <div><b>LAN</b> <span><small>игроки</small>телефон в том же Wi-Fi — без хостинга</span></div>
+  </div>
+
+  <!-- PAIN -->
+  <section id="pain" class="sec">
+    <div class="sec-head">
+      <h2>Хватит <i>склеивать</i> стол из пяти сервисов</h2>
+      <p>Notion — для лора. Excel — для денег. Папка — для картинок. Roll20 — для боя. В итоге за столом открыт Excel, а лор — в другой вкладке.</p>
+    </div>
+    <div class="pain">
+      <div class="card">
+        <h3>Notion / Obsidian</h3>
+        <p>Тексты без механики. КЗ и ячейки — ручками. Ссылки ломаются при переносе базы.</p>
+        <div class="fix">→ SoyMan: вычисляемые статблоки + ссылки на uid</div>
+      </div>
+      <div class="card">
+        <h3>Excel для финансов</h3>
+        <p>Кто сколько заплатил — в таблице рядом. Забыл обновить — соврал игроку.</p>
+        <div class="fix">→ Деньги внутри сессии и кампании</div>
+      </div>
+      <div class="card">
+        <h3>Roll20 / Foundry онлайн</h3>
+        <p>Требуют интернет, карту и токены. За живым столом — оверхед.</p>
+        <div class="fix">→ Пульт стола: инициатива, звук, показ картинки</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="sec">
+    <div class="sec-head">
+      <h2>Что внутри — <i>шесть</i> причин остаться</h2>
+      <p>Собрано под живой стол, где мастер смотрит на игроков, а не в ноутбук.</p>
+    </div>
+    <div class="feat-grid">
+      <article class="feat">
+        <div class="feat-head"><strong>01 · Финансы</strong><span>CORE</span></div>
+        <div class="feat-body">
+          <p><b>Деньги — часть модели, а не заметка.</b> Тип оплаты, ставка, полученное — в кампании и сессии. Видно, кто должен, а кто оплатил.</p>
+          <ul><li>per_session / per_campaign</li><li>amount_paid на игрока</li><li>Счётчики на главной</li></ul>
+        </div>
+        <div class="feat-foot"><span>Для платного ГМа</span><span>Без Excel</span></div>
+      </article>
+      <article class="feat">
+        <div class="feat-head"><strong>02 · Полотно</strong><span>66 досок</span></div>
+        <div class="feat-body">
+          <p>Приключение как <b>схема, а не список глав</b>. Главы-контейнеры, сцены, переходы, проверки. Репетиция без записи в БД.</p>
+          <ul><li>Подсказки «чего не хватает»</li><li>Пины на карте мира</li><li>Режим репетиции</li></ul>
+        </div>
+        <div class="feat-foot"><span>@xyflow</span><span>Экспорт схемой</span></div>
+      </article>
+      <article class="feat">
+        <div class="feat-head"><strong>03 · Статблоки</strong><span>1226 шт</span></div>
+        <div class="feat-body">
+          <p>Не текст, а <b>вычисление</b>. КЗ, бонусы, ячейки — из компендиума. Правишь вид — правится у 20 гоблинов.</p>
+          <ul><li>D&D 5.5 deep</li><li>Наследование на лету</li><li>Печать ч/б</li></ul>
+        </div>
+        <div class="feat-foot"><span>3451 запись</span><span>SRD-чисто</span></div>
+      </article>
+      <article class="feat">
+        <div class="feat-head"><strong>04 · Пульт стола</strong><span>LIVE</span></div>
+        <div class="feat-body">
+          <p><b>Работает, пока смотришь в стол.</b> Трекер инициативы, второй монитор, «показать картинку», звук 4 канала с кроссфейдом.</p>
+          <ul><li>Background / Ambient / Weather / Stingers</li><li>Боевой плейлист</li><li>Вынос панелей</li></ul>
+        </div>
+        <div class="feat-foot"><span>Без диджеинга</span><span>Тишина = канал</span></div>
+      </article>
+      <article class="feat">
+        <div class="feat-head"><strong>05 · Хранилище</strong><span>RPG-Vault</span></div>
+        <div class="feat-body">
+          <p>Настоящие папки в проводнике. Одинаковые файлы — <b>одним inode</b> (hardlink). Удалённое — в `_Archive`.</p>
+          <ul><li>Дедупликация</li><li>Флешка-режим для клубов</li><li>Бэкап одной кнопкой</li></ul>
+        </div>
+        <div class="feat-foot"><span>Проводник</span><span>Зип-бэкап</span></div>
+      </article>
+      <article class="feat">
+        <div class="feat-head"><strong>06 · Игроки</strong><span>ROLE-BRANCHED</span></div>
+        <div class="feat-body">
+          <p>Один клиент, ветвление по роли. Игрок видит <b>только гранты</b> — поштучно, не «включил сеттинг — открылось всё».</p>
+          <ul><li>Телефон в том же Wi-Fi</li><li>Хостед-синх опционально</li><li>Гранты на кампанию</li></ul>
+        </div>
+        <div class="feat-foot"><span>Мобилка</span><span>Без второго приложения</span></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- COMPARISON -->
+  <section id="compare" class="sec">
+    <div class="sec-head">
+      <h2>Честное <i>сравнение</i></h2>
+      <p>Не «мы лучше всех». Мы лучше — за живым столом. Онлайн-бой — к Foundry.</p>
+    </div>
+    <div class="compare">
+      <div class="compare-row compare-head"><div>Критерий</div><div>SoyMan</div><div>World Anvil / Kanka</div><div>Foundry / Roll20</div></div>
+      <div class="compare-row"><div>Офлайн без интернета</div><div class="yes">● Да</div><div class="no">— Нет</div><div class="no">— Нет</div></div>
+      <div class="compare-row"><div>Финансы в модели</div><div class="yes">● Встроены</div><div class="no">— Заметка</div><div class="no">— Нет</div></div>
+      <div class="compare-row"><div>Вычисляемые статблоки</div><div class="yes">● Да</div><div class="no">— Текст</div><div class="yes mid">● Есть (тяжело)</div></div>
+      <div class="compare-row"><div>Пульт живого стола</div><div class="yes">● Да (2-й монитор, звук)</div><div class="no">— Нет</div><div class="mid">◐ Карта, не стол</div></div>
+      <div class="compare-row"><div>Ссылки не ломаются при переносе</div><div class="yes">● uid-ключи</div><div class="no">— ID ломаются</div><div class="no">— ID ломаются</div></div>
+      <div class="compare-row"><div>Цена за лор</div><div class="yes">0₽ (пустая) / SRD</div><div class="no">$5-15/мес</div><div class="no">$60 + хостинг</div></div>
+      <div class="compare-row"><div>Онлайн-карта-бой</div><div class="no">— Нет (и не надо)</div><div class="no">— Нет</div><div class="yes">● Топ</div></div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section id="pricing" class="sec">
+    <div class="sec-head">
+      <h2>Тарифы — <i>просто</i></h2>
+      <p>Софт бесплатный. Платишь за хостед и за время авторов модулей. Как задумано: флешка, клубы, кайф.</p>
+    </div>
+    <div class="pricing">
+      <div class="price">
+        <div class="price-head">
+          <h3>Free</h3>
+          <p>Офлайн-ядро. Твоя база — твоя. Навсегда.</p>
+        </div>
+        <div class="price-amount"><b>0₽</b><span class="mono">навсегда</span></div>
+        <ul>
+          <li>Windows-приложение (portable + installer)</li>
+          <li>4 системы-заглушки, без платного контента из книг</li>
+          <li>Кампании, сеттинги, полотно, пульт, звук</li>
+          <li>LAN для игроков (тот же Wi-Fi)</li>
+          <li>Автообновление через GitHub Releases</li>
+          <li>Бэкап зипом</li>
+        </ul>
+        <div class="price-cta"><a class="btn-ghost" href="https://github.com/MotionTofu/Soyman-TTRPG_Manager/releases" target="_blank" rel="noreferrer">Скачать Free</a></div>
+        <div style="padding:0 16px 14px"><small>Лицензия: source-available. SRD-чисто — без претензий WotC.</small></div>
+      </div>
+
+      <div class="price featured">
+        <div class="price-head">
+          <h3>Мастер+</h3>
+          <p>Хостед-синх. Игроки по ссылке, а не по 192.168.x.x</p>
+        </div>
+        <div class="price-amount"><b>299₽</b><span class="mono">/ мес</span><s> — </s><span class="mono">2 490₽ / год (−30%)</span></div>
+        <ul>
+          <li><b>Всё из Free</b> + хостед для игроков</li>
+          <li>Ссылка-приглашение, без настройки сети</li>
+          <li>Облачный бэкап и «флешка одной кнопкой»</li>
+          <li>Приоритет в Telegram-саппорте</li>
+          <li>Ранний доступ к модулям маркета</li>
+        </ul>
+        <div class="price-cta"><a class="btn-primary" href="https://t.me/brothertofu" target="_blank" rel="noreferrer">Хочу Мастер+ — 14 дней бесплатно</a></div>
+        <div style="padding:0 16px 14px"><small>14 дней бесплатно. Отмена в 1 клик. 1/5 от одной платной сессии.</small></div>
+      </div>
+
+      <div class="price">
+        <div class="price-head">
+          <h3>Клуб</h3>
+          <p>Для игротек и клубов. 5–10 столов.</p>
+        </div>
+        <div class="price-amount"><b>от 5 000₽</b><span class="mono">/ мес</span></div>
+        <ul>
+          <li>Всё из Мастер+</li>
+          <li>Флешка-развёртывание на любом ноуте клуба</li>
+          <li>Обучение админов, чек-лист стола</li>
+          <li>Выделенный канал в Telegram</li>
+          <li>Скидка на модули маркета</li>
+        </ul>
+        <div class="price-cta"><a class="btn-ghost" href="https://t.me/brothertofu" target="_blank" rel="noreferrer">Написать про Клуб</a></div>
+        <div style="padding:0 16px 14px"><small>Договор, счёт, акты. Для юрлиц.</small></div>
+      </div>
+    </div>
+    <div style="margin-top:14px;border:1.5px dashed var(--line);padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+      <span class="mono" style="font-size:11px">Маркет модулей: 199–990₽ · Авторы получают 70–80% · SRD-модуль бесплатно (лид-магнит)</span>
+      <span class="micro">Скоро · Модерация · uid-систем</span>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="sec">
+    <div class="sec-head">
+      <h2>FAQ — <i>без воды</i></h2>
+      <p>Три вопроса, которые решают покупку.</p>
+    </div>
+    <div class="faq">
+      <details open><summary>Чем лучше Notion/Obsidian?</summary><div class="a">Там тексты. Тут — модель: КЗ считается, деньги считаются, ссылки не ломаются при переносе (`[[being@8f3c|wdh|Мирт]]`). И пульт стола, которого у вики нет.</div></details>
+      <details><summary>А если я вожу онлайн?</summary><div class="a">Бери Foundry/Roll20. SoyMan — для живого стола. Онлайн у нас — helper-режим, не VTT. Честно проигрываем там, где карта-бой — главное.</div></details>
+      <details><summary>Что с лицензией D&D? Это пиратка?</summary><div class="a">Пустая сборка — 0 текста из книг, только SRD. Полные модули — отдельно, с модерацией. Хочешь — ставь свой перевод, хочешь — бери SRD. Претензий WotC нет.</div></details>
+      <details><summary>Только Windows и русский?</summary><div class="a">Да, пока так. Это граница продукта (<code class="mono">ToDo.md:514</code>). Mac/Linux и английский — после хостеда, не раньше.</div></details>
+      <details><summary>Что если интернет ляжет в клубе?</summary><div class="a">Ничего. Приложение полностью офлайн (`Electron + SQLite`). Хранилище — обычные папки. Флешка-режим — пришёл, развернул, играешь.</div></details>
+      <details><summary>Как дать доступ игрокам без IT?</summary><div class="a">Free: телефон в том же Wi-Fi — открывает твой <code class="mono">:4732</code>. Мастер+: просто ссылка-приглашение, без IP и портов.</div></details>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta halftone">
+    <div>
+      <h2>Готов к столу?<br>Скачай и води сегодня</h2>
+      <p>Пустая сборка — 0₽. Поставится как обычная программа, обновится сама. Твоя первая кампания — через 5 минут.</p>
+      <div class="mono" style="font-size:11px;margin-top:8px;color:var(--on-surface-muted)">Платным мастерам: 14 дней Мастер+ бесплатно — хватит на 2 сессии.</div>
+    </div>
+    <div class="cta-actions">
+      <a class="btn-primary" href="https://github.com/MotionTofu/Soyman-TTRPG_Manager/releases" style="flex:1;justify-content:center" target="_blank" rel="noreferrer">Скачать SoyMan · Windows</a>
+      <a class="btn-ghost" href="https://t.me/brothertofu" style="background:transparent;color:var(--on-surface);border-color:var(--on-surface)" target="_blank" rel="noreferrer">Написать в Telegram</a>
+      <div class="mono" style="font-size:10px;color:var(--on-surface-muted);flex:1 1 100%">Boosty · GitHub Sponsors · Звёздочка на GitHub — тоже помощь</div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div>
+      <div class="mono" style="font-size:11px">© SoyMan TTRPG Manager · 2026 · brothertofu</div>
+      <div class="micro" style="margin-top:4px">Сделано мастером для мастеров. Офлайн. Без воды. С характером.</div>
+    </div>
+    <div class="foot-links">
+      <a href="https://github.com/MotionTofu/Soyman-TTRPG_Manager" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://t.me/brothertofu" target="_blank" rel="noreferrer">Telegram</a>
+      <a href="https://boosty.to/" target="_blank" rel="noreferrer">Boosty</a>
+      <a href="mailto:hello@soyman.app">hello@soyman.app</a>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+// плавный скролл по якорям
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{
+    const id=a.getAttribute('href'); if(!id||id==="#") return;
+    const t=document.querySelector(id); if(!t) return;
+    e.preventDefault(); t.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+});
+</script>
+</body>
+</html>

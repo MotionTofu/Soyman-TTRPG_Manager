@@ -185,21 +185,24 @@ export const SectionDropZone = memo(function SectionDropZone({
       !acceptCompendiumKinds.includes(result.kind ?? "")
     )
       return;
-    await api.post("/links", {
+    await api.post("/entity-relations", {
       from_type: entityType,
       from_id: entityId,
       to_type: result.type,
       to_id: result.id,
       section,
       origin,
+      tone: "neutral",
+      label: "",
+      description: "",
     });
     load();
   }
 
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
 
-  async function remove(linkId: number) {
-    await api.del(`/links/${linkId}`);
+  async function remove(relationId: number) {
+    await api.del(`/entity-relations/${relationId}`);
     setPendingDelete(null);
     load();
   }
@@ -304,13 +307,16 @@ export const SectionDropZone = memo(function SectionDropZone({
           acceptTypes={acceptTypes}
           acceptCompendiumKinds={acceptCompendiumKinds}
           onPick={async (result) => {
-            await api.post("/links", {
+            await api.post("/entity-relations", {
               from_type: entityType,
               from_id: entityId,
               to_type: result.type,
               to_id: result.id,
               section,
               origin,
+              tone: "neutral",
+              label: "",
+              description: "",
             });
             setPickerOpen(false);
             load();

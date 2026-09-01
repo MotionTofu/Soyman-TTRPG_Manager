@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, getAuthToken, setAuthToken } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
@@ -18,6 +18,8 @@ import { openSecondWindow, openExternalLink } from "../electronApi";
 import { UnloadTargetsProvider } from "../unloadTargets";
 import { brandLogo } from "../brandLogo";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
+import { Breadcrumbs } from "../components/Breadcrumbs";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface NavItem {
   to?: string;
@@ -312,18 +314,74 @@ function NewWindowButton() {
 }
 
 function LogoutButton({ username }: { username?: string }) {
+  const [dialog, confirm] = useConfirm();
   if (!getAuthToken()) return null;
   return (
-    <button
-      className="nav-bottom-button"
-      onClick={() => {
-        setAuthToken(null);
-        window.location.reload();
-      }}
-    >
-      {username ? `Выйти (${username})` : "Выйти"}
-    </button>
+    <>
+      {dialog}
+      <button
+        className="nav-bottom-button"
+        onClick={async () => {
+          const ok = await confirm({ title: "Выйти?", message: "Вы выйдете из аккаунта и вернётесь к экрану входа.", confirmLabel: "Выйти", cancelLabel: "Отмена", danger: true });
+          if (!ok) return;
+          setAuthToken(null);
+          window.location.reload();
+        }}
+      >
+        {username ? `Выйти (${username})` : "Выйти"}
+      </button>
+    </>
   );
+}
+
+const CRUMB_LABEL: Record<string, string> = {
+  campaigns: "Кампании",
+  library: "Библиотека",
+  settings: "Сеттинги",
+  systems: "Системы",
+  players: "Игроки",
+  cabinet: "Кабинет",
+  mastering: "Мастерение",
+  resources: "Ресурсы",
+  canvas: "Полотно",
+  graph: "Граф",
+  storages: "Настройки",
+  health: "Здоровье",
+  about: "Справка",
+  archive: "Архив",
+  invitations: "Приглашения",
+  sessions: "Сессии",
+  characters: "Персонажи",
+  locations: "Локации",
+  beings: "Существа",
+  scenes: "Сцены",
+  adventures: "Приключения",
+  artifacts: "Артефакты",
+  communities: "Сообщества",
+  events: "События",
+  compendium: "Компендиум",
+};
+
+function buildCrumbs(pathname: string) {
+  if (pathname === "/" || pathname === "") return [{ label: "Главная" }];
+  const parts = pathname.split("/").filter(Boolean);
+  const crumbs: { label: string; to?: string }[] = [{ label: "Главная", to: "/" }];
+  let acc = "";
+  for (let i = 0; i < parts.length; i++) {
+    const seg = parts[i];
+    // id segments (numeric) — show as "…" but still linkable via parent? skip label, just keep parent
+    if (/^\d+$/.test(seg) && i > 0) {
+      // attach id to previous crumb's to
+      const prev = crumbs[crumbs.length - 1];
+      if (prev.to) prev.to += `/${seg}`;
+      continue;
+    }
+    acc += `/${seg}`;
+    const label = CRUMB_LABEL[seg] ?? seg;
+    const isLast = i === parts.length - 1 || (i + 1 < parts.length && /^\d+$/.test(parts[i + 1]) && i + 1 === parts.length - 1);
+    crumbs.push({ label, to: isLast ? undefined : acc });
+  }
+  return crumbs;
 }
 
 export function AppShell() {
@@ -334,6 +392,25 @@ export function AppShell() {
   const isPlayer = user?.role === "player";
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
   const updateAvailable = useUpdateAvailable();
+  const [activeStorageName, setActiveStorageName] = useState<string | null>(null);
+  // 2.1 — серые пункты на пустой БД (badge 0 + muted + disabled tooltip) — не display:none
+  const [navCounts, setNavCounts] = useState<Record<string, number | null>>({});
+  useEffect(() => {
+    if (isPlayer || userLoading) return;
+    api.get<{ activeId: string; storages: { id: string; name: string }[] }>("/storages").then((r) => {
+      const active = r.storages.find((s) => s.id === r.activeId);
+      if (active) setActiveStorageName(active.name);
+    }).catch(() => {});
+    // Считаем только быстрые списки — по длине массива, без отдельного count-эндпоинта
+    const fetches: Promise<void>[] = [];
+    fetches.push(api.get<unknown[]>("/campaigns").then((a) => setNavCounts((m) => ({ ...m, campaigns: a.length }))).catch(() => {}));
+    fetches.push(api.get<unknown[]>("/settings").then((a) => setNavCounts((m) => ({ ...m, settings: a.length }))).catch(() => {}));
+    fetches.push(api.get<unknown[]>("/players").then((a) => setNavCounts((m) => ({ ...m, players: a.length }))).catch(() => {}));
+    fetches.push(api.get<unknown[]>("/resources").then((a) => setNavCounts((m) => ({ ...m, resources: a.length }))).catch(() => {}));
+    fetches.push(api.get<unknown[]>("/mastering").then((a) => setNavCounts((m) => ({ ...m, mastering: Array.isArray(a) ? (a as unknown[]).length : 0 }))).catch(() => {}));
+    // Полотно/Граф — считаем через поиск, если пусто — 0
+    void fetches;
+  }, [isPlayer, userLoading]);
 
   // Нижний список разделов: свои пункты роли плюс Boosty. Пункт уходит за
   // «О программе» и ведёт не в раздел, а в модалку подтверждения — внешняя
@@ -403,6 +480,18 @@ export function AppShell() {
         }
       : null;
 
+  useEffect(() => {
+    if (!navOpen && !searchOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setNavOpen(false);
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen, searchOpen]);
+
   return (
     // Движок пульта звука живёт здесь, а не в main.tsx: окно самого пульта
     // рендерится ВНЕ AppShell, и звук в нём заводиться не должен — иначе
@@ -453,22 +542,33 @@ export function AppShell() {
         </nav>
       ) : (
         <nav id="app-nav" className={`app-nav${navOpen ? " open" : ""}`}>
-          <ParticleField count={5} className="header-particles" />
+          <ParticleField count={2} className="header-particles" />
           <img src={brandLogo} alt="SoyMan — TTRPG Manager" className="brand-logo" />
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to!}
-              end={item.end}
-              className={({ isActive }) => (isActive ? "active" : "")}
-              onClick={() => setNavOpen(false)}
-            >
-              <NavIcon name={item.icon} />
-              {item.label}
-            </NavLink>
-          ))}
+          {navItems.map((item) => {
+            const key = item.to?.replace(/^\//, "") ?? "";
+            const cnt = navCounts[key];
+            const isEmpty = cnt === 0;
+            // 2.1 grey: пока пусто — muted + badge 0 + tooltip, не скрываем
+            const emptyLabel = isEmpty ? "Пока пусто — заведи кампанию" : undefined;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to!}
+                end={item.end}
+                className={({ isActive }) => (isActive ? "active" : "") + (isEmpty ? " nav-empty" : "")}
+                onClick={() => setNavOpen(false)}
+                title={emptyLabel}
+                aria-disabled={isEmpty ? true : undefined}
+                style={isEmpty ? { opacity: 0.52 } : undefined}
+              >
+                <NavIcon name={item.icon} />
+                {item.label}
+                {isEmpty && <span className="badge tag" style={{ marginLeft: 6, fontFamily: "var(--font-mono)", fontSize: 10, padding: "1px 5px" }}>0</span>}
+              </NavLink>
+            );
+          })}
           <div className="nav-bottom">
-            <ParticleField count={5} className="footer-particles" />
+            <ParticleField count={1} className="footer-particles" />
             {navBottomItems.map((item) =>
               item.onClick ? (
                 <button
@@ -504,6 +604,16 @@ export function AppShell() {
         </nav>
       )}
       <main className={`app-content${userLoading ? "" : isPlayer ? "" : " has-player"}`}>
+        {!userLoading && !/^\/sessions\/\d+\/live\/panel\/\w+/.test(pathname) && (
+          <div style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+            <Breadcrumbs items={buildCrumbs(pathname)} />
+            {!isPlayer && activeStorageName && (
+              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
+                {activeStorageName}
+              </span>
+            )}
+          </div>
+        )}
         <Outlet />
       </main>
       <div id="search-panel" className={`search-panel-slot${searchOpen ? " open" : ""}`}>

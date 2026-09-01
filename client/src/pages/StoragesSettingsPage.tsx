@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "../api/client";
+import { useConfirm } from "../hooks/useConfirm";
+import { safeGetItem, safeSetItem } from "../utils/safeStorage";
 import { ModulesTab } from "../components/ModulesTab";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { DatabaseSizeCard } from "../components/DatabaseSizeCard";
+import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
+import { ThemeEditorModal } from "../components/ThemeEditorModal";
 import { hasElectronAPI, isPathSafeForExplorer } from "../electronApi";
 import { NavIcon } from "../components/NavIcons";
 import { SectionHeading } from "../components/SectionHeading";
@@ -11,6 +16,7 @@ import type { AppSettings, StorageProfile } from "../types";
 import {
   allThemes, applyTheme, findTheme, loadThemePrefs,
   saveThemePrefs, loadRadiusOverride, saveRadiusOverride,
+  type Theme,
 } from "../themes";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -24,16 +30,17 @@ import {
 } from "../dndPrefs";
 
 function loadSectionOpen(key: string, fallback: boolean): boolean {
-  try {
-    const v = localStorage.getItem(`storagesSectionOpen_${key}`);
-    return v == null ? fallback : v === "1";
-  } catch { return fallback; }
+  const v = safeGetItem(`storagesSectionOpen_${key}`);
+  return v == null ? fallback : v === "1";
 }
 function saveSectionOpen(key: string, open: boolean) {
-  try { localStorage.setItem(`storagesSectionOpen_${key}`, open ? "1" : "0"); } catch {}
+  safeSetItem(`storagesSectionOpen_${key}`, open ? "1" : "0");
 }
 
 export function StoragesSettingsPage() {
+  const location = useLocation() as { state?: { fromAppearance?: boolean } };
+  const fromAppearance = location.state?.fromAppearance === true;
+  const [confirmDialog, confirm] = useConfirm();
   const [activeId, setActiveId] = useState("");
   const [storages, setStorages] = useState<StorageProfile[]>([]);
   const [error, setError] = useState("");
@@ -42,7 +49,7 @@ export function StoragesSettingsPage() {
 
   // Appearance state moved from AppearanceSettingsPage
   const [prefs, setPrefs] = useState(loadThemePrefs());
-  const [radius, setRadius] = useState(() => loadRadiusOverride() ?? 6);
+  const [radius, setRadius] = useState(() => loadRadiusOverride() ?? 0);
   const [duotone, setDuotone] = useState(loadCoverDuotone);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [uploadingHomeBg, setUploadingHomeBg] = useState(false);
@@ -71,6 +78,10 @@ export function StoragesSettingsPage() {
 
   const [importDragOver, setImportDragOver] = useState(false);
 
+  // Theme context menu + editor
+  const [themeMenu, setThemeMenu] = useState<{ x: number; y: number; theme: Theme } | null>(null);
+  const [themeEditor, setThemeEditor] = useState<Theme | null>(null);
+
   function refreshAppSettings(signal?: AbortSignal) {
     api.get<AppSettings>("/app-settings", signal ? { signal } : undefined)
       .then((s) => {
@@ -94,7 +105,7 @@ export function StoragesSettingsPage() {
   }
   function changeRadius(px: number) {
     setRadius(px);
-    saveRadiusOverride(px === 6 ? null : px);
+    saveRadiusOverride(px === 0 ? null : px);
     applyTheme(findTheme(prefs.themeId, prefs.customThemes));
   }
   function changeHideFinance(hide: boolean) {
@@ -129,7 +140,7 @@ export function StoragesSettingsPage() {
       await api.post("/app-settings/home-background", form);
       refreshAppSettings();
     } catch (e) {
-      console.error(e);
+      if ((e as Error).name === "AbortError") return;
       showError(e instanceof Error ? e.message.slice(0, 200) : "Не удалось загрузить фон");
     } finally {
       setUploadingHomeBg(false);
@@ -137,8 +148,12 @@ export function StoragesSettingsPage() {
   }
   const homeBgCrop = useImageCrop("background", uploadHomeBackground);
   async function removeHomeBackground() {
-    await api.del("/app-settings/home-background");
-    refreshAppSettings();
+    try {
+      await api.del("/app-settings/home-background");
+      refreshAppSettings();
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+    }
   }
 
   function showToast(msg: string) {
@@ -156,10 +171,15 @@ export function StoragesSettingsPage() {
     const seconds = Math.max(0, Number(val) || 0);
     if (fadeSaveRef.current) window.clearTimeout(fadeSaveRef.current);
     fadeSaveRef.current = window.setTimeout(async () => {
-      await api.put("/app-settings/fade-duration", { fade_duration_ms: seconds * 1000 });
-      showToast("Сохранено");
-      refreshAppSettings();
-    }, 400);
+      try {
+        await api.put("/app-settings/fade-duration", { fade_duration_ms: seconds * 1000 });
+        refreshAppSettings();
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") {
+          showError("Не удалось сохранить затухание");
+        }
+      }
+    }, 600);
   }
   async function saveFadeDurationNow(val: string) {
     const seconds = Math.max(0, Number(val) || 0);
@@ -225,7 +245,7 @@ export function StoragesSettingsPage() {
       refresh();
       showToast("Хранилище создано");
     } catch (e) {
-      console.error(e);
+      if ((e as Error).name === "AbortError") return;
       const msg = e instanceof Error ? e.message : "Не удалось создать хранилище";
       setError(msg.slice(0, 200));
     } finally {
@@ -235,19 +255,23 @@ export function StoragesSettingsPage() {
 
   async function activate(id: string) {
     if (activatingId || removingId || creating || importing) return;
-    if (
-      !confirm(
-        "Переключить активное хранилище? Приложение перезагрузится и начнёт работать с выбранным хранилищем."
-      )
-    )
-      return;
+    const target = storages.find((s) => s.id === id);
+    const preview = target ? `«${target.name}»\n${target.vaultRoot}` : id;
+    const ok = await confirm({
+      title: "Переключить хранилище?",
+      message: `Активировать ${preview}\n\nПриложение перезагрузится и начнёт работать с выбранным хранилищем. Несохранённые черновики в других вкладках могут потеряться.`,
+      confirmLabel: "Переключить",
+      cancelLabel: "Отмена",
+      danger: true,
+    });
+    if (!ok) return;
     setActivatingId(id);
     setError("");
     try {
       await api.post(`/storages/${id}/activate`);
       window.location.reload();
     } catch (e) {
-      console.error(e);
+      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message.slice(0, 200) : "Не удалось переключить хранилище");
     } finally {
       setActivatingId(null);
@@ -256,14 +280,15 @@ export function StoragesSettingsPage() {
 
   async function remove(id: string) {
     if (activatingId || removingId || creating || importing) return;
-    if (!confirm("Убрать хранилище из списка? Сами файлы на диске не удаляются.")) return;
+    const ok = await confirm({ title: "Убрать хранилище?", message: "Убрать хранилище из списка? Сами файлы на диске не удаляются.", confirmLabel: "Убрать", cancelLabel: "Отмена" });
+    if (!ok) return;
     setRemovingId(id);
     setError("");
     try {
       await api.del(`/storages/${id}`);
       refresh();
     } catch (e) {
-      console.error(e);
+      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message.slice(0, 200) : "Не удалось убрать хранилище");
     } finally {
       setRemovingId(null);
@@ -283,7 +308,7 @@ export function StoragesSettingsPage() {
       setError("");
       refresh();
     } catch (e) {
-      console.error(e);
+      if ((e as Error).name === "AbortError") return;
       showError(e instanceof Error ? e.message.slice(0, 200) : "Не удалось переименовать", 2500);
     } finally {
       setRenamingSaving(false);
@@ -313,8 +338,8 @@ export function StoragesSettingsPage() {
       refresh();
       showToast("Импортировано");
     } catch (e) {
-      console.error(e);
-      setError(e instanceof Error ? e.message.slice(0, 200) : "Не удалось импортировать бэкап");
+      if ((e as Error).name === "AbortError") return;
+      showError(e instanceof Error ? e.message.slice(0, 200) : "Не удалось импортировать бэкап");
     } finally {
       setImporting(false);
     }
@@ -349,6 +374,8 @@ export function StoragesSettingsPage() {
     }
     navigator.clipboard.writeText(path).then(() => {
       showToast("Путь скопирован");
+    }).catch(() => {
+      showToast("Не удалось скопировать");
     });
   }
 
@@ -363,17 +390,11 @@ export function StoragesSettingsPage() {
   // activeTab внизу намеренно: перенос наверх сдвинул бы индексы хуков и
   // сломал бы сохраненное состояние у существующих пользователей до перезагрузки.
   const [activeTab, setActiveTab] = useState(() => {
-    try {
-      const v = localStorage.getItem("storagesActiveTab") || "store";
-      return v === "links" || v === "pult" ? "store" : v;
-    } catch {
-      return "store";
-    }
+    const v = safeGetItem("storagesActiveTab") || "interface";
+    return v === "links" || v === "pult" ? "interface" : v;
   });
   useEffect(() => {
-    try {
-      localStorage.setItem("storagesActiveTab", activeTab);
-    } catch {}
+    safeSetItem("storagesActiveTab", activeTab);
   }, [activeTab]);
   // Фаза 4: перетаскивание zip вне зоны не должно открывать файл в браузере
   useEffect(() => {
@@ -392,30 +413,49 @@ export function StoragesSettingsPage() {
     };
   }, [activeTab]);
 
+  // Предупреждение перед перезагрузкой если есть черновики
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (newName.trim() || newFolder.trim() || renameDraft.trim() || importName.trim() || importFolder.trim() || renamingId) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [newName, newFolder, renameDraft, importName, importFolder, renamingId]);
+
   return (
-    <div className="stack" style={{ gap: 24 }}>
+    <div className="stack" style={{ paddingBottom: 60 }}>
+      {confirmDialog}
       <SectionHeading section="storages" compact>
         Настройки
       </SectionHeading>
+      {fromAppearance && (
+        <div className="card" role="status" style={{ borderLeft: "1px solid var(--accent)", background: "var(--paper-2)" }}>
+          <span style={{ fontWeight: 600 }}>Внешний вид переехал в Настройки → Интерфейс</span>
+          <div className="muted" style={{ marginTop: 4 }}>Старая закладка <code>/appearance</code> теперь здесь. Темы, скругление и дуотон — во вкладке «Интерфейс».</div>
+        </div>
+      )}
       {toast && (
         <div className="settings-toast" role="status" aria-live="polite">
           {toast}
         </div>
       )}
-      {error && <div className="backup-info error" role="alert">{error}</div>}
+      {error && <div id="storage-error" className="backup-info error" role="alert">{error}</div>}
 
       <div className="tabs" role="tablist" aria-label="Разделы настроек">
-        <button role="tab" aria-selected={activeTab === "store"} className={activeTab === "store" ? "active" : ""} onClick={() => setActiveTab("store")}>
-          Хранилище
-        </button>
         <button role="tab" aria-selected={activeTab === "interface"} className={activeTab === "interface" ? "active" : ""} onClick={() => setActiveTab("interface")}>
           Интерфейс
         </button>
-        <button role="tab" aria-selected={activeTab === "systems"} className={activeTab === "systems" ? "active" : ""} onClick={() => setActiveTab("systems")}>
-          Системы
+        <button role="tab" aria-selected={activeTab === "store"} className={activeTab === "store" ? "active" : ""} onClick={() => setActiveTab("store")}>
+          Хранилище
         </button>
         <button role="tab" aria-selected={activeTab === "modules"} className={activeTab === "modules" ? "active" : ""} onClick={() => setActiveTab("modules")}>
           Модули
+        </button>
+        <button role="tab" aria-selected={activeTab === "systems"} className={activeTab === "systems" ? "active" : ""} onClick={() => setActiveTab("systems")}>
+          Системы
         </button>
         <button role="tab" aria-selected={activeTab === "player"} className={activeTab === "player" ? "active" : ""} onClick={() => setActiveTab("player")}>
           Плеер
@@ -481,10 +521,10 @@ export function StoragesSettingsPage() {
                 </div>
                 <div className="muted" style={{ padding: "0 12px 4px 44px", fontSize: 11, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 360 }}>{s.vaultRoot}</span>
-                  <button type="button" onClick={() => openInExplorer(s.vaultRoot)} style={{ fontSize: 11, padding: "2px 6px", height: 22 }}>
+                  <button type="button" onClick={() => openInExplorer(s.vaultRoot)} style={{ fontSize: 11, padding: "2px 6px", height: 36 }}>
                     Открыть
                   </button>
-                  <button type="button" onClick={() => { navigator.clipboard.writeText(s.vaultRoot); showToast("Скопировано"); }} style={{ fontSize: 11, padding: "2px 6px", height: 22 }}>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(s.vaultRoot).then(() => showToast("Скопировано")).catch(() => showToast("Не удалось скопировать")); }} style={{ fontSize: 11, padding: "2px 6px", height: 36 }}>
                     Копировать
                   </button>
                 </div>
@@ -494,7 +534,7 @@ export function StoragesSettingsPage() {
               storages.length === 0 ? (
                 <EmptyState icon="barcode" title="Хранилищ нет" hint="Создайте первое — укажите название и путь к папке." />
               ) : (
-                <div className="muted" style={{ padding: 12, textAlign: "center" }}>Ничего не найдено по «{q}»</div>
+                <EmptyState icon="barcode" title="Ничего не найдено" hint={`По «${q}» ничего нет.`} action={<button onClick={() => setQ("")}>Сбросить поиск</button>} />
               )
             )}
           </div>
@@ -506,12 +546,12 @@ export function StoragesSettingsPage() {
           <div className="card res-add" style={{ gap: 12, alignItems: "end" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 180px", minWidth: 0 }}>
               <span className="res-toolbar__filter-label">Название</span>
-              <input placeholder="Моё хранилище" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ width: "100%" }} />
+              <input placeholder="Моё хранилище" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ width: "100%" }} required aria-label="Название хранилища" aria-invalid={!!error && !newName.trim() ? "true" : undefined} aria-describedby={error ? "storage-error" : undefined} />
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 280px", minWidth: 0 }}>
               <span className="res-toolbar__filter-label">Путь к папке</span>
               <div style={{ display: "flex", gap: 6 }}>
-                <input placeholder="D:\RPG-Storage-2" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} style={{ flex: 1 }} />
+                <input placeholder="D:\RPG-Storage-2" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} style={{ flex: 1 }} required aria-label="Путь к папке хранилища" aria-invalid={!!error && !newFolder.trim() ? "true" : undefined} aria-describedby={error ? "storage-error" : undefined} />
                 {hasElectron && (
                   <button type="button" onClick={pickNewFolder} title="Обзор" style={{ height: 32 }}>
                     <NavIcon name="folder" /> Обзор
@@ -548,7 +588,7 @@ export function StoragesSettingsPage() {
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 1 200px", minWidth: 140 }}>
               <span className="res-toolbar__filter-label">Zip бэкапа {importFile ? `· ${importFile.name}` : ""}</span>
-              <input type="file" accept=".zip,application/zip" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
+              <input type="file" accept=".zip,application/zip" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} aria-label="Файл бэкапа" />
             </label>
             <button className="primary" onClick={importBackup} disabled={importing} style={{ height: 32, whiteSpace: "nowrap" }}>
               {importing ? "Импортирую…" : "Импортировать"}
@@ -614,7 +654,7 @@ export function StoragesSettingsPage() {
                 {themes.map((th) => {
                   const selected = th.id === prefs.themeId;
                   return (
-                    <div key={th.id} className={`card theme-card${selected ? " is-selected" : ""}`} onClick={() => selectTheme(th.id)} role="button" aria-pressed={selected} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectTheme(th.id); } }}>
+                    <div key={th.id} className={`card theme-card${selected ? " is-selected" : ""}`} onClick={() => selectTheme(th.id)} onContextMenu={(e) => { e.preventDefault(); setThemeMenu({ x: e.clientX, y: e.clientY, theme: th }); }} role="button" aria-pressed={selected} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectTheme(th.id); } }}>
                       <div className="theme-swatches">
                         <span className="theme-swatch" style={{ background: th.vars["--paper"] }} aria-hidden="true" />
                         <span className="theme-swatch" style={{ background: th.vars["--paper-2"] }} aria-hidden="true" />
@@ -627,6 +667,37 @@ export function StoragesSettingsPage() {
                   );
                 })}
               </div>
+              {themeMenu && (
+                <ContextMenu
+                  x={themeMenu.x}
+                  y={themeMenu.y}
+                  title={themeMenu.theme.name}
+                  items={[
+                    ...(themeMenu.theme.id !== prefs.themeId ? [{
+                      label: "Установить",
+                      onClick: () => selectTheme(themeMenu.theme.id),
+                    }] : []),
+                    {
+                      label: "Редактировать",
+                      onClick: () => setThemeEditor(themeMenu.theme),
+                    },
+                  ] as ContextMenuItem[]}
+                  onClose={() => setThemeMenu(null)}
+                />
+              )}
+              {themeEditor && (
+                <ThemeEditorModal
+                  theme={themeEditor}
+                  prefs={prefs}
+                  onSave={(newPrefs) => {
+                    setPrefs(newPrefs);
+                    saveThemePrefs(newPrefs);
+                    applyTheme(findTheme(newPrefs.themeId, newPrefs.customThemes));
+                    setThemeEditor(null);
+                  }}
+                  onClose={() => setThemeEditor(null)}
+                />
+              )}
             </div>
           </details>
 

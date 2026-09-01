@@ -26,7 +26,8 @@ function loadOrCreateJwtSecret(): string {
   }
   const secret = crypto.randomBytes(32).toString("hex");
   fs.mkdirSync(configDir, { recursive: true });
-  fs.writeFileSync(secretPath, secret);
+  fs.writeFileSync(secretPath, secret, { mode: 0o600 });
+  try { fs.chmodSync(secretPath, 0o600); } catch {}
   return secret;
 }
 
@@ -42,6 +43,7 @@ export interface AuthUser {
   // закрыто этим флагом, — смена роли у чужих учёток. Флаг получает первый
   // мастер, заведённый первым запуском (см. POST /auth/setup).
   isAdmin: boolean;
+  tokenVersion: number;
 }
 
 export interface AuthedRequest extends Request {
@@ -65,7 +67,19 @@ export function signToken(user: AuthUser): string {
 // see the /files middleware, which plain <img>/<audio> tags hit directly.
 export function verifyToken(token: string): AuthUser | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as AuthUser;
+    const payload = jwt.verify(token, JWT_SECRET) as AuthUser;
+    // Отзыв старых токенов при смене пароля/роли (audit P0 C-03): сравниваем
+    // tokenVersion из JWT с актуальным в БД — несовпадение = токен отозван.
+    try {
+      const row = db.prepare("SELECT token_version FROM users WHERE id = ?").get(payload.id) as { token_version: number } | undefined;
+      if (row && typeof payload.tokenVersion === "number" && row.token_version !== payload.tokenVersion) return null;
+      // Для токенов, выданных до введения token_version (поле отсутствует),
+      // считаем версию 0 — совпадает с DEFAULT 0 в БД, не ломает старые сессии.
+      if (row && payload.tokenVersion == null && row.token_version !== 0) return null;
+    } catch {
+      // Если БД ещё не мигрирована — не блокируем вход
+    }
+    return payload;
   } catch {
     return null;
   }

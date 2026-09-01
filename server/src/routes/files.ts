@@ -7,9 +7,28 @@ import {
   findRelinkCandidates,
   relinkResource,
 } from "../services/fileHealth";
-import { vaultAbs } from "../services/filesystem";
+import { vaultAbs, VAULT_ROOT } from "../services/filesystem";
+import { signPath } from "../services/signedUrl";
+import { requireAuth } from "../services/auth";
+
+function isInsideVault(p: string): boolean {
+  try {
+    const resolved = path.resolve(p);
+    const root = path.resolve(VAULT_ROOT);
+    return resolved === root || resolved.startsWith(root + path.sep);
+  } catch { return false; }
+}
 
 export const filesRouter = Router();
+
+// Подписанный URL на 60 сек для <img>/<audio> без ?token= (O-3)
+filesRouter.get("/signed-url", requireAuth(), (req, res) => {
+  const p = req.query.path as string | undefined;
+  if (!p || typeof p !== "string" || !p.startsWith("/files/") || p.includes("\0") || p.length > 1024) {
+    return res.status(400).json({ error: "invalid path" });
+  }
+  res.json({ url: signPath(p, 60) });
+});
 
 // Файл, лежащий вне текущего хранилища. Путь не собирается из запроса —
 // берётся из базы по id, поэтому подсунуть сюда «..» нельзя: отдаётся ровно
@@ -39,13 +58,20 @@ filesRouter.post("/relink", (req, res) => {
   if (!resource_id || !new_path) {
     return res.status(400).json({ error: "нужны resource_id и new_path" });
   }
-  if (!fs.existsSync(new_path)) {
+  if (new_path.includes("\0") || /[\u202A-\u202E\u200B-\u200F\uFEFF]/.test(new_path)) {
+    return res.status(400).json({ error: "Недопустимый путь" });
+  }
+  const normalized = path.resolve(path.normalize(new_path));
+  if (!isInsideVault(normalized)) {
+    return res.status(403).json({ error: "Путь вне хранилища запрещён" });
+  }
+  if (!fs.existsSync(normalized)) {
     return res.status(400).json({ error: "по этому пути файла нет" });
   }
-  relinkResource(resource_id, new_path);
+  relinkResource(resource_id, normalized);
   res.json({
     ok: true,
-    candidates: findRelinkCandidates(path.dirname(new_path), resource_id),
+    candidates: findRelinkCandidates(path.dirname(normalized), resource_id),
   });
 });
 
@@ -55,8 +81,11 @@ filesRouter.post("/relink-batch", (req, res) => {
   const apply = db.transaction(() => {
     for (const item of items) {
       if (!item?.resource_id || !item?.new_path) continue;
-      if (!fs.existsSync(item.new_path)) continue;
-      relinkResource(item.resource_id, item.new_path);
+      if (item.new_path.includes("\0") || /[\u202A-\u202E\u200B-\u200F\uFEFF]/.test(item.new_path)) continue;
+      const normalized = path.resolve(path.normalize(item.new_path));
+      if (!isInsideVault(normalized)) continue;
+      if (!fs.existsSync(normalized)) continue;
+      relinkResource(item.resource_id, normalized);
     }
   });
   apply();

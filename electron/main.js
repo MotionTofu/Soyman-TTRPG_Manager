@@ -127,8 +127,10 @@ function waitForServer(url, attempt = 0) {
         resolve();
       })
       .on("error", () => {
-        if (attempt > 100) return reject(new Error("Server did not start in time"));
-        setTimeout(() => waitForServer(url, attempt + 1).then(resolve, reject), 150);
+        if (attempt > 80) return reject(new Error("Server did not start in time"));
+        // 3.4 — экспоненциальный бэкофф вместо ровных 150мс: быстрее на быстром диске, терпеливее на медленном
+        const delay = Math.min(800, Math.round(120 * Math.pow(1.18, attempt)));
+        setTimeout(() => waitForServer(url, attempt + 1).then(resolve, reject), delay);
       });
   });
 }
@@ -220,12 +222,15 @@ function createMenu() {
 }
 
 function isSafeExplorerPath(p) {
-  if (!p || typeof p !== "string" || p.includes("\0") || p.length > 1024) return false;
-  if (p.includes("..")) return false;
-  if (/^[a-zA-Z]:[\\/]/.test(p)) return true;
-  if (p.startsWith("\\\\")) return false;
-  if (p.startsWith("/") || p.startsWith("\\")) return true;
-  return false;
+  if (!p || typeof p !== "string" || p.includes("\0") || p.length > 2048) return false;
+  if (/[\u202A-\u202E\u200B-\u200F\uFEFF]/.test(p)) return false;
+  if (p.split(/[\\/]/).includes("..")) return false;
+  const normalized = path.normalize(p);
+  if (normalized.split(path.sep).includes("..")) return false;
+  const resolved = path.resolve(normalized);
+  if (!path.isAbsolute(resolved)) return false;
+  if (resolved.startsWith("\\\\") || resolved.includes("\\\\?\\")) return false;
+  return true;
 }
 ipcMain.handle("show-in-explorer", async (_event, folderPath) => {
   if (!isSafeExplorerPath(folderPath)) return { ok: false, error: "Недопустимый путь" };
@@ -329,6 +334,9 @@ function spawnWindow(route = "/", parent = null) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       preload: path.join(__dirname, "preload.js"),
     },
   });
@@ -359,12 +367,24 @@ function openWindowFromFocused() {
 
 async function createWindow() {
   seedIfNeeded();
-  // Сервер поднимается внутри этого же процесса, поэтому версию приложения
-  // проще передать окружением, чем тащить в него electron: она нужна каталогу
-  // модулей, чтобы не предлагать установку того, что эта сборка не прочтёт.
   process.env.APP_VERSION = app.getVersion();
   require(serverEntry);
-  await waitForServer(`http://127.0.0.1:${PORT}/api/health`);
+  // 3.4 — показываем спиннер пока сервер поднимается, вместо белого экрана
+  let loadingWin = null;
+  const loadingTimer = setTimeout(() => {
+    loadingWin = new BrowserWindow({
+      width: 360, height: 180, resizable: false, frame: false, transparent: false,
+      backgroundColor: "#e8e4da", show: true, alwaysOnTop: true, center: true,
+      webPreferences: { sandbox: true },
+    });
+    loadingWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#e8e4da;color:#1c1c1c;font-family:sans-serif;flex-direction:column;gap:12px"><div style="width:28px;height:28px;border:2px solid #2a2a2a;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase">Запускаем хранилище…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></body>`)}`);
+  }, 400);
+  try {
+    await waitForServer(`http://127.0.0.1:${PORT}/api/health`);
+  } finally {
+    clearTimeout(loadingTimer);
+    if (loadingWin && !loadingWin.isDestroyed()) loadingWin.close();
+  }
 
   createMenu();
 

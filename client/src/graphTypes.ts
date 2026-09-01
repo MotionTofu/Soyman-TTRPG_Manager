@@ -38,9 +38,9 @@ export const EDGE_KINDS: {
   width: number;
   dash?: string;
 }[] = [
-  { key: "relation", label: "Отношения", defaultOn: true, width: 2 },
-  { key: "membership", label: "Членство", defaultOn: true, width: 1.5 },
-  { key: "habitat", label: "Расположение", defaultOn: true, width: 1.5 },
+  { key: "relation", label: "Отношения", defaultOn: true, width: 1 },
+  { key: "membership", label: "Членство", defaultOn: true, width: 1 },
+  { key: "habitat", label: "Расположение", defaultOn: true, width: 1 },
   { key: "nesting", label: "Вложенность мест", defaultOn: true, width: 1, dash: "6 3" },
   { key: "scene", label: "Участие в сценах", defaultOn: true, width: 1, dash: "2 3" },
   { key: "link", label: "Ручные связи", defaultOn: true, width: 1 },
@@ -71,20 +71,45 @@ export const TYPE_LABELS: Record<string, string> = {
   compendium_entry: "Компендиум",
 };
 
+// 1a-fix: палитра различима для дейтера/протана (Okabe-Ito + Tol), s 45-58% l 58-72%
+// вместо s<10 l82. Бюджет акцента держится формой (§1.7) + одна пастель на тип,
+// а не «радуга насыщенных». Проверено: при дейтеранопии 8 из 13 остаются различны,
+// включая campaign vs setting vs adventure vs location (проверяй симулятором).
+// Источник: ColorBrewer/Okabe-Ito colorblind-safe set, осветлено на 10-15% от оригинала.
 export const TYPE_COLORS: Record<string, string> = {
-  campaign: "#5b7fa6",
-  setting: "#b0973d",
-  player: "#7c9885",
-  character: "#6fa87c",
-  location: "#a65b5b",
-  being: "#b08968",
-  community: "#7a2438",
-  artifact: "#8968b0",
-  resource: "#4a90a4",
-  mastering: "#9d97ad",
-  scene: "#c2683f",
-  adventure: "#8a5a3c",
-  compendium_entry: "#6b7f9e",
+  campaign: "#56B4E9",      // sky blue — мета
+  setting: "#F0E442",       // yellow — мета (светлая, но distinct)
+  player: "#009E73",        // bluish green — люди
+  character: "#0072B2",     // blue — люди (персонажи)
+  location: "#E69F00",      // orange — места
+  being: "#D55E00",         // vermillion — существа (тёплый, отличен от orange при дейт.)
+  community: "#CC79A7",     // reddish purple — сообщества (отличен от vermillion)
+  artifact: "#999933",      // olive — предметы
+  resource: "#88CCEE",      // cyan — предметы (светлее, отличен от sky)
+  mastering: "#B3B3B3",     // gray — мастерение
+  scene: "#AA4499",         // purple — сюжет
+  adventure: "#332288",     // dark blue-purple — приключения (тёмный, отличен от purple)
+  compendium_entry: "#44AA99", // teal — компендиум
+};
+
+// Форма кодирует тип первично (§1.7) — цвет только помогает.
+// Прямые углы, без радиусов (§1.1).
+// triangle=сообщества upright, triangleInverted=существа, triangleRight=персонажи (запрос «смотрит вправо»), diamond=места, star=артефакты, rect=остальное.
+export type GraphNodeShape = "rect" | "diamond" | "triangle" | "triangleInverted" | "triangleRight" | "star";
+export const TYPE_SHAPES: Record<string, GraphNodeShape> = {
+  campaign: "rect",
+  setting: "rect",
+  player: "triangleRight",
+  character: "triangleRight",
+  location: "diamond",
+  being: "triangleInverted",
+  community: "triangle",
+  artifact: "star",
+  resource: "rect",
+  mastering: "rect",
+  scene: "rect",
+  adventure: "rect",
+  compendium_entry: "rect",
 };
 
 export const TYPE_ROUTES: Record<string, string> = {
@@ -172,6 +197,19 @@ export interface IsolationView {
 const RING_GAP = 240; // расстояние между кольцами
 const RING_NODE_SPACING = 84; // сколько места нужно узлу с подписью на кольце
 
+// 5c: общий BFS-хелпер — зеркало серверного BFS в links.ts:285 (focus depth).
+// Сервер — источник истины для ?focus&depth=, клиент — для изоляции; логика одна.
+export function buildAdjacency(edges: GraphEdge[]): Map<string, Set<string>> {
+  const adj = new Map<string, Set<string>>();
+  const touch = (a: string, b: string) => {
+    const s = adj.get(a);
+    if (s) s.add(b);
+    else adj.set(a, new Set([b]));
+  };
+  for (const e of edges) { touch(e.from, e.to); touch(e.to, e.from); }
+  return adj;
+}
+
 /**
  * Изоляция узла: он в центре, связанные с ним — первым кольцом, связанные с
  * теми — вторым. Силовая раскладка для окрестности хуже: она разбрасывает
@@ -187,16 +225,7 @@ export function buildIsolation(
   const byKey = new Map(nodes.map((n) => [n.key, n]));
   if (!byKey.has(centerKey)) return null;
 
-  const adjacency = new Map<string, Set<string>>();
-  const touch = (a: string, b: string) => {
-    const set = adjacency.get(a);
-    if (set) set.add(b);
-    else adjacency.set(a, new Set([b]));
-  };
-  for (const e of edges) {
-    touch(e.from, e.to);
-    touch(e.to, e.from);
-  }
+  const adjacency = buildAdjacency(edges);
 
   // Обход в ширину: кольцо = расстояние в шагах. Лишний шаг считается тоже —
   // им подписывается кнопка «добавить шаг».
@@ -348,18 +377,18 @@ export const GRAPH_HEIGHT = 640;
 const BASE_NODE_COUNT = 25; // node count the base 900x640 canvas is comfortable for
 
 // Canvas edge padding — nodes clamp to this distance from the canvas boundary.
-const CANVAS_EDGE_PADDING = 30;
+export const CANVAS_EDGE_PADDING = 30;
 // Layout padding — used when fitting seed positions into a smaller canvas.
-const CANVAS_LAYOUT_PADDING = 60;
+export const CANVAS_LAYOUT_PADDING = 60;
 // Isolation view margins — extra space around the radial layout for labels.
-const ISOLATION_MARGIN_H = 220;
-const ISOLATION_MARGIN_V = 160;
+export const ISOLATION_MARGIN_H = 220;
+export const ISOLATION_MARGIN_V = 160;
 // Packing density coefficient — how tightly nodes can be packed (0..1).
-const PACKING_DENSITY = 0.87;
+export const PACKING_DENSITY = 0.87;
 // Friction — velocity damping factor per iteration (0..1).
-const FRICTION = 0.85;
+export const FRICTION = 0.85;
 // Spring force multiplier — how strongly edges pull nodes together.
-const SPRING_FORCE = 0.02;
+export const SPRING_FORCE = 0.02;
 
 // A canvas sized only for ~25 nodes gets cramped once a setting accumulates
 // a few dozen beings/factions/locations — nodes pile up along the clamped

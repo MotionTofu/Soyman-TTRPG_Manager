@@ -6,10 +6,12 @@ import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { useCurrentUser } from "../api/currentUser";
 import type { Campaign, PlayerDetail, PlayerGroup } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { ConfirmModal } from "../components/ConfirmModal";
 
 export function PlayerDetailPage() {
   const { id } = useParams();
@@ -32,6 +34,9 @@ export function PlayerDetailPage() {
   const [accountError, setAccountError] = useState("");
   const [allGroups, setAllGroups] = useState<PlayerGroup[]>([]);
   const [playerGroupIds, setPlayerGroupIds] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
 
   function refreshAccount() {
     api
@@ -46,6 +51,7 @@ export function PlayerDetailPage() {
 
   async function toggleAccountRole() {
     if (!account) return;
+    setShowRoleModal(false);
     const nextRole = account.role === "gm" ? "player" : "gm";
     await api.put(`/auth/players/${id}/role`, { role: nextRole });
     refreshAccount();
@@ -130,27 +136,33 @@ export function PlayerDetailPage() {
 
   async function saveEdit() {
     if (!nameDraft.trim() || !player) return;
-    await api.put(`/players/${id}`, { name: nameDraft, notes: notesDraft });
-    syncMentionLinks("player", Number(id), player.notes, notesDraft);
-    setEditing(false);
-    refresh();
+    setSaving(true);
+    try {
+      await api.put(`/players/${id}`, { name: nameDraft, notes: notesDraft });
+      syncMentionLinks("player", Number(id), player.notes, notesDraft);
+      setEditing(false);
+      refresh();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function archivePlayer() {
-    if (!confirm("Отправить игрока в архив?")) return;
+    setShowArchiveModal(false);
     await api.del(`/players/${id}`);
     navigate("/players");
   }
 
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+      <Breadcrumbs items={[{ label: "Игроки", to: "/players" }, { label: player.name }]} />
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
         <div className="row" style={{ alignItems: "flex-start" }}>
           <label className="avatar-upload-label" title={IMAGE_HINT}>
             {player.avatar_image_url ? (
-              <img src={player.avatar_image_url} alt="" className="player-avatar" />
+              <img src={player.avatar_image_url} alt={`Аватар ${player.name}`} className="player-avatar" />
             ) : (
-              <div className="player-avatar roster-avatar-placeholder" />
+              <div className="player-avatar player-avatar-placeholder" />
             )}
             <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
             <input
@@ -161,10 +173,10 @@ export function PlayerDetailPage() {
             />
           </label>
           {avatarCrop.modal}
-          <div>
+          <div className="player-profile-header">
             <h1>{player.name}</h1>
             {player.notes && (
-              <div className="muted">
+              <div className="player-profile-notes">
                 <MentionText text={player.notes} />
               </div>
             )}
@@ -172,14 +184,14 @@ export function PlayerDetailPage() {
         </div>
         <div className="entity-header-actions">
           <button onClick={() => setEditing(true)}>Редактировать</button>
-          <button className="danger" onClick={archivePlayer}>
+          <button className="danger" onClick={() => setShowArchiveModal(true)}>
             <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>
 
       <div className="card stack">
-        <h3>Доступ к игрок-клиенту</h3>
+        <div className="player-section-header">Доступ к игрок-клиенту</div>
         {!accountLoaded && <span className="muted">Загрузка…</span>}
         {accountLoaded && account && !accountEditing && (
           <div className="row" style={{ justifyContent: "space-between" }}>
@@ -189,7 +201,7 @@ export function PlayerDetailPage() {
             </span>
             <div className="row">
               {currentUser?.isAdmin && (
-                <button onClick={toggleAccountRole}>
+                <button onClick={() => setShowRoleModal(true)}>
                   {account.role === "gm" ? "Забрать метку «Мастер»" : "Сделать мастером"}
                 </button>
               )}
@@ -218,6 +230,7 @@ export function PlayerDetailPage() {
                 placeholder={account ? "Новый пароль (необязательно)" : "Пароль"}
                 value={passwordDraft}
                 onChange={(e) => setPasswordDraft(e.target.value)}
+                autoComplete={account ? "current-password" : "new-password"}
               />
               <button className="primary" onClick={account ? saveAccountEdit : createAccount}>
                 Сохранить
@@ -241,7 +254,7 @@ export function PlayerDetailPage() {
       <RemindersWidget targetType="player" targetId={Number(id)} />
 
       <div className="card stack">
-        <h3>Группы игроков</h3>
+        <div className="player-section-header">Группы игроков</div>
         {allGroups.length === 0 ? (
           <span className="muted">Групп пока нет — создайте их на странице списка игроков.</span>
         ) : (
@@ -251,29 +264,24 @@ export function PlayerDetailPage() {
               return (
                 <label
                   key={g.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    cursor: "pointer",
-                    padding: "4px 8px",
-                    borderRadius: "var(--card-radius)",
-                    border: `1px solid ${isIn ? "var(--accent)" : "var(--line)"}`,
-                    background: isIn ? "var(--accent-bg, rgba(79, 140, 255, 0.08))" : "transparent",
-                    fontSize: "var(--fs-meta)",
-                  }}
+                  className={`player-group-chip${isIn ? " player-group-chip--active" : ""}`}
                 >
                   <input
                     type="checkbox"
                     checked={isIn}
-                    onChange={async () => {
+                    onChange={() => {
+                      setPlayerGroupIds((prev) =>
+                        isIn ? prev.filter((gid) => gid !== g.id) : [...prev, g.id]
+                      );
                       if (isIn) {
-                        await api.del(`/player-groups/${g.id}/members?playerIds=${Number(id)}`);
+                        api.del(`/player-groups/${g.id}/members?playerIds=${Number(id)}`).catch(() => {
+                          setPlayerGroupIds((prev) => isIn ? [...prev, g.id] : prev.filter((gid) => gid !== g.id));
+                        });
                       } else {
-                        await api.post(`/player-groups/${g.id}/members`, { playerIds: [Number(id)] });
+                        api.post(`/player-groups/${g.id}/members`, { playerIds: [Number(id)] }).catch(() => {
+                          setPlayerGroupIds((prev) => isIn ? [...prev, g.id] : prev.filter((gid) => gid !== g.id));
+                        });
                       }
-                      const groups = await api.get<PlayerGroup[]>(`/player-groups/by-player/${id}`);
-                      setPlayerGroupIds(groups.map((gr) => gr.id));
                     }}
                   />
                   {g.name}
@@ -285,7 +293,7 @@ export function PlayerDetailPage() {
       </div>
 
       <div className="card stack">
-        <h3>Персонажи (Игрок | Персонаж)</h3>
+        <div className="player-section-header">Персонажи</div>
         <table>
           <thead>
             <tr>
@@ -301,7 +309,7 @@ export function PlayerDetailPage() {
                 <td>
                   {c.avatar_image_url ? (
                     <Link to={`/characters/${c.id}`}>
-                      <img src={c.avatar_image_url} alt="" className="roster-avatar" />
+                      <img src={c.avatar_image_url} alt={`Аватар ${c.character_name}`} className="roster-avatar" />
                     </Link>
                   ) : (
                     <div className="roster-avatar roster-avatar-placeholder" />
@@ -338,7 +346,7 @@ export function PlayerDetailPage() {
             value={characterName}
             onChange={(e) => setCharacterName(e.target.value)}
           />
-          <button className="primary" onClick={addCharacter}>
+          <button className="primary" onClick={addCharacter} disabled={!campaignId || !characterName.trim()}>
             Добавить
           </button>
         </div>
@@ -355,12 +363,40 @@ export function PlayerDetailPage() {
             <MentionTextarea value={notesDraft} onChange={setNotesDraft} />
           </label>
           <div className="row">
-            <button className="primary" onClick={saveEdit}>
-              Сохранить
+            <button className="primary" onClick={saveEdit} disabled={saving}>
+              {saving ? "Сохранение…" : "Сохранить"}
             </button>
-            <button onClick={() => setEditing(false)}>Отмена</button>
+            <button onClick={() => setEditing(false)} disabled={saving}>Отмена</button>
           </div>
         </div>
+      )}
+
+      {showArchiveModal && (
+        <ConfirmModal
+          title="Архивировать игрока?"
+          message={`Это архивирует ${player.name} и его ${player.characters.length} персонаж${player.characters.length === 1 ? "а" : "ей"}. Игрок потеряет доступ к приложению.`}
+          confirmLabel="Архивировать"
+          cancelLabel="Отмена"
+          danger
+          onClose={() => setShowArchiveModal(false)}
+          onConfirm={archivePlayer}
+        />
+      )}
+
+      {showRoleModal && account && (
+        <ConfirmModal
+          title={account.role === "gm" ? "Забрать метку Мастер?" : "Сделать мастером?"}
+          message={
+            account.role === "gm"
+              ? `${player.name} потеряет доступ к пульту сессий и редактированию кампаний.`
+              : `${player.name} сможет готовить и вести сессии.`
+          }
+          confirmLabel={account.role === "gm" ? "Забрать метку" : "Сделать мастером"}
+          cancelLabel="Отмена"
+          danger={account.role === "gm"}
+          onClose={() => setShowRoleModal(false)}
+          onConfirm={toggleAccountRole}
+        />
       )}
     </div>
   );

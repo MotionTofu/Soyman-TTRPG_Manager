@@ -2,13 +2,27 @@ import { Router } from "express";
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
-import { vaultAbs, VAULT_ROOT } from "../services/filesystem";
+import { ensureSubfolder, sanitizeName, vaultAbs, VAULT_ROOT, vaultRel } from "../services/filesystem";
 import { findMissingFiles, relinkResource } from "../services/fileHealth";
-import { sweepOrphans } from "../services/orphans";
+import { sweepOrphans, getLastOrphanBackup, restoreLastOrphanBackup } from "../services/orphans";
 import { openInFileExplorer } from "../services/filesystem";
+import rateLimit from "express-rate-limit";
 import { MENTIONABLE, mentionTextColumns, scanMentions, exists, rewriteAllMentions, idOfUid, normUid, rewriteMentions, prefixOf, sourceCodeOf, formatRef, type Mention, type RefMention, type LegacyMention } from "../services/mentions";
 
+const healthScanLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too many scans, wait a minute" },
+});
+
 export const healthRouter = Router();
+
+function auditLog(req: { ip?: string; headers?: Record<string, unknown>; user?: { id?: number; role?: string } }, action: string, details: Record<string, unknown> = {}) {
+  const user = (req as { user?: { id?: number; role?: string } }).user;
+  console.log(`[health] ${action}`, { user: user?.id ?? "?", role: user?.role ?? "?", ip: req.ip, ...details });
+}
 
 // --- helpers ---
 
@@ -44,6 +58,7 @@ const PATH_TABLES: { table: string; column: string; idCol?: string }[] = [
   { table: "resources", column: "file_path" },
   { table: "statblocks", column: "avatar_image_path" },
   { table: "gallery_images", column: "image_path" },
+  { table: "compendium_entries", column: "avatar_image_path" },
   { table: "archived_files", column: "archive_path" },
 ];
 
@@ -147,7 +162,7 @@ function scanBrokenLinks(cols?: ReturnType<typeof mentionTextColumns>): { count:
   const seen = new Set<string>();
   let count = 0;
   for (const { table, column } of columns) {
-    const rows = db.prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%'`).all() as { v: string | null }[];
+    const rows = db.prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%' LIMIT 5000`).all() as { v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
         if ((m as { kind: string }).kind !== "legacy" || !MENTIONABLE[(m as { type: string }).type] || exists((m as { type: string }).type, (m as { id: number }).id)) continue;
@@ -182,7 +197,7 @@ function scanLegacyMentions(cols?: ReturnType<typeof mentionTextColumns>): { ent
   let resolvable = 0;
   let broken = 0;
   for (const { table, column } of columns) {
-    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%:%|%'`).all() as { id: number; v: string | null }[];
+    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%:%|%' LIMIT 5000`).all() as { id: number; v: string | null }[];
     for (const row of rows) {
       if (!row.v || !row.v.includes("[[")) continue;
       for (const m of scanMentions(row.v)) {
@@ -350,7 +365,7 @@ function scanDanglingModules(cols?: ReturnType<typeof mentionTextColumns>): { co
   const columns = cols ?? mentionTextColumns();
   const byCode = new Map<string, { label: string; count: number; samples: DanglingEntry[] }>();
   for (const { table, column } of columns) {
-    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%'`).all() as { id: number; v: string | null }[];
+    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%' LIMIT 5000`).all() as { id: number; v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
         const kind = (m as unknown as { kind: string }).kind;
@@ -380,7 +395,7 @@ function collectDeadUidMentions(cols?: ReturnType<typeof mentionTextColumns>): D
   const columns = cols ?? mentionTextColumns();
   const out: DanglingEntry[] = [];
   for (const { table, column } of columns) {
-    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%'`).all() as { id: number; v: string | null }[];
+    const rows = db.prepare(`SELECT id, ${column} AS v FROM ${table} WHERE ${column} LIKE '%[[%@%' LIMIT 5000`).all() as { id: number; v: string | null }[];
     for (const row of rows) {
       for (const m of scanMentions(row.v || "")) {
         if (m.kind !== "ref") continue;
@@ -434,19 +449,15 @@ interface DeadCandidate {
   via: string;
 }
 
-function findCandidatesForDead(
+type CandidateRow = { id: number; uid: string; name: string; name_original: string | null; aliases: string | null; _aliasesParsed?: string[] | null };
+
+function resolveScope(
   type: string,
-  label: string,
   hostTable: string,
   hostId: number,
   code: string
-): DeadCandidate[] {
-  const table = MENTIONABLE[type];
-  if (!table) return [];
-  const needle = label.trim().toLowerCase();
-  if (!needle) return [];
+): { scopeSystemId?: number; scopeSettingId?: number } {
   const hostScope = getHostScope(hostTable, hostId);
-  // Попытка сузить по коду модуля: code → system/setting
   let scopeSystemId: number | undefined = hostScope.system_id;
   let scopeSettingId: number | undefined = hostScope.setting_id;
   if (type === "compendium_entry" && code && code !== "unknown") {
@@ -456,29 +467,51 @@ function findCandidatesForDead(
     const st = db.prepare(`SELECT id FROM settings WHERE lower(code)=lower(?) OR lower(name)=lower(?)`).get(code, code) as { id: number } | undefined;
     if (st) scopeSettingId = st.id;
   }
-  let rows: { id: number; uid: string; name: string; name_original: string | null; aliases: string | null }[] = [];
+  return { scopeSystemId, scopeSettingId };
+}
+
+function fetchCandidateRows(
+  type: string,
+  scopeSystemId: number | undefined,
+  scopeSettingId: number | undefined,
+  cache: Map<string, CandidateRow[]>
+): CandidateRow[] {
+  const table = MENTIONABLE[type];
+  if (!table) return [];
+  const cacheKey = `${type}|${scopeSystemId ?? ""}|${scopeSettingId ?? ""}`;
+  const hit = cache.get(cacheKey);
+  if (hit) return hit;
+  let rows: CandidateRow[] = [];
   try {
     if (type === "compendium_entry" && scopeSystemId != null) {
-      rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL AND system_id = ?`).all(scopeSystemId) as typeof rows;
+      rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL AND system_id = ?`).all(scopeSystemId) as CandidateRow[];
     } else if (scopeSettingId != null && table !== "compendium_entries" && table !== "systems") {
-      // setting-scoped таблицы имеют setting_id
-      const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-      if (cols.some((c) => c.name === "setting_id")) {
-        rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL AND setting_id = ?`).all(scopeSettingId) as typeof rows;
+      const colSet = hostScopePragmaCache.get(table);
+      const hasSetting = colSet ? colSet.has("setting_id") : (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === "setting_id");
+      if (hasSetting) {
+        rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL AND setting_id = ?`).all(scopeSettingId) as CandidateRow[];
       } else {
-        rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL`).all() as typeof rows;
+        rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL`).all() as CandidateRow[];
       }
     } else {
-      rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL`).all() as typeof rows;
+      rows = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL`).all() as CandidateRow[];
     }
   } catch {
+    cache.set(cacheKey, []);
     return [];
   }
-  // Детерминированно режем по алфавиту, иначе отсечётся нужный кандидат за пределами 500
-  if (rows.length > 500) {
-    rows.sort((a, b) => a.name.localeCompare(b.name, "ru"));
-    rows = rows.slice(0, 500);
+  // Парсим aliases один раз на строку (без среза до фильтра — иначе пропускаем «Туманный шаг» за пределами 500)
+  for (const r of rows) {
+    if (r.aliases && r.aliases.startsWith("[")) {
+      try { r._aliasesParsed = JSON.parse(r.aliases) as string[]; } catch { r._aliasesParsed = null; }
+    } else r._aliasesParsed = null;
   }
+  cache.set(cacheKey, rows);
+  return rows;
+}
+
+function rankCandidatesForNeedle(rows: CandidateRow[], type: string, needle: string): DeadCandidate[] {
+  if (!needle) return [];
   const out: DeadCandidate[] = [];
   for (const r of rows) {
     const nameLow = r.name.trim().toLowerCase();
@@ -488,13 +521,20 @@ function findCandidatesForDead(
     if (nameLow === needle) { tier = "exact"; via = "имя"; }
     else if (origLow && origLow === needle) { tier = "likely"; via = "оригинал"; }
     else {
-      try {
-        const al = r.aliases ? (JSON.parse(r.aliases) as string[]) : [];
-        const hit = al.find((a) => a.trim().toLowerCase() === needle);
-        if (hit) { tier = "likely"; via = `синоним «${hit}»`; }
-      } catch {}
+      const al = r._aliasesParsed;
+      if (al) {
+        const found = al.find((a) => a.trim().toLowerCase() === needle);
+        if (found) { tier = "likely"; via = `синоним «${found}»`; }
+      }
     }
     if (!tier && (nameLow.includes(needle) || needle.includes(nameLow))) { tier = "doubtful"; via = "часть названия"; }
+    if (!tier && r._aliasesParsed) {
+      const aliasHit = r._aliasesParsed.find((a) => {
+        const al = a.trim().toLowerCase();
+        return al.includes(needle) || needle.includes(al);
+      });
+      if (aliasHit) { tier = "doubtful"; via = `синоним «${aliasHit}»`; }
+    }
     if (!tier) continue;
     const prefix = prefixOf(type, r.id) || normUid(r.uid).slice(0, 8);
     const source = sourceCodeOf(type, r.id);
@@ -503,6 +543,21 @@ function findCandidatesForDead(
   const order = { exact: 0, likely: 1, doubtful: 2 } as const;
   out.sort((a, b) => order[a.tier] - order[b.tier] || a.name.localeCompare(b.name, "ru"));
   return out.slice(0, 10);
+}
+
+function findCandidatesForDead(
+  type: string,
+  label: string,
+  hostTable: string,
+  hostId: number,
+  code: string
+): DeadCandidate[] {
+  const needle = label.trim().toLowerCase();
+  if (!needle || !MENTIONABLE[type]) return [];
+  const { scopeSystemId, scopeSettingId } = resolveScope(type, hostTable, hostId, code);
+  const cache = new Map<string, CandidateRow[]>();
+  const rows = fetchCandidateRows(type, scopeSystemId, scopeSettingId, cache);
+  return rankCandidatesForNeedle(rows, type, needle);
 }
 
 interface DeadUidGroup {
@@ -524,9 +579,18 @@ function getDeadUidGroups(): DeadUidGroup[] {
     if (g) g.samples.push(e);
     else byKey.set(key, { type: e.type, uid: normUid(e.uid), code: e.code, label: e.label, samples: [e] });
   }
+  // Батч: один Map кэша строк на весь вызов — 33 группы → 4-6 SELECT вместо 33
+  const rowCache = new Map<string, CandidateRow[]>();
   const groups: DeadUidGroup[] = [];
   for (const g of byKey.values()) {
-    const candidates = findCandidatesForDead(g.type, g.label, g.samples[0].table, g.samples[0].id, g.code);
+    const needle = g.label.trim().toLowerCase();
+    if (!needle || !MENTIONABLE[g.type]) {
+      groups.push({ type: g.type, uid: g.uid, code: g.code, label: g.label, count: g.samples.length, samples: g.samples.slice(0, 20), candidates: [] });
+      continue;
+    }
+    const { scopeSystemId, scopeSettingId } = resolveScope(g.type, g.samples[0].table, g.samples[0].id, g.code);
+    const rows = fetchCandidateRows(g.type, scopeSystemId, scopeSettingId, rowCache);
+    const candidates = rankCandidatesForNeedle(rows, g.type, needle);
     groups.push({ type: g.type, uid: g.uid, code: g.code, label: g.label, count: g.samples.length, samples: g.samples.slice(0, 20), candidates });
   }
   groups.sort((a, b) => b.count - a.count);
@@ -569,6 +633,18 @@ function findBestUidByLabel(type: string, label: string, systemId?: number): str
   }
 
   return null;
+}
+
+function findBestUidScoped(type: string, label: string, hostTable: string, hostId: number, code: string): string | null {
+  const needle = label.trim().toLowerCase();
+  if (!needle || !MENTIONABLE[type]) return null;
+  const { scopeSystemId, scopeSettingId } = resolveScope(type, hostTable, hostId, code);
+  const cache = new Map<string, CandidateRow[]>();
+  const rows = fetchCandidateRows(type, scopeSystemId, scopeSettingId, cache);
+  const ranked = rankCandidatesForNeedle(rows, type, needle);
+  const best = ranked.find((c) => c.tier === "exact" || c.tier === "likely");
+  if (!best) return null;
+  return best.uid;
 }
 
 function scanOrphanFiles(): { path: string; size: number }[] {
@@ -668,10 +744,130 @@ function scanRelinkCandidates(): { resource_id: number; name: string; old_path: 
   return out;
 }
 
+async function scanBrokenPathsAsync(): Promise<{ entries: { table: string; column: string; id: number; path: string }[]; total: number; truncated: boolean }> {
+  const out: { table: string; column: string; id: number; path: string }[] = [];
+  let total = 0;
+  for (const { table, column } of PATH_TABLES) {
+    try {
+      const rows = db.prepare(`SELECT id, ${column} as p FROM ${table} WHERE ${column} IS NOT NULL AND ${column} != ''`).all() as { id: number; p: string }[];
+      for (const r of rows) {
+        let broken = false;
+        try { await fs.promises.access(vaultAbs(r.p), fs.constants.F_OK); } catch { broken = true; }
+        if (broken) {
+          total++;
+          if (out.length < 200) out.push({ table, column, id: r.id, path: r.p });
+        }
+      }
+    } catch {}
+  }
+  return { entries: out, total, truncated: total > out.length };
+}
+
+async function scanOrphanFilesAsync(): Promise<{ path: string; size: number }[]> {
+  const known = new Set<string>();
+  for (const { table, column } of PATH_TABLES) {
+    try {
+      const rows = db.prepare(`SELECT ${column} as p FROM ${table} WHERE ${column} IS NOT NULL AND ${column} != ''`).all() as { p: string }[];
+      for (const r of rows) {
+        const rel = r.p.replace(/\//g, path.sep);
+        known.add(rel.toLowerCase());
+        try { known.add(path.relative(VAULT_ROOT, vaultAbs(r.p)).toLowerCase()); } catch {}
+      }
+    } catch {}
+  }
+  try {
+    const arch = db.prepare("SELECT archive_path as p FROM archived_files").all() as { p: string }[];
+    for (const r of arch) if (r.p) known.add(path.relative(VAULT_ROOT, vaultAbs(r.p)).toLowerCase());
+  } catch {}
+  const out: { path: string; size: number }[] = [];
+  const stack: string[] = [VAULT_ROOT];
+  const skipDirs = new Set(["_Archive"]);
+  let walked = 0;
+  while (stack.length) {
+    const dir = stack.pop()!;
+    let entries: fs.Dirent[] = [];
+    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (skipDirs.has(e.name)) continue;
+        stack.push(full);
+      } else if (e.isFile()) {
+        walked++;
+        if (walked > 5000) break;
+        const rel = path.relative(VAULT_ROOT, full).toLowerCase();
+        if (!known.has(rel)) {
+          try {
+            const st = await fs.promises.stat(full);
+            out.push({ path: path.relative(VAULT_ROOT, full), size: st.size });
+          } catch {}
+        }
+        if (out.length >= 100) break;
+      }
+    }
+    if (out.length >= 100 || walked > 5000) break;
+    if (walked % 200 === 0) await new Promise<void>((r) => setImmediate(r));
+  }
+  return out;
+}
+
+async function scanRelinkCandidatesAsync(): Promise<{ resource_id: number; name: string; old_path: string; new_path: string; match: string }[]> {
+  const missing = findMissingFiles();
+  if (missing.length === 0) return [];
+  const byName = new Map<string, string[]>();
+  const stack: string[] = [VAULT_ROOT];
+  let walked = 0;
+  while (stack.length) {
+    const dir = stack.pop()!;
+    let entries: fs.Dirent[] = [];
+    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === "_Archive") continue;
+        stack.push(full);
+      } else if (e.isFile()) {
+        walked++;
+        if (walked > 5000) break;
+        const low = e.name.toLowerCase();
+        const list = byName.get(low);
+        if (!list) byName.set(low, [full]);
+        else list.push(full);
+      }
+    }
+    if (walked > 5000) break;
+    if (walked % 200 === 0) await new Promise<void>((r) => setImmediate(r));
+  }
+  const out: { resource_id: number; name: string; old_path: string; new_path: string; match: string }[] = [];
+  for (const m of missing) {
+    const base = path.basename(m.file_path).toLowerCase();
+    const candidates = byName.get(base);
+    if (!candidates || candidates.length === 0) continue;
+    let best = candidates[0];
+    let match: string = "name_only";
+    const known = db.prepare("SELECT size_bytes FROM resource_file_sizes WHERE resource_id = ?").get(m.resource_id) as { size_bytes: number } | undefined;
+    if (known) {
+      for (const cand of candidates) {
+        try {
+          const sz = (await fs.promises.stat(cand)).size;
+          if (sz === known.size_bytes) { best = cand; match = "name_and_size"; break; }
+        } catch {}
+      }
+    }
+    out.push({ resource_id: m.resource_id, name: m.name, old_path: m.file_path, new_path: path.relative(VAULT_ROOT, best), match });
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 // GET /api/health/scan — только чтение, по кнопке (C-P0-6: 1× mentionTextColumns вместо 4×, C-P1-1: total vs shown)
-healthRouter.get("/scan", (_req, res) => {
+healthRouter.get("/scan", healthScanLimiter, async (_req, res) => {
   const cols = mentionTextColumns();
-  const brokenPathsRes = scanBrokenPaths();
+  const [brokenPathsRes, orphanFiles, relinkCandidates] = await Promise.all([
+    scanBrokenPathsAsync(),
+    scanOrphanFilesAsync(),
+    scanRelinkCandidatesAsync(),
+  ]);
   const missingFiles = findMissingFiles();
   const orphans = countOrphans();
   const orphansTotal = Object.values(orphans).reduce((a, b) => a + b, 0);
@@ -680,8 +876,6 @@ healthRouter.get("/scan", (_req, res) => {
   const legacy = scanLegacyMentions(cols);
   const danglingModules = scanDanglingModules(cols);
   const deadUidMentions = collectDeadUidMentions(cols);
-  const orphanFiles = scanOrphanFiles();
-  const relinkCandidates = scanRelinkCandidates();
   const bracketNames = scanBracketNames();
   res.json({
     brokenPaths: brokenPathsRes.entries, brokenPathsCount: brokenPathsRes.total, brokenPathsShown: brokenPathsRes.entries.length, brokenPathsTruncated: brokenPathsRes.truncated,
@@ -699,23 +893,42 @@ healthRouter.get("/scan", (_req, res) => {
 });
 
 // POST /api/health/orphans/clean
-healthRouter.post("/orphans/clean", (_req, res) => {
+healthRouter.post("/orphans/clean", (req, res) => {
   const removed = sweepOrphans();
-  res.json({ removed });
+  auditLog(req as never, "orphans/clean", { removed });
+  res.json({ removed, canUndo: !!getLastOrphanBackup() });
+});
+healthRouter.post("/orphans/undo", (req, res) => {
+  const backup = getLastOrphanBackup();
+  if (!backup) return res.status(404).json({ error: "nothing to undo" });
+  const restored = restoreLastOrphanBackup();
+  auditLog(req as never, "orphans/undo", { restored, at: backup.at });
+  res.json({ restored });
+});
+healthRouter.get("/orphans/undo", (req, res) => {
+  const backup = getLastOrphanBackup();
+  res.json({ canUndo: !!backup, at: backup?.at ?? null, count: backup ? Object.values(backup.rows).reduce((a, r) => a + r.length, 0) : 0 });
 });
 
 // POST /api/health/links/strip — убрать битые legacy-ссылки
-healthRouter.post("/links/strip", (_req, res) => {
+healthRouter.post("/links/strip", (req, res) => {
   const removed = rewriteAllMentions((m) =>
     (m as { kind: string }).kind === "legacy" && MENTIONABLE[(m as { type: string }).type] && !exists((m as { type: string }).type, (m as { id: number }).id) ? (m as { label: string }).label : null
   );
+  auditLog(req as never, "links/strip", { removed });
   res.json({ removed });
 });
 
 // POST /api/health/uid-links/fix — починить мёртвые UID-ссылки, заменив UID на актуальные (C-P0-7: rewriteAllMentions + ключ type:uid, без коллизий)
-healthRouter.post("/uid-links/fix", (_req, res) => {
+healthRouter.post("/uid-links/fix", (req, res) => {
   const dead = collectDeadUidMentions();
   if (dead.length === 0) return res.json({ fixed: 0, unresolved: 0 });
+
+  const deadByKey = new Map<string, DanglingEntry>();
+  for (const e of dead) {
+    const k = `${e.type}:${normUid(e.uid)}`;
+    if (!deadByKey.has(k)) deadByKey.set(k, e);
+  }
 
   let fixed = 0;
   let unresolved = 0;
@@ -730,7 +943,8 @@ healthRouter.post("/uid-links/fix", (_req, res) => {
     const key = `${rm.type}:${normUid(rm.uid)}`;
     let newUid: string | null | undefined = fixMap.get(key);
     if (newUid === undefined) {
-      const found = findBestUidByLabel(rm.type, rm.label);
+      const sample = deadByKey.get(key);
+      const found = sample ? findBestUidScoped(rm.type, rm.label, sample.table, sample.id, sample.code) : findBestUidByLabel(rm.type, rm.label);
       fixMap.set(key, found ?? null);
       newUid = found ?? null;
     }
@@ -741,6 +955,7 @@ healthRouter.post("/uid-links/fix", (_req, res) => {
     return `[[${rm.type}@${newUid}|${source}|${rm.label}]]`;
   });
 
+  auditLog(req as never, "uid-links/fix", { fixed, unresolved });
   res.json({ fixed, unresolved });
 });
 
@@ -751,7 +966,7 @@ healthRouter.get("/legacy-details", (_req, res) => {
 });
 
 // POST /api/health/legacy-fix — перевести все legacy на uid (resolvable) или схлопнуть (broken)
-healthRouter.post("/legacy-fix", (_req, res) => {
+healthRouter.post("/legacy-fix", (req, res) => {
   let fixed = 0;
   let stripped = 0;
   const changed = rewriteAllMentions((m) => {
@@ -763,6 +978,7 @@ healthRouter.post("/legacy-fix", (_req, res) => {
     fixed++;
     return formatRef(lm.type, prefix, sourceCodeOf(lm.type, lm.id), lm.label);
   });
+  auditLog(req as never, "legacy-fix", { fixed, stripped, changed });
   res.json({ fixed, stripped, changed });
 });
 
@@ -778,9 +994,14 @@ healthRouter.get("/dead-uid-search", (req, res) => {
   const needle = q.toLowerCase();
   let rows: { id: number; uid: string; name: string; name_original: string | null; aliases: string | null }[] = [];
   try {
-    // Ищем по имени/оригиналу (LOWER для кириллицы — в JS, а не SQL lower)
-    const all = db.prepare(`SELECT id, uid, name, name_original, aliases FROM ${table} WHERE uid IS NOT NULL LIMIT 800`).all() as typeof rows;
-    const filtered = all.filter((r) => {
+    const like = `%${q.toLowerCase()}%`;
+    // SQL pre-filter via lower_u (unicode-aware) — 80 instead of 3115 rows, then JS rank + aliases
+    const pre = db.prepare(
+      `SELECT id, uid, name, name_original, aliases FROM ${table}
+       WHERE uid IS NOT NULL AND (lower_u(name) LIKE lower_u(?) OR lower_u(COALESCE(name_original,'')) LIKE lower_u(?) OR lower_u(COALESCE(aliases,'')) LIKE lower_u(?))
+       LIMIT 80`
+    ).all(like, like, like) as typeof rows;
+    const filtered = pre.filter((r) => {
       const n = r.name.toLowerCase();
       const o = (r.name_original || "").toLowerCase();
       if (n.includes(needle) || o.includes(needle)) return true;
@@ -803,9 +1024,31 @@ healthRouter.get("/dead-uid-search", (req, res) => {
   const results = rows.map((r) => {
     const prefix = prefixOf(type, r.id) || normUid(r.uid).slice(0, 8);
     const source = sourceCodeOf(type, r.id);
-    const nl = r.name.toLowerCase();
-    const tier: DeadCandidate["tier"] = nl === needle ? "exact" : nl.startsWith(needle) ? "likely" : "doubtful";
-    const via = tier === "exact" ? "имя" : tier === "likely" ? "начинается" : "часть";
+    const nl = r.name.trim().toLowerCase();
+    const ol = (r.name_original || "").trim().toLowerCase();
+    let tier: DeadCandidate["tier"] = "doubtful";
+    let via = "часть";
+    if (nl === needle) { tier = "exact"; via = "имя"; }
+    else if (ol && ol === needle) { tier = "likely"; via = "оригинал"; }
+    else {
+      try {
+        const al = r.aliases ? (JSON.parse(r.aliases) as string[]) : [];
+        const hit = al.find((a) => a.trim().toLowerCase() === needle);
+        if (hit) { tier = "likely"; via = `синоним «${hit}»`; }
+        else if (nl.startsWith(needle)) { tier = "likely"; via = "начинается"; }
+        else {
+          const aliasHit = al.find((a) => {
+            const alLow = a.trim().toLowerCase();
+            return alLow.includes(needle) || needle.includes(alLow);
+          });
+          if (aliasHit) { tier = "doubtful"; via = `синоним «${aliasHit}»`; }
+        }
+      } catch {
+        if (nl.startsWith(needle)) { tier = "likely"; via = "начинается"; }
+      }
+    }
+    // Если до сих пор doubtful но startsWith — повысить до likely
+    if (tier === "doubtful" && nl.startsWith(needle)) { tier = "likely"; via = "начинается"; }
     return { id: r.id, name: r.name, uid: normUid(r.uid), prefix, source, tier, via };
   });
   res.json({ results });
@@ -855,6 +1098,7 @@ healthRouter.post("/dead-uid-fix", (req, res) => {
     fixed++;
     return formatRef(rm.type, choice.prefix, choice.source, rm.label);
   });
+  auditLog(req as never, "dead-uid-fix", { fixed, stripped, changedFields, fixes: fixes.length });
   res.json({ fixed, stripped, changedFields });
 });
 
@@ -862,10 +1106,34 @@ healthRouter.post("/dead-uid-fix", (req, res) => {
 healthRouter.post("/relink", (req, res) => {
   const { resource_id, new_path } = req.body as { resource_id?: number; new_path?: string };
   if (!resource_id || !new_path) return res.status(400).json({ error: "resource_id и new_path обязательны" });
-  const abs = vaultAbs(new_path);
-  if (!fs.existsSync(abs)) return res.status(400).json({ error: "файл не найден: " + new_path });
+  if (new_path.includes("\0") || new_path.includes("..") || /[\u202A-\u202E\u200B-\u200F\uFEFF]/.test(new_path)) return res.status(400).json({ error: "Недопустимый путь" });
+  const abs = path.isAbsolute(new_path) ? path.resolve(new_path) : vaultAbs(new_path);
+  const resolved = path.resolve(abs);
+  if (!path.isAbsolute(new_path)) {
+    const root = path.resolve(VAULT_ROOT);
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) return res.status(400).json({ error: "path outside vault" });
+  }
+  if (!fs.existsSync(resolved)) return res.status(400).json({ error: "файл не найден: " + new_path });
   relinkResource(resource_id, new_path);
+  auditLog(req as never, "relink", { resource_id, new_path });
   res.json({ ok: true });
+});
+
+// POST /api/health/path/clear — убрать битый путь (U-P0-2: ставить NULL вместо битого *_path)
+healthRouter.post("/path/clear", (req, res) => {
+  const { table, column, id } = req.body as { table?: string; column?: string; id?: number };
+  if (!table || !column || !id) return res.status(400).json({ error: "table, column, id required" });
+  if (!/^[a-z_]+$/.test(table) || !/^[a-z_]+$/.test(column)) return res.status(400).json({ error: "invalid name" });
+  const allowed = PATH_TABLES.some((p) => p.table === table && p.column === column);
+  if (!allowed) return res.status(400).json({ error: "column not allowed" });
+  const exists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);
+  if (!exists) return res.status(404).json({ error: "table not found" });
+  // Проверка существования строки и что колонка действительно содержит путь
+  const row = db.prepare(`SELECT ${column} as v FROM ${table} WHERE id=?`).get(id) as { v: string | null } | undefined;
+  if (!row) return res.status(404).json({ error: "row not found" });
+  db.prepare(`UPDATE ${table} SET ${column}=NULL WHERE id=?`).run(id);
+  auditLog(req as never, "path/clear", { table, column, id });
+  res.json({ ok: true, cleared: `${table}.${column}#${id}` });
 });
 
 // POST /api/health/open-folder — открыть папку в проводнике (C-P0-4: только в Electron, case-insensitive на Windows)
@@ -888,7 +1156,132 @@ healthRouter.post("/open-folder", (req, res) => {
     if (st?.isFile()) openInFileExplorer(resolved, true);
     else openInFileExplorer(st ? resolved : path.dirname(resolved), false);
   } catch {}
+  auditLog(req as never, "open-folder", { path: relPath });
   res.json({ ok: true });
+});
+
+// POST /api/health/orphan/archive — перенести сироты в _Archive/orphans/YYYY-MM-DD
+healthRouter.post("/orphan/archive", (req, res) => {
+  const { paths } = req.body as { paths?: string[] };
+  if (!Array.isArray(paths) || paths.length === 0) return res.status(400).json({ error: "paths required" });
+  if (paths.length > 100) return res.status(400).json({ error: "too many paths (max 100)" });
+  const day = new Date().toISOString().slice(0, 10);
+  const archiveBase = path.join(VAULT_ROOT, "_Archive", "orphans", day);
+  try { fs.mkdirSync(archiveBase, { recursive: true }); } catch {}
+  let moved = 0;
+  const errors: string[] = [];
+  for (const rel of paths) {
+    if (typeof rel !== "string" || !rel || rel.includes("\0") || rel.includes("..")) { errors.push(rel); continue; }
+    const abs = vaultAbs(rel);
+    const resolved = path.resolve(abs);
+    const root = path.resolve(VAULT_ROOT);
+    if (resolved === root || !resolved.startsWith(root + path.sep)) { errors.push(rel); continue; }
+    if (resolved.toLowerCase().includes(path.join("_archive").toLowerCase())) { errors.push(rel); continue; }
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) { errors.push(rel); continue; }
+    const base = sanitizeName(path.basename(resolved));
+    let target = path.join(archiveBase, base);
+    const ext = path.extname(base);
+    const nameNoExt = path.basename(base, ext);
+    for (let n = 2; fs.existsSync(target); n++) target = path.join(archiveBase, `${nameNoExt}-${n}${ext}`);
+    try { fs.renameSync(resolved, target); moved++; } catch { errors.push(rel); }
+  }
+  auditLog(req as never, "orphan/archive", { moved, requested: paths.length, errors: errors.length });
+  res.json({ moved, errors });
+});
+
+// POST /api/health/orphan/create-resources — создать ресурсы из сирот (global scope)
+healthRouter.post("/orphan/create-resources", (req, res) => {
+  const { paths } = req.body as { paths?: string[] };
+  if (!Array.isArray(paths) || paths.length === 0) return res.status(400).json({ error: "paths required" });
+  if (paths.length > 100) return res.status(400).json({ error: "too many paths" });
+  let created = 0;
+  const maxPosRow = db.prepare("SELECT COALESCE(MAX(position), -1) as m FROM resources").get() as { m: number };
+  let pos = maxPosRow.m + 1;
+  for (const rel of paths) {
+    if (typeof rel !== "string" || !rel || rel.includes("\0") || rel.includes("..")) continue;
+    const abs = vaultAbs(rel);
+    const resolved = path.resolve(abs);
+    const root = path.resolve(VAULT_ROOT);
+    if (resolved === root || !resolved.startsWith(root + path.sep)) continue;
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) continue;
+    const base = path.basename(rel);
+    const name = base.replace(/\.[^.]+$/, "") || base;
+    const ext = path.extname(base).toLowerCase();
+    const isImage = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"].includes(ext);
+    const category = isImage ? "image" : ext === ".pdf" ? "pdf" : ext === ".mp3" || ext === ".ogg" || ext === ".wav" ? "audio" : "other";
+    db.prepare(
+      `INSERT INTO resources (name, type, scope, category, file_path, position) VALUES (?, 'note', 'global', ?, ?, ?)`
+    ).run(name, category, vaultRel(rel), pos++);
+    created++;
+  }
+  auditLog(req as never, "orphan/create-resources", { created, requested: paths.length });
+  res.json({ created });
+});
+
+// POST /api/health/orphan/attach — пришить сироту к сущности в указанный *_path
+healthRouter.post("/orphan/attach", (req, res) => {
+  const { orphanPath, table, column, id } = req.body as { orphanPath?: string; table?: string; column?: string; id?: number };
+  if (!orphanPath || !table || !column || !id) return res.status(400).json({ error: "orphanPath, table, column, id required" });
+  if (!/^[a-z_]+$/.test(table) || !/^[a-z_]+$/.test(column)) return res.status(400).json({ error: "invalid name" });
+  const allowed = PATH_TABLES.some((p) => p.table === table && p.column === column);
+  if (!allowed) return res.status(400).json({ error: "column not allowed" });
+  if (typeof orphanPath !== "string" || orphanPath.includes("\0") || orphanPath.includes("..")) return res.status(400).json({ error: "invalid orphanPath" });
+  const abs = vaultAbs(orphanPath);
+  const resolved = path.resolve(abs);
+  const root = path.resolve(VAULT_ROOT);
+  if (resolved === root || !resolved.startsWith(root + path.sep)) return res.status(400).json({ error: "orphanPath outside vault" });
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return res.status(404).json({ error: "orphan file not found" });
+  const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);
+  if (!tableExists) return res.status(404).json({ error: "table not found" });
+  const row = db.prepare(`SELECT id FROM ${table} WHERE id=?`).get(id) as { id: number } | undefined;
+  if (!row) return res.status(404).json({ error: "row not found" });
+  const rel = vaultRel(orphanPath);
+  db.prepare(`UPDATE ${table} SET ${column}=? WHERE id=?`).run(rel, id);
+  auditLog(req as never, "orphan/attach", { orphanPath: rel, table, column, id });
+  res.json({ ok: true, path: rel });
+});
+
+// POST /api/health/orphan/attach-batch — пакетное пришивание (браузер сирот, выбор много сразу)
+healthRouter.post("/orphan/attach-batch", (req, res) => {
+  const body = req.body as { items?: { orphanPath: string; table: string; column: string; id: number }[]; paths?: string[]; table?: string; column?: string; id?: number };
+  let items: { orphanPath: string; table: string; column: string; id: number }[] = [];
+  if (Array.isArray(body.items) && body.items.length > 0) {
+    items = body.items;
+  } else if (Array.isArray(body.paths) && body.table && body.column && body.id) {
+    items = body.paths.map((p) => ({ orphanPath: p, table: body.table!, column: body.column!, id: body.id! }));
+  } else {
+    return res.status(400).json({ error: "items (or paths+table+column+id) required" });
+  }
+  if (items.length === 0) return res.status(400).json({ error: "items required" });
+  if (items.length > 100) return res.status(400).json({ error: "too many items (max 100)" });
+  const errors: { orphanPath: string; error: string }[] = [];
+  let attached = 0;
+  for (const it of items) {
+    const { orphanPath, table, column, id } = it as { orphanPath?: string; table?: string; column?: string; id?: number };
+    if (!orphanPath || !table || !column || !id) { errors.push({ orphanPath: String(orphanPath ?? ""), error: "missing fields" }); continue; }
+    if (!/^[a-z_]+$/.test(table) || !/^[a-z_]+$/.test(column)) { errors.push({ orphanPath, error: "invalid name" }); continue; }
+    const allowed = PATH_TABLES.some((p) => p.table === table && p.column === column);
+    if (!allowed) { errors.push({ orphanPath, error: "column not allowed" }); continue; }
+    if (typeof orphanPath !== "string" || orphanPath.includes("\0") || orphanPath.includes("..")) { errors.push({ orphanPath, error: "invalid orphanPath" }); continue; }
+    const abs = vaultAbs(orphanPath);
+    const resolved = path.resolve(abs);
+    const root = path.resolve(VAULT_ROOT);
+    if (resolved === root || !resolved.startsWith(root + path.sep)) { errors.push({ orphanPath, error: "outside vault" }); continue; }
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) { errors.push({ orphanPath, error: "not found" }); continue; }
+    const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);
+    if (!tableExists) { errors.push({ orphanPath, error: "table not found" }); continue; }
+    const row = db.prepare(`SELECT id FROM ${table} WHERE id=?`).get(id) as { id: number } | undefined;
+    if (!row) { errors.push({ orphanPath, error: "row not found" }); continue; }
+    const rel = vaultRel(orphanPath);
+    try {
+      db.prepare(`UPDATE ${table} SET ${column}=? WHERE id=?`).run(rel, id);
+      attached++;
+    } catch (e) {
+      errors.push({ orphanPath, error: String(e instanceof Error ? e.message : e) });
+    }
+  }
+  auditLog(req as never, "orphan/attach-batch", { attached, total: items.length, errors: errors.length });
+  res.json({ attached, total: items.length, errors });
 });
 
 // POST /api/health/seq/reset — C-P0-5: allowlist только AUTOINCREMENT таблицы
@@ -909,5 +1302,6 @@ healthRouter.post("/seq/reset", (req, res) => {
   if (!after) {
     try { db.prepare("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)").run(table, next); } catch {}
   }
+  auditLog(req as never, "seq/reset", { table, maxId: mx, seq: next });
   res.json({ table, maxId: mx, seq: next });
 });

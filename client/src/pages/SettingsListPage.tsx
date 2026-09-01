@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
@@ -51,7 +51,6 @@ function SettingCoverTile({ setting: s }: { setting: Setting }) {
                 <span
                   key={i}
                   className="genre-chip"
-                  style={{ "--genre-color": cat?.color ?? "#888" } as React.CSSProperties}
                 >
                   {cat && <ZineGraphic name={cat.icon} className="genre-chip-icon" />}
                   {g.subgenre ?? g.genre}
@@ -75,6 +74,8 @@ export function SettingsListPage() {
   const [groups, setGroups] = useState<SettingGroup[]>([]);
   const [groupMemberships, setGroupMemberships] = useState<Record<number, number[]>>({});
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
+  const [q, setQ] = useState("");
+  const [genreFilter, setGenreFilter] = useState<string | null>(null);
 
   async function loadSettings(signal?: AbortSignal) {
     setLoading(true);
@@ -94,17 +95,22 @@ export function SettingsListPage() {
     try {
       const fetchedGroups = await api.get<SettingGroup[]>("/setting-groups", signal ? { signal } : undefined);
       setGroups(fetchedGroups);
+      if (fetchedGroups.length === 0) {
+        setGroupMemberships({});
+        return;
+      }
+      const opts = signal ? { signal } : undefined;
+      const allMembers = await Promise.all(
+        fetchedGroups.map((g) => api.get<Setting[]>(`/setting-groups/${g.id}/members`, opts).catch(() => [] as Setting[]))
+      );
       const memberships: Record<number, number[]> = {};
-      for (const g of fetchedGroups) {
-        const members = await api.get<Setting[]>(
-          `/setting-groups/${g.id}/members`,
-          signal ? { signal } : undefined
-        );
-        for (const m of members) {
+      fetchedGroups.forEach((g, idx) => {
+        for (const m of allMembers[idx]) {
           if (!memberships[m.id]) memberships[m.id] = [];
           memberships[m.id].push(g.id);
         }
-      }
+      });
+      if (signal?.aborted) return;
       setGroupMemberships(memberships);
     } catch {
       // silent
@@ -125,14 +131,27 @@ export function SettingsListPage() {
 
   useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
 
-  const filteredSettings = (() => {
-    if (activeTab === null) return settings;
-    if (activeTab === "ungrouped") {
-      return settings.filter((s) => !groupMemberships[s.id]?.length);
-    }
-    const groupId = Number(activeTab);
-    return settings.filter((s) => groupMemberships[s.id]?.includes(groupId));
-  })();
+  const filteredSettings = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    const byTab = (() => {
+      if (activeTab === null) return settings;
+      if (activeTab === "ungrouped") {
+        return settings.filter((s) => !groupMemberships[s.id]?.length);
+      }
+      const groupId = Number(activeTab);
+      return settings.filter((s) => groupMemberships[s.id]?.includes(groupId));
+    })();
+    const byGenre = genreFilter
+      ? byTab.filter((s) => s.genres?.some((g) => g.genre === genreFilter))
+      : byTab;
+    if (!qq) return byGenre;
+    return byGenre.filter(
+      (s) =>
+        s.name.toLowerCase().includes(qq) ||
+        (s.description ?? "").toLowerCase().includes(qq) ||
+        (s.code ?? "").toLowerCase().includes(qq)
+    );
+  }, [settings, activeTab, groupMemberships, q, genreFilter]);
 
   return (
     <div className="stack" style={{ position: "relative" }}>
@@ -152,6 +171,41 @@ export function SettingsListPage() {
         onTabChange={setActiveTab}
         onGroupsChanged={refresh}
       />
+
+      <div className="res-toolbar" style={{ marginTop: 4 }}>
+        <input
+          className="res-toolbar__search"
+          placeholder="Поиск по имени, описанию, коду…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Поиск по сеттингам"
+        />
+        <div className="genre-chips">
+          {GENRE_CATEGORIES.map((cat) => (
+            <button
+              key={cat.name}
+              className={`genre-chip${genreFilter === cat.name ? " genre-chip--selected" : ""}`}
+              style={{ "--genre-color": cat.color } as React.CSSProperties}
+              onClick={() => setGenreFilter(genreFilter === cat.name ? null : cat.name)}
+            >
+              <ZineGraphic name={cat.icon} className="genre-chip-icon" />
+              {cat.name}
+            </button>
+          ))}
+        </div>
+        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
+          {filteredSettings.length} / {settings.length}
+        </span>
+        {q && (
+          <button
+            onClick={() => setQ("")}
+            style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+            title="Сбросить поиск"
+          >
+            Сбросить
+          </button>
+        )}
+      </div>
 
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -191,6 +245,31 @@ export function SettingsListPage() {
             </button>
           )}
         </div>
+      )}
+
+      {!loading && !loadError && filteredSettings.length === 0 && settings.length > 0 && (
+        <EmptyState
+          icon="barcode"
+          title="Ничего не найдено"
+          hint={q.trim() ? `По «${q.trim()}» ничего нет.` : genreFilter ? `Нет сеттингов с жанром «${genreFilter}».` : activeTab !== null ? "В этой группе пока пусто — добавьте сеттинг." : "Ничего не найдено."}
+          action={
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+              {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+              {genreFilter && <button onClick={() => setGenreFilter(null)}>Сбросить жанр</button>}
+              {activeTab !== null && activeTab !== "ungrouped" && (
+                <button
+                  className="primary"
+                  onClick={() => {
+                    const g = groups.find((gr) => gr.id === Number(activeTab));
+                    if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+                  }}
+                >
+                  Добавить в группу
+                </button>
+              )}
+            </div>
+          }
+        />
       )}
 
       {!loading && !loadError && settings.length === 0 && (

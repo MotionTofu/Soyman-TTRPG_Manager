@@ -12,8 +12,8 @@ where each piece actually lives in this codebase.
 
 | Concern | File |
 |---|---|
-| Theme tokens (`--paper`/`--ink`/`--accent`/etc, all five app themes) | `client/src/themes.ts` — `buildTheme()`/`skinTheme()`; `zine` is the default (see `loadThemePrefs`'s fallback) |
-| Global token defaults / pre-JS FOUC guard | `client/src/index.css` `:root` block (mirrors the "Классическая" theme byte-for-byte) |
+| Theme tokens (`--paper`/`--ink`/`--accent`/etc, all five app themes) | `client/src/themes.ts` — `buildTheme()`/`skinTheme()`; `noir` is the default (`DEFAULT_THEME_ID = "noir"`, see `loadThemePrefs` fallback) |
+| Global token defaults / pre-JS FOUC guard | `client/src/index.css` `:root` block (mirrors the "Соевый нуар"/`noir` theme byte-for-byte to avoid FOUC) |
 | Statblock theme tokens (zine/noir/aberrant) | `client/src/statblockThemes.ts` (theme list) + `client/src/statblockThemes.css` (`.sb-scope`-local `--paper`/`--ink`/`--muted`/`--line` bridge variables — an independent namespace from the app theme, deliberately not aliased to it) |
 | Fonts (Display/Body, self-hosted via Google Fonts) | `client/src/fonts.ts`, loaded in `index.html` |
 | Texture utilities (grain, halftone, marker underline/highlight, torn edges, rotate) | `client/src/zine.css`, imported from `main.tsx` |

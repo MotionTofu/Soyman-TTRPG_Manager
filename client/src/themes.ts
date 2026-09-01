@@ -214,6 +214,10 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--pay-paid-soft": sem.paid + "22",
     "--pay-free": sem.free,
     "--pay-free-soft": sem.free + "22",
+    // Scrim color for image-tile gradients: dark themes fade to paper (bg),
+    // light themes fade to ink (text). Used by .campaign-tile-scrim,
+    // .home-hero-scrim, .setting-card-bg::before.
+    "--scrim": mode === "dark" ? paper : ink,
   };
 
   return { id, name, mode, vars };
@@ -405,7 +409,7 @@ PEACE_THEME.vars["--surface"] = "#0E3C3C";
 PEACE_THEME.vars["--on-surface"] = "#CEDAD0";
 PEACE_THEME.vars["--on-surface-muted"] = "#8BBB92";
 
-export const BUILTIN_THEMES: Theme[] = [ZINE_THEME, RIOT_THEME, NEON_THEME, SOY_NOIR_THEME, PEACE_THEME, ABERRANT_THEME];
+export const BUILTIN_THEMES: Theme[] = [PEACE_THEME, SOY_NOIR_THEME, NEON_THEME, ABERRANT_THEME, RIOT_THEME, ZINE_THEME];
 
 // Тема по умолчанию — «Соевый Нуар»: на неё же настроен предзагрузочный
 // :root в index.css (защита от вспышки чужой палитры до запуска JS).

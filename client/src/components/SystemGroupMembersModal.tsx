@@ -69,7 +69,7 @@ export function SystemGroupMembersModal({ groupId, groupName, onClose, onUpdated
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, width: "100%" }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, width: "100%" }}>
         <h3 style={{ marginBottom: 12 }}>{groupName}</h3>
         <p style={{ color: "var(--muted)", fontSize: "var(--fs-meta)", marginBottom: 12 }}>
           Отметьте системы, которые входят в группу:
@@ -106,7 +106,7 @@ export function SystemGroupMembersModal({ groupId, groupName, onClose, onUpdated
           </div>
         )}
 
-        <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-start" }}>
           <button onClick={onClose}>Готово</button>
         </div>
       </div>

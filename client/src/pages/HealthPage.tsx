@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
@@ -6,7 +6,7 @@ import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
 import { useCurrentUser } from "../api/currentUser";
 import { useConfirm } from "../hooks/useConfirm";
-import { hasElectronAPI } from "../electronApi";
+import { OrphanBrowserModal } from "../components/health/OrphanBrowserModal";
 
 interface LegacyEntry {
   type: string;
@@ -72,6 +72,24 @@ interface ScanResult {
   bracketNamesCount: number;
 }
 
+type TabId = "seq" | "paths" | "uids" | "names" | "orphanFiles";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "seq", label: "Автоинкрементация" },
+  { id: "paths", label: "Битые пути" },
+  { id: "uids", label: "Пропавшие UID" },
+  { id: "names", label: "Имена" },
+  { id: "orphanFiles", label: "Файлы-сироты" },
+];
+
+const TAB_HINTS: Record<TabId, string> = {
+  seq: "Норма — drift 0..4. Большой drift = кто-то плодит строки в цикле (см. П0.4).",
+  paths: "Пути *_path указывают на файл, которого нет на диске. Починка — вручную: перепривязать файл или очистить поле.",
+  uids: "Ссылки [[type@uid|code|label]] на несуществующие записи: модуль не установлен, uid удалён, или ссылка в старом формате [[type:id|label]]. Клик ведёт на запись-владельца.",
+  names: "Имена с хвостом [Original] — наследство П2.6. Миграция режет хвост в name_original; перезапустите приложение — db.ts:2382 добьёт остатки.",
+  orphanFiles: "Файлы на диске, которых нет ни в одной *_path-колонке. Отметь и перенеси в архив, создай ресурсы или пришей точечно.",
+};
+
 export function HealthPage() {
   const { user, loading: userLoading } = useCurrentUser();
   const isPlayer = user?.role === "player";
@@ -79,17 +97,20 @@ export function HealthPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [scanError, setScanError] = useState("");
+  const [activeTab, setActiveTab] = useState<TabId>("seq");
   const [deadGroups, setDeadGroups] = useState<DeadGroup[] | null>(null);
   const [deadOpen, setDeadOpen] = useState(false);
   const [deadChoices, setDeadChoices] = useState<Record<string, number | null | undefined>>({});
   const [deadBusy, setDeadBusy] = useState(false);
   const [deadFilter, setDeadFilter] = useState("");
-  // Ручной поиск по группе: q ввода + результаты + busy
   const [manualQ, setManualQ] = useState<Record<string, string>>({});
   const [manualResults, setManualResults] = useState<Record<string, DeadCandidate[]>>({});
   const [manualBusy, setManualBusy] = useState<Record<string, boolean>>({});
+  const [orphanOpen, setOrphanOpen] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const scanAbortRef = useRef<AbortController | null>(null);
+  const [pathFilter, setPathFilter] = useState("");
+  const [orphanUndo, setOrphanUndo] = useState(false);
 
   useEffect(() => {
     return () => { scanAbortRef.current?.abort(); };
@@ -117,11 +138,22 @@ export function HealthPage() {
   }
 
   async function cleanOrphans() {
-    const ok = await confirm({ title: "Убрать сироты", message: "Убрать все сироты (статблоки, ссылки, доски) без возможности отмены? Рекомендуется сделать бэкап.", confirmLabel: "Убрать", danger: true });
+    const ok = await confirm({ title: "Убрать сироты", message: "Убрать все сироты (статблоки, ссылки, доски). Можно отменить в течение сессии.", confirmLabel: "Убрать", danger: true });
     if (!ok) return;
     try {
-      const r = await api.post<{ removed: number }>("/health/orphans/clean");
+      const r = await api.post<{ removed: number; canUndo?: boolean }>("/health/orphans/clean");
       setMsg(`Убрано сирот: ${r.removed}`);
+      setOrphanUndo(!!r.canUndo);
+      runScan();
+    } catch (e) {
+      setMsg(String(e instanceof Error ? e.message : e));
+    }
+  }
+  async function undoOrphans() {
+    try {
+      const r = await api.post<{ restored: number }>("/health/orphans/undo");
+      setMsg(`Восстановлено сирот: ${r.restored}`);
+      setOrphanUndo(false);
       runScan();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
@@ -177,7 +209,6 @@ export function HealthPage() {
     }
   }
 
-  // P0-2: авто-выбор только exact/likely, doubtful не трогаем
   const isSafeTier = (t: DeadCandidate["tier"]) => t === "exact" || t === "likely";
 
   async function openDeadModal() {
@@ -221,7 +252,6 @@ export function HealthPage() {
     try {
       const r = await api.get<{ results: DeadCandidate[] }>(`/health/dead-uid-search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(qq)}&limit=20`);
       setManualResults((p) => ({ ...p, [groupKey]: r.results }));
-      // Автоматически подмешиваем результаты в группу, чтобы можно было выбрать без дубля
       setDeadGroups((prev) => prev ? prev.map((g) => {
         const k = `${g.type}:${g.uid}`;
         if (k !== groupKey) return g;
@@ -276,7 +306,6 @@ export function HealthPage() {
     if (fixes.length === 0) { setMsg("Ничего не выбрано"); return; }
     const needFix = fixes.filter((f) => f.newId !== null).length;
     const needStrip = fixes.filter((f) => f.newId === null).length;
-    // P0-4: разбивка + совет бэкапа, два confirm при смешанном наборе
     const backupHint = " Рекомендуется сделать бэкап БД перед записью (раздел «Хранилища» → «Создать бэкап»).";
     if (needStrip > 0 && needFix > 0) {
       const ok = await confirm({ title: "Применить замены?", message: `Починить ${needFix} и схлопнуть ${needStrip} ссылок в ${fixes.length} группах?${backupHint}`, confirmLabel: `Применить (${fixes.length})`, danger: needStrip > 0 });
@@ -311,14 +340,24 @@ export function HealthPage() {
     }
   }
 
-  async function openFolder(path: string) {
+  async function clearPath(table: string, column: string, id: number) {
+    const ok = await confirm({ title: "Убрать путь", message: `Очистить ${table}.${column} #${id}? Поле станет пустым (NULL).`, confirmLabel: "Очистить" });
+    if (!ok) return;
     try {
-      await api.post("/health/open-folder", { path });
-      setMsg(`Открываю папку: ${path}`);
+      await api.post("/health/path/clear", { table, column, id });
+      setMsg(`Очищено ${table}.${column} #${id}`);
+      runScan();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
   }
+
+  const filteredPaths = useMemo(() => {
+    if (!scan) return [];
+    const needle = pathFilter.trim().toLowerCase();
+    if (!needle) return scan.brokenPaths;
+    return scan.brokenPaths.filter((b) => `${b.table}.${b.column} ${b.path}`.toLowerCase().includes(needle));
+  }, [scan, pathFilter]);
 
   if (!userLoading && isPlayer) {
     return (
@@ -331,17 +370,29 @@ export function HealthPage() {
 
   return (
     <div className="stack health-page">
-      <SectionHeading section="health">Здоровье</SectionHeading>
-      <p className="muted" style={{ maxWidth: "62ch", margin: "-8px 0 0 0" }}>
-        Ревизия базы и файлов по кнопке — списком с предложением починить. Проверяет битые пути, потерянные файлы,
-        сироты, дрифт счётчиков, битые ссылки.
-      </p>
-
-      <div className="row" style={{ flexWrap: "wrap" }}>
-        <button className={scan ? "" : "primary"} onClick={runScan} disabled={loading}>
-          {loading ? "Проверяю…" : "Проверить здоровье"}
-        </button>
-        {msg && <span className="muted health-value" role="status" aria-live="polite">{msg}</span>}
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <SectionHeading section="health" compact>Здоровье</SectionHeading>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <button className={scan && !scanError ? "" : "primary"} onClick={runScan} disabled={loading}>
+            {loading ? "Проверяю…" : "Проверить здоровье"}
+          </button>
+          <Link to="/storages" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", color: "var(--muted)", textDecoration: "underline" }}>Бэкап</Link>
+          {scan && (
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(JSON.stringify(scan, null, 2));
+                  setMsg("Отчёт скопирован в буфер");
+                  setTimeout(() => setMsg(""), 2000);
+                } catch { setMsg("Не удалось скопировать"); }
+              }}
+              title="Скопировать JSON-отчёт текущего скана"
+            >
+              Копировать отчёт
+            </button>
+          )}
+          {msg && <span className="muted health-value" role="status" aria-live="polite">{msg}</span>}
+        </div>
       </div>
 
       {scanError && !loading && (
@@ -354,231 +405,262 @@ export function HealthPage() {
         </div>
       )}
 
-      {!scan && !loading && !scanError && (
-        <EmptyState icon="barcode" title="Проверка не запущена" hint="Нажмите «Проверить» — ревизия идёт только по кнопке, без фона. Ничего не меняется до вашего действия." action={<button className="primary" onClick={runScan}>Проверить здоровье</button>} />
-      )}
+      {/* Таббар */}
+      <div className="tabs" role="tablist" aria-label="Разделы здоровья">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={activeTab === t.id}
+            className={activeTab === t.id ? "active" : ""}
+            onClick={() => setActiveTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      {scan && (
-        <div className="stack">
-          {/* Сироты — §1.11: пустой блок не показывается, §1.8: один горячий на странице */}
-          {scan.orphansTotal > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Сироты</strong> — полиморфные хвосты без хозяина</summary>
-              <p className="muted">statblocks / generic_links / entity_relations / canvas_boards. Считаются без удаления; чистка — кнопкой.</p>
-              <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                {Object.entries(scan.orphans).map(([k, v]) => <li key={k}>{k}: {v}</li>)}
-              </ul>
-              <div className="row">
-                <button className="danger" onClick={cleanOrphans}>Убрать сирот ({scan.orphansTotal})</button>
-              </div>
-            </details>
-          )}
-
-          {/* Счётчики — §1.5: числа моноширинным */}
-          {scan.seq.some((r) => r.drift > 0) && (
-            <details className="card stack" open={(scan.seqWorst?.drift ?? 0) > 20}>
-              <summary><strong className="entry-title">Счётчики AUTOINCREMENT</strong> — дрифт seq vs max(id)</summary>
-              <p className="muted">Норма — drift 0..4. Большой drift = кто-то плодит строки в цикле (см. П0.4).</p>
+      {/* Контент таба */}
+      <div className="stack" style={{ minHeight: 120 }}>
+        {/* === Автоинкрементация === */}
+        {activeTab === "seq" && (
+          <div className="stack">
+            <p className="muted health-hint">{TAB_HINTS.seq}</p>
+            {scan && scan.seq.some((r) => r.drift > 0) ? (
               <div className="stack">
                 {scan.seq.filter((r) => r.drift > 0).map((r) => (
-                  <div key={r.table} className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                    <span className={r.drift > 20 ? "badge tag" : "muted"} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>{r.table}: seq {r.seq} / max {r.maxId ?? "—"} / drift {r.drift}</span>
+                  <div key={r.table} className="health-row">
+                    <span className="health-row--mono"><span className={r.drift > 20 ? "badge tag" : "muted"}>{r.table}</span> <span className="health-value">seq {r.seq} / max {r.maxId ?? "—"} / drift {r.drift}</span></span>
                     <button onClick={() => resetSeq(r.table)}>Сбросить</button>
                   </div>
                 ))}
               </div>
-            </details>
-          )}
+            ) : scan ? (
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Дрифта нет — всё в норме.</span>
+            ) : null}
+          </div>
+        )}
 
-          {/* Битые пути — §1.11: не показывается если нечего (C-P1-1: total vs shown) */}
-          {scan.brokenPathsCount > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Битые пути к файлам</strong> — *_path без файла на диске {scan.brokenPathsCount > 200 ? `· ${scan.brokenPathsCount}` : ""}</summary>
-              <p className="muted">Показано {scan.brokenPaths.length} из {scan.brokenPathsCount}{scan.brokenPathsTruncated ? " — список обрезан до 200, используйте фильтр/поиск в БД для остальных" : ""}. Починка — вручную: перепривязать файл или удалить запись.</p>
-              <div className="stack" style={{ maxHeight: 260, overflowY: "auto", overflowX: "hidden", fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", wordBreak: "break-word", overflowWrap: "anywhere" }}>
-                {scan.brokenPaths.map((b, i) => (
-                  <div key={`${b.table}:${b.column}:${b.id}:${i}`} className="muted">
-                    {b.table}.{b.column} #{b.id}: {b.path}
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-
-          {/* Пропавшие файлы ресурсов — §1.11 */}
-          {scan.missingFilesCount > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Пропавшие файлы ресурсов</strong></summary>
-              <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                {scan.missingFiles.slice(0, 50).map((f) => (
-                  <li key={f.resource_id}>{f.name} — {f.file_path}</li>
-                ))}
-              </ul>
-              {scan.missingFilesCount > 50 && <span className="muted" style={{ fontFamily: "var(--font-mono)" }}>…и ещё {scan.missingFilesCount - 50}</span>}
-              {scan.relinkCandidatesCount > 0 && (
-                <div className="stack">
-                  <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Кандидаты автоперепривязки (по имени файла):</strong>
-                  {scan.relinkCandidates.map((c) => (
-                    <div key={c.resource_id} className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                      <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", wordBreak: "break-word", overflowWrap: "anywhere" }}>{c.name}: {c.old_path} → {c.new_path}</span>
-                      <button onClick={() => relink(c)}>Перепривязать</button>
+        {/* === Битые пути === */}
+        {activeTab === "paths" && (
+          <div className="stack">
+            <p className="muted health-hint">{TAB_HINTS.paths}</p>
+            {scan && scan.brokenPathsCount > 0 ? (
+              <div className="stack">
+                <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input placeholder="Фильтр: таблица, колонка, путь…" value={pathFilter} onChange={(e) => setPathFilter(e.target.value)} style={{ flex: "1 1 220px", minWidth: 140 }} aria-label="Фильтр битых путей" />
+                  <span className="muted health-value">{filteredPaths.length} / {scan.brokenPaths.length}</span>
+                  {pathFilter && <button onClick={() => setPathFilter("")} style={{ fontFamily: "var(--font-ui)", fontSize: 11 }}>Сброс</button>}
+                </div>
+                <div className="stack health-mono" style={{ maxHeight: 400, overflowY: "auto", overflowX: "hidden" }}>
+                  {filteredPaths.map((b, i) => (
+                    <div key={`${b.table}:${b.column}:${b.id}:${i}`} className="muted health-row">
+                      <span title={b.path} className="health-path" style={{ flex: "1 1 200px", minWidth: 0 }}>{b.table}.{b.column} #{b.id}: {b.path}</span>
+                      <button onClick={() => clearPath(b.table, b.column, b.id)} style={{ flex: "0 0 auto", fontSize: 11, padding: "2px 8px" }}>Очистить</button>
                     </div>
                   ))}
+                  {filteredPaths.length === 0 && <span className="muted health-value">Ничего не найдено по «{pathFilter}»</span>}
                 </div>
-              )}
-              <p className="muted">Если кандидата нет — перепривяжите вручную в карточке ресурса.</p>
-            </details>
-          )}
-
-          {/* Битые ссылки — наследство */}
-          {scan.brokenLinksCount > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Битые ссылки в текстах</strong> — наследство `[[type:id|label]]` без цели</summary>
-              <p className="muted">Зачёркнутая ждёт модуля и оживает сама; битая — цель удалена навсегда. Уборка схлопывает в текст.</p>
-              <p className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                Найдено: {scan.brokenLinks.count} — {scan.brokenLinks.samples.map((s) => `${s.type} «${s.label}»`).join(", ")}{scan.brokenLinks.count > scan.brokenLinks.samples.length ? " и другие" : ""}
-              </p>
-              <div className="row">
-                <button onClick={stripBroken}>Убрать, оставить текст ({scan.brokenLinks.count})</button>
-              </div>
-            </details>
-          )}
-
-          {/* Legacy id→uid (C-P1-4: total vs shown) */}
-          {scan.legacyCount > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Наследие id-ссылок</strong> — `[[type:id|label]]` → `[[type@uid|code|label]]` · {scan.legacyCount}</summary>
-              <p className="muted">Детерминированная конвертация: id ищется в своей таблице. Resolvable → uid, иначе — схлопнется в текст. Идемпотентно, транзакция.{scan.legacyTruncated ? ` Показано 100 из ${scan.legacyCount} — остальное следующим прогоном.` : ""}</p>
-              <p className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                Всего: {scan.legacyCount} · на uid: {scan.legacyResolvable} · битых: {scan.legacyBroken} {scan.legacyTruncated ? "· показано 100" : ""}
-              </p>
-              <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                {scan.legacy.entries.slice(0, 12).map((e, i) => (
-                  <li key={`${e.table}:${e.column}:${e.hostId}:${e.type}:${e.id}:${i}`}>
-                    {e.hostRoute ? <Link to={e.hostRoute} style={{ color: "var(--accent)" }}>{e.hostLabel ?? `#${e.hostId}`}</Link> : <span>{e.table} #{e.hostId}</span>}
-                    <span> · {e.table}.{e.column} — [[{e.type}:{e.id}|{e.label}]] → {e.resolvable ? e.preview : `«${e.label}» (битая)`}</span>
-                  </li>
-                ))}
-              </ul>
-              {scan.legacyCount > 12 && <span className="muted" style={{ fontFamily: "var(--font-mono)" }}>…и ещё {scan.legacyCount - 12}</span>}
-              <div className="row">
-                <button onClick={fixLegacy}>Перевести на uid ({scan.legacyResolvable}) / снять битые ({scan.legacyBroken})</button>
-              </div>
-            </details>
-          )}
-
-          {/* Каких модулей не хватает — подвешенные ref, кликабельно к месту хранения */}
-          {scan.danglingModulesCount > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Каких модулей не хватает</strong> — подвешенные `[[type@uid|code|label]]`</summary>
-              <p className="muted">Клик по ошибке ведёт на запись, где она хранится. Поставьте модуль с этим code — ссылки оживут сами (uid-линки).</p>
-              <div className="stack" style={{ gap: 12 }}>
-                {scan.danglingModules.map((m) => (
-                  <div key={m.code} className="stack health-group">
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}><strong>{m.code}</strong> — «{m.label}» ×{m.count}</div>
+                {scan.missingFilesCount > 0 && (
+                  <div className="stack" style={{ marginTop: 8 }}>
+                    <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Пропавшие файлы ресурсов ({scan.missingFilesCount}):</strong>
                     <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                      {(m.samples ?? []).map((s, i) => (
-                        <li key={`${s.table}:${s.column}:${s.id}:${s.uid}:${i}`}>
-                          {s.hostRoute ? (
-                            <Link to={s.hostRoute} style={{ color: "var(--accent)" }}>{s.hostLabel ?? `#${s.id}`}</Link>
+                      {scan.missingFiles.slice(0, 50).map((f) => (
+                        <li key={f.resource_id}>{f.name} — {f.file_path}</li>
+                      ))}
+                    </ul>
+                    {scan.missingFilesCount > 50 && <span className="muted" style={{ fontFamily: "var(--font-mono)" }}>…и ещё {scan.missingFilesCount - 50}</span>}
+                    {scan.relinkCandidatesCount > 0 && (
+                      <div className="stack">
+                        <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Кандидаты автоперепривязки:</strong>
+                        {scan.relinkCandidates.map((c) => (
+                          <div key={c.resource_id} className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                            <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", wordBreak: "break-word", overflowWrap: "anywhere" }}>{c.name}: {c.old_path} → {c.new_path}</span>
+                            <button onClick={() => relink(c)}>Перепривязать</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="muted health-hint">Если кандидата нет — перепривяжите вручную в карточке ресурса.</p>
+                  </div>
+                )}
+              </div>
+            ) : scan ? (
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Битых путей нет.</span>
+            ) : null}
+          </div>
+        )}
+
+        {/* === Пропавшие UID === */}
+        {activeTab === "uids" && (
+          <div className="stack">
+            <p className="muted health-hint">{TAB_HINTS.uids}</p>
+            {scan ? (
+              <div className="stack" style={{ gap: 16 }}>
+                {/* Модули не хватает */}
+                {scan.danglingModulesCount > 0 && (
+                  <div className="stack">
+                    <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Модули не установлены ({scan.danglingModulesCount} ссылок):</strong>
+                    <p className="muted health-hint" style={{ margin: "2px 0 4px" }}>Поставьте модуль с этим code — ссылки оживут сами.</p>
+                    <div className="stack" style={{ gap: 8 }}>
+                      {scan.danglingModules.map((m) => (
+                        <div key={m.code} className="stack health-group" style={{ padding: "6px 0" }}>
+                          <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}><strong>{m.code}</strong> — «{m.label}» ×{m.count}</div>
+                          <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                            {(m.samples ?? []).map((s, i) => (
+                              <li key={`${s.table}:${s.column}:${s.id}:${s.uid}:${i}`}>
+                                {s.hostRoute ? (
+                                  <Link to={s.hostRoute} style={{ color: "var(--accent)" }}>{s.hostLabel ?? `#${s.id}`}</Link>
+                                ) : (
+                                  <span>{s.table} #{s.id}</span>
+                                )}
+                                <span className="muted"> · {s.table}.{s.column} · «{s.label}» ({s.type}:{s.uid.slice(0, 8)}…)</span>
+                              </li>
+                            ))}
+                            {m.count > (m.samples?.length ?? 0) && (
+                              <li className="muted">…и ещё {m.count - (m.samples?.length ?? 0)} в этом модуле</li>
+                            )}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Мёртвые UID внутри модулей */}
+                {scan.deadUidMentionsCount > 0 && (
+                  <div className="stack">
+                    <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>UID не найден в базе ({scan.deadUidMentionsCount} ссылок):</strong>
+                    <p className="muted health-hint" style={{ margin: "2px 0 4px" }}>Можно починить автоматически по имени.</p>
+                    <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {scan.deadUidMentions.slice(0, 20).map((m, i) => (
+                        <li key={i}>
+                          {m.hostRoute ? (
+                            <Link to={m.hostRoute} style={{ color: "var(--accent)" }}>{m.hostLabel ?? `#${m.id}`}</Link>
                           ) : (
-                            <span>{s.table} #{s.id}</span>
+                            <span>{m.table} #{m.id}</span>
                           )}
-                          <span className="muted"> · {s.table}.{s.column} · «{s.label}» ({s.type}:{s.uid.slice(0, 8)}…)</span>
+                          <span> · {m.table}.{m.column} — «{m.label}» ({m.code}: {m.uid.slice(0, 8)}…)</span>
                         </li>
                       ))}
-                      {m.count > (m.samples?.length ?? 0) && (
-                        <li className="muted">…и ещё {m.count - (m.samples?.length ?? 0)} в этом модуле</li>
-                      )}
                     </ul>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-
-          {/* Мёртвые UID-ссылки внутри установленных модулей — кликабельно */}
-          {scan.deadUidMentionsCount > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Мёртвые UID-ссылки</strong> — `[[type@uid|code|label]]` с несуществующим UID</summary>
-              <p className="muted">Клик ведёт на запись, где хранится битая ссылка. Можно починить автоматически по имени.</p>
-              <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                {scan.deadUidMentions.slice(0, 20).map((m, i) => (
-                  <li key={i}>
-                    {m.hostRoute ? (
-                      <Link to={m.hostRoute} style={{ color: "var(--accent)" }}>{m.hostLabel ?? `#${m.id}`}</Link>
-                    ) : (
-                      <span>{m.table} #{m.id}</span>
-                    )}
-                    <span> · {m.table}.{m.column} — «{m.label}» ({m.code}: {m.uid.slice(0, 8)}…)</span>
-                  </li>
-                ))}
-              </ul>
-              {scan.deadUidMentionsCount > 20 && <span className="muted" style={{ fontFamily: "var(--font-mono)" }}>…и ещё {scan.deadUidMentionsCount - 20}</span>}
-              <div className="row">
-                <button onClick={fixDeadUidLinks}>Авто-починка ({scan.deadUidMentionsCount})</button>
-                <button onClick={openDeadModal} disabled={deadBusy}>{deadBusy ? "Загружаю…" : `Проверить вручную (${scan.deadUidMentionsCount})`}</button>
-              </div>
-            </details>
-          )}
-
-          {/* Бракет-хвосты — наследство П2.6 */}
-          {scan.bracketNamesCount > 0 && (
-            <details className="card stack" open>
-              <summary><strong className="entry-title">Имена с хвостом [Original]</strong> — наследство П2.6</summary>
-              <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                {scan.bracketNames.map((b) => (
-                  <li key={b.table}>{b.table}: {b.count} — напр. «{b.sample}»</li>
-                ))}
-              </ul>
-              <p className="muted">Миграция режет хвост в name_original; перезапустите приложение — `db.ts:2382` добьёт остатки.</p>
-            </details>
-          )}
-
-          {/* Орфан-файлы на диске — группировка по конечным папкам */}
-          {scan.orphanFilesCount > 0 && (() => {
-            const byDir = new Map<string, { files: typeof scan.orphanFiles; total: number }>();
-            for (const f of scan.orphanFiles) {
-              const dir = f.path.includes("/") || f.path.includes("\\") ? f.path.replace(/[/\\][^/\\]+$/, "") : ".";
-              const g = byDir.get(dir);
-              if (g) { g.files.push(f); g.total += f.size; } else byDir.set(dir, { files: [f], total: f.size });
-            }
-            return (
-              <details className="card stack" open>
-                <summary><strong className="entry-title">Файлы-сироты на диске</strong> — без записи в БД (до 100)</summary>
-                <div className="stack">
-                  {[...byDir.entries()].map(([dir, g]) => (
-                    <div key={dir} className="stack health-group">
-                      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>{dir} — {g.files.length} файл(ов), {(g.total / 1024).toFixed(1)} КБ</span>
-                        {hasElectronAPI() ? (
-                          <button onClick={() => openFolder(dir)}>Открыть папку</button>
-                        ) : (
-                          <button onClick={async () => { try { await navigator.clipboard.writeText(dir); setMsg(`Скопировано: ${dir}`); } catch { setMsg(dir); } }}>Копировать путь</button>
-                        )}
-                      </div>
-                      <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                        {g.files.slice(0, 20).map((f) => (
-                          <li key={f.path}>{f.path.split(/[/\\]/).pop()} — {(f.size / 1024).toFixed(1)} КБ</li>
-                        ))}
-                      </ul>
-                      {g.files.length > 20 && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>…и ещё {g.files.length - 20} в этой папке</span>}
+                    {scan.deadUidMentionsCount > 20 && <span className="muted" style={{ fontFamily: "var(--font-mono)" }}>…и ещё {scan.deadUidMentionsCount - 20}</span>}
+                    <div className="row" style={{ gap: 8 }}>
+                      <button onClick={fixDeadUidLinks}>Авто-починка ({scan.deadUidMentionsCount})</button>
+                      <button onClick={openDeadModal} disabled={deadBusy}>{deadBusy ? "Загружаю…" : `Проверить вручную (${scan.deadUidMentionsCount})`}</button>
                     </div>
-                  ))}
-                </div>
-                <p className="muted">Кнопка открывает конечную папку в проводнике — проверьте и удалите вручную. Авто-удаления нет.</p>
-              </details>
-            );
-          })()}
+                  </div>
+                )}
 
-          {scan.orphansTotal === 0 && scan.brokenPathsCount === 0 && scan.missingFilesCount === 0 && scan.brokenLinksCount === 0 && scan.legacyCount === 0 && scan.danglingModulesCount === 0 && scan.deadUidMentionsCount === 0 && scan.orphanFilesCount === 0 && scan.bracketNamesCount === 0 && !scan.seq.some((r) => r.drift > 0) && (
-            <div className="card stack" style={{ borderStyle: "dashed" }}>
-              <strong className="entry-title">Всё чисто</strong>
-              <p className="muted" style={{ margin: 0 }}>Сирот, битых путей, пропавших файлов, битых ссылок, сирот-файлов, хвостов [Original] и дрифта нет — ревизия пройдена.</p>
-            </div>
-          )}
-        </div>
-      )}
+                {/* Битые ссылки */}
+                {scan.brokenLinksCount > 0 && (
+                  <div className="stack">
+                    <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Битые ссылки в текстах ({scan.brokenLinks.count}):</strong>
+                    <p className="muted health-hint" style={{ margin: "2px 0 4px" }}>Зачёркнутая ждёт модуля и оживает сама; битая — цель удалена навсегда. Уборка схлопывает в текст.</p>
+                    <p className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {scan.brokenLinks.samples.map((s) => `${s.type} «${s.label}»`).join(", ")}{scan.brokenLinks.count > scan.brokenLinks.samples.length ? " и другие" : ""}
+                    </p>
+                    <div className="row">
+                      <button onClick={stripBroken}>Убрать, оставить текст ({scan.brokenLinks.count})</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Legacy */}
+                {scan.legacyCount > 0 && (
+                  <div className="stack">
+                    <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Наследие id→uid ({scan.legacyCount}):</strong>
+                    <p className="muted health-hint" style={{ margin: "2px 0 4px" }}>Детерминированная конвертация: id ищется в своей таблице. Resolvable → uid, иначе — схлопнется в текст.{scan.legacyTruncated ? ` Показано 100 из ${scan.legacyCount}.` : ""}</p>
+                    <p className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      На uid: {scan.legacyResolvable} · битых: {scan.legacyBroken}
+                    </p>
+                    <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {scan.legacy.entries.slice(0, 12).map((e, i) => (
+                        <li key={`${e.table}:${e.column}:${e.hostId}:${e.type}:${e.id}:${i}`}>
+                          {e.hostRoute ? <Link to={e.hostRoute} style={{ color: "var(--accent)" }}>{e.hostLabel ?? `#${e.hostId}`}</Link> : <span>{e.table} #{e.hostId}</span>}
+                          <span> · {e.table}.{e.column} — [[{e.type}:{e.id}|{e.label}]] → {e.resolvable ? e.preview : `«${e.label}» (битая)`}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {scan.legacyCount > 12 && <span className="muted" style={{ fontFamily: "var(--font-mono)" }}>…и ещё {scan.legacyCount - 12}</span>}
+                    <div className="row">
+                      <button onClick={fixLegacy}>Перевести на uid ({scan.legacyResolvable}) / снять битые ({scan.legacyBroken})</button>
+                    </div>
+                  </div>
+                )}
+
+                {scan.danglingModulesCount === 0 && scan.deadUidMentionsCount === 0 && scan.brokenLinksCount === 0 && scan.legacyCount === 0 && (
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Потерь нет — все ссылки в порядке.</span>
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* === Имена === */}
+        {activeTab === "names" && (
+          <div className="stack">
+            <p className="muted health-hint">{TAB_HINTS.names}</p>
+            {scan && scan.bracketNamesCount > 0 ? (
+              <div className="stack">
+                <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                  {scan.bracketNames.map((b) => (
+                    <li key={b.table}>{b.table}: {b.count} — напр. «{b.sample}»</li>
+                  ))}
+                </ul>
+              </div>
+            ) : scan ? (
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Имена чистые.</span>
+            ) : null}
+          </div>
+        )}
+
+        {/* === Файлы-сироты === */}
+        {activeTab === "orphanFiles" && (
+          <div className="stack">
+            <p className="muted health-hint">{TAB_HINTS.orphanFiles}</p>
+            {scan ? (
+              <div className="stack" style={{ gap: 16 }}>
+                {/* Сироты-строки */}
+                {scan.orphansTotal > 0 && (
+                  <div className="stack">
+                    <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Сироты в БД ({scan.orphansTotal}):</strong>
+                    <p className="muted health-hint" style={{ margin: "2px 0 4px" }}>statblocks / generic_links / entity_relations / canvas_boards. Считаются без удаления; чистка — кнопкой.</p>
+                    <p className="muted health-hint" style={{ margin: "2px 0 4px", fontSize: "var(--fs-meta)" }}>Перед удалением: <Link to="/storages" style={{ color: "var(--accent)" }}>сделайте бэкап</Link> — можно отменить в этой сессии.</p>
+                    <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {Object.entries(scan.orphans).map(([k, v]) => <li key={k}>{k}: {v}</li>)}
+                    </ul>
+                    <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                      <button className="danger" onClick={cleanOrphans}>Убрать сирот ({scan.orphansTotal})</button>
+                      {orphanUndo && <button onClick={undoOrphans}>Отменить удаление</button>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Файлы-сироты на диске */}
+                {scan.orphanFilesCount > 0 && (
+                  <div className="stack">
+                    <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Файлы на диске без записи в БД ({scan.orphanFilesCount}) · {(scan.orphanFiles.reduce((a, f) => a + f.size, 0) / 1024).toFixed(1)} КБ:</strong>
+                    <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {scan.orphanFiles.slice(0, 8).map((f) => (
+                        <li key={f.path}>{f.path.split(/[/\\]/).pop()} — {(f.size / 1024).toFixed(1)} КБ</li>
+                      ))}
+                    </ul>
+                    {scan.orphanFiles.length > 8 && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>…и ещё {scan.orphanFiles.length - 8}</span>}
+                    <div className="row">
+                      <button className="primary" onClick={() => setOrphanOpen(true)}>Переназначить вручную ({scan.orphanFiles.length})</button>
+                    </div>
+                  </div>
+                )}
+
+                {scan.orphansTotal === 0 && scan.orphanFilesCount === 0 && (
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сирот нет.</span>
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
 
       {confirmDialog}
       {deadOpen && deadGroups && (() => {
@@ -650,7 +732,6 @@ export function HealthPage() {
                         ))}
                       </select>
                     </label>
-                    {/* Бейджи tier + diff */}
                     {g.candidates.length > 0 && (
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                         {g.candidates.slice(0, 3).map((c) => (
@@ -665,7 +746,6 @@ export function HealthPage() {
                       <div className="dead-uid-diff">→ {g.label} <span className="muted">(схлопнется в текст)</span></div>
                     )}
                     {g.candidates.length === 0 && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Кандидатов не найдено — предлагается схлопнуть или найти вручную ниже</span>}
-                    {/* Ручной поиск */}
                     <div className="dead-uid-search">
                       <input
                         placeholder="Найти вручную (≥2 символа)…"
@@ -736,6 +816,7 @@ export function HealthPage() {
         </Modal>
         );
       })()}
+      {orphanOpen && scan && <OrphanBrowserModal files={scan.orphanFiles} onClose={() => setOrphanOpen(false)} onDone={runScan} />}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import type { Player } from "../types";
 
 interface MyCharacter {
@@ -31,15 +32,21 @@ export function PlayerCabinetPage() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [editingName, setEditingName] = useState(false);
+  const [nameSaving, setNameSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [me, setMe] = useState<PlayerMe | null>(null);
   const [charactersError, setCharactersError] = useState("");
 
   useEffect(() => {
+    const ac = new AbortController();
     api
-      .get<PlayerMe>("/player/me")
+      .get<PlayerMe>("/player/me", { signal: ac.signal })
       .then(setMe)
-      .catch((e) => setCharactersError(String(e)));
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setCharactersError(String(e));
+      });
+    return () => ac.abort();
   }, []);
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -71,9 +78,14 @@ export function PlayerCabinetPage() {
 
   async function saveName() {
     if (!nameDraft.trim() || !user?.playerId) return;
-    await api.put(`/players/${user.playerId}`, { name: nameDraft });
-    setEditingName(false);
-    refresh();
+    setNameSaving(true);
+    try {
+      await api.put(`/players/${user.playerId}`, { name: nameDraft });
+      setEditingName(false);
+      refresh();
+    } finally {
+      setNameSaving(false);
+    }
   }
 
   async function changePassword() {
@@ -85,6 +97,10 @@ export function PlayerCabinetPage() {
     }
     if (!newPassword) {
       setPasswordError("Введите новый пароль.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError("Пароль должен быть не менее 6 символов.");
       return;
     }
     if (newPassword !== newPasswordConfirm) {
@@ -109,14 +125,15 @@ export function PlayerCabinetPage() {
 
   return (
     <div className="stack">
+      <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кабинет" }]} />
       <h1>Кабинет</h1>
 
       <div className="card row" style={{ alignItems: "flex-start", gap: 16 }}>
         <label className="avatar-upload-label" title={IMAGE_HINT}>
           {player.avatar_image_url ? (
-            <img src={player.avatar_image_url} alt="" className="player-avatar" />
+            <img src={player.avatar_image_url} alt={`Аватар ${player.name}`} className="player-avatar" />
           ) : (
-            <div className="player-avatar roster-avatar-placeholder" />
+            <div className="player-avatar player-avatar-placeholder" />
           )}
           <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
           <input
@@ -132,14 +149,15 @@ export function PlayerCabinetPage() {
           {editingName ? (
             <div className="row">
               <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-              <button className="primary" onClick={saveName}>
-                Сохранить
+              <button className="primary" onClick={saveName} disabled={nameSaving}>
+                {nameSaving ? "Сохранение…" : "Сохранить"}
               </button>
               <button
                 onClick={() => {
                   setEditingName(false);
                   setNameDraft(player.name);
                 }}
+                disabled={nameSaving}
               >
                 Отмена
               </button>
@@ -153,7 +171,7 @@ export function PlayerCabinetPage() {
         </div>
       </div>
 
-      <div className="card stack" style={{ maxWidth: 400 }}>
+      <div className="card stack player-cabinet-password">
         <strong>Смена пароля</strong>
         <span className="muted">Логин: {user?.username}</span>
         <input
@@ -161,18 +179,21 @@ export function PlayerCabinetPage() {
           placeholder="Текущий пароль"
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
+          autoComplete="current-password"
         />
         <input
           type="password"
           placeholder="Новый пароль"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
+          autoComplete="new-password"
         />
         <input
           type="password"
           placeholder="Повторите новый пароль"
           value={newPasswordConfirm}
           onChange={(e) => setNewPasswordConfirm(e.target.value)}
+          autoComplete="new-password"
         />
         {passwordError && <p className="error">{passwordError}</p>}
         {passwordDone && <span className="muted">Пароль обновлён.</span>}
@@ -185,7 +206,7 @@ export function PlayerCabinetPage() {
         <strong>Персонажи</strong>
         {charactersError && <p className="error">Не удалось загрузить персонажей: {charactersError}</p>}
         {!charactersError && !me && <p className="muted">Загрузка…</p>}
-        {me && me.characters.length === 0 && <p className="muted">У вас пока нет персонажей.</p>}
+        {me && me.characters.length === 0 && <p className="muted">У вас пока нет персонажей. Перейдите в кампанию и попросите Мастера создать персонажа.</p>}
         {me && me.characters.length > 0 && (
           <div className="stack" style={{ gap: 8 }}>
             {me.characters.map((c) => (

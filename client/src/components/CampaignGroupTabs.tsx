@@ -12,7 +12,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
   const [groups, setGroups] = useState<CampaignGroup[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [contextMenu, setContextMenu] = useState<{ groupId: number; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ kind: "group"; groupId: number; x: number; y: number } | { kind: "static"; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<{ groupId: number; name: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +94,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
         aria-selected={activeTab === null}
         className={activeTab === null ? "active" : ""}
         onClick={() => onTabChange(null)}
+        onContextMenu={(e) => { e.preventDefault(); setContextMenu({ kind: "static", x: e.clientX, y: e.clientY }); }}
       >
         Все
       </button>
@@ -103,6 +104,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
         aria-selected={activeTab === "role:gm"}
         className={activeTab === "role:gm" ? "active" : ""}
         onClick={() => onTabChange("role:gm")}
+        onContextMenu={(e) => { e.preventDefault(); setContextMenu({ kind: "static", x: e.clientX, y: e.clientY }); }}
       >
         Я мастер
       </button>
@@ -112,6 +114,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
         aria-selected={activeTab === "role:player"}
         className={activeTab === "role:player" ? "active" : ""}
         onClick={() => onTabChange("role:player")}
+        onContextMenu={(e) => { e.preventDefault(); setContextMenu({ kind: "static", x: e.clientX, y: e.clientY }); }}
       >
         Я игрок
       </button>
@@ -125,7 +128,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
           onClick={() => onTabChange(String(g.id))}
           onContextMenu={(e) => {
             e.preventDefault();
-            setContextMenu({ groupId: g.id, x: e.clientX, y: e.clientY });
+            setContextMenu({ kind: "group", groupId: g.id, x: e.clientX, y: e.clientY });
           }}
         >
           {renaming?.groupId === g.id ? (
@@ -152,6 +155,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
         aria-selected={activeTab === "ungrouped"}
         className={activeTab === "ungrouped" ? "active" : ""}
         onClick={() => onTabChange("ungrouped")}
+        onContextMenu={(e) => { e.preventDefault(); setContextMenu({ kind: "static", x: e.clientX, y: e.clientY }); }}
       >
         Вне групп
       </button>
@@ -191,25 +195,33 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
           className="setting-group-context-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
-          <button onClick={() => {
-            const g = groups.find((gr) => gr.id === contextMenu.groupId);
-            if (g) setRenaming({ groupId: g.id, name: g.name });
-            setContextMenu(null);
-          }}>
-            Переименовать
-          </button>
-          <button className="danger" onClick={() => {
-            setDeleteConfirm(contextMenu.groupId);
-            setContextMenu(null);
-          }}>
-            Удалить
-          </button>
+          {contextMenu.kind === "static" ? (
+            <span style={{ display: "block", padding: "6px 12px", color: "var(--muted)", fontSize: "var(--fs-body)" }}>
+              Эту вкладку не изменить
+            </span>
+          ) : (
+            <>
+              <button onClick={() => {
+                const g = groups.find((gr) => gr.id === contextMenu.groupId);
+                if (g) setRenaming({ groupId: g.id, name: g.name });
+                setContextMenu(null);
+              }}>
+                Переименовать
+              </button>
+              <button className="danger" onClick={() => {
+                setDeleteConfirm(contextMenu.groupId);
+                setContextMenu(null);
+              }}>
+                Удалить
+              </button>
+            </>
+          )}
         </div>
       )}
 
       {deleteConfirm !== null && (
         <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Удалить группу?</h3>
             <p>Кампании не будут удалены — они останутся в разделе «Все кампании».</p>
             <div className="row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 16 }}>

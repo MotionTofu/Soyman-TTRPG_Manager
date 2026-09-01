@@ -79,13 +79,16 @@ export function SettingWizard({ onClose }: { onClose: () => void }) {
     { key: newKey(), name: "", category: "key_figure", locationKey: null, communityKeys: [] },
   ]);
 
-  const coverPreview = useMemo(() => (cover ? URL.createObjectURL(cover) : null), [cover]);
-  useEffect(
-    () => () => {
-      if (coverPreview) URL.revokeObjectURL(coverPreview);
-    },
-    [coverPreview]
-  );
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!cover) {
+      setCoverPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(cover);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [cover]);
   const canCreate = name.trim().length > 0 && !saving;
 
   // Родитель строки — ближайшая сверху строка меньшей глубины. Дерево не

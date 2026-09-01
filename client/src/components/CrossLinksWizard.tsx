@@ -107,7 +107,8 @@ export function CrossLinksWizard({
     setDone("");
     try {
       const found = await api.get<CrossLinkProposal[]>(
-        `/cross-links/plan?ownerKind=${ownerKind}&ownerId=${ownerId}&targetType=${stepKey}&sources=${encodeURIComponent(sourceParam)}`
+        `/cross-links/plan?ownerKind=${ownerKind}&ownerId=${ownerId}&targetType=${stepKey}&sources=${encodeURIComponent(sourceParam)}`,
+        { timeoutMs: 30000 }
       );
       setProposals(found);
       // Галочки только на точных: визард охватывает и компендиум, где
@@ -125,7 +126,8 @@ export function CrossLinksWizard({
     try {
       const r = await api.post<{ written: number }>(
         `/cross-links/apply?ownerKind=${ownerKind}&ownerId=${ownerId}&targetType=${stepKey}&sources=${encodeURIComponent(sourceParam)}`,
-        { chosen: proposals.filter((p) => chosen[proposalId(p)]) }
+        { chosen: proposals.filter((p) => chosen[proposalId(p)]) },
+        { timeoutMs: 30000 }
       );
       setDone(`Расставлено ссылок: ${r.written}.`);
       setVisited((v) => ({ ...v, [stepKey]: (v[stepKey] ?? 0) + r.written }));
@@ -299,6 +301,11 @@ export function CrossLinksWizard({
                 </div>
               );
             })}
+            <div className="row">
+              <button className="primary" disabled={!!busy || !picked} onClick={() => void apply()}>
+                Расставить отмеченные ({picked})
+              </button>
+            </div>
           </>
         )}
       </div>

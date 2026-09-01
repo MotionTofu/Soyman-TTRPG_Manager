@@ -10,10 +10,13 @@ import {
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { ContextMenu } from "./ContextMenu";
+import { EmptyState } from "./EmptyState";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
 import {
+  CANVAS_EDGE_PADDING,
   DEFAULT_EDGE_KINDS,
+  EDGE_KINDS,
   EDGE_KIND_STYLE,
   buildIsolation,
   findPath,
@@ -24,6 +27,7 @@ import {
   TYPE_COLORS,
   TYPE_LABELS,
   TYPE_ROUTES,
+  TYPE_SHAPES,
   canvasSizeFor,
   simulateGraph,
   type EdgeKind,
@@ -130,6 +134,15 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // Расставленное руками переживает перезагрузку: карта мира, которую мастер
   // разложил под себя, — это его работа, а не временное состояние экрана.
   const [manual, setManual] = useState<ManualLayout>(() => loadLayout(layoutKey));
+
+  // 0a: смена мира (layoutKey) — другая карта. Состояние manual должно
+  // перечитаться из localStorage, иначе раскладка Эстарии налезет на Нестиум.
+  useEffect(() => {
+    setManual(loadLayout(layoutKey));
+    setFocusedKey(null);
+    setIsolation(null);
+    setView({ zoom: 1, panX: 0, panY: 0 });
+  }, [layoutKey]);
   const [groupMode, setGroupMode] = useState<GroupMode>("none");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   // Концы прокладываемого пути: «как этот связан с той фракцией».
@@ -144,7 +157,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // Какие виды связей показывать. Раньше здесь был один чекбокс «упоминания»,
   // а всё остальное — членство, обитание, вложенность, сцены — рисовалось
   // одинаковой серой линией и не отключалось.
-  const [activeKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
+  const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
   // Типы сущностей, скрытые из графа через легенду (клик по точке).
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set());
   const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
@@ -185,23 +198,52 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // Позиции прошлой раскладки: смена фильтра — это то же поле с убранными
   // булавками, а не новая карта, поэтому уцелевшие узлы стартуют оттуда, где
   // их только что видели, и доводятся коротким прогоном.
+  // 0e: мутация lastPositions вынесена из useMemo в useEffect — рендер чистый.
+  // 3a: на 50+ узлах — в Worker, иначе синхронно.
   const lastPositions = useRef<NodePositions | null>(null);
-  const simulated = useMemo(() => {
-    if (!data) return new Map() as NodePositions;
-    // Ручные позиции идут и в затравку, и в список закреплённых: узел стоит
-    // там, куда его поставили, а остальные раскладываются вокруг него.
-    const seed: NodePositions = new Map(lastPositions.current ?? []);
-    for (const [key, p] of Object.entries(manual)) seed.set(key, { ...p, vx: 0, vy: 0 });
-    const next = simulateGraph(
-      data.nodes,
-      data.edges,
-      baseCanvas.width,
-      baseCanvas.height,
-      seed.size > 0 ? seed : undefined,
-      new Set(Object.keys(manual))
-    );
-    lastPositions.current = next;
-    return next;
+  const [simulated, setSimulated] = useState<NodePositions>(() => new Map());
+  const [simWorking, setSimWorking] = useState(false);
+
+  useEffect(() => {
+    if (!data) { setSimulated(new Map()); return; }
+    const nodes = data.nodes;
+    const edges = data.edges;
+    const wb = baseCanvas.width;
+    const hb = baseCanvas.height;
+    const useWorker = nodes.length > 50 && typeof Worker !== "undefined";
+    if (!useWorker) {
+      const seed: NodePositions = new Map(lastPositions.current ?? []);
+      for (const [key, p] of Object.entries(manual)) seed.set(key, { ...p, vx: 0, vy: 0 });
+      const next = simulateGraph(nodes, edges, wb, hb, seed.size > 0 ? seed : undefined, new Set(Object.keys(manual)));
+      lastPositions.current = next;
+      setSimulated(next);
+      return;
+    }
+    setSimWorking(true);
+    const seedArr: [string, { x: number; y: number; vx: number; vy: number }][] = (() => {
+      const m: [string, { x: number; y: number; vx: number; vy: number }][] = [];
+      if (lastPositions.current) for (const [k, v] of lastPositions.current) m.push([k, { x: v.x, y: v.y, vx: v.vx, vy: v.vy }]);
+      for (const [k, p] of Object.entries(manual)) {
+        const idx = m.findIndex(([kk]) => kk === k);
+        if (idx >= 0) m[idx] = [k, { x: p.x, y: p.y, vx: 0, vy: 0 }];
+        else m.push([k, { x: p.x, y: p.y, vx: 0, vy: 0 }]);
+      }
+      return m;
+    })();
+    const pinned = Object.keys(manual);
+    const worker = new Worker(new URL("../graphWorker.ts", import.meta.url), { type: "module" });
+    let cancelled = false;
+    worker.onmessage = (e: MessageEvent<{ positions: [string, { x: number; y: number; vx: number; vy: number }][] }>) => {
+      if (cancelled) return;
+      const next: NodePositions = new Map(e.data.positions.map(([k, v]) => [k, { x: v.x, y: v.y, vx: v.vx, vy: v.vy }]));
+      lastPositions.current = next;
+      setSimulated(next);
+      setSimWorking(false);
+      worker.terminate();
+    };
+    worker.onerror = () => { setSimWorking(false); worker.terminate(); };
+    worker.postMessage({ nodes, edges, width: wb, height: hb, seed: seedArr.length > 0 ? seedArr : undefined, pinned: pinned.length > 0 ? pinned : undefined });
+    return () => { cancelled = true; setSimWorking(false); worker.terminate(); };
   }, [data, baseCanvas.width, baseCanvas.height]);
 
   // Позиции для отрисовки: расставленное руками поверх посчитанного. Держится
@@ -307,19 +349,38 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setManual(next);
   }
 
+  function resetLayout() {
+    if (!layoutKey) return;
+    try {
+      localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
+    } catch {}
+    setManual({});
+    lastPositions.current = null;
+    setView({ zoom: 1, panX: 0, panY: 0 });
+  }
+
   function isolate(key: string) {
     setIsolation({ key, depth: 1 });
     setFocusedKey(key);
     setPathFrom(null);
     setPathTo(null);
     setMenu(null);
-    setView({ zoom: 1, panX: 0, panY: 0 });
+    // Центрирование сделает useEffect по isolationView, когда просчёт готов.
   }
 
   function leaveIsolation() {
     setIsolation(null);
     setView({ zoom: 1, panX: 0, panY: 0 });
   }
+
+  // 3c: изоляция центрируется (как focusNode), а не в левый верхний угол.
+  useEffect(() => {
+    if (!isolationView) return;
+    const w = isolationView.width;
+    const h = isolationView.height;
+    const centered = centeredPan(1, w / 2, h / 2, w, h);
+    setView({ zoom: 1, panX: centered.x, panY: centered.y });
+  }, [isolationView]);
 
   function handleNodeContextMenu(e: ReactMouseEvent, node: GraphNode) {
     e.preventDefault();
@@ -420,8 +481,8 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         setManual((prev) => ({
           ...prev,
           [key]: {
-            x: Math.max(30, Math.min(canvasSize.width - 30, origin.x + dx)),
-            y: Math.max(30, Math.min(canvasSize.height - 30, origin.y + dy)),
+            x: Math.max(CANVAS_EDGE_PADDING, Math.min(canvasSize.width - CANVAS_EDGE_PADDING, origin.x + dx)),
+            y: Math.max(CANVAS_EDGE_PADDING, Math.min(canvasSize.height - CANVAS_EDGE_PADDING, origin.y + dy)),
           },
         }));
       });
@@ -497,6 +558,9 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     return data.nodes.filter((n) => n.title.toLowerCase().includes(q)).slice(0, 8);
   }, [data, debouncedQuery]);
 
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  useEffect(() => { setHighlightIdx(-1); }, [debouncedQuery]);
+
   const nodesByKey = useMemo(() => {
     if (!data) return new Map<string, GraphNode>();
     return new Map(data.nodes.map((n) => [n.key, n]));
@@ -504,6 +568,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
 
   const visibleNodes = isolationView ? isolationView.nodes : pipeline?.grouped.nodes ?? [];
   const visibleEdges = isolationView ? isolationView.edges : pipeline?.grouped.edges ?? [];
+  const groupedFoldedCount = pipeline?.grouped.folded.size ?? 0;
 
   const visibleKeys = useMemo(() => new Set(visibleNodes.map((n) => n.key)), [visibleNodes]);
 
@@ -560,19 +625,41 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
             placeholder={pathFrom && !pathTo ? "…и до кого прокладывать путь" : "Найти сущность…"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (shownMatches.length === 0) return;
+              if (e.key === "ArrowDown") { e.preventDefault(); setHighlightIdx((v) => Math.min(shownMatches.length - 1, v + 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setHighlightIdx((v) => Math.max(0, v - 1)); }
+              else if (e.key === "Enter" && highlightIdx >= 0) {
+                e.preventDefault();
+                const pick = shownMatches[highlightIdx];
+                if (pick) (pathFrom && !pathTo ? pickPathTo(pick.key) : focusNode(pick.key));
+              } else if (e.key === "Escape") setQuery("");
+            }}
           />
+          {debouncedQuery.trim() && shownMatches.length === 0 && (
+            <div className="entity-search-results"><div className="entity-search-item muted">Нет результатов</div></div>
+          )}
           {shownMatches.length > 0 && (
             <div className="entity-search-results">
-              {shownMatches.map((n) => (
-                <div
-                  key={n.key}
-                  className="entity-search-item"
-                  onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key))}
-                >
-                  <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
-                  {n.title}
-                </div>
-              ))}
+              {shownMatches.map((n, idx) => {
+                const q = debouncedQuery.trim();
+                const title = n.title;
+                const pos = q ? title.toLowerCase().indexOf(q.toLowerCase()) : -1;
+                const before = pos >= 0 ? title.slice(0, pos) : title;
+                const match = pos >= 0 ? title.slice(pos, pos + q.length) : "";
+                const after = pos >= 0 ? title.slice(pos + q.length) : "";
+                return (
+                  <div
+                    key={n.key}
+                    className={`entity-search-item${idx === highlightIdx ? " highlighted" : ""}`}
+                    onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key))}
+                    onMouseEnter={() => setHighlightIdx(idx)}
+                  >
+                    <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
+                    <span>{before}{match && <mark style={{ background: "var(--accent-soft)", padding: 0 }}>{match}</mark>}{after}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -602,6 +689,55 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           Локации
         </button>
       </div>
+      {/* Row: виды связей — чекбоксы с N, бары остаются, чипы остаются */}
+      <span className="graph-toolbar-sep" />
+      <div className="graph-toolbar-row" style={{ gap: 4, flexWrap: "wrap" }}>
+        {EDGE_KINDS.map((k) => {
+          const on = activeKinds.has(k.key);
+          const count = data ? data.edges.filter((e) => e.kind === k.key).length : 0;
+          return (
+            <label
+              key={k.key}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontFamily: "var(--font-ui)",
+                fontSize: "10px",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                opacity: on ? 1 : 0.45,
+                cursor: "pointer",
+              }}
+              title={`${k.label}: ${count}`}
+            >
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={() =>
+                  setActiveKinds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(k.key)) next.delete(k.key);
+                    else next.add(k.key);
+                    return next;
+                  })
+                }
+                style={{ accentColor: "var(--ink)" }}
+              />
+              {k.label}
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", opacity: 0.7 }}>({count})</span>
+            </label>
+          );
+        })}
+      </div>
+      {/* Мини-ключ штрихов (solid/dashed) */}
+      <span className="graph-toolbar-sep" />
+      <div className="graph-toolbar-row muted" style={{ fontFamily: "var(--font-mono)", fontSize: "9px", gap: 8 }}>
+        <span title="Отношения — сплошная 1px">— сплошная</span>
+        <span title="Вложенность мест — штрих 6 3">- - 6 3</span>
+        <span title="Участие в сценах — штрих 2 3">· · 2 3</span>
+        <span title="Упоминания — штрих 1 4">· · 1 4</span>
+      </div>
       {/* Row 1: fullscreen | zoom | save | reset */}
       <span className="graph-toolbar-sep" />
       <div className="graph-toolbar-row">
@@ -619,15 +755,99 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         <button type="button" className="graph-tb-btn" onClick={() => zoomBy(1.3)} title="Приблизить">
           <NavIcon name="plus" />
         </button>
+        <button
+          type="button"
+          className="graph-tb-btn"
+          onClick={() => {
+            const svg = wrapRef.current?.querySelector("svg");
+            if (!svg) return;
+            const clone = svg.cloneNode(true) as SVGElement;
+            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+            // Фон paper для печати (иначе прозрачный)
+            clone.style.background = "var(--paper, #fff)";
+            const data = new XMLSerializer().serializeToString(clone);
+            const blob = new Blob([data], { type: "image/svg+xml" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `graph-${layoutKey || "global"}.svg`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          title="Скачать SVG (вектор)"
+        >
+          SVG
+        </button>
+        <button
+          type="button"
+          className="graph-tb-btn"
+          onClick={() => {
+            const svg = wrapRef.current?.querySelector("svg");
+            if (!svg) return;
+            const clone = svg.cloneNode(true) as SVGElement;
+            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+            const data = new XMLSerializer().serializeToString(clone);
+            const blob = new Blob([data], { type: "image/svg+xml" });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              const vb = svg.viewBox.baseVal;
+              const w = Math.ceil(vb.width || canvasSize.width);
+              const h = Math.ceil(vb.height || canvasSize.height);
+              canvas.width = w * 2;
+              canvas.height = h * 2;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) return;
+              ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--paper") || "#fff";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob((b) => {
+                if (!b) return;
+                const u2 = URL.createObjectURL(b);
+                const a = document.createElement("a");
+                a.href = u2;
+                a.download = `graph-${layoutKey || "global"}.png`;
+                a.click();
+                URL.revokeObjectURL(u2);
+              }, "image/png");
+              URL.revokeObjectURL(url);
+            };
+            img.src = url;
+          }}
+          title="Скачать PNG (растр 2×)"
+        >
+          PNG
+        </button>
         {!isolationView && (
-          <button
-            type="button"
-            className="graph-tb-btn"
-            onClick={saveLayout}
-            title="Закрепить всё, что сейчас на экране"
-          >
-            Сохранить раскладку
-          </button>
+          <>
+            <button
+              type="button"
+              className="graph-tb-btn"
+              onClick={saveLayout}
+              title="Закрепить всё, что сейчас на экране"
+            >
+              Сохранить раскладку
+            </button>
+            <button
+              type="button"
+              className="graph-tb-btn"
+              onClick={resetLayout}
+              title="Сбросить ручную раскладку — удалить сохранённые позиции"
+            >
+              Сбросить раскладку
+            </button>
+            {groupedFoldedCount > 0 && (
+              <button
+                type="button"
+                className="graph-tb-btn"
+                onClick={() => setExpandedGroups(new Set())}
+                title="Развернуть все свёрнутые группы"
+              >
+                Развернуть всё ({groupedFoldedCount})
+              </button>
+            )}
+          </>
         )}
         <button type="button" className="graph-tb-btn" onClick={resetView}>
           Сбросить вид ({Math.round(view.zoom * 100)}%)
@@ -736,6 +956,21 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     }
     const allTypeKeys = [...typesInData.keys()];
     const allVisible = hiddenTypes.size === 0;
+    const ORDER: string[] = [
+      "character",
+      "being",
+      "artifact",
+      "location",
+      "community",
+      "compendium_entry",
+      "mastering",
+      "scene",
+      "adventure",
+      "campaign",
+      "setting",
+    ];
+    const orderedLegendTypes = ORDER.filter((t) => typesInData.has(t));
+    for (const t of typesInData.keys()) if (!orderedLegendTypes.includes(t)) orderedLegendTypes.push(t);
     return (
       <div className="relation-graph-legend">
         <button
@@ -748,53 +983,152 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
             })
           }
         >
-          {allVisible ? "Выкл" : "Вкл"}
+          {allVisible ? "СНЯТЬ ВСЁ" : "ВЫБРАТЬ ВСЁ"}
         </button>
-        {[...typesInData.entries()].map(([type, _count]) => {
+        {orderedLegendTypes.map((type) => {
           const hidden = hiddenTypes.has(type);
+          const needsSep = type === "scene";
           return (
-            <button
-              key={type}
-              type="button"
-              className="graph-tb-btn"
-              style={{ opacity: hidden ? 0.4 : 1 }}
-              onClick={() =>
-                setHiddenTypes((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(type)) next.delete(type);
-                  else next.add(type);
-                  return next;
-                })
-              }
-              title={hidden ? `Показать ${TYPE_LABELS[type] ?? type}` : `Скрыть ${TYPE_LABELS[type] ?? type}`}
-            >
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: TYPE_COLORS[type] ?? "#888",
-                  flexShrink: 0,
-                }}
-              />
-              {TYPE_LABELS[type] ?? type}
+            <>
+              {needsSep && <span className="graph-toolbar-sep" style={{ height: 18 }} />}
+              <button
+                key={type}
+                type="button"
+                className="graph-tb-btn"
+                style={{ opacity: hidden ? 0.4 : 1 }}
+                onClick={() =>
+                  setHiddenTypes((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(type)) next.delete(type);
+                    else next.add(type);
+                    return next;
+                  })
+                }
+                title={hidden ? `Показать ${TYPE_LABELS[type] ?? type}` : `Скрыть ${TYPE_LABELS[type] ?? type}`}
+              >
+              {(() => {
+                const shape = TYPE_SHAPES[type] ?? "rect";
+                const fill = TYPE_COLORS[type] ?? "#888";
+                if (shape === "diamond") {
+                  return (
+                    <span
+                      title="◇ ромб — локации"
+                      style={{
+                        display: "inline-block",
+                        width: 8,
+                        height: 8,
+                        background: fill,
+                        flexShrink: 0,
+                        border: "1px solid var(--line)",
+                        transform: "rotate(45deg)",
+                      }}
+                    />
+                  );
+                }
+                if (shape === "triangle") {
+                  return (
+                    <span
+                      title="▲ треугольник — персонажи/сообщества"
+                      style={{
+                        display: "inline-block",
+                        width: 0,
+                        height: 0,
+                        flexShrink: 0,
+                        borderLeft: "5px solid transparent",
+                        borderRight: "5px solid transparent",
+                        borderBottom: `9px solid ${fill}`,
+                        filter: "drop-shadow(0 0 0 var(--line))",
+                      }}
+                    />
+                  );
+                }
+                if (shape === "triangleInverted") {
+                  return (
+                    <span
+                      title="▼ перевёрнутый треугольник — существа"
+                      style={{
+                        display: "inline-block",
+                        width: 0,
+                        height: 0,
+                        flexShrink: 0,
+                        borderLeft: "5px solid transparent",
+                        borderRight: "5px solid transparent",
+                        borderTop: `9px solid ${fill}`,
+                      }}
+                    />
+                  );
+                }
+                if (shape === "triangleRight") {
+                  return (
+                    <span
+                      title="▶ треугольник вправо — персонажи"
+                      style={{
+                        display: "inline-block",
+                        width: 0,
+                        height: 0,
+                        flexShrink: 0,
+                        borderTop: "5px solid transparent",
+                        borderBottom: "5px solid transparent",
+                        borderLeft: `9px solid ${fill}`,
+                      }}
+                    />
+                  );
+                }
+                if (shape === "star") {
+                  return (
+                    <span
+                      title="★ звёздочка — артефакты"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 12,
+                        height: 12,
+                        flexShrink: 0,
+                        color: fill,
+                        fontSize: "12px",
+                        lineHeight: 1,
+                        textShadow: "0 0 0 var(--line)",
+                      }}
+                    >
+                      ★
+                    </span>
+                  );
+                }
+                return (
+                  <span
+                    title="■ квадрат — кампании/сеттинги/сцены/предметы"
+                    style={{
+                      display: "inline-block",
+                      width: 8,
+                      height: 8,
+                      background: fill,
+                      flexShrink: 0,
+                      border: "1px solid var(--line)",
+                    }}
+                  />
+                );
+              })()}
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                {TYPE_LABELS[type] ?? type}
+              </span>
             </button>
+            </>
           );
-        })}
+          })}
       </div>
     );
   })();
 
   const isolated = (data.isolated ?? []).filter((n) => !EXCLUDED_GRAPH_TYPES.has(n.type));
   const isolatedPanel = isolated.length > 0 && (
-    <details className="card relation-graph-isolated">
+    <details className="card relation-graph-isolated" open>
       <summary>
-        Ни одной связи в этом срезе: {isolated.length}
+        Без связей в этом срезе: {isolated.length}
       </summary>
       <div className="stack" style={{ marginTop: 8 }}>
-        <span className="muted">
-          Эти сущности есть в выбранной области, но ни с чем не соединены — их не видно на холсте.
+        <span className="muted" style={{ fontFamily: "var(--font-body)", fontSize: "12px" }}>
+          Эти сущности есть в выбранной области, но ни с чем не соединены — их не видно на холсте. Добавьте связь на странице сущности.
         </span>
         <div className="relation-graph-isolated-list">
           {isolated.map((n) => {
@@ -811,14 +1145,34 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     </details>
   );
 
+  const graphStats = data ? `${visibleNodes.length} узлов · ${visibleEdges.length} связей${isolated.length > 0 ? ` · ${isolated.length} без связей` : ""}` : "";
   const graphBody =
     data.nodes.length === 0 ? (
-      <p className="muted">{emptyMessage ?? "Связей пока нет — перетаскивайте сущности друг на друга из поиска."}</p>
+      <EmptyState
+        icon="anarchyStar"
+        title="СХЕМЫ ПОКА НЕТ"
+        hint={emptyMessage ?? "Добавьте связи между существами, фракциями и местами — граф проявится сам."}
+        action={
+          <Link to="/settings" className="primary" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>
+            К сеттингам
+          </Link>
+        }
+      />
+    ) : simWorking ? (
+      <div className="card" style={{ padding: "24px", textAlign: "center" }}>
+        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "12px" }}>Считаю раскладку…</span>
+      </div>
     ) : (
       <div
         ref={wrapRef}
         className="relation-graph-wrap"
-        style={{ height: fullscreen ? undefined : height, flex: fullscreen ? 1 : undefined }}
+        style={{
+          height: fullscreen ? undefined : height,
+          flex: fullscreen ? 1 : undefined,
+          backgroundImage: "radial-gradient(var(--line) 0.6px, transparent 0.6px)",
+          backgroundSize: "8px 8px",
+          backgroundPosition: "0 0",
+        }}
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
@@ -830,6 +1184,25 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         onContextMenu={(e) => e.preventDefault()}
         onAuxClick={(e) => e.preventDefault()}
       >
+        {/* Статистика в правом верхнем углу холста — как на скрине, без плашки «СХЕМА СВЯЗЕЙ» */}
+        <div
+          style={{
+            position: "absolute",
+            top: 6,
+            right: 8,
+            zIndex: 1,
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            letterSpacing: "0.04em",
+            color: "var(--muted)",
+            background: "color-mix(in srgb, var(--paper-2) 92%, transparent)",
+            padding: "2px 6px",
+            border: "1px solid var(--line)",
+            pointerEvents: "none",
+          }}
+        >
+          {graphStats}
+        </div>
         <svg viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`} width="100%" height="100%">
           <g transform={`translate(${view.panX},${view.panY}) scale(${view.zoom})`}>
             {visibleEdges.map((e, i) => {
@@ -897,8 +1270,8 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                     x2={bx}
                     y2={by}
                     stroke={onPath ? "var(--accent, #c2683f)" : color}
-                    strokeOpacity={offPath ? 0.08 : dim ? 0.12 : onPath ? 1 : tone ? 0.75 : 0.6}
-                    strokeWidth={onPath ? 3 : kindStyle?.width ?? 1}
+                    strokeOpacity={offPath ? 0.08 : dim ? 0.12 : onPath ? 1 : tone ? 0.6 : 0.5}
+                    strokeWidth={onPath ? 1.5 : 1}
                     strokeDasharray={onPath ? undefined : kindStyle?.dash}
                   >
                     <title>{tooltip}</title>
@@ -924,6 +1297,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                         stroke="var(--paper)"
                         strokeWidth={3}
                         paintOrder="stroke"
+                        style={{ fontFamily: "var(--font-ui)", letterSpacing: "0.06em", textTransform: "uppercase" } as React.CSSProperties}
                       >
                         {relationLabel}
                       </text>
@@ -971,31 +1345,113 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                   }}
                   onContextMenu={(e) => handleNodeContextMenu(e, n)}
                 >
-                  <circle
-                    r={radius}
-                    fill={TYPE_COLORS[n.type] ?? "#888"}
-                    stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "none"}
-                    strokeWidth={onPath ? 3 : 2}
-                  />
+                  {(() => {
+                    const shape = TYPE_SHAPES[n.type] ?? "rect";
+                    const fill = TYPE_COLORS[n.type] ?? "#888";
+                    // Прямые углы, без радиусов (§1.1). Размер — по foldedCount.
+                    if (shape === "diamond") {
+                      return (
+                        <polygon
+                          points={`0,${-radius} ${radius},0 0,${radius} ${-radius},0`}
+                          fill={fill}
+                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
+                          strokeWidth={onPath ? 1.5 : 1}
+                        />
+                      );
+                    }
+                    if (shape === "triangle") {
+                      return (
+                        <polygon
+                          points={`0,${-radius} ${radius},${radius} ${-radius},${radius}`}
+                          fill={fill}
+                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
+                          strokeWidth={onPath ? 1.5 : 1}
+                        />
+                      );
+                    }
+                    if (shape === "triangleInverted") {
+                      return (
+                        <polygon
+                          points={`0,${radius} ${radius},${-radius} ${-radius},${-radius}`}
+                          fill={fill}
+                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
+                          strokeWidth={onPath ? 1.5 : 1}
+                        />
+                      );
+                    }
+                    if (shape === "triangleRight") {
+                      return (
+                        <polygon
+                          points={`${-radius},${-radius} ${-radius},${radius} ${radius},0`}
+                          fill={fill}
+                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
+                          strokeWidth={onPath ? 1.5 : 1}
+                        />
+                      );
+                    }
+                    if (shape === "star") {
+                      // Пышная 5-лучёвка — толстые лучи, хорошо читается на 9px радиусе.
+                      // rInner 0.62 = более «надутая», чем тонкая 0.45 — не иголки, а пухляши.
+                      const rOuter = radius;
+                      const rInner = radius * 0.62;
+                      const pts: string[] = [];
+                      for (let i = 0; i < 10; i++) {
+                        const r = i % 2 === 0 ? rOuter : rInner;
+                        const angle = (Math.PI * 2 * i) / 10 - Math.PI / 2;
+                        pts.push(`${(Math.cos(angle) * r).toFixed(1)},${(Math.sin(angle) * r).toFixed(1)}`);
+                      }
+                      return (
+                        <polygon
+                          points={pts.join(" ")}
+                          fill={fill}
+                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
+                          strokeWidth={onPath ? 1.5 : 1}
+                        />
+                      );
+                    }
+                    return (
+                      <rect
+                        x={-radius}
+                        y={-radius}
+                        width={radius * 2}
+                        height={radius * 2}
+                        fill={fill}
+                        stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
+                        strokeWidth={onPath ? 1.5 : 1}
+                      />
+                    );
+                  })()}
                   {pinned && (
-                    // Кружок внутри — метка «стоит там, где поставили руками».
-                    <circle r={3} fill="var(--paper)" opacity={0.9} />
+                    // Квадрат внутри — метка «стоит там, где поставили руками» (не круг, §1.1).
+                    <rect x={-2.5} y={-2.5} width={5} height={5} fill="var(--paper)" opacity={0.9} />
                   )}
                   {/* React escapes {n.title} automatically — safe from XSS */}
-                  <text x={radius + 5} y={4} fontSize={11} fill="var(--ink)">
+                  <text
+                    x={radius + 5}
+                    y={4}
+                    fontSize={11}
+                    fill="var(--ink)"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
                     {n.title}
-                    {foldedCount > 0 && <tspan className="muted"> +{foldedCount}</tspan>}
+                    {foldedCount > 0 && (
+                      <tspan style={{ fontFamily: "var(--font-mono)", fontSize: "10px" }} className="muted">
+                        {" "}
+                        +{foldedCount}
+                      </tspan>
+                    )}
                   </text>
                   <title>
                     {`${TYPE_LABELS[n.type] ?? n.type}: ${n.title}` +
-                      (foldedCount > 0 ? ` — свёрнуто внутрь: ${foldedCount}, нажмите, чтобы раскрыть` : "")}
+                      (foldedCount > 0 ? ` — свёрнуто внутрь: ${foldedCount}, нажмите, чтобы раскрыть` : "") +
+                      " — клик фокус, двойной клик — окрестность"}
                   </title>
                 </g>
               );
             })}
           </g>
-        </svg>
-      </div>
+          </svg>
+        </div>
     );
 
   // Меню и карточка живут вне обоих вариантов вёрстки (обычной и
@@ -1051,7 +1507,24 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   if (fullscreen) {
     return createPortal(
       <div className="relation-graph-fullscreen">
-        <div className="relation-graph-fullscreen-bar">
+        <div
+          className="relation-graph-fullscreen-bar"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            padding: "8px 12px",
+            background: "var(--surface)",
+            color: "var(--on-surface)",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>Граф связей — весь экран</span>
+            <button type="button" className="graph-tb-btn" onClick={() => setFullscreen(false)} style={{ background: "var(--paper)", color: "var(--ink)" }}>
+              × Закрыть (Esc)
+            </button>
+          </div>
           {toolbar}
           {legend}
         </div>

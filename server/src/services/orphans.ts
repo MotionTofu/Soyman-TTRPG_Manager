@@ -78,7 +78,61 @@ const RELATION_ENDPOINT_TABLE: Record<string, string> = {
   artifact: "artifacts",
 };
 
+let lastOrphanBackup: { at: string; rows: Record<string, unknown[]> } | null = null;
+
+export function getLastOrphanBackup(): typeof lastOrphanBackup { return lastOrphanBackup; }
+export function restoreLastOrphanBackup(): number {
+  if (!lastOrphanBackup) return 0;
+  let restored = 0;
+  const run = db.transaction(() => {
+    for (const [key, rows] of Object.entries(lastOrphanBackup!.rows)) {
+      const [table] = key.split(":");
+      if (!rows.length) continue;
+      const cols = Object.keys(rows[0] as Record<string, unknown>);
+      const placeholders = cols.map(() => "?").join(",");
+      const stmt = db.prepare(`INSERT OR IGNORE INTO ${table} (${cols.join(",")}) VALUES (${placeholders})`);
+      for (const r of rows) restored += stmt.run(...cols.map((c) => (r as Record<string, unknown>)[c])).changes;
+    }
+  });
+  run();
+  lastOrphanBackup = null;
+  return restored;
+}
+
 export function sweepOrphans(): number {
+  // backup before delete
+  const backup: Record<string, unknown[]> = {};
+  for (const { table, ownerTypes } of SATELLITES) {
+    for (const ownerType of ownerTypes) {
+      const ownerTable = OWNER_TABLE[ownerType];
+      try {
+        const rows = db.prepare(`SELECT * FROM ${table} WHERE owner_type = ? AND owner_id NOT IN (SELECT id FROM ${ownerTable})`).all(ownerType) as unknown[];
+        if (rows.length) backup[`${table}:${ownerType}`] = rows;
+      } catch {}
+    }
+  }
+  for (const [type, table] of Object.entries(LINK_ENDPOINT_TABLE)) {
+    try {
+      const rowsFrom = db.prepare(`SELECT * FROM generic_links WHERE from_type = ? AND from_id NOT IN (SELECT id FROM ${table})`).all(type) as unknown[];
+      if (rowsFrom.length) backup[`generic_links:from:${type}`] = rowsFrom;
+      const rowsTo = db.prepare(`SELECT * FROM generic_links WHERE to_type = ? AND to_id NOT IN (SELECT id FROM ${table})`).all(type) as unknown[];
+      if (rowsTo.length) backup[`generic_links:to:${type}`] = rowsTo;
+    } catch {}
+  }
+  for (const [type, table] of Object.entries(RELATION_ENDPOINT_TABLE)) {
+    try {
+      const rowsFrom = db.prepare(`SELECT * FROM entity_relations WHERE from_type = ? AND from_id NOT IN (SELECT id FROM ${table})`).all(type) as unknown[];
+      if (rowsFrom.length) backup[`entity_relations:from:${type}`] = rowsFrom;
+      const rowsTo = db.prepare(`SELECT * FROM entity_relations WHERE to_type = ? AND to_id NOT IN (SELECT id FROM ${table})`).all(type) as unknown[];
+      if (rowsTo.length) backup[`entity_relations:to:${type}`] = rowsTo;
+    } catch {}
+  }
+  try {
+    const boards = db.prepare(`SELECT * FROM canvas_boards WHERE scope_type = 'arc' AND scope_id NOT IN (SELECT id FROM story_arcs)`).all() as unknown[];
+    if (boards.length) backup["canvas_boards:arc"] = boards;
+  } catch {}
+  lastOrphanBackup = { at: new Date().toISOString(), rows: backup };
+
   let removed = 0;
   const run = db.transaction(() => {
     for (const { table, ownerTypes } of SATELLITES) {

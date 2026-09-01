@@ -341,6 +341,13 @@ export function openDatabase(dbDir: string): Database.Database {
   const database = new Database(path.join(dbDir, "app.db"));
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
+  // 3.3 — integrity_check не блокирует старт: уходим в фон через 2с после открытия
+  setTimeout(() => {
+    try {
+      const row = database.prepare("PRAGMA integrity_check").get() as { integrity_check: string } | undefined;
+      if (row && row.integrity_check !== "ok") console.error(`[db] integrity_check: ${row.integrity_check}`);
+    } catch {}
+  }, 2000);
 
   // Migrate the old `player_characters` table (pre-characters-feature) into
   // `characters` before schema.sql creates the new table, so existing data survives.
@@ -1160,6 +1167,44 @@ export function openDatabase(dbDir: string): Database.Database {
     }
   }
 
+  // Unified relations: extend entity_relations with section and origin from
+  // generic_links, then migrate all generic_links rows into entity_relations.
+  if (!columnExists(database, "entity_relations", "section")) {
+    database.exec("ALTER TABLE entity_relations ADD COLUMN section TEXT");
+  }
+  if (!columnExists(database, "entity_relations", "origin")) {
+    database.exec("ALTER TABLE entity_relations ADD COLUMN origin TEXT NOT NULL DEFAULT 'planned'");
+  }
+  // Migrate generic_links → entity_relations (one-time, idempotent via NOT EXISTS)
+  if (tableExists(database, "generic_links")) {
+    const glCount = (database.prepare("SELECT COUNT(*) as c FROM generic_links").get() as { c: number }).c;
+    const erCount = (database.prepare("SELECT COUNT(*) as c FROM entity_relations").get() as { c: number }).c;
+    // Only migrate if generic_links has rows that aren't yet in entity_relations
+    if (glCount > 0) {
+      const existingPairs = new Set(
+        (database.prepare("SELECT from_type, from_id, to_type, to_id, section FROM entity_relations").all() as {
+          from_type: string; from_id: number; to_type: string; to_id: number; section: string | null;
+        }[]).map((r) => `${r.from_type}:${r.from_id}:${r.to_type}:${r.to_id}:${r.section ?? ""}`)
+      );
+      const links = database.prepare("SELECT * FROM generic_links").all() as {
+        id: number; from_type: string; from_id: number; to_type: string; to_id: number;
+        section: string | null; origin: string; created_at: string;
+      }[];
+      const insert = database.prepare(
+        `INSERT OR IGNORE INTO entity_relations (from_type, from_id, to_type, to_id, tone, label, description, section, origin, created_at)
+         VALUES (?, ?, ?, ?, 'neutral', '', '', ?, ?, ?)`
+      );
+      let migrated = 0;
+      for (const l of links) {
+        const key = `${l.from_type}:${l.from_id}:${l.to_type}:${l.to_id}:${l.section ?? ""}`;
+        if (existingPairs.has(key)) continue;
+        insert.run(l.from_type, l.from_id, l.to_type, l.to_id, l.section, l.origin ?? "planned", l.created_at);
+        migrated++;
+      }
+      if (migrated > 0) console.log(`[db] Migrated ${migrated} generic_links → entity_relations`);
+    }
+  }
+
   // Sub-grouping within a resource's "type" — currently only used by the
   // session-page "Ресурсы" section (folder/pdf/image/audio/link/other), kept
   // separate from `type` so it doesn't collide with the existing
@@ -1369,6 +1414,9 @@ export function openDatabase(dbDir: string): Database.Database {
   // мастерский доступ у такого аккаунта тоже есть.
   if (!columnExists(database, "users", "is_admin")) {
     database.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columnExists(database, "users", "token_version")) {
+    database.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0");
   }
 
   // Учётка `admin` с паролем `admin` заводилась при КАЖДОМ старте, пока её не
@@ -2345,9 +2393,11 @@ export function openDatabase(dbDir: string): Database.Database {
       .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))")
       .run(tokensKey);
   }
-  // Остатки legacy от systemApply/crossLinks до фикса — добиваем каждый запуск.
+  // Остатки legacy от systemApply/crossLinks до фикса — добиваем фоном, не блокируем старт (3.3).
   if (appSettingFlag(database, tokensKey)) {
-    fixResidualLegacyMentions(database);
+    setTimeout(() => {
+      try { fixResidualLegacyMentions(database); } catch (e) { console.error("Добивка legacy-меншенов фоном не удалась:", e); }
+    }, 2500);
   }
 
   // Пульт звука: роль аудиоресурса и его вид на кнопке.

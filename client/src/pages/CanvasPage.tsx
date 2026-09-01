@@ -5215,7 +5215,6 @@ export function CanvasPage() {
       {/* Шапка. В списке к ней же прижата «Открыть доску…»: отдельной строкой
           она стоила ещё одного пустого ряда под потолком. */}
       <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>
-        <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         {freeId ? (
           <>
             <Link to="/canvas" style={{ color: "var(--muted)" }}>Все полотна</Link>
@@ -5313,7 +5312,6 @@ export function CanvasPage() {
         ) : (
           <SectionHeading section="canvas" compact>Полотно</SectionHeading>
         )}
-        </div>
         {/* «Открыть доску…», а не «Открыть холст…» (блок D5): слово «холст»
             из подписей кнопок ушло вовсе — мастер открывает именно свободные
             доски, приключения и карты открываются со списка ниже.

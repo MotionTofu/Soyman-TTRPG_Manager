@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { MiniCalendar, type MiniEvent } from "../components/MiniCalendar";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
+import { SessionFinanceModal } from "../components/SessionFinanceModal";
 import { copySessionPrep } from "../sessionCopy";
 import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
@@ -47,6 +48,7 @@ export function HomeCalendarPage() {
     startTime: string;
     copyFromSessionId: string;
   } | null>(null);
+  const [financeSessionId, setFinanceSessionId] = useState<number | null>(null);
   const [oneshotSessions, setOneshotSessions] = useState<SessionSummary[]>([]);
   const [initialLoad, setInitialLoad] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -64,6 +66,7 @@ export function HomeCalendarPage() {
     campaignId: s.campaign_id,
     campaignName: s.campaign_name,
     startTime: s.start_time,
+    campaignRole: s.campaign_role,
   }));
 
   const [calendarError, setCalendarError] = useState<string | null>(null);
@@ -76,15 +79,22 @@ export function HomeCalendarPage() {
     setCampaignsError(null);
     setInitialLoad(false);
     const guarded = <T,>(fn: (v: T) => void) => (v: T) => { if (loadIdRef.current === cur) fn(v); };
+    // 3.2 — критичные 5 запросов сразу (герой + онбординг), остальное лениво после первого кадра
     Promise.allSettled([
       api.get<SessionSummary[]>("/calendar").then(guarded(setSessions)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCalendarError(String(e)); throw e; }),
-      api.get<FinanceSummary>("/finance/summary").then(guarded(setFinance)).catch(() => {}),
-      api.get<AppSettings>("/app-settings").then((s) => { if (loadIdRef.current === cur) setHomeBgUrl(s.home_background_url); }).catch(() => {}),
       api.get<Campaign[]>("/campaigns").then(guarded(setCampaigns)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCampaignsError(String(e)); throw e; }),
       api.get<System[]>("/systems").then(guarded(setSystems)).catch(() => {}),
       api.get<Setting[]>("/settings").then(guarded(setSettings)).catch(() => {}),
       api.get<Player[]>("/players").then(guarded(setPlayers)).catch(() => {}),
-    ]).finally(() => { if (loadIdRef.current === cur) setInitialLoad(true); });
+    ]).finally(() => {
+      if (loadIdRef.current === cur) setInitialLoad(true);
+      // 3.2 лениво: Сводка и фон — после того как герой уже отрисован
+      setTimeout(() => {
+        if (loadIdRef.current !== cur) return;
+        api.get<FinanceSummary>("/finance/summary").then(guarded(setFinance)).catch(() => {});
+        api.get<AppSettings>("/app-settings").then((s) => { if (loadIdRef.current === cur) setHomeBgUrl(s.home_background_url); }).catch(() => {});
+      }, 400);
+    });
   }
 
   useEffect(() => {
@@ -204,6 +214,10 @@ export function HomeCalendarPage() {
               },
             ],
           },
+      ...(event.campaignRole === "gm" ? [{
+        label: "Финансы",
+        onClick: () => setFinanceSessionId(event.id),
+      }] : []),
       {
         label: "Удалить (в архив)",
         danger: true,
@@ -285,6 +299,13 @@ export function HomeCalendarPage() {
 
       <div className="home-layout">
         <div className="home-main">
+          {/* P1 D-02: дубль EmptyState «Начни с хранилища» убран — единый OnboardingHero покрывает §1.11 */}
+          {initialLoad && !nearestSession && campaigns.length === 0 && sessionStorage.getItem("justCreated") && (
+            <div className="card" style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "10px 12px", borderLeft: "3px solid var(--accent)" }}>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Добро пожаловать, Мастер!</span>
+              <span className="muted" style={{ marginLeft: 8, fontSize: "var(--fs-meta)" }}>Начни с Системы — первый шаг ниже.</span>
+            </div>
+          )}
           {/* Hero — nearest upcoming session's campaign, full-bleed cover. */}
           {nearestSession ? (
             // Ведёт в карточку сессии, а не в пульт: с главной ныряют
@@ -368,7 +389,8 @@ export function HomeCalendarPage() {
             сессий, каждую подписывал «Ближайшая сессия:», и первой строкой
             всегда шло то, что уже стоит героем во всю ширину. */}
         <div className="home-rail">
-          {finance && (
+          {/* 2.2 §1.11: на пустой БД «Сводка» — кладбище нулей — не показываем */}
+          {finance && campaigns.length > 0 && (
             <div className="card stack home-rail-stats">
               <SectionHeading level="section" icon="graph">
                 Сводка
@@ -407,25 +429,29 @@ export function HomeCalendarPage() {
             </div>
           )}
 
-          <div className="card stack home-rail-calendar">
-            <SectionHeading level="section" icon="calendar" right={<LocalClock />}>
-              Календарь
-            </SectionHeading>
-            <MiniCalendar
-              events={miniEvents}
-              // Клетка календаря показывает только число, поэтому меню
-              // само называет игру, к которой относятся его пункты: иначе
-              // «Удалить (в архив)» в дне с игрой — действие вслепую.
-              onEventContextMenu={(event, x, y) =>
-                setMenu({ x, y, title: event.campaignName ?? "Сессия", items: eventMenuItems(event) })
-              }
-              onDayContextMenu={(date, x, y) =>
-                setMenu({ x, y, items: [{ label: "+ Добавить сессию", onClick: () => openCreateModal(date) }] })
-              }
-            />
-          </div>
-        </div>
-      </div>
+          {/* 2.2 календарь до первой кампании не нужен — сессии некуда вязать */}
+          {campaigns.length > 0 && (
+            <div className="card stack home-rail-calendar">
+              <SectionHeading level="section" icon="calendar" right={<LocalClock />}>
+                Календарь
+              </SectionHeading>
+              <MiniCalendar
+                events={miniEvents}
+                onDayClick={(date) => openCreateModal(date)}
+                // Клетка календаря показывает только число, поэтому меню
+                // само называет игру, к которой относятся его пункты: иначе
+                // «Удалить (в архив)» в дне с игрой — действие вслепую.
+                onEventContextMenu={(event, x, y) =>
+                  setMenu({ x, y, title: event.campaignName ?? "Сессия", items: eventMenuItems(event) })
+                }
+                onDayContextMenu={(date, x, y) =>
+                  setMenu({ x, y, items: [{ label: "+ Добавить сессию", onClick: () => openCreateModal(date) }] })
+                }
+              />
+            </div>
+          )}
+         </div>
+       </div>
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={() => setMenu(null)} />
@@ -491,6 +517,14 @@ export function HomeCalendarPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {financeSessionId && (
+        <SessionFinanceModal
+          sessionId={financeSessionId}
+          onClose={() => setFinanceSessionId(null)}
+          onSaved={refreshSessions}
+        />
       )}
     </div>
   );

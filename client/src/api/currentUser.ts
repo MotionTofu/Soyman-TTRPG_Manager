@@ -16,6 +16,15 @@ export interface CurrentUser {
 let cached: CurrentUser | null = null;
 let inflight: Promise<CurrentUser | null> | null = null;
 
+export function setCachedUser(user: CurrentUser | null) {
+  cached = user;
+  inflight = user ? Promise.resolve(user) : null;
+}
+export function clearCachedUser() {
+  cached = null;
+  inflight = null;
+}
+
 export function fetchCurrentUser(): Promise<CurrentUser | null> {
   if (cached) return Promise.resolve(cached);
   if (!getAuthToken()) return Promise.resolve(null);

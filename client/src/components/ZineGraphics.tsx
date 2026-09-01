@@ -10,7 +10,7 @@
 // icon system — reach for NavIcons for anything functional/navigational.
 import type { SVGProps } from "react";
 
-export type ZineGraphicName = "skullDie" | "anarchyStar" | "splatter" | "barcode" | "issueStamp" | "fantasySwords" | "cosmicOrbit";
+export type ZineGraphicName = "skullDie" | "anarchyStar" | "splatter" | "barcode" | "issueStamp" | "fantasySwords" | "cosmicOrbit" | "health";
 
 const SHARED: SVGProps<SVGSVGElement> = {
   fill: "none",
@@ -178,5 +178,7 @@ export function ZineGraphic({
       return <FantasySwords className={className} aria-hidden="true" />;
     case "cosmicOrbit":
       return <CosmicOrbit className={className} aria-hidden="true" />;
+    case "health":
+      return <AnarchyStar className={className} aria-hidden="true" />;
   }
 }

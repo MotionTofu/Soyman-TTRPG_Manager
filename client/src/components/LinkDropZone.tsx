@@ -6,16 +6,17 @@ import { ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import type { SearchResult } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 
-interface GenericLink {
+interface UnifiedRelation {
   id: number;
   from_type: string;
   from_id: number;
   to_type: string;
   to_id: number;
+  section: string | null;
 }
 
 interface LinkedItem {
-  linkId: number;
+  relationId: number;
   type: string;
   id: number;
   label: string;
@@ -25,48 +26,56 @@ interface Props {
   entityType: string;
   entityId: number;
   title?: string;
+  /** Namespace for grouping — stored as `section` in entity_relations. */
+  section?: string;
 }
 
 export const SEARCH_DRAG_MIME = "application/x-rpg-search-result";
 
-export function LinkDropZone({ entityType, entityId, title = "Связанное" }: Props) {
+export function LinkDropZone({ entityType, entityId, title = "Связанное", section }: Props) {
   const [items, setItems] = useState<LinkedItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
 
   async function load() {
-    const links = await api.get<GenericLink[]>(
-      `/links?type=${entityType}&id=${entityId}`
+    const sectionParam = section ? `&section=${encodeURIComponent(section)}` : "";
+    const data = await api.get<{ outgoing: UnifiedRelation[]; incoming: UnifiedRelation[] }>(
+      `/entity-relations?entity_type=${entityType}&entity_id=${entityId}${sectionParam}`
     );
-    const resolved = await Promise.all(
-      links.map(async (l) => {
-        const other =
-          l.from_type === entityType && l.from_id === entityId
-            ? { type: l.to_type, id: l.to_id }
-            : { type: l.from_type, id: l.from_id };
-        const label = await resolveEntityLabel(other.type, other.id);
-        return { linkId: l.id, type: other.type, id: other.id, label };
-      })
-    );
-    setItems(resolved);
+    // Merge outgoing + incoming, deduplicate by relationId
+    const seen = new Set<number>();
+    const all: LinkedItem[] = [];
+    for (const r of [...data.outgoing, ...data.incoming]) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      const otherType = r.from_type === entityType ? r.to_type : r.from_type;
+      const otherId = r.from_type === entityType ? r.to_id : r.from_id;
+      const label = await resolveEntityLabel(otherType, otherId);
+      all.push({ relationId: r.id, type: otherType, id: otherId, label });
+    }
+    setItems(all);
   }
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityType, entityId]);
+  }, [entityType, entityId, section]);
 
   async function link(result: SearchResult) {
-    await api.post("/links", {
+    await api.post("/entity-relations", {
       from_type: entityType,
       from_id: entityId,
       to_type: result.type,
       to_id: result.id,
+      tone: "neutral",
+      label: "",
+      description: "",
+      section: section ?? null,
+      origin: "planned",
     });
     load();
   }
 
-  // Та же связь, но из мешка (кнопка «Выгрузить»), а не перетаскиванием.
   useUnloadTarget({ label: title, accepts: () => true, drop: link });
 
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -77,15 +86,15 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
     await link(JSON.parse(raw) as SearchResult);
   }
 
-  async function removeLink(linkId: number) {
+  async function removeLink(relationId: number) {
     const ok = await confirm({ message: "Удалить связь?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/links/${linkId}`);
+    await api.del(`/entity-relations/${relationId}`);
     load();
   }
 
   return (
-    <div className="stack" id={`section-${entityType}-${entityId}-${title.replace(/\s+/g, "-")}`}>
+    <div className="stack" id={`section-${entityType}-${entityId}-${(title ?? "").replace(/\s+/g, "-")}`}>
       {confirmDialog}
       <strong>{title}</strong>
       <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
@@ -105,12 +114,12 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
         )}
         <div className="stack">
           {items.map((it) => (
-            <div key={it.linkId} className="row" style={{ justifyContent: "space-between" }}>
+            <div key={it.relationId} className="row" style={{ justifyContent: "space-between" }}>
               <span className="row" style={{ alignItems: "center" }}>
                 <span className={`entity-type-chip ${it.type}`}>{ENTITY_TYPE_SINGULAR[it.type] ?? it.type}</span>
                 {it.label}
               </span>
-              <button onClick={() => removeLink(it.linkId)}>✕</button>
+              <button onClick={() => removeLink(it.relationId)}>✕</button>
             </div>
           ))}
         </div>

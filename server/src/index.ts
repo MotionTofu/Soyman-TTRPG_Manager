@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import hpp from "hpp";
 import fs from "fs";
 import path from "path";
 import { createServer } from "http";
@@ -63,6 +66,7 @@ import { healthRouter } from "./routes/health";
 import { sweepOrphans } from "./services/orphans";
 import { backfillCompendiumSummaries } from "./services/monsterSummary";
 import { attachUser, requireAuth, bootstrapGmAccount, verifyToken, type AuthedRequest } from "./services/auth";
+import { signPath, verifySignedUrl } from "./services/signedUrl";
 import { apiRoleGate } from "./services/playerAccess";
 
 initVault();
@@ -105,18 +109,22 @@ const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .map((o) => o.trim())
   .filter(Boolean);
 
-// RFC1918 private ranges + link-local — a phone/tablet on the same WiFi as
-// this machine is exactly as trusted as the machine itself for local dev/
-// testing (same reasoning as the localhost/127.0.0.1 exception below), so
-// LAN testing doesn't require setting ALLOWED_ORIGINS by hand every time.
-function isPrivateLanHost(host: string): boolean {
-  return (
-    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
-    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host) ||
-    /^169\.254\.\d{1,3}\.\d{1,3}$/.test(host)
-  );
-}
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+      mediaSrc: ["'self'", "blob:", "data:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      frameAncestors: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+app.use(hpp());
 
 app.use(
   cors({
@@ -124,7 +132,7 @@ app.use(
       if (!origin) return cb(null, true); // same-origin, curl, native app
       try {
         const host = new URL(origin).hostname;
-        if (host === "localhost" || host === "127.0.0.1" || isPrivateLanHost(host)) {
+        if (host === "localhost" || host === "127.0.0.1") {
           return cb(null, true);
         }
       } catch {
@@ -135,19 +143,31 @@ app.use(
     },
   })
 );
-// 5mb was fine while every JSON body was plain text/metadata. Setting exports
-// with ?include=images now embed avatar/background/resource files as base64
-// (opt-in, explicitly warned about in the export modal), so imports of those
-// files can legitimately be much larger.
-app.use(express.json({ limit: "1000mb" }));
+// JSON limit: 1mb default — prevents OOM from 999mb payloads. Imports with
+// ?include=images legitimately embed base64 (opt-in) and need up to 50mb.
+app.use((req, res, next) => {
+  const isImport =
+    req.path.startsWith("/api/import") || req.path.startsWith("/api/system-import");
+  const limit = isImport ? "50mb" : "1mb";
+  return (express.json({ limit }) as unknown as express.RequestHandler)(req, res, next);
+});
 app.use(attachUser);
+
+// Rate-limit auth — brute-force on /setup and /login must not be free.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "слишком много попыток, попробуйте позже" },
+});
 
 // П2.1: в БД пути хранятся ОТНОСИТЕЛЬНО корня хранилища, но наружу — клиенту —
 // они уходят как раньше, абсолютными: клиент показывает folder_path/file_path
 // текстом (ArtifactDetailPage и т.п.) и не должен видеть «Campaigns\...»
 // вместо «E:\RPG-Vault\Campaigns\...». Конвертация на границе ответа одной
 // точкой: рекурсивно по JSON, ключи `*_path` (плюс old_path/new_path из
-// relink-кандидатов) → vaultAbs. Голый `path` НЕ трогается (пути валидации
+// relink-кандатов) → vaultAbs. Голый `path` НЕ трогается (пути валидации
 // import'ов и `path` у JSON-pointer'ов — не файлы). Внешние absolute-пути
 // (ресурсы вне vault) vaultAbs пропускает как есть.
 function absolutizeVaultPaths(v: unknown): unknown {
@@ -163,13 +183,37 @@ function absolutizeVaultPaths(v: unknown): unknown {
   }
   return v;
 }
+// Подписываем /files URL короткоживущим HMAC (60с) вместо утечки JWT в ?token=
+// — см. audit P0 C-01. Клиент перестаёт клеить ?token= (client/src/api/client.ts)
+function signFileUrls(v: unknown): unknown {
+  if (typeof v === "string") {
+    if (v.startsWith("/files/") && !v.includes("sig=") && !v.includes("token=")) {
+      try { return signPath(v, 60); } catch { return v; }
+    }
+    return v;
+  }
+  if (Array.isArray(v)) return v.map(signFileUrls);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      out[k] = signFileUrls(val);
+    }
+    return out;
+  }
+  return v;
+}
 app.use((_req, res, next) => {
   const origJson = res.json.bind(res);
-  res.json = (body) => origJson(body === undefined ? body : absolutizeVaultPaths(body));
+  res.json = (body) => {
+    if (body === undefined) return origJson(body);
+    let out = absolutizeVaultPaths(body);
+    out = signFileUrls(out);
+    return origJson(out);
+  };
   next();
 });
 
-app.use("/api/auth", authRouter);
+app.use("/api/auth", authLimiter, authRouter);
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 // Player-role routes are already scoped to the caller's own player_id inside
@@ -204,9 +248,21 @@ app.use("/files", (req: AuthedRequest, _res, next) => {
     const user = verifyToken(req.query.token);
     if (user) req.user = user;
   }
+  // Signed url fallback (HMAC 60s) — does not expose long-lived JWT in URL
+  if (!req.user && typeof req.query.sig === "string" && typeof req.query.exp === "string") {
+    const filePath = (req as unknown as { path: string }).path || req.path;
+    // req.path is "/vault-relative" part after /files mount, reconstruct full "/files/..."
+    const fullPath = `/files${filePath}`;
+    if (verifySignedUrl(fullPath, req.query.sig as string, req.query.exp as string)) {
+      (req as unknown as { signedUrlValid?: boolean }).signedUrlValid = true;
+    }
+  }
   next();
 });
-app.use("/files", requireAuth(), (req, res, next) => {
+app.use("/files", (req: AuthedRequest, res, next) => {
+  if ((req as unknown as { signedUrlValid?: boolean }).signedUrlValid) return next();
+  return (requireAuth() as unknown as (req: AuthedRequest, res: unknown, next: () => void) => void)(req, res, next);
+}, (req, res, next) => {
   // Митгация утечки ?token= (H4): файлы не должны кэшироваться публично и не
   // должны уходить в Referer. Полный фикс — грузить через Authorization header
   // (см. client/src/utils/fileUrl.ts), но пока ?token= остаётся fallback для
@@ -216,7 +272,10 @@ app.use("/files", requireAuth(), (req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   next();
 });
-app.use("/files", requireAuth(), (req, res, next) => {
+app.use("/files", (req: AuthedRequest, res, next) => {
+  if ((req as unknown as { signedUrlValid?: boolean }).signedUrlValid) return next();
+  return (requireAuth() as unknown as (req: AuthedRequest, res: unknown, next: () => void) => void)(req, res, next);
+}, (req, res, next) => {
   express.static(VAULT_ROOT)(req, res, next);
 });
 

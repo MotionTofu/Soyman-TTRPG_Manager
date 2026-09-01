@@ -12,12 +12,14 @@ export interface MiniEvent {
   campaignId: number;
   campaignName?: string;
   startTime?: string | null;
+  campaignRole?: string;
 }
 
 interface Props {
   events?: MiniEvent[];
   onEventContextMenu?: (event: MiniEvent, x: number, y: number) => void;
   onDayContextMenu?: (date: string, x: number, y: number) => void;
+  onDayClick?: (date: string) => void;
   /** Сколько месяцев показывать подряд, начиная с текущего курсора. */
   months?: number;
   /** @deprecated — используется только в режиме без `events` (fallback). */
@@ -65,7 +67,7 @@ function toDateKey(y: number, m: number, d: number): string {
 //    6 px: инверсия читается с любого расстояния и остаётся одной целью для
 //    мыши. Клик по дню с одной игрой ведёт прямо в неё, по дню с несколькими
 //    открывает короткий список.
-export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayContextMenu, months = 2, refreshKey = 0 }: Props) {
+export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayContextMenu, onDayClick, months = 2, refreshKey = 0 }: Props) {
   const { user } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const navigate = useNavigate();
@@ -286,37 +288,44 @@ export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayCont
                 .filter(Boolean)
                 .join(" ");
               const isInteractive = dayEvents.length > 0;
+              const isEmptyClickable = !isInteractive && !!onDayClick;
               return (
                 <div
                   key={c.key}
-                  className={cls}
-                  role={isInteractive ? "button" : undefined}
-                  tabIndex={isInteractive ? 0 : undefined}
+                  className={cls + (isEmptyClickable ? " day-empty-clickable" : "")}
+                  role={isInteractive || isEmptyClickable ? "button" : undefined}
+                  tabIndex={isInteractive || isEmptyClickable ? 0 : undefined}
                   aria-label={
                     isInteractive
                       ? many
                         ? `${c.day} число, ${dayEvents.length} игры: ${dayEvents.map((e) => `${e.campaignName ?? "Сессия"} ${STATUS_LABELS[e.status]}${e.startTime ? ` ${e.startTime}` : ""}`).join(", ")}`
                         : `${c.day} число, ${dayEvents[0].campaignName ?? "Сессия"} — ${STATUS_LABELS[dayEvents[0].status]}${dayEvents[0].startTime ? ` ${dayEvents[0].startTime}` : ""}`
-                      : undefined
+                      : isEmptyClickable ? `${c.day} число — нажать чтобы создать сессию` : undefined
                   }
                   title={
                     many
                       ? `${dayEvents.length} игры в этот день`
                       : one
                         ? `${dayEvents[0].campaignName ?? "Сессия"} — ${STATUS_LABELS[dayEvents[0].status]}`
-                        : undefined
+                        : isEmptyClickable ? "Тап — новая сессия на этот день" : undefined
                   }
                   onClick={(e) => {
-                    if (!isInteractive) return;
-                    // Всегда открываем список над датой (даже для 1 игры) — единый паттерн (B1).
-                    e.stopPropagation();
-                    openPopoverForDay(c.key!, dayEvents, e.currentTarget);
+                    if (isInteractive) {
+                      // Всегда открываем список над датой (даже для 1 игры) — единый паттерн (B1).
+                      e.stopPropagation();
+                      openPopoverForDay(c.key!, dayEvents, e.currentTarget);
+                      return;
+                    }
+                    if (isEmptyClickable) {
+                      e.stopPropagation();
+                      onDayClick!(c.key!);
+                    }
                   }}
                   onKeyDown={(e) => {
-                    if (!isInteractive) return;
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      openPopoverForDay(c.key!, dayEvents, e.currentTarget as HTMLElement);
+                      if (isInteractive) openPopoverForDay(c.key!, dayEvents, e.currentTarget as HTMLElement);
+                      else if (isEmptyClickable) onDayClick!(c.key!);
                     }
                   }}
                   onContextMenu={(ev) => {

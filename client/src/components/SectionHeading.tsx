@@ -62,7 +62,7 @@ export function SectionHeading({ children, level = "page", icon, action, right, 
 
   return (
     <div className={`section-heading${compact ? " section-heading--compact" : ""}`}>
-      <ParticleField count={compact ? 3 : 6} />
+      <ParticleField count={compact ? 2 : 3} />
       <h1 className="zine-marker-underline" data-section={section}>{children}</h1>
     </div>
   );

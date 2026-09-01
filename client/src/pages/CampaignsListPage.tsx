@@ -21,6 +21,7 @@ export function CampaignsListPage() {
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [q, setQ] = useState("");
 
   function openCreate() {
     setCreating(true);
@@ -72,12 +73,22 @@ export function CampaignsListPage() {
   }
 
   const filtered = useMemo(() => {
-    if (!activeTab) return campaigns;
-    if (activeTab === "role:gm") return campaigns.filter((c) => c.role === "gm");
-    if (activeTab === "role:player") return campaigns.filter((c) => c.role === "player");
-    if (activeTab === "ungrouped") return campaigns.filter((c) => !groupMemberIds.has(c.id));
-    return campaigns.filter((c) => groupMemberIds.has(c.id));
-  }, [campaigns, activeTab, groupMemberIds]);
+    const qq = q.trim().toLowerCase();
+    const byTab = (() => {
+      if (!activeTab) return campaigns;
+      if (activeTab === "role:gm") return campaigns.filter((c) => c.role === "gm");
+      if (activeTab === "role:player") return campaigns.filter((c) => c.role === "player");
+      if (activeTab === "ungrouped") return campaigns.filter((c) => !groupMemberIds.has(c.id));
+      return campaigns.filter((c) => groupMemberIds.has(c.id));
+    })();
+    if (!qq) return byTab;
+    return byTab.filter(
+      (c) =>
+        c.name.toLowerCase().includes(qq) ||
+        (c.system_name ?? "").toLowerCase().includes(qq) ||
+        (c.setting_name ?? "").toLowerCase().includes(qq)
+    );
+  }, [campaigns, activeTab, groupMemberIds, q]);
 
   return (
     <div className="stack" style={{ position: "relative" }}>
@@ -94,6 +105,28 @@ export function CampaignsListPage() {
         onTabChange={setActiveTab}
         onGroupsChanged={refresh}
       />
+
+      <div className="res-toolbar" style={{ marginTop: 4 }}>
+        <input
+          className="res-toolbar__search"
+          placeholder="Поиск по имени, системе, сеттингу…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Поиск по кампаниям"
+        />
+        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
+          {filtered.length} / {campaigns.length}
+        </span>
+        {q && (
+          <button
+            onClick={() => setQ("")}
+            style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+            title="Сбросить поиск"
+          >
+            Сбросить
+          </button>
+        )}
+      </div>
 
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -136,9 +169,17 @@ export function CampaignsListPage() {
       )}
 
       {!loading && !loadError && filtered.length === 0 && campaigns.length > 0 && (
-        <div className="muted" style={{ padding: "8px 2px" }}>
-          Нет кампаний в этой группе — <button style={{ padding: 0, border: "none", background: "none", color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }} onClick={() => setActiveTab(null)}>показать все</button>
-        </div>
+        <EmptyState
+          icon="barcode"
+          title="Ничего не найдено"
+          hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет кампаний в этой группе."}
+          action={
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+              {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+              <button onClick={() => setActiveTab(null)}>Показать все</button>
+            </div>
+          }
+        />
       )}
 
       {!loading && !loadError && campaigns.length === 0 && (

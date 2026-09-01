@@ -5,6 +5,8 @@ import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
 import { CrossWindowSyncBanner } from "./components/CrossWindowSyncBanner";
 import { useCurrentUser } from "./api/currentUser";
+import { EmptyState } from "./components/EmptyState";
+import { Link } from "react-router-dom";
 
 // Every route below is its own chunk (Vite code-splits on dynamic import)
 // instead of one large bundle — mainly matters for the hosted web/server
@@ -118,6 +120,19 @@ function LibraryRoute() {
   return user?.role === "player" ? <PlayerLibraryPage /> : <LibraryPage />;
 }
 
+function NotFoundPage() {
+  return (
+    <div style={{ padding: 24 }}>
+      <EmptyState
+        icon="barcode"
+        title="Страница не найдена"
+        hint="Такого адреса нет — возможно, ссылка устарела."
+        action={<Link to="/" className="primary" style={{ display: "inline-block", padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>На Главную</Link>}
+      />
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -169,11 +184,12 @@ function App() {
               <Route path="/canvas" element={<CanvasPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />
-              <Route path="/appearance" element={<Navigate to="/storages" replace />} />
+              <Route path="/appearance" element={<Navigate to="/storages" replace state={{ fromAppearance: true }} />} />
               <Route path="/health" element={<HealthPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/invitations" element={<InvitationsPage />} />
               <Route path="/archive" element={<ArchivePage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
         </Suspense>

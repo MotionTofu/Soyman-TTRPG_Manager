@@ -1,5 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
+import fs from "fs";
+import os from "os";
 import path from "path";
 import { db } from "../db/db";
 import { ensureSubfolder, toFileUrl } from "../services/filesystem";
@@ -11,13 +13,26 @@ import type { AuthedRequest } from "../services/auth";
 export const galleryRouter = Router();
 const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+    filename: (_req, file, cb) => cb(null, `rpg-upload-${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname)}`),
+  }),
+  limits: { fileSize: 15 * 1024 * 1024, files: 1, fields: 10 },
   fileFilter(_req, file, cb) {
     if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) cb(null, true);
     else cb(new Error("Поддерживаются только изображения JPG/PNG/GIF/WebP/AVIF"));
   },
 });
+function getFileBuffer(file: Express.Multer.File): Buffer {
+  if ((file as unknown as { buffer?: Buffer }).buffer) return (file as unknown as { buffer: Buffer }).buffer;
+  const p = (file as unknown as { path?: string }).path;
+  if (p && fs.existsSync(p)) return fs.readFileSync(p);
+  return Buffer.alloc(0);
+}
+function cleanupFile(file: Express.Multer.File | undefined) {
+  const p = (file as unknown as { path?: string })?.path;
+  if (p) try { fs.unlinkSync(p); } catch {}
+}
 
 const OWNER_TABLES: Record<string, string> = {
   character: "characters",
@@ -82,7 +97,7 @@ galleryRouter.post("/", upload.single("file"), async (req: AuthedRequest, res) =
   }
   const ext = path.extname(req.file.originalname) || ".jpg";
   const target = path.join(folder, `img-${Date.now()}${ext}`);
-  await storeDeduped(await resizeImageBuffer(req.file.buffer, "gallery"), target);
+  try { await storeDeduped(await resizeImageBuffer(getFileBuffer(req.file), "gallery"), target); } finally { cleanupFile(req.file); }
 
   const maxPos = db
     .prepare("SELECT COALESCE(MAX(position), -1) as m FROM gallery_images WHERE owner_type = ? AND owner_id = ?")

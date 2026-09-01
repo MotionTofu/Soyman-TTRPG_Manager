@@ -47,44 +47,12 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
   onUnauthorized = fn;
 }
 
-// Every /files/... URL embedded anywhere in a JSON response (avatar_image_url,
-// thumbnail_image_url, file_url, background_image_url, ...) needs the same
-// bearer token plain <img>/<audio> tags can't attach as a header — appended
-// here once, centrally, instead of touching every page that renders one.
-// Оптимизация P-09: клонируем только url-поля, не весь объект, и не трогаем description/text.
-function isUrlKey(k: string): boolean {
-  const lower = k.toLowerCase();
-  return lower.endsWith("_url") || lower === "src";
-}
+// /files URLs теперь подписываются сервером короткоживущим HMAC ?sig=&exp= (60с)
+// — клиент больше не клеит ?token= (JWT 7д) в URL, чтобы не светить токен в
+// логах/Referer/History (audit P0 C-01, server/src/index.ts signFileUrls).
+// withFileTokens оставлен как identity для совместимости — прямой <img src>
+// без заголовка всё равно получит уже подписанный URL из JSON.
 function withFileTokens<T>(value: T): T {
-  if (typeof value === "string") {
-    if (value.startsWith("/files/") && token) {
-      const sep = value.includes("?") ? "&" : "?";
-      return (value + sep + "token=" + encodeURIComponent(token)) as unknown as T;
-    }
-    return value;
-  }
-  if (Array.isArray(value)) return value.map((v) => withFileTokens(v)) as unknown as T;
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    let changed = false;
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (typeof v === "string" && v.startsWith("/files/") && token && isUrlKey(k)) {
-        const sep = v.includes("?") ? "&" : "?";
-        out[k] = v + sep + "token=" + encodeURIComponent(token);
-        changed = true;
-      } else if (v && typeof v === "object") {
-        const next = withFileTokens(v as unknown as T);
-        out[k] = next;
-        if (next !== v) changed = true;
-      } else {
-        out[k] = v;
-      }
-    }
-    // Если ни одно url-поле не менялось и вложенные объекты те же — возвращаем исходный, без аллокации
-    if (!changed) return value;
-    return out as T;
-  }
   return value;
 }
 

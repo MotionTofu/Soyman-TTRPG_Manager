@@ -32,7 +32,7 @@ const upload = multer({
 
 function isSafeStoredPath(p: string | null | undefined): boolean {
   if (!p) return false;
-  if (/["'\n\r\\]/.test(p)) return false;
+  if (/["'\n\r]/.test(p)) return false;
   if (p.includes("..")) return false;
   return true;
 }

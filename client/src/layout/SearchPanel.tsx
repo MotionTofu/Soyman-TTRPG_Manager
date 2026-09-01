@@ -124,13 +124,14 @@ export function SearchPanel({ horizontal }: Props = {}) {
   return (
     <div className={`search-panel${horizontal ? " horizontal" : ""}`}>
       <div className="search-heading">
-        <ParticleField count={5} />
+        <ParticleField count={2} />
         <strong>Поиск</strong>
       </div>
       <div className="row search-input-row">
         <div className="search-input-wrap">
           <input
             placeholder="Например: Гоблин"
+            aria-label="Поиск"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -150,18 +151,20 @@ export function SearchPanel({ horizontal }: Props = {}) {
             type="button"
             className={filtersOpen ? "active-sort" : ""}
             onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+            aria-controls="search-filters"
           >
-            Фильтры
+            Фильтры {activeTypes.size !== TYPES.length ? `· ${activeTypes.size}/${TYPES.length}` : ""}
           </button>
         )}
       </div>
       {!isPlayer && filtersOpen && (
-        <>
+        <div id="search-filters">
           <div className="row">
             <button onClick={() => setActiveTypes(new Set(TYPES.map((t) => t.key)))}>
               Выбрать всё
             </button>
-            <button onClick={() => setActiveTypes(new Set())}>Сбросить фильтры</button>
+            <button onClick={() => setActiveTypes(new Set(TYPES.map((t) => t.key)))}>Сбросить фильтры</button>
           </div>
           <div className="filters">
             {TYPES.map((t) => (
@@ -185,7 +188,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
               </label>
             )}
           </div>
-        </>
+        </div>
       )}
       <div className="stack">
         {isSearching && (

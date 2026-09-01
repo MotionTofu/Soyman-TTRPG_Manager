@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'player', -- gm | player
   player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
   is_admin INTEGER NOT NULL DEFAULT 0, -- права админа: смена роли у чужих учёток; достаётся первому мастеру, см. services/auth.ts
+  token_version INTEGER NOT NULL DEFAULT 0, -- инкремент при смене пароля/роли — старые JWT инвалидируются (audit P0 C-03)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

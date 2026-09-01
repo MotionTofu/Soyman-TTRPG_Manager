@@ -20,10 +20,11 @@ interface UserRow {
   role: "gm" | "player";
   player_id: number | null;
   is_admin: number;
+  token_version: number;
 }
 
 function toAuthUser(row: UserRow): AuthUser {
-  return { id: row.id, username: row.username, role: row.role, playerId: row.player_id, isAdmin: !!row.is_admin };
+  return { id: row.id, username: row.username, role: row.role, playerId: row.player_id, isAdmin: !!row.is_admin, tokenVersion: row.token_version ?? 0 };
 }
 
 // Public: lets the client decide between the login form and the one-time
@@ -47,13 +48,8 @@ authRouter.post("/setup", async (req, res) => {
   const info = db
     .prepare("INSERT INTO users (username, password_hash, role, is_admin) VALUES (?, ?, 'gm', 1)")
     .run(username.trim(), passwordHash);
-  const user: AuthUser = {
-    id: Number(info.lastInsertRowid),
-    username: username.trim(),
-    role: "gm",
-    playerId: null,
-    isAdmin: true,
-  };
+  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid) as UserRow;
+  const user = toAuthUser(row);
   res.status(201).json({ token: signToken(user), user });
 });
 
@@ -93,8 +89,9 @@ authRouter.put("/me", requireAuth(), async (req: AuthedRequest, res) => {
     if (taken) return res.status(409).json({ error: "username already taken" });
   }
   const passwordHash = password ? await hashPassword(password) : null;
+  const bumpVersion = passwordHash ? ", token_version = token_version + 1" : "";
   db.prepare(
-    "UPDATE users SET username = COALESCE(?, username), password_hash = COALESCE(?, password_hash) WHERE id = ?"
+    `UPDATE users SET username = COALESCE(?, username), password_hash = COALESCE(?, password_hash)${bumpVersion} WHERE id = ?`
   ).run(username || null, passwordHash, row.id);
   const updated = toAuthUser(
     db.prepare("SELECT * FROM users WHERE id = ?").get(row.id) as UserRow
@@ -155,7 +152,8 @@ authRouter.put("/players/:playerId/password", requireAuth("gm"), async (req, res
     if (taken) return res.status(409).json({ error: "username already taken" });
   }
   const passwordHash = password ? await hashPassword(password) : null;
-  db.prepare("UPDATE users SET username = COALESCE(?, username), password_hash = COALESCE(?, password_hash) WHERE id = ?").run(
+  const bump = passwordHash ? ", token_version = token_version + 1" : "";
+  db.prepare(`UPDATE users SET username = COALESCE(?, username), password_hash = COALESCE(?, password_hash)${bump} WHERE id = ?`).run(
     username || null,
     passwordHash,
     existing.id
@@ -180,6 +178,6 @@ authRouter.put("/players/:playerId/role", requireAdmin(), async (req, res) => {
     .get(req.params.playerId) as { id: number; is_admin: number } | undefined;
   if (!existing) return res.status(404).json({ error: "this player has no login yet" });
   if (existing.is_admin) return res.status(403).json({ error: "can't change the admin account's role" });
-  db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, existing.id);
+  db.prepare("UPDATE users SET role = ?, token_version = token_version + 1 WHERE id = ?").run(role, existing.id);
   res.json({ id: existing.id, role });
 });

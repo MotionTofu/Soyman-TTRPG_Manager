@@ -493,13 +493,21 @@ playerRouter.get("/settings", (req: AuthedRequest, res) => {
   if (!campaignIds.length) return res.json([]);
   const rows = db
     .prepare(
-      `SELECT DISTINCT s.id, s.name FROM settings s
+      `SELECT DISTINCT s.id, s.name, s.description,
+              s.thumbnail_image_path, s.background_image_path
+       FROM settings s
        JOIN campaigns c ON c.setting_id = s.id
        WHERE c.id IN (${campaignIds.map(() => "?").join(",")})
        ORDER BY s.name COLLATE NOCASE`
     )
-    .all(...campaignIds);
-  res.json(rows);
+    .all(...campaignIds) as { id: number; name: string; description: string | null; thumbnail_image_path: string | null; background_image_path: string | null }[];
+  res.json(rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    thumbnail_image_url: r.thumbnail_image_path ? toFileUrl(r.thumbnail_image_path) : null,
+    background_image_url: r.background_image_path ? toFileUrl(r.background_image_path) : null,
+  })));
 });
 
 playerRouter.get("/settings/:id", (req: AuthedRequest, res) => {

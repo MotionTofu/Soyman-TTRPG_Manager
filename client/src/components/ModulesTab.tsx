@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { useConfirm } from "../hooks/useConfirm";
+import { EmptyState } from "../components/EmptyState";
 import { refreshMentionIndex } from "../mentions";
 import type { Module, ModuleCatalogEntry } from "../types";
 
@@ -13,21 +15,36 @@ export function ModulesTab() {
   const [importing, setImporting] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+  const toastTimerRef = useRef<number | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
+
+  useEffect(() => () => { if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current); }, []);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(""), 3000);
+  }
 
   const [catalog, setCatalog] = useState<ModuleCatalogEntry[] | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState("");
   const [catalogBusyId, setCatalogBusyId] = useState<string | null>(null);
 
-  function refresh() {
-    api.get<Module[]>("/modules").then(setModules);
+  function refresh(signal?: AbortSignal) {
+    api.get<Module[]>("/modules", signal ? { signal } : undefined).then(setModules).catch(() => {});
     // Установка, включение, обновление и удаление модуля меняют состав
     // сущностей пачкой — а по карте глобальных ключей ссылки в текстах решают,
     // куда ведут. Без перечитывания только что поставленный модуль оживил бы
     // ссылки на себя лишь после перезапуска приложения.
     void refreshMentionIndex();
   }
-  useEffect(refresh, []);
+  useEffect(() => {
+    const ac = new AbortController();
+    refresh(ac.signal);
+    return () => ac.abort();
+  }, []);
 
   async function refreshCatalog() {
     setCatalogLoading(true);
@@ -65,7 +82,8 @@ export function ModulesTab() {
       const parts = Object.entries(result.summary)
         .filter(([, v]) => v > 0)
         .map(([k, v]) => `${k}: ${v}`);
-      alert(`Готово, «${entry.name}» обновлён.` + (parts.length ? `\n\n${parts.join("\n")}` : ""));
+      const msg = `Готово, «${entry.name}» обновлён.` + (parts.length ? `\n${parts.join(", ")}` : "");
+      showToast(msg);
       refresh();
       await refreshCatalog();
     } catch (e) {
@@ -90,7 +108,7 @@ export function ModulesTab() {
     const message = materialized
       ? `Отправить «${mod.name}» в Архив? Данные сохранятся — восстановить или удалить навсегда можно на странице «Архив».`
       : `Убрать импортированный модуль «${mod.name}» из списка? Он не был включён, данные нигде не созданы.`;
-    if (!confirm(message)) return;
+    if (!confirm({ title: materialized ? "Отправить в Архив?" : "Убрать модуль?", message, confirmLabel: materialized ? "Отправить" : "Убрать", cancelLabel: "Отмена", danger: materialized })) return;
     await api.del(`/modules/${mod.id}`);
     refresh();
   }
@@ -144,10 +162,8 @@ export function ModulesTab() {
       const parts = Object.entries(result.summary)
         .filter(([, v]) => v > 0)
         .map(([k, v]) => `${k}: ${v}`);
-      alert(
-        `Готово. Резервная копия сохранена в Архиве как «${result.backup.name}».` +
-          (parts.length ? `\n\n${parts.join("\n")}` : "")
-      );
+      const msg = `Готово. Резервная копия сохранена как «${result.backup.name}».` + (parts.length ? `\n${parts.join(", ")}` : "");
+      showToast(msg);
       refresh();
     } catch (e) {
       setError(String(e));
@@ -196,6 +212,8 @@ export function ModulesTab() {
 
   return (
     <div className="stack" style={{ gap: 12 }}>
+      {confirmDialog}
+      {toast && <div className="settings-toast" role="status" aria-live="polite">{toast}</div>}
       <details className="card res-group" open>
         <summary className="res-group__band">
           <span className="res-group__title">Общее</span>
@@ -212,7 +230,7 @@ export function ModulesTab() {
               <input type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
-          <div className="stack" style={{ gap: 8, borderTop: "1.5px solid var(--line)", paddingTop: 12 }}>
+          <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             <p className="muted" style={{ margin: 0 }}>Каталог на GitHub — курируется вручную.</p>
             <div className="row">
               <button onClick={refreshCatalog} disabled={catalogLoading}>
@@ -220,7 +238,7 @@ export function ModulesTab() {
               </button>
             </div>
             {catalogError && <div className="backup-info error">{catalogError}</div>}
-            {catalog && catalog.length === 0 && <p className="muted">Каталог пуст.</p>}
+            {catalog && catalog.length === 0 && <EmptyState icon="barcode" title="Каталог пуст" hint="Попробуйте обновить каталог из GitHub." />}
             {catalog && catalog.length > 0 && (
               <div className="stack">
                 {catalog.map((entry) => (
@@ -259,7 +277,7 @@ export function ModulesTab() {
         <div className="res-group__body" style={{ padding: 12 }}>
           <div className="stack">
             {systemModules.map(renderRow)}
-            {systemModules.length === 0 && <p className="muted">Пока нет систем.</p>}
+            {systemModules.length === 0 && <EmptyState icon="barcode" title="Систем пока нет" hint="Добавьте модуль из файла или установите из каталога." />}
           </div>
         </div>
       </details>
@@ -272,7 +290,7 @@ export function ModulesTab() {
         <div className="res-group__body" style={{ padding: 12 }}>
           <div className="stack">
             {settingModules.map(renderRow)}
-            {settingModules.length === 0 && <p className="muted">Пока нет сеттингов.</p>}
+            {settingModules.length === 0 && <EmptyState icon="barcode" title="Сеттингов пока нет" hint="Добавьте модуль из файла или установите из каталога." />}
           </div>
         </div>
       </details>

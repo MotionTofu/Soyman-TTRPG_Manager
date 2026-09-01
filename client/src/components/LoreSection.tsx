@@ -64,19 +64,22 @@ export function LoreSection({ entityType, entityId, title, section, acceptTypes,
     if (!raw) return;
     const result: SearchResult = JSON.parse(raw);
     if (acceptTypes !== "any" && !acceptTypes.includes(result.type)) return;
-    await api.post("/links", {
+    await api.post("/entity-relations", {
       from_type: entityType,
       from_id: entityId,
       to_type: result.type,
       to_id: result.id,
       section,
+      tone: "neutral",
+      label: "",
+      description: "",
     });
     load();
   }
 
-  async function remove(linkId: number) {
+  async function remove(relationId: number) {
     if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
-    await api.del(`/links/${linkId}`);
+    await api.del(`/entity-relations/${relationId}`);
     load();
   }
 

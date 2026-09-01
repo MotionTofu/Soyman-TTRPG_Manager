@@ -3,10 +3,9 @@ import { db } from "../db/db";
 
 export const entityRelationsRouter = Router();
 
-// Кто может участвовать в именованных отношениях. Изначально это были только
-// «личности и фракции»; локации и артефакты добавлены потому, что мир
-// регулярно требует связей вроде «род владеет замком», «изгнан из города»,
-// «одержим клинком», а выразить их было нечем.
+// Unified entity types — covers both the original RelationsTab (beings,
+// characters, communities) and the former LinkDropZone use cases (settings,
+// campaigns, events, sessions, etc.).
 const ENTITY_TABLES: Record<string, { table: string; nameCol: string }> = {
   being: { table: "setting_beings", nameCol: "name" },
   character: { table: "characters", nameCol: "character_name" },
@@ -14,6 +13,14 @@ const ENTITY_TABLES: Record<string, { table: string; nameCol: string }> = {
   compendium_entry: { table: "compendium_entries", nameCol: "name" },
   location: { table: "setting_locations", nameCol: "name" },
   artifact: { table: "artifacts", nameCol: "name" },
+  setting: { table: "settings", nameCol: "name" },
+  campaign: { table: "campaigns", nameCol: "name" },
+  setting_event: { table: "setting_events", nameCol: "title" },
+  resource: { table: "resources", nameCol: "name" },
+  mastering: { table: "mastering_notes", nameCol: "title" },
+  scene: { table: "story_scenes", nameCol: "name" },
+  adventure: { table: "story_arcs", nameCol: "name" },
+  player: { table: "players", nameCol: "name" },
 };
 
 function resolveName(type: string, id: number): string | null {
@@ -34,24 +41,29 @@ interface RelationRow {
   tone: string;
   label: string;
   description: string;
+  section: string | null;
+  origin: string;
   created_at: string;
 }
 
-// Relations are directional (A's stated attitude toward B), so a full
-// picture of "how does this entity relate to everyone" needs both rows it
-// authored (outgoing) and rows others authored about it (incoming) — the
-// client renders these as two lists since they can legitimately disagree.
+// GET /entity-relations — outgoing + incoming for an entity, optionally filtered by section.
 entityRelationsRouter.get("/", (req, res) => {
-  const { entity_type, entity_id } = req.query as { entity_type?: string; entity_id?: string };
+  const { entity_type, entity_id, section } = req.query as {
+    entity_type?: string; entity_id?: string; section?: string;
+  };
   if (!entity_type || !entity_id)
     return res.status(400).json({ error: "entity_type and entity_id are required" });
 
+  const sectionFilter = section ? " AND section = ?" : "";
+  const outParams = section ? [entity_type, entity_id, section] : [entity_type, entity_id];
+  const inParams = section ? [entity_type, entity_id, section] : [entity_type, entity_id];
+
   const outgoing = db
-    .prepare("SELECT * FROM entity_relations WHERE from_type = ? AND from_id = ? ORDER BY created_at DESC")
-    .all(entity_type, entity_id) as RelationRow[];
+    .prepare(`SELECT * FROM entity_relations WHERE from_type = ? AND from_id = ?${sectionFilter} ORDER BY created_at DESC`)
+    .all(...outParams) as RelationRow[];
   const incoming = db
-    .prepare("SELECT * FROM entity_relations WHERE to_type = ? AND to_id = ? ORDER BY created_at DESC")
-    .all(entity_type, entity_id) as RelationRow[];
+    .prepare(`SELECT * FROM entity_relations WHERE to_type = ? AND to_id = ?${sectionFilter} ORDER BY created_at DESC`)
+    .all(...inParams) as RelationRow[];
 
   const withNames = (rows: RelationRow[], otherKey: "to" | "from") =>
     rows.map((r) => ({
@@ -69,10 +81,7 @@ entityRelationsRouter.get("/", (req, res) => {
 
 /**
  * Названия отношений, которые уже где-то заведены, — словарь для подсказки
- * при вводе. Отдельной таблицы у него нет намеренно: список выводится из
- * самих связей, поэтому не расходится с ними и не копит слова, которые уже
- * нигде не используются. Часто встречающиеся идут первыми — «друзья» из
- * десяти связей нужнее, чем «должен денег за лошадь» из одной.
+ * при вводе.
  */
 entityRelationsRouter.get("/labels", (req, res) => {
   const { q } = req.query as { q?: string };
@@ -80,9 +89,6 @@ entityRelationsRouter.get("/labels", (req, res) => {
     .prepare("SELECT label FROM entity_relations WHERE TRIM(label) <> ''")
     .all() as { label: string }[];
 
-  // Регистр сводится здесь, а не запросом: lower() и COLLATE NOCASE в SQLite
-  // умеют только латиницу, так что «Дружба» и «дружба» остались бы разными
-  // словами, а поиск по «друж» не нашёл бы ни того, ни другого.
   const prefix = (q ?? "").trim().toLocaleLowerCase();
   const byWord = new Map<string, { label: string; uses: number }>();
   for (const row of rows) {
@@ -100,8 +106,9 @@ entityRelationsRouter.get("/labels", (req, res) => {
   );
 });
 
+// POST /entity-relations — create a single relation (supports section + origin).
 entityRelationsRouter.post("/", (req, res) => {
-  const { from_type, from_id, to_type, to_id, tone, label, description } = req.body as {
+  const { from_type, from_id, to_type, to_id, tone, label, description, section, origin } = req.body as {
     from_type: string;
     from_id: number;
     to_type: string;
@@ -109,6 +116,8 @@ entityRelationsRouter.post("/", (req, res) => {
     tone?: string;
     label?: string;
     description?: string;
+    section?: string;
+    origin?: string;
   };
   if (!from_type || !from_id || !to_type || !to_id)
     return res.status(400).json({ error: "from_type, from_id, to_type, to_id are required" });
@@ -118,7 +127,9 @@ entityRelationsRouter.post("/", (req, res) => {
     { from_type, from_id, to_type, to_id },
     tone || "neutral",
     label ?? "",
-    description ?? ""
+    description ?? "",
+    section ?? null,
+    origin ?? "planned"
   );
   res.status(201).json(created ?? { skipped: true });
 });
@@ -131,46 +142,48 @@ interface RelationEnds {
 }
 
 /**
- * Одна связь. Повтор — та же пара в ту же сторону с тем же названием — не
- * заводится второй раз: пакетное добавление и зеркалирование иначе плодили бы
- * одинаковые строки с одного лишнего нажатия. Возвращает null, если связь уже
- * была: вызывающему это нужно, чтобы посчитать, сколько на самом деле создано.
+ * Одна связь. Повтор — та же пара в ту же сторону с тем же label и section — не
+ * заводится второй раз.
  */
-function createRelation(ends: RelationEnds, tone: string, label: string, description: string) {
+function createRelation(
+  ends: RelationEnds,
+  tone: string,
+  label: string,
+  description: string,
+  section: string | null = null,
+  origin: string = "planned"
+) {
   const duplicate = db
     .prepare(
       `SELECT id FROM entity_relations
-       WHERE from_type = ? AND from_id = ? AND to_type = ? AND to_id = ? AND label = ?`
+       WHERE from_type = ? AND from_id = ? AND to_type = ? AND to_id = ? AND label = ?
+       AND (section = ? OR (section IS NULL AND ? IS NULL))`
     )
-    .get(ends.from_type, ends.from_id, ends.to_type, ends.to_id, label);
+    .get(ends.from_type, ends.from_id, ends.to_type, ends.to_id, label, section, section);
   if (duplicate) return null;
   const info = db
     .prepare(
-      `INSERT INTO entity_relations (from_type, from_id, to_type, to_id, tone, label, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO entity_relations (from_type, from_id, to_type, to_id, tone, label, description, section, origin)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(ends.from_type, ends.from_id, ends.to_type, ends.to_id, tone, label, description);
+    .run(ends.from_type, ends.from_id, ends.to_type, ends.to_id, tone, label, description, section, origin);
   return db.prepare("SELECT * FROM entity_relations WHERE id = ?").get(info.lastInsertRowid);
 }
 
-/**
- * Пакетное добавление: один тон и одно название на несколько адресатов, с
- * необязательным зеркалом. Зеркало — вторая самостоятельная запись, а не
- * симметричная связь: отношения сторон вправе разойтись, и правится каждая
- * своя. Лор при этом не копируется — он у каждой стороны свой.
- */
+// POST /entity-relations/batch — batch-create with one tone/label.
 entityRelationsRouter.post("/batch", (req, res) => {
-  const { entity_type, entity_id, targets, direction, tone, label, description, mirror } =
+  const { entity_type, entity_id, targets, direction, tone, label, description, mirror, section, origin } =
     req.body as {
       entity_type: string;
       entity_id: number;
       targets: { type: string; id: number }[];
-      // outgoing — отношение этой сущности к выбранным, incoming — их к ней.
       direction?: "outgoing" | "incoming";
       tone?: string;
       label?: string;
       description?: string;
       mirror?: boolean;
+      section?: string;
+      origin?: string;
     };
   if (!entity_type || !entity_id || !Array.isArray(targets) || targets.length === 0)
     return res.status(400).json({ error: "entity_type, entity_id and targets are required" });
@@ -195,10 +208,8 @@ entityRelationsRouter.post("/batch", (req, res) => {
     const primary = direction === "incoming" ? incoming : outgoing;
     const ends = mirror ? [primary, direction === "incoming" ? outgoing : incoming] : [primary];
     for (const e of ends) {
-      // Связь сущности с самой собой смысла не имеет и в списках выглядит
-      // сломанной — пропускается молча.
       if (e.from_type === e.to_type && e.from_id === e.to_id) continue;
-      if (createRelation(e, tone || "neutral", label ?? "", description ?? "")) created++;
+      if (createRelation(e, tone || "neutral", label ?? "", description ?? "", section ?? null, origin ?? "planned")) created++;
       else skipped++;
     }
   }

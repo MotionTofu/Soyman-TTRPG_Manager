@@ -108,6 +108,13 @@ archiveRouter.get("/", (_req, res) => {
     }))
   );
 
+  const SCOPE_LABELS: Record<string, string> = {
+    global: "глобально",
+    campaign: "кампания",
+    session: "сессия",
+    setting: "сеттинг",
+    system: "система",
+  };
   const resources = db
     .prepare(
       `SELECT r.id, r.name, r.scope, r.archived_at,
@@ -122,11 +129,17 @@ archiveRouter.get("/", (_req, res) => {
   items.push(
     ...resources.map((r) => {
       const owner = r.system_name || r.setting_name || r.campaign_name || null;
-      const sub = [r.scope, owner].filter(Boolean).join(" · ");
+      const scopeLabel = SCOPE_LABELS[r.scope] ?? r.scope;
+      const sub = [scopeLabel, owner].filter(Boolean).join(" · ");
       return { type: "resource", id: r.id, title: r.name, subtitle: sub || undefined, archived_at: r.archived_at };
     })
   );
 
+  const MASTERING_CATEGORY_LABELS: Record<string, string> = {
+    prep: "подготовка",
+    live: "за столом",
+    knowledge: "матчасть",
+  };
   const mastering = db
     .prepare(
       `SELECT m.id, m.title, m.category, m.archived_at, sy.name as system_name
@@ -139,7 +152,7 @@ archiveRouter.get("/", (_req, res) => {
       type: "mastering",
       id: r.id,
       title: r.title,
-      subtitle: [r.category, r.system_name].filter(Boolean).join(" · ") || undefined,
+      subtitle: [MASTERING_CATEGORY_LABELS[r.category] ?? r.category, r.system_name].filter(Boolean).join(" · ") || undefined,
       archived_at: r.archived_at,
     }))
   );
@@ -249,9 +262,10 @@ archiveRouter.get("/", (_req, res) => {
 // с живыми кампаниями просто падало пятисоткой): кампания отвязывается, а
 // Мастер заранее видит, какие именно останутся без системы.
 //
-// Пока считается только для системы — у остальных типов каскад ничего
-// ценного за собой не рвёт. Ответ намеренно пустой, а не отсутствующий:
-// клиенту не приходится знать, для каких типов сводка бывает.
+// Для системы — детальная сводка (см. выше). Для сеттинга/кампании —
+// сколько детей уйдёт каскадом (FK ON DELETE CASCADE в schema.sql), чтобы
+// generic «будут стёрты вложенные данные» стал конкретным. Ответ намеренно
+// пустой, а не отсутствующий для остальных типов: клиенту не приходится знать.
 interface PurgeImpact {
   detachedCampaigns: string[];
   compendiumLinks: number;
@@ -260,7 +274,21 @@ interface PurgeImpact {
   characters: number;
   masteringNotes: number;
   modules: number;
+  // Сеттинг → его дети (каскад schema.sql)
+  settingChildren?: { locations: number; beings: number; communities: number; artifacts: number; arcs: number; scenes: number };
+  // Кампания → её дети
+  campaignChildren?: { sessions: number; characters: number; roster: number };
 }
+
+const EMPTY_IMPACT: PurgeImpact = {
+  detachedCampaigns: [],
+  compendiumLinks: 0,
+  baseMonsters: 0,
+  resources: 0,
+  characters: 0,
+  masteringNotes: 0,
+  modules: 0,
+};
 
 function systemPurgeImpact(systemId: string | number): PurgeImpact {
   const count = (sql: string): number =>
@@ -294,19 +322,42 @@ function systemPurgeImpact(systemId: string | number): PurgeImpact {
   };
 }
 
-const EMPTY_IMPACT: PurgeImpact = {
-  detachedCampaigns: [],
-  compendiumLinks: 0,
-  baseMonsters: 0,
-  resources: 0,
-  characters: 0,
-  masteringNotes: 0,
-  modules: 0,
-};
+function settingPurgeImpact(settingId: string | number): PurgeImpact {
+  const count = (sql: string): number =>
+    (db.prepare(sql).get(settingId) as { c: number }).c;
+  return {
+    ...EMPTY_IMPACT,
+    settingChildren: {
+      locations: count("SELECT COUNT(*) AS c FROM setting_locations WHERE setting_id = ?"),
+      beings: count("SELECT COUNT(*) AS c FROM setting_beings WHERE setting_id = ?"),
+      communities: count("SELECT COUNT(*) AS c FROM setting_communities WHERE setting_id = ?"),
+      artifacts: count("SELECT COUNT(*) AS c FROM artifacts WHERE setting_id = ?"),
+      arcs: count("SELECT COUNT(*) AS c FROM story_arcs WHERE setting_id = ?"),
+      scenes: count("SELECT COUNT(*) AS c FROM story_scenes WHERE setting_id = ?"),
+    },
+  };
+}
+
+function campaignPurgeImpact(campaignId: string | number): PurgeImpact {
+  const count = (sql: string): number =>
+    (db.prepare(sql).get(campaignId) as { c: number }).c;
+  return {
+    ...EMPTY_IMPACT,
+    campaignChildren: {
+      sessions: count("SELECT COUNT(*) AS c FROM sessions WHERE campaign_id = ?"),
+      characters: count("SELECT COUNT(*) AS c FROM characters WHERE campaign_id = ?"),
+      roster: count("SELECT COUNT(*) AS c FROM campaign_roster WHERE campaign_id = ?"),
+    },
+  };
+}
 
 archiveRouter.get("/:type/:id/impact", (req, res) => {
   if (!ARCHIVE_TABLES[req.params.type]) return res.status(400).json({ error: "unknown type" });
-  res.json(req.params.type === "system" ? systemPurgeImpact(req.params.id) : EMPTY_IMPACT);
+  const t = req.params.type;
+  if (t === "system") return res.json(systemPurgeImpact(req.params.id));
+  if (t === "setting") return res.json(settingPurgeImpact(req.params.id));
+  if (t === "campaign") return res.json(campaignPurgeImpact(req.params.id));
+  return res.json(EMPTY_IMPACT);
 });
 
 // The one place permanent, irreversible deletion lives — uniform across every

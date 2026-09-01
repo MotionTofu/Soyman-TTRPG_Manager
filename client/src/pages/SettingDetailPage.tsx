@@ -8,6 +8,7 @@ import { LocationTree } from "../components/LocationTree";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { SettingCalendarEditor } from "../components/SettingCalendarEditor";
 import { EntityTypeChip } from "../components/EntityTypeChip";
+import { SectionHeading } from "../components/SectionHeading";
 import { useTabState } from "../hooks/useTabState";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
@@ -41,6 +42,7 @@ import { NAMED_BEING_CATEGORIES } from "../beingCategories";
 import { NavIcon } from "../components/NavIcons";
 import { EmptyState } from "../components/EmptyState";
 import { isSafeImageUrl, safeBackgroundImage } from "../utils/safeUrl";
+import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { CampaignWizard } from "../components/CampaignWizard";
 import { EntityImageSlot } from "../components/EntityImageSlot";
@@ -60,6 +62,62 @@ import type {
   SettingGroup,
   SettingLocation,
 } from "../types";
+
+function SettingCampaignTile({ campaign: c }: { campaign: Campaign }) {
+  const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
+  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
+  const authBlob = useAuthenticatedFileUrl(imageUrl);
+  const bg = imageUrl?.startsWith("/files/")
+    ? (authBlob ? `url("${authBlob}")` : undefined)
+    : safeBackgroundImage(imageUrl);
+
+  return (
+    <Link to={`/campaigns/${c.id}`} className="card campaign-tile">
+      <div className="campaign-tile-cover cover-halftone">
+        {bg ? (
+          <div className="cover-art cover-photo">
+            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
+          </div>
+        ) : (
+          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+        )}
+        <div className="campaign-tile-scrim" />
+        <h3 className="campaign-tile-name">{c.name}</h3>
+      </div>
+      <div className="campaign-tile-meta">
+        <div className="campaign-tile-system">{c.system_name ?? "Система не указана"}</div>
+      </div>
+    </Link>
+  );
+}
+
+function SettingCharacterTile({ character: ch }: { character: Character }) {
+  const rawUrl = ch.thumbnail_image_url ?? ch.avatar_image_url ?? null;
+  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
+  const authBlob = useAuthenticatedFileUrl(imageUrl);
+  const bg = imageUrl?.startsWith("/files/")
+    ? (authBlob ? `url("${authBlob}")` : undefined)
+    : safeBackgroundImage(imageUrl);
+
+  return (
+    <Link to={`/characters/${ch.id}`} className="card campaign-tile">
+      <div className="campaign-tile-cover cover-halftone">
+        {bg ? (
+          <div className="cover-art cover-photo">
+            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
+          </div>
+        ) : (
+          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+        )}
+        <div className="campaign-tile-scrim" />
+        <h3 className="campaign-tile-name">{ch.character_name}</h3>
+      </div>
+      <div className="campaign-tile-meta">
+        <div className="campaign-tile-system">{ch.player_name ?? "игрок"}</div>
+      </div>
+    </Link>
+  );
+}
 
 const TABS = [
   "Обзор",
@@ -735,26 +793,40 @@ export function SettingDetailPage() {
           <div className="cover-art-image" style={{ backgroundImage: safeBg }} />
         </div>
       )}
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div className="row" style={{ alignItems: "center" }}>
-          <h1 id="section-overview-title" style={{ scrollMarginTop: 16 }}>
-            {tab === "Обзор" ? (
-              setting.name
-            ) : (
-              <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
-                {setting.name}
-              </button>
-            )}
-          </h1>
-          <EntityTypeChip type="setting" />
-          {(setting as any).archived_at && <span className="badge cancelled">Архивировано</span>}
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <SectionHeading section="settings" compact>
+            <span id="section-overview-title" style={{ scrollMarginTop: 16 }}>
+              {tab === "Обзор" ? (
+                setting.name
+              ) : (
+                <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
+                  {setting.name}
+                </button>
+              )}
+            </span>
+          </SectionHeading>
+          <div className="row" style={{ gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
+            <EntityTypeChip type="setting" />
+            {(setting as any).archived_at && <span className="badge cancelled">Архивировано</span>}
+          </div>
         </div>
-        <div className="entity-header-actions">
+        <div className="entity-header-actions" style={{ flexShrink: 0 }}>
           {/* Имя правится в карточке «Описание» на «Обзоре» — вместе с самим
               описанием, одной кнопкой «Сохранить». */}
           {saving && <span className="muted" aria-live="polite">Сохранение…</span>}
           <button onClick={() => setShowExport(true)}>Экспорт</button>
-          <label className="row" style={{ cursor: "pointer" }}>
+          <label
+            style={{
+              background: "var(--bg-elevated)",
+              border: "var(--card-border-width, 1px) solid var(--line)",
+              color: "var(--text-bright)",
+              borderRadius: 0,
+              padding: "6px 12px",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
             Импорт
             <input
               type="file"
@@ -771,6 +843,14 @@ export function SettingDetailPage() {
 
       {showExport && (
         <SettingExportModal settingId={settingId} settingName={setting.name} onClose={() => setShowExport(false)} />
+      )}
+
+      {genrePickerOpen && (
+        <GenrePicker
+          selected={setting.genres ?? []}
+          onSave={saveGenres}
+          onClose={() => setGenrePickerOpen(false)}
+        />
       )}
 
       {creatingEvent && (
@@ -844,7 +924,7 @@ export function SettingDetailPage() {
                       <span>{hasGenres ? "✓" : "○"}</span> Выбрать жанры {hasGenres ? `· ${setting.genres!.length}` : ""}
                     </span>
                     {!hasGenres && (
-                      <button className="small primary" onClick={() => setGenrePickerOpen(true)}>
+                      <button className="small" onClick={() => setGenrePickerOpen(true)}>
                         Выбрать →
                       </button>
                     )}
@@ -854,7 +934,7 @@ export function SettingDetailPage() {
                       <span>{hasCampaigns ? "✓" : "○"}</span> Привязать кампанию {hasCampaigns ? `· ${campaigns.length}` : ""}
                     </span>
                     {!hasCampaigns && (
-                      <button className="small primary" onClick={openCampaignWizard}>
+                      <button className="small" onClick={openCampaignWizard}>
                         Создать →
                       </button>
                     )}
@@ -885,10 +965,15 @@ export function SettingDetailPage() {
             ]}
             onSaveFields={(v) => saveName(v.name, v.code)}
           >
-            <div className="genre-display" style={{ marginTop: 8 }}>
-              <div className="genre-display-header">
+            <div style={{ marginTop: 8 }}>
+              <div className="row" style={{ alignItems: "center", gap: 6 }}>
                 <strong>Жанры</strong>
-                <button className="genre-add-btn" onClick={() => setGenrePickerOpen(true)} title="Выбрать жанры" aria-label="Выбрать жанры">+</button>
+                <button
+                  className="genre-add-btn"
+                  onClick={() => setGenrePickerOpen(true)}
+                  title="Выбрать жанры"
+                  aria-label="Выбрать жанры"
+                >+</button>
               </div>
               <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>До 3 жанров — помогают фильтровать в списке сеттингов.</span>
               {setting.genres && setting.genres.length > 0 ? (
@@ -896,11 +981,7 @@ export function SettingDetailPage() {
                   {setting.genres.map((g, i) => {
                     const cat = GENRE_CATEGORIES.find((c) => c.name === g.genre);
                     return (
-                      <span
-                        key={i}
-                        className="genre-chip genre-chip--selected"
-                        style={{ "--genre-color": cat?.color ?? "#888" } as React.CSSProperties}
-                      >
+                      <span key={i} className="genre-chip genre-chip--selected">
                         {cat && <ZineGraphic name={cat.icon} className="genre-chip-icon" />}
                         {g.subgenre ?? g.genre}
                       </span>
@@ -908,17 +989,9 @@ export function SettingDetailPage() {
                   })}
                 </div>
               ) : (
-                <span className="muted">Жанры не выбраны</span>
+                <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Жанры не выбраны</span>
               )}
             </div>
-
-            {genrePickerOpen && (
-              <GenrePicker
-                selected={setting.genres ?? []}
-                onSave={saveGenres}
-                onClose={() => setGenrePickerOpen(false)}
-              />
-            )}
 
             {allGroups.length > 0 && (
               <div style={{ marginTop: 8 }}>
@@ -939,7 +1012,7 @@ export function SettingDetailPage() {
                           gap: 4,
                           cursor: "pointer",
                           padding: "4px 8px",
-                          borderRadius: "var(--card-radius)",
+                          borderRadius: 0,
                           border: `1px solid ${isIn ? "var(--accent)" : "var(--line)"}`,
                           background: isIn ? "var(--accent-bg, rgba(79, 140, 255, 0.08))" : "transparent",
                           fontSize: "var(--fs-meta)",
@@ -967,64 +1040,51 @@ export function SettingDetailPage() {
             )}
           </EditableTextCard>
 
-          <div className="card stack" id="section-campaigns">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0 }}>Кампании · {campaigns.length}</h3>
-              <button className="primary small" onClick={openCampaignWizard}>
-                + Новая кампания
-              </button>
+          <div className="card res-group" id="section-campaigns">
+            <div className="res-group__band" style={{ cursor: "default" }}>
+              <span className="res-group__title">Кампании и персонажи</span>
+              <span className="res-group__count">{campaigns.length}</span>
+              <span style={{ marginLeft: "auto" }}>
+                <button className="primary small" onClick={openCampaignWizard}>
+                  + Новая кампания
+                </button>
+              </span>
             </div>
+            <div className="res-group__body" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
             {campaigns.length === 0 ? (
               <EmptyState
                 title="Кампаний нет"
                 hint="Привяжите кампанию к этому сеттингу — и она появится здесь."
                 action={
-                  <button className="primary" onClick={openCampaignWizard}>
+                  <button onClick={openCampaignWizard}>
                     + Новая кампания в этом сеттинге
                   </button>
                 }
               />
             ) : (
-              <div className="grid-cards">
-                {campaigns.map((c) => (
-                  <Link key={c.id} to={`/campaigns/${c.id}`} className="card">
-                    <h3>{c.name}</h3>
-                    <div className="muted">{c.system_name ?? "Система не указана"}</div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="card stack" id="section-characters">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0 }}>Персонажи игроков · {characters.length}</h3>
-              <Link to="/campaigns" className="muted" style={{ fontSize: "var(--fs-meta)", textDecoration: "underline" }}>
-                К кампаниям →
-              </Link>
-            </div>
-            {characters.length === 0 ? (
-              <EmptyState
-                title="Персонажей нет"
-                hint="Персонажи появятся, когда в кампаниях этого сеттинга заведут игроков."
-                action={
-                  <Link to="/campaigns" style={{ display: "inline-block", padding: "6px 12px", border: "1px solid var(--line)", background: "var(--bg-elevated)", borderRadius: "var(--card-radius)", textDecoration: "none" }}>
-                    К кампаниям
-                  </Link>
-                }
-              />
-            ) : (
-              <div className="grid-cards">
-                {characters.map((c) => (
-                  <Link key={c.id} to={`/characters/${c.id}`} className="card">
-                    <h3>{c.character_name}</h3>
-                    <div className="muted">
-                      {c.player_name} · {c.campaign_name}
+              campaigns.map((c) => {
+                const campChars = characters.filter((ch) => ch.campaign_id === c.id);
+                return (
+                  <div key={c.id} className="campaign-row">
+                    <div className="campaign-row-main">
+                      <SettingCampaignTile campaign={c} />
                     </div>
-                  </Link>
-                ))}
-              </div>
+                    <div className="campaign-row-chars">
+                      {campChars.length > 0 ? (
+                        campChars.map((ch) => (
+                          <SettingCharacterTile key={ch.id} character={ch} />
+                        ))
+                      ) : (
+                        <div className="muted" style={{ fontSize: "var(--fs-micro)", padding: "12px 0" }}>
+                          Нет персонажей
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
+            </div>
           </div>
           {campaignWizardOpen && (
             <CampaignWizard
@@ -1043,8 +1103,11 @@ export function SettingDetailPage() {
             <LinkDropZone entityType="setting" entityId={settingId} title="Связанные сущности" />
           </div>
 
-          <div className="card stack" id="section-images">
-            <h3>Изображения сеттинга</h3>
+          <div className="card res-group" id="section-images">
+            <div className="res-group__band" style={{ cursor: "default" }}>
+              <span className="res-group__title">Изображения сеттинга</span>
+            </div>
+            <div className="res-group__body" style={{ padding: 12 }}>
             <div className="entity-image-slots">
               <EntityImageSlot
                 title="Фон профиля"
@@ -1063,6 +1126,7 @@ export function SettingDetailPage() {
                 onSelect={thumbCrop.onSelect}
                 onDelete={() => deleteImage("thumbnail")}
               />
+            </div>
             </div>
             {bgCrop.modal}
             {thumbCrop.modal}

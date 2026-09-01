@@ -132,12 +132,15 @@ export const ResourcesSection = memo(function ResourcesSection({
   }
 
   async function attachResource(resourceId: number) {
-    await api.post("/links", {
+    await api.post("/entity-relations", {
       from_type: scope,
       from_id: entityId,
       to_type: "resource",
       to_id: resourceId,
       section: "attached_resource",
+      tone: "neutral",
+      label: "",
+      description: "",
     });
     loadAttached();
   }

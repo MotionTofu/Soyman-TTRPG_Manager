@@ -7,7 +7,11 @@ import { renameFolder, moveFolder } from "./filesystem";
 // uses a bare `path` column). We discover them by introspecting the live
 // schema, so a newly added path column is covered automatically and there's
 // no hand-maintained list to fall out of date.
+function assertSafeIdentifier(name: string): void {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error(`Unsafe identifier: ${name}`);
+}
 function pathColumns(table: string): string[] {
+  assertSafeIdentifier(table);
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   return cols
     .filter((c) => c.name.endsWith("_path") || (table === "vault_files" && c.name === "path"))
@@ -34,7 +38,9 @@ export function rewriteVaultPaths(oldPrefix: string, newPrefix: string): void {
     .all() as { name: string }[];
   const run = db.transaction(() => {
     for (const { name: table } of tables) {
+      assertSafeIdentifier(table);
       for (const col of pathColumns(table)) {
+        assertSafeIdentifier(col);
         db.prepare(
           `UPDATE ${table} SET ${col} = ? || substr(${col}, ?)
            WHERE ${col} = ? OR substr(${col}, 1, ?) = ?`

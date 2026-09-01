@@ -60,7 +60,12 @@ export function DatabaseSizeCard() {
     }
   }
 
-  if (!fill) return null;
+  if (!fill) return (
+    <div className="card stack">
+      <h3>Файл базы</h3>
+      <div className="muted" style={{ height: 20 }} />
+    </div>
+  );
   const percent = Math.round(fill.freeRatio * 100);
 
   return (
