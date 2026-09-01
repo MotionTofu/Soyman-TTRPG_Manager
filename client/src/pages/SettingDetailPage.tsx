@@ -57,6 +57,7 @@ import type {
   BeingCategory,
   Campaign,
   Character,
+  ImportantDate,
   Resource,
   Setting,
   SettingBeing,
@@ -164,6 +165,7 @@ export function SettingDetailPage() {
   const [chronicleFilter, setChronicleFilter] = useState<"all" | "important" | "upcoming" | "cancelled" | "visible">("all");
   const [chronicleSort, setChronicleSort] = useState<"chronological" | "important-first">("chronological");
   const [cycles, setCycles] = useState<SettingCycle[]>([]);
+  const [importantDates, setImportantDates] = useState<ImportantDate[]>([]);
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
@@ -261,6 +263,13 @@ export function SettingDetailPage() {
     api
       .get<SettingCycle[]>(`/settings/${settingId}/cycles`, opts)
       .then(setCycles)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        console.error(e);
+      });
+    api
+      .get<ImportantDate[]>(`/settings/${settingId}/important-dates`, opts)
+      .then(setImportantDates)
       .catch((e: unknown) => {
         if ((e as Error).name === "AbortError") return;
         console.error(e);
@@ -1108,6 +1117,7 @@ export function SettingDetailPage() {
                   : null
               }
               cycles={cycles}
+              importantDates={importantDates}
               onMoveEvent={moveCalendarEvent}
               onNowChange={(date) => pinSettingCalendar(date)}
               onEventClick={(id) => navigate(`/events/${id}`)}
@@ -1205,7 +1215,7 @@ export function SettingDetailPage() {
               )}
 
               {chronicleTab === "Повторяющиеся" && (
-                <ImportantDatesSection settingId={settingId} />
+                <ImportantDatesSection settingId={settingId} months={calendar?.months} weekdays={calendar?.weekdays} />
               )}
 
               {chronicleTab === "Циклы" && (
