@@ -109,8 +109,8 @@
      контуром, читалась как «кнопка недоступна». Здесь нужна плотная тёмно-
      бордовая заливка, которая одинаково узнаётся на светлой бумаге зина и на
      тёмных скинах, поэтому значение фиксированное, а не потемовое. */
-  --danger-bg: #7b1220;
-  --danger-bg-hover: #94182b;
+  --danger-bg: #c02020;
+  --danger-bg-hover: #dc3030;
   --danger-text: #ffffff;
 
   /* Name/title size scale — same on every theme, this is about scale not
@@ -345,6 +345,16 @@ h4 { font-size: var(--fs-body); }
 }
 .setting-overview {
   gap: var(--sp-5);
+}
+.overview-two-col {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+.overview-two-col__left,
+.overview-two-col__right {
+  flex: 1;
+  min-width: 0;
 }
 .geography-tree {
   gap: var(--sp-5);
@@ -899,6 +909,8 @@ h4 { font-size: var(--fs-body); }
 }
 .setting-overview .card div[style*="pre-wrap"] {
   max-width: 62ch;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .setting-overview .card .card div[style*="pre-wrap"],
 .setting-overview .card .card p {
@@ -1502,7 +1514,8 @@ h4 { font-size: var(--fs-body); }
   letter-spacing: 0.10em;
   border: 1px solid var(--line);
   background: var(--paper);
-  padding: 2px 10px;
+  padding: 4px 10px;
+  line-height: 1;
 }
 .btn-capsule .btn-capsule-count {
   font-family: var(--font-mono);
@@ -1521,8 +1534,139 @@ h4 { font-size: var(--fs-body); }
   min-width: 200px;
   max-height: 240px;
   overflow-y: auto;
-  background: var(--paper);
+  background: var(--paper-2, var(--paper));
   border: 1px solid var(--line);
+}
+.visibility-picker-panel::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 12px;
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+  border-bottom-color: var(--line);
+}
+
+/* === Floating Action Bar === */
+.floating-action-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.floating-action-bar-inner {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-lg);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  animation: fab-slide-up 0.15s ease-out;
+}
+@keyframes fab-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.floating-action-bar-count {
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  color: var(--text);
+  white-space: nowrap;
+}
+.floating-action-bar-players {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.floating-action-bar-player {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+.floating-action-bar-player-name {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  color: var(--text);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.floating-action-bar-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.floating-action-bar-btn:hover { background: var(--bg-elevated); }
+.floating-action-bar-close {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.floating-action-bar-close:hover { background: var(--bg-elevated); color: var(--text); }
+
+/* === Subsection select-all checkbox === */
+.subsection-select-all {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.subsection-select-all input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
+/* === Row select checkbox === */
+.setting-player-row-select input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.setting-player-row-select a,
+.setting-player-row-select span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === Visibility dot (granted to someone) === */
+.visibility-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-active, #4caf50);
+  flex-shrink: 0;
 }
 /* Card grid titles are entity names (campaign/system/setting/player names),
    not section labels, so they get the Display voice explicitly — the base
@@ -2950,6 +3094,16 @@ th, td {
 .chronicle-status.is-upcoming { border-style: dashed; }
 .chronicle-status.is-cancelled { text-decoration: line-through; opacity: 0.7; }
 .chronicle-status.is-happened { border-style: solid; }
+.chronicle-scroll {
+  max-height: calc(100vh - 30px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+.chronicle-scroll::-webkit-scrollbar { width: 6px; }
+.chronicle-scroll::-webkit-scrollbar-track { background: transparent; }
+.chronicle-scroll::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 0; }
+.chronicle-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink); }
 .month-calendar .day.today {
   background: color-mix(in srgb, var(--accent-2) 10%, transparent);
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-2) 35%, transparent);
@@ -5153,8 +5307,8 @@ details.card[open] summary {
   text-align: left;
   background: transparent;
   border-color: transparent;
-  color: var(--status-cancelled);
-  font-weight: inherit;
+  color: var(--danger-bg);
+  font-weight: 600;
 }
 .context-menu button.danger:hover {
   background: var(--paper-2);
@@ -8237,7 +8391,7 @@ details[open] > summary.chevron-summary .chevron-icon,
   vertical-align: -2px;
 }
 .comp-mini.danger {
-  color: var(--status-cancelled);
+  color: var(--danger-bg);
 }
 .comp-mini.is-active {
   background: var(--accent);
@@ -8281,7 +8435,31 @@ details[open] > summary.chevron-summary .chevron-icon,
   border-radius: var(--card-radius);
 }
 .setting-player-row:hover {
-  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+  background: color-mix(in oklab, var(--paper-2, var(--paper)) 92%, var(--ink));
+}
+/* Inverted header for player-setting sections — dark band inside card body,
+   extending to edges via negative margin. Matches §1.4 "плашка-инверсия". */
+.card-header--inverted {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 8px 14px;
+  margin: -14px -14px 12px -14px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-header--inverted-label {
+  font-weight: 400;
+}
+.card-header--inverted-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  opacity: 0.7;
 }
 .comp-category summary.comp-level-label {
   cursor: pointer;
@@ -9702,19 +9880,25 @@ details[open] > .res-group__band .chevron-icon {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--genre-color, #888);
-  opacity: 0.6;
-  transition: opacity 0.15s;
   flex-shrink: 0;
 }
-.genre-category-toggle:hover {
-  opacity: 1;
-}
 .genre-category-triangle {
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--accent);
   transition: transform 0.15s ease;
 }
 .genre-category-triangle--open {
   transform: rotate(90deg);
+}
+.genre-category-count {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.55;
+  font-weight: 400;
 }
 .genre-category-header {
   display: inline-flex;
@@ -9833,7 +10017,8 @@ details[open] > .res-group__band .chevron-icon {
   background: var(--bg-hover);
 }
 .setting-group-context-menu button.danger {
-  color: var(--status-cancelled);
+  color: var(--danger-bg);
+  font-weight: 600;
 }
 .setting-group-context-menu button.danger:hover {
   background: var(--status-cancelled-bg, rgba(220, 50, 50, 0.08));

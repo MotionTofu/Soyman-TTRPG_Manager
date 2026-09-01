@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { LinkDropZone } from "../components/LinkDropZone";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
 import { ResourcesSection } from "../components/ResourcesSection";
 import { LocationTree } from "../components/LocationTree";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { SettingCalendarEditor } from "../components/SettingCalendarEditor";
+import { SettingCalendarSettings } from "../components/SettingCalendarSettings";
+import { ImportantDatesSection } from "../components/ImportantDatesSection";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { SectionHeading } from "../components/SectionHeading";
 import { useTabState } from "../hooks/useTabState";
@@ -25,14 +27,16 @@ import { loadThumbnailStyles } from "../thumbnailStyles";
 import { TagChips } from "../components/TagChips";
 import { GenrePicker } from "../components/GenrePicker";
 import { ZineGraphic } from "../components/ZineGraphics";
-import { GENRE_CATEGORIES } from "../genreData";
+import { GENRE_CATEGORIES, MAX_GENRES } from "../genreData";
 import type { SettingGenre } from "../types";
 import { LocationFilter } from "../components/LocationCascadePicker";
 import { SettingEntryList } from "../components/SettingEntryList";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { SettingBeingTileGrid, SettingCommunityTileGrid } from "../components/SettingBeingTileGrid";
+import { ArtifactTileGrid } from "../components/ArtifactTileGrid";
 import { EntityWizard } from "../components/entityWizard/EntityWizard";
 import { AdventuresTab } from "../components/AdventuresTab";
+import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { RelationGraph } from "../components/RelationGraph";
 import { SETTING_SCOPED_TYPES } from "../components/GraphTypeFilters";
@@ -46,6 +50,7 @@ import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { CampaignWizard } from "../components/CampaignWizard";
 import { EntityImageSlot } from "../components/EntityImageSlot";
+
 import type { System } from "../types";
 import type {
   Artifact,
@@ -57,6 +62,7 @@ import type {
   SettingBeing,
   SettingCalendarEra,
   SettingCalendarEvent,
+  SettingCalendarTimeline,
   SettingCommunity,
   SettingCycle,
   SettingGroup,
@@ -132,79 +138,6 @@ const TABS = [
   "Ресурсы",
 ] as const;
 
-// Хроника мира groups events as Эпоха > Столетие > Десятилетие > Года >
-// События instead of one flat chronological list. An era covers its own
-// start_year up to (not including) the next era's start_year — sorting by
-// start_year alone defines the ranges, no separate end_year needed. Events
-// older than the first era (or every event, if no eras are defined yet)
-// fall into a synthetic "Без эпохи" bucket rather than being hidden.
-interface EraBucket {
-  era: SettingCalendarEra | null;
-  startYear: number;
-  endYear: number | null;
-  events: SettingCalendarEvent[];
-}
-
-function buildEraBuckets(eras: SettingCalendarEra[], events: SettingCalendarEvent[]): EraBucket[] {
-  const sorted = [...eras].sort((a, b) => a.start_year - b.start_year);
-  const buckets: EraBucket[] = sorted.map((era, i) => ({
-    era,
-    startYear: era.start_year,
-    endYear: i + 1 < sorted.length ? sorted[i + 1].start_year - 1 : null,
-    events: [],
-  }));
-  const noEra: EraBucket = {
-    era: null,
-    startYear: -Infinity,
-    endYear: sorted.length > 0 ? sorted[0].start_year - 1 : null,
-    events: [],
-  };
-  for (const ev of events) {
-    let placed = false;
-    for (let i = buckets.length - 1; i >= 0; i--) {
-      if (ev.inworld_year >= buckets[i].startYear) {
-        buckets[i].events.push(ev);
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) noEra.events.push(ev);
-  }
-  return noEra.events.length > 0 || sorted.length === 0 ? [noEra, ...buckets] : buckets;
-}
-
-function groupByYear(events: SettingCalendarEvent[]): [number, SettingCalendarEvent[]][] {
-  const map = new Map<number, SettingCalendarEvent[]>();
-  for (const ev of events) {
-    const list = map.get(ev.inworld_year) ?? [];
-    list.push(ev);
-    map.set(ev.inworld_year, list);
-  }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]);
-}
-
-function groupByDecade(events: SettingCalendarEvent[]): [number, SettingCalendarEvent[]][] {
-  const map = new Map<number, SettingCalendarEvent[]>();
-  for (const ev of events) {
-    const key = Math.floor(ev.inworld_year / 10) * 10;
-    const list = map.get(key) ?? [];
-    list.push(ev);
-    map.set(key, list);
-  }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]);
-}
-
-function groupByCentury(events: SettingCalendarEvent[]): [number, SettingCalendarEvent[]][] {
-  const map = new Map<number, SettingCalendarEvent[]>();
-  for (const ev of events) {
-    const centuryStart = Math.floor((ev.inworld_year - 1) / 100) * 100 + 1;
-    const list = map.get(centuryStart) ?? [];
-    list.push(ev);
-    map.set(centuryStart, list);
-  }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]);
-}
-
 export function SettingDetailPage() {
   const { id } = useParams();
   const settingId = Number(id);
@@ -223,12 +156,13 @@ export function SettingDetailPage() {
   const [tab, selectTab] = useTabState(TABS, "Обзор");
   const [showExport, setShowExport] = useState(false);
   const [creatingEvent, setCreatingEvent] = useState(false);
+  const [artifactCount, setArtifactCount] = useState<number | null>(null);
 
   const calendar = useSettingCalendar(settingId);
   const [calendarEvents, setCalendarEvents] = useState<SettingCalendarEvent[]>([]);
-  // Список и ось — два вида одних и тех же событий, а не две вкладки: список
-  // читают и правят, ось показывает расстояния между датами.
-  const [chronicleView, setChronicleView] = useState<"list" | "axis">("list");
+  const [chronicleTab, setChronicleTab] = useState<"Хронология" | "Повторяющиеся" | "Циклы" | "Календарь">("Хронология");
+  const [chronicleFilter, setChronicleFilter] = useState<"all" | "important" | "upcoming" | "cancelled" | "visible">("all");
+  const [chronicleSort, setChronicleSort] = useState<"chronological" | "important-first">("chronological");
   const [cycles, setCycles] = useState<SettingCycle[]>([]);
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
@@ -279,16 +213,36 @@ export function SettingDetailPage() {
   }
 
   const [eras, setEras] = useState<SettingCalendarEra[]>([]);
-  const [addingEra, setAddingEra] = useState(false);
-  const [eraName, setEraName] = useState("");
-  const [eraStartYear, setEraStartYear] = useState("");
+  const [timelines, setTimelines] = useState<SettingCalendarTimeline[]>([]);
+  const [selectedTimelineId, setSelectedTimelineId] = useState<number | null>(null);
+  const [addingTimeline, setAddingTimeline] = useState(false);
+  const [timelineName, setTimelineName] = useState("");
+  const [selectedEraId, setSelectedEraId] = useState<number | null>(null);
   const [worldFilter, setWorldFilter] = useState("");
   const filteredCalendarEvents = useMemo(() => {
     const q = worldFilter.trim().toLowerCase();
     if (!q) return calendarEvents;
     return calendarEvents.filter((ev) => ev.title.toLowerCase().includes(q) || (ev.description ?? "").toLowerCase().includes(q));
   }, [calendarEvents, worldFilter]);
-  const eraBuckets = useMemo(() => buildEraBuckets(eras, filteredCalendarEvents), [eras, filteredCalendarEvents]);
+  const sortedFilteredEvents = useMemo(() => {
+    let events = filteredCalendarEvents;
+    if (chronicleFilter === "important") events = events.filter((e) => e.important);
+    else if (chronicleFilter === "upcoming") events = events.filter((e) => e.status === "upcoming");
+    else if (chronicleFilter === "cancelled") events = events.filter((e) => e.status === "cancelled");
+    else if (chronicleFilter === "visible") events = events.filter((e) => e.visible_to_players);
+    if (selectedEraId != null) {
+      const era = eras.find((e) => e.id === selectedEraId);
+      if (era) {
+        const nextEra = eras.filter((e) => e.timeline_id === era.timeline_id).sort((a, b) => a.start_year - b.start_year).find((e) => e.start_year > era.start_year);
+        const endYear = nextEra ? nextEra.start_year : era.start_year + 1000;
+        events = events.filter((e) => e.inworld_year >= era.start_year && e.inworld_year < endYear);
+      }
+    }
+    const sorted = [...events];
+    if (chronicleSort === "important-first") sorted.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
+    else sorted.sort((a, b) => a.inworld_year - b.inworld_year || a.inworld_month - b.inworld_month || a.inworld_day - b.inworld_day);
+    return sorted;
+  }, [filteredCalendarEvents, chronicleFilter, chronicleSort, selectedEraId, eras]);
   const axisRef = useRef<HTMLDivElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
@@ -328,41 +282,40 @@ export function SettingDetailPage() {
   }
   useEffect(refreshEras, [settingId]);
 
-  async function createEra() {
-    if (!eraName.trim() || !eraStartYear.trim()) return;
-    const y = Number(eraStartYear);
-    if (!Number.isFinite(y)) { alert("Год — число"); return; }
-    if (eras.some((er) => er.name.trim().toLowerCase() === eraName.trim().toLowerCase())) { alert("Эпоха с таким названием уже есть"); return; }
-    if (eras.some((er) => er.start_year === y)) { alert("Эпоха с таким годом уже есть"); return; }
-    await api.post(`/settings/${settingId}/calendar-eras`, {
-      name: eraName.trim(),
-      start_year: y,
-    });
-    setEraName("");
-    setEraStartYear("");
-    setAddingEra(false);
-    // refreshEras создаст новый AbortController внутри
-    const ctrl = new AbortController();
+  function refreshTimelines() {
+    const controller = new AbortController();
     api
-      .get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`, { signal: ctrl.signal })
-      .then(setEras)
-      .catch(() => {});
+      .get<SettingCalendarTimeline[]>(`/settings/${settingId}/calendar-timelines`, { signal: controller.signal })
+      .then(setTimelines)
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        console.error(e);
+      });
+    return () => controller.abort();
+  }
+  useEffect(refreshTimelines, [settingId]);
+
+  async function createTimeline() {
+    if (!timelineName.trim()) return;
+    await api.post(`/settings/${settingId}/calendar-timelines`, { name: timelineName.trim() });
+    setTimelineName("");
+    setAddingTimeline(false);
+    const ctrl = new AbortController();
+    api.get<SettingCalendarTimeline[]>(`/settings/${settingId}/calendar-timelines`, { signal: ctrl.signal }).then(setTimelines).catch(() => {});
   }
 
-  async function deleteEra(eraId: number) {
+  async function deleteTimeline(timelineId: number) {
     const ok = await confirm({
-      title: "Удалить эпоху?",
-      message: "События внутри неё не удалятся, просто перестанут быть сгруппированы.",
+      title: "Удалить таймлайн?",
+      message: "Эпохи этого таймлайна станут безэтапными. События не удалятся.",
       confirmLabel: "Удалить",
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/settings/calendar-eras/${eraId}`);
+    await api.del(`/settings/calendar-timelines/${timelineId}`);
+    if (selectedTimelineId === timelineId) setSelectedTimelineId(null);
     const ctrl = new AbortController();
-    api
-      .get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`, { signal: ctrl.signal })
-      .then(setEras)
-      .catch(() => {});
+    api.get<SettingCalendarTimeline[]>(`/settings/${settingId}/calendar-timelines`, { signal: ctrl.signal }).then(setTimelines).catch(() => {});
   }
 
   async function loadOverview(signal?: AbortSignal) {
@@ -370,13 +323,14 @@ export function SettingDetailPage() {
     setLoadError(null);
     const opts = signal ? { signal } : undefined;
     try {
-      const [s, res, chars, camps, groups, bySetting] = await Promise.all([
+      const [s, res, chars, camps, groups, bySetting, artCount] = await Promise.all([
         api.get<Setting>(`/settings/${settingId}`, opts),
         api.get<Resource[]>(`/resources?scope=setting&setting_id=${settingId}`, opts),
         api.get<Character[]>(`/characters?setting_id=${settingId}`, opts),
         api.get<Campaign[]>(`/campaigns?setting_id=${settingId}`, opts),
         api.get<SettingGroup[]>("/setting-groups", opts),
         api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`, opts),
+        api.get<{ count: number }>(`/artifacts/count?setting_id=${settingId}`, opts),
       ]);
       setSetting(s);
       setResources(res);
@@ -384,6 +338,7 @@ export function SettingDetailPage() {
       setCampaigns(camps);
       setAllGroups(groups);
       setSettingGroupIds(bySetting.map((g) => g.id));
+      setArtifactCount(artCount.count);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       setLoadError(String(e instanceof Error ? e.message : e));
@@ -405,7 +360,7 @@ export function SettingDetailPage() {
 
   if (loadError && !setting) {
     return (
-      <div className="stack" style={{ position: "relative" }}>
+    <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
         <div
           className="card"
           style={{
@@ -662,6 +617,19 @@ export function SettingDetailPage() {
   async function saveEventModal() {
     if (!eventModal || !eventModal.title.trim()) return;
     const hasPeriod = eventModal.year_end.trim() !== "" || eventModal.month_end.trim() !== "" || eventModal.day_end.trim() !== "";
+    // Валидация порядка start/end: конец периода не может быть раньше начала.
+    if (hasPeriod) {
+      const sy = Number(eventModal.year) || 0;
+      const ey = eventModal.year_end.trim() !== "" ? Number(eventModal.year_end) : sy;
+      const sm = Number(eventModal.month) || 1;
+      const em = eventModal.month_end.trim() !== "" ? Number(eventModal.month_end) : sm;
+      const sd = Number(eventModal.day) || 1;
+      const ed = eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : sd;
+      if (ey < sy || (ey === sy && em < sm) || (ey === sy && em === sm && ed < sd)) {
+        showAlert("Дата окончания периода раньше даты начала.");
+        return;
+      }
+    }
     const payload: Record<string, unknown> = {
       title: eventModal.title,
       description: eventModal.description,
@@ -719,64 +687,6 @@ export function SettingDetailPage() {
     });
   }
 
-  function EventRow({ ev }: { ev: SettingCalendarEvent }) {
-    const expanded = expandedEvents.has(ev.id);
-    const mentionChips = (() => {
-      const out: string[] = [];
-      const seen = new Set<string>();
-      for (const m of (ev.description ?? "").matchAll(/\[\[(\w+):\d+\|([^\]]+)\]\]/g)) {
-        const label = m[2];
-        if (!seen.has(label)) { seen.add(label); out.push(label); if (out.length >= 3) break; }
-      }
-      return out;
-    })();
-    return (
-      <div className="stack" style={{ gap: "var(--sp-2)" }}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <span className="row chronicle-row" style={{ alignItems: "center", flexWrap: "wrap", gap: "var(--sp-2)" }}>
-            {ev.description && (
-              <button style={{ padding: "2px 6px" }} onClick={() => toggleEventExpanded(ev.id)}>
-                {expanded ? "▾" : "▸"}
-              </button>
-            )}
-            <span className="chronicle-date">{calendar ? formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar.months) : `${ev.inworld_year}.${ev.inworld_month}.${ev.inworld_day}`}</span>
-            <span className={`chronicle-status is-${ev.status}`}>{ev.status === "cancelled" ? "Отменено" : ev.status === "upcoming" ? "Предстоит" : "Случилось"}</span>
-            <Link to={`/events/${ev.id}`} className="chronicle-title">{ev.title}</Link>
-            {mentionChips.length > 0 && (
-              <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                {mentionChips.slice(0, 2).map((label) => <span key={label} className="badge tag" style={{ fontSize: "var(--fs-micro)" }}>{label}</span>)}
-                {mentionChips.length > 2 && <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>+{mentionChips.length - 2}</span>}
-              </span>
-            )}
-          </span>
-          <div className="row" style={{ gap: "var(--sp-2)", alignItems: "center" }}>
-            <button
-              onClick={() => toggleEventImportant(ev)}
-              title={ev.important ? "Убрать из избранного" : "В избранное"}
-              className={`comp-mini ${ev.important ? "primary" : ""}`}
-              style={{ padding: "2px 6px", fontSize: 14, lineHeight: 1 }}
-            >
-              {ev.important ? "★" : "☆"}
-            </button>
-            <label className="row" style={{ fontSize: "var(--fs-meta)" }}>
-              <input type="checkbox" checked={!!ev.visible_to_players} onChange={() => toggleEventVisible(ev)} />
-              Видно игрокам
-            </label>
-            <button className="comp-mini" onClick={() => openEditEventModal(ev)}>Редактировать</button>
-            <button className="comp-mini" onClick={() => { setChronicleView("axis"); setTimelineFocus({ year: ev.inworld_year, month: ev.inworld_month, day: ev.inworld_day }); setTimeout(() => axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }} title="На оси">Ось</button>
-            <button className="comp-mini" onClick={() => { calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На календаре">Календарь</button>
-            <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
-          </div>
-        </div>
-        {expanded && ev.description && (
-          <div className="chronicle-row__expanded" style={{ whiteSpace: "pre-wrap" }}>
-            <MentionText text={ev.description} />
-          </div>
-        )}
-      </div>
-    );
-  }
-
   // C-P0-2: гвард для background — аналог SettingsListPage (safeBackgroundImage + isSafeImageUrl)
   const safeBg = safeBackgroundImage(
     setting.background_image_url && isSafeImageUrl(setting.background_image_url)
@@ -785,7 +695,7 @@ export function SettingDetailPage() {
   );
 
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
       {confirmDialog}
       {alertDialog}
       {safeBg && (
@@ -883,7 +793,7 @@ export function SettingDetailPage() {
       <div className="tabs">
         {TABS.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
+            {t === "Сокровищница" && artifactCount != null ? `Сокровищница · ${artifactCount}` : t}
           </button>
         ))}
       </div>
@@ -938,107 +848,137 @@ export function SettingDetailPage() {
                         Создать →
                       </button>
                     )}
-                  </div>
-                </div>
+        </div>
+      </div>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <select value={filterClass} onChange={(e) => { setFilterClass(e.target.value); setFilterType(""); }} style={{ fontSize: 12 }}>
+          <option value="">Все роды</option>
+          {ITEM_CLASSES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ fontSize: 12 }} disabled={!filterClass}>
+          <option value="">Все типы</option>
+          {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} style={{ fontSize: 12 }}>
+          <option value="">Все редкости</option>
+          {MAGIC_ITEM_RARITIES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        {(filterClass || filterType || filterRarity) && (
+          <button style={{ fontSize: 12 }} onClick={() => { setFilterClass(""); setFilterType(""); setFilterRarity(""); }}>
+            Сбросить фильтры
+          </button>
+        )}
+      </div>
               </div>
             );
           })()}
-          <EditableTextCard
-            key={`description-${setting.id}`}
-            title="Описание"
-            value={setting.description}
-            onSave={saveDescription}
-            rows={6}
-            entityType="setting"
-            entityId={settingId}
-            defaultSettingId={settingId}
-            fields={[
-              { key: "name", label: "Имя", value: setting.name, required: true },
-              {
-                key: "code",
-                label: "Код",
-                value: setting.code ?? "",
-                placeholder: "wdh",
-                pattern: "^[a-z0-9-]{2,8}$",
-                title: 'Пример: wdh → Waterdeep: Dragon Heist. Короткое сокращение для ссылок [[wdh:…]]. Латиница, 2–8 символов.',
-              },
-            ]}
-            onSaveFields={(v) => saveName(v.name, v.code)}
-          >
-            <div style={{ marginTop: 8 }}>
-              <div className="row" style={{ alignItems: "center", gap: 6 }}>
-                <strong>Жанры</strong>
-                <button
-                  className="genre-add-btn"
-                  onClick={() => setGenrePickerOpen(true)}
-                  title="Выбрать жанры"
-                  aria-label="Выбрать жанры"
-                >+</button>
+          <div className="overview-two-col" style={{ marginTop: 0 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <EditableTextCard
+                key={`description-${setting.id}`}
+                title="Описание"
+                value={setting.description}
+                onSave={saveDescription}
+                rows={6}
+                entityType="setting"
+                entityId={settingId}
+                defaultSettingId={settingId}
+                fields={[
+                  { key: "name", label: "Название", value: setting.name, required: true },
+                  {
+                    key: "code",
+                    label: "Код",
+                    value: setting.code ?? "",
+                    placeholder: "wdh",
+                    pattern: "^[a-z0-9-]{2,8}$",
+                    title: 'Пример: wdh → Waterdeep: Dragon Heist. Короткое сокращение для ссылок [[wdh:…]]. Латиница, 2–8 символов.',
+                  },
+                ]}
+                onSaveFields={(v) => saveName(v.name, v.code)}
+              />
+            </div>
+            <div className="card stack" style={{ flex: 1, minWidth: 0 }}>
+              <h3>Теги</h3>
+              <div className="genre-chips">
+                {setting.genres && setting.genres.length > 0 && setting.genres.map((g, i) => {
+                  const cat = GENRE_CATEGORIES.find((c) => c.name === g.genre);
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      className="genre-chip genre-chip--selected"
+                      onClick={() => setGenrePickerOpen(true)}
+                    >
+                      {cat && <ZineGraphic name={cat.icon} className="genre-chip-icon" />}
+                      {g.subgenre ?? g.genre}
+                    </button>
+                  );
+                })}
+                {(!setting.genres || setting.genres.length < MAX_GENRES) && (
+                  <button
+                    type="button"
+                    className="genre-chip"
+                    onClick={() => setGenrePickerOpen(true)}
+                  >
+                    +жанр
+                  </button>
+                )}
               </div>
-              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>До 3 жанров — помогают фильтровать в списке сеттингов.</span>
-              {setting.genres && setting.genres.length > 0 ? (
-                <div className="genre-chips" style={{ marginTop: 4 }}>
-                  {setting.genres.map((g, i) => {
-                    const cat = GENRE_CATEGORIES.find((c) => c.name === g.genre);
-                    return (
-                      <span key={i} className="genre-chip genre-chip--selected">
-                        {cat && <ZineGraphic name={cat.icon} className="genre-chip-icon" />}
-                        {g.subgenre ?? g.genre}
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : (
-                <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Жанры не выбраны</span>
+              {allGroups.length > 0 && (
+                <>
+                  <div style={{ borderTop: "1px solid var(--line)", margin: "4px 0" }} />
+                  <strong>Группы сеттингов</strong>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                    {allGroups.map((g) => {
+                      const isIn = settingGroupIds.includes(g.id);
+                      return (
+                        <label
+                          key={g.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            cursor: "pointer",
+                            padding: "4px 8px",
+                            borderRadius: 0,
+                            border: `1px solid ${isIn ? "var(--accent)" : "var(--line)"}`,
+                            background: isIn ? "var(--accent-bg, rgba(79, 140, 255, 0.08))" : "transparent",
+                            fontSize: "var(--fs-meta)",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isIn}
+                            onChange={async () => {
+                              const prev = settingGroupIds;
+                              if (isIn) {
+                                setSettingGroupIds(prev.filter((id) => id !== g.id));
+                              } else {
+                                setSettingGroupIds([...prev, g.id]);
+                              }
+                              try {
+                                if (isIn) {
+                                  await api.del(`/setting-groups/${g.id}/members?settingIds=${settingId}`);
+                                } else {
+                                  await api.post(`/setting-groups/${g.id}/members`, { settingIds: [settingId] });
+                                }
+                                const groups = await api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`);
+                                setSettingGroupIds(groups.map((gr) => gr.id));
+                              } catch (e) {
+                                setSettingGroupIds(prev);
+                                showAlert(String(e instanceof Error ? e.message : e));
+                              }
+                            }}
+                          />
+                          {g.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
-
-            {allGroups.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                  <strong>Группы сеттингов</strong>
-                  <Link to="/settings" style={{ fontSize: "var(--fs-micro)", textDecoration: "underline" }}>Настроить группы →</Link>
-                </div>
-                <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Папки-группы из списка сеттингов — отметьте, куда входит этот сеттинг.</span>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-                  {allGroups.map((g) => {
-                    const isIn = settingGroupIds.includes(g.id);
-                    return (
-                      <label
-                        key={g.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          cursor: "pointer",
-                          padding: "4px 8px",
-                          borderRadius: 0,
-                          border: `1px solid ${isIn ? "var(--accent)" : "var(--line)"}`,
-                          background: isIn ? "var(--accent-bg, rgba(79, 140, 255, 0.08))" : "transparent",
-                          fontSize: "var(--fs-meta)",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isIn}
-                          onChange={async () => {
-                            if (isIn) {
-                              await api.del(`/setting-groups/${g.id}/members?settingIds=${settingId}`);
-                            } else {
-                              await api.post(`/setting-groups/${g.id}/members`, { settingIds: [settingId] });
-                            }
-                            const groups = await api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`);
-                            setSettingGroupIds(groups.map((gr) => gr.id));
-                          }}
-                        />
-                        {g.name}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </EditableTextCard>
+          </div>
 
           <div className="card res-group" id="section-campaigns">
             <div className="res-group__band" style={{ cursor: "default" }}>
@@ -1099,10 +1039,6 @@ export function SettingDetailPage() {
             />
           )}
 
-          <div className="card" id="section-related">
-            <LinkDropZone entityType="setting" entityId={settingId} title="Связанные сущности" />
-          </div>
-
           <div className="card res-group" id="section-images">
             <div className="res-group__band" style={{ cursor: "default" }}>
               <span className="res-group__title">Изображения сеттинга</span>
@@ -1144,172 +1080,156 @@ export function SettingDetailPage() {
       {tab === "Население" && <PopulationTab settingId={settingId} />}
       {tab === "Приключения" && (
         <div className="card stack">
-          <div className="row" style={{ justifyContent: "flex-end" }}>
-            <button onClick={() => navigate(`/import?setting=${settingId}`)}>
-              Импорт приключения
-            </button>
-          </div>
           <AdventuresTab settingId={settingId} />
         </div>
       )}
-      {tab === "Сокровищница" && (
-        <div className="card stack">
-          <ArtifactsTab settingId={settingId} />
-        </div>
-      )}
+      {tab === "Сокровищница" && <ArtifactsTab settingId={settingId} />}
       {tab === "Граф связей" && <SettingGraphTab settingId={settingId} />}
 
       {tab === "Хроника мира" && (
         <div className="stack">
-          <div ref={calendarRef} className="card stack">
-            <SettingCalendarEditor
-              settingId={settingId}
-              items={calendarItems}
-              pinned={
+          <div ref={axisRef} className="card stack">
+            <Timeline
+              focusDate={timelineFocus}
+              events={filteredCalendarEvents.map((e) => ({
+                id: e.id, title: e.title,
+                year: e.inworld_year, month: e.inworld_month, day: e.inworld_day,
+                precision: e.date_precision,
+                year_end: e.inworld_year_end, month_end: e.inworld_month_end, day_end: e.inworld_day_end,
+                status: e.status, important: e.important === 1,
+              }))}
+              months={calendar?.months ?? []}
+              era={calendar?.era ?? ""}
+              eras={eras}
+              selectedTimelineId={selectedTimelineId}
+              now={
                 setting.pinned_calendar_year != null && setting.pinned_calendar_month != null
                   ? { year: setting.pinned_calendar_year, month: setting.pinned_calendar_month }
                   : null
               }
-              onPin={pinSettingCalendar}
-              onDayContextMenu={handleCalendarDayContextMenu}
-              onItemContextMenu={handleCalendarItemContextMenu}
+              cycles={cycles}
+              onMoveEvent={moveCalendarEvent}
+              onNowChange={(date) => pinSettingCalendar(date)}
+              onEventClick={(id) => navigate(`/events/${id}`)}
+              action={
+                <>
+                  <button className="primary" onClick={() => setCreatingEvent(true)}>+ Создать событие</button>
+                  <button onClick={() => setChronicleTab("Календарь")}>+ Эпоху</button>
+                </>
+              }
+              leftAction={
+                <span className="row" style={{ gap: 4, alignItems: "center" }}>
+                  <select
+                    value={selectedTimelineId ?? ""}
+                    onChange={(e) => setSelectedTimelineId(e.target.value ? Number(e.target.value) : null)}
+                    style={{ fontSize: "var(--fs-meta)" }}
+                  >
+                    <option value="">Общий</option>
+                    {timelines.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <button className="comp-mini" onClick={() => setAddingTimeline((v) => !v)} title="Новый таймлайн">+</button>
+                  {addingTimeline && (
+                    <span className="row" style={{ gap: 4 }}>
+                      <input placeholder="Название таймлайна" value={timelineName} onChange={(e) => setTimelineName(e.target.value)} style={{ width: 180 }} />
+                      <button className="comp-mini primary" onClick={createTimeline}>OK</button>
+                      <button className="comp-mini" onClick={() => { setAddingTimeline(false); setTimelineName(""); }}>✕</button>
+                    </span>
+                  )}
+                  {selectedTimelineId != null && (
+                    <button className="comp-mini danger" onClick={() => deleteTimeline(selectedTimelineId)} title="Удалить таймлайн">✕</button>
+                  )}
+                </span>
+              }
             />
           </div>
 
-          {/* Циклы рядом с календарём: и то и другое — устройство мира,
-              заводится один раз при создании сеттинга. */}
-          <SettingCycles settingId={settingId} />
+          <div className="chronicle-split">
+            <div className="chronicle-left stack">
+              <div className="tabs">
+                {(["Хронология", "Повторяющиеся", "Циклы", "Календарь"] as const).map((t) => (
+                  <button key={t} className={chronicleTab === t ? "active" : ""} onClick={() => setChronicleTab(t)}>{t}</button>
+                ))}
+              </div>
 
-          <div ref={axisRef} className="card stack">
-            <div className="tabs" style={{ justifyContent: "space-between", width: "100%" }}>
-              <div className="row" style={{ gap: 0 }}>
-                <button className={chronicleView === "list" ? "active" : ""} onClick={() => setChronicleView("list")}>Список</button>
-                <button className={chronicleView === "axis" ? "active" : ""} onClick={() => setChronicleView("axis")}>Ось</button>
-              </div>
-              <div className="row">
-                {/* Создание события через общий визард; правка существующего
-                    и клик по дню календаря по-прежнему открывают быструю
-                    модалку — там уже известна дата. */}
-                <button className="primary" onClick={() => setCreatingEvent(true)}>
-                  + Создать событие
-                </button>
-                <button onClick={() => setAddingEra((v) => !v)}>+ Добавить эпоху</button>
-              </div>
+              {chronicleTab === "Хронология" && (
+                <div className="stack chronicle-scroll">
+                  <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                    <input placeholder="Поиск по хронике: название, описание" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 220px" }} />
+                    {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
+                    <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>{sortedFilteredEvents.length} из {calendarEvents.length}</span>
+                  </div>
+                  <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                    {(["all", "important", "upcoming", "cancelled", "visible"] as const).map((f) => (
+                      <button key={f} className={`comp-mini ${chronicleFilter === f ? "primary" : ""}`} onClick={() => setChronicleFilter(f)}>
+                        {{ all: "Все", important: "Важные", upcoming: "Предстоящие", cancelled: "Отменённые", visible: "Видимые игрокам" }[f]}
+                      </button>
+                    ))}
+                    <span style={{ margin: "0 4px" }}>|</span>
+                    <button className={`comp-mini ${chronicleSort === "chronological" ? "primary" : ""}`} onClick={() => setChronicleSort("chronological")}>Хронология</button>
+                    <button className={`comp-mini ${chronicleSort === "important-first" ? "primary" : ""}`} onClick={() => setChronicleSort("important-first")}>Важные сверху</button>
+                    {selectedTimelineId != null && eras.some((e) => e.timeline_id === selectedTimelineId) && (
+                      <>
+                        <span style={{ margin: "0 4px" }}>|</span>
+                        <select
+                          className="comp-mini"
+                          value={selectedEraId ?? ""}
+                          onChange={(e) => setSelectedEraId(e.target.value ? Number(e.target.value) : null)}
+                          style={{ fontSize: "var(--fs-meta)" }}
+                        >
+                          <option value="">Все эпохи</option>
+                          {eras.filter((e) => e.timeline_id === selectedTimelineId).sort((a, b) => a.start_year - b.start_year).map((e) => (
+                            <option key={e.id} value={e.id}>{e.name} ({e.start_year})</option>
+                          ))}
+                        </select>
+                      </>
+                    )}
+                  </div>
+                  <div className="stack">
+                    {sortedFilteredEvents.map((ev) => (
+                      <SettingChronicleEventRow
+                        key={ev.id} ev={ev}
+                        expanded={expandedEvents.has(ev.id)} calendar={calendar}
+                        onToggleExpand={toggleEventExpanded}
+                        onToggleImportant={toggleEventImportant}
+                        onToggleVisible={toggleEventVisible}
+                        onEdit={openEditEventModal} onDelete={deleteCalendarEvent}
+                        onShowOnAxis={(e) => { setTimelineFocus({ year: e.inworld_year, month: e.inworld_month, day: e.inworld_day }); setTimeout(() => axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }}
+                        onShowOnCalendar={() => { calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+                      />
+                    ))}
+                    {sortedFilteredEvents.length === 0 && <p className="muted">{calendarEvents.length === 0 ? "Событий пока нет." : "Ничего не найдено."}</p>}
+                  </div>
+                </div>
+              )}
+
+              {chronicleTab === "Повторяющиеся" && (
+                <ImportantDatesSection settingId={settingId} />
+              )}
+
+              {chronicleTab === "Циклы" && (
+                <SettingCycles settingId={settingId} />
+              )}
+
+              {chronicleTab === "Календарь" && (
+                <SettingCalendarSettings settingId={settingId} />
+              )}
             </div>
-            <span className="muted">
-              События хроники автоматически переносятся во все кампании, использующие этот сеттинг
-              — удаление из кампании не затрагивает эту запись, а удаление здесь удалит событие и
-              из кампаний.
-            </span>
-            {addingEra && (
-              <div className="row">
-                <input placeholder="Название эпохи" value={eraName} onChange={(e) => setEraName(e.target.value)} />
-                <input
-                  type="number"
-                  placeholder="Год начала"
-                  style={{ width: 110 }}
-                  value={eraStartYear}
-                  onChange={(e) => setEraStartYear(e.target.value)}
-                />
-                <button className="primary" onClick={createEra}>
-                  Добавить
-                </button>
-                <button onClick={() => setAddingEra(false)}>Отмена</button>
-              </div>
-            )}
 
-            <div className="row" style={{ gap: 8, flexWrap: "wrap" }} hidden={chronicleView === "axis"}>
-              <input placeholder="Поиск по хроноике: название, описание" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 220px" }} />
-              {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
-              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>{filteredCalendarEvents.length} из {calendarEvents.length}</span>
-            </div>
-
-            {chronicleView === "axis" && (
-              <Timeline
-                focusDate={timelineFocus}
-                events={filteredCalendarEvents.map((e) => ({
-                  id: e.id,
-                  title: e.title,
-                  year: e.inworld_year,
-                  month: e.inworld_month,
-                  day: e.inworld_day,
-                  precision: e.date_precision,
-                  year_end: e.inworld_year_end,
-                  month_end: e.inworld_month_end,
-                  day_end: e.inworld_day_end,
-                  status: e.status,
-                  important: e.important === 1,
-                }))}
-                months={calendar?.months ?? []}
-                era={calendar?.era ?? ""}
-                now={
+            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
+              <SettingCalendarEditor
+                settingId={settingId}
+                items={calendarItems}
+                pinned={
                   setting.pinned_calendar_year != null && setting.pinned_calendar_month != null
                     ? { year: setting.pinned_calendar_year, month: setting.pinned_calendar_month }
                     : null
                 }
-                cycles={cycles}
-                onMoveEvent={moveCalendarEvent}
-                onNowChange={(date) => pinSettingCalendar(date)}
-                onEventClick={(id) => navigate(`/events/${id}`)}
+                onPin={pinSettingCalendar}
+                onDayContextMenu={handleCalendarDayContextMenu}
+                onItemContextMenu={handleCalendarItemContextMenu}
               />
-            )}
-
-            <div className="stack chronicle-stack" hidden={chronicleView === "axis"}>
-              {eraBuckets.map((bucket) => (
-                <details key={bucket.era?.id ?? "no-era"} className="card">
-                  <summary className="row" style={{ justifyContent: "space-between" }}>
-                    <span>
-                      <strong>{bucket.era ? bucket.era.name : "Без эпохи"}</strong>{" "}
-                      <span className="muted">
-                        ({bucket.era ? bucket.startYear : "…"}
-                        {bucket.endYear != null ? `–${bucket.endYear}` : "–…"})
-                      </span>
-                    </span>
-                    {bucket.era && (
-                      <button
-                        type="button"
-                        className="comp-mini danger"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          deleteEra(bucket.era!.id);
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </summary>
-                  <div className="stack" style={{ marginTop: 8, paddingLeft: 16 }}>
-                    {groupByCentury(bucket.events).map(([centuryStart, centuryEvents]) => (
-                      <details key={centuryStart} className="card">
-                        <summary>
-                          Столетие {centuryStart}–{centuryStart + 99}
-                        </summary>
-                        <div className="stack" style={{ marginTop: 8, paddingLeft: 16 }}>
-                          {groupByDecade(centuryEvents).map(([decadeStart, decadeEvents]) => (
-                            <details key={decadeStart} className="card">
-                              <summary>{decadeStart}-е</summary>
-                              <div className="stack" style={{ marginTop: 8, paddingLeft: 16 }}>
-                                {groupByYear(decadeEvents).map(([year, yearEvents]) => (
-                                  <details key={year} className="card">
-                                    <summary>{year}</summary>
-                                    <div className="stack" style={{ marginTop: 8, paddingLeft: 16 }}>
-                                      {yearEvents.map((ev) => (
-                                        <EventRow key={ev.id} ev={ev} />
-                                      ))}
-                                    </div>
-                                  </details>
-                                ))}
-                              </div>
-                            </details>
-                          ))}
-                        </div>
-                      </details>
-                    ))}
-                    {bucket.events.length === 0 && <p className="muted">Событий нет.</p>}
-                  </div>
-                </details>
-              ))}
-              {calendarEvents.length === 0 && <p className="muted">Событий пока нет.</p>}
             </div>
           </div>
         </div>
@@ -2218,30 +2138,112 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
 }
 
 function ArtifactsTab({ settingId }: { settingId: number }) {
-  const navigate = useNavigate();
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [creating, setCreating] = useState(false);
-  const [confirmDialog, confirm] = useConfirm();
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [grouping, setGrouping] = useState<"alpha" | "item_class" | "rarity">("item_class");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filterClass, setFilterClass] = useState<string>("");
+  const [filterType, setFilterType] = useState<string>("");
+  const [filterRarity, setFilterRarity] = useState<string>("");
 
-  function refresh() {
-    api.get<Artifact[]>(`/artifacts?setting_id=${settingId}`).then(setArtifacts);
-  }
-  useEffect(refresh, [settingId]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  async function deleteArtifact(id: number) {
-    const ok = await confirm({ message: "Отправить артефакт в архив?", confirmLabel: "Архивировать", danger: true });
-    if (!ok) return;
-    await api.del(`/artifacts/${id}`);
-    refresh();
+  function refresh(signal?: AbortSignal) {
+    setLoading(true);
+    setLoadError(null);
+    const opts = signal ? { signal } : undefined;
+    api
+      .get<Artifact[]>(`/artifacts?setting_id=${settingId}`, opts)
+      .then((rows) => {
+        setArtifacts(rows);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setLoadError(String(e instanceof Error ? e.message : e));
+        setLoading(false);
+      });
   }
+  useEffect(() => {
+    const controller = new AbortController();
+    refresh(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingId]);
+
+  const typeOptions = filterClass ? itemTypeOptions(filterClass) : [];
+
+  const filtered = artifacts.filter((a) => {
+    if (filterClass && a.item_class !== filterClass) return false;
+    if (filterType && a.item_type !== filterType) return false;
+    if (filterRarity && a.rarity !== filterRarity) return false;
+    if (!debouncedQuery.trim()) return true;
+    const q = debouncedQuery.toLowerCase();
+    return (
+      a.name.toLowerCase().includes(q) ||
+      (a.owner && a.owner.toLowerCase().includes(q)) ||
+      (a.rarity && a.rarity.toLowerCase().includes(q)) ||
+      (a.item_type && a.item_type.toLowerCase().includes(q))
+    );
+  });
 
   return (
-    <div className="stack">
-      {confirmDialog}
-      <div className="row">
+    <div className="card stack">
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
         <button className="primary" onClick={() => setCreating(true)}>
-          Создать
+          + Предмет
         </button>
+        <input
+          placeholder="Поиск…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ flex: 1, minWidth: 150 }}
+        />
+        <div className="row" style={{ gap: 2 }}>
+          {([
+            ["item_class", "По типу"],
+            ["rarity", "По редкости"],
+            ["alpha", "По алфавиту"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              className={grouping === key ? "active" : ""}
+              onClick={() => {
+                if (grouping === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                else { setGrouping(key); setSortDir("asc"); }
+              }}
+              style={{ fontSize: 12 }}
+            >
+              {label} {grouping === key ? (sortDir === "asc" ? "↑" : "↓") : ""}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <select value={filterClass} onChange={(e) => { setFilterClass(e.target.value); setFilterType(""); }} style={{ fontSize: 12 }}>
+          <option value="">Все роды</option>
+          {ITEM_CLASSES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ fontSize: 12 }} disabled={!filterClass}>
+          <option value="">Все типы</option>
+          {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} style={{ fontSize: 12 }}>
+          <option value="">Все редкости</option>
+          {MAGIC_ITEM_RARITIES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        {(filterClass || filterType || filterRarity) && (
+          <button style={{ fontSize: 12 }} onClick={() => { setFilterClass(""); setFilterType(""); setFilterRarity(""); }}>
+            Сбросить фильтры
+          </button>
+        )}
       </div>
       {creating && (
         <EntityWizard
@@ -2251,39 +2253,40 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           onCreated={refresh}
         />
       )}
-      <div className="entity-row-list">
-        {artifacts.map((a) => (
-          <Link key={a.id} to={`/artifacts/${a.id}`} className="entity-row">
-            <span className="entity-row-name">{a.name}</span>
-            {a.owner && <span className="muted">{a.owner}</span>}
-            <span className="entity-row-actions">
-              {/* Не <a> внутри <a> — строка целиком уже ссылка. */}
-              <button
-                type="button"
-                className="entity-row-action-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  navigate(`/artifacts/${a.id}`);
-                }}
-              >
-                Изменить
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  deleteArtifact(a.id);
-                }}
-              >
-                Удалить
-              </button>
-            </span>
-          </Link>
-        ))}
-        {artifacts.length === 0 && <p className="muted">Артефактов пока нет.</p>}
-      </div>
+      {loading && <p className="muted">Загрузка…</p>}
+      {loadError && (
+        <EmptyState
+          icon="skullDie"
+          title="Ошибка загрузки"
+          hint={loadError}
+          action={<button onClick={() => refresh()}>Повторить</button>}
+        />
+      )}
+      {!loading && !loadError && filtered.length === 0 && artifacts.length === 0 && (
+        <EmptyState
+          icon="fantasySwords"
+          title="Сокровищница пуста"
+          hint="Особые предметы сеттинга, имеющие значение для приключений"
+          action={
+            <button className="primary" onClick={() => setCreating(true)}>
+              + Создать первый предмет
+            </button>
+          }
+        />
+      )}
+      {!loading && !loadError && filtered.length === 0 && artifacts.length > 0 && (
+        <p className="muted">Ничего не найдено.</p>
+      )}
+      {!loading && !loadError && filtered.length > 0 && (
+        <ArtifactTileGrid
+          artifacts={filtered}
+          grouping={grouping}
+          searchActive={!!debouncedQuery.trim()}
+          dir={sortDir}
+          settingId={settingId}
+          onRefresh={refresh}
+        />
+      )}
     </div>
   );
 }
@@ -2300,9 +2303,10 @@ function SettingExportModal({
   const [includeCalendar, setIncludeCalendar] = useState(false);
   const [includeResources, setIncludeResources] = useState(false);
   const [includeImages, setIncludeImages] = useState(false);
+  const [includeAdventures, setIncludeAdventures] = useState(false);
 
   async function doExport() {
-    const include = [includeCalendar && "calendar", includeResources && "resources", includeImages && "images"]
+    const include = [includeCalendar && "calendar", includeResources && "resources", includeImages && "images", includeAdventures && "adventures"]
       .filter(Boolean)
       .join(",");
     const data = await api.get(`/settings/${settingId}/export?include=${include}`);
@@ -2340,6 +2344,14 @@ function SettingExportModal({
             onChange={(e) => setIncludeImages(e.target.checked)}
           />
           Изображения, галереи, карты локаций (с пинами) и звуковые файлы (значительно увеличит размер файла)
+        </label>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={includeAdventures}
+            onChange={(e) => setIncludeAdventures(e.target.checked)}
+          />
+          Приключения (сценарии, сцены, проверки, полотна)
         </label>
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <button onClick={onClose}>Отмена</button>
