@@ -61,6 +61,30 @@ export async function resolveEntityMapLabel(type: string, id: number): Promise<s
   }
 }
 
+export type ResolvedLabelResult = { target_type: string; target_id: number; label: string };
+
+export async function resolveEntityMapLabels(
+  pins: { target_type: string; target_id: number }[]
+): Promise<ResolvedLabelResult[]> {
+  if (pins.length === 0) return [];
+  try {
+    const { labels } = await api.post<{ labels: ResolvedLabelResult[] }>(
+      "/setting-locations/resolve-labels",
+      { pins }
+    );
+    return labels ?? [];
+  } catch {
+    // Fallback: resolve individually via GET requests
+    return Promise.all(
+      pins.map(async (p) => ({
+        target_type: p.target_type,
+        target_id: p.target_id,
+        label: await resolveEntityMapLabel(p.target_type, p.target_id),
+      }))
+    );
+  }
+}
+
 export async function resolveEntityLabel(type: string, id: number): Promise<string> {
   if (type === "preproduction") {
     try {

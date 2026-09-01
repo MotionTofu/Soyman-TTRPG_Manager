@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api, deleteFileWithChoice } from "../api/client";
-import { resolveEntityMapLabel } from "../api/resolveEntity";
+import { resolveEntityMapLabels, type ResolvedLabelResult } from "../api/resolveEntity";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { SearchPanel } from "../layout/SearchPanel";
 import { Modal } from "./Modal";
@@ -12,7 +12,11 @@ import { LocationCascadePicker } from "./LocationCascadePicker";
 import { SendMapToSessionModal } from "./SendMapToSessionModal";
 import { addToBag } from "../bag";
 import { NavIcon } from "./NavIcons";
+import { isSafeImageUrl } from "../utils/safeUrl";
+import { useConfirm, useAlert } from "../hooks/useConfirm";
 import type { LocationPin, SearchResult, SettingLocation } from "../types";
+
+const MAX_PINS = 100;
 
 interface Props {
   locationId: number;
@@ -166,10 +170,13 @@ export function LocationMap({
   const [transferring, setTransferring] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [pinQuery, setPinQuery] = useState("");
+  const [rawPinQuery, setRawPinQuery] = useState("");
   const [pinDropdownOpen, setPinDropdownOpen] = useState(false);
   const [pinTarget, setPinTarget] = useState<ResolvedPin | null>(null);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [wrapSize, setWrapSize] = useState<{ w: number; h: number } | null>(null);
+  const [pinsLoading, setPinsLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; onUndo?: () => void } | null>(null);
   const imgWrapRef = useRef<HTMLDivElement>(null);
   const initializedForUrlRef = useRef<string | null>(null);
   const dragState = useRef<{ pinId: number; moved: boolean; x: number; y: number } | null>(null);
@@ -179,17 +186,39 @@ export function LocationMap({
   );
   const justPannedRef = useRef(false);
   const navigate = useNavigate();
+  const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, alertFn] = useAlert();
+
+  function showToast(msg: string, onUndo?: () => void) {
+    setToast({ msg, onUndo });
+    window.setTimeout(() => setToast((t) => (t?.msg === msg ? null : t)), 5000);
+  }
 
   useEffect(() => {
+    if (pins.length === 0) { setResolved([]); return; }
     let cancelled = false;
-    Promise.all(
-      pins.map(async (p) => ({ ...p, label: await resolveEntityMapLabel(p.target_type, p.target_id) }))
-    ).then((rows) => {
-      if (!cancelled) setResolved(rows);
-    });
-    return () => {
-      cancelled = true;
-    };
+    setPinsLoading(true);
+    resolveEntityMapLabels(pins.map((p) => ({ target_type: p.target_type, target_id: p.target_id })))
+      .then((results) => {
+        if (cancelled) return;
+        const labelMap = new Map(results.map((r) => [`${r.target_type}:${r.target_id}`, r.label]));
+        setResolved(
+          pins.map((p) => ({
+            ...p,
+            label: labelMap.get(`${p.target_type}:${p.target_id}`) ?? `${p.target_type} #${p.target_id}`,
+          }))
+        );
+      })
+      .catch((err) => {
+        if (!cancelled && err?.name !== "AbortError") {
+          console.error("Failed to resolve pin labels:", err);
+          showToast("Не удалось загрузить подписи пинов");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPinsLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [pins]);
 
   // Track the wrap's own box so pin/image math re-runs whenever it resizes
@@ -265,6 +294,37 @@ export function LocationMap({
     return () => el.removeEventListener("wheel", onWheel);
   }, [mapImageUrl, fullscreen, maxZoom]);
 
+  // Debounce pin query to avoid re-filtering on every keystroke
+  useEffect(() => {
+    const t = window.setTimeout(() => setPinQuery(rawPinQuery), 150);
+    return () => window.clearTimeout(t);
+  }, [rawPinQuery]);
+
+  // Cleanup pan/drag state on unmount to avoid stale refs
+  useEffect(() => {
+    return () => {
+      panState.current = null;
+      dragState.current = null;
+    };
+  }, []);
+
+  function highlight(text: string, query: string): React.ReactNode {
+    if (!query.trim()) return text;
+    const q = query.trim().toLocaleLowerCase("ru");
+    const lower = text.toLocaleLowerCase("ru");
+    const idx = lower.indexOf(q);
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark style={{ background: "color-mix(in srgb, var(--accent) 22%, transparent)", color: "inherit", padding: 0 }}>
+          {text.slice(idx, idx + q.length)}
+        </mark>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  }
+
   function zoomBy(factor: number) {
     const rect = imgWrapRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -296,19 +356,40 @@ export function LocationMap({
 
   async function uploadMap(file: File | null) {
     if (!file) return;
+    if (file.size > 15 * 1024 * 1024) { alertFn("Файл слишком большой. Максимум — 15 МБ."); return; }
+    if (!/^image\/(jpeg|png|gif|webp|avif)/.test(file.type)) { alertFn("Недопустимый формат. Используйте JPG, PNG, GIF, WebP или AVIF."); return; }
     setUploading(true);
-    const form = new FormData();
-    form.append("file", file);
-    await api.post(`/setting-locations/${locationId}/map`, form);
-    setUploading(false);
-    onChange();
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await api.post(`/setting-locations/${locationId}/map`, form);
+      showToast("Карта загружена");
+      onChange();
+    } catch {
+      alertFn("Не удалось загрузить карту — проверьте соединение с сервером.");
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function removeMap() {
-    if (!confirm("Убрать карту и все пины на ней?")) return;
-    const deleted = await deleteFileWithChoice(`/setting-locations/${locationId}/map`);
-    if (!deleted) return;
-    onChange();
+    const ok = await confirm({
+      title: "Убрать карту?",
+      message: `Убрать карту локации «${locationName}» и все пины на ней (${pins.length})?`,
+      confirmLabel: "Убрать",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const deleted = await deleteFileWithChoice(`/setting-locations/${locationId}/map`);
+      if (!deleted) return;
+      showToast("Карта удалена", () => {
+        void api.post(`/setting-locations/${locationId}/map/restore`).then(onChange);
+      });
+      onChange();
+    } catch {
+      alertFn("Не удалось удалить карту — проверьте соединение с сервером.");
+    }
   }
 
   function addMapToBag() {
@@ -328,7 +409,7 @@ export function LocationMap({
       setTransferKeepCopy(false);
       onChange();
     } catch {
-      alert("Не удалось перенести карту — возможно, у выбранной локации уже есть своя карта.");
+      showToast("Не удалось перенести карту — возможно, у выбранной локации уже есть своя карта.");
     } finally {
       setTransferring(false);
     }
@@ -344,23 +425,32 @@ export function LocationMap({
     setShowSettings(true);
   }
 
-  function parseDraftNumber(value: string): number {
-    return Number(value.replace(",", ".")) || 0;
+  function parseDraftNumber(value: string, fallback: number): number {
+    const n = Number(value.replace(",", "."));
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.min(maxZoom, Math.max(MIN_ZOOM, n));
   }
 
   async function saveSettings() {
-    await api.put(`/setting-locations/${locationId}/map-settings`, {
-      max_zoom: parseDraftNumber(settingsDraft.maxZoom) || DEFAULT_MAX_ZOOM,
-      start_zoom: parseDraftNumber(settingsDraft.startZoom) || DEFAULT_START_ZOOM,
-      goto_zoom: parseDraftNumber(settingsDraft.gotoZoom) || DEFAULT_GOTO_ZOOM,
-      labels_always: settingsDraft.labelsAlways,
-    });
-    setShowSettings(false);
-    onChange();
+    try {
+      await api.put(`/setting-locations/${locationId}/map-settings`, {
+        max_zoom: parseDraftNumber(settingsDraft.maxZoom, DEFAULT_MAX_ZOOM),
+        start_zoom: parseDraftNumber(settingsDraft.startZoom, DEFAULT_START_ZOOM),
+        goto_zoom: parseDraftNumber(settingsDraft.gotoZoom, DEFAULT_GOTO_ZOOM),
+        labels_always: settingsDraft.labelsAlways,
+      });
+      setShowSettings(false);
+      showToast("Настройки карты сохранены");
+      onChange();
+    } catch {
+      alertFn("Не удалось сохранить настройки карты.");
+    }
   }
 
   function toContentPercent(clientX: number, clientY: number) {
-    const rect = imgWrapRef.current!.getBoundingClientRect();
+    const el = imgWrapRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
     const localX = clientX - rect.left;
     const localY = clientY - rect.top;
     const contentX = (localX - view.panX) / view.zoom;
@@ -377,17 +467,21 @@ export function LocationMap({
     setDragOver(false);
     const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
     if (!raw || !imgWrapRef.current) return;
-    const result: SearchResult = JSON.parse(raw);
-    const { x, y } = toContentPercent(e.clientX, e.clientY);
-    api
-      .post(`/setting-locations/${locationId}/pins`, {
-        target_type: result.type,
-        target_id: result.id,
-        x,
-        y,
-      })
-      .then(onChange)
-      .catch(() => alert("Не удалось добавить пин — проверьте соединение с сервером и попробуйте ещё раз."));
+    try {
+      const result: SearchResult = JSON.parse(raw);
+      const { x, y } = toContentPercent(e.clientX, e.clientY);
+      api
+        .post(`/setting-locations/${locationId}/pins`, {
+          target_type: result.type,
+          target_id: result.id,
+          x,
+          y,
+        })
+        .then(onChange)
+        .catch(() => alertFn("Не удалось добавить пин — проверьте соединение с сервером и попробуйте ещё раз."));
+    } catch {
+      // Silently ignore invalid drag data
+    }
   }
 
   function deselect() {
@@ -396,17 +490,19 @@ export function LocationMap({
   }
 
   async function removePin(pinId: number) {
-    if (!confirm("Удалить этот пин?")) return;
+    const ok = await confirm({ title: "Удалить пин?", message: "Удалить этот пин с карты?", confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     try {
       await api.del(`/setting-locations/pins/${pinId}`);
       if (selectedPinId === pinId) deselect();
       onChange();
     } catch {
-      alert("Не удалось удалить пин — проверьте соединение с сервером и попробуйте ещё раз.");
+      alertFn("Не удалось удалить пин — проверьте соединение с сервером и попробуйте ещё раз.");
     }
   }
 
   async function duplicatePin(pin: ResolvedPin) {
+    if (resolved.length >= MAX_PINS) { alertFn(`Максимум ${MAX_PINS} пинов на одной карте.`); return; }
     try {
       const created = await api.post<LocationPin>(`/setting-locations/${locationId}/pins`, {
         target_type: pin.target_type,
@@ -418,9 +514,10 @@ export function LocationMap({
         border_color: pin.border_color,
       });
       setSelectedPinId(created.id);
+      showToast("Пин скопирован");
       onChange();
     } catch {
-      alert("Не удалось скопировать пин — проверьте соединение с сервером и попробуйте ещё раз.");
+      alertFn("Не удалось скопировать пин — проверьте соединение с сервером и попробуйте ещё раз.");
     }
   }
 
@@ -435,7 +532,7 @@ export function LocationMap({
   // actually persisted (that drift is what makes pins look like they "reset").
   function revertPinEditOnFailure(err: unknown) {
     console.error(err);
-    alert("Не удалось сохранить изменение пина — проверьте соединение с сервером. Восстанавливаю последнее сохранённое состояние.");
+    alertFn("Не удалось сохранить изменение пина — проверьте соединение с сервером. Восстанавливаю последнее сохранённое состояние.");
     onChange();
   }
 
@@ -491,7 +588,7 @@ export function LocationMap({
       } catch (err) {
         if (i === attempts - 1) {
           console.error(err);
-          alert(
+          alertFn(
             "Не удалось сохранить новое положение пина — проверьте соединение с сервером. Пин вернётся на последнюю сохранённую позицию."
           );
           onChange();
@@ -574,12 +671,15 @@ export function LocationMap({
   }
 
   const pinSuggestions = pinQuery.trim()
-    ? resolved.filter((p) => p.label.toLowerCase().includes(pinQuery.trim().toLowerCase()))
+    ? resolved.filter((p) => p.label.toLocaleLowerCase("ru").includes(pinQuery.trim().toLocaleLowerCase("ru")))
     : [];
 
-  const imageBox = computeImageBox(naturalSize, wrapSize);
+  const debouncedPinQuery = pinQuery;
 
-  const mapBody = mapImageUrl && (
+  const imageBox = computeImageBox(naturalSize, wrapSize);
+  const safeMapUrl = isSafeImageUrl(mapImageUrl) ? mapImageUrl : null;
+
+  const mapBody = safeMapUrl && (
     <div
       ref={imgWrapRef}
       className={`location-map-wrap${dragOver ? " drag-over" : ""}`}
@@ -599,7 +699,7 @@ export function LocationMap({
         style={{ transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})` }}
       >
         <img
-          src={mapImageUrl}
+          src={safeMapUrl}
           alt=""
           className="location-map-img"
           draggable={false}
@@ -637,6 +737,9 @@ export function LocationMap({
               <span
                 className="location-map-pin-dot"
                 style={dotStyle}
+                role="button"
+                tabIndex={0}
+                aria-label={`${p.label}, ${ENTITY_TYPE_LABELS[p.target_type] ?? p.target_type}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   handlePinClick(p);
@@ -644,6 +747,7 @@ export function LocationMap({
                 onPointerDown={(e) => handlePinPointerDown(e, p)}
                 onPointerMove={(e) => handlePinPointerMove(e, p)}
                 onPointerUp={() => handlePinPointerUp(p)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePinClick(p); } }}
               />
               {!isSelected && (
                 <div
@@ -713,6 +817,9 @@ export function LocationMap({
           );
         })}
       </div>
+      {pinsLoading && pins.length > 0 && (
+        <div className="location-map-pin-loading">Загружаю подписи…</div>
+      )}
       <div className="location-map-zoom-controls">
         <button type="button" onClick={() => zoomBy(1.3)} title="Приблизить">
           <NavIcon name="plus" />
@@ -745,8 +852,8 @@ export function LocationMap({
     <>
       <div className="card stack location-map-card">
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-          <h3>Карта</h3>
-          {mapImageUrl && (
+          <h3>Карта {pins.length > 0 && <span className="map-pin-count">({pins.length} {pins.length === 1 ? "пин" : pins.length < 5 ? "пина" : "пинов"})</span>}</h3>
+          {safeMapUrl && (
             <div className="row">
               <button type="button" onClick={openSettings}>
                 <NavIcon name="gear" /> Настройки карты
@@ -780,9 +887,10 @@ export function LocationMap({
             </div>
           )}
         </div>
-        {!mapImageUrl && (
+        {!safeMapUrl && (
           <>
-            <span className="muted">Загрузите изображение карты, чтобы размещать на ней пины.</span>
+            {mapImageUrl && <span className="muted">Карта повреждена или содержит небезопасный URL. Загрузите изображение заново.</span>}
+            {!mapImageUrl && <span className="muted">Загрузите изображение карты, чтобы размещать на ней пины.</span>}
             <label className="character-avatar-upload" style={{ alignSelf: "flex-start" }}>
               {uploading ? "Загрузка…" : "Загрузить карту"}
               <input
@@ -795,15 +903,15 @@ export function LocationMap({
             <span className="muted image-hint">{IMAGE_HINT}</span>
           </>
         )}
-        {mapImageUrl && !fullscreen && (
+        {safeMapUrl && !fullscreen && (
           <>
             {mapBody}
             <div className="location-map-pin-search">
               <input
                 placeholder="Найти пин по названию…"
-                value={pinQuery}
+                value={rawPinQuery}
                 onChange={(e) => {
-                  setPinQuery(e.target.value);
+                  setRawPinQuery(e.target.value);
                   setPinTarget(null);
                   setPinDropdownOpen(true);
                 }}
@@ -820,7 +928,7 @@ export function LocationMap({
                       onClick={() => selectPinSuggestion(p)}
                     >
                       <span className="muted">{ENTITY_TYPE_LABELS[p.target_type] ?? p.target_type}</span>{" "}
-                      {p.label}
+                      {highlight(p.label, debouncedPinQuery)}
                     </div>
                   ))}
                 </div>
@@ -831,14 +939,14 @@ export function LocationMap({
             </div>
           </>
         )}
-        {mapImageUrl && fullscreen && (
+        {safeMapUrl && fullscreen && (
           <span className="muted">Карта открыта в полноэкранном режиме.</span>
         )}
       </div>
-      {mapImageUrl &&
+      {safeMapUrl &&
         fullscreen &&
         createPortal(
-          <div className="location-map-fullscreen">
+          <div className="location-map-fullscreen" role="dialog" aria-modal="true" aria-label="Карта на весь экран" ref={(el) => { if (el) el.focus(); }}>
             <div className="location-map-fullscreen-bar">
               <SearchPanel horizontal />
               <button
@@ -866,6 +974,7 @@ export function LocationMap({
                 value={settingsDraft.maxZoom}
                 onChange={(e) => setSettingsDraft((d) => ({ ...d, maxZoom: e.target.value }))}
               />
+              <span className="muted" style={{ fontSize: 11 }}>Предел приближения колесом мыши и кнопками +/−.</span>
             </label>
             <label className="stack" style={{ gap: 4 }}>
               Стартовый зум (при открытии страницы)
@@ -875,6 +984,7 @@ export function LocationMap({
                 value={settingsDraft.startZoom}
                 onChange={(e) => setSettingsDraft((d) => ({ ...d, startZoom: e.target.value }))}
               />
+              <span className="muted" style={{ fontSize: 11 }}>Какая степень приближения будет установлена при первом открытии карты.</span>
             </label>
             <label className="stack" style={{ gap: 4 }}>
               Зум при переходе к пину
@@ -884,6 +994,7 @@ export function LocationMap({
                 value={settingsDraft.gotoZoom}
                 onChange={(e) => setSettingsDraft((d) => ({ ...d, gotoZoom: e.target.value }))}
               />
+              <span className="muted" style={{ fontSize: 11 }}>Приближение при нажатии «Перейти» в поиске пинов.</span>
             </label>
             <label className="row">
               <input
@@ -937,6 +1048,15 @@ export function LocationMap({
       )}
       {sendOpen && (
         <SendMapToSessionModal locationId={locationId} settingId={settingId} onClose={() => setSendOpen(false)} />
+      )}
+      {confirmDialog}
+      {alertDialog}
+      {toast && (
+        <div className="location-map-toast">
+          <span>{toast.msg}</span>
+          {toast.onUndo && <button type="button" className="location-map-toast-undo" onClick={() => { const cb = toast.onUndo; setToast(null); cb?.(); }}>Отменить</button>}
+          <button type="button" className="location-map-toast-close" onClick={() => setToast(null)} aria-label="Закрыть">×</button>
+        </div>
       )}
     </>
   );

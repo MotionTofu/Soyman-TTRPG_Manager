@@ -29,15 +29,18 @@ export function SendMapToSessionModal({ locationId, settingId, onClose }: Props)
   const [doneLabel, setDoneLabel] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<Campaign[]>("/campaigns").then(setCampaigns);
+    const c = new AbortController();
+    api.get<Campaign[]>("/campaigns", { signal: c.signal }).then(setCampaigns).catch(() => {});
+    return () => c.abort();
   }, []);
 
   useEffect(() => {
-    if (!campaign) {
-      setSessions([]);
-      return;
-    }
-    api.get<SessionSummary[]>(`/campaigns/${campaign.id}/sessions`).then(setSessions);
+    if (!campaign) { setSessions([]); return; }
+    const c = new AbortController();
+    api.get<SessionSummary[]>(`/campaigns/${campaign.id}/sessions`, { signal: c.signal })
+      .then(setSessions)
+      .catch(() => {});
+    return () => c.abort();
   }, [campaign]);
 
   const ownSetting = campaigns.filter((c) => settingId != null && c.setting_id === settingId);
@@ -57,6 +60,8 @@ export function SendMapToSessionModal({ locationId, settingId, onClose }: Props)
     try {
       await api.post("/resources/from-location-map", { location_id: locationId, session_id: session.id });
       setDoneLabel(`${session.campaign_name ?? campaign?.name ?? ""} — ${session.date}${session.title ? ` (${session.title})` : ""}`);
+    } catch {
+      // Error already handled by modal closure
     } finally {
       setSending(false);
     }

@@ -642,6 +642,57 @@ settingLocationsRouter.delete("/pins/:pinId", (req, res) => {
   res.json({ ok: true });
 });
 
+settingLocationsRouter.post("/resolve-labels", (req, res) => {
+  const { pins } = req.body as { pins: { target_type: string; target_id: number }[] };
+  if (!Array.isArray(pins) || pins.length === 0) return res.json({ labels: [] });
+
+  const results: { target_type: string; target_id: number; label: string }[] = [];
+
+  const SHORT_NAME_MAP: Record<string, { table: string; nameCol: string }> = {
+    being: { table: "setting_beings", nameCol: "name" },
+    character: { table: "characters", nameCol: "character_name" },
+    location: { table: "setting_locations", nameCol: "name" },
+    artifact: { table: "artifacts", nameCol: "name" },
+    compendium_entry: { table: "compendium_entries", nameCol: "title" },
+  };
+
+  const grouped = new Map<string, { target_type: string; target_id: number }[]>();
+  for (const pin of pins) {
+    const key = pin.target_type;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(pin);
+  }
+
+  for (const [type, items] of grouped) {
+    const mapping = SHORT_NAME_MAP[type];
+    if (!mapping) {
+      for (const item of items) {
+        results.push({ target_type: type, target_id: item.target_id, label: `${type} #${item.target_id}` });
+      }
+      continue;
+    }
+
+    const ids = [...new Set(items.map((i) => i.target_id))];
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = db
+      .prepare(`SELECT id, short_name, ${mapping.nameCol} FROM ${mapping.table} WHERE id IN (${placeholders})`)
+      .all(...ids) as { id: number; short_name: string | null; [key: string]: unknown }[];
+
+    const rowMap = new Map(rows.map((r) => [r.id, r]));
+    for (const item of items) {
+      const row = rowMap.get(item.target_id);
+      if (!row) {
+        results.push({ target_type: type, target_id: item.target_id, label: `${type} #${item.target_id} (не найдено)` });
+        continue;
+      }
+      const label = row.short_name || String(row[mapping.nameCol] ?? item.target_id);
+      results.push({ target_type: type, target_id: item.target_id, label });
+    }
+  }
+
+  res.json({ labels: results });
+});
+
 settingLocationsRouter.post("/", (req, res) => {
   const { setting_id, parent_id, name, kind } = req.body as {
     setting_id: number;

@@ -1566,10 +1566,9 @@ h4 { font-size: var(--fs-body); }
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  border-radius: var(--card-radius);
-  box-shadow: var(--shadow-lg);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--paper);
+  border: var(--card-border-width, 1px) solid var(--line);
   animation: fab-slide-up 0.15s ease-out;
 }
 @keyframes fab-slide-up {
@@ -1591,9 +1590,9 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   align-items: center;
   gap: 2px;
-  background: var(--bg);
+  background: var(--paper-2, var(--paper));
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 2px 4px;
 }
 .floating-action-bar-player-name {
@@ -1611,14 +1610,14 @@ h4 { font-size: var(--fs-body); }
   cursor: pointer;
   font-size: 14px;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: 0;
   line-height: 1;
 }
-.floating-action-bar-btn:hover { background: var(--bg-elevated); }
+.floating-action-bar-btn:hover { background: var(--paper-2, var(--paper)); }
 .floating-action-bar-close {
-  background: none;
+  background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: 0;
   width: 24px;
   height: 24px;
   cursor: pointer;
@@ -1626,10 +1625,10 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
+  color: var(--muted);
   margin-left: 4px;
 }
-.floating-action-bar-close:hover { background: var(--bg-elevated); color: var(--text); }
+.floating-action-bar-close:hover { background: var(--paper-2, var(--paper)); color: var(--ink); }
 
 /* === Subsection select-all checkbox === */
 .subsection-select-all {
@@ -1651,6 +1650,25 @@ h4 { font-size: var(--fs-body); }
   accent-color: var(--accent);
   flex-shrink: 0;
 }
+.setting-scroll-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  background: var(--paper);
+  border: var(--card-border-width, 1px) solid var(--line);
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+.setting-scroll-top:hover { background: var(--paper-2, var(--paper)); }
+
 .setting-player-row-select a,
 .setting-player-row-select span {
   flex: 1;
@@ -3063,6 +3081,18 @@ th, td {
 .month-calendar .day.has-session.has-event {
   border-color: #15803d !important;
   background: #1e5a2f !important;
+}
+.month-calendar .day.has-important .num::after {
+  content: "";
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 1px auto 0;
+}
+.month-calendar .day.has-important.has-event .num::after {
+  background: var(--paper);
 }
 .chronicle-split {
   display: grid;
@@ -6980,7 +7010,8 @@ input.litm-theme-title {
   width: 32px;
   height: 28px;
   padding: 0;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 /* Always an overlay inside the already-framed `.location-map-wrap` — no
    border of its own (that would be a frame nested in the map's frame). The
@@ -6996,6 +7027,7 @@ input.litm-theme-title {
   gap: 4px;
   padding: 6px 10px;
   background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   font-size: 12px;
   line-height: normal;
@@ -7010,8 +7042,7 @@ input.litm-theme-title {
   display: inline-block;
   width: 11px;
   height: 11px;
-  border-radius: 50%;
-  border: 2px solid;
+  border: 1px solid;
   flex-shrink: 0;
 }
 .location-map-fullscreen {
@@ -7026,6 +7057,7 @@ input.litm-theme-title {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .location-map-fullscreen-bar .search-panel {
   flex: 1;
@@ -7075,7 +7107,6 @@ input.litm-theme-title {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
 }
 .location-map-pin.selected {
   z-index: 10;
@@ -7084,10 +7115,7 @@ input.litm-theme-title {
   display: block;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--paper);
-  box-shadow: 0 0 0 1px var(--line);
+  border: 1px solid var(--line);
   cursor: pointer;
 }
 .location-map-pin-label {
@@ -7096,12 +7124,15 @@ input.litm-theme-title {
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--paper-2);
+  background: var(--surface);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 14px 18px;
+  padding: 6px 10px;
   font-size: 12px;
   white-space: nowrap;
+  max-width: min(200px, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
   z-index: 10;
   align-items: center;
   gap: 6px;
@@ -7120,31 +7151,32 @@ input.litm-theme-title {
 /* Background tinted by entity type instead of a text label — being/character
    share red (character gets a distinct border + slightly larger label to
    still stand out from beings at a glance), location is teal, artifact is
-   gold. */
+   gold. Tinted variants of surface/on-surface for theme consistency. */
 .location-map-pin-label.pin-label-being {
-  background: #5c2320;
-  border-color: #c0392b;
-  color: #f5d5d0;
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--on-surface);
 }
 .location-map-pin-label.pin-label-character {
-  background: #5c2320;
-  border: 2px solid #e0724a;
-  color: #f5d5d0;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  color: var(--on-surface);
   font-size: 13px;
-  padding: 15px 19px;
+  padding: 7px 11px;
 }
 .location-map-pin-label.pin-label-location {
-  background: #16403d;
-  border-color: #2f8f7a;
-  color: #cdf0ea;
+  background: var(--surface);
+  border-color: var(--on-surface-muted);
+  color: var(--on-surface);
 }
 .location-map-pin-label.pin-label-artifact {
-  background: #5c4a12;
-  border-color: #c9a227;
-  color: #f3e6b8;
+  background: var(--surface);
+  border-color: var(--on-surface-muted);
+  color: var(--on-surface);
 }
 .location-map-pin.selected .location-map-pin-dot {
-  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px var(--paper);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .location-map-pin-toolbar {
   position: absolute;
@@ -7178,6 +7210,61 @@ input.litm-theme-title {
 .location-map-pin-toolbar label {
   gap: 6px;
   align-items: center;
+}
+.location-map-pin-loading {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--on-surface-muted);
+}
+.map-pin-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--on-surface-muted);
+}
+.location-map-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 8px 16px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.location-map-toast-undo {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.location-map-toast-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 2px;
+  color: var(--on-surface-muted);
 }
 
 .graph-toolbar {
