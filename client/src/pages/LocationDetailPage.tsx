@@ -276,6 +276,7 @@ export function LocationDetailPage() {
       <Breadcrumbs
         items={[
           { label: "Сеттинг", to: `/settings/${location.setting_id}` },
+          { label: "География", to: `/settings/${location.setting_id}?tab=${encodeURIComponent("География")}` },
           ...location.ancestors.map((a) => ({ label: a.name, to: `/locations/${a.id}` })),
           { label: location.name },
         ]}
@@ -594,7 +595,7 @@ export function LocationDetailPage() {
             {location.important_dates.map((d) => (
               <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
                 <span>
-                  <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [])}
+                  <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [], calendar?.weekdays ?? [])}
                 </span>
                 <button className="danger" onClick={() => removeImportantDate(d.id)}>
                   ✕
