@@ -91,7 +91,29 @@ function pinCounterScale(zoom: number) {
   return (1 - (1 - zoom) * 0.15) / zoom;
 }
 
-function clampPan(zoom: number, panX: number, panY: number, rect: { width: number; height: number }) {
+function clampPan(
+  zoom: number,
+  panX: number,
+  panY: number,
+  rect: { width: number; height: number },
+  imageBox?: { left: number; top: number; width: number; height: number } | null
+) {
+  if (imageBox) {
+    // Clamp so image edges never leave the viewport.
+    const imgLeft = imageBox.left;
+    const imgTop = imageBox.top;
+    const imgRight = imgLeft + imageBox.width;
+    const imgBottom = imgTop + imageBox.height;
+    const minX = rect.width - imgRight * zoom;
+    const maxX = -imgLeft * zoom;
+    const minY = rect.height - imgBottom * zoom;
+    const maxY = -imgTop * zoom;
+    return {
+      x: Math.min(maxX, Math.max(minX, panX)),
+      y: Math.min(maxY, Math.max(minY, panY)),
+    };
+  }
+  // Fallback: clamp to wrap edges (no imageBox available).
   const scaledW = rect.width * zoom;
   const scaledH = rect.height * zoom;
   const minX = Math.min(0, rect.width - scaledW);
@@ -104,10 +126,16 @@ function clampPan(zoom: number, panX: number, panY: number, rect: { width: numbe
 
 // Keeps the given content point (in unscaled px, relative to the map's own box)
 // fixed at the center of the current viewport rect while zooming to `zoom`.
-function centeredPan(zoom: number, contentX: number, contentY: number, rect: { width: number; height: number }) {
+function centeredPan(
+  zoom: number,
+  contentX: number,
+  contentY: number,
+  rect: { width: number; height: number },
+  imageBox?: { left: number; top: number; width: number; height: number } | null
+) {
   const panX = rect.width / 2 - zoom * contentX;
   const panY = rect.height / 2 - zoom * contentY;
-  return clampPan(zoom, panX, panY, rect);
+  return clampPan(zoom, panX, panY, rect, imageBox);
 }
 
 // Pins are stored as a percentage of the *image's own* rendered box, not the
@@ -253,7 +281,7 @@ export function LocationMap({
     const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
     const contentX = box.left + box.width / 2;
     const contentY = box.top + box.height / 2;
-    const clamped = centeredPan(startZoom, contentX, contentY, rect);
+    const clamped = centeredPan(startZoom, contentX, contentY, rect, box);
     setView({ zoom: startZoom, panX: clamped.x, panY: clamped.y });
     initializedForUrlRef.current = mapImageUrl;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -261,12 +289,22 @@ export function LocationMap({
 
   useEffect(() => {
     if (!fullscreen) return;
+    // Re-clamp pan when fullscreen changes so the image doesn't appear offset
+    // in the new (larger) container.
+    const rect = imgWrapRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width) return;
+    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
+    setView((v) => {
+      const clamped = clampPan(v.zoom, v.panX, v.panY, rect, box);
+      if (clamped.x === v.panX && clamped.y === v.panY) return v;
+      return { ...v, panX: clamped.x, panY: clamped.y };
+    });
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setFullscreen(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen]);
+  }, [fullscreen, naturalSize]);
 
   // React makes onWheel passive by default, so preventDefault() there silently
   // no-ops — attach a real listener to actually stop the page from scrolling.
@@ -286,7 +324,8 @@ export function LocationMap({
         if (newZoom === v.zoom) return v;
         const contentX = (mx - v.panX) / v.zoom;
         const contentY = (my - v.panY) / v.zoom;
-        const clamped = centeredPan(newZoom, contentX, contentY, rect);
+        const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
+        const clamped = centeredPan(newZoom, contentX, contentY, rect, box);
         return { zoom: newZoom, panX: clamped.x, panY: clamped.y };
       });
     }
@@ -335,7 +374,8 @@ export function LocationMap({
       if (newZoom === v.zoom) return v;
       const contentX = (cx - v.panX) / v.zoom;
       const contentY = (cy - v.panY) / v.zoom;
-      const clamped = centeredPan(newZoom, contentX, contentY, rect);
+      const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
+      const clamped = centeredPan(newZoom, contentX, contentY, rect, box);
       return { zoom: newZoom, panX: clamped.x, panY: clamped.y };
     });
   }
@@ -346,8 +386,10 @@ export function LocationMap({
     const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
     const contentX = box.left + box.width / 2;
     const contentY = box.top + box.height / 2;
-    const clamped = centeredPan(view.zoom, contentX, contentY, rect);
-    setView((v) => ({ ...v, panX: clamped.x, panY: clamped.y }));
+    setView((v) => {
+      const clamped = centeredPan(v.zoom, contentX, contentY, rect, box);
+      return { ...v, panX: clamped.x, panY: clamped.y };
+    });
   }
 
   function resetView() {
@@ -431,12 +473,18 @@ export function LocationMap({
     return Math.min(maxZoom, Math.max(MIN_ZOOM, n));
   }
 
+  function parseSettingNumber(value: string, fallback: number): number {
+    const n = Number(value.replace(",", "."));
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.max(MIN_ZOOM, n);
+  }
+
   async function saveSettings() {
     try {
       await api.put(`/setting-locations/${locationId}/map-settings`, {
-        max_zoom: parseDraftNumber(settingsDraft.maxZoom, DEFAULT_MAX_ZOOM),
-        start_zoom: parseDraftNumber(settingsDraft.startZoom, DEFAULT_START_ZOOM),
-        goto_zoom: parseDraftNumber(settingsDraft.gotoZoom, DEFAULT_GOTO_ZOOM),
+        max_zoom: parseSettingNumber(settingsDraft.maxZoom, DEFAULT_MAX_ZOOM),
+        start_zoom: parseSettingNumber(settingsDraft.startZoom, DEFAULT_START_ZOOM),
+        goto_zoom: parseSettingNumber(settingsDraft.gotoZoom, DEFAULT_GOTO_ZOOM),
         labels_always: settingsDraft.labelsAlways,
       });
       setShowSettings(false);
@@ -635,7 +683,8 @@ export function LocationMap({
     const dy = e.clientY - panState.current.startY;
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panState.current.moved = true;
     const rect = imgWrapRef.current.getBoundingClientRect();
-    const clamped = clampPan(view.zoom, panState.current.originX + dx, panState.current.originY + dy, rect);
+    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
+    const clamped = clampPan(view.zoom, panState.current.originX + dx, panState.current.originY + dy, rect, box);
     setView((v) => ({ ...v, panX: clamped.x, panY: clamped.y }));
   }
 
