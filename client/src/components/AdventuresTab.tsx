@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { chapterWord, sceneWord } from "../sceneKinds";
+import { AdventureWizard } from "./AdventureWizard";
 import type { StoryArc } from "../types";
 import { NavIcon } from "./NavIcons";
+import { useAlert } from "../hooks/useConfirm";
 
 // "Приключения" — the index of a setting's prepared story blocks. Everything
 // inside one (chapters, scenes, milestones, secrets) lives on the adventure's
@@ -18,21 +20,17 @@ export function AdventuresTab({
   campaignId?: number;
 }) {
   const [arcs, setArcs] = useState<StoryArc[]>([]);
-  const [name, setName] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [dragId, setDragId] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [alertDialog, showAlert] = useAlert();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   function refresh() {
     api.get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`).then(setArcs);
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [settingId]);
-
-  async function create() {
-    if (!name.trim()) return;
-    await api.post("/story/arcs", { setting_id: settingId, name });
-    setName("");
-    refresh();
-  }
 
   async function archive(arc: StoryArc) {
     if (!confirm(`Отправить «${arc.name}» в архив вместе с главами и сценами?`)) return;
@@ -56,8 +54,43 @@ export function AdventuresTab({
     refresh();
   }
 
+  async function importAdventure(file: File | null) {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await api.post("/story/arcs/import", { setting_id, data });
+      refresh();
+    } catch (e) {
+      showAlert(`Ошибка импорта: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   return (
     <div className="stack">
+      {!campaignId && (
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <button className="primary" onClick={() => setWizardOpen(true)}>
+            + Приключение
+          </button>
+          <label className="row" style={{ cursor: "pointer" }}>
+            {importing ? "Импорт…" : "Импорт приключения"}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json"
+              style={{ display: "none" }}
+              disabled={importing}
+              onChange={(e) => importAdventure(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        </div>
+      )}
+
       <p className="muted">
         Приключение — блок подготовленного сюжета внутри сеттинга (книга, ваншот, арка). Внутри
         него главы, сцены, вехи, тайны и зацепки.{" "}
@@ -65,19 +98,6 @@ export function AdventuresTab({
           ? "Кампания видит приключения сеттинга: правка сцены создаёт копию только для этой кампании, оригинал не меняется."
           : "Кампании наследуют эти приключения и могут править сцены у себя, не трогая оригинал."}
       </p>
-
-      {!campaignId && (
-        <div className="row">
-          <input
-            placeholder="Название приключения"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <button className="primary" onClick={create}>
-            + Приключение
-          </button>
-        </div>
-      )}
 
       <div className="entity-row-list">
         {adventures.map((a) => (
@@ -112,6 +132,16 @@ export function AdventuresTab({
         ))}
         {adventures.length === 0 && <p className="muted">Приключений пока нет.</p>}
       </div>
+
+      {wizardOpen && (
+        <AdventureWizard
+          settingId={settingId}
+          campaignId={campaignId}
+          onClose={() => setWizardOpen(false)}
+          onCreated={() => refresh()}
+        />
+      )}
+      {alertDialog}
     </div>
   );
 }

@@ -49,7 +49,7 @@ export function PlayerContentReader({ entries, index, onNavigate, onClose }: Pro
   if (!entry) return null;
 
   return createPortal(
-    <div className="player-reader-overlay" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div className="player-reader-overlay" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} role="dialog" aria-modal="true" aria-label={`${entry.section}: ${entry.title}`}>
       <div className="player-reader-topbar">
         <span className="player-reader-section muted">{entry.section}</span>
         <button type="button" className="player-reader-close" onClick={onClose} aria-label="Закрыть">
@@ -80,7 +80,7 @@ export function PlayerContentReader({ entries, index, onNavigate, onClose }: Pro
           ›
         </button>
       )}
-      <div className="player-reader-progress muted">
+      <div className="player-reader-progress muted" aria-live="polite" aria-atomic="true">
         {index + 1} / {entries.length}
       </div>
     </div>,

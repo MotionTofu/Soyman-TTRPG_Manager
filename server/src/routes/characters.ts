@@ -7,7 +7,15 @@ import { characterFolder, ensureSubfolder, toFileUrl, vaultAbs, vaultRel, writeR
 import { broadcastCharacterUpdate } from "../services/realtime";
 
 export const charactersRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 function withAvatarUrl<T extends { avatar_image_path?: string | null; thumbnail_image_path?: string | null }>(
   row: T

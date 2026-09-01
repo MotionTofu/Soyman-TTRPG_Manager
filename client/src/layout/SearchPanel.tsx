@@ -164,7 +164,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
             <button onClick={() => setActiveTypes(new Set(TYPES.map((t) => t.key)))}>
               Выбрать всё
             </button>
-            <button onClick={() => setActiveTypes(new Set(TYPES.map((t) => t.key)))}>Сбросить фильтры</button>
+            <button onClick={() => setActiveTypes(new Set())}>Сбросить фильтры</button>
           </div>
           <div className="filters">
             {TYPES.map((t) => (

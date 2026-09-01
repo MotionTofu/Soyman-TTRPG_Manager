@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import {
   allThemes, applyTheme, findTheme, loadThemePrefs,
   saveThemePrefs, loadRadiusOverride, saveRadiusOverride,
+  type Theme,
 } from "../themes";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -29,6 +30,7 @@ export function AppearanceSettingsPage() {
   const [bagSize, setBagSize] = useState(loadBagSize);
   const [useEpithets, setUseEpithets] = useState(loadUseEpithets);
   const [dndPrefs, setDndPrefs] = useState(loadDndPrefs());
+  const [previewTheme, setPreviewTheme] = useState<Theme | null>(null);
 
   function refreshAppSettings() {
     api.get<AppSettings>("/app-settings").then(setAppSettings);
@@ -243,7 +245,7 @@ export function AppearanceSettingsPage() {
               <div
               key={t.id}
               className="card"
-              onClick={() => select(t.id)}
+              onClick={() => setPreviewTheme(t)}
               style={{ cursor: "pointer", borderColor: t.id === prefs.themeId ? t.vars["--accent"] : undefined, borderWidth: t.id === prefs.themeId ? 1 : undefined }}
             >
               <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -306,6 +308,53 @@ export function AppearanceSettingsPage() {
         </div>
       </details>
 
+      {previewTheme && (
+        <div className="modal-backdrop" onClick={() => setPreviewTheme(null)}>
+          <div
+            className="modal"
+            style={{ maxWidth: 380, padding: 0, overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ background: previewTheme.vars["--paper"], color: previewTheme.vars["--ink"], padding: "12px 16px", borderBottom: `1px solid ${previewTheme.vars["--line"]}` }}>
+              <span style={{ fontFamily: previewTheme.vars["--font-display"], fontSize: "var(--fs-h3)", fontWeight: 600 }}>Предпросмотр темы</span>
+            </div>
+            <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12, background: previewTheme.vars["--paper-2"], color: previewTheme.vars["--ink"] }}>
+              {/* Color palette */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[
+                  { label: "Фон", color: previewTheme.vars["--paper"] },
+                  { label: "Поверх", color: previewTheme.vars["--paper-2"] },
+                  { label: "Акцент", color: previewTheme.vars["--accent"] },
+                  { label: "Текст", color: previewTheme.vars["--ink"] },
+                  { label: "Muted", color: previewTheme.vars["--muted"] },
+                  { label: "Линия", color: previewTheme.vars["--line"] },
+                ].map((c) => (
+                  <div key={c.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                    <span style={{ width: 32, height: 32, background: c.color, border: `1px solid ${previewTheme.vars["--line"]}` }} />
+                    <span style={{ fontSize: 9, fontFamily: "var(--font-ui)", textTransform: "uppercase", letterSpacing: "0.06em", color: previewTheme.vars["--muted"] }}>{c.label}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Sample card */}
+              <div style={{ background: previewTheme.vars["--paper"], border: `1px solid ${previewTheme.vars["--line"]}`, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ fontFamily: previewTheme.vars["--font-display"], fontWeight: 600, fontSize: 16 }}>Пример карточки</span>
+                <span style={{ fontFamily: previewTheme.vars["--body"], fontSize: 13, color: previewTheme.vars["--muted"] }}>Так будет выглядеть текст и элементы интерфейса в этой теме.</span>
+                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                  <span style={{ padding: "4px 10px", background: previewTheme.vars["--accent"], color: previewTheme.vars["--on-accent"], fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600 }}>Кнопка</span>
+                  <span style={{ padding: "4px 10px", border: `1px solid ${previewTheme.vars["--line"]}`, fontFamily: "var(--font-ui)", fontSize: 11 }}>Вторичная</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button onClick={() => setPreviewTheme(null)}>Отмена</button>
+                <button
+                  className="primary"
+                  onClick={() => { select(previewTheme.id); setPreviewTheme(null); }}
+                >Применить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

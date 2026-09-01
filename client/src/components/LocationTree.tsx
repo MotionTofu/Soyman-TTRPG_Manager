@@ -7,7 +7,7 @@ import { NavIcon } from "./NavIcons";
 import { EntityWizard } from "./entityWizard/EntityWizard";
 import { EmptyState } from "./EmptyState";
 import { isSafeImageUrl } from "../utils/safeUrl";
-import { useConfirm } from "../hooks/useConfirm";
+import { useConfirm, useAlert } from "../hooks/useConfirm";
 import { addToBag } from "../bag";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { buildMentionToken } from "../mentions";
@@ -34,6 +34,7 @@ export function LocationTree({ settingId }: Props) {
   const [mapFilter, setMapFilter] = useState<"" | "with" | "without">("");
   const [descFilter, setDescFilter] = useState<"" | "with" | "without">("");
   const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
   const treeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -226,7 +227,7 @@ export function LocationTree({ settingId }: Props) {
       setLastArchived(null);
       refresh();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -237,7 +238,7 @@ export function LocationTree({ settingId }: Props) {
       await api.put(`/setting-locations/${draggedId}/parent`, { parent_id: null });
       refresh();
     } catch (err) {
-      alert(String(err instanceof Error ? err.message : err));
+      showAlert(String(err instanceof Error ? err.message : err));
     } finally {
       setDraggedId(null);
     }
@@ -335,6 +336,7 @@ export function LocationTree({ settingId }: Props) {
   return (
     <div className="stack">
       {confirmDialog}
+      {alertDialog}
       <p className="muted">
         Верхний уровень — континенты, миры, крупнейшие регионы. Разворачивайте узлы, чтобы
         добавлять вложенные локации (страны, города, районы, конкретные места).
@@ -711,11 +713,12 @@ export function LocationNode({
       setAddingChild(false);
       onChange();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
   const [confirmDialogNode, confirmNode] = useConfirm();
+  const [alertDialogNode, showAlert] = useAlert();
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
   function startEdit(e?: React.MouseEvent) {
@@ -736,7 +739,7 @@ export function LocationNode({
       });
       onChange();
     } catch (err) {
-      alert(String(err instanceof Error ? err.message : err));
+      showAlert(String(err instanceof Error ? err.message : err));
     }
   }
 
@@ -756,7 +759,7 @@ export function LocationNode({
   async function saveEdit() {
     const name = editName.trim();
     if (!name) {
-      alert("Имя не может быть пустым");
+      showAlert("Имя не может быть пустым");
       return;
     }
     try {
@@ -764,7 +767,7 @@ export function LocationNode({
       setEditing(false);
       onChange();
     } catch (err) {
-      alert(String(err instanceof Error ? err.message : err));
+      showAlert(String(err instanceof Error ? err.message : err));
     }
   }
 
@@ -779,7 +782,7 @@ export function LocationNode({
     try {
       await api.del(`/setting-locations/${location.id}`);
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
       return;
     }
     onArchived?.(location.id, location.name);
@@ -815,14 +818,14 @@ export function LocationNode({
     const dragged = draggedId ?? (raw ? Number(raw) : null);
     if (dragged == null || dragged === location.id) return;
     if (isDescendant?.(dragged, location.id)) {
-      alert("Нельзя вложить локацию в своего же потомка.");
+      showAlert("Нельзя вложить локацию в своего же потомка.");
       return;
     }
     try {
       await api.put(`/setting-locations/${dragged}/parent`, { parent_id: location.id });
       onChange();
     } catch (err) {
-      alert(String(err instanceof Error ? err.message : err));
+      showAlert(String(err instanceof Error ? err.message : err));
     } finally {
       setDraggedId?.(null);
     }
@@ -848,6 +851,7 @@ export function LocationNode({
   return (
     <>
       {confirmDialogNode}
+      {alertDialogNode}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       <details ref={detailsRef} className="card" draggable onDragStart={handleDragStart} onDragEnd={handleDragEnd} data-location-id={location.id}>
         <summary

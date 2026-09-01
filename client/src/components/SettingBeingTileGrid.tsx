@@ -155,7 +155,7 @@ function BeingGroup({
   );
 }
 
-export function SettingBeingTileGrid({
+export const SettingBeingTileGrid = memo(function SettingBeingTileGrid({
   beings,
   grouping,
   searchActive,
@@ -193,7 +193,7 @@ export function SettingBeingTileGrid({
       )}
     </div>
   );
-}
+});
 
 // Community tile — same grid, simpler facts
 const SettingCommunityTile = memo(function SettingCommunityTile({ community }: { community: SettingCommunity }) {

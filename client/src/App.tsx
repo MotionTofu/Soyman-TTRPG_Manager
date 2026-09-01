@@ -4,6 +4,7 @@ import { AppShell } from "./layout/AppShell";
 import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
 import { CrossWindowSyncBanner } from "./components/CrossWindowSyncBanner";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useCurrentUser } from "./api/currentUser";
 import { EmptyState } from "./components/EmptyState";
 import { Link } from "react-router-dom";
@@ -139,7 +140,15 @@ function App() {
       <LoginGate>
         <RealtimeListener />
         <CrossWindowSyncBanner />
-        <Suspense fallback={<p className="muted" style={{ padding: 24 }}>Загрузка…</p>}>
+        <ErrorBoundary>
+          <Suspense fallback={
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", padding: 48 }}>
+              <div className="muted" style={{ textAlign: "center" }}>
+                <div style={{ width: 24, height: 24, border: "2px solid var(--line)", borderTopColor: "var(--ink)", borderRadius: "50%", animation: "spin .6s linear infinite", margin: "0 auto 12px" }} />
+                Загрузка…
+              </div>
+            </div>
+          }>
           <Routes>
             {/* Outside <AppShell> on purpose — a popped-out panel window
                 (see sessionLivePanels.tsx) has no room to spare for the
@@ -193,6 +202,7 @@ function App() {
             </Route>
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </LoginGate>
     </BrowserRouter>
   );

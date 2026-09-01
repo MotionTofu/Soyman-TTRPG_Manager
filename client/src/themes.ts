@@ -140,11 +140,10 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
   const paperElevated = mixHex(cfg.bg, towards, surfaceAltMix);
   const ink = cfg.text;
   const inkBright = mode === "dark" ? mixHex(cfg.text, "#ffffff", 0.15) : cfg.text;
-  // Подмес чернил в фон для `--muted`. В светлом режиме 0.37 — БОЛЬШЕ, чем
-  // 0.35, из расчёта §1.1 на бумаге нуара (#e8e4da) даёт ровно 4.5:1 по
-  // WCAG против неё (#676662 ≈ 4.53:1), а с #EDE7D9 уже 4.7:1. Тёмный не
+  // Подмес чернил в фон для `--muted`. В светлом режиме 0.35 даёт ≈4.8:1 по
+  // WCAG на бумаге нуара (#e8e4da), с запасом above 4.5:1. Тёмный не
   // напрягаем: фон там близок к чернилам, и 0.45 тянет к белому (П1.7).
-  const muted = cfg.textMutedOverride || mixHex(cfg.text, cfg.bg, mode === "dark" ? 0.45 : 0.37);
+  const muted = cfg.textMutedOverride || mixHex(cfg.text, cfg.bg, mode === "dark" ? 0.45 : 0.35);
   // §3.1's `--ink-2` sits between the main ink and the muted ink.
   const ink2 = mixHex(ink, muted, 0.5);
   const line = cfg.border;

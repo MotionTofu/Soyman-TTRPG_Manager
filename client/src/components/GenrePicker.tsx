@@ -46,6 +46,10 @@ export function GenrePicker({
     return draft.some((g) => g.genre === genre && !g.subgenre);
   }
 
+  function categoryCount(genre: string) {
+    return draft.filter((g) => g.genre === genre).length;
+  }
+
   const atLimit = draft.length >= MAX_GENRES;
 
   return (
@@ -58,23 +62,16 @@ export function GenrePicker({
 
         {GENRE_CATEGORIES.map((cat) => {
           const isExpanded = expanded.has(cat.name);
+          const cnt = categoryCount(cat.name);
           return (
             <div key={cat.name} className="genre-category">
               <div className="genre-category-row">
                 <button
                   className="genre-category-toggle"
-                  style={{ color: cat.color } as React.CSSProperties}
                   onClick={() => toggleExpand(cat.name)}
                   aria-label={isExpanded ? "Свернуть" : "Развернуть"}
                 >
-                  <svg
-                    className={`genre-category-triangle${isExpanded ? " genre-category-triangle--open" : ""}`}
-                    viewBox="0 0 12 12"
-                    width="12"
-                    height="12"
-                  >
-                    <path d="M4 2 L9 6 L4 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <span className={`genre-category-triangle${isExpanded ? " genre-category-triangle--open" : ""}`} />
                 </button>
                 <button
                   className={`genre-chip genre-category-header${isCategoryOnlySelected(cat.name) ? " genre-chip--selected" : ""}`}
@@ -85,6 +82,9 @@ export function GenrePicker({
                 >
                   <ZineGraphic name={cat.icon} className="genre-chip-icon" />
                   <span>{cat.name}</span>
+                  {cnt > 0 && (
+                    <span className="genre-category-count">{cnt}/{MAX_GENRES}</span>
+                  )}
                 </button>
               </div>
 

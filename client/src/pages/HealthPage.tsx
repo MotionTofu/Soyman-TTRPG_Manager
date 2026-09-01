@@ -111,6 +111,7 @@ export function HealthPage() {
   const scanAbortRef = useRef<AbortController | null>(null);
   const [pathFilter, setPathFilter] = useState("");
   const [orphanUndo, setOrphanUndo] = useState(false);
+  const [selectedSeqTables, setSelectedSeqTables] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     return () => { scanAbortRef.current?.abort(); };
@@ -166,6 +167,23 @@ export function HealthPage() {
     try {
       const r = await api.post<{ table: string; maxId: number | null; seq: number }>("/health/seq/reset", { table });
       setMsg(`Счётчик ${r.table} → ${r.seq} (max ${r.maxId})`);
+      runScan();
+    } catch (e) {
+      setMsg(String(e instanceof Error ? e.message : e));
+    }
+  }
+
+  async function resetSelectedSeq() {
+    if (selectedSeqTables.size === 0) return;
+    const tables = Array.from(selectedSeqTables);
+    const ok = await confirm({ title: "Сбросить счётчики", message: `Сбросить ${tables.length} счётчик(ов) до max(id)?`, confirmLabel: `Сбросить (${tables.length})` });
+    if (!ok) return;
+    try {
+      for (const table of tables) {
+        await api.post<{ table: string; maxId: number | null; seq: number }>("/health/seq/reset", { table });
+      }
+      setMsg(`Сброшено ${tables.length} счётчик(ов)`);
+      setSelectedSeqTables(new Set());
       runScan();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
@@ -428,9 +446,45 @@ export function HealthPage() {
             <p className="muted health-hint">{TAB_HINTS.seq}</p>
             {scan && scan.seq.some((r) => r.drift > 0) ? (
               <div className="stack">
+                <div className="row" style={{ gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <label className="row" style={{ gap: 4, alignItems: "center", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={scan.seq.filter((r) => r.drift > 0).every((r) => selectedSeqTables.has(r.table))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedSeqTables(new Set(scan.seq.filter((r) => r.drift > 0).map((r) => r.table)));
+                        } else {
+                          setSelectedSeqTables(new Set());
+                        }
+                      }}
+                    />
+                    <span style={{ fontSize: "var(--fs-meta)", fontFamily: "var(--font-ui)" }}>Выбрать всё</span>
+                  </label>
+                  {selectedSeqTables.size > 0 && (
+                    <button onClick={resetSelectedSeq} style={{ marginLeft: 8 }}>
+                      Сбросить выбранные ({selectedSeqTables.size})
+                    </button>
+                  )}
+                </div>
                 {scan.seq.filter((r) => r.drift > 0).map((r) => (
                   <div key={r.table} className="health-row">
-                    <span className="health-row--mono"><span className={r.drift > 20 ? "badge tag" : "muted"}>{r.table}</span> <span className="health-value">seq {r.seq} / max {r.maxId ?? "—"} / drift {r.drift}</span></span>
+                    <label className="row" style={{ gap: 6, alignItems: "center", cursor: "pointer", flex: 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedSeqTables.has(r.table)}
+                        onChange={(e) => {
+                          const next = new Set(selectedSeqTables);
+                          if (e.target.checked) {
+                            next.add(r.table);
+                          } else {
+                            next.delete(r.table);
+                          }
+                          setSelectedSeqTables(next);
+                        }}
+                      />
+                      <span className="health-row--mono"><span className={r.drift > 20 ? "badge tag" : "muted"}>{r.table}</span> <span className="health-value">seq {r.seq} / max {r.maxId ?? "—"} / drift {r.drift}</span></span>
+                    </label>
                     <button onClick={() => resetSeq(r.table)}>Сбросить</button>
                   </div>
                 ))}

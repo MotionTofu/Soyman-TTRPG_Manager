@@ -1,0 +1,358 @@
+.mention-textarea-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.mention-textarea-wrap textarea {
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+}
+.mention-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 20;
+}
+.mention-dropdown-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.mention-dropdown-item.active,
+.mention-dropdown-item:hover {
+  background: var(--bg-elevated);
+}
+.ext-link {
+  color: var(--accent-2);
+  font-weight: 600;
+  text-decoration: underline;
+}
+/* Ссылки-кнопки в списке контактов раздела «Автор» (страница «Справка»):
+   снимают с button его обычный вид (заливка, контур, паддинги) и оставляют
+   подчёркнутый текст поверх остальных строк-контактов. Внешний ресурс не
+   открывается сразу — сначала та же модалка подтверждения, что и в навигации. */
+.author-contact-link {
+  background: none;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  text-align: left;
+  white-space: normal;
+  color: var(--accent-2);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.author-contact-link:hover {
+  border-color: transparent;
+}
+
+/* --- Справка --------------------------------------------------------- */
+
+/* Первый текстовый элемент — без верхнего отступа. */
+.about-hint {
+  margin-top: 0;
+}
+
+/* Таблица горячих клавиш — своя, не rt-table.
+   §1.5: заголовки — Label (Oswald капс), значения — Data (JetBrains Mono),
+   проза — Body (Archivo). */
+.about-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.about-table th,
+.about-table td {
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: 5px 10px;
+  text-align: left;
+}
+.about-table th {
+  background: var(--bg-elevated);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+}
+.about-table td {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+}
+/* Data-голос: комбинации клавиш моноширинным (§1.5). */
+.about-table__combo {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* На мобильном колонка «Где» скрывается — текст слишком длинный для
+   390px, а контент и так читается из колонки «Что делает». */
+@media (max-width: 600px) {
+  .about-table__where { display: none; }
+}
+
+/* Блок контактов автора — вертикальный стек с иконкой, подписью и
+   значением в каждой строке. Паттерн: иконка слева, Label-подпись
+   (Oswald капс), Data-значение (JetBrains Mono) по правому краю. */
+.about-author-intro {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  margin: 0;
+}
+.about-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.about-contact {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: none;
+  border: none;
+  padding: 6px var(--sp-2);
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+}
+.about-contact:hover {
+  background: var(--bg-elevated);
+}
+.about-contact:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.about-contact__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.about-contact__label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  min-width: 70px;
+}
+.about-contact__value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* Вложенный аккордеон внутри «Фишек» — подразделы. */
+.about-sub {
+  margin: 2px 0 0;
+}
+.about-sub summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 1px 0;
+}
+.about-sub summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.about-sub__body {
+  padding-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.about-sub__body ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.rt-h {
+  display: inline-block;
+  font-weight: 700;
+}
+.rt-h1 { font-size: 1.5em; margin: 4px 0; }
+.rt-h2 { font-size: 1.25em; margin: 3px 0; }
+.rt-h3 { font-size: 1.1em; margin: 2px 0; }
+
+.rt-quote {
+  display: block;
+  margin: 4px 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--accent);
+  font-style: italic;
+  color: var(--muted, #999);
+}
+
+.rt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* Formatting controls used to be this row mounted permanently above every
+   MentionTextarea (a dozen controls, the single biggest source of
+   horizontal overflow app-wide) — hidden outright below 860px as a result.
+   Now the row only renders inside the flyout below, opened on demand from
+   a small trigger button, so it no longer needs to be hidden on mobile —
+   formatting is reachable there again. */
+.rt-format-trigger-wrap {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 4px;
+}
+.rt-format-trigger {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  cursor: pointer;
+}
+.rt-format-trigger:hover {
+  border-color: var(--accent);
+}
+.rt-format-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  z-index: 25;
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 6px;
+  width: min(360px, calc(100vw - 40px));
+  flex-wrap: wrap;
+}
+.rt-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  cursor: pointer;
+}
+.rt-btn:hover {
+  border-color: var(--accent);
+}
+.rt-color-btn {
+  position: relative;
+  overflow: hidden;
+  padding: 2px 6px;
+}
+.rt-color-btn input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+.rt-select {
+  padding: 2px 4px;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  cursor: pointer;
+  max-width: 110px;
+}
+.rt-select:hover {
+  border-color: var(--accent);
+}
+.rt-ul {
+  margin: 4px 0;
+  padding-left: 1.4em;
+}
+.rt-ul li {
+  margin: 2px 0;
+}
+.rt-table-wrap {
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.rt-table {
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.rt-table th,
+.rt-table td {
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: 4px 8px;
+  text-align: left;
+}
+.rt-table th {
+  background: var(--bg-elevated);
+  font-weight: 600;
+}
+.rt-table-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.rt-table-editor-row input {
+  width: 120px;
+}
+.rt-table-editor-row:first-child input {
+  font-weight: 600;
+}
+.rt-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  margin: 0 2px;
+}
+.rt-link-wrap {
+  position: relative;
+}
+.rt-link-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 6px;
+  z-index: 20;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rt-link-menu-item {
+  text-align: left;
+}
+.rt-link-external {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  padding-top: 6px;
+}
+.rt-link-external input {
+  width: 100%;
+}
+
+.mention-dropdown-type {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+

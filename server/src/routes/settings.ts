@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import { db } from "../db/db";
 import { defaultStatus, settingNow, timePatch } from "../services/eventTime";
+import { buildAdventureExportData, importAdventureExport } from "./story";
 import {
   beingFolder,
   communityFolder,
@@ -334,9 +335,63 @@ settingsRouter.get("/:id/important-dates", (req, res) => {
        UNION ALL
        SELECT d.*, l.name as owner_name FROM important_dates d
        JOIN setting_locations l ON l.id = d.owner_id AND d.owner_type = 'location'
-       WHERE l.setting_id = ? AND l.archived_at IS NULL`
+       WHERE l.setting_id = ? AND l.archived_at IS NULL
+       UNION ALL
+       SELECT d.*, NULL as owner_name FROM important_dates d
+       WHERE d.owner_type = 'setting' AND d.owner_id = 0`
     )
     .all(req.params.id, req.params.id, req.params.id);
+  res.json(rows);
+});
+
+settingsRouter.post("/:id/important-dates", (req, res) => {
+  const { owner_type, owner_id, title, description, date_type, color, recurrence, year, month, day, custom_rule } = req.body;
+  if (!title?.trim() || day == null) {
+    return res.status(400).json({ error: "title and day are required" });
+  }
+  const safeOwnerType = owner_type || "setting";
+  const safeOwnerId = owner_type === "setting" ? 0 : (owner_id || 0);
+  const info = db.prepare(
+    `INSERT INTO important_dates (owner_type, owner_id, title, description, date_type, color, recurrence, year, month, day, custom_rule)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(safeOwnerType, safeOwnerId, title.trim(), description ?? "", date_type ?? "", color ?? "", recurrence ?? "once", year ?? null, month ?? null, day, custom_rule ?? "");
+  res.status(201).json(db.prepare("SELECT * FROM important_dates WHERE id = ?").get(info.lastInsertRowid));
+});
+
+settingsRouter.put("/important-dates/:dateId", (req, res) => {
+  const { title, description, date_type, color, recurrence, year, month, day, custom_rule } = req.body;
+  db.prepare(
+    `UPDATE important_dates SET
+       title = COALESCE(?, title),
+       description = COALESCE(?, description),
+       date_type = COALESCE(?, date_type),
+       color = COALESCE(?, color),
+       recurrence = COALESCE(?, recurrence),
+       year = ?,
+       month = ?,
+       day = COALESCE(?, day),
+       custom_rule = COALESCE(?, custom_rule)
+     WHERE id = ?`
+  ).run(title ?? null, description ?? null, date_type ?? null, color ?? null, recurrence ?? null, year ?? null, month ?? null, day ?? null, custom_rule ?? null, req.params.dateId);
+  res.json(db.prepare("SELECT * FROM important_dates WHERE id = ?").get(req.params.dateId));
+});
+
+settingsRouter.delete("/important-dates/:dateId", (req, res) => {
+  db.prepare("DELETE FROM important_dates WHERE id = ?").run(req.params.dateId);
+  res.json({ ok: true });
+});
+
+settingsRouter.get("/:id/entities", (req, res) => {
+  const beings = db.prepare("SELECT id, name FROM setting_beings WHERE setting_id = ? AND archived_at IS NULL ORDER BY name").all(req.params.id);
+  const communities = db.prepare("SELECT id, name FROM setting_communities WHERE setting_id = ? AND archived_at IS NULL ORDER BY name").all(req.params.id);
+  const locations = db.prepare("SELECT id, name FROM setting_locations WHERE setting_id = ? AND archived_at IS NULL ORDER BY name").all(req.params.id);
+  res.json({ beings, communities, locations });
+});
+
+settingsRouter.get("/:id/date-types", (req, res) => {
+  const rows = db.prepare(
+    `SELECT DISTINCT date_type, color FROM important_dates WHERE date_type != '' AND date_type IS NOT NULL`
+  ).all();
   res.json(rows);
 });
 
@@ -433,6 +488,15 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || m < 1 || m > 36 || d < 1 || d > 60) {
     return res.status(400).json({ error: "invalid inworld date" });
   }
+  // Кросс-валидация: день не больше длины месяца в календаре сеттинга.
+  // Если календарь не настроен (нет месяцев) — пропускаем, длина диапазона уже проверена.
+  const months = db.prepare("SELECT position, days FROM setting_calendar_months WHERE setting_id = ? ORDER BY position").all(req.params.id) as { position: number; days: number }[];
+  if (months.length > 0) {
+    const monthDef = months.find((mo) => mo.position === m);
+    if (monthDef && d > monthDef.days) {
+      return res.status(400).json({ error: `day ${d} exceeds ${monthDef.days} days in month ${monthDef.position}` });
+    }
+  }
   const status = defaultStatus(y, m, settingNow(Number(req.params.id)));
   // Транзакция: событие мира + копии в кампании + important_dates должны встать атомарно.
   const run = db.transaction(() => {
@@ -508,8 +572,21 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
       }
     }
   }
-  const existing = db.prepare("SELECT id FROM setting_calendar_events WHERE id = ?").get(req.params.eventId) as { id: number } | undefined;
+  const existing = db.prepare("SELECT id, setting_id FROM setting_calendar_events WHERE id = ?").get(req.params.eventId) as { id: number; setting_id: number } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
+  // Кросс-валидация: день не больше длины месяца в календаре сеттинга.
+  if (inworld_month != null && inworld_day != null) {
+    const mCheck = Number(inworld_month); const dCheck = Number(inworld_day);
+    if (Number.isFinite(mCheck) && Number.isFinite(dCheck)) {
+      const months = db.prepare("SELECT position, days FROM setting_calendar_months WHERE setting_id = ? ORDER BY position").all(existing.setting_id) as { position: number; days: number }[];
+      if (months.length > 0) {
+        const monthDef = months.find((mo) => mo.position === mCheck);
+        if (monthDef && dCheck > monthDef.days) {
+          return res.status(400).json({ error: `day ${dCheck} exceeds ${monthDef.days} days in month ${monthDef.position}` });
+        }
+      }
+    }
+  }
   db.prepare(
     `UPDATE setting_calendar_events SET
        title = COALESCE(?, title),
@@ -696,19 +773,20 @@ settingsRouter.get("/:id/calendar-eras", (req, res) => {
 });
 
 settingsRouter.post("/:id/calendar-eras", (req, res) => {
-  const { name, start_year } = req.body as { name: string; start_year: number };
+  const { name, start_year, timeline_id } = req.body as { name: string; start_year: number; timeline_id?: number | null };
   if (!name || start_year == null) return res.status(400).json({ error: "name and start_year are required" });
   const info = db
-    .prepare("INSERT INTO setting_calendar_eras (setting_id, name, start_year) VALUES (?, ?, ?)")
-    .run(req.params.id, name, start_year);
+    .prepare("INSERT INTO setting_calendar_eras (setting_id, name, start_year, timeline_id) VALUES (?, ?, ?, ?)")
+    .run(req.params.id, name, start_year, timeline_id ?? null);
   res.status(201).json(db.prepare("SELECT * FROM setting_calendar_eras WHERE id = ?").get(info.lastInsertRowid));
 });
 
 settingsRouter.put("/calendar-eras/:eraId", (req, res) => {
-  const { name, start_year } = req.body as { name?: string; start_year?: number };
-  db.prepare("UPDATE setting_calendar_eras SET name = COALESCE(?, name), start_year = COALESCE(?, start_year) WHERE id = ?").run(
+  const { name, start_year, timeline_id } = req.body as { name?: string; start_year?: number; timeline_id?: number | null };
+  db.prepare("UPDATE setting_calendar_eras SET name = COALESCE(?, name), start_year = COALESCE(?, start_year), timeline_id = COALESCE(?, timeline_id) WHERE id = ?").run(
     name ?? null,
     start_year ?? null,
+    timeline_id ?? null,
     req.params.eraId
   );
   res.json(db.prepare("SELECT * FROM setting_calendar_eras WHERE id = ?").get(req.params.eraId));
@@ -716,6 +794,39 @@ settingsRouter.put("/calendar-eras/:eraId", (req, res) => {
 
 settingsRouter.delete("/calendar-eras/:eraId", (req, res) => {
   db.prepare("DELETE FROM setting_calendar_eras WHERE id = ?").run(req.params.eraId);
+  res.json({ ok: true });
+});
+
+settingsRouter.get("/:id/calendar-timelines", (req, res) => {
+  const rows = db
+    .prepare("SELECT * FROM setting_calendar_timelines WHERE setting_id = ? ORDER BY position, id")
+    .all(req.params.id);
+  res.json(rows);
+});
+
+settingsRouter.post("/:id/calendar-timelines", (req, res) => {
+  const { name } = req.body as { name: string };
+  if (!name?.trim()) return res.status(400).json({ error: "name is required" });
+  const maxPos = db.prepare("SELECT COALESCE(MAX(position), -1) as p FROM setting_calendar_timelines WHERE setting_id = ?").get(req.params.id) as { p: number };
+  const info = db
+    .prepare("INSERT INTO setting_calendar_timelines (setting_id, name, position) VALUES (?, ?, ?)")
+    .run(req.params.id, name.trim(), maxPos.p + 1);
+  res.status(201).json(db.prepare("SELECT * FROM setting_calendar_timelines WHERE id = ?").get(info.lastInsertRowid));
+});
+
+settingsRouter.put("/calendar-timelines/:timelineId", (req, res) => {
+  const { name, position } = req.body as { name?: string; position?: number };
+  db.prepare("UPDATE setting_calendar_timelines SET name = COALESCE(?, name), position = COALESCE(?, position) WHERE id = ?").run(
+    name ?? null,
+    position ?? null,
+    req.params.timelineId
+  );
+  res.json(db.prepare("SELECT * FROM setting_calendar_timelines WHERE id = ?").get(req.params.timelineId));
+});
+
+settingsRouter.delete("/calendar-timelines/:timelineId", (req, res) => {
+  db.prepare("UPDATE setting_calendar_eras SET timeline_id = NULL WHERE timeline_id = ?").run(req.params.timelineId);
+  db.prepare("DELETE FROM setting_calendar_timelines WHERE id = ?").run(req.params.timelineId);
   res.json({ ok: true });
 });
 
@@ -1432,6 +1543,18 @@ export function buildSettingExportData(
     payload.resources = resources;
   }
 
+  if (include.includes("adventures")) {
+    const topArcs = db
+      .prepare("SELECT id FROM story_arcs WHERE setting_id = ? AND parent_id IS NULL ORDER BY position")
+      .all(settingId) as { id: number }[];
+    const adventures: NonNullable<SettingExportData["adventures"]> = [];
+    for (const arc of topArcs) {
+      const data = buildAdventureExportData(arc.id);
+      if (data) adventures.push(data as NonNullable<SettingExportData["adventures"]>[number]);
+    }
+    if (adventures.length > 0) payload.adventures = adventures;
+  }
+
   // Отношения между сущностями. Собираются последними, когда состав файла уже
   // известен: берутся только те, у которых оба конца уезжают в этот же файл —
   // половина отношения на чужом устройстве это связь в никуда.
@@ -1587,6 +1710,16 @@ export interface SettingExportData {
     notes: string;
     link_url: string | null;
     file_data?: FileData | null;
+  }[];
+  adventures?: {
+    format: "adventure-export/1";
+    adventure: Record<string, unknown>;
+    chapters: Record<string, unknown>[];
+    scenes: Record<string, unknown>[];
+    milestones: Record<string, unknown>[];
+    secrets: Record<string, unknown>[];
+    arc_transitions: Record<string, unknown>[];
+    canvas?: Record<string, unknown>;
   }[];
 }
 
@@ -1893,6 +2026,14 @@ export async function importSettingExport(
   if (withImages) await insertGalleries(body, folder, maps);
 
   imported.resolve();
+
+  // Import adventures if present
+  if (body.adventures && body.adventures.length > 0) {
+    for (const adventure of body.adventures) {
+      importAdventureExport(newSettingId, adventure as Record<string, unknown>);
+    }
+  }
+
   // Проходить по чужим текстам не нужно: зачёркнутые ссылки на то, что принёс
   // этот сеттинг, оживают сами — их ключ теперь резолвится.
   return newSettingId;

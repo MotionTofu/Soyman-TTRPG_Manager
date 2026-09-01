@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { System } from "../types";
+import { useAlert } from "../hooks/useConfirm";
 
 interface SystemGroupMembersModalProps {
   groupId: number;
@@ -14,6 +15,8 @@ export function SystemGroupMembersModal({ groupId, groupName, onClose, onUpdated
   const [memberIds, setMemberIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [alertDialog, showAlert] = useAlert();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,7 +64,7 @@ export function SystemGroupMembersModal({ groupId, groupName, onClose, onUpdated
         else revert.delete(systemId);
         return revert;
       });
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     } finally {
       setSaving(false);
     }
@@ -110,6 +113,7 @@ export function SystemGroupMembersModal({ groupId, groupName, onClose, onUpdated
           <button onClick={onClose}>Готово</button>
         </div>
       </div>
+      {alertDialog}
     </div>
   );
 }

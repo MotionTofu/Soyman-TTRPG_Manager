@@ -1,0 +1,305 @@
+.location-map-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.location-map-wrap {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 300px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  line-height: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.location-map-wrap.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.location-map-inner {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+.location-map-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.location-map-zoom-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: normal;
+}
+.location-map-zoom-controls button {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+/* Always an overlay inside the already-framed `.location-map-wrap` — no
+   border of its own (that would be a frame nested in the map's frame). The
+   background stays: unlike a card-in-card, this sits over the uploaded map
+   image itself and needs a legibility scrim, not a decorative box. */
+.location-map-legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  font-size: 12px;
+  line-height: normal;
+  pointer-events: none;
+}
+.location-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.location-map-legend-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.location-map-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+}
+.location-map-fullscreen-bar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+}
+.location-map-fullscreen-bar .search-panel {
+  flex: 1;
+}
+.location-map-fullscreen-close {
+  flex-shrink: 0;
+  margin: 0 12px;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+}
+.location-map-fullscreen .location-map-card {
+  padding: 12px;
+}
+.location-map-pin-search {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.location-map-pin-search input {
+  flex: 1;
+}
+.location-map-pin-search-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 90px;
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 20;
+}
+.location-map-pin-search-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.location-map-pin-search-item:hover {
+  background: var(--bg-elevated);
+}
+.location-map-pin {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.location-map-pin.selected {
+  z-index: 10;
+}
+.location-map-pin-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.location-map-pin-label {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: min(200px, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 10;
+  align-items: center;
+  gap: 6px;
+}
+.location-map-pin-label button {
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  line-height: 1;
+  color: inherit;
+}
+.location-map-pin:hover .location-map-pin-label,
+.location-map-pin-label.always {
+  display: flex;
+}
+/* Background tinted by entity type instead of a text label — being/character
+   share red (character gets a distinct border + slightly larger label to
+   still stand out from beings at a glance), location is teal, artifact is
+   gold. Tinted variants of surface/on-surface for theme consistency. */
+.location-map-pin-label.pin-label-being {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--on-surface);
+}
+.location-map-pin-label.pin-label-character {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  color: var(--on-surface);
+  font-size: 13px;
+  padding: 7px 11px;
+}
+.location-map-pin-label.pin-label-location {
+  background: var(--surface);
+  border-color: var(--on-surface-muted);
+  color: var(--on-surface);
+}
+.location-map-pin-label.pin-label-artifact {
+  background: var(--surface);
+  border-color: var(--on-surface-muted);
+  color: var(--on-surface);
+}
+.location-map-pin.selected .location-map-pin-dot {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.location-map-pin-toolbar {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--paper-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 12px;
+  font-size: 14px;
+  white-space: nowrap;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+.location-map-pin-toolbar button {
+  font-size: 13px;
+  padding: 5px 10px;
+}
+.location-map-pin-toolbar input[type="color"] {
+  width: 34px;
+  height: 26px;
+  padding: 0 2px;
+}
+.location-map-pin-toolbar input[type="range"] {
+  width: 110px;
+}
+.location-map-pin-toolbar label {
+  gap: 6px;
+  align-items: center;
+}
+.location-map-pin-loading {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--on-surface-muted);
+}
+.map-pin-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--on-surface-muted);
+}
+.location-map-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 8px 16px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.location-map-toast-undo {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.location-map-toast-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 2px;
+  color: var(--on-surface-muted);
+}

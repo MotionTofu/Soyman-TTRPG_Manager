@@ -7,7 +7,15 @@ import { playerFolder, toFileUrl, writeReplacingOldFile } from "../services/file
 import { renameEntityFolder } from "../services/vaultPaths";
 
 export const playersRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 function withThumbUrl<T extends { thumbnail_image_path?: string | null; avatar_image_path?: string | null }>(
   row: T

@@ -8,6 +8,7 @@ import { EntityTypeChip } from "./EntityTypeChip";
 import { MentionText } from "./mentions/MentionText";
 import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { CreatureCardLoader, fetchCreatureCard, type CreatureCardPayload } from "./CreatureCard";
+import { ArtifactCardLoader } from "./ArtifactCard";
 import { normalizeDndCharacter, DndCharacterView } from "./dnd/DndCharacterForm";
 import type { DndCharacterData, DndCreatureData, Statblock } from "../types";
 
@@ -68,6 +69,16 @@ export function EntityPreviewContent({
         onClose={onClose}
         profileInNewWindow={profileInNewWindow}
         statblockInline={statblockInline}
+        collapsed={collapsed}
+        onToggleCollapse={onToggleCollapse}
+      />
+    );
+  }
+  if (type === "artifact") {
+    return (
+      <ArtifactCardLoader
+        id={id}
+        onClose={onClose}
         collapsed={collapsed}
         onToggleCollapse={onToggleCollapse}
       />
@@ -268,16 +279,6 @@ function OtherEntityPreview({
                   ))}
                 </div>
               )}
-            </>
-          )}
-
-          {type === "artifact" && (
-            <>
-              <span className="muted">
-                {[detail.owner, detail.power].filter(Boolean).join(" · ")}
-              </span>
-              <MentionText text={String(detail.history ?? "")} />
-              <MentionText text={String(detail.notes ?? "")} />
             </>
           )}
         </div>

@@ -83,7 +83,9 @@ export function InworldCalendar({
 
   const expandedDates: { day: number; date: ImportantDate }[] = [];
   for (const d of importantDates ?? []) {
-    if (d.recurrence === "monthly") {
+    if (d.recurrence === "weekly" || d.recurrence === "custom") {
+      expandedDates.push({ day: d.day, date: d });
+    } else if (d.recurrence === "monthly") {
       expandedDates.push({ day: d.day, date: d });
     } else if (d.recurrence === "annual" && d.month === cursor.month) {
       expandedDates.push({ day: d.day, date: d });
@@ -122,7 +124,10 @@ export function InworldCalendar({
         <button onClick={goNext}>След →</button>
       </div>
       {onPin && (
-        <div className="row" style={{ justifyContent: "center" }}>
+        <div className="row" style={{ justifyContent: "center", gap: 8 }}>
+          {pinned && (pinned.year !== cursor.year || pinned.month !== cursor.month) && (
+            <button onClick={() => { setYear(pinned.year); setMonth(pinned.month); }} title="Перейти к закреплённому месяцу">Сегодня</button>
+          )}
           {pinned?.year === cursor.year && pinned?.month === cursor.month ? (
             <button onClick={() => onPin(null)} title="Сейчас в мире — отсюда считается статус предстоящее/случилось и центрируется ось">Открепить месяц</button>
           ) : (
@@ -146,10 +151,11 @@ export function InworldCalendar({
           const dayItems = visibleItems.filter((it) => it.day === c.day);
           const hasSession = dayItems.some((it) => it.kind === "session");
           const hasEvent = dayItems.some((it) => it.kind === "event");
+          const hasImportant = expandedDates.some((ed) => ed.day === c.day);
           return (
             <div
               key={c.day}
-              className={`day${hasSession ? " has-session" : ""}${hasEvent ? " has-event" : ""}`}
+              className={`day${hasSession ? " has-session" : ""}${hasEvent ? " has-event" : ""}${hasImportant ? " has-important" : ""}`}
               onClick={() => onDayClick?.(cursor.year, cursor.month, c.day!)}
               onContextMenu={(e) => {
                 e.preventDefault();

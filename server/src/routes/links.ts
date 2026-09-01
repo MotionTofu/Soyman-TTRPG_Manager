@@ -142,6 +142,12 @@ function buildScope(campaignId?: string, settingId?: string): Map<string, ScopeQ
   return null;
 }
 
+// ── In-memory cache for /graph (TTL 30s) ─────────────────────────
+// Graph data changes rarely but is expensive to build. Cache keyed by
+// the full query string; stale entries are evicted on access.
+const GRAPH_CACHE_TTL = 30_000;
+export const graphCache = new Map<string, { data: unknown; expires: number }>();
+
 linksRouter.get("/graph", (req, res) => {
   const { types, setting_id, campaign_id, focus, depth } = req.query as {
     types?: string;
@@ -163,6 +169,14 @@ linksRouter.get("/graph", (req, res) => {
   // Пустая строка — это «типы не выбраны», а не «фильтра нет»: снятые
   // галочки должны давать пустой граф, а не молча весь.
   const allowedTypes = types === undefined ? null : new Set(types.split(",").filter(Boolean));
+
+  // Cache check — graph data is expensive to build but changes rarely.
+  const cacheKey = `${types ?? ""}|${setting_id ?? ""}|${campaign_id ?? ""}|${focus ?? ""}|${depth ?? ""}`;
+  const cached = graphCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return res.json(cached.data);
+  }
+
   // campaign_id is the narrower scope, so it wins if both are given.
   const scopeQueries = buildScope(campaign_id, setting_id);
 
@@ -348,7 +362,14 @@ linksRouter.get("/graph", (req, res) => {
     isolated.sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
   }
 
-  res.json({ nodes, edges: visibleEdges, isolated });
+  const result = { nodes, edges: visibleEdges, isolated };
+  graphCache.set(cacheKey, { data: result, expires: Date.now() + GRAPH_CACHE_TTL });
+  // Evict stale entries (amortized cleanup).
+  if (graphCache.size > 50) {
+    const now = Date.now();
+    for (const [k, v] of graphCache) { if (v.expires < now) graphCache.delete(k); }
+  }
+  res.json(result);
 });
 
 // Sessions whose Задумка/Основные события text @-mentions this entity —
@@ -414,11 +435,13 @@ linksRouter.post("/", (req, res) => {
     )
     .run(from_type, from_id, to_type, to_id, section ?? null, origin === "live" ? "live" : "planned");
   res.status(201).json({ ok: true, id: info.lastInsertRowid });
+  graphCache.clear();
 });
 
 linksRouter.delete("/:id", (req, res) => {
   db.prepare("DELETE FROM generic_links WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+  graphCache.clear();
 });
 
 // --- Подвешенные ссылки: те, чья цель на этом устройстве не установлена ---

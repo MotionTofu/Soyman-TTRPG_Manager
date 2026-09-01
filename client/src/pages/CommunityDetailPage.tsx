@@ -338,7 +338,7 @@ export function CommunityDetailPage() {
                     {community.important_dates.map((d) => (
                       <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
                         <span>
-                          <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [])}
+                          <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [], calendar?.weekdays ?? [])}
                         </span>
                         <button className="comp-mini" onClick={() => removeImportantDate(d.id)}>
                           ✕

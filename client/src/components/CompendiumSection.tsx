@@ -33,6 +33,7 @@ import {
 import { EMPTY_MECHANICS_OPTIONS, loadMechanicsOptions, type MechanicsOptions } from "../compendiumMechanics";
 import { ALL_SKILLS } from "./dnd/AbilityScores";
 import type { CompendiumEntry, SearchResult, SystemSection } from "../types";
+import { useAlert } from "../hooks/useConfirm";
 
 interface Props {
   systemId: number;
@@ -426,6 +427,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [filterAttunement, setFilterAttunement] = useState("");
   const [filterVehicleCategory, setFilterVehicleCategory] = useState("");
   const [filterSize, setFilterSize] = useState("");
+  const [alertDialog, showAlert] = useAlert();
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const raw = localStorage.getItem(`compendium-sort-${section.id}`);
     const stored = raw?.split(":")[0] as SortMode | null;
@@ -743,7 +745,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (!editing) return;
     const original = entries.find((e) => e.id === editing.id);
     if (original?.kind === "background" && editing.abilities.length > 0 && editing.abilities.length !== 3) {
-      alert("Выберите ровно 3 характеристики (или ни одной).");
+      showAlert("Выберите ровно 3 характеристики (или ни одной).");
       return;
     }
     const data: Record<string, unknown> = { ...editing.data };
@@ -1224,6 +1226,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           + Добавить {kindLabel(rootKind).toLowerCase()}
         </button>
       )}
+      {alertDialog}
     </div>
   );
 }

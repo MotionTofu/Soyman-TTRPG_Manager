@@ -159,7 +159,6 @@ export function SettingsListPage() {
       <div className="page-header-row row">
         <SectionHeading section="settings" compact>Сеттинги</SectionHeading>
         <div className="row">
-          <button onClick={() => navigate("/import")}>Импорт приключения</button>
           <button className="primary" onClick={() => setCreating(true)}>
             + Новый сеттинг
           </button>

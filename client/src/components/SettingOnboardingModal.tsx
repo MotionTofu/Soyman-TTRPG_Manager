@@ -12,11 +12,12 @@ interface Props {
 
 export function SettingOnboardingModal({ onClose, onRefresh }: Props) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"choose" | "import">("choose");
+  const [mode, setMode] = useState<"choose" | "import" | "success">("choose");
   const [showWizard, setShowWizard] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const [successId, setSuccessId] = useState<number | null>(null);
 
   async function handleImport(file: File) {
     setImporting(true);
@@ -26,9 +27,9 @@ export function SettingOnboardingModal({ onClose, onRefresh }: Props) {
       const text = await file.text();
       const data = JSON.parse(text);
       const created = await api.post<Setting>("/settings/import", data);
+      setSuccessId(created.id);
+      setMode("success");
       onRefresh();
-      onClose();
-      navigate(`/settings/${created.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -50,7 +51,7 @@ export function SettingOnboardingModal({ onClose, onRefresh }: Props) {
 
   return (
     <Modal onClose={onClose} closeOnBackdropClick={false}>
-      <div className="stack" style={{ minWidth: 420 }}>
+      <div className="stack">
         <h3 style={{ margin: 0 }}>Сеттинг</h3>
 
         {mode === "choose" && (
@@ -63,9 +64,10 @@ export function SettingOnboardingModal({ onClose, onRefresh }: Props) {
                 Импорт файла
               </button>
               <button onClick={() => setShowWizard(true)}>Создать новый</button>
+              <button onClick={onClose}>Отмена</button>
             </div>
             <span className="muted" style={{ fontSize: 11 }}>
-              Файл — это JSON, полученный экспортом сеттинга (кнопка Экспорт на странице сеттинга).
+              Файл JSON
             </span>
           </div>
         )}
@@ -97,7 +99,19 @@ export function SettingOnboardingModal({ onClose, onRefresh }: Props) {
                 Отмена
               </button>
             </div>
-            {importing && <span className="muted">Импортирую… файл может весить до 500+ МБ, подождите</span>}
+            {importing && <span className="muted">Загружается…</span>}
+          </div>
+        )}
+
+        {mode === "success" && (
+          <div className="stack" style={{ gap: 12, alignItems: "center", padding: "20px 0" }}>
+            <span style={{ fontSize: 24, color: "var(--success, #15803d)" }}>✓</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontWeight: 600, fontSize: 14 }}>Успех!</span>
+            <span className="muted" style={{ fontSize: 12 }}>Сеттинг создан и загружен</span>
+            <button className="primary" onClick={() => navigate(`/settings/${successId}`)}>
+              Открыть сеттинг
+            </button>
+            <button onClick={onClose}>Закрыть</button>
           </div>
         )}
       </div>

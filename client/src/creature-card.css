@@ -1,0 +1,474 @@
+.creature-card {
+  border: 2px solid var(--ink);
+  border-radius: var(--card-radius);
+  background: var(--paper);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+[data-theme-id="peace"] .creature-card {
+  border-color: var(--paper) !important;
+}
+[data-theme-id="peace"] .creature-card:hover {
+  border-color: var(--accent-2) !important;
+}
+.creature-card--page {
+  max-width: 420px;
+}
+/* Шапка — плашка-инверсия (§1.4), а не жирный текст. */
+.creature-card__band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
+}
+.creature-card__portrait {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border: 1.5px solid var(--on-surface);
+  border-radius: 0;
+}
+.creature-card__portrait--empty {
+  display: block;
+  background: transparent;
+}
+.creature-card__title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.creature-card__name {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 0.94;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.creature-card__cr {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--on-surface-muted);
+  margin-top: 3px;
+}
+/* Плашка целиком — переключатель свёрнутости там, где сворачивание есть
+   (докстанция). Цель размером с шапку, а не значок рядом с крестиком. */
+.creature-card__band.is-clickable {
+  cursor: pointer;
+}
+.creature-card__mark {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--on-surface-muted);
+  align-self: flex-start;
+}
+.preview-head-clickable {
+  cursor: pointer;
+}
+.creature-card__close {
+  background: none;
+  border: 0;
+  color: var(--on-surface-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  align-self: flex-start;
+}
+/* Тип / роль / размер кодируются НАЧЕРТАНИЕМ, а не цветом и не эмодзи
+   (§1.7): цветной глиф не печатается в ч/б и выглядит наклейкой из другого
+   приложения. */
+.creature-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 0;
+}
+.creature-card__chip {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  line-height: 1.6;
+  padding: 1px 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.creature-card__chip.is-type {
+  background: var(--ink);
+  color: var(--paper);
+}
+.creature-card__chip.is-size {
+  border: 0;
+  padding: 1px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+.creature-card__inherited {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 9px;
+  color: var(--muted);
+  padding: 4px 10px 0;
+}
+.creature-card__section-body .creature-card__inherited {
+  padding: 0;
+}
+.creature-card__empty {
+  padding: 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* Подписи блоков — капс на разделителе 1.5px, не вторая плашка: плашка-
+   инверсия в системе называет карточку, вторая внутри неё сломала бы
+   иерархию. */
+.creature-card__section-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  background: none;
+  border: 0;
+  border-top: 1.5px solid var(--line);
+  border-radius: 0;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.creature-card__section-mark {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.creature-card__section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+.creature-card__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.creature-card__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.creature-card__label,
+.creature-card__sublabel {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+.creature-card__label {
+  flex: 0 0 74px;
+}
+/* КД и хиты пополам: две пары «подпись — значение» в одной строке. */
+.creature-card__row--pair {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  column-gap: 8px;
+}
+.creature-card__row--pair .creature-card__label {
+  flex: none;
+}
+/* Моноширинный — только под значения (§1.5). */
+.creature-card__value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.creature-card__tactics ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+.creature-card__tactics li,
+.creature-card__prose,
+.creature-card__secret {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+.creature-card__secret > .creature-card__sublabel,
+.creature-card__tactics > .creature-card__sublabel {
+  display: block;
+  margin-bottom: 2px;
+}
+.creature-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding: 8px 10px;
+  border-top: 1.5px solid var(--line);
+}
+/* Одна кнопка — ссылка, вторая — <button>, и без явных правил они расходились:
+   выравнивание бралось из умолчаний браузера, а в докстанции пульта ссылку
+   догоняло ещё и `.app-nav a` (док — это тот же <nav class="app-nav">) со
+   шрифтом навигации. Селектор с двумя классами перебивает его. */
+.creature-card .creature-card__button,
+.creature-card__button {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+  padding: 6px 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.creature-card .creature-card__button:hover,
+.creature-card__button:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Вкладка «Карточка существа»: форма и живой вид рядом. */
+/* Две колонки — только когда обе помещаются целиком. Порог по КОНТЕЙНЕРУ, а
+   не по окну: на 1100 колонка контента здесь 501 px, и жёсткая пара
+   «форма + карточка 340» ужимала форму до 145 px — при том что окно широкое и
+   медиазапрос по ширине окна ничего бы не заметил. */
+.creature-card-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.creature-card-editor__roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.creature-card-editor__roles .creature-card__chip {
+  cursor: pointer;
+}
+.creature-card-editor__roles .creature-card__chip.is-picked {
+  background: var(--ink);
+  color: var(--paper);
+}
+.creature-card-editor__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+/* Поповер карточки на полотне: в ЭКРАННЫХ координатах, зумом не
+   масштабируется — на 40% масштаба именно в неё и лезут. */
+.creature-card-popover {
+  position: fixed;
+  /* Ниже .modal-backdrop (50): «Статблок» из поповера открывает модалку, и
+     карточка не должна лежать поверх неё. */
+  z-index: 48;
+  width: 300px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.creature-card-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 47;
+}
+
+/* Полоса управления над краткой карточкой: без подписи ряд из селектора темы
+   и двух иконок висел в воздухе — карточка рисует свою шапку сама, и вторая
+   шапка ей не нужна. */
+.sb-short-card-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sb-short-card-caption {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* --- Бестиарий плиткой (шаг 5 ревизии) ---------------------------------
+   Раскладка считается от ширины плитки, а не от числа колонок: на 1920 это
+   четыре колонки по 315 px (владелец подтвердил, что так и надо), на 1440 —
+   три, на телефоне одна. Жёсткие «ровно три» дали бы на 1440 плитки по
+   260 px без места под портрет, а на 2560 — по 500. */
+.monster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+.monster-tile {
+  border: 2px solid var(--ink);
+  border-radius: var(--card-radius);
+  background: var(--paper);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+[data-theme-id="peace"] .monster-tile {
+  border-color: var(--paper) !important;
+}
+[data-theme-id="peace"] .monster-tile:hover {
+  border-color: var(--accent-2) !important;
+}
+.monster-tile:hover {
+  border-color: var(--accent);
+}
+/* Шапка — плашка-инверсия (§1.4). Звезда слева, мешок справа: обе цели
+   стоят по краям плашки и не спорят с именем в середине. */
+.monster-tile__band {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
+}
+.monster-tile__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 0.96;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.monster-tile__star,
+.monster-tile__bag {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--on-surface-muted);
+  display: flex;
+  align-items: center;
+}
+.monster-tile__star:hover,
+.monster-tile__bag:hover {
+  color: var(--on-surface);
+}
+/* Избранное различается ЗАЛИВКОЙ звезды, а не цветом: в «Соевом нуаре»
+   --accent равен чернилам, и закрашенная акцентом звезда на плашке-инверсии
+   пропадала совсем. Контур приглушён, залитая — в полный цвет плашки. */
+.monster-tile__star.is-on {
+  color: var(--on-surface);
+}
+.monster-tile__body {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  align-items: flex-start;
+}
+.monster-tile__portrait,
+.monster-tile__monogram {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+}
+.monster-tile__portrait {
+  object-fit: cover;
+}
+/* Портрета почти нигде нет — монограмма делит сетку на узнаваемые полосы по
+   типу существа. Тон приглушённый: это заглушка, а не смысловой код. */
+.monster-tile__monogram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1;
+  color: #12100e;
+  background: hsl(var(--monogram-tone, 0) 16% 84%);
+}
+.monster-tile__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.monster-tile__en {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  overflow-wrap: anywhere;
+}
+.monster-tile__meta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+/* Значение — моноширинным (§1.5). __cr — бестиарий (КО), __value — транспорт
+   (КД · хиты): один и тот же класс-строка, переименование в __value целиком
+   оставлено косметическим шагом (плитки переиспользуют блок без дублирования). */
+.monster-tile__cr,
+.monster-tile__value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.monster-tile__actions {
+  display: flex;
+  border-top: 1.5px solid var(--line);
+  margin-top: auto;
+}
+.monster-tile__actions > * {
+  flex: 1 1 0;
+  text-align: center;
+  padding: 6px 4px;
+  font-size: var(--fs-meta);
+  background: none;
+  border: 0;
+  border-left: 1.5px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.monster-tile__actions > *:first-child {
+  border-left: 0;
+}
+.monster-tile__actions > *:hover {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+

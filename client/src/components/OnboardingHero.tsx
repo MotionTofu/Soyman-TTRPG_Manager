@@ -41,6 +41,7 @@ interface Props {
 }
 
 export function OnboardingHero({ systems, settings, campaigns, players = [], onRefresh }: Props) {
+  const [dismissed, setDismissed] = useState(() => sessionStorage.getItem("onboarding-dismissed") === "1");
   const [showSystemModal, setShowSystemModal] = useState(false);
   const [showSettingModal, setShowSettingModal] = useState(false);
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -50,6 +51,11 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
   const [sessionTime, setSessionTime] = useState("");
   const [sessionCreating, setSessionCreating] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
+
+  function notifyRefresh() {
+    window.dispatchEvent(new Event("nav-refresh"));
+    onRefresh();
+  }
 
   const hasSystem = systems.length > 0;
   const hasSetting = settings.length > 0;
@@ -112,7 +118,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
         start_time: sessionTime || null,
       });
       setShowSessionModal(false);
-      onRefresh();
+      notifyRefresh();
     } catch (e) {
       setSessionError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -124,7 +130,16 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {/* §1.4 шапка-инверсия */}
       <div style={{ background: "var(--surface)", color: "var(--on-surface)", padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 4 }}>
-        <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", lineHeight: 0.96, textTransform: "uppercase", letterSpacing: "-0.01em", color: "var(--on-surface)" }}>Твоя первая легенда</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", lineHeight: 0.96, textTransform: "uppercase", letterSpacing: "-0.01em", color: "var(--on-surface)" }}>Твоя первая легенда</span>
+          <button
+            type="button"
+            onClick={() => { sessionStorage.setItem("onboarding-dismissed", "1"); setDismissed(true); }}
+            style={{ background: "none", border: "none", color: "var(--on-surface-muted)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 0 0 8px" }}
+            aria-label="Скрыть подсказки"
+            title="Скрыть"
+          >×</button>
+        </div>
         <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--on-surface-muted)" }}>Пять шагов до первой сессии — идём по порядку</span>
       </div>
 
@@ -149,7 +164,9 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
             const completed = isCompleted(step);
             const clickable = isClickable(step);
             const blocked = !completed && !clickable;
-            return (
+  if (dismissed) return null;
+
+  return (
               <button
                 key={step.key}
                 type="button"
@@ -210,14 +227,14 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
       {showSystemModal && (
         <SystemOnboardingModal
           onClose={() => setShowSystemModal(false)}
-          onCreated={onRefresh}
+          onCreated={notifyRefresh}
         />
       )}
 
       {showSettingModal && (
         <SettingOnboardingModal
           onClose={() => setShowSettingModal(false)}
-          onRefresh={onRefresh}
+          onRefresh={notifyRefresh}
         />
       )}
 
@@ -228,7 +245,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
           onClose={() => setShowCampaignWizard(false)}
           onCreated={() => {
             setShowCampaignWizard(false);
-            onRefresh();
+            notifyRefresh();
           }}
         />
       )}
@@ -238,7 +255,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
           onClose={() => setShowPlayerModal(false)}
           onCreated={() => {
             setShowPlayerModal(false);
-            onRefresh();
+            notifyRefresh();
           }}
         />
       )}

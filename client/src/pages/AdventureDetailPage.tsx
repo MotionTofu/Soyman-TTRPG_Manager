@@ -63,6 +63,18 @@ export function AdventureDetailPage() {
     navigate(`/settings/${arc?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
   }
 
+  async function exportAdventure() {
+    const res = await fetch(`/api/story/arcs/${arcId}/export`, { credentials: "include" });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${arc.name.replace(/[^a-z0-9а-яё]+/gi, "_").slice(0, 60) || "adventure"}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="stack">
       <Breadcrumbs
@@ -96,6 +108,9 @@ export function AdventureDetailPage() {
           </div>
         </div>
         <div className="entity-header-actions">
+          <button onClick={exportAdventure}>
+            Экспорт
+          </button>
           {arc.is_default !== 1 && (
             <>
               <button
@@ -132,7 +147,7 @@ export function AdventureDetailPage() {
             <FieldRow label="Теги" value={arc.tags} onSave={(v) => save({ tags: v })} />
           </div>
           <EditableTextCard
-            title="Синопсис"
+            title="Логлайн"
             value={arc.description}
             onSave={(v) => save({ description: v })}
             rows={5}

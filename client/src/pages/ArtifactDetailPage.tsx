@@ -1,98 +1,205 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AliasesCard } from "../components/AliasesCard";
-import { MentionTextarea } from "../components/mentions/MentionTextarea";
+import { ArtifactCardEditor } from "../components/ArtifactCardEditor";
+import { Breadcrumbs } from "../components/Breadcrumbs";
+import { EditableTextCard } from "../components/EditableTextCard";
+import { EntityFieldsCard } from "../components/EntityFieldsCard";
+import { EntityTypeChip } from "../components/EntityTypeChip";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { MentionsTab } from "../components/MentionsTab";
 import { GalleryTab } from "../components/GalleryTab";
 import { ChapterList } from "../components/ChapterList";
 import { useTabState } from "../hooks/useTabState";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { useImageCrop } from "../hooks/useImageCrop";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
 import { CompendiumEntryPicker } from "../components/MonsterTemplatePicker";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { RelationsTab } from "../components/RelationsTab";
-import type { Artifact, CompendiumLink, SearchResult } from "../types";
+import { formatImportantDate } from "../inworldCalendar";
+import type { Artifact, Campaign, CompendiumLink, DateRecurrence, SearchResult, SettingBeing, SettingCommunity } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { TagChips } from "../components/TagChips";
 
-const TABS = ["Досье", "Отношения", "Галерея", "Карточка предмета"] as const;
+const TABS = ["Досье", "Отношения", "Галерея", "Важные даты", "Карточка предмета"] as const;
 
 export function ArtifactDetailPage() {
   const { id } = useParams();
   const artifactId = Number(id);
   const navigate = useNavigate();
-
-  const [artifact, setArtifact] = useState<Artifact | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    short_name: "",
-    description: "",
-    owner: "",
-    power: "",
-    history: "",
-    notes: "",
-    item_class: "",
-    item_type: "",
-    rarity: "",
-    requires_attunement: false,
-  });
-  const [editMode, setEditMode] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [beings, setBeings] = useState<SettingBeing[]>([]);
+  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
+  const [dateTitle, setDateTitle] = useState("");
+  const [dateRecurrence, setDateRecurrence] = useState<DateRecurrence>("once");
+  const [dateYear, setDateYear] = useState("");
+  const [dateMonth, setDateMonth] = useState("");
+  const [dateDay, setDateDay] = useState("");
   const [tab, selectTab] = useTabState(TABS, "Досье");
 
-  function refresh() {
-    api.get<Artifact>(`/artifacts/${artifactId}`).then((a) => {
-      setArtifact(a);
-      setForm({
-        name: a.name,
-        short_name: a.short_name ?? "",
-        description: a.description ?? "",
-        owner: a.owner,
-        power: a.power,
-        history: a.history,
-        notes: a.notes,
-        item_class: a.item_class ?? "",
-        item_type: a.item_type ?? "",
-        rarity: a.rarity ?? "",
-        requires_attunement: !!a.requires_attunement,
-      });
-    });
-  }
-  useEffect(refresh, [artifactId]);
-
-  if (!artifact) return <p className="muted">Загрузка…</p>;
-
-  async function save() {
-    if (!artifact) return;
-    await api.put(`/artifacts/${artifactId}`, form);
-    syncMentionLinks("artifact", artifactId, artifact.power, form.power);
-    syncMentionLinks("artifact", artifactId, artifact.history, form.history);
-    syncMentionLinks("artifact", artifactId, artifact.notes, form.notes);
-    setEditMode(false);
+  async function handleAvatarChange(file: File | null) {
+    if (!file) return;
+    setUploadingAvatar(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    await api.post(`/artifacts/${artifactId}/avatar`, formData);
+    setUploadingAvatar(false);
     refresh();
+  }
+
+  const avatarCrop = useImageCrop("square", handleAvatarChange);
+
+  async function saveTags(tags: string[]) {
+    await api.put(`/artifacts/${artifactId}`, { tags });
+    refresh();
+  }
+
+  async function addImportantDate() {
+    if (!dateTitle.trim() || !dateDay) return;
+    await api.post(`/artifacts/${artifactId}/important-dates`, {
+      title: dateTitle,
+      recurrence: dateRecurrence,
+      year: dateRecurrence === "once" ? Number(dateYear) || null : null,
+      month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
+      day: Number(dateDay),
+    });
+    setDateTitle("");
+    setDateYear("");
+    setDateMonth("");
+    setDateDay("");
+    refresh();
+  }
+
+  async function removeImportantDate(dateId: number) {
+    const ok = await confirm({ message: "Удалить важную дату?", confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
+    await api.del(`/artifacts/important-dates/${dateId}`);
+    refresh();
+  }
+
+  const [artifact, setArtifact] = useState<Artifact | null>(null);
+
+  const refresh = useCallback(() => {
+    const controller = new AbortController();
+    api.get<Artifact>(`/artifacts/${artifactId}`, { signal: controller.signal })
+      .then((a) => {
+        setArtifact(a);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") throw err;
+      });
+    return () => controller.abort();
+  }, [artifactId]);
+
+  useEffect(() => {
+    const cleanup = refresh();
+    return cleanup;
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!artifact) return;
+    api
+      .get<Campaign[]>("/campaigns")
+      .then((all) => setCampaigns(all.filter((c) => c.setting_id === artifact.setting_id)));
+    api
+      .get<SettingBeing[]>(`/setting-beings?setting_id=${artifact.setting_id}`)
+      .then(setBeings);
+    api
+      .get<SettingCommunity[]>(`/setting-communities?setting_id=${artifact.setting_id}`)
+      .then(setCommunities);
+  }, [artifact?.setting_id]);
+
+  const typeOptions = useMemo(() => {
+    const list = itemTypeOptions(artifact?.item_class ?? "");
+    const currentType = artifact?.item_type ?? "";
+    return currentType && !list.includes(currentType) ? [currentType, ...list] : list;
+  }, [artifact?.item_class, artifact?.item_type]);
+
+  if (!artifact) {
+    return (
+      <div className="stack" aria-busy="true" aria-label="Загрузка артефакта">
+        <div
+          className="card"
+          style={{
+            height: 140,
+            opacity: 0.45,
+            background: "var(--bg-elevated)",
+            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
+          }}
+        />
+        <div
+          className="card"
+          style={{
+            height: 220,
+            opacity: 0.45,
+            background: "var(--bg-elevated)",
+            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
+            animationDelay: "120ms",
+          }}
+        />
+      </div>
+    );
   }
 
   async function archiveArtifact() {
     if (!artifact) return;
-    if (!confirm("Отправить артефакт в архив?")) return;
-    await api.del(`/artifacts/${artifactId}`);
-    navigate(`/settings/${artifact.setting_id}`);
+    const ok = await confirm({ message: "Отправить артефакт в архив?", confirmLabel: "Архивировать", danger: true });
+    if (!ok) return;
+    try {
+      await api.del(`/artifacts/${artifactId}`);
+      navigate(`/settings/${artifact.setting_id}`);
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
   }
-
-  // Тип, проставленный до разделения на роды (или руками при импорте), может
-  // не значиться ни в одном списке — он добавляется к вариантам, иначе правка
-  // досье молча стёрла бы его.
-  const typeOptions = (() => {
-    const list = itemTypeOptions(form.item_class);
-    return form.item_type && !list.includes(form.item_type) ? [form.item_type, ...list] : list;
-  })();
 
   return (
     <div className="stack">
+      {confirmDialog}
+      {alertDialog}
+      <Breadcrumbs
+        items={[
+          {
+            label: "Сокровищница",
+            to: `/settings/${artifact.setting_id}?tab=${encodeURIComponent("Сокровищница")}`,
+          },
+          { label: artifact.name },
+        ]}
+      />
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <div className="row" style={{ alignItems: "center" }}>
-          <h1>{artifact.name}</h1>
-          <GraphNeighbourhoodLink type="artifact" id={artifact.id} />
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          <div className="stack" style={{ alignItems: "center" }}>
+            <label className="avatar-upload-label" title={IMAGE_HINT}>
+              {artifact.avatar_image_url ? (
+                <img src={artifact.avatar_image_url} alt="" className="being-avatar" />
+              ) : (
+                <div className="being-avatar roster-avatar-placeholder" />
+              )}
+              <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
+              <input
+                type="file"
+                accept={IMAGE_ACCEPT}
+                style={{ display: "none" }}
+                onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            {avatarCrop.modal}
+          </div>
+          <div>
+            <div className="row" style={{ alignItems: "center" }}>
+              <h1>{artifact.name}</h1>
+              <EntityTypeChip type="artifact" />
+              <GraphNeighbourhoodLink type="artifact" id={artifact.id} />
+            </div>
+            <TagChips tags={artifact.tags ?? []} onChange={saveTags} />
+          </div>
         </div>
         <div className="entity-header-actions">
           <button className="danger" onClick={archiveArtifact}>
@@ -110,214 +217,173 @@ export function ArtifactDetailPage() {
         ))}
       </div>
 
-      {tab === "Досье" &&
-        (editMode ? (
+      {tab === "Досье" && (
+        <div className="stack">
+          <EntityFieldsCard
+            key={`fields-${artifact.id}`}
+            fields={[
+              { key: "name", label: "Название", value: artifact.name, required: true },
+              {
+                key: "short_name",
+                label: "Короткое имя для карты",
+                value: artifact.short_name ?? "",
+                title: "Показывается вместо полного имени в подписи пина на карте локации",
+              },
+            ]}
+            onSave={async (v) => {
+              await api.put(`/artifacts/${artifactId}`, { name: v.name, short_name: v.short_name });
+              refresh();
+            }}
+          />
           <div className="card stack">
-            <label>
-              Название
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </label>
-            <label>
-              Короткое имя для карты
-              <input
-                value={form.short_name}
-                onChange={(e) => setForm({ ...form, short_name: e.target.value })}
-                title="Показывается вместо полного имени в подписи пина на карте локации"
-              />
-            </label>
-            <label>
-              Владелец
-              <input value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
-            </label>
-            <div className="row">
-              <label>
-                Род предмета
-                <select
-                  value={form.item_class}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    // Тип, редкость и настройка вне выбранного рода не имеют
-                    // смысла — сбрасываем их вместе с ним.
-                    setForm({
-                      ...form,
-                      item_class: next,
-                      item_type: itemTypeOptions(next).includes(form.item_type) ? form.item_type : "",
-                      ...(next === "equipment" ? { rarity: "", requires_attunement: false } : {}),
-                    });
+            <h3>Владелец</h3>
+            {artifact.owner_entity ? (
+              <div className="row" style={{ alignItems: "center", gap: 8 }}>
+                <Link to={`/${artifact.owner_entity.type === "being" ? "beings" : "communities"}/${artifact.owner_entity.id}`}>
+                  {artifact.owner_entity.name}
+                </Link>
+                <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
+                  {artifact.owner_entity.type === "being" ? "Существо" : "Сообщество"}
+                </span>
+                <button
+                  onClick={async () => {
+                    await api.put(`/artifacts/${artifactId}`, { owner_type: null, owner_id: null });
+                    refresh();
                   }}
                 >
-                  <option value="">— не указан —</option>
-                  {ITEM_CLASSES.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Тип предмета
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className="row" style={{ gap: 8 }}>
                 <select
-                  value={form.item_type}
-                  onChange={(e) => setForm({ ...form, item_type: e.target.value })}
+                  value=""
+                  onChange={async (e) => {
+                    const [type, idStr] = e.target.value.split(":");
+                    const id = Number(idStr);
+                    if (!type || !id) return;
+                    await api.put(`/artifacts/${artifactId}`, { owner_type: type, owner_id: id });
+                    refresh();
+                  }}
                 >
-                  <option value="">— не указан —</option>
-                  {typeOptions.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
+                  <option value="">Выбрать…</option>
+                  {beings.length > 0 && <optgroup label="Существа">
+                    {beings.map((b) => (
+                      <option key={`being:${b.id}`} value={`being:${b.id}`}>{b.name}</option>
+                    ))}
+                  </optgroup>}
+                  {communities.length > 0 && <optgroup label="Сообщества">
+                    {communities.map((c) => (
+                      <option key={`community:${c.id}`} value={`community:${c.id}`}>{c.name}</option>
+                    ))}
+                  </optgroup>}
                 </select>
-              </label>
-              {form.item_class !== "equipment" && (
-                <>
-                  <label>
-                    Редкость
-                    <select
-                      value={form.rarity}
-                      onChange={(e) => setForm({ ...form, rarity: e.target.value })}
-                    >
-                      <option value="">— не указана —</option>
-                      {MAGIC_ITEM_RARITIES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="row" style={{ alignItems: "center", gap: 4 }}>
-                    <input
-                      type="checkbox"
-                      checked={form.requires_attunement}
-                      onChange={(e) => setForm({ ...form, requires_attunement: e.target.checked })}
-                    />
-                    Требует настройки
-                  </label>
-                </>
-              )}
-            </div>
-            <label>
-              Короткое описание
-              <MentionTextarea
-                value={form.description}
-                onChange={(v) => setForm({ ...form, description: v })}
-                rows={2}
-                defaultSettingId={artifact.setting_id}
-              />
-            </label>
-            <label>
-              Сила / свойства
-              <MentionTextarea
-                value={form.power}
-                onChange={(v) => setForm({ ...form, power: v })}
-                rows={4}
-                defaultSettingId={artifact.setting_id}
-              />
-            </label>
-            <label>
-              История
-              <MentionTextarea
-                value={form.history}
-                onChange={(v) => setForm({ ...form, history: v })}
-                rows={4}
-                defaultSettingId={artifact.setting_id}
-              />
-            </label>
-            <label>
-              Заметки
-              <MentionTextarea
-                value={form.notes}
-                onChange={(v) => setForm({ ...form, notes: v })}
-                rows={3}
-                defaultSettingId={artifact.setting_id}
-              />
-            </label>
-            <div className="row">
-              <button className="primary" onClick={save}>
-                Сохранить
-              </button>
-              <button onClick={() => setEditMode(false)}>Отмена</button>
-            </div>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="stack">
-            <div className="card stack">
-              {artifact.owner && (
-                <div className="muted">
-                  Владелец: <MentionText text={artifact.owner} />
-                </div>
-              )}
-              {!!(
-                artifact.item_class ||
-                artifact.item_type ||
-                artifact.rarity ||
-                artifact.requires_attunement
-              ) && (
-                <div className="row" style={{ gap: 6 }}>
-                  {artifact.item_class && (
-                    <span className="badge tag">
-                      {ITEM_CLASSES.find((c) => c.value === artifact.item_class)?.label ??
-                        artifact.item_class}
-                    </span>
-                  )}
-                  {artifact.item_type && <span className="badge tag">{artifact.item_type}</span>}
-                  {artifact.rarity && <span className="badge tag">{artifact.rarity}</span>}
-                  {!!artifact.requires_attunement && <span className="badge tag">Требует настройки</span>}
-                </div>
-              )}
-              {artifact.description && (
-                <div className="stack">
-                  <strong>Короткое описание</strong>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={artifact.description} />
-                  </div>
-                </div>
-              )}
-              {artifact.power && (
-                <div>
-                  <strong>Сила / свойства</strong>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={artifact.power} />
-                  </div>
-                </div>
-              )}
-              {artifact.history && (
-                <div>
-                  <strong>История</strong>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={artifact.history} />
-                  </div>
-                </div>
-              )}
-              {artifact.notes && (
-                <div>
-                  <strong>Заметки</strong>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={artifact.notes} />
-                  </div>
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  setForm({
-                    name: artifact.name,
-                    short_name: artifact.short_name ?? "",
-                    description: artifact.description ?? "",
-                    owner: artifact.owner,
-                    power: artifact.power,
-                    history: artifact.history,
-                    notes: artifact.notes,
-                    item_class: artifact.item_class ?? "",
-                    item_type: artifact.item_type ?? "",
-                    rarity: artifact.rarity ?? "",
-                    requires_attunement: !!artifact.requires_attunement,
-                  });
-                  setEditMode(true);
-                }}
-                style={{ alignSelf: "flex-start" }}
-              >
-                Редактировать
-              </button>
-            </div>
+          <EditableTextCard
+            title="Короткое описание"
+            value={artifact.description}
+            onSave={async (v) => {
+              await api.put(`/artifacts/${artifactId}`, { description: v });
+              syncMentionLinks("artifact", artifactId, artifact.description, v);
+              refresh();
+            }}
+            rows={2}
+            entityType="artifact"
+            entityId={artifactId}
+            defaultSettingId={artifact.setting_id}
+            collapsible
+            defaultOpen
+            fields={[
+              {
+                key: "item_class",
+                label: "Род предмета",
+                value: artifact.item_class ?? "",
+                options: [{ value: "", label: "— не указан —" }, ...ITEM_CLASSES.map((c) => ({ value: c.value, label: c.label }))],
+              },
+              {
+                key: "item_type",
+                label: "Тип предмета",
+                value: artifact.item_type ?? "",
+                options: [{ value: "", label: "— не указан —" }, ...typeOptions.map((t) => ({ value: t, label: t }))],
+              },
+              ...(artifact.item_class !== "equipment"
+                ? [
+                    {
+                      key: "rarity",
+                      label: "Редкость",
+                      value: artifact.rarity ?? "",
+                      options: [{ value: "", label: "— не указана —" }, ...MAGIC_ITEM_RARITIES.map((r) => ({ value: r, label: r }))],
+                    },
+                  ]
+                : []),
+            ]}
+            onSaveFields={async (v) => {
+              await api.put(`/artifacts/${artifactId}`, {
+                item_class: v.item_class || null,
+                item_type: v.item_type || null,
+                rarity: v.rarity || null,
+              });
+              refresh();
+            }}
+          />
+          <EditableTextCard
+            title="Сила / свойства"
+            value={artifact.power}
+            onSave={async (v) => {
+              await api.put(`/artifacts/${artifactId}`, { power: v });
+              syncMentionLinks("artifact", artifactId, artifact.power, v);
+              refresh();
+            }}
+            rows={4}
+            entityType="artifact"
+            entityId={artifactId}
+            defaultSettingId={artifact.setting_id}
+            collapsible
+          />
+          <EditableTextCard
+            title="История"
+            value={artifact.history}
+            onSave={async (v) => {
+              await api.put(`/artifacts/${artifactId}`, { history: v });
+              syncMentionLinks("artifact", artifactId, artifact.history, v);
+              refresh();
+            }}
+            rows={4}
+            entityType="artifact"
+            entityId={artifactId}
+            defaultSettingId={artifact.setting_id}
+            collapsible
+          />
+          <EditableTextCard
+            title="Секрет"
+            value={artifact.secret}
+            onSave={async (v) => {
+              await api.put(`/artifacts/${artifactId}`, { secret: v });
+              syncMentionLinks("artifact", artifactId, artifact.secret, v);
+              refresh();
+            }}
+            rows={3}
+            entityType="artifact"
+            entityId={artifactId}
+            defaultSettingId={artifact.setting_id}
+            collapsible
+          />
+          <EditableTextCard
+            title="Заметки"
+            value={artifact.notes}
+            onSave={async (v) => {
+              await api.put(`/artifacts/${artifactId}`, { notes: v });
+              syncMentionLinks("artifact", artifactId, artifact.notes, v);
+              refresh();
+            }}
+            rows={3}
+            entityType="artifact"
+            entityId={artifactId}
+            defaultSettingId={artifact.setting_id}
+            collapsible
+          />
             <ChapterList
               ownerId={artifactId}
               ownerType="artifact"
@@ -327,6 +393,7 @@ export function ArtifactDetailPage() {
               titlePrefix="Статья"
               addLabel="статью"
               defaultSettingId={artifact.setting_id}
+              campaigns={campaigns}
             />
             <details className="stack">
               <summary>
@@ -335,7 +402,7 @@ export function ArtifactDetailPage() {
               <MentionsTab entityType="artifact" entityId={artifactId} />
             </details>
           </div>
-        ))}
+      )}
 
       {tab === "Досье" && (
         <AliasesCard
@@ -369,13 +436,68 @@ export function ArtifactDetailPage() {
 
       {tab === "Галерея" && <GalleryTab ownerType="artifact" ownerId={artifactId} />}
 
-      {tab === "Карточка предмета" && (
+      {tab === "Важные даты" && (
         <div className="card stack">
-          <p className="muted">
-            Карточка предмета — скоро здесь появится компактная витрина для показа игрокам (пульт
-            управления сессией и другие места).
-          </p>
+          <span className="muted">
+            Эти даты отмечаются на календаре сеттинга и переносятся в календари связанных с ним
+            кампаний.
+          </span>
+          <div className="row">
+            <input
+              placeholder="Название (напр. День находки)"
+              value={dateTitle}
+              onChange={(e) => setDateTitle(e.target.value)}
+            />
+            <select value={dateRecurrence} onChange={(e) => setDateRecurrence(e.target.value as DateRecurrence)}>
+              <option value="once">Разовое</option>
+              <option value="annual">Ежегодное</option>
+              <option value="monthly">Ежемесячное</option>
+            </select>
+            {dateRecurrence === "once" && (
+              <input
+                type="number"
+                placeholder="Год"
+                style={{ width: 80 }}
+                value={dateYear}
+                onChange={(e) => setDateYear(e.target.value)}
+              />
+            )}
+            {dateRecurrence !== "monthly" && (
+              <select value={dateMonth} onChange={(e) => setDateMonth(e.target.value)}>
+                <option value="">Месяц…</option>
+              </select>
+            )}
+            <input
+              type="number"
+              placeholder="День"
+              style={{ width: 70 }}
+              value={dateDay}
+              onChange={(e) => setDateDay(e.target.value)}
+            />
+            <button className="primary" onClick={addImportantDate}>
+              Добавить
+            </button>
+          </div>
+          <div className="stack">
+            {(artifact.important_dates ?? []).map((d) => (
+              <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
+                <span>
+                  <strong>{d.title}</strong> — {formatImportantDate(d, [], [])}
+                </span>
+                <button className="danger" onClick={() => removeImportantDate(d.id)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            {(!artifact.important_dates || artifact.important_dates.length === 0) && (
+              <p className="muted">Важных дат пока нет.</p>
+            )}
+          </div>
         </div>
+      )}
+
+      {tab === "Карточка предмета" && (
+        <ArtifactCardEditor id={artifactId} onChange={refresh} />
       )}
     </div>
   );

@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { readFileAsBase64, vaultAbs } from "../services/filesystem";
+import { storeDeduped } from "../services/vaultDedup";
 import { pruneRoutesForKeys } from "./canvas";
 import {
   contentSceneId,
@@ -1313,12 +1315,443 @@ storyRouter.put("/scenes/:id", (req, res) => {
         for (const cid of checkIds)
           db.prepare("DELETE FROM canvas_nodes WHERE node_type = 'check' AND node_id = ?").run(cid);
       }
-    });
+});
+
     moveRows();
   }
 
   res.json(db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(target.id));
 });
+
+// ─── Adventure Export Data Builder ───────────────────────────────────────
+// Shared between the standalone adventure export endpoint and the setting
+// export (which bundles all adventures for a setting).
+
+export function buildAdventureExportData(arcId: number | string): Record<string, unknown> | null {
+  const arc = db.prepare("SELECT * FROM story_arcs WHERE id = ? AND parent_id IS NULL").get(arcId) as Record<string, unknown> | undefined;
+  if (!arc) return null;
+
+  const thumbData = readFileAsBase64(arc.thumbnail_image_path as string | null);
+
+  const chapters = db
+    .prepare("SELECT * FROM story_arcs WHERE parent_id = ? ORDER BY position")
+    .all(arcId) as Record<string, unknown>[];
+
+  const chapterIds = chapters.map((c) => c.id);
+  const allArcIds = [Number(arcId), ...chapterIds.map(Number)];
+  const placeholders = allArcIds.map(() => "?").join(",");
+
+  const scenes = db
+    .prepare(`SELECT * FROM story_scenes WHERE arc_id IN (${placeholders}) AND archived_at IS NULL ORDER BY position`)
+    .all(...allArcIds) as Record<string, unknown>[];
+  const sceneIds = scenes.map((s) => s.id);
+  const scPh = sceneIds.map(() => "?").join(",");
+
+  const checks = sceneIds.length > 0
+    ? db.prepare(`SELECT * FROM story_scene_checks WHERE scene_id IN (${scPh}) ORDER BY position`).all(...sceneIds) as Record<string, unknown>[]
+    : [];
+  const checkIds = checks.map((c) => c.id);
+  const ckPh = checkIds.map(() => "?").join(",");
+
+  const outcomes = checkIds.length > 0
+    ? db.prepare(`SELECT * FROM story_check_outcomes WHERE check_id IN (${ckPh}) ORDER BY position`).all(...checkIds) as Record<string, unknown>[]
+    : [];
+
+  const rewards = db
+    .prepare(`SELECT * FROM story_scene_rewards WHERE arc_id IN (${placeholders}) OR scene_id IN (${scPh}) ORDER BY position`)
+    .all(...allArcIds, ...sceneIds) as Record<string, unknown>[];
+
+  const transitions = sceneIds.length > 0
+    ? db.prepare(`SELECT * FROM story_scene_transitions WHERE from_scene_id IN (${scPh}) ORDER BY position`).all(...sceneIds) as Record<string, unknown>[]
+    : [];
+
+  const milestones = db
+    .prepare(`SELECT * FROM story_milestones WHERE arc_id IN (${placeholders}) ORDER BY position`)
+    .all(...allArcIds) as Record<string, unknown>[];
+
+  const secrets = db
+    .prepare(`SELECT * FROM story_secrets WHERE arc_id IN (${placeholders}) ORDER BY position`)
+    .all(...allArcIds) as Record<string, unknown>[];
+
+  const arcTransitions = db
+    .prepare(`SELECT * FROM story_arc_transitions WHERE from_arc_id IN (${placeholders}) OR to_arc_id IN (${placeholders}) ORDER BY position`)
+    .all(...allArcIds, ...allArcIds) as Record<string, unknown>[];
+
+  // Cast links
+  const castLinks = sceneIds.length > 0
+    ? db.prepare(`SELECT * FROM generic_links WHERE from_type = 'scene' AND from_id IN (${scPh})`).all(...sceneIds) as Record<string, unknown>[]
+    : [];
+  const linkIds = castLinks.map((l) => l.id);
+  const linkCast = linkIds.length > 0
+    ? db.prepare(`SELECT * FROM link_cast WHERE link_id IN (${linkIds.map(() => "?").join(",")})`).all(...linkIds) as Record<string, unknown>[]
+    : [];
+
+  // Canvas layout
+  const board = db
+    .prepare("SELECT id FROM canvas_boards WHERE scope_type = 'arc' AND scope_id = ?")
+    .get(arcId) as { id: number } | undefined;
+  const canvasNodes = board ? db.prepare("SELECT * FROM canvas_nodes WHERE board_id = ?").all(board.id) as Record<string, unknown>[] : [];
+  const canvasStickers = board ? db.prepare("SELECT * FROM canvas_stickers WHERE board_id = ?").all(board.id) as Record<string, unknown>[] : [];
+  const canvasImages = board ? db.prepare("SELECT * FROM canvas_images WHERE board_id = ?").all(board.id) as (Record<string, unknown> & { file_path?: string | null })[] : [];
+  const canvasFrames = board ? db.prepare("SELECT * FROM canvas_frames WHERE board_id = ?").all(board.id) as Record<string, unknown>[] : [];
+  const canvasPins = board ? db.prepare("SELECT * FROM canvas_pins WHERE board_id = ?").all(board.id) as Record<string, unknown>[] : [];
+  const canvasBundles = board ? db.prepare("SELECT * FROM canvas_bundles WHERE id IN (SELECT node_id FROM canvas_nodes WHERE board_id = ? AND node_type = 'bundle')").all(board.id) as Record<string, unknown>[] : [];
+  const canvasRoutes = board ? db.prepare("SELECT * FROM canvas_routes WHERE board_id = ?").all(board.id) as Record<string, unknown>[] : [];
+  const routeIds = canvasRoutes.map((r) => r.id);
+  const canvasRouteOutputs = routeIds.length > 0
+    ? db.prepare(`SELECT * FROM canvas_route_outputs WHERE route_id IN (${routeIds.map(() => "?").join(",")})`).all(...routeIds) as Record<string, unknown>[]
+    : [];
+  const canvasThreads = board ? db.prepare("SELECT * FROM canvas_threads WHERE board_id = ?").all(board.id) as Record<string, unknown>[] : [];
+
+  // Slugify + key maps
+  function slugify(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60) || "unnamed";
+  }
+
+  const arcKeyMap = new Map<number, string>();
+  arcKeyMap.set(Number(arcId), `adv.${slugify(arc.name as string)}`);
+  for (const ch of chapters) arcKeyMap.set(ch.id as number, `chp.${slugify(ch.name as string)}`);
+  const sceneKeyMap = new Map<number, string>();
+  for (const s of scenes) sceneKeyMap.set(s.id as number, `scn.${slugify(s.name as string)}`);
+
+  // Index maps
+  const checksByScene = new Map<number, Record<string, unknown>[]>();
+  for (const c of checks) { const sid = c.scene_id as number; if (!checksByScene.has(sid)) checksByScene.set(sid, []); checksByScene.get(sid)!.push(c); }
+  const outcomesByCheck = new Map<number, Record<string, unknown>[]>();
+  for (const o of outcomes) { const cid = o.check_id as number; if (!outcomesByCheck.has(cid)) outcomesByCheck.set(cid, []); outcomesByCheck.get(cid)!.push(o); }
+  const rewardsByScene = new Map<number, Record<string, unknown>[]>();
+  for (const r of rewards) { const sid = r.scene_id as number; if (sid) { if (!rewardsByScene.has(sid)) rewardsByScene.set(sid, []); rewardsByScene.get(sid)!.push(r); } }
+  const rewardsByArc = new Map<number, Record<string, unknown>[]>();
+  for (const r of rewards) { const aid = r.arc_id as number; if (aid) { if (!rewardsByArc.has(aid)) rewardsByArc.set(aid, []); rewardsByArc.get(aid)!.push(r); } }
+  const transitionsByScene = new Map<number, Record<string, unknown>[]>();
+  for (const t of transitions) { const fid = t.from_scene_id as number; if (!transitionsByScene.has(fid)) transitionsByScene.set(fid, []); transitionsByScene.get(fid)!.push(t); }
+  const castByScene = new Map<number, Record<string, unknown>[]>();
+  for (const l of castLinks) { const sid = l.from_id as number; if (!castByScene.has(sid)) castByScene.set(sid, []); castByScene.get(sid)!.push(l); }
+
+  // Canvas sticker/image/frame/pin/bundle/route ID maps (for export keys)
+  const stickerIdMap = new Map<number, string>(); for (const s of canvasStickers) stickerIdMap.set(s.id as number, `sticker_${s.id}`);
+  const imageIdMap = new Map<number, string>(); for (const img of canvasImages) imageIdMap.set(img.id as number, `image_${img.id}`);
+  const frameIdMap = new Map<number, string>(); for (const f of canvasFrames) frameIdMap.set(f.id as number, `frame_${f.id}`);
+  const pinIdMap = new Map<number, string>(); for (const p of canvasPins) pinIdMap.set(p.id as number, `pin_${p.id}`);
+  const bundleIdMap = new Map<number, string>(); for (const b of canvasBundles) bundleIdMap.set(b.id as number, `bundle_${b.id}`);
+  const routeIdMap = new Map<number, string>(); for (const r of canvasRoutes) routeIdMap.set(r.id as number, `route_${r.id}`);
+
+  const scenesData = scenes.map((s, idx) => {
+    const sid = s.id as number;
+    const sceneChecks = (checksByScene.get(sid) ?? []).map((c) => ({
+      what: c.what, difficulty: c.difficulty, position: c.position,
+      outcomes: (outcomesByCheck.get(c.id as number) ?? []).map((o) => ({ label: o.label, consequence: o.consequence, position: o.position })),
+    }));
+    const sceneRewards = [
+      ...(rewardsByScene.get(sid) ?? []),
+      ...(Number(s.arc_id) === Number(arcId) ? (rewardsByArc.get(Number(arcId)) ?? []) : []),
+    ].map((r) => ({ what: r.what, where_found: r.where_found, notes: r.notes, position: r.position }));
+    const sceneTransitions = (transitionsByScene.get(sid) ?? []).map((t) => ({
+      to: sceneKeyMap.get(t.to_scene_id as number) ?? null, label: t.label, position: t.position,
+    }));
+    const sceneCast = (castByScene.get(sid) ?? []).map((l) => {
+      const ce = linkCast.find((c) => c.link_id === l.id);
+      return { target_type: l.to_type, target_id: l.to_id, section: l.section, role: ce?.role ?? "", qty: ce?.qty ?? null, notes: l.notes };
+    });
+    return {
+      name: s.name, kind: s.kind,
+      chapter: Number(s.arc_id) !== Number(arcId) ? arcKeyMap.get(s.arc_id as number) ?? undefined : undefined,
+      summary: s.summary, read_aloud: s.read_aloud, whats_happening: s.whats_happening,
+      entry_condition: s.entry_condition, outcomes: s.outcomes,
+      hidden_from_players: s.hidden_from_players, position: s.position ?? idx,
+      checks: sceneChecks.length > 0 ? sceneChecks : undefined,
+      rewards: sceneRewards.length > 0 ? sceneRewards : undefined,
+      transitions: sceneTransitions.length > 0 ? sceneTransitions : undefined,
+      cast: sceneCast.length > 0 ? sceneCast : undefined,
+    };
+  });
+
+  return {
+    format: "adventure-export/1",
+    adventure: {
+      name: arc.name, description: arc.description, hook: arc.hook,
+      recommended_level: arc.recommended_level, player_count: arc.player_count,
+      duration: arc.duration, source: arc.source, tags: arc.tags,
+      thumbnail_image_path: thumbData,
+    },
+    chapters: chapters.map((ch) => ({ name: ch.name, description: ch.description, position: ch.position })),
+    scenes: scenesData,
+    milestones: milestones.map((m) => ({
+      arc: m.arc_id ? arcKeyMap.get(m.arc_id as number) ?? null : null,
+      scene: m.scene_id ? sceneKeyMap.get(m.scene_id as number) ?? null : null,
+      title: m.title, description: m.description, position: m.position,
+    })),
+    secrets: secrets.map((s) => ({
+      arc: s.arc_id ? arcKeyMap.get(s.arc_id as number) ?? null : null,
+      kind: s.kind, title: s.title, content: s.content, position: s.position,
+    })),
+    arc_transitions: arcTransitions.map((t) => ({
+      from: arcKeyMap.get(t.from_arc_id as number) ?? null,
+      to: arcKeyMap.get(t.to_arc_id as number) ?? null,
+      label: t.label, position: t.position,
+    })),
+    canvas: {
+      nodes: canvasNodes.map((n) => ({ node_type: n.node_type, node_id: n.node_id, x: n.x, y: n.y, z_index: n.z_index, parent_key: n.parent_key })),
+      stickers: canvasStickers.map((s) => ({ key: stickerIdMap.get(s.id as number), text: s.text, name: s.name, note: s.note, color: s.color })),
+      images: canvasImages.map((img) => ({ key: imageIdMap.get(img.id as number), file_data: readFileAsBase64(img.file_path as string | null), w: img.w, h: img.h })),
+      frames: canvasFrames.map((f) => ({ key: frameIdMap.get(f.id as number), name: f.name, color: f.color, x: f.x, y: f.y, w: f.w, h: f.h, collapsed: f.collapsed })),
+      pins: canvasPins.map((p) => ({ key: pinIdMap.get(p.id as number), name: p.name, x: p.x, y: p.y, size: p.size, color: p.color, shape: p.shape, z_index: p.z_index })),
+      bundles: canvasBundles.map((b) => ({ key: bundleIdMap.get(b.id as number), name: b.name, content_type: b.content_type })),
+      routes: canvasRoutes.map((r) => ({
+        key: routeIdMap.get(r.id as number), from_key: r.from_key, kind: r.kind, role: r.role,
+        outputs: canvasRouteOutputs.filter((o) => o.route_id === r.id).map((o) => ({ to_key: o.to_key, role: o.role })),
+      })),
+      threads: canvasThreads.map((t) => ({ from_pin: pinIdMap.get(t.from_pin_id as number), to_pin: pinIdMap.get(t.to_pin_id as number), width: t.width, color: t.color })),
+    },
+  };
+}
+
+// ─── Adventure Import ─────────────────────────────────────────────────────
+// Accepts an adventure-export/1 JSON and creates the adventure with all
+// related data in the target setting.
+
+export function importAdventureExport(
+  settingId: number,
+  data: Record<string, unknown>
+): number | null {
+  if (data.format !== "adventure-export/1") return null;
+
+  const adv = data.adventure as Record<string, unknown>;
+  const chapters = (data.chapters ?? []) as Record<string, unknown>[];
+  const scenes = (data.scenes ?? []) as Record<string, unknown>[];
+  const milestones = (data.milestones ?? []) as Record<string, unknown>[];
+  const secrets = (data.secrets ?? []) as Record<string, unknown>[];
+  const arcTransitions = (data.arc_transitions ?? []) as Record<string, unknown>[];
+
+  function slugify(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60) || "unnamed";
+  }
+
+  const insertArc = db.prepare(
+    `INSERT INTO story_arcs (setting_id, parent_id, name, kind, description, hook, recommended_level, player_count, duration, source, tags, thumbnail_image_path, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertScene = db.prepare(
+    `INSERT INTO story_scenes (setting_id, arc_id, name, kind, summary, read_aloud, whats_happening, entry_condition, outcomes, hidden_from_players, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertCheck = db.prepare(
+    `INSERT INTO story_scene_checks (scene_id, what, difficulty, position) VALUES (?, ?, ?, ?)`
+  );
+  const insertOutcome = db.prepare(
+    `INSERT INTO story_check_outcomes (check_id, label, consequence, position) VALUES (?, ?, ?, ?)`
+  );
+  const insertReward = db.prepare(
+    `INSERT INTO story_scene_rewards (scene_id, arc_id, what, where_found, notes, position) VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  const insertTransition = db.prepare(
+    `INSERT INTO story_scene_transitions (from_scene_id, to_scene_id, label, position) VALUES (?, ?, ?, ?)`
+  );
+  const insertMilestone = db.prepare(
+    `INSERT INTO story_milestones (arc_id, scene_id, title, description, position) VALUES (?, ?, ?, ?, ?)`
+  );
+  const insertSecret = db.prepare(
+    `INSERT INTO story_secrets (arc_id, kind, title, content, position) VALUES (?, ?, ?, ?, ?)`
+  );
+  const insertArcTransition = db.prepare(
+    `INSERT INTO story_arc_transitions (from_arc_id, to_arc_id, label, position) VALUES (?, ?, ?, ?)`
+  );
+
+  const result = db.transaction(() => {
+    // 1. Create adventure
+    const arcResult = insertArc.run(
+      settingId, null, adv.name, "adventure",
+      adv.description ?? "", adv.hook ?? "", adv.recommended_level ?? "",
+      adv.player_count ?? "", adv.duration ?? "", adv.source ?? "",
+      adv.tags ?? "", null, 0
+    );
+    const newArcId = Number(arcResult.lastInsertRowid);
+
+    // 2. Create chapters
+    const chapterIdMap = new Map<string, number>();
+    for (let i = 0; i < chapters.length; i++) {
+      const ch = chapters[i];
+      const r = insertArc.run(
+        settingId, newArcId, ch.name, "chapter",
+        ch.description ?? "", "", "", "", "", "", "",
+        null, i
+      );
+      chapterIdMap.set(`chp.${slugify(ch.name as string)}`, Number(r.lastInsertRowid));
+    }
+
+    // 3. Create scenes
+    const sceneIdMap = new Map<string, number>();
+    for (let i = 0; i < scenes.length; i++) {
+      const s = scenes[i];
+      const chapterKey = s.chapter as string | undefined;
+      const arcId = chapterKey && chapterIdMap.has(chapterKey) ? chapterIdMap.get(chapterKey) : newArcId;
+      const r = insertScene.run(
+        settingId, arcId, s.name, s.kind ?? "scene",
+        s.summary ?? "", s.read_aloud ?? "", s.whats_happening ?? "",
+        s.entry_condition ?? "", s.outcomes ?? "",
+        s.hidden_from_players ?? 1, s.position ?? i
+      );
+      const key = `scn.${slugify(s.name as string)}`;
+      sceneIdMap.set(key, Number(r.lastInsertRowid));
+    }
+
+    // 4. Create checks and outcomes
+    for (const s of scenes) {
+      const sceneKey = `scn.${slugify(s.name as string)}`;
+      const sceneId = sceneIdMap.get(sceneKey);
+      if (!sceneId) continue;
+      const checks = (s.checks ?? []) as Record<string, unknown>[];
+      for (let ci = 0; ci < checks.length; ci++) {
+        const c = checks[ci];
+        const cr = insertCheck.run(sceneId, c.what ?? "", c.difficulty ?? "", ci);
+        const checkId = Number(cr.lastInsertRowid);
+        const outcomes = (c.outcomes ?? []) as Record<string, unknown>[];
+        for (let oi = 0; oi < outcomes.length; oi++) {
+          const o = outcomes[oi];
+          insertOutcome.run(checkId, o.label ?? "", o.consequence ?? "", oi);
+        }
+      }
+    }
+
+    // 5. Create rewards
+    for (const s of scenes) {
+      const sceneKey = `scn.${slugify(s.name as string)}`;
+      const sceneId = sceneIdMap.get(sceneKey);
+      const rewards = (s.rewards ?? []) as Record<string, unknown>[];
+      for (let ri = 0; ri < rewards.length; ri++) {
+        const r = rewards[ri];
+        insertReward.run(sceneId ?? null, null, r.what ?? "", r.where_found ?? "", r.notes ?? "", r.position ?? ri);
+      }
+    }
+
+    // 6. Create scene transitions
+    for (const s of scenes) {
+      const fromKey = `scn.${slugify(s.name as string)}`;
+      const fromId = sceneIdMap.get(fromKey);
+      if (!fromId) continue;
+      const transitions = (s.transitions ?? []) as Record<string, unknown>[];
+      for (let ti = 0; ti < transitions.length; ti++) {
+        const t = transitions[ti];
+        const toId = sceneIdMap.get(t.to as string);
+        if (toId) insertTransition.run(fromId, toId, t.label ?? "", ti);
+      }
+    }
+
+    // 7. Create milestones
+    for (let i = 0; i < milestones.length; i++) {
+      const m = milestones[i];
+      const arcKey = m.arc as string | undefined;
+      const arcId = arcKey ? (chapterIdMap.get(arcKey) ?? newArcId) : newArcId;
+      const sceneKey = m.scene as string | undefined;
+      const sceneId = sceneKey ? sceneIdMap.get(sceneKey) ?? null : null;
+      insertMilestone.run(arcId, sceneId, m.title ?? "", m.description ?? "", m.position ?? i);
+    }
+
+    // 8. Create secrets
+    for (let i = 0; i < secrets.length; i++) {
+      const s = secrets[i];
+      const arcKey = s.arc as string | undefined;
+      const arcId = arcKey ? (chapterIdMap.get(arcKey) ?? newArcId) : newArcId;
+      insertSecret.run(arcId, s.kind ?? "secret", s.title ?? "", s.content ?? "", s.position ?? i);
+    }
+
+    // 9. Create arc transitions
+    for (let i = 0; i < arcTransitions.length; i++) {
+      const t = arcTransitions[i];
+      const fromId = chapterIdMap.get(t.from as string) ?? newArcId;
+      const toId = chapterIdMap.get(t.to as string) ?? newArcId;
+      insertArcTransition.run(fromId, toId, t.label ?? "", t.position ?? i);
+    }
+
+    // 10. Restore canvas layout
+    const canvas = data.canvas as Record<string, unknown> | undefined;
+    if (canvas) {
+      let boardRow = db.prepare("SELECT id FROM canvas_boards WHERE scope_type = 'arc' AND scope_id = ?").get(newArcId) as { id: number } | undefined;
+      if (!boardRow) {
+        db.prepare("INSERT INTO canvas_boards (scope_type, scope_id) VALUES ('arc', ?)").run(newArcId);
+        boardRow = db.prepare("SELECT id FROM canvas_boards WHERE scope_type = 'arc' AND scope_id = ?").get(newArcId) as { id: number };
+      }
+      const boardId = boardRow.id;
+
+      const nodeIdMap = new Map<string, number>();
+
+      // Stickers
+      const exportStickers = (canvas.stickers ?? []) as Record<string, unknown>[];
+      for (const s of exportStickers) {
+        const r = db.prepare("INSERT INTO canvas_stickers (board_id, text, name, note, color) VALUES (?, ?, ?, ?, ?)")
+          .run(boardId, s.text ?? "", s.name ?? "", s.note ?? "", s.color ?? "paper");
+        nodeIdMap.set(s.key as string, Number(r.lastInsertRowid));
+      }
+
+      // Frames
+      const exportFrames = (canvas.frames ?? []) as Record<string, unknown>[];
+      for (const f of exportFrames) {
+        const r = db.prepare("INSERT INTO canvas_frames (board_id, name, color, x, y, w, h, collapsed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .run(boardId, f.name ?? "Группа", f.color ?? "#2C3E50", f.x ?? 0, f.y ?? 0, f.w ?? 320, f.h ?? 240, f.collapsed ?? 0);
+        nodeIdMap.set(f.key as string, Number(r.lastInsertRowid));
+      }
+
+      // Pins
+      const exportPins = (canvas.pins ?? []) as Record<string, unknown>[];
+      for (const p of exportPins) {
+        const r = db.prepare("INSERT INTO canvas_pins (board_id, name, x, y, size, color, shape, z_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .run(boardId, p.name ?? "Пин", p.x ?? 0, p.y ?? 0, p.size ?? "M", p.color ?? "#2C3E50", p.shape ?? "circle", p.z_index ?? 1000);
+        nodeIdMap.set(p.key as string, Number(r.lastInsertRowid));
+      }
+
+      // Bundles
+      const exportBundles = (canvas.bundles ?? []) as Record<string, unknown>[];
+      for (const b of exportBundles) {
+        const r = db.prepare("INSERT INTO canvas_bundles (name, content_type) VALUES (?, ?)")
+          .run(b.name ?? "", b.content_type ?? null);
+        nodeIdMap.set(b.key as string, Number(r.lastInsertRowid));
+      }
+
+      // Routes
+      const exportRoutes = (canvas.routes ?? []) as Record<string, unknown>[];
+      for (const r of exportRoutes) {
+        const fromKey = r.from_key as string;
+        const routeResult = db.prepare("INSERT INTO canvas_routes (board_id, from_key, kind, role) VALUES (?, ?, ?, ?)")
+          .run(boardId, fromKey, r.kind ?? "transition", r.role ?? "");
+        const newRouteId = Number(routeResult.lastInsertRowid);
+        nodeIdMap.set(r.key as string, newRouteId);
+        const outputs = (r.outputs ?? []) as Record<string, unknown>[];
+        for (const o of outputs) {
+          db.prepare("INSERT INTO canvas_route_outputs (route_id, to_key, role) VALUES (?, ?, ?)")
+            .run(newRouteId, o.to_key as string, o.role ?? "");
+        }
+      }
+
+      // Nodes
+      const exportNodes = (canvas.nodes ?? []) as Record<string, unknown>[];
+      for (const n of exportNodes) {
+        const nodeType = n.node_type as string;
+        const oldNodeId = n.node_id as number;
+        const exportKey = `${nodeType}_${oldNodeId}`;
+        const newNodeId = nodeIdMap.get(exportKey);
+        if (newNodeId != null) {
+          db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index, parent_key) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .run(boardId, nodeType, newNodeId, n.x ?? 0, n.y ?? 0, n.z_index ?? 0, n.parent_key ?? null);
+        }
+      }
+
+      // Threads
+      const exportThreads = (canvas.threads ?? []) as Record<string, unknown>[];
+      for (const t of exportThreads) {
+        const fromPinId = nodeIdMap.get(t.from_pin as string);
+        const toPinId = nodeIdMap.get(t.to_pin as string);
+        if (fromPinId && toPinId) {
+          db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color) VALUES (?, ?, ?, ?, ?)")
+            .run(boardId, fromPinId, toPinId, t.width ?? 2, t.color ?? "#2C3E50");
+        }
+      }
+    }
+
+    return newArcId;
+  })();
+
+  return result;
+}
 
 storyRouter.delete("/scenes/:id", (req, res) => {
   // Уходящая с полки заготовка сначала материализует свои вставки: каждая

@@ -48,6 +48,7 @@ import { loadHideFinance } from "../financePrivacy";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { useConfirm, useAlert } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CampaignCalendarEvent,
   CampaignDetail,
@@ -116,14 +117,18 @@ export function CampaignDetailPage() {
   );
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
+  const { toast: undoToast, deleteWithUndo } = useUndoDelete();
   // Третий вид рядом с сеткой и списком: сетка показывает месяц, список —
   // порядок, ось — расстояния и «сколько у них осталось».
-  const [worldView, setWorldView] = useState<WorldView>(
-    () => (localStorage.getItem("campaignWorldView") as WorldView) || "calendar"
-  );
+  const [worldView, setWorldView] = useState<WorldView>(() => {
+    try {
+      const v = localStorage.getItem("campaignWorldView");
+      return (v as WorldView) || "calendar";
+    } catch { return "calendar"; }
+  });
   function changeWorldView(v: WorldView) {
     setWorldView(v);
-    localStorage.setItem("campaignWorldView", v);
+    try { localStorage.setItem("campaignWorldView", v); } catch { /* private browsing */ }
   }
   const [cycles, setCycles] = useState<SettingCycle[]>([]);
   useEffect(() => {
@@ -378,6 +383,19 @@ export function CampaignDetailPage() {
   async function saveEventModal() {
     if (!eventModal || !eventModal.title.trim()) return;
     const hasPeriod = eventModal.year_end.trim() !== "" || eventModal.month_end.trim() !== "" || eventModal.day_end.trim() !== "";
+    // Валидация порядка start/end: конец периода не может быть раньше начала.
+    if (hasPeriod) {
+      const sy = Number(eventModal.year) || 0;
+      const ey = eventModal.year_end.trim() !== "" ? Number(eventModal.year_end) : sy;
+      const sm = Number(eventModal.month) || 1;
+      const em = eventModal.month_end.trim() !== "" ? Number(eventModal.month_end) : sm;
+      const sd = Number(eventModal.day) || 1;
+      const ed = eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : sd;
+      if (ey < sy || (ey === sy && em < sm) || (ey === sy && em === sm && ed < sd)) {
+        showAlert("Дата окончания периода раньше даты начала.");
+        return;
+      }
+    }
     const payload: Record<string, unknown> = {
       title: eventModal.title,
       description: eventModal.description,
@@ -501,7 +519,12 @@ export function CampaignDetailPage() {
   async function archiveCampaign() {
     const ok = await confirm({ title: "Архивировать кампанию?", message: "Отправить кампанию в архив? Она пропадёт из основных разделов.", confirmLabel: "Архивировать", danger: true });
     if (!ok) return;
-    await api.del(`/campaigns/${campaignId}`);
+    const name = campaign?.name || "Без названия";
+    await deleteWithUndo({
+      entityName: name,
+      deleteFn: () => api.del(`/campaigns/${campaignId}`),
+      restoreFn: () => api.del(`/campaigns/${campaignId}`),
+    });
     navigate("/campaigns");
   }
 
@@ -863,7 +886,7 @@ export function CampaignDetailPage() {
           <div ref={axisRef} className="card stack" style={{ gap: 8 }}>
             <Timeline
               title="Ось времени"
-              action={<button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>+ Создать событие</button>}
+              action={<button className="primary" onClick={() => openCreateEventModal(timelineNow?.year ?? 1, timelineNow?.month ?? 1, timelineNow?.day ?? 1)}>+ Создать событие</button>}
               focusDate={timelineFocus}
               events={[
                 ...sortedCalendarEvents.map((ev) => ({
@@ -901,6 +924,7 @@ export function CampaignDetailPage() {
               era={calendar?.era ?? ""}
               now={timelineNow}
               cycles={cycles}
+              importantDates={settingImportantDates}
               onMoveEvent={moveCampaignEvent}
               onNowChange={(date) => pinCampaignCalendar(date)}
               onEventClick={(id) => {
@@ -917,7 +941,7 @@ export function CampaignDetailPage() {
                 </summary>
                 <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
                   <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                    <input placeholder="Поиск по хроноике мира" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 200px" }} />
+                    <input placeholder="Поиск по хронике мира" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 200px" }} />
                     <button onClick={() => setWorldSort((s) => (s === "asc" ? "desc" : "asc"))}>{worldSort === "asc" ? "↑ Старые → новые" : "↓ Новые → старые"}</button>
                     {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
                   </div>
@@ -963,7 +987,7 @@ export function CampaignDetailPage() {
                         </div>
                       );
                     })}
-                    {calendarEvents.length === 0 && <EmptyState icon="issueStamp" title="ХРОНИКА ПУСТА" hint="Первое событие задаёт летоисчисление мира" action={<button className="primary" onClick={() => openCreateEventModal(1, 1, 1)}>+ Создать событие</button>} />}
+                    {calendarEvents.length === 0 && <EmptyState icon="issueStamp" title="ХРОНИКА ПУСТА" hint="Первое событие задаёт летоисчисление мира" action={<button className="primary" onClick={() => openCreateEventModal(timelineNow?.year ?? 1, timelineNow?.month ?? 1, timelineNow?.day ?? 1)}>+ Создать событие</button>} />}
                   </div>
                 </div>
               </details>
@@ -1005,7 +1029,7 @@ export function CampaignDetailPage() {
                     />
                   )}
                   <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                    ПКМ - меню.
+                    ПКМ — создать событие, посмотреть список событий и сессий на день.
                   </span>
                 </div>
               </details>
@@ -2531,6 +2555,15 @@ function PreproductionTab({
               Сохранить
             </button>
             <button onClick={() => setEditMode(false)}>Отмена</button>
+          </div>
+        </div>
+      )}
+      {undoToast && (
+        <div className="archive-toast" role="status" aria-live="polite">
+          <span className="archive-toast__msg">{undoToast.msg}</span>
+          <div className="archive-toast__actions">
+            <button className="archive-toast__undo" onClick={() => { const cb = undoToast.onUndo; cb(); }}>Отменить</button>
+            <button className="archive-toast__close" onClick={() => {}} aria-label="Закрыть">×</button>
           </div>
         </div>
       )}

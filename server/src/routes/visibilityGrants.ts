@@ -81,3 +81,48 @@ visibilityGrantsRouter.delete("/", (req, res) => {
   ).run(campaign_id, player_id, target_type, target_id);
   res.json({ ok: true });
 });
+
+// Batch grant/revoke — set visibility for multiple targets × multiple players
+// in a single transaction. Body: { campaign_id, player_ids[], targets[],
+// action: "grant" | "revoke" }. Each target is { target_type, target_id }.
+visibilityGrantsRouter.post("/batch", (req, res) => {
+  const { campaign_id, player_ids, targets, action } = req.body as {
+    campaign_id?: number;
+    player_ids?: number[];
+    targets?: { target_type: string; target_id: number }[];
+    action?: string;
+  };
+  if (!campaign_id || !player_ids?.length || !targets?.length || !action) {
+    return res.status(400).json({ error: "campaign_id, player_ids[], targets[], action are required" });
+  }
+  if (action !== "grant" && action !== "revoke") {
+    return res.status(400).json({ error: "action must be 'grant' or 'revoke'" });
+  }
+  for (const t of targets) {
+    if (!VALID_TARGET_TYPES.has(t.target_type)) {
+      return res.status(400).json({ error: `invalid target_type: ${t.target_type}` });
+    }
+  }
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO player_visibility_grants (campaign_id, player_id, target_type, target_id) VALUES (?, ?, ?, ?)"
+  );
+  const del = db.prepare(
+    "DELETE FROM player_visibility_grants WHERE campaign_id = ? AND player_id = ? AND target_type = ? AND target_id = ?"
+  );
+  const runBatch = db.transaction(() => {
+    let affected = 0;
+    for (const playerId of player_ids) {
+      for (const t of targets) {
+        if (action === "grant") {
+          insert.run(campaign_id, playerId, t.target_type, t.target_id);
+        } else {
+          del.run(campaign_id, playerId, t.target_type, t.target_id);
+        }
+        affected++;
+      }
+    }
+    return affected;
+  });
+  const affected = runBatch();
+  res.status(201).json({ ok: true, affected });
+});

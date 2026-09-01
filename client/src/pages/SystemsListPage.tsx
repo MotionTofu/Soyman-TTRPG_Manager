@@ -161,7 +161,6 @@ export function SystemsListPage() {
       <div className="page-header-row row">
         <SectionHeading section="systems" compact>Системы</SectionHeading>
         <div className="row">
-          <button onClick={() => navigate("/import-system")}>Импорт книги правил</button>
           <button className="primary" onClick={() => setCreating(true)}>
             + Новая система
           </button>

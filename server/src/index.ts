@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import hpp from "hpp";
+import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { createServer } from "http";
@@ -58,6 +59,7 @@ import { authRouter } from "./routes/auth";
 import { playerRouter } from "./routes/player";
 import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
 import { visibilityGrantsRouter } from "./routes/visibilityGrants";
+import { campaignSettingEntitiesRouter } from "./routes/campaignSettingEntities";
 import { storyRouter } from "./routes/story";
 import { canvasRouter } from "./routes/canvas";
 import { adventureImportRouter } from "./routes/adventureImport";
@@ -323,6 +325,7 @@ app.use("/api/sound-sets", soundSetsRouter);
 app.use("/api/files", filesRouter);
 app.use("/api/campaign-player-sections", campaignPlayerSectionsRouter);
 app.use("/api/visibility-grants", visibilityGrantsRouter);
+app.use("/api/campaign-setting-entities", campaignSettingEntitiesRouter);
 app.use("/api/story", storyRouter);
 app.use("/api/canvas", canvasRouter);
 app.use("/api/import", adventureImportRouter);
@@ -347,7 +350,13 @@ if (fs.existsSync(clientDist)) {
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(`[${req.method} ${req.path}]`, err);
   if (res.headersSent) return next(err);
-  res.status(500).json({ error: err?.message ?? "internal server error" });
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: "File too large — maximum 15 MB" });
+    }
+    return res.status(400).json({ error: "Upload error" });
+  }
+  res.status(500).json({ error: "internal server error" });
 });
 
 const PORT = process.env.PORT || 3001;

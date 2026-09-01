@@ -395,21 +395,30 @@ export function AppShell() {
   const [activeStorageName, setActiveStorageName] = useState<string | null>(null);
   // 2.1 — серые пункты на пустой БД (badge 0 + muted + disabled tooltip) — не display:none
   const [navCounts, setNavCounts] = useState<Record<string, number | null>>({});
-  useEffect(() => {
-    if (isPlayer || userLoading) return;
+
+  const refreshNavCounts = () => {
     api.get<{ activeId: string; storages: { id: string; name: string }[] }>("/storages").then((r) => {
       const active = r.storages.find((s) => s.id === r.activeId);
       if (active) setActiveStorageName(active.name);
     }).catch(() => {});
-    // Считаем только быстрые списки — по длине массива, без отдельного count-эндпоинта
-    const fetches: Promise<void>[] = [];
-    fetches.push(api.get<unknown[]>("/campaigns").then((a) => setNavCounts((m) => ({ ...m, campaigns: a.length }))).catch(() => {}));
-    fetches.push(api.get<unknown[]>("/settings").then((a) => setNavCounts((m) => ({ ...m, settings: a.length }))).catch(() => {}));
-    fetches.push(api.get<unknown[]>("/players").then((a) => setNavCounts((m) => ({ ...m, players: a.length }))).catch(() => {}));
-    fetches.push(api.get<unknown[]>("/resources").then((a) => setNavCounts((m) => ({ ...m, resources: a.length }))).catch(() => {}));
-    fetches.push(api.get<unknown[]>("/mastering").then((a) => setNavCounts((m) => ({ ...m, mastering: Array.isArray(a) ? (a as unknown[]).length : 0 }))).catch(() => {}));
-    // Полотно/Граф — считаем через поиск, если пусто — 0
-    void fetches;
+    api.get<unknown[]>("/campaigns").then((a) => setNavCounts((m) => ({ ...m, campaigns: a.length }))).catch(() => {});
+    api.get<unknown[]>("/settings").then((a) => setNavCounts((m) => ({ ...m, settings: a.length }))).catch(() => {});
+    api.get<unknown[]>("/players").then((a) => setNavCounts((m) => ({ ...m, players: a.length }))).catch(() => {});
+    api.get<unknown[]>("/resources").then((a) => setNavCounts((m) => ({ ...m, resources: a.length }))).catch(() => {});
+    api.get<unknown[]>("/mastering").then((a) => setNavCounts((m) => ({ ...m, mastering: Array.isArray(a) ? (a as unknown[]).length : 0 }))).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (isPlayer || userLoading) return;
+    refreshNavCounts();
+  }, [isPlayer, userLoading]);
+
+  // Обновляем счётчики навигации при событии "nav-refresh" (создание/удаление данных)
+  useEffect(() => {
+    if (isPlayer || userLoading) return;
+    const handler = () => refreshNavCounts();
+    window.addEventListener("nav-refresh", handler);
+    return () => window.removeEventListener("nav-refresh", handler);
   }, [isPlayer, userLoading]);
 
   // Нижний список разделов: свои пункты роли плюс Boosty. Пункт уходит за

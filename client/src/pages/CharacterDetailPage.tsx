@@ -9,6 +9,7 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { formatImportantDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
@@ -53,6 +54,7 @@ export function CharacterDetailPage() {
   const calendar = useSettingCalendar(character?.campaign_setting_id);
   const avatarCrop = useImageCrop("square", handleAvatarChange);
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
+  const { toast: undoToast, deleteWithUndo } = useUndoDelete();
 
   function refresh() {
     api.get<Character>(`/characters/${characterId}`).then((c) => {
@@ -89,8 +91,12 @@ export function CharacterDetailPage() {
 
   async function archiveCharacter() {
     if (!character) return;
-    if (!confirm("Отправить персонажа в архив?")) return;
-    await api.del(`/characters/${characterId}`);
+    const name = character.character_name || "Без имени";
+    await deleteWithUndo({
+      entityName: name,
+      deleteFn: () => api.del(`/characters/${characterId}`),
+      restoreFn: () => api.del(`/characters/${characterId}`),
+    });
     navigate(`/campaigns/${character.campaign_id}`);
   }
 
@@ -326,7 +332,7 @@ export function CharacterDetailPage() {
                   {(character.important_dates ?? []).map((d) => (
                     <div key={d.id} className="row" style={{ justifyContent: "space-between" }}>
                       <span>
-                        <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [])}
+                        <strong>{d.title}</strong> — {formatImportantDate(d, calendar?.months ?? [], calendar?.weekdays ?? [])}
                       </span>
                       <button className="danger" onClick={() => removeImportantDate(d.id)}>
                         ✕
@@ -355,6 +361,15 @@ export function CharacterDetailPage() {
           />
         )}
       </div>
+      {undoToast && (
+        <div className="archive-toast" role="status" aria-live="polite">
+          <span className="archive-toast__msg">{undoToast.msg}</span>
+          <div className="archive-toast__actions">
+            <button className="archive-toast__undo" onClick={() => { const cb = undoToast.onUndo; cb(); }}>Отменить</button>
+            <button className="archive-toast__close" onClick={() => {}} aria-label="Закрыть">×</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

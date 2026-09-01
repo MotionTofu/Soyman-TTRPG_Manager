@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Campaign } from "../types";
+import { useAlert } from "../hooks/useConfirm";
 
 interface CampaignGroupMembersModalProps {
   groupId: number;
@@ -14,6 +15,8 @@ export function CampaignGroupMembersModal({ groupId, groupName, onClose, onUpdat
   const [memberIds, setMemberIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [alertDialog, showAlert] = useAlert();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,7 +64,7 @@ export function CampaignGroupMembersModal({ groupId, groupName, onClose, onUpdat
         else revert.delete(campaignId);
         return revert;
       });
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     } finally {
       setSaving(false);
     }
@@ -110,6 +113,7 @@ export function CampaignGroupMembersModal({ groupId, groupName, onClose, onUpdat
           <button onClick={onClose}>Готово</button>
         </div>
       </div>
+      {alertDialog}
     </div>
   );
 }

@@ -12,7 +12,15 @@ import {
 import { unpaidSessionsForPlayer } from "../services/finance";
 import { broadcastCharacterUpdate } from "../services/realtime";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 // Everything here is scoped to the authenticated player account's own
 // player_id — never trusts an id from the request body/query for anything
@@ -443,6 +451,7 @@ playerRouter.get("/campaigns/:id/player-sections", (req: AuthedRequest, res) => 
 // table, just scoped to setting_* target types instead of campaign_player_*.
 playerRouter.get("/campaigns/:id/setting-player-content", (req: AuthedRequest, res) => {
   const campaignId = Number(req.params.id);
+  if (!Number.isFinite(campaignId)) return res.status(400).json({ error: "invalid campaign id" });
   const playerId = req.user!.playerId!;
   if (!myCampaignIds(playerId).includes(campaignId)) {
     return res.status(404).json({ error: "not found" });
@@ -463,22 +472,22 @@ playerRouter.get("/campaigns/:id/setting-player-content", (req: AuthedRequest, r
 
   const locationIds = idsFor("setting_location");
   const locations = db
-    .prepare(`SELECT * FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locationIds)})`)
+    .prepare(`SELECT id, name, description FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locationIds)})`)
     .all(campaign.setting_id, ...locationIds);
 
   const beingIds = idsFor("setting_being");
   const beings = db
-    .prepare(`SELECT * FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beingIds)})`)
+    .prepare(`SELECT id, name, history FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beingIds)})`)
     .all(campaign.setting_id, ...beingIds);
 
   const communityIds = idsFor("setting_community");
   const communities = db
-    .prepare(`SELECT * FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(communityIds)})`)
+    .prepare(`SELECT id, name, description FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(communityIds)})`)
     .all(campaign.setting_id, ...communityIds);
 
   const eventIds = idsFor("setting_calendar_event");
   const chronicleEvents = db
-    .prepare(`SELECT * FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(eventIds)})`)
+    .prepare(`SELECT id, title, description, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(eventIds)})`)
     .all(campaign.setting_id, ...eventIds);
 
   res.json({ locations, beings, communities, chronicleEvents });
@@ -512,6 +521,7 @@ playerRouter.get("/settings", (req: AuthedRequest, res) => {
 
 playerRouter.get("/settings/:id", (req: AuthedRequest, res) => {
   const settingId = Number(req.params.id);
+  if (!Number.isFinite(settingId)) return res.status(400).json({ error: "invalid setting id" });
   const playerId = req.user!.playerId!;
   const campaignIds = myCampaignIds(playerId);
   const myCampaignsWithSetting = campaignIds.length
@@ -528,36 +538,41 @@ playerRouter.get("/settings/:id", (req: AuthedRequest, res) => {
     | undefined;
   if (!setting) return res.status(404).json({ error: "not found" });
 
-  const locationIds = new Set<number>();
-  const beingIds = new Set<number>();
-  const communityIds = new Set<number>();
-  const eventIds = new Set<number>();
-  for (const { id: campaignId } of myCampaignsWithSetting) {
-    const grants = db
-      .prepare(
-        "SELECT target_type, target_id FROM player_visibility_grants WHERE campaign_id = ? AND player_id = ?"
-      )
-      .all(campaignId, playerId) as { target_type: string; target_id: number }[];
-    for (const g of grants) {
-      if (g.target_type === "setting_location") locationIds.add(g.target_id);
-      else if (g.target_type === "setting_being") beingIds.add(g.target_id);
-      else if (g.target_type === "setting_community") communityIds.add(g.target_id);
-      else if (g.target_type === "setting_calendar_event") eventIds.add(g.target_id);
-    }
-  }
-  const inClause = (ids: Set<number>) => (ids.size ? [...ids].map(() => "?").join(",") : "-1");
+  const campaignIdList = myCampaignsWithSetting.map((c) => c.id);
+  const inClause = (ids: number[]) => (ids.length ? ids.map(() => "?").join(",") : "-1");
 
+  // Single batch query instead of N per-campaign queries
+  const grantRows = campaignIdList.length
+    ? (db
+        .prepare(
+          `SELECT DISTINCT target_type, target_id FROM player_visibility_grants WHERE campaign_id IN (${inClause(campaignIdList)}) AND player_id = ?`
+        )
+        .all(...campaignIdList, playerId) as { target_type: string; target_id: number }[])
+    : [];
+
+  const locationIds: number[] = [];
+  const beingIds: number[] = [];
+  const communityIds: number[] = [];
+  const eventIds: number[] = [];
+  for (const g of grantRows) {
+    if (g.target_type === "setting_location") locationIds.push(g.target_id);
+    else if (g.target_type === "setting_being") beingIds.push(g.target_id);
+    else if (g.target_type === "setting_community") communityIds.push(g.target_id);
+    else if (g.target_type === "setting_calendar_event") eventIds.push(g.target_id);
+  }
+
+  // Minimal fields — players don't need statblocks, behavior, tags, etc.
   const locations = db
-    .prepare(`SELECT * FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locationIds)})`)
+    .prepare(`SELECT id, name, description FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locationIds)})`)
     .all(settingId, ...locationIds);
   const beings = db
-    .prepare(`SELECT * FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beingIds)})`)
+    .prepare(`SELECT id, name, history FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beingIds)})`)
     .all(settingId, ...beingIds);
   const communities = db
-    .prepare(`SELECT * FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(communityIds)})`)
+    .prepare(`SELECT id, name, description FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(communityIds)})`)
     .all(settingId, ...communityIds);
   const chronicleEvents = db
-    .prepare(`SELECT * FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(eventIds)})`)
+    .prepare(`SELECT id, title, description, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(eventIds)})`)
     .all(settingId, ...eventIds);
 
   res.json({ setting, locations, beings, communities, chronicleEvents });

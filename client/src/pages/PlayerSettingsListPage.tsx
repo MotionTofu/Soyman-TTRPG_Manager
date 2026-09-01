@@ -48,20 +48,58 @@ function SettingTile({ s }: { s: SettingSummary }) {
 // used by campaigns this player is actually in (see /api/player/settings).
 export function PlayerSettingsListPage() {
   const [settings, setSettings] = useState<SettingSummary[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<SettingSummary[]>("/player/settings").then(setSettings);
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError(null);
+    api
+      .get<SettingSummary[]>("/player/settings", { signal: controller.signal })
+      .then((data) => {
+        setSettings(data);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setLoadError(String(e instanceof Error ? e.message : e));
+        setLoading(false);
+      });
+    return () => controller.abort();
   }, []);
 
-  if (!settings) return <p className="muted">Загрузка…</p>;
+  if (loading) {
+    return (
+      <div className="stack" aria-busy="true" aria-label="Загрузка сеттингов">
+        <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Сеттинги" }]} />
+        <h1>Сеттинги</h1>
+        <div className="card" style={{ height: 80, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
+        <div className="card" style={{ height: 80, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: "120ms" }} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="stack">
+        <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Сеттинги" }]} />
+        <h1>Сеттинги</h1>
+        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span>Не удалось загрузить сеттинги: {loadError}</span>
+          <button className="primary" onClick={() => window.location.reload()}>Повторить</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="stack">
       <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Сеттинги" }]} />
       <h1>Сеттинги</h1>
-      {settings.length === 0 && <p className="muted">Ваши кампании пока не привязаны к сеттингу.</p>}
+      {settings!.length === 0 && <p className="muted">Ваши кампании пока не привязаны к сеттингу.</p>}
       <div className="stack" style={{ gap: 8 }}>
-        {settings.map((s) => (
+        {settings!.map((s) => (
           <SettingTile key={s.id} s={s} />
         ))}
       </div>

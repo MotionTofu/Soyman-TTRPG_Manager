@@ -40,7 +40,9 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
 
   async function toggle(playerId: number, granted: boolean) {
     const prev = grants ? [...grants] : [];
-    const optimistic = granted ? prev.filter((g) => g.player_id !== playerId) : [...prev, { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId } as PlayerVisibilityGrant];
+    const optimistic = granted
+      ? prev.filter((g) => g.player_id !== playerId)
+      : [...prev, { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId } as PlayerVisibilityGrant];
     setGrants(optimistic as PlayerVisibilityGrant[]);
     try {
       if (granted) {
@@ -48,7 +50,30 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
       } else {
         await api.post("/visibility-grants", { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId });
       }
-      refresh();
+    } catch {
+      setGrants(prev);
+    }
+  }
+
+  async function batchToggle(playerIds: number[], grant: boolean) {
+    if (!playerIds.length) return;
+    const prev = grants ? [...grants] : [];
+    const optimistic = grant
+      ? [
+          ...prev,
+          ...playerIds
+            .filter((pid) => !prev.some((g) => g.player_id === pid))
+            .map((pid) => ({ campaign_id: campaignId, player_id: pid, target_type: targetType, target_id: targetId } as PlayerVisibilityGrant)),
+        ]
+      : prev.filter((g) => !playerIds.includes(g.player_id));
+    setGrants(optimistic as PlayerVisibilityGrant[]);
+    try {
+      await api.post("/visibility-grants/batch", {
+        campaign_id: campaignId,
+        player_ids: playerIds,
+        targets: [{ target_type: targetType, target_id: targetId }],
+        action: grant ? "grant" : "revoke",
+      });
     } catch {
       setGrants(prev);
     }
@@ -66,18 +91,18 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
           {roster.length > 1 && (
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
               <button
-                onClick={async () => {
-                  const missing = roster.filter((p) => !grants?.some((g) => g.player_id === p.id));
-                  for (const p of missing) await toggle(p.id, false);
+                onClick={() => {
+                  const missing = roster.filter((p) => !grants?.some((g) => g.player_id === p.id)).map((p) => p.id);
+                  void batchToggle(missing, true);
                 }}
                 style={{ fontSize: 11, padding: "2px 6px" }}
               >
                 Выбрать всех
               </button>
               <button
-                onClick={async () => {
-                  const present = roster.filter((p) => grants?.some((g) => g.player_id === p.id));
-                  for (const p of present) await toggle(p.id, true);
+                onClick={() => {
+                  const present = roster.filter((p) => grants?.some((g) => g.player_id === p.id)).map((p) => p.id);
+                  void batchToggle(present, false);
                 }}
                 style={{ fontSize: 11, padding: "2px 6px" }}
               >

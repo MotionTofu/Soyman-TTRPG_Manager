@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { SystemGroup } from "../types";
+import { useAlert } from "../hooks/useConfirm";
 
 interface SystemGroupTabsProps {
   activeTab: string | null;
@@ -15,6 +16,7 @@ export function SystemGroupTabs({ activeTab, onTabChange, onGroupsChanged }: Sys
   const [contextMenu, setContextMenu] = useState<{ kind: "group"; groupId: number; x: number; y: number } | { kind: "static"; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<{ groupId: number; name: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [alertDialog, showAlert] = useAlert();
   const inputRef = useRef<HTMLInputElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -57,7 +59,7 @@ export function SystemGroupTabs({ activeTab, onTabChange, onGroupsChanged }: Sys
       await loadGroups();
       onGroupsChanged();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -71,7 +73,7 @@ export function SystemGroupTabs({ activeTab, onTabChange, onGroupsChanged }: Sys
       await loadGroups();
       onGroupsChanged();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -83,7 +85,7 @@ export function SystemGroupTabs({ activeTab, onTabChange, onGroupsChanged }: Sys
       await loadGroups();
       onGroupsChanged();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -211,6 +213,7 @@ export function SystemGroupTabs({ activeTab, onTabChange, onGroupsChanged }: Sys
           </div>
         </div>
       )}
+      {alertDialog}
     </div>
   );
 }

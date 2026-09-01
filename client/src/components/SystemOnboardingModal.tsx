@@ -11,7 +11,7 @@ interface Props {
 
 export function SystemOnboardingModal({ onClose, onCreated }: Props) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"choose" | "import" | "create">("choose");
+  const [mode, setMode] = useState<"choose" | "import" | "create" | "success">("choose");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [dnd, setDnd] = useState(true);
@@ -19,6 +19,7 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const [successId, setSuccessId] = useState<number | null>(null);
 
   async function handleImport(file: File) {
     setImporting(true);
@@ -28,9 +29,9 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
       const text = await file.text();
       const data = JSON.parse(text);
       const created = await api.post<System>("/systems/import", data);
+      setSuccessId(created.id);
+      setMode("success");
       onCreated();
-      onClose();
-      navigate(`/systems/${created.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -51,9 +52,9 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
         description,
         template: dnd ? "dnd" : undefined,
       });
+      setSuccessId(created.id);
+      setMode("success");
       onCreated();
-      onClose();
-      navigate(`/systems/${created.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -63,7 +64,7 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
 
   return (
     <Modal onClose={onClose} closeOnBackdropClick={false}>
-      <div className="stack" style={{ minWidth: 420 }}>
+      <div className="stack">
         <h3 style={{ margin: 0 }}>Система</h3>
 
         {mode === "choose" && (
@@ -76,9 +77,10 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
                 Импорт файла
               </button>
               <button onClick={() => setMode("create")}>Создать новую</button>
+              <button onClick={onClose}>Отмена</button>
             </div>
             <span className="muted" style={{ fontSize: 11 }}>
-              Файл — это JSON, полученный экспортом системы (кнопка Экспорт на странице системы).
+              Файл JSON
             </span>
           </div>
         )}
@@ -110,7 +112,7 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
                 Отмена
               </button>
             </div>
-            {importing && <span className="muted">Импортирую…</span>}
+            {importing && <span className="muted">Загружается…</span>}
           </div>
         )}
 
@@ -155,6 +157,18 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
                 Отмена
               </button>
             </div>
+          </div>
+        )}
+
+        {mode === "success" && (
+          <div className="stack" style={{ gap: 12, alignItems: "center", padding: "20px 0" }}>
+            <span style={{ fontSize: 24, color: "var(--success, #15803d)" }}>✓</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontWeight: 600, fontSize: 14 }}>Успех!</span>
+            <span className="muted" style={{ fontSize: 12 }}>Система создана и загружена</span>
+            <button className="primary" onClick={() => navigate(`/systems/${successId}`)}>
+              Открыть систему
+            </button>
+            <button onClick={onClose}>Закрыть</button>
           </div>
         )}
       </div>

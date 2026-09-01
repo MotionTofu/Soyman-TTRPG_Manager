@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { CampaignGroup } from "../types";
+import { useAlert } from "../hooks/useConfirm";
 
 interface CampaignGroupTabsProps {
   activeTab: string | null;
@@ -15,6 +16,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
   const [contextMenu, setContextMenu] = useState<{ kind: "group"; groupId: number; x: number; y: number } | { kind: "static"; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<{ groupId: number; name: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [alertDialog, showAlert] = useAlert();
   const inputRef = useRef<HTMLInputElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -57,7 +59,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
       await loadGroups();
       onGroupsChanged();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -71,7 +73,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
       await loadGroups();
       onGroupsChanged();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -83,7 +85,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
       await loadGroups();
       onGroupsChanged();
     } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
+      showAlert(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -231,6 +233,7 @@ export function CampaignGroupTabs({ activeTab, onTabChange, onGroupsChanged }: C
           </div>
         </div>
       )}
+      {alertDialog}
     </div>
   );
 }

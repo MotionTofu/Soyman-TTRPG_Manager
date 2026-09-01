@@ -1,4 +1,4 @@
-import type { CalendarMonth, DatePrecision, ImportantDate } from "./types";
+import type { CalendarMonth, CalendarWeekday, CustomRule, DatePrecision, ImportantDate } from "./types";
 
 export function daysInYear(months: CalendarMonth[]): number {
   return months.reduce((sum, m) => sum + m.days, 0);
@@ -76,15 +76,68 @@ export function formatEventDate(year: number, month: number, day: number, months
   return `${year} ${monthName} ${day}`;
 }
 
-export function formatImportantDate(date: ImportantDate, months: CalendarMonth[]): string {
+export function formatCustomRule(rule: CustomRule, weekdays: CalendarWeekday[]): string {
+  if (rule.kind === "every") {
+    const n = rule.every_n ?? 1;
+    const unit = rule.every_unit ?? "год";
+    return `раз в ${n} ${pluralRu(n, unit)}`;
+  }
+  const ordinal = rule.ordinal ?? 1;
+  const unit1 = rule.ordinal_unit ?? "понедельник";
+  const unit2 = rule.in_unit ?? "месяц";
+  const ordinalLabel = ordinalOrdinalRu(ordinal);
+  return `каждый ${ordinalLabel} ${unit1} ${unit2.replace(/а$/, "а")}`;
+}
+
+function pluralRu(n: number, unit: string): string {
+  const abs = Math.abs(n) % 100;
+  const lastDigit = abs % 10;
+  if (abs > 10 && abs < 20) return unit + (unit === "неделя" ? "ь" : unit === "день" ? "" : unit === "месяц" ? "ев" : unit === "год" ? "лет" : unit === "десятилетие" ? "ий" : unit === "столетие" ? "ий" : unit === "тысячелетие" ? "ий" : "");
+  if (lastDigit === 1) return unit + (unit === "неделя" ? "" : unit === "день" ? "" : unit === "месяц" ? "" : unit === "год" ? "" : unit === "десятилетие" ? "" : unit === "столетие" ? "" : unit === "тысячелетие" ? "" : "");
+  if (lastDigit >= 2 && lastDigit <= 4) return unit + (unit === "неделя" ? "и" : unit === "день" ? "я" : unit === "месяц" ? "а" : unit === "год" ? "а" : unit === "десятилетие" ? "ия" : unit === "столетие" ? "ия" : unit === "тысячелетие" ? "ия" : "");
+  return unit + (unit === "неделя" ? "ь" : unit === "день" ? "" : unit === "месяц" ? "ев" : unit === "год" ? "лет" : unit === "десятилетие" ? "ий" : unit === "столетие" ? "ий" : unit === "тысячелетие" ? "ий" : "");
+}
+
+function ordinalOrdinalRu(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const lastDigit = abs % 10;
+  if (abs > 10 && abs < 20) return `${n}-й`;
+  if (lastDigit === 1) return `${n}-й`;
+  if (lastDigit >= 2 && lastDigit <= 4) return `${n}-й`;
+  return `${n}-й`;
+}
+
+const GENITIVE_MONTHS: Record<string, string> = {
+  "январь": "января", "февраль": "февраля", "март": "марта", "апрель": "апреля",
+  "май": "мая", "июнь": "июня", "июль": "июля", "август": "августа",
+  "сентябрь": "сентября", "октябрь": "октября", "ноябрь": "ноября", "декабрь": "декабря",
+};
+
+function genitiveMonth(name: string): string {
+  const low = name.toLowerCase();
+  return GENITIVE_MONTHS[low] ?? name;
+}
+
+export function formatImportantDate(date: ImportantDate, months: CalendarMonth[], weekdays?: CalendarWeekday[]): string {
   const monthName = date.month != null ? months.find((m) => m.position === date.month)?.name : undefined;
+  const monthGen = monthName ? genitiveMonth(monthName) : undefined;
+  if (date.recurrence === "weekly") {
+    const wd = weekdays?.find((w) => w.position === date.day);
+    return wd ? `каждую ${wd.name.toLowerCase()} (еженедельно)` : `каждую неделю, ${date.day}-й день`;
+  }
   if (date.recurrence === "monthly") {
     return `${date.day}-е число (ежемесячно)`;
   }
   if (date.recurrence === "annual") {
-    return `${date.day}${monthName ? ` ${monthName}` : ""} (ежегодно)`;
+    return `${date.day} ${monthGen ?? "???"} (ежегодно)`;
   }
-  return `${date.day}${monthName ? ` ${monthName}` : ""}${date.year != null ? ` ${date.year}` : ""}`;
+  if (date.recurrence === "custom" && date.custom_rule) {
+    try {
+      const rule = JSON.parse(date.custom_rule) as CustomRule;
+      return formatCustomRule(rule, weekdays ?? []);
+    } catch { /* fall through */ }
+  }
+  return `${date.day}${monthGen ? ` ${monthGen}` : ""}${date.year != null ? ` ${date.year}` : ""}`;
 }
 
 // Обратное к elapsedDays: номер дня от начала летоисчисления → дата.

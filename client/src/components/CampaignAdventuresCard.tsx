@@ -9,7 +9,7 @@ import { chapterWord, sceneWord } from "../sceneKinds";
 import type { StoryArc } from "../types";
 
 // Обзорные тексты приключений кампании: по подблоку на приключение, внутри —
-// «Сводка», «Синопсис» и «Завязка». Всё свёрнуто: у книжной кампании таких
+// «Сводка», «Логлайн» и «Завязка». Всё свёрнуто: у книжной кампании таких
 // подблоков может быть с десяток, и разворачивать их сразу — тот самый
 // бесконечный свиток, от которого профиль кампании и уходил.
 //
@@ -26,7 +26,7 @@ const SUMMARY_FIELDS = [
 ] as const;
 
 const TEXT_FIELDS = [
-  { key: "description", label: "Синопсис", help: "О чём это приключение." },
+  { key: "description", label: "Логлайн", help: "О чём это приключение." },
   { key: "hook", label: "Завязка", help: "Как партия вообще попадает в это приключение." },
 ] as const;
 
@@ -143,9 +143,6 @@ export function CampaignAdventuresCard({
           <button className="primary" onClick={openAdd}>
             + Приключение
           </button>
-          <Link to={`/import?setting=${settingId}&campaign=${campaignId}`}>
-            Импортировать книгу →
-          </Link>
         </div>
       )}
     </div>

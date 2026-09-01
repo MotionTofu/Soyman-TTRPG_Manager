@@ -139,6 +139,28 @@
   border-color: var(--surface);
 }
 
+.tl-era-band {
+  position: absolute;
+  top: 30px;
+  height: 20px;
+  background: var(--line);
+  opacity: 0.3;
+  border-radius: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.tl-era-label {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  line-height: 20px;
+  font-size: var(--fs-micro);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* «Сейчас» — единственное место на оси, где уместен акцентный цвет: это не
    данные, а положение наблюдателя. */
 .tl-now {

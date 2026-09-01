@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { daysInYear, dateFromElapsed, elapsedDays, formatByPrecision } from "../inworldCalendar";
-import type { CalendarMonth, DatePrecision, EventStatus, SettingCycle } from "../types";
+import type { CalendarMonth, DatePrecision, EventStatus, ImportantDate, SettingCalendarEra, SettingCycle } from "../types";
 import "../timeline.css";
 
 // Ось времени — общая для хроники мира и расписания кампании.
@@ -55,26 +55,34 @@ export function Timeline({
   events,
   months,
   era,
+  eras,
+  selectedTimelineId,
   now,
   cycles = [],
+  importantDates = [],
   onMoveEvent,
   onNowChange,
   onEventClick,
   title,
   action,
+  leftAction,
   focusDate,
 }: {
   events: TimelineEvent[];
   months: CalendarMonth[];
   era: string;
+  eras?: SettingCalendarEra[];
+  selectedTimelineId?: number | null;
   /** «Сейчас» в мире. Рисуется красной стрелкой, её можно тянуть. */
   now: { year: number; month: number; day?: number } | null;
   cycles?: SettingCycle[];
+  importantDates?: ImportantDate[];
   onMoveEvent?: (id: number, date: { year: number; month: number; day: number; precision: DatePrecision }) => void;
   onNowChange?: (date: { year: number; month: number }) => void;
   onEventClick?: (id: number) => void;
   title?: string;
   action?: React.ReactNode;
+  leftAction?: React.ReactNode;
   focusDate?: { year: number; month: number; day: number } | null;
 }) {
   const [zoom, setZoom] = useState(2); // «Год» по умолчанию
@@ -166,19 +174,35 @@ export function Timeline({
   // определено. Разница не косметическая: неточное событие ждёт уточнения, а
   // период уже точен и уточнять в нём нечего.
   const placed: Placed[] = useMemo(() => {
-    return events.map((e) => {
-      const start = dayOf(e.year, e.month, e.day);
-      let span = 1;
-      if (e.year_end != null) {
-        const end = dayOf(e.year_end, e.month_end ?? e.month, e.day_end ?? e.day);
-        span = Math.max(1, end - start + 1);
-      } else if (e.precision === "year") span = perYear;
-      else if (e.precision === "decade") span = perYear * 10;
-      else if (e.precision === "century") span = perYear * 100;
-      else if (e.precision === "month") span = months.find((m) => m.position === e.month)?.days ?? 30;
-      return { event: e, x: xOf(start), width: Math.max(2, span * pxPerDay) };
-    });
-  }, [events, dayOf, xOf, pxPerDay, perYear, months]);
+    const PAD = 200;
+    const vl = offsetDay - PAD / pxPerDay;
+    const vr = offsetDay + (width + PAD) / pxPerDay;
+    return events
+      .filter((e) => {
+        const s = dayOf(e.year, e.month, e.day);
+        let span = 1;
+        if (e.year_end != null) {
+          const end = dayOf(e.year_end, e.month_end ?? e.month, e.day_end ?? e.day);
+          span = Math.max(1, end - s + 1);
+        } else if (e.precision === "year") span = perYear;
+        else if (e.precision === "decade") span = perYear * 10;
+        else if (e.precision === "century") span = perYear * 100;
+        else if (e.precision === "month") span = months.find((m) => m.position === e.month)?.days ?? 30;
+        return s + span >= vl && s <= vr;
+      })
+      .map((e) => {
+        const start = dayOf(e.year, e.month, e.day);
+        let span = 1;
+        if (e.year_end != null) {
+          const end = dayOf(e.year_end, e.month_end ?? e.month, e.day_end ?? e.day);
+          span = Math.max(1, end - start + 1);
+        } else if (e.precision === "year") span = perYear;
+        else if (e.precision === "decade") span = perYear * 10;
+        else if (e.precision === "century") span = perYear * 100;
+        else if (e.precision === "month") span = months.find((m) => m.position === e.month)?.days ?? 30;
+        return { event: e, x: xOf(start), width: Math.max(2, span * pxPerDay) };
+      });
+  }, [events, dayOf, xOf, pxPerDay, perYear, months, offsetDay, width]);
 
   // Свёртка слипшихся. Считается по экранным пикселям, а не по датам: на
   // масштабе века слипается всё, на масштабе дня — ничего, и порог должен
@@ -218,6 +242,7 @@ export function Timeline({
   }
 
   const drag = useRef<{ x: number; offset: number } | null>(null);
+  const rafRef = useRef<number>(0);
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest(".tl-item, .tl-now")) return;
     touched.current = true;
@@ -226,10 +251,15 @@ export function Timeline({
   }
   function onPointerMove(e: React.PointerEvent) {
     if (!drag.current) return;
-    setOffsetDay(drag.current.offset - (e.clientX - drag.current.x) / pxPerDay);
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      if (drag.current) setOffsetDay(drag.current.offset - (e.clientX - drag.current.x) / pxPerDay);
+    });
   }
   function onPointerUp() {
     drag.current = null;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
   }
 
   // Засечки. Шаг выбирается по масштабу так, чтобы подписи не слипались: на
@@ -277,11 +307,67 @@ export function Timeline({
     return out;
   }, [cycles, precision, offsetDay, width, pxPerDay, dayOf, xOf]);
 
+  // Важные даты на оси — повторяющиеся события как маркеры.
+  // Показываем при зуме год/месяц/3 дня/день.
+  const importantDatePoints = useMemo(() => {
+    if (!importantDates.length) return [];
+    if (precision === "century" || precision === "decade") return [];
+    const from = Math.floor(offsetDay);
+    const to = Math.ceil(offsetDay + width / pxPerDay);
+    const perYearDays = daysInYear(months) || 365;
+    const out: { x: number; name: string; color?: string }[] = [];
+    const cap = 200;
+    for (const d of importantDates) {
+      if (out.length >= cap) break;
+      if (d.recurrence === "annual" && d.month != null) {
+        const minYear = Math.floor(from / perYearDays) + 1;
+        const maxYear = Math.ceil(to / perYearDays) + 1;
+        for (let y = minYear; y <= maxYear; y++) {
+          if (out.length >= cap) break;
+          const day = dayOf(y, d.month, d.day);
+          if (day >= from && day <= to) out.push({ x: xOf(day), name: d.title, color: d.color ?? undefined });
+        }
+      } else if (d.recurrence === "monthly") {
+        const startDate = dateFromElapsed(Math.max(from, 0), months);
+        const endDate = dateFromElapsed(to, months);
+        for (let y = startDate.year; y <= endDate.year; y++) {
+          for (let m = 1; m <= months.length; m++) {
+            if (out.length >= cap) break;
+            const day = dayOf(y, m, d.day);
+            if (day >= from && day <= to) out.push({ x: xOf(day), name: d.title, color: d.color ?? undefined });
+          }
+        }
+      } else if (d.recurrence === "weekly") {
+        const day = Math.floor(from);
+        for (let d0 = day; d0 <= to && out.length < cap; d0++) {
+          const date = dateFromElapsed(d0, months);
+          if (date.day === d.day) out.push({ x: xOf(d0), name: d.title, color: d.color ?? undefined });
+        }
+      }
+    }
+    return out;
+  }, [importantDates, precision, offsetDay, width, pxPerDay, dayOf, xOf, months]);
+
   const nowX = now ? xOf(dayOf(now.year, now.month, now.day ?? 1)) : null;
 
   // Стрелку «сейчас» тянут только на годе и мельче: на столетии один пиксель
   // это несколько лет, и «сейчас» уехало бы от дрожания руки.
   const nowDraggable = onNowChange != null && zoom >= 2;
+
+  const eraBands = useMemo(() => {
+    if (!eras || eras.length === 0) return [];
+    const filtered = selectedTimelineId != null
+      ? eras.filter((e) => e.timeline_id === selectedTimelineId)
+      : eras.filter((e) => e.timeline_id == null);
+    if (filtered.length === 0) return [];
+    const sorted = [...filtered].sort((a, b) => a.start_year - b.start_year);
+    const perYearDays = daysInYear(months) || 365;
+    return sorted.map((era, i) => {
+      const startDay = (era.start_year - 1) * perYearDays;
+      const endDay = i + 1 < sorted.length ? (sorted[i + 1].start_year - 1) * perYearDays : startDay + perYearDays * 100;
+      return { name: era.name, startDay, endDay };
+    });
+  }, [eras, selectedTimelineId, months]);
 
   function dropNow(clientX: number) {
     if (!nowDraggable) return;
@@ -314,7 +400,15 @@ export function Timeline({
   return (
     <div className="tl">
       <div className="row tl-toolbar" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {title ? <h3 style={{ margin: 0 }}>{title}</h3> : <span />}
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          {title ? <h3 style={{ margin: 0 }}>{title}</h3> : <span />}
+          {now && (
+            <button onClick={() => setOffsetDay(dayOf(now.year, now.month, now.day ?? 1) - width / 2 / pxPerDay)}>
+              К «сейчас»
+            </button>
+          )}
+          {leftAction}
+        </div>
         <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
           {ZOOMS.map((z, i) => (
             <button
@@ -327,11 +421,6 @@ export function Timeline({
           ))}
         </div>
         <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-        {now && (
-          <button onClick={() => setOffsetDay(dayOf(now.year, now.month, now.day ?? 1) - width / 2 / pxPerDay)}>
-            К «сейчас»
-          </button>
-        )}
           {action}
         </div>
       </div>
@@ -351,8 +440,31 @@ export function Timeline({
           </div>
         ))}
 
+        {eraBands.map((b, i) => {
+          const x = xOf(b.startDay);
+          return (
+            <div
+              key={`era-${i}`}
+              className="tl-era-band"
+              style={{ left: x, width: Math.max(2, xOf(b.endDay) - x) }}
+              title={b.name}
+            >
+              <span className="tl-era-label">{b.name}</span>
+            </div>
+          );
+        })}
+
         {cyclePoints.map((p, i) => (
           <div key={i} className="tl-cycle" style={{ left: p.x }} title={`${p.cycle}: ${p.name}`} />
+        ))}
+
+        {importantDatePoints.map((p, i) => (
+          <div
+            key={`imp-${i}`}
+            className="tl-cycle"
+            style={{ left: p.x, background: p.color ?? "var(--accent)", borderColor: p.color ?? "var(--accent)" }}
+            title={p.name}
+          />
         ))}
 
         {clusters.map((c, i) =>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useConfirm } from "../hooks/useConfirm";
 import type { SettingCycle } from "../types";
 
 // Циклы сеттинга: «каждые N дней, начиная с такой-то даты», с именованными
@@ -104,6 +105,7 @@ function CycleRow({ cycle, onChanged }: { cycle: SettingCycle; onChanged: () => 
   const [pointName, setPointName] = useState("");
   const [pointDay, setPointDay] = useState("");
   const [error, setError] = useState("");
+  const [confirmDialog, confirm] = useConfirm();
 
   async function addPoint() {
     if (!pointName.trim() || pointDay === "") return;
@@ -136,7 +138,7 @@ function CycleRow({ cycle, onChanged }: { cycle: SettingCycle; onChanged: () => 
         <button
           className="danger"
           onClick={async () => {
-            if (!confirm(`Удалить цикл «${cycle.name}»?`)) return;
+            if (!await confirm(`Удалить цикл «${cycle.name}»?`)) return;
             await api.del(`/settings/cycles/${cycle.id}`);
             onChanged();
           }}
@@ -179,6 +181,7 @@ function CycleRow({ cycle, onChanged }: { cycle: SettingCycle; onChanged: () => 
         <button onClick={addPoint}>Добавить точку</button>
       </div>
       {error && <span className="muted">{error}</span>}
+      {confirmDialog}
     </div>
   );
 }

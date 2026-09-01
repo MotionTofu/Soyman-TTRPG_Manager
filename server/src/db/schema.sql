@@ -969,7 +969,11 @@ CREATE TABLE IF NOT EXISTS important_dates (
   owner_type TEXT NOT NULL, -- being | community | location | character
   owner_id INTEGER NOT NULL,
   title TEXT NOT NULL,
-  recurrence TEXT NOT NULL DEFAULT 'once', -- once | annual | monthly
+  description TEXT DEFAULT '',
+  date_type TEXT DEFAULT '',
+  color TEXT DEFAULT '',
+  custom_rule TEXT DEFAULT '',
+  recurrence TEXT NOT NULL DEFAULT 'once', -- once | annual | monthly | weekly | custom
   year INTEGER,  -- used when recurrence = once
   month INTEGER, -- used when recurrence = once | annual
   day INTEGER NOT NULL,
@@ -1076,6 +1080,15 @@ CREATE TABLE IF NOT EXISTS setting_calendar_eras (
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   start_year INTEGER NOT NULL,
+  timeline_id INTEGER REFERENCES setting_calendar_timelines(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS setting_calendar_timelines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

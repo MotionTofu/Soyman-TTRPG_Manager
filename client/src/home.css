@@ -1,0 +1,530 @@
+.home-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  align-items: start;
+  gap: var(--sp-6);
+}
+.home-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  min-width: 0;
+}
+.home-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.home-hero {
+  padding: 0;
+  overflow: hidden;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 511.989 511.989'%3E%3Cg transform='scale(-1,1) translate(-511.989,0)'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M48.641,496.629c-2.726,0-5.46-1.031-7.539-3.123L18.47,470.881c-2-2-3.125-4.703-3.125-7.531s1.125-5.547,3.125-7.547l79.194-79.201c2-2,4.719-3.125,7.546-3.125c2.828,0,5.539,1.125,7.539,3.125l22.625,22.623c4.172,4.172,4.172,10.922,0,15.096l-79.193,79.186C54.102,495.598,51.368,496.629,48.641,496.629z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M63.727,448.256c-7.055-7.047-16.429-10.938-26.398-10.938c-9.976,0-19.351,3.891-26.398,10.938c-14.554,14.562-14.554,38.25,0,52.795c7.047,7.047,16.422,10.938,26.398,10.938c9.969,0,19.344-3.891,26.398-10.938C78.282,486.506,78.282,462.818,63.727,448.256z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M161.779,406.131c-2.835,0-5.546-1.125-7.546-3.125l-45.249-45.264c-2.008-2-3.125-4.703-3.125-7.531s1.117-5.547,3.125-7.547L355.649,95.998c1.625-1.625,3.75-2.688,6.031-3.016l52.797-7.547c3.328-0.469,6.672,0.641,9.047,3.016s3.499,5.734,3.016,9.062l-7.547,52.795c-0.312,2.281-1.375,4.391-3.016,6.031L169.318,403.006C167.318,405.006,164.607,406.131,161.779,406.131z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M139.147,383.506c-2.727,0-5.461-1.047-7.539-3.123c-4.164-4.172-4.164-10.922,0-15.094l186.324-186.324c4.172-4.172,10.922-4.172,15.077,0c4.172,4.157,4.172,10.922,0,15.078l-186.316,186.34C144.608,382.459,141.882,383.506,139.147,383.506z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M199.49,418.086L93.898,312.492c-2.43-2.422-5.867-3.531-9.257-2.984c-3.383,0.547-6.297,2.688-7.828,5.766L61.728,345.43c-2.055,4.109-1.25,9.078,2,12.312l90.505,90.514c2.047,2.047,4.781,3.125,7.546,3.125c1.617,0,3.25-0.359,4.766-1.125l30.172-15.078c3.062-1.547,5.21-4.453,5.757-7.844C203.021,423.959,201.912,420.506,199.49,418.086z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath d='M48.641,496.629c-2.726,0-5.46-1.031-7.539-3.123L18.47,470.881c-2-2-3.125-4.703-3.125-7.531s1.125-5.547,3.125-7.547l79.194-79.201c2-2,4.719-3.125,7.546-3.125c2.828,0,5.539,1.125,7.539,3.125l22.625,22.623c4.172,4.172,4.172,10.922,0,15.096l-79.193,79.186C54.102,495.598,51.368,496.629,48.641,496.629z' fill='%23965353'/%3E%3Cpath d='M63.727,448.256c-7.055-7.047-16.429-10.938-26.398-10.938c-9.976,0-19.351,3.891-26.398,10.938c-14.554,14.562-14.554,38.25,0,52.795c7.047,7.047,16.422,10.938,26.398,10.938c9.969,0,19.344-3.891,26.398-10.938C78.282,486.506,78.282,462.818,63.727,448.256z' fill='%23FFCE54'/%3E%3Cpolygon points='59.954,414.32 97.664,452.021 112.749,436.943 75.039,399.224' fill='%237F4545'/%3E%3Cpath d='M161.779,406.131c-2.835,0-5.546-1.125-7.546-3.125l-45.249-45.264c-2.008-2-3.125-4.703-3.125-7.531s1.117-5.547,3.125-7.547L355.649,95.998c1.625-1.625,3.75-2.688,6.031-3.016l52.797-7.547c3.328-0.469,6.672,0.641,9.047,3.016s3.499,5.734,3.016,9.062l-7.547,52.795c-0.312,2.281-1.375,4.391-3.016,6.031L169.318,403.006C167.318,405.006,164.607,406.131,161.779,406.131z' fill='%23FFCE54'/%3E%3Cpath d='M139.147,383.506c-2.727,0-5.461-1.047-7.539-3.123c-4.164-4.172-4.164-10.922,0-15.094l186.324-186.324c4.172-4.172,10.922-4.172,15.077,0c4.172,4.157,4.172,10.922,0,15.078l-186.316,186.34C144.608,382.459,141.882,383.506,139.147,383.506z' fill='%23F6BB42'/%3E%3Cpath d='M199.49,418.086L93.898,312.492c-2.43-2.422-5.867-3.531-9.257-2.984c-3.383,0.547-6.297,2.688-7.828,5.766L61.728,345.43c-2.055,4.109-1.25,9.078,2,12.312l90.505,90.514c2.047,2.047,4.781,3.125,7.546,3.125c1.617,0,3.25-0.359,4.766-1.125l30.172-15.078c3.062-1.547,5.21-4.453,5.757-7.844C203.021,423.959,201.912,420.506,199.49,418.086z' fill='%23ED5564'/%3E%3C/g%3E%3C/svg%3E") 2 2, pointer;
+}
+.home-hero-cover {
+  position: relative;
+  width: 100%;
+  /* Пропорция от СВОЕЙ колонки, а не от ширины окна: vw не знает, что между
+     двумя боковыми панелями колонке достаётся вдвое меньше, и при свёрнутом
+     окне рисовал 300 px высоты на 489 px ширины — почти квадрат вместо
+     обложки. Границы держат её читаемой в обе стороны. */
+  aspect-ratio: 16 / 6;
+  min-height: 200px;
+  max-height: 300px;
+  isolation: isolate;
+  overflow: hidden;
+}
+.home-hero-empty {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-hero-empty .empty-state {
+  padding: var(--sp-5, 24px);
+}
+/* Onboarding Hero — 5 горизонтальных шагов. */
+.home-hero-onboarding {
+  min-height: 220px;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.onboarding-header {
+  text-align: center;
+}
+.onboarding-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  text-transform: var(--name-transform);
+  line-height: 0.96;
+}
+.onboarding-hint {
+  margin: var(--sp-1) 0 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.onboarding-steps {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: center;
+}
+.onboarding-step {
+  flex: 1;
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: 0;
+  background: var(--paper-2);
+  cursor: pointer;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+.onboarding-step:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.onboarding-step:disabled {
+  cursor: default;
+}
+.onboarding-step-active {
+  border-color: var(--accent);
+}
+.onboarding-step-done {
+  opacity: 0.4;
+  border-style: dashed;
+}
+.onboarding-step-num {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1;
+}
+.onboarding-step-done .onboarding-step-num {
+  background: var(--muted);
+}
+.onboarding-step-num .nav-icon {
+  width: 24px;
+  height: 24px;
+}
+.onboarding-step-title {
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+/* 2.3 — на 520px шаги онбординга столбиком (тапабельнее, без горизонтального скролла) */
+@media (max-width: 520px) {
+  .onboarding-steps {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .onboarding-steps > button {
+    flex: 1 1 auto !important;
+    flex-direction: row !important;
+    justify-content: flex-start;
+    text-align: left;
+    min-width: 0 !important;
+  }
+}
+/* 2.4 — пустая ячейка календаря кликабельна (тап = новая сессия) */
+.mini-calendar-day.day-empty-clickable {
+  cursor: pointer;
+}
+.mini-calendar-day.day-empty-clickable:hover {
+  background: var(--accent-soft);
+  border-color: var(--line);
+}
+.mini-calendar-day.day-empty-clickable:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+/* 2.1 — серый пункт навигации на пустой БД */
+.app-nav a.nav-empty {
+  opacity: 0.52;
+}
+.app-nav a.nav-empty .badge.tag {
+  background: var(--paper);
+  color: var(--muted);
+}
+/* Модалка создания игроков — drafting rows. */
+.player-draft {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+}
+.player-draft-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.player-draft-num {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.player-draft-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.player-draft-remove:hover {
+  color: var(--accent);
+}
+.player-draft-add {
+  background: none;
+  border: var(--card-border-width, 1px) dashed var(--line);
+  padding: var(--sp-2);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+}
+.player-draft-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.error-text {
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  margin: 0;
+}
+.home-hero-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 20%, color-mix(in srgb, var(--scrim) 95%, transparent) 100%);
+}
+[data-theme-id="peace"] .home-hero-session {
+  color: color-mix(in srgb, var(--ink) 90%, transparent);
+}
+[data-theme-id="peace"] .home-hero-eyebrow,
+[data-theme-id="peace"] .home-hero-date {
+  color: var(--muted);
+}
+.home-hero-content {
+  position: absolute;
+  left: var(--sp-5);
+  right: var(--sp-5);
+  bottom: var(--sp-4);
+  /* Над растром (z-index 1 у .cover-halftone::before): §5.2 запрещает
+     халфтон под текстом. */
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-hero-eyebrow {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  /* Подпись лежит на инвертированной поверхности — значит свой muted, а не
+     тот, что выведен против бумаги. */
+  color: var(--on-surface-muted);
+}
+.home-hero-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: 400;
+  text-transform: var(--name-transform);
+  line-height: 0.92;
+  color: var(--accent);
+}
+/* Название сессии, если задано: второй голос — проза курсивом, между
+   титульным и значением. Разрыв ×1.6 держится за счёт смены гарнитуры. */
+.home-hero-session {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-style: italic;
+  color: color-mix(in srgb, var(--paper) 90%, transparent);
+}
+/* Номер, дата и время — значения, значит моношрифт. Это то, чего герою не
+   хватало: он говорил куда идти, но не в каком состоянии то, куда идёшь. */
+.home-hero-date {
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--on-surface-muted);
+}
+
+/* auto-FIT, а не auto-fill и не жёсткие repeat(4). auto-fill на колонке в
+   984 px раскладывался на пять мест, четыре плитки занимали четыре, и справа
+   оставалась дыра. Жёсткие четыре колонки, наоборот, ломали узкое окно: при
+   свёрнутом до 1440 приложении колонка всего 489 px, и плитка сжималась до
+   110 px. auto-fit схлопывает лишний трек — четыре в ряд там, где есть
+   место, две там, где нет, и обе всегда в полную ширину. */
+.home-tiles {
+  display: grid;
+  /* Четыре трека всегда, даже когда кампания одна. auto-fit растягивал
+     единственную плитку во всю ширину колонки: витрина одной кампании
+     выглядела заявлением, а не рядом, и с каждой новой кампанией плитка
+     скакала в размере, пока их не станет четыре. Ряд обрывается на четвёртой
+     (HomeCalendarPage режет список), так что лишних треков не бывает. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+/* Блок «Напомню!» — случайная статья из справочника (HomeArticleCard).
+   Карточка кликабельна целиком и открывает ту же модалку записи, что и
+   ссылка-меншен в любом тексте, поэтому своей «кнопки» у неё нет. */
+/* «Напомню!» — вырезка, а не карточка (см. HomeArticleCard.tsx). Единственный
+   блок главной, который каждый раз другой, и единственный, имеющий право
+   выглядеть вырванным из журнала: чернильная плашка-шапка, наклон, штамп
+   выпуска. Ниже по экрану эта «разнузданность» никому не мешает читать —
+   потому блок и остался внизу основной колонки, а не поднят под герой. */
+.home-article {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  cursor: pointer;
+  /* Вырезка занимает всю ширину основной колонки. Ограничение в 68ch стояло
+     на самом блоке — мера строки соблюдалась, но на широкой раскладке (когда
+     рельс уходит под основную колонку) вырезка оставалась полосой в 544 px
+     посреди 816-пиксельной колонки, с пустым листом справа. Теперь меру
+     держит разворот внутри блока: узкая колонка шапки и колонка прозы.
+
+     Раскладка разворота решается container query, а не шириной окна:
+     ширина этого блока от окна не выводится — колонка контента в оболочке
+     фиксированная, а под 1280 px основная колонка, наоборот, расширяется. */
+  container-type: inline-size;
+  /* Точка отсчёта для затухания обрезанного тела (.home-article-clipped::after). */
+  position: relative;
+  background: var(--paper);
+  border: var(--card-border-width, 1px) solid var(--ink);
+  /* Рваного низа здесь больше нет. clip-path в 14 узлов на процентах давал
+     не оторванный край, а мелкую пилу: на широком блоке зубцы растягивались
+     в пологие волны, а сам clip-path заодно срезал нижнюю рамку. Ровный низ
+     честнее — «вырванность» держат плашка-шапка, наклон и штамп выпуска. */
+}
+.home-article:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Плашка-шапка называет блок изнутри — заголовка секции над вырезкой нет. */
+.home-article-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 7px var(--sp-3);
+}
+.home-article-band-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  text-transform: uppercase;
+  line-height: 1;
+}
+.home-article-issue {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  color: var(--on-surface-muted);
+}
+.home-article:hover .home-article-issue {
+  color: var(--accent-text);
+}
+.home-article-body-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-3) var(--sp-5);
+  padding: var(--sp-3);
+}
+.home-article-head,
+.home-article-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+/* Верхняя граница меры строки. На обычном широком экране колонка прозы и
+   так выходит примерно в эти же 68ch по пропорции, а на очень широком —
+   упирается сюда, и лишнюю ширину забирает колонка шапки, а не строка. */
+.home-article-text {
+  max-width: 68ch;
+}
+/* Пока блок узкий — шапка и проза идут друг под другом, линия просто
+   отделяет одно от другого. */
+.home-article-head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--sp-2);
+}
+/* Разворот. Порог — 620 px: шапке нужно не меньше 240 px, чтобы название
+   в две-три строки не превращалось в столбик по слову, прозе — не меньше
+   340 px, чтобы строка оставалась строкой. */
+@container (min-width: 620px) {
+  .home-article-body-wrap {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr);
+  }
+  .home-article-head {
+    border-bottom: none;
+    border-right: 1px solid var(--line);
+    padding-bottom: 0;
+    padding-right: var(--sp-4);
+    height: 100%;
+  }
+}
+.home-article-path {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.home-article-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  text-transform: var(--name-transform);
+  line-height: 0.96;
+  color: var(--text-bright, var(--ink));
+}
+/* Высота главной не должна зависеть от того, какая статья выпала: длинное
+   тело обрезается по высоте и уходит в затухание, короткое влезает целиком. */
+.home-article-body {
+  position: relative;
+  max-height: 132px;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+/* Затухание обрезанного тела. Растянуто по всему блоку, а не по колонке
+   прозы: полоса шириной в текст обрывалась на его правом краю и не доходила
+   до низа вырезки — под ней оставались «Читать целиком» и поле, то есть
+   бумага буквально начиналась заново под градиентом. Цвет — var(--paper),
+   фон самой вырезки: прежний --paper-2 темнее её на тон, и затухание читалось
+   затемнением, а не растворением. */
+.home-article-clipped::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 92px;
+  pointer-events: none;
+  background-image: linear-gradient(180deg, transparent 0%, var(--paper) 72%, var(--paper) 100%);
+}
+/* «Читать целиком» — поверх затухания: гаснуть должна проза, а не подпись,
+   ради которой вырезку и щёлкают. */
+.home-article-more {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+@media (max-width: 1280px) {
+  .home-layout {
+    grid-template-columns: 1fr;
+  }
+  .home-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .home-rail > * {
+    flex: 1 1 260px;
+  }
+}
+@media (max-width: 860px) {
+  .home-hero-cover {
+    height: 186px;
+  }
+  /* Клетка — цель для пальца, а не для мыши: при обычном поле карточки в
+     14 px на 375-м экране выходило 42 px, на два ниже порога в 44. Поле
+     карточки календаря ужимается ровно настолько, чтобы клетка добрала. */
+  .home-rail-calendar {
+    padding: var(--sp-2);
+  }
+  .home-rail-calendar .mini-calendar {
+    gap: 2px;
+  }
+  .home-rail {
+    flex-direction: column;
+  }
+  /* Плитки на телефоне — 2×2. По одной в столбец четыре кампании дали бы
+     почти тысячу пикселей прокрутки ради витрины, которую на телефоне
+     листают мимо. */
+  .home-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-3);
+  }
+  /* Порядок в одну колонку: герой → календарь → плитки → счётчики →
+     «Напомню!». Рельс вклинивается сразу за героем — на телефоне мастер
+     открывает приложение не осматривать владения (для этого есть большой
+     экран), а свериться: когда следующая и что на неделе. Витрина уезжает
+     вниз, где ей на телефоне и место. */
+  .home-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+    /* Десктопная сетка несёт align-items: start; в колоночном флексе это
+       значит «по содержимому», и блоки переставали занимать ширину экрана —
+       клетка календаря ужималась до 20 px, вдвое ниже порога попадания
+       пальцем. */
+    align-items: stretch;
+  }
+  .home-main,
+  .home-rail {
+    display: contents;
+  }
+  /* display: contents не влияет на то, какие селекторы совпадают, поэтому
+     правило рельса с брейкпоинта 1280 продолжало действовать — а в колонке
+     flex-basis задаёт уже высоту, а не ширину, и прибивал блокам 260 px. */
+  .home-rail > * {
+    flex: 0 0 auto;
+  }
+  .home-hero { order: 1; }
+  .home-rail-calendar { order: 2; }
+  .home-section-campaigns { order: 3; }
+  .home-rail-stats { order: 4; }
+  .home-section-article { order: 5; }
+}

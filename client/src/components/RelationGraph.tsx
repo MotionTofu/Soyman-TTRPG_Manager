@@ -1,4 +1,5 @@
-import {
+import React, {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -12,16 +13,15 @@ import { Link, useNavigate } from "react-router-dom";
 import { ContextMenu } from "./ContextMenu";
 import { EmptyState } from "./EmptyState";
 import { EntityPreviewModal } from "./EntityPreviewModal";
+import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
 import {
   CANVAS_EDGE_PADDING,
   DEFAULT_EDGE_KINDS,
   EDGE_KINDS,
-  EDGE_KIND_STYLE,
   buildIsolation,
   findPath,
   foldGroups,
-  type GroupMode,
   GRAPH_HEIGHT,
   GRAPH_WIDTH,
   TYPE_COLORS,
@@ -32,19 +32,26 @@ import {
   simulateGraph,
   type EdgeKind,
   type GraphData,
+  type GraphEdge,
   type GraphNode,
+  type IsolationView,
   type NodePositions,
 } from "../graphTypes";
-import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
-import type { RelationTone } from "../types";
+import {
+  drawGraph,
+  hitTestEdge,
+  hitTestNode,
+  edgeTooltip,
+  nodeTooltip,
+  type DrawInput,
+} from "../canvasGraph";
 
-const ARROW_PAN_STEP = 90; // на сколько единиц холста двигают стрелки
+const ARROW_PAN_STEP = 90;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 6;
-const FOCUS_ZOOM = 2.2;
 
-// Типы, которые никогда не попадают на граф связей.
-const EXCLUDED_GRAPH_TYPES = new Set(["player", "resource"]);
+// Типы, скрытые по умолчанию — операционные сущности, засоряющие граф.
+const DEFAULT_HIDDEN_TYPES = new Set(["scene", "adventure", "campaign"]);
 
 interface View {
   zoom: number;
@@ -53,53 +60,33 @@ interface View {
 }
 
 function clampPan(
-  zoom: number,
-  panX: number,
-  panY: number,
-  canvasW: number,
-  canvasH: number
-): { x: number; y: number } {
-  const clampAxis = (scaled: number, size: number, pan: number) =>
-    scaled <= size ? (size - scaled) / 2 : Math.min(0, Math.max(size - scaled, pan));
+  zoom: number, panX: number, panY: number,
+  canvasW: number, canvasH: number,
+  worldW: number, worldH: number, fs: number,
+) {
+  const minX = canvasW - worldW * zoom * fs;
+  const minY = canvasH - worldH * zoom * fs;
   return {
-    x: clampAxis(canvasW * zoom, canvasW, panX),
-    y: clampAxis(canvasH * zoom, canvasH, panY),
+    x: Math.max(minX, Math.min(0, panX)),
+    y: Math.max(minY, Math.min(0, panY)),
   };
 }
 
-function centeredPan(zoom: number, contentX: number, contentY: number, canvasW: number, canvasH: number) {
-  return clampPan(zoom, canvasW / 2 - contentX * zoom, canvasH / 2 - contentY * zoom, canvasW, canvasH);
-}
-
-// Unordered key for a node pair — used to detect when both A→B and B→A
-// exist, so the two directions can be drawn as separate offset lines
-// instead of overlapping into what looks like one plain edge.
-function pairKey(a: string, b: string) {
-  return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-
-const RELATION_ARROW_OFFSET = 5; // world units apart, for a bidirectional pair
-const ARROW_POSITIONS = [0.3, 0.5, 0.7]; // a few chevrons along the line, not just at the tip
-const EDGE_LABEL_FONT_SIZE = 9;
-
-// Edge labels grow with zoom, but slower than the map itself — a 100% zoom
-// increase (zoom 1 -> 2) should only make the label ~50% bigger, not 100%,
-// or text on a close-up graph gets comically huge. The <g> that holds
-// everything is already scaled by `zoom`, so to land on `labelScale(zoom)`
-// on screen the label itself needs an inverse counter-scale of
-// labelScale(zoom) / zoom.
-function labelScale(zoom: number) {
-  return 1 + 0.5 * (zoom - 1);
+function centeredPan(
+  zoom: number, wx: number, wy: number,
+  canvasW: number, canvasH: number,
+  worldW: number, worldH: number, fs: number,
+) {
+  const panX = canvasW / 2 - wx * zoom * fs;
+  const panY = canvasH / 2 - wy * zoom * fs;
+  return clampPan(zoom, panX, panY, canvasW, canvasH, worldW, worldH, fs);
 }
 
 interface Props {
   data: GraphData | null;
   height?: number;
   emptyMessage?: string;
-  // Под каким ключом хранить расставленные руками узлы. Разные графы —
-  // разные карты: у сеттинга своя, у общей страницы своя.
   layoutKey?: string;
-  // Скоуп (сеттинг/кампания) — в Row 0, после поиска.
   scopeBar?: React.ReactNode;
 }
 
@@ -118,91 +105,490 @@ function loadLayout(key: string | undefined): ManualLayout {
   }
 }
 
-// Reusable pan/zoom force-directed graph — the "corkboard with pins and
-// threads": drag to pan, scroll/buttons to zoom, click a node to pin focus
-// (dims everyone else and centers/zooms on it), search box to jump straight
-// to a node without hunting for it visually. Used both by the global
-// "Граф связей" page and a setting-scoped graph tab.
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar }: Props) {
+// ─── Canvas component — refs-based, no React re-renders for pan/zoom ───
+
+function GraphCanvas({
+  width,
+  height,
+  worldWidth,
+  worldHeight,
+  positions,
+  visibleEdges,
+  visibleNodes,
+  groupedFolded,
+  pairCounts,
+  nodesByKey,
+  focusedKey,
+  pathFrom,
+  pathTo,
+  nodeScales,
+  manual,
+  showPins,
+  isolationView,
+  onNodeClick,
+  onNodeDoubleClick,
+  onBackgroundClick,
+  onNodeContextMenu,
+  onNodeDrag,
+}: {
+  width: number;
+  height: number;
+  worldWidth: number;
+  worldHeight: number;
+  positions: NodePositions;
+  visibleEdges: GraphEdge[];
+  visibleNodes: GraphNode[];
+  groupedFolded: Map<string, number>;
+  pairCounts: Map<string, number>;
+  nodesByKey: Map<string, GraphNode>;
+  focusedKey: string | null;
+  pathFrom: string | null;
+  pathTo: string | null;
+  nodeScales: Map<string, number>;
+  manual: ManualLayout;
+  showPins: boolean;
+  isolationView: IsolationView | null;
+  onNodeClick: (n: GraphNode, isFoldedGroup: boolean) => void;
+  onNodeDoubleClick: (key: string) => void;
+  onBackgroundClick: () => void;
+  onNodeContextMenu: (e: ReactMouseEvent, node: GraphNode) => void;
+  onNodeDrag: (key: string, x: number, y: number) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef(0);
+  const viewRef = useRef<View>({ zoom: 1, panX: 0, panY: 0 });
+  const dragState = useRef<{ key: string; moved: boolean } | null>(null);
+  const dragOrigin = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
+  const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const justPannedRef = useRef(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // Keep path computation as refs (cheap, no re-render needed)
+  const path = pathFrom && pathTo ? findPath(visibleEdges, pathFrom, pathTo) : null;
+  const pathKeysRef = useRef<Set<string> | null>(null);
+  const pathEdgesRef = useRef<Set<GraphEdge> | null>(null);
+  pathKeysRef.current = path ? new Set(path.keys) : null;
+  pathEdgesRef.current = path ? new Set(path.edges) : null;
+
+  // Neighbor keys for focus dimming — computed once per focusedKey/visibleEdges change,
+  // not on every draw call.
+  const neighborKeys = useMemo(() => {
+    if (!focusedKey) return null;
+    const keys = new Set<string>();
+    for (const e of visibleEdges) {
+      if (e.from === focusedKey || e.to === focusedKey) {
+        keys.add(e.from);
+        keys.add(e.to);
+      }
+    }
+    return keys;
+  }, [visibleEdges, focusedKey]);
+
+  // ── Tooltip ───────────────────────────────────────────────────
+  function showTooltip(text: string, cx: number, cy: number) {
+    const el = tooltipRef.current;
+    if (!el) return;
+    el.textContent = text;
+    el.style.display = "block";
+    el.style.left = `${cx + 12}px`;
+    el.style.top = `${cy - 8}px`;
+  }
+  function hideTooltip() {
+    if (tooltipRef.current) tooltipRef.current.style.display = "none";
+  }
+
+  // ── Draw ──────────────────────────────────────────────────────
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const v = viewRef.current;
+    const fitScale = Math.min(w / worldWidth, h / worldHeight);
+    const input: DrawInput = {
+      ctx,
+      width: w,
+      height: h,
+      panX: v.panX,
+      panY: v.panY,
+      zoom: v.zoom,
+      fitScale,
+      visibleEdges,
+      visibleNodes,
+      positions,
+      nodesByKey,
+      groupedFolded,
+      pairCounts,
+      focusedKey,
+      neighborKeys,
+      pathKeys: pathKeysRef.current,
+      pathEdges: pathEdgesRef.current,
+      nodeScales,
+      manual,
+      showPins,
+    };
+    drawGraph(input);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleEdges, visibleNodes, positions, nodesByKey, groupedFolded, pairCounts, focusedKey, neighborKeys, nodeScales, manual, showPins, worldWidth, worldHeight]);
+
+  // Redraw when props change
+  useEffect(() => { draw(); }, [draw]);
+
+  // ResizeObserver
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => draw());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [draw]);
+
+  // Sync isolation view centering
+  useEffect(() => {
+    if (!isolationView) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+    const centered = centeredPan(1, worldWidth / 2, worldHeight / 2, r.width, r.height, worldWidth, worldHeight, fs);
+    viewRef.current = { zoom: 1, panX: centered.x, panY: centered.y };
+    draw();
+  }, [isolationView, width, height, draw, worldWidth, worldHeight]);
+
+  // ── Wheel zoom ────────────────────────────────────────────────
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const v = viewRef.current;
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom * factor));
+      if (newZoom === v.zoom) return;
+      const c = canvasRef.current;
+      if (!c) return;
+      const r = c.getBoundingClientRect();
+      const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+      const cursorScreenX = e.clientX - r.left;
+      const cursorScreenY = e.clientY - r.top;
+      const worldX = (cursorScreenX - v.panX) / (v.zoom * fs);
+      const worldY = (cursorScreenY - v.panY) / (v.zoom * fs);
+      const newPanX = cursorScreenX - worldX * newZoom * fs;
+      const newPanY = cursorScreenY - worldY * newZoom * fs;
+      const clamped = clampPan(newZoom, newPanX, newPanY, r.width, r.height, worldWidth, worldHeight, fs);
+      viewRef.current = { zoom: newZoom, panX: clamped.x, panY: clamped.y };
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(draw);
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [draw]);
+
+  // ── Keyboard pan ──────────────────────────────────────────────
+  const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = ARROW_PAN_STEP;
+    const v = viewRef.current;
+    let dx = 0;
+    let dy = 0;
+    if (e.key === "ArrowLeft") dx = step;
+    else if (e.key === "ArrowRight") dx = -step;
+    else if (e.key === "ArrowUp") dy = step;
+    else if (e.key === "ArrowDown") dy = -step;
+    else return;
+    e.preventDefault();
+    const c = canvasRef.current;
+    if (!c) return;
+    const r = c.getBoundingClientRect();
+    const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+    const clamped = clampPan(v.zoom, v.panX + dx, v.panY + dy, r.width, r.height, worldWidth, worldHeight, fs);
+    viewRef.current = { ...v, panX: clamped.x, panY: clamped.y };
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(draw);
+  }, [draw, worldWidth, worldHeight]);
+
+  // ── Pointer: world coordinates from event ─────────────────────
+  function worldCoords(e: { clientX: number; clientY: number }) {
+    const c = canvasRef.current;
+    if (!c) return { x: 0, y: 0 };
+    const r = c.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return { x: 0, y: 0 };
+    const v = viewRef.current;
+    const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+    return {
+      x: (e.clientX - r.left - v.panX) / (v.zoom * fs),
+      y: (e.clientY - r.top - v.panY) / (v.zoom * fs),
+    };
+  }
+
+  // ── Pointer events ────────────────────────────────────────────
+  const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    wrapRef.current?.focus({ preventScroll: true });
+    if (e.button === 1) {
+      e.preventDefault();
+      panState.current = { startX: e.clientX, startY: e.clientY, originX: viewRef.current.panX, originY: viewRef.current.panY, moved: false };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button !== 0) return;
+    const w = worldCoords(e);
+    const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
+    if (hit) {
+      e.preventDefault();
+      const start = positions.get(hit.key)!;
+      dragState.current = { key: hit.key, moved: false };
+      dragOrigin.current = { x: start.x, y: start.y, clientX: e.clientX, clientY: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  }, [visibleNodes, positions, nodeScales, worldWidth, worldHeight]);
+
+  const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const r = c.getBoundingClientRect();
+    if (r.width === 0) return;
+
+    // Node drag
+    if (dragState.current && dragOrigin.current) {
+      const origin = dragOrigin.current;
+      const v = viewRef.current;
+      const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+      const scale = v.zoom * fs;
+      const dx = (e.clientX - origin.clientX) / scale;
+      const dy = (e.clientY - origin.clientY) / scale;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.current.moved = true;
+      if (!dragState.current.moved) return;
+      const key = dragState.current.key;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        const nx = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, origin.x + dx));
+        const ny = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, origin.y + dy));
+        onNodeDrag(key, nx, ny);
+        // Keep custom event for backward compat
+        const evt = new CustomEvent("graph-node-drag", {
+          detail: { key, x: nx, y: ny },
+          bubbles: true,
+        });
+        wrapRef.current?.dispatchEvent(evt);
+      });
+      return;
+    }
+
+    // Pan
+    if (!panState.current) return;
+    const v = viewRef.current;
+    const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+    const dx = e.clientX - panState.current.startX;
+    const dy = e.clientY - panState.current.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) panState.current.moved = true;
+    const clamped = clampPan(v.zoom, panState.current.originX + dx, panState.current.originY + dy, r.width, r.height, worldWidth, worldHeight, fs);
+    viewRef.current = { ...v, panX: clamped.x, panY: clamped.y };
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(draw);
+  }, [draw, width, height, worldWidth, worldHeight, onNodeDrag]);
+
+  const handlePointerUp = useCallback(() => {
+    if (dragState.current) {
+      if (dragState.current.moved) justPannedRef.current = true;
+      dragState.current = null;
+      dragOrigin.current = null;
+      return;
+    }
+    if (panState.current?.moved) justPannedRef.current = true;
+    panState.current = null;
+  }, []);
+
+  const handleClick = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    if (justPannedRef.current) { justPannedRef.current = false; return; }
+    const w = worldCoords(e);
+    const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
+    if (hit) {
+      e.stopPropagation();
+      onNodeClick(hit, (groupedFolded.get(hit.key) ?? 0) > 0);
+    } else {
+      onBackgroundClick();
+    }
+  }, [visibleNodes, positions, nodeScales, groupedFolded, onNodeClick, onBackgroundClick]);
+
+  const handleDoubleClick = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    const w = worldCoords(e);
+    const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
+    if (hit) { e.stopPropagation(); onNodeDoubleClick(hit.key); }
+  }, [visibleNodes, positions, nodeScales, onNodeDoubleClick]);
+
+  const handleContextMenu = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const w = worldCoords(e);
+    const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
+    if (hit) onNodeContextMenu(e, hit);
+  }, [visibleNodes, positions, nodeScales, onNodeContextMenu]);
+
+  const handleMouseMove = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    const w = worldCoords(e);
+    const hitN = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
+    if (hitN) {
+      showTooltip(nodeTooltip(hitN, groupedFolded.get(hitN.key) ?? 0), e.clientX, e.clientY);
+      return;
+    }
+    const hitE = hitTestEdge(w.x, w.y, visibleEdges, positions);
+    if (hitE) { showTooltip(edgeTooltip(hitE, nodesByKey), e.clientX, e.clientY); return; }
+    hideTooltip();
+  }, [visibleNodes, visibleEdges, positions, nodeScales, groupedFolded, nodesByKey]);
+
+  // Expose zoom/reset via custom events (parent toolbar buttons)
+  useEffect(() => {
+    const el = wrapRef.current?.parentElement;
+    if (!el) return;
+    function onCommand(e: Event) {
+      const d = (e as CustomEvent).detail;
+      if (d.type === "zoomBy") {
+        const v = viewRef.current;
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom * d.factor));
+        if (newZoom === v.zoom) return;
+        const c = canvasRef.current;
+        if (!c) return;
+        const r = c.getBoundingClientRect();
+        const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+        const centerX = r.width / 2;
+        const centerY = r.height / 2;
+        const worldX = (centerX - v.panX) / (v.zoom * fs);
+        const worldY = (centerY - v.panY) / (v.zoom * fs);
+        const newPanX = centerX - worldX * newZoom * fs;
+        const newPanY = centerY - worldY * newZoom * fs;
+        const clamped = clampPan(newZoom, newPanX, newPanY, r.width, r.height, worldWidth, worldHeight, fs);
+        viewRef.current = { zoom: newZoom, panX: clamped.x, panY: clamped.y };
+        draw();
+      } else if (d.type === "resetView") {
+        viewRef.current = { zoom: 1, panX: 0, panY: 0 };
+        draw();
+      }
+    }
+    el.addEventListener("graph-command", onCommand as EventListener);
+    return () => el.removeEventListener("graph-command", onCommand as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draw, worldWidth, worldHeight]);
+
+  return (
+    <div
+      ref={wrapRef}
+      className="relation-graph-wrap"
+      style={{
+        height: "100%",
+        position: "relative",
+        backgroundImage: "radial-gradient(var(--line) 0.6px, transparent 0.6px)",
+        backgroundSize: "8px 8px",
+        backgroundPosition: "0 0",
+      }}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onPointerDown={handlePointerDown}
+      onPointerMove={(e) => { handlePointerMove(e); handleMouseMove(e); }}
+      onPointerUp={handlePointerUp}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContextMenu}
+      onAuxClick={(e) => e.preventDefault()}
+      onMouseLeave={hideTooltip}
+    >
+      <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+      <div
+        ref={tooltipRef}
+        style={{
+          display: "none",
+          position: "fixed",
+          zIndex: 100,
+          background: "var(--paper)",
+          border: "1px solid var(--line)",
+          padding: "4px 8px",
+          fontSize: "12px",
+          fontFamily: "var(--font-body)",
+          maxWidth: "300px",
+          pointerEvents: "none",
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Outer component — React state for toolbar/legend ────────────
+
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar }: Props) {
   const navigate = useNavigate();
-  const [view, setView] = useState<View>({ zoom: 1, panX: 0, panY: 0 });
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
-  // Расставленное руками переживает перезагрузку: карта мира, которую мастер
-  // разложил под себя, — это его работа, а не временное состояние экрана.
   const [manual, setManual] = useState<ManualLayout>(() => loadLayout(layoutKey));
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+  const [pathFrom, setPathFrom] = useState<string | null>(null);
+  const [pathTo, setPathTo] = useState<string | null>(null);
+  const [isolation, setIsolation] = useState<{ key: string; depth: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
+  const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
+  const [nodeScales, setNodeScales] = useState<Map<string, number>>(() => new Map());
+  const [resizeTarget, setResizeTarget] = useState<GraphNode | null>(null);
+  const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN_TYPES));
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const [isolatedOpen, setIsolatedOpen] = useState(false);
+  const [edgeKindsOpen, setEdgeKindsOpen] = useState(false);
+  const [entityTypesOpen, setEntityTypesOpen] = useState(false);
 
-  // 0a: смена мира (layoutKey) — другая карта. Состояние manual должно
-  // перечитаться из localStorage, иначе раскладка Эстарии налезет на Нестиум.
+  const graphWrapRef = useRef<HTMLDivElement>(null);
+
+  // Reset on layoutKey change
   useEffect(() => {
     setManual(loadLayout(layoutKey));
     setFocusedKey(null);
     setIsolation(null);
-    setView({ zoom: 1, panX: 0, panY: 0 });
   }, [layoutKey]);
-  const [groupMode, setGroupMode] = useState<GroupMode>("none");
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
-  // Концы прокладываемого пути: «как этот связан с той фракцией».
-  const [pathFrom, setPathFrom] = useState<string | null>(null);
-  const [pathTo, setPathTo] = useState<string | null>(null);
-  // Изоляция: узел в центре и всё, что с ним связано, на заданное число шагов.
-  const [isolation, setIsolation] = useState<{ key: string; depth: number } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
-  const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
-  const dragState = useRef<{ key: string; moved: boolean } | null>(null);
-  const dragOrigin = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
-  // Какие виды связей показывать. Раньше здесь был один чекбокс «упоминания»,
-  // а всё остальное — членство, обитание, вложенность, сцены — рисовалось
-  // одинаковой серой линией и не отключалось.
-  const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
-  // Типы сущностей, скрытые из графа через легенду (клик по точке).
-  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set());
-  const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
-    null
-  );
-  const justPannedRef = useRef(false);
-  const rafRef = useRef(0);
 
-  // World-space canvas size — grows with the node count so a large setting's
-  // graph has room to spread out instead of everything piling up along the
-  // clamped edges of a fixed-size canvas.
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Fullscreen escape
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  // Save layout
+  useEffect(() => {
+    if (!layoutKey) return;
+    try {
+      if (Object.keys(manual).length === 0) localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
+      else localStorage.setItem(LAYOUT_STORE_PREFIX + layoutKey, JSON.stringify(manual));
+    } catch (e) { console.warn("Graph layout not saved:", e); }
+  }, [manual, layoutKey]);
+
+  // Data change resets
+  useEffect(() => {
+    setFocusedKey(null);
+    setPathFrom(null);
+    setPathTo(null);
+    setIsolation(null);
+  }, [data]);
+
+  // ── Layout computation ────────────────────────────────────────
   const baseCanvas = data ? canvasSizeFor(data.nodes.length) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
-
-  // Отбор по видам -> отбор по типам -> свёртка в группы -> изоляция.
-  // Считается здесь, до раннего выхода: размеры холста и позиции зависят от
-  // результата, а ими пользуются обработчики колеса и панорамирования.
-  const pipeline = useMemo(() => {
-    if (!data) return null;
-    const kindEdges = data.edges.filter((e) => activeKinds.has(e.kind));
-    // Исключаем типы, которые не участвуют в графе, плюс скрытые через легенду.
-    const visibleNodes = data.nodes.filter(
-      (n) => !EXCLUDED_GRAPH_TYPES.has(n.type) && !hiddenTypes.has(n.type)
-    );
-    const visibleKeys = new Set(visibleNodes.map((n) => n.key));
-    const typeEdges = kindEdges.filter((e) => visibleKeys.has(e.from) && visibleKeys.has(e.to));
-    const grouped = foldGroups(visibleNodes, typeEdges, groupMode, expandedGroups);
-    const isolationView = isolation
-      ? buildIsolation(grouped.nodes, grouped.edges, isolation.key, isolation.depth)
-      : null;
-    return { grouped, isolationView };
-  }, [data, activeKinds, hiddenTypes, groupMode, expandedGroups, isolation]);
-
-  const isolationView = pipeline?.isolationView ?? null;
-  const canvasSize = isolationView
-    ? { width: isolationView.width, height: isolationView.height }
-    : baseCanvas;
-
-  // Позиции прошлой раскладки: смена фильтра — это то же поле с убранными
-  // булавками, а не новая карта, поэтому уцелевшие узлы стартуют оттуда, где
-  // их только что видели, и доводятся коротким прогоном.
-  // 0e: мутация lastPositions вынесена из useMemo в useEffect — рендер чистый.
-  // 3a: на 50+ узлах — в Worker, иначе синхронно.
   const lastPositions = useRef<NodePositions | null>(null);
   const [simulated, setSimulated] = useState<NodePositions>(() => new Map());
-  const [simWorking, setSimWorking] = useState(false);
 
   useEffect(() => {
     if (!data) { setSimulated(new Map()); return; }
@@ -219,7 +605,6 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       setSimulated(next);
       return;
     }
-    setSimWorking(true);
     const seedArr: [string, { x: number; y: number; vx: number; vy: number }][] = (() => {
       const m: [string, { x: number; y: number; vx: number; vy: number }][] = [];
       if (lastPositions.current) for (const [k, v] of lastPositions.current) m.push([k, { x: v.x, y: v.y, vx: v.vx, vy: v.vy }]);
@@ -238,387 +623,136 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       const next: NodePositions = new Map(e.data.positions.map(([k, v]) => [k, { x: v.x, y: v.y, vx: v.vx, vy: v.vy }]));
       lastPositions.current = next;
       setSimulated(next);
-      setSimWorking(false);
       worker.terminate();
     };
-    worker.onerror = () => { setSimWorking(false); worker.terminate(); };
+    worker.onerror = () => { worker.terminate(); };
     worker.postMessage({ nodes, edges, width: wb, height: hb, seed: seedArr.length > 0 ? seedArr : undefined, pinned: pinned.length > 0 ? pinned : undefined });
-    return () => { cancelled = true; setSimWorking(false); worker.terminate(); };
+    return () => { cancelled = true; worker.terminate(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, baseCanvas.width, baseCanvas.height]);
 
-  // Позиции для отрисовки: расставленное руками поверх посчитанного. Держится
-  // отдельно от simulated, чтобы перетаскивание не гоняло раскладку заново.
-  // В изоляции своя радиальная раскладка — ручная карта туда не переносится
-  // (кольца по шагам и есть смысл этого вида) и остаётся нетронутой для
-  // возврата.
+  // Merge simulated + manual
   const positions = useMemo(() => {
-    if (isolationView) return isolationView.positions;
     const merged: NodePositions = new Map(simulated);
     for (const [key, p] of Object.entries(manual)) {
       if (merged.has(key)) merged.set(key, { ...p, vx: 0, vy: 0 });
     }
     return merged;
-  }, [simulated, manual, isolationView]);
+  }, [simulated, manual]);
 
-  // New graph data (e.g. a filter changed) invalidates any pinned focus and
-  // resets the view — the previously-focused node may no longer exist here.
-  useEffect(() => {
-    setFocusedKey(null);
-    setPathFrom(null);
-    setPathTo(null);
-    // Новые данные — другая область или другой запрос: изолированного узла в
-    // них может не быть вовсе, и вид повис бы без панели выхода.
-    if (isolation) console.debug("[RelationGraph] data changed, clearing isolation");
-    setIsolation(null);
-    setView({ zoom: 1, panX: 0, panY: 0 });
+  // ── Pipeline: filter → group → isolate ────────────────────────
+  const pipeline = useMemo(() => {
+    if (!data) return null;
+    const kindEdges = data.edges.filter((e) => activeKinds.has(e.kind));
+    const visibleNodes = data.nodes.filter(
+      (n) => !hiddenTypes.has(n.type),
+    );
+    const visibleKeys = new Set(visibleNodes.map((n) => n.key));
+    const typeEdges = kindEdges.filter((e) => visibleKeys.has(e.from) && visibleKeys.has(e.to));
+    const grouped = foldGroups(visibleNodes, typeEdges, "none", expandedGroups);
+    const isolationView = isolation
+      ? buildIsolation(grouped.nodes, grouped.edges, isolation.key, isolation.depth)
+      : null;
+    return { grouped, isolationView };
+  }, [data, activeKinds, hiddenTypes, expandedGroups, isolation]);
+
+  const isolationView = pipeline?.isolationView ?? null;
+  const grouped = pipeline?.grouped;
+  const visibleNodesList = isolationView ? isolationView.nodes : grouped?.nodes ?? [];
+  const visibleEdgesList = isolationView ? isolationView.edges : grouped?.edges ?? [];
+  const groupedFoldedCount = grouped?.folded.size ?? 0;
+  const showPins = Object.keys(manual).length < visibleNodesList.length;
+
+  // Precomputed lookups
+  const nodesByKey = useMemo(() => data ? new Map(data.nodes.map((n) => [n.key, n])) : new Map<string, GraphNode>(), [data]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- visibleEdgesList is stable within a pipeline computation
+  const pairCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of visibleEdgesList) {
+      const k = e.from < e.to ? `${e.from}|${e.to}` : `${e.to}|${e.from}`;
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return counts;
+  }, [visibleEdgesList]);
+  const edgeKindCounts = useMemo(() => {
+    if (!data) return new Map<EdgeKind, number>();
+    const counts = new Map<EdgeKind, number>();
+    for (const e of data.edges) counts.set(e.kind, (counts.get(e.kind) ?? 0) + 1);
+    return counts;
   }, [data]);
 
-  useEffect(() => {
-    if (!layoutKey) return;
-    try {
-      if (Object.keys(manual).length === 0) localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
-      else localStorage.setItem(LAYOUT_STORE_PREFIX + layoutKey, JSON.stringify(manual));
-    } catch (e) {
-      console.warn("Graph layout not saved:", e);
-    }
-  }, [manual, layoutKey]);
+  // ── Search ────────────────────────────────────────────────────
+  const searchMatches = useMemo(() => {
+    if (!data || !debouncedQuery.trim()) return [];
+    const q = debouncedQuery.trim().toLowerCase();
+    return data.nodes.filter((n) => n.title.toLowerCase().includes(q)).slice(0, 8);
+  }, [data, debouncedQuery]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const visibleKeys = useMemo(() => new Set(visibleNodesList.map((n) => n.key)), [visibleNodesList]);
+  const shownMatches = searchMatches.filter((n) => visibleKeys.has(n.key));
 
-  useEffect(() => {
-    if (!fullscreen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setFullscreen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen]);
+  // Path
+  const path = pathFrom && pathTo ? findPath(visibleEdgesList, pathFrom, pathTo) : null;
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 200);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  // Deps include `data`: the wrap <div> (and wrapRef.current) only exists
-  // once data has loaded — with `data` left out of the deps list, this
-  // effect ran once while still showing "Загрузка…" (no element to attach
-  // to yet) and never got a second chance to attach once the graph
-  // actually rendered, which is why wheel-zoom silently did nothing.
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    function onWheel(e: WheelEvent) {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-      setView((v) => {
-        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom * factor));
-        if (newZoom === v.zoom) return v;
-        const centerX = (canvasSize.width / 2 - v.panX) / v.zoom;
-        const centerY = (canvasSize.height / 2 - v.panY) / v.zoom;
-        const clamped = centeredPan(newZoom, centerX, centerY, canvasSize.width, canvasSize.height);
-        return { zoom: newZoom, panX: clamped.x, panY: clamped.y };
-      });
-    }
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-    // Also re-runs on `fullscreen`: the wrap is a *different* DOM node
-    // inline vs. inside the fullscreen portal, so the ref target changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, fullscreen]);
-
-  function zoomBy(factor: number) {
-    setView((v) => {
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom * factor));
-      if (newZoom === v.zoom) return v;
-      const centerX = (canvasSize.width / 2 - v.panX) / v.zoom;
-      const centerY = (canvasSize.height / 2 - v.panY) / v.zoom;
-      const clamped = centeredPan(newZoom, centerX, centerY, canvasSize.width, canvasSize.height);
-      return { zoom: newZoom, panX: clamped.x, panY: clamped.y };
-    });
-  }
-
-  function resetView() {
-    setView({ zoom: 1, panX: 0, panY: 0 });
-    setFocusedKey(null);
-  }
-
-  // «Сделать текущее каноничным»: всё, что сейчас видно, закрепляется на своих
-  // местах — дальше карта не переезжает ни при смене фильтров, ни при
-  // появлении новых сущностей, двигаются только они.
-  function saveLayout() {
-    const next: ManualLayout = { ...manual };
-    for (const [key, p] of positions) next[key] = { x: p.x, y: p.y };
-    setManual(next);
-  }
-
-  function resetLayout() {
-    if (!layoutKey) return;
-    try {
-      localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
-    } catch {}
-    setManual({});
-    lastPositions.current = null;
-    setView({ zoom: 1, panX: 0, panY: 0 });
-  }
-
+  // ── Handlers ──────────────────────────────────────────────────
+  function focusNode(key: string) { setFocusedKey(key); setQuery(""); }
   function isolate(key: string) {
     setIsolation({ key, depth: 1 });
     setFocusedKey(key);
     setPathFrom(null);
     setPathTo(null);
     setMenu(null);
-    // Центрирование сделает useEffect по isolationView, когда просчёт готов.
+    setNodeScales((prev) => { if (prev.has(key)) return prev; const next = new Map(prev); next.set(key, 2); return next; });
   }
-
-  function leaveIsolation() {
-    setIsolation(null);
-    setView({ zoom: 1, panX: 0, panY: 0 });
+  function leaveIsolation() { setIsolation(null); }
+  function pickPathTo(key: string) { setPathTo(key); setQuery(""); }
+  function saveLayout() {
+    const next: ManualLayout = { ...manual };
+    for (const [key, p] of positions) next[key] = { x: p.x, y: p.y };
+    setManual(next);
   }
+  function resetLayout() {
+    if (!layoutKey) return;
+    try { localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey); } catch {}
+    setManual({});
+    lastPositions.current = null;
+  }
+  function handleNodeClick(n: GraphNode, isFoldedGroup: boolean) {
+    setMenu(null);
+    if (isFoldedGroup) { setExpandedGroups((prev) => new Set(prev).add(n.key)); setFocusedKey(n.key); return; }
+    if (expandedGroups.has(n.key)) { setExpandedGroups((prev) => { const next = new Set(prev); next.delete(n.key); return next; }); return; }
+    if (focusedKey === n.key) setFocusedKey(null); else focusNode(n.key);
+  }
+  function handleBackgroundClick() { setFocusedKey(null); setMenu(null); }
+  function handleNodeContextMenu(e: ReactMouseEvent, node: GraphNode) { setMenu({ x: e.clientX, y: e.clientY, node }); }
 
-  // 3c: изоляция центрируется (как focusNode), а не в левый верхний угол.
+  // Node drag handler via custom events
   useEffect(() => {
-    if (!isolationView) return;
-    const w = isolationView.width;
-    const h = isolationView.height;
-    const centered = centeredPan(1, w / 2, h / 2, w, h);
-    setView({ zoom: 1, panX: centered.x, panY: centered.y });
-  }, [isolationView]);
+    const el = graphWrapRef.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      setManual((prev) => ({ ...prev, [d.key]: { x: d.x, y: d.y } }));
+    };
+    el.addEventListener("graph-node-drag", handler as EventListener);
+    return () => el.removeEventListener("graph-node-drag", handler as EventListener);
+  }, []);
 
-  function handleNodeContextMenu(e: ReactMouseEvent, node: GraphNode) {
-    e.preventDefault();
-    e.stopPropagation();
-    setMenu({ x: e.clientX, y: e.clientY, node });
+  function dispatchCommand(type: string, detail?: Record<string, unknown>) {
+    const el = graphWrapRef.current;
+    if (!el) return;
+    el.dispatchEvent(new CustomEvent("graph-command", { detail: { type, ...detail }, bubbles: true }));
   }
 
-  function pickPathTo(key: string) {
-    setPathTo(key);
-    setQuery("");
-  }
-
-  function focusNode(key: string) {
-    const p = positions.get(key);
-    if (!p) return;
-    const zoom = Math.max(view.zoom, FOCUS_ZOOM);
-    const clamped = centeredPan(zoom, p.x, p.y, canvasSize.width, canvasSize.height);
-    setView({ zoom, panX: clamped.x, panY: clamped.y });
-    setFocusedKey(key);
-    setQuery("");
-  }
-
-  function panBy(dx: number, dy: number) {
-    setView((v) => {
-      const clamped = clampPan(v.zoom, v.panX + dx, v.panY + dy, canvasSize.width, canvasSize.height);
-      return { ...v, panX: clamped.x, panY: clamped.y };
-    });
-  }
-
-  // Стрелки двигают холст, когда он в фокусе, — вместе со средней кнопкой это
-  // способ ходить по карте, не задевая узлы левой кнопкой.
-  function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
-    const step = ARROW_PAN_STEP / view.zoom;
-    if (e.key === "ArrowLeft") panBy(step, 0);
-    else if (e.key === "ArrowRight") panBy(-step, 0);
-    else if (e.key === "ArrowUp") panBy(0, step);
-    else if (e.key === "ArrowDown") panBy(0, -step);
-    else return;
-    e.preventDefault();
-  }
-
-  function startPan(e: ReactPointerEvent<HTMLDivElement>) {
-    e.preventDefault();
-    panState.current = { startX: e.clientX, startY: e.clientY, originX: view.panX, originY: view.panY, moved: false };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    // Холст должен получить фокус, иначе стрелки уйдут в страницу и она
-    // прокрутится вместо графа.
-    wrapRef.current?.focus({ preventScroll: true });
-    // Средняя кнопка панорамирует откуда угодно, в том числе с узла: это
-    // основной способ ходить по карте, когда левая занята перетаскиванием.
-    if (e.button === 1) {
-      startPan(e);
-      return;
-    }
-    if (e.button !== 0) return;
-    const nodeEl = (e.target as HTMLElement).closest(".relation-graph-node");
-    if (nodeEl) {
-      // Тащат узел, а не фон: запоминаем, откуда он поехал, и ловим указатель
-      // на обёртке — она же принимает pointermove и для панорамирования.
-      const key = nodeEl.getAttribute("data-key");
-      const start = key ? positions.get(key) : null;
-      if (!key || !start) return;
-      e.preventDefault();
-      dragState.current = { key, moved: false };
-      dragOrigin.current = { x: start.x, y: start.y, clientX: e.clientX, clientY: e.clientY };
-      e.currentTarget.setPointerCapture(e.pointerId);
-      return;
-    }
-    // Левый драг по фону тоже панорамирует — средняя кнопка есть не на всяком
-    // тачпаде, и лишать карту единственного привычного способа ходить по ней
-    // из-за этого не стоит.
-    //
-    // preventDefault: без него протаскивание по подписям узлов запускает
-    // штатное выделение текста (синяя подсветка), которое срабатывает вопреки
-    // user-select: none на обёртке — эта CSS гасит результат, но не сам жест.
-    startPan(e);
-  }
-
-  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
-    if (dragState.current && dragOrigin.current && wrapRef.current) {
-      const origin = dragOrigin.current;
-      const rect = wrapRef.current.getBoundingClientRect();
-      // Экранные пиксели -> единицы холста (svg вписан по ширине) -> мировые
-      // координаты (внутри <g> всё ещё умножено на зум).
-      const scale = (rect.width / canvasSize.width) * view.zoom;
-      const dx = (e.clientX - origin.clientX) / scale;
-      const dy = (e.clientY - origin.clientY) / scale;
-      // Дрожание руки на клике — не перестановка: пока порог не пройден, узел
-      // не попадает в ручную раскладку и не закрепляется в ней.
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.current.moved = true;
-      if (!dragState.current.moved) return;
-      const key = dragState.current.key;
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        setManual((prev) => ({
-          ...prev,
-          [key]: {
-            x: Math.max(CANVAS_EDGE_PADDING, Math.min(canvasSize.width - CANVAS_EDGE_PADDING, origin.x + dx)),
-            y: Math.max(CANVAS_EDGE_PADDING, Math.min(canvasSize.height - CANVAS_EDGE_PADDING, origin.y + dy)),
-          },
-        }));
-      });
-      return;
-    }
-    if (!panState.current || !wrapRef.current) return;
-    const rect = wrapRef.current.getBoundingClientRect();
-    const scale = rect.width / canvasSize.width;
-    const dx = (e.clientX - panState.current.startX) / scale;
-    const dy = (e.clientY - panState.current.startY) / scale;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) panState.current.moved = true;
-    const clamped = clampPan(
-      view.zoom,
-      panState.current.originX + dx,
-      panState.current.originY + dy,
-      canvasSize.width,
-      canvasSize.height
-    );
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      setView((v) => ({ ...v, panX: clamped.x, panY: clamped.y }));
-    });
-  }
-
-  function handlePointerUp() {
-    if (dragState.current) {
-      // Тот же флаг, что и для панорамирования: он гасит клик-фокус, который
-      // иначе сработал бы в конце перетаскивания.
-      if (dragState.current.moved) justPannedRef.current = true;
-      dragState.current = null;
-      dragOrigin.current = null;
-      return;
-    }
-    if (panState.current?.moved) justPannedRef.current = true;
-    panState.current = null;
-  }
-
-  function handleBackgroundClick() {
-    if (justPannedRef.current) {
-      justPannedRef.current = false;
-      return;
-    }
-    setFocusedKey(null);
-  }
-
-  function handleNodeClick(n: GraphNode, isFoldedGroup = false) {
-    if (justPannedRef.current) {
-      justPannedRef.current = false;
-      return;
-    }
-    // Свёрнутая группа по клику раскрывается — это и есть способ посмотреть,
-    // кто внутри, не разворачивая всю карту.
-    if (isFoldedGroup) {
-      setExpandedGroups((prev) => new Set(prev).add(n.key));
-      setFocusedKey(n.key);
-      return;
-    }
-    if (expandedGroups.has(n.key)) {
-      setExpandedGroups((prev) => {
-        const next = new Set(prev);
-        next.delete(n.key);
-        return next;
-      });
-      return;
-    }
-    if (focusedKey === n.key) setFocusedKey(null);
-    else focusNode(n.key);
-  }
-
-  const searchMatches = useMemo(() => {
-    if (!data || !debouncedQuery.trim()) return [];
-    const q = debouncedQuery.trim().toLowerCase();
-    return data.nodes.filter((n) => n.title.toLowerCase().includes(q)).slice(0, 8);
-  }, [data, debouncedQuery]);
-
-  const [highlightIdx, setHighlightIdx] = useState(-1);
-  useEffect(() => { setHighlightIdx(-1); }, [debouncedQuery]);
-
-  const nodesByKey = useMemo(() => {
-    if (!data) return new Map<string, GraphNode>();
-    return new Map(data.nodes.map((n) => [n.key, n]));
-  }, [data]);
-
-  const visibleNodes = isolationView ? isolationView.nodes : pipeline?.grouped.nodes ?? [];
-  const visibleEdges = isolationView ? isolationView.edges : pipeline?.grouped.edges ?? [];
-  const groupedFoldedCount = pipeline?.grouped.folded.size ?? 0;
-
-  const visibleKeys = useMemo(() => new Set(visibleNodes.map((n) => n.key)), [visibleNodes]);
-
-  const pairCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const e of visibleEdges) {
-      const k = pairKey(e.from, e.to);
-      counts.set(k, (counts.get(k) ?? 0) + 1);
-    }
-    return counts;
-  }, [visibleEdges]);
+  const isolated = data?.isolated ?? [];
 
   if (!data) return <p className="muted">Загрузка…</p>;
-  // pipeline depends on data — if data is non-null, pipeline is too.
   if (!pipeline) return <p className="muted">Загрузка…</p>;
 
-  // Конвейер посчитан выше (см. pipeline): отбор по видам -> свёртка в группы
-  // -> изоляция. В изоляции рисуется только окрестность выбранного узла.
-  const grouped = pipeline.grouped;
-
-  // Путь между двумя выбранными узлами — по тем же видимым связям.
-  const path =
-    pathFrom && pathTo ? findPath(visibleEdges, pathFrom, pathTo) : null;
-  const pathKeys = path ? new Set(path.keys) : null;
-  const pathEdges = path ? new Set(path.edges) : null;
-
-  // Dimming only ever reacts to a pinned focus, never to hover — hover-driven
-  // dimming made the graph flicker as the cursor passed over nodes.
-  const neighborKeys = focusedKey
-    ? new Set(
-        visibleEdges
-          .filter((e) => e.from === focusedKey || e.to === focusedKey)
-          .flatMap((e) => [e.from, e.to])
-      )
-    : null;
-
-  const focusedNode = data.nodes.find((n) => n.key === focusedKey) ?? null;
-  // Искать имеет смысл только среди нарисованного: свёрнутый внутрь группы
-  // узел найдётся, но прыгать будет некуда.
-  // Метка «поставлен руками» имеет смысл, пока такие узлы — исключение. После
-  // «Сохранить раскладку» закреплены все, и метка на каждом узле перестаёт
-  // что-либо различать, оставаясь просто рябью.
-  const showPins = Object.keys(manual).length < visibleNodes.length;
-  const shownMatches = searchMatches.filter((n) => visibleKeys.has(n.key));
-
-  const counterScale = labelScale(view.zoom) / view.zoom;
+  const _graphStats = `${visibleNodesList.length} узлов · ${visibleEdgesList.length} связей${isolated.length > 0 ? ` · ${isolated.length} без связей` : ""}`;
 
   const toolbar = (
     <div className="graph-toolbar">
-      {/* Row 0: search | filters | scope | group */}
       <div className="graph-toolbar-row">
         <div className="row" style={{ position: "relative" }}>
           <input
@@ -629,11 +763,8 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
               if (shownMatches.length === 0) return;
               if (e.key === "ArrowDown") { e.preventDefault(); setHighlightIdx((v) => Math.min(shownMatches.length - 1, v + 1)); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setHighlightIdx((v) => Math.max(0, v - 1)); }
-              else if (e.key === "Enter" && highlightIdx >= 0) {
-                e.preventDefault();
-                const pick = shownMatches[highlightIdx];
-                if (pick) (pathFrom && !pathTo ? pickPathTo(pick.key) : focusNode(pick.key));
-              } else if (e.key === "Escape") setQuery("");
+              else if (e.key === "Enter" && highlightIdx >= 0) { e.preventDefault(); const pick = shownMatches[highlightIdx]; if (pick) { if (pathFrom && !pathTo) pickPathTo(pick.key); else focusNode(pick.key); } }
+              else if (e.key === "Escape") setQuery("");
             }}
           />
           {debouncedQuery.trim() && shownMatches.length === 0 && (
@@ -649,12 +780,9 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                 const match = pos >= 0 ? title.slice(pos, pos + q.length) : "";
                 const after = pos >= 0 ? title.slice(pos + q.length) : "";
                 return (
-                  <div
-                    key={n.key}
-                    className={`entity-search-item${idx === highlightIdx ? " highlighted" : ""}`}
+                  <div key={n.key} className={`entity-search-item${idx === highlightIdx ? " highlighted" : ""}`}
                     onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key))}
-                    onMouseEnter={() => setHighlightIdx(idx)}
-                  >
+                    onMouseEnter={() => setHighlightIdx(idx)}>
                     <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
                     <span>{before}{match && <mark style={{ background: "var(--accent-soft)", padding: 0 }}>{match}</mark>}{after}</span>
                   </div>
@@ -664,248 +792,68 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           )}
         </div>
       </div>
-      {scopeBar && (
+      {scopeBar && (<><span className="graph-toolbar-sep" /><div className="graph-toolbar-row">{scopeBar}</div></>)}
+      {isolated.length > 0 && (
         <>
           <span className="graph-toolbar-sep" />
-          <div className="graph-toolbar-row">{scopeBar}</div>
+          <div className="graph-toolbar-row">
+            <button type="button" className="graph-tb-btn"
+              onClick={() => setIsolatedOpen(true)}
+              title="Сущности без связей в текущем срезе">
+              Без связей ({isolated.length})
+            </button>
+          </div>
         </>
       )}
       <span className="graph-toolbar-sep" />
       <div className="graph-toolbar-row">
-        <button
-          type="button"
-          className={`graph-tb-btn${groupMode === "community" ? " active" : ""}`}
-          onClick={() => setGroupMode(groupMode === "community" ? "none" : "community")}
-          title="Свернуть членов фракций внутрь: персонажи и существа спрячутся под узлом фракции"
-        >
-          Фракции
-        </button>
-        <button
-          type="button"
-          className={`graph-tb-btn${groupMode === "location" ? " active" : ""}`}
-          onClick={() => setGroupMode(groupMode === "location" ? "none" : "location")}
-          title="Свернуть обитателей внутрь локаций: существа спрячутся под узлом места"
-        >
-          Локации
-        </button>
-      </div>
-      {/* Row: виды связей — чекбоксы с N, бары остаются, чипы остаются */}
-      <span className="graph-toolbar-sep" />
-      <div className="graph-toolbar-row" style={{ gap: 4, flexWrap: "wrap" }}>
-        {EDGE_KINDS.map((k) => {
-          const on = activeKinds.has(k.key);
-          const count = data ? data.edges.filter((e) => e.kind === k.key).length : 0;
-          return (
-            <label
-              key={k.key}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                fontFamily: "var(--font-ui)",
-                fontSize: "10px",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                opacity: on ? 1 : 0.45,
-                cursor: "pointer",
-              }}
-              title={`${k.label}: ${count}`}
-            >
-              <input
-                type="checkbox"
-                checked={on}
-                onChange={() =>
-                  setActiveKinds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(k.key)) next.delete(k.key);
-                    else next.add(k.key);
-                    return next;
-                  })
-                }
-                style={{ accentColor: "var(--ink)" }}
-              />
-              {k.label}
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", opacity: 0.7 }}>({count})</span>
-            </label>
-          );
-        })}
-      </div>
-      {/* Мини-ключ штрихов (solid/dashed) */}
-      <span className="graph-toolbar-sep" />
-      <div className="graph-toolbar-row muted" style={{ fontFamily: "var(--font-mono)", fontSize: "9px", gap: 8 }}>
-        <span title="Отношения — сплошная 1px">— сплошная</span>
-        <span title="Вложенность мест — штрих 6 3">- - 6 3</span>
-        <span title="Участие в сценах — штрих 2 3">· · 2 3</span>
-        <span title="Упоминания — штрих 1 4">· · 1 4</span>
-      </div>
-      {/* Row 1: fullscreen | zoom | save | reset */}
-      <span className="graph-toolbar-sep" />
-      <div className="graph-toolbar-row">
-        <button
-          type="button"
-          className="graph-tb-btn"
-          onClick={() => setFullscreen((v) => !v)}
-          title={fullscreen ? "Закрыть (Esc)" : "На весь экран"}
-        >
-          {fullscreen ? "Свернуть" : <><NavIcon name="fullscreen" /> Весь экран</>}
-        </button>
-        <button type="button" className="graph-tb-btn" onClick={() => zoomBy(1 / 1.3)} title="Отдалить">
-          <NavIcon name="minus" />
-        </button>
-        <button type="button" className="graph-tb-btn" onClick={() => zoomBy(1.3)} title="Приблизить">
-          <NavIcon name="plus" />
-        </button>
-        <button
-          type="button"
-          className="graph-tb-btn"
-          onClick={() => {
-            const svg = wrapRef.current?.querySelector("svg");
-            if (!svg) return;
-            const clone = svg.cloneNode(true) as SVGElement;
-            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-            // Фон paper для печати (иначе прозрачный)
-            clone.style.background = "var(--paper, #fff)";
-            const data = new XMLSerializer().serializeToString(clone);
-            const blob = new Blob([data], { type: "image/svg+xml" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `graph-${layoutKey || "global"}.svg`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-          title="Скачать SVG (вектор)"
-        >
-          SVG
-        </button>
-        <button
-          type="button"
-          className="graph-tb-btn"
-          onClick={() => {
-            const svg = wrapRef.current?.querySelector("svg");
-            if (!svg) return;
-            const clone = svg.cloneNode(true) as SVGElement;
-            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-            const data = new XMLSerializer().serializeToString(clone);
-            const blob = new Blob([data], { type: "image/svg+xml" });
-            const url = URL.createObjectURL(blob);
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement("canvas");
-              const vb = svg.viewBox.baseVal;
-              const w = Math.ceil(vb.width || canvasSize.width);
-              const h = Math.ceil(vb.height || canvasSize.height);
-              canvas.width = w * 2;
-              canvas.height = h * 2;
-              const ctx = canvas.getContext("2d");
-              if (!ctx) return;
-              ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--paper") || "#fff";
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              canvas.toBlob((b) => {
-                if (!b) return;
-                const u2 = URL.createObjectURL(b);
-                const a = document.createElement("a");
-                a.href = u2;
-                a.download = `graph-${layoutKey || "global"}.png`;
-                a.click();
-                URL.revokeObjectURL(u2);
-              }, "image/png");
-              URL.revokeObjectURL(url);
-            };
-            img.src = url;
-          }}
-          title="Скачать PNG (растр 2×)"
-        >
-          PNG
-        </button>
-        {!isolationView && (
-          <>
-            <button
-              type="button"
-              className="graph-tb-btn"
-              onClick={saveLayout}
-              title="Закрепить всё, что сейчас на экране"
-            >
-              Сохранить раскладку
-            </button>
-            <button
-              type="button"
-              className="graph-tb-btn"
-              onClick={resetLayout}
-              title="Сбросить ручную раскладку — удалить сохранённые позиции"
-            >
-              Сбросить раскладку
-            </button>
-            {groupedFoldedCount > 0 && (
-              <button
-                type="button"
-                className="graph-tb-btn"
-                onClick={() => setExpandedGroups(new Set())}
-                title="Развернуть все свёрнутые группы"
-              >
-                Развернуть всё ({groupedFoldedCount})
-              </button>
-            )}
-          </>
+        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1 / 1.3 })} title="Отдалить"><NavIcon name="minus" /></button>
+        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1.3 })} title="Приблизить"><NavIcon name="plus" /></button>
+        <button type="button" className="graph-tb-btn" onClick={saveLayout} title="Закрепить всё, что сейчас на экране">Сохранить раскладку</button>
+        <button type="button" className="graph-tb-btn" onClick={resetLayout} title="Сбросить ручную раскладку">Сбросить раскладку</button>
+        {groupedFoldedCount > 0 && (
+          <button type="button" className="graph-tb-btn" onClick={() => setExpandedGroups(new Set())} title="Развернуть все свёрнутые группы">
+            Развернуть всё ({groupedFoldedCount})
+          </button>
         )}
-        <button type="button" className="graph-tb-btn" onClick={resetView}>
-          Сбросить вид ({Math.round(view.zoom * 100)}%)
-        </button>
       </div>
-      {focusedNode && (
+      {focusedKey && (
         <div className="row relation-graph-focus-panel">
-          <span className={`entity-type-chip ${focusedNode.type}`}>
-            {TYPE_LABELS[focusedNode.type] ?? focusedNode.type}
+          <span className={`entity-type-chip ${nodesByKey.get(focusedKey)?.type ?? ""}`}>
+            {TYPE_LABELS[nodesByKey.get(focusedKey)?.type ?? ""] ?? ""}
           </span>
-          <strong>{focusedNode.title}</strong>
-          {TYPE_ROUTES[focusedNode.type] && (
-            <Link to={`${TYPE_ROUTES[focusedNode.type]}/${focusedNode.id}`}>Открыть страницу →</Link>
+          <strong>{nodesByKey.get(focusedKey)?.title ?? "?"}</strong>
+          {TYPE_ROUTES[nodesByKey.get(focusedKey)?.type ?? ""] && (
+            <Link to={`${TYPE_ROUTES[nodesByKey.get(focusedKey)?.type ?? ""]}/${nodesByKey.get(focusedKey)?.id}`}>Открыть страницу →</Link>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setPathFrom(focusedNode.key);
-              setPathTo(null);
-              setQuery("");
-            }}
-            title="Проложить цепочку от этой сущности до другой"
-          >
-            Путь отсюда…
-          </button>
-          <button type="button" onClick={() => setFocusedKey(null)}>
-            Снять фокус
-          </button>
+          {(!isolation || isolation.key !== focusedKey) ? (
+            <button type="button" onClick={() => setIsolation({ key: focusedKey, depth: 1 })} title="Изолировать узел и связи">+ шаг</button>
+          ) : (
+            <>
+              {isolation.depth > 1 && (
+                <button type="button" onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth - 1 })}>− шаг</button>
+              )}
+              <button type="button" disabled={(pipeline?.grouped ? buildIsolation(pipeline.grouped.nodes, pipeline.grouped.edges, focusedKey, isolation.depth) : null)?.nextStepCount === 0}
+                onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth + 1 })}
+                title="Показать связи следующего порядка">+ шаг</button>
+            </>
+          )}
+          <button type="button" onClick={() => { setPathFrom(focusedKey); setPathTo(null); setQuery(""); }} title="Проложить цепочку">Путь отсюда…</button>
+          <button type="button" onClick={() => setFocusedKey(null)}>Снять фокус</button>
         </div>
       )}
       {isolationView && (
         <div className="row relation-graph-focus-panel">
-          <button type="button" onClick={leaveIsolation}>
-            ← Вернуться ко всему графу
-          </button>
+          <button type="button" onClick={leaveIsolation}>← Вернуться ко всему графу</button>
           <strong>{nodesByKey.get(isolation!.key)?.title ?? "?"}</strong>
-          <span className="muted">
-            шагов: {isolation!.depth}, узлов вокруг: {isolationView.nodes.length - 1}
-          </span>
-          <button
-            type="button"
-            disabled={isolationView.nextStepCount === 0}
+          <span className="muted">шагов: {isolation!.depth}, узлов вокруг: {isolationView.nodes.length - 1}</span>
+          <button type="button" disabled={isolationView.nextStepCount === 0}
             onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth + 1 })}
-            title={
-              isolationView.nextStepCount === 0
-                ? "Дальше связей нет — дальше этого круга сущность ни с чем не соединена"
-                : "Показать связи следующего порядка"
-            }
-          >
+            title={isolationView.nextStepCount === 0 ? "Дальше связей нет" : "Показать связи следующего порядка"}>
             Добавить шаг {isolationView.nextStepCount > 0 && `(+${isolationView.nextStepCount})`}
           </button>
           {isolation!.depth > 1 && (
-            <button
-              type="button"
-              onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth - 1 })}
-            >
-              Убрать шаг
-            </button>
+            <button type="button" onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth - 1 })}>Убрать шаг</button>
           )}
         </div>
       )}
@@ -914,633 +862,251 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           <strong>Путь:</strong>
           <span>{nodesByKey.get(pathFrom)?.title ?? "?"}</span>
           {!pathTo && <span className="muted">выберите вторую сущность в поиске слева</span>}
-          {pathTo && !path && (
-            <span className="muted">
-              связи между ними в этом срезе нет — попробуйте включить больше видов связей
-            </span>
-          )}
+          {pathTo && !path && <span className="muted">связи между ними в этом срезе нет</span>}
           {path && (
             <span className="relation-graph-path-chain">
               {path.keys.slice(1).map((key, i) => (
-                <span key={key}>
-                  {" ⟶ "}
-                  {path.edges[i]?.section && (
-                    <span className="muted">[{path.edges[i].section}] </span>
-                  )}
-                  {nodesByKey.get(key)?.title ?? "?"}
-                </span>
+                <span key={key}>{" ⟶ "}{path.edges[i]?.section && <span className="muted">[{path.edges[i].section}] </span>}{nodesByKey.get(key)?.title ?? "?"}</span>
               ))}
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setPathFrom(null);
-              setPathTo(null);
-            }}
-          >
-            Сбросить путь
-          </button>
+          <button type="button" onClick={() => { setPathFrom(null); setPathTo(null); }}>Сбросить путь</button>
         </div>
       )}
     </div>
   );
 
-  const legend = (() => {
-    // Считаем типы по ВСЕМ узлам данных (не только видимым), чтобы легенда
-    // показывала все доступные типы и давала включать/выключать.
-    // Исключены типы, которые не участвуют в графе (player, resource).
-    const typesInData = new Map<string, number>();
-    for (const n of data?.nodes ?? []) {
-      if (!EXCLUDED_GRAPH_TYPES.has(n.type)) typesInData.set(n.type, (typesInData.get(n.type) ?? 0) + 1);
-    }
-    const allTypeKeys = [...typesInData.keys()];
-    const allVisible = hiddenTypes.size === 0;
-    const ORDER: string[] = [
-      "character",
-      "being",
-      "artifact",
-      "location",
-      "community",
-      "compendium_entry",
-      "mastering",
-      "scene",
-      "adventure",
-      "campaign",
-      "setting",
-    ];
-    const orderedLegendTypes = ORDER.filter((t) => typesInData.has(t));
-    for (const t of typesInData.keys()) if (!orderedLegendTypes.includes(t)) orderedLegendTypes.push(t);
-    return (
-      <div className="relation-graph-legend">
-        <button
-          type="button"
-          className="graph-tb-btn"
-          onClick={() =>
-            setHiddenTypes((prev) => {
-              if (prev.size === 0) return new Set(allTypeKeys);
-              return new Set();
-            })
-          }
-        >
-          {allVisible ? "СНЯТЬ ВСЁ" : "ВЫБРАТЬ ВСЁ"}
-        </button>
-        {orderedLegendTypes.map((type) => {
-          const hidden = hiddenTypes.has(type);
-          const needsSep = type === "scene";
-          return (
-            <>
-              {needsSep && <span className="graph-toolbar-sep" style={{ height: 18 }} />}
-              <button
-                key={type}
-                type="button"
-                className="graph-tb-btn"
-                style={{ opacity: hidden ? 0.4 : 1 }}
-                onClick={() =>
-                  setHiddenTypes((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(type)) next.delete(type);
-                    else next.add(type);
-                    return next;
-                  })
-                }
-                title={hidden ? `Показать ${TYPE_LABELS[type] ?? type}` : `Скрыть ${TYPE_LABELS[type] ?? type}`}
-              >
-              {(() => {
-                const shape = TYPE_SHAPES[type] ?? "rect";
-                const fill = TYPE_COLORS[type] ?? "#888";
-                if (shape === "diamond") {
+  const graphBody = data.nodes.length === 0 ? (
+    <EmptyState icon="anarchyStar" title="СХЕМЫ ПОКА НЕТ"
+      hint={emptyMessage ?? "Добавьте связи между существами, фракциями и местами — граф проявится сам."}
+      action={<Link to="/settings" className="primary" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>К сеттингам</Link>}
+    />
+  ) : (
+    <div ref={graphWrapRef} style={{ flex: 1, minHeight: fullscreen ? 0 : height, display: "flex", position: "relative" }}>
+      <GraphCanvas
+        width={baseCanvas.width}
+        height={baseCanvas.height}
+        worldWidth={baseCanvas.width}
+        worldHeight={baseCanvas.height}
+        positions={positions}
+        visibleEdges={visibleEdgesList}
+        visibleNodes={visibleNodesList}
+        groupedFolded={grouped?.folded ?? new Map()}
+        pairCounts={pairCounts}
+        nodesByKey={nodesByKey}
+        focusedKey={focusedKey}
+        pathFrom={pathFrom}
+        pathTo={pathTo}
+        nodeScales={nodeScales}
+        manual={manual}
+        showPins={showPins}
+        isolationView={isolationView}
+        onNodeClick={handleNodeClick}
+        onNodeDoubleClick={isolate}
+        onBackgroundClick={handleBackgroundClick}
+        onNodeContextMenu={handleNodeContextMenu}
+        onNodeDrag={(key, x, y) => setManual((prev) => ({ ...prev, [key]: { x, y } }))}
+      />
+      {/* Stats — top right, below fullscreen button */}
+      <span style={{ position: "absolute", top: 36, right: 8, zIndex: 5, fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted)", pointerEvents: "none" }}>
+        {_graphStats}
+      </span>
+      {/* Canvas overlay controls */}
+      <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 8, zIndex: 5 }}>
+        <div style={{ position: "relative" }}>
+          <button type="button" className={`graph-tb-btn${edgeKindsOpen ? " active" : ""}`}
+            onClick={() => { setEdgeKindsOpen((v) => !v); setEntityTypesOpen(false); }}>
+            Типы связей
+          </button>
+          {edgeKindsOpen && (
+            <div className="graph-float-panel" style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, zIndex: 20, background: "var(--paper)", border: "1px solid var(--line)", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6, minWidth: 220, maxWidth: 260 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>Типы связей</span>
+                <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "1px 5px" }}
+                  onClick={() => setEdgeKindsOpen(false)}>×</button>
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
+                  onClick={() => setActiveKinds(new Set(EDGE_KINDS.map((k) => k.key)))}>Все</button>
+                <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
+                  onClick={() => setActiveKinds(new Set())}>Нет</button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                {EDGE_KINDS.map((k) => {
+                  const on = activeKinds.has(k.key);
+                  const count = edgeKindCounts.get(k.key) ?? 0;
+                  const dash = k.dash;
                   return (
-                    <span
-                      title="◇ ромб — локации"
-                      style={{
-                        display: "inline-block",
-                        width: 8,
-                        height: 8,
-                        background: fill,
-                        flexShrink: 0,
-                        border: "1px solid var(--line)",
-                        transform: "rotate(45deg)",
-                      }}
-                    />
+                    <button key={k.key} type="button"
+                      className={`graph-tb-btn${on ? " active" : ""}`}
+                      style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "10px", padding: "3px 6px", opacity: on ? 1 : 0.45, textAlign: "left" }}
+                      onClick={() => setActiveKinds((prev) => { const next = new Set(prev); if (next.has(k.key)) next.delete(k.key); else next.add(k.key); return next; })}>
+                      <svg width="20" height="2" style={{ flexShrink: 0 }}>
+                        <line x1="0" y1="1" x2="20" y2="1" stroke="var(--ink)" strokeWidth={k.width}
+                          strokeDasharray={dash || "none"} />
+                      </svg>
+                      <span style={{ flex: 1 }}>{k.label}</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "9px", opacity: 0.6 }}>{count}</span>
+                    </button>
                   );
-                }
-                if (shape === "triangle") {
-                  return (
-                    <span
-                      title="▲ треугольник — персонажи/сообщества"
-                      style={{
-                        display: "inline-block",
-                        width: 0,
-                        height: 0,
-                        flexShrink: 0,
-                        borderLeft: "5px solid transparent",
-                        borderRight: "5px solid transparent",
-                        borderBottom: `9px solid ${fill}`,
-                        filter: "drop-shadow(0 0 0 var(--line))",
-                      }}
-                    />
-                  );
-                }
-                if (shape === "triangleInverted") {
-                  return (
-                    <span
-                      title="▼ перевёрнутый треугольник — существа"
-                      style={{
-                        display: "inline-block",
-                        width: 0,
-                        height: 0,
-                        flexShrink: 0,
-                        borderLeft: "5px solid transparent",
-                        borderRight: "5px solid transparent",
-                        borderTop: `9px solid ${fill}`,
-                      }}
-                    />
-                  );
-                }
-                if (shape === "triangleRight") {
-                  return (
-                    <span
-                      title="▶ треугольник вправо — персонажи"
-                      style={{
-                        display: "inline-block",
-                        width: 0,
-                        height: 0,
-                        flexShrink: 0,
-                        borderTop: "5px solid transparent",
-                        borderBottom: "5px solid transparent",
-                        borderLeft: `9px solid ${fill}`,
-                      }}
-                    />
-                  );
-                }
-                if (shape === "star") {
-                  return (
-                    <span
-                      title="★ звёздочка — артефакты"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: 12,
-                        height: 12,
-                        flexShrink: 0,
-                        color: fill,
-                        fontSize: "12px",
-                        lineHeight: 1,
-                        textShadow: "0 0 0 var(--line)",
-                      }}
-                    >
-                      ★
-                    </span>
-                  );
-                }
-                return (
-                  <span
-                    title="■ квадрат — кампании/сеттинги/сцены/предметы"
-                    style={{
-                      display: "inline-block",
-                      width: 8,
-                      height: 8,
-                      background: fill,
-                      flexShrink: 0,
-                      border: "1px solid var(--line)",
-                    }}
-                  />
-                );
-              })()}
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                {TYPE_LABELS[type] ?? type}
-              </span>
-            </button>
-            </>
-          );
-          })}
-      </div>
-    );
-  })();
-
-  const isolated = (data.isolated ?? []).filter((n) => !EXCLUDED_GRAPH_TYPES.has(n.type));
-  const isolatedPanel = isolated.length > 0 && (
-    <details className="card relation-graph-isolated" open>
-      <summary>
-        Без связей в этом срезе: {isolated.length}
-      </summary>
-      <div className="stack" style={{ marginTop: 8 }}>
-        <span className="muted" style={{ fontFamily: "var(--font-body)", fontSize: "12px" }}>
-          Эти сущности есть в выбранной области, но ни с чем не соединены — их не видно на холсте. Добавьте связь на странице сущности.
-        </span>
-        <div className="relation-graph-isolated-list">
-          {isolated.map((n) => {
-            const route = TYPE_ROUTES[n.type];
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ position: "relative" }}>
+          <button type="button" className={`graph-tb-btn${entityTypesOpen ? " active" : ""}`}
+            onClick={() => { setEntityTypesOpen((v) => !v); setEdgeKindsOpen(false); }}>
+            Типы сущностей
+          </button>
+          {entityTypesOpen && (() => {
+            const typesInData = new Map<string, number>();
+            for (const n of data?.nodes ?? []) {
+              if (!hiddenTypes.has(n.type)) typesInData.set(n.type, (typesInData.get(n.type) ?? 0) + 1);
+            }
+            const ORDER = ["character", "being", "artifact", "location", "community", "compendium_entry", "mastering", "scene", "adventure", "campaign", "setting"];
+            const ordered = ORDER.filter((t) => typesInData.has(t));
+            for (const t of typesInData.keys()) if (!ordered.includes(t)) ordered.push(t);
             return (
-              <span key={n.key} className="row" style={{ gap: 4 }}>
-                <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
-                {route ? <Link to={`${route}/${n.id}`}>{n.title}</Link> : n.title}
-              </span>
+            <div className="graph-float-panel" style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, zIndex: 20, background: "var(--paper)", border: "1px solid var(--line)", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6, minWidth: 220, maxWidth: 260 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>Типы сущностей</span>
+                  <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "1px 5px" }}
+                    onClick={() => setEntityTypesOpen(false)}>×</button>
+                </div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
+                    onClick={() => setHiddenTypes(new Set())}>Все</button>
+                  <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
+                    onClick={() => setHiddenTypes(new Set(typesInData.keys()))}>Нет</button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {ordered.map((type) => {
+                    const hidden = hiddenTypes.has(type);
+                    const count = typesInData.get(type) ?? 0;
+                    const shape = TYPE_SHAPES[type] ?? "rect";
+                    const fill = TYPE_COLORS[type] ?? "#888";
+                    return (
+                      <button key={type} type="button"
+                        className={`graph-tb-btn`}
+                        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "10px", padding: "3px 6px", opacity: hidden ? 0.4 : 1, textAlign: "left" }}
+                        onClick={() => setHiddenTypes((prev) => { const next = new Set(prev); if (next.has(type)) next.delete(type); else next.add(type); return next; })}>
+                        {(() => {
+                          if (shape === "diamond") return <span style={{ display: "inline-block", width: 7, height: 7, background: fill, flexShrink: 0, border: "1px solid var(--line)", transform: "rotate(45deg)" }} />;
+                          if (shape === "triangle") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: `7px solid ${fill}` }} />;
+                          if (shape === "triangleInverted") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `7px solid ${fill}` }} />;
+                          if (shape === "triangleRight") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderTop: "4px solid transparent", borderBottom: "4px solid transparent", borderLeft: `7px solid ${fill}` }} />;
+                          if (shape === "star") return <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 10, height: 10, flexShrink: 0, color: fill, fontSize: "10px", lineHeight: 1 }}>★</span>;
+                          return <span style={{ display: "inline-block", width: 7, height: 7, background: fill, flexShrink: 0, border: "1px solid var(--line)" }} />;
+                        })()}
+                        <span style={{ flex: 1 }}>{TYPE_LABELS[type] ?? type}</span>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "9px", opacity: 0.6 }}>{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
-          })}
+          })()}
         </div>
       </div>
-    </details>
+      <button type="button" className="graph-tb-btn"
+        style={{ position: "absolute", top: 8, right: 8, zIndex: 5 }}
+        onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Закрыть (Esc)" : "На весь экран"}>
+        {fullscreen ? "Свернуть" : <><NavIcon name="fullscreen" /> Весь экран</>}
+      </button>
+    </div>
   );
 
-  const graphStats = data ? `${visibleNodes.length} узлов · ${visibleEdges.length} связей${isolated.length > 0 ? ` · ${isolated.length} без связей` : ""}` : "";
-  const graphBody =
-    data.nodes.length === 0 ? (
-      <EmptyState
-        icon="anarchyStar"
-        title="СХЕМЫ ПОКА НЕТ"
-        hint={emptyMessage ?? "Добавьте связи между существами, фракциями и местами — граф проявится сам."}
-        action={
-          <Link to="/settings" className="primary" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>
-            К сеттингам
-          </Link>
-        }
-      />
-    ) : simWorking ? (
-      <div className="card" style={{ padding: "24px", textAlign: "center" }}>
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "12px" }}>Считаю раскладку…</span>
-      </div>
-    ) : (
-      <div
-        ref={wrapRef}
-        className="relation-graph-wrap"
-        style={{
-          height: fullscreen ? undefined : height,
-          flex: fullscreen ? 1 : undefined,
-          backgroundImage: "radial-gradient(var(--line) 0.6px, transparent 0.6px)",
-          backgroundSize: "8px 8px",
-          backgroundPosition: "0 0",
-        }}
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onClick={handleBackgroundClick}
-        // Своё меню на узлах; на фоне штатное тоже ни к чему — оно перекрывает
-        // карту и ничего полезного для графа не предлагает.
-        onContextMenu={(e) => e.preventDefault()}
-        onAuxClick={(e) => e.preventDefault()}
-      >
-        {/* Статистика в правом верхнем углу холста — как на скрине, без плашки «СХЕМА СВЯЗЕЙ» */}
-        <div
-          style={{
-            position: "absolute",
-            top: 6,
-            right: 8,
-            zIndex: 1,
-            fontFamily: "var(--font-mono)",
-            fontSize: "11px",
-            letterSpacing: "0.04em",
-            color: "var(--muted)",
-            background: "color-mix(in srgb, var(--paper-2) 92%, transparent)",
-            padding: "2px 6px",
-            border: "1px solid var(--line)",
-            pointerEvents: "none",
-          }}
-        >
-          {graphStats}
-        </div>
-        <svg viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`} width="100%" height="100%">
-          <g transform={`translate(${view.panX},${view.panY}) scale(${view.zoom})`}>
-            {visibleEdges.map((e, i) => {
-              const a = positions.get(e.from);
-              const b = positions.get(e.to);
-              if (!a || !b) return null;
-              const dim = neighborKeys && !neighborKeys.has(e.from) && !neighborKeys.has(e.to);
-              const tone = e.tone as RelationTone | null;
-              const color = tone ? RELATION_TONE_COLORS[tone] : "var(--line)";
-              const kindStyle = EDGE_KIND_STYLE[e.kind];
-              const fromTitle = nodesByKey.get(e.from)?.title ?? "?";
-              const toTitle = nodesByKey.get(e.to)?.title ?? "?";
-              const relationLabel = e.section || (tone ? RELATION_TONE_LABELS[tone] : null);
-              const tooltip = `${fromTitle} → ${toTitle}${relationLabel ? `: ${relationLabel}` : ""}`;
-
-              // A directional relation shares its pair with a reverse
-              // (A→B and B→A) — offset each to its own side so the two
-              // don't paint as a single indistinguishable line. The
-              // perpendicular is computed from a canonical lo→hi direction
-              // (not e.from→e.to, which flips between the two directions
-              // of the same pair and would cancel the offset back out) —
-              // only the sign flips, based on which side this edge is on.
-              const bidirectional = tone && (pairCounts.get(pairKey(e.from, e.to)) ?? 0) > 1;
-              let ax = a.x, ay = a.y, bx = b.x, by = b.y;
-              if (bidirectional) {
-                const loKey = e.from < e.to ? e.from : e.to;
-                const loPos = positions.get(loKey)!;
-                const hiPos = loKey === e.from ? b : a;
-                const dx = hiPos.x - loPos.x;
-                const dy = hiPos.y - loPos.y;
-                const len = Math.sqrt(dx * dx + dy * dy) || 1;
-                const perpX = -dy / len;
-                const perpY = dx / len;
-                const sign = e.from === loKey ? 1 : -1;
-                ax += perpX * sign * RELATION_ARROW_OFFSET;
-                ay += perpY * sign * RELATION_ARROW_OFFSET;
-                bx += perpX * sign * RELATION_ARROW_OFFSET;
-                by += perpY * sign * RELATION_ARROW_OFFSET;
-              }
-              const angle = (Math.atan2(by - ay, bx - ax) * 180) / Math.PI;
-              // Flip a near-vertical/upside-down label 180° so it never
-              // renders upside down — readability matters more than the
-              // label always pointing the same way as the arrows.
-              const labelAngle = angle > 90 || angle < -90 ? angle + 180 : angle;
-              const onPath = pathEdges?.has(e) ?? false;
-              // В режиме пути всё, что не цепочка, уходит на задний план —
-              // иначе саму цепочку в тысяче линий не разглядеть.
-              const offPath = pathKeys != null && !onPath;
-              // В изоляции подписи показываются у всех связей: туда и заходят
-              // затем, чтобы прочитать, чем именно сущность связана с
-              // окружением, а узлов там немного.
-              const showLabel =
-                (onPath ||
-                  isolationView != null ||
-                  (focusedKey && (e.from === focusedKey || e.to === focusedKey))) &&
-                relationLabel;
-              const midX = (ax + bx) / 2;
-              const midY = (ay + by) / 2;
-
-              return (
-                <g key={i}>
-                  <line
-                    x1={ax}
-                    y1={ay}
-                    x2={bx}
-                    y2={by}
-                    stroke={onPath ? "var(--accent, #c2683f)" : color}
-                    strokeOpacity={offPath ? 0.08 : dim ? 0.12 : onPath ? 1 : tone ? 0.6 : 0.5}
-                    strokeWidth={onPath ? 1.5 : 1}
-                    strokeDasharray={onPath ? undefined : kindStyle?.dash}
-                  >
-                    <title>{tooltip}</title>
-                  </line>
-                  {tone &&
-                    !dim &&
-                    ARROW_POSITIONS.map((t, ai) => (
-                      <polygon
-                        key={ai}
-                        points="-5,-3 4,0 -5,3"
-                        transform={`translate(${ax + (bx - ax) * t},${ay + (by - ay) * t}) rotate(${angle})`}
-                        fill={color}
-                        opacity={dim ? 0.12 : 0.85}
-                      />
-                    ))}
-                  {showLabel && (
-                    <g transform={`translate(${midX},${midY}) rotate(${labelAngle}) scale(${counterScale})`}>
-                      <text
-                        y={-4}
-                        fontSize={EDGE_LABEL_FONT_SIZE}
-                        textAnchor="middle"
-                        fill="var(--ink)"
-                        stroke="var(--paper)"
-                        strokeWidth={3}
-                        paintOrder="stroke"
-                        style={{ fontFamily: "var(--font-ui)", letterSpacing: "0.06em", textTransform: "uppercase" } as React.CSSProperties}
-                      >
-                        {relationLabel}
-                      </text>
-                    </g>
-                  )}
-                </g>
-              );
-            })}
-            {visibleNodes.map((n) => {
-              const p = positions.get(n.key);
-              if (!p) return null;
-              const foldedCount = grouped.folded.get(n.key) ?? 0;
-              const onPath = pathKeys?.has(n.key) ?? false;
-              const offPath = pathKeys != null && !onPath;
-              const dim = neighborKeys && !neighborKeys.has(n.key) && focusedKey !== n.key;
-              const pinned = showPins && manual[n.key] != null;
-              // Свёрнутая группа крупнее ровно настолько, насколько она
-              // «толще»: узел на десять жителей должен выглядеть весомее
-              // одиночки, но не заслонять карту.
-              const radius = (focusedKey === n.key ? 12 : 9) + Math.min(6, foldedCount * 0.4);
-              return (
-                <g
-                  key={n.key}
-                  className="relation-graph-node"
-                  data-key={n.key}
-                  transform={`translate(${p.x},${p.y})`}
-                  style={{ cursor: "grab" }}
-                  opacity={offPath ? 0.15 : dim ? 0.25 : 1}
-                  role="button"
-                  aria-label={`${TYPE_LABELS[n.type] ?? n.type}: ${n.title}`}
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleNodeClick(n, foldedCount > 0);
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    isolate(n.key);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handleNodeClick(n, foldedCount > 0);
-                    }
-                  }}
-                  onContextMenu={(e) => handleNodeContextMenu(e, n)}
-                >
-                  {(() => {
-                    const shape = TYPE_SHAPES[n.type] ?? "rect";
-                    const fill = TYPE_COLORS[n.type] ?? "#888";
-                    // Прямые углы, без радиусов (§1.1). Размер — по foldedCount.
-                    if (shape === "diamond") {
-                      return (
-                        <polygon
-                          points={`0,${-radius} ${radius},0 0,${radius} ${-radius},0`}
-                          fill={fill}
-                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
-                          strokeWidth={onPath ? 1.5 : 1}
-                        />
-                      );
-                    }
-                    if (shape === "triangle") {
-                      return (
-                        <polygon
-                          points={`0,${-radius} ${radius},${radius} ${-radius},${radius}`}
-                          fill={fill}
-                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
-                          strokeWidth={onPath ? 1.5 : 1}
-                        />
-                      );
-                    }
-                    if (shape === "triangleInverted") {
-                      return (
-                        <polygon
-                          points={`0,${radius} ${radius},${-radius} ${-radius},${-radius}`}
-                          fill={fill}
-                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
-                          strokeWidth={onPath ? 1.5 : 1}
-                        />
-                      );
-                    }
-                    if (shape === "triangleRight") {
-                      return (
-                        <polygon
-                          points={`${-radius},${-radius} ${-radius},${radius} ${radius},0`}
-                          fill={fill}
-                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
-                          strokeWidth={onPath ? 1.5 : 1}
-                        />
-                      );
-                    }
-                    if (shape === "star") {
-                      // Пышная 5-лучёвка — толстые лучи, хорошо читается на 9px радиусе.
-                      // rInner 0.62 = более «надутая», чем тонкая 0.45 — не иголки, а пухляши.
-                      const rOuter = radius;
-                      const rInner = radius * 0.62;
-                      const pts: string[] = [];
-                      for (let i = 0; i < 10; i++) {
-                        const r = i % 2 === 0 ? rOuter : rInner;
-                        const angle = (Math.PI * 2 * i) / 10 - Math.PI / 2;
-                        pts.push(`${(Math.cos(angle) * r).toFixed(1)},${(Math.sin(angle) * r).toFixed(1)}`);
-                      }
-                      return (
-                        <polygon
-                          points={pts.join(" ")}
-                          fill={fill}
-                          stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
-                          strokeWidth={onPath ? 1.5 : 1}
-                        />
-                      );
-                    }
-                    return (
-                      <rect
-                        x={-radius}
-                        y={-radius}
-                        width={radius * 2}
-                        height={radius * 2}
-                        fill={fill}
-                        stroke={onPath ? "var(--accent, #c2683f)" : focusedKey === n.key ? "var(--ink)" : "var(--line)"}
-                        strokeWidth={onPath ? 1.5 : 1}
-                      />
-                    );
-                  })()}
-                  {pinned && (
-                    // Квадрат внутри — метка «стоит там, где поставили руками» (не круг, §1.1).
-                    <rect x={-2.5} y={-2.5} width={5} height={5} fill="var(--paper)" opacity={0.9} />
-                  )}
-                  {/* React escapes {n.title} automatically — safe from XSS */}
-                  <text
-                    x={radius + 5}
-                    y={4}
-                    fontSize={11}
-                    fill="var(--ink)"
-                    style={{ fontFamily: "var(--font-body)" }}
-                  >
-                    {n.title}
-                    {foldedCount > 0 && (
-                      <tspan style={{ fontFamily: "var(--font-mono)", fontSize: "10px" }} className="muted">
-                        {" "}
-                        +{foldedCount}
-                      </tspan>
-                    )}
-                  </text>
-                  <title>
-                    {`${TYPE_LABELS[n.type] ?? n.type}: ${n.title}` +
-                      (foldedCount > 0 ? ` — свёрнуто внутрь: ${foldedCount}, нажмите, чтобы раскрыть` : "") +
-                      " — клик фокус, двойной клик — окрестность"}
-                  </title>
-                </g>
-              );
-            })}
-          </g>
-          </svg>
-        </div>
-    );
-
-  // Меню и карточка живут вне обоих вариантов вёрстки (обычной и
-  // полноэкранной) — иначе при переключении они бы пропадали.
   const overlays = (
     <>
       {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
+        <ContextMenu x={menu.x} y={menu.y}
           items={[
             { label: "Изолировать узел и связи", onClick: () => isolate(menu.node.key) },
-            {
-              label: "Карточка сущности",
-              onClick: () => {
-                setPreview({ type: menu.node.type, id: menu.node.id });
-                setMenu(null);
-              },
-            },
-            ...(TYPE_ROUTES[menu.node.type]
-              ? [
-                  {
-                    label: "Перейти к сущности",
-                    onClick: () => navigate(`${TYPE_ROUTES[menu.node.type]}/${menu.node.id}`),
-                  },
-                ]
-              : []),
-            ...(expandedGroups.has(menu.node.key)
-              ? [
-                  {
-                    label: "Свернуть группу",
-                    onClick: () => {
-                      setExpandedGroups((prev) => {
-                        const next = new Set(prev);
-                        next.delete(menu.node.key);
-                        return next;
-                      });
-                      setMenu(null);
-                    },
-                  },
-                ]
-              : []),
+            { label: "Изменить размер", onClick: () => { setResizeTarget(menu.node); setMenu(null); } },
+            { label: "Карточка сущности", onClick: () => { setPreview({ type: menu.node.type, id: menu.node.id }); setMenu(null); } },
+            ...(TYPE_ROUTES[menu.node.type] ? [{ label: "Перейти к сущности", onClick: () => { navigate(`${TYPE_ROUTES[menu.node.type]}/${menu.node.id}`); setMenu(null); } }] : []),
+            ...(expandedGroups.has(menu.node.key) ? [{ label: "Свернуть группу", onClick: () => { setExpandedGroups((prev) => { const next = new Set(prev); next.delete(menu.node.key); return next; }); setMenu(null); } }] : []),
           ]}
           onClose={() => setMenu(null)}
         />
       )}
-      {preview && (
-        <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />
+      {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
+      {resizeTarget && (
+        <Modal onClose={() => setResizeTarget(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16, minWidth: 280 }}>
+            <div style={{ fontFamily: "var(--font-ui)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>Размер узла</div>
+            <div style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600 }}>{resizeTarget.title}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36, textAlign: "right" }}>50%</span>
+              <input type="range" min={50} max={200} step={5}
+                value={Math.round((nodeScales.get(resizeTarget.key) ?? 1) * 100)}
+                onChange={(e) => { const val = Number(e.target.value) / 100; setNodeScales((prev) => { const next = new Map(prev); if (val === 1) next.delete(resizeTarget.key); else next.set(resizeTarget.key, val); return next; }); }}
+                style={{ flex: 1, accentColor: "var(--accent, #c2683f)" }} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36 }}>200%</span>
+            </div>
+            <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px" }}>{Math.round((nodeScales.get(resizeTarget.key) ?? 1) * 100)}%</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+              {(nodeScales.get(resizeTarget.key) ?? 1) !== 1 && (
+                <button type="button" className="graph-tb-btn" onClick={() => setNodeScales((prev) => { const next = new Map(prev); next.delete(resizeTarget.key); return next; })}>Сбросить</button>
+              )}
+              <button type="button" className="graph-tb-btn" onClick={() => setResizeTarget(null)} style={{ background: "var(--paper)", color: "var(--ink)" }}>Готово</button>
+            </div>
+          </div>
+        </Modal>
       )}
+      {isolatedOpen && isolated.length > 0 && (
+        <Modal onClose={() => setIsolatedOpen(false)}>
+          <div style={{ padding: 16, minWidth: 320, maxWidth: 480, maxHeight: "60vh", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontFamily: "var(--font-ui)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>
+              Без связей в этом срезе: {isolated.length}
+            </div>
+            <span className="muted" style={{ fontFamily: "var(--font-body)", fontSize: "12px" }}>
+              Эти сущности есть в выбранной области, но ни с чем не соединены — их не видно на холсте.
+            </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, overflowY: "auto", flex: 1 }}>
+              {isolated.map((n) => {
+                const route = TYPE_ROUTES[n.type];
+                return (
+                  <span key={n.key} className="row" style={{ gap: 4 }}>
+                    <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
+                    {route ? <Link to={`${route}/${n.id}`} onClick={() => setIsolatedOpen(false)}>{n.title}</Link> : n.title}
+                  </span>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+              <button type="button" className="graph-tb-btn" onClick={() => setIsolatedOpen(false)} style={{ background: "var(--paper)", color: "var(--ink)" }}>Закрыть</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </>
   );
 
   if (fullscreen) {
     return createPortal(
       <div className="relation-graph-fullscreen">
-        <div
-          className="relation-graph-fullscreen-bar"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            padding: "8px 12px",
-            background: "var(--surface)",
-            color: "var(--on-surface)",
-            borderBottom: "1px solid var(--line)",
-          }}
-        >
+        <div className="relation-graph-fullscreen-bar" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 12px", background: "var(--surface)", color: "var(--on-surface)", borderBottom: "1px solid var(--line)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             <span style={{ fontFamily: "var(--font-ui)", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>Граф связей — весь экран</span>
-            <button type="button" className="graph-tb-btn" onClick={() => setFullscreen(false)} style={{ background: "var(--paper)", color: "var(--ink)" }}>
-              × Закрыть (Esc)
-            </button>
+            <button type="button" className="graph-tb-btn" onClick={() => setFullscreen(false)} style={{ background: "var(--paper)", color: "var(--ink)" }}>× Закрыть (Esc)</button>
           </div>
           {toolbar}
-          {legend}
         </div>
         {graphBody}
         {overlays}
       </div>,
-      document.body
+      document.body,
     );
   }
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
       {toolbar}
-      {legend}
       {graphBody}
-      {isolatedPanel}
       {overlays}
     </div>
   );

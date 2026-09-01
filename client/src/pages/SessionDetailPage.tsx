@@ -14,6 +14,7 @@ import { LazyDetails } from "../components/LazyDetails";
 import { MentionText } from "../components/mentions/MentionText";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { elapsedDays, formatInworldDate, formatInworldRange } from "../inworldCalendar";
 import { loadHideFinance } from "../financePrivacy";
 import type {
@@ -89,6 +90,7 @@ export function SessionDetailPage() {
   // Открывают одно приключение — то, по которому сегодня играют.
   const [openSecretGroups, setOpenSecretGroups] = useState<string[]>([]);
   const calendar = useSettingCalendar(campaign?.setting_id);
+  const { toast: undoToast, deleteWithUndo } = useUndoDelete();
 
   const refresh = useCallback(() => {
     let cancelled = false;
@@ -374,8 +376,12 @@ export function SessionDetailPage() {
 
   async function archiveSession() {
     if (!session) return;
-    if (!confirm("Отправить сессию в архив?")) return;
-    await api.del(`/sessions/${sessionId}`);
+    const date = session.date || "Без даты";
+    await deleteWithUndo({
+      entityName: `Сессия ${date}`,
+      deleteFn: () => api.del(`/sessions/${sessionId}`),
+      restoreFn: () => api.del(`/sessions/${sessionId}`),
+    });
     navigate(`/campaigns/${session.campaign_id}`);
   }
 
@@ -1235,6 +1241,15 @@ export function SessionDetailPage() {
           onChange={refresh}
           settingId={campaign?.setting_id ?? null}
         />
+      )}
+      {undoToast && (
+        <div className="archive-toast" role="status" aria-live="polite">
+          <span className="archive-toast__msg">{undoToast.msg}</span>
+          <div className="archive-toast__actions">
+            <button className="archive-toast__undo" onClick={() => { const cb = undoToast.onUndo; cb(); }}>Отменить</button>
+            <button className="archive-toast__close" onClick={() => {}} aria-label="Закрыть">×</button>
+          </div>
+        </div>
       )}
     </div>
   );

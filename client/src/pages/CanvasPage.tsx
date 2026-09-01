@@ -24,6 +24,7 @@ import { api } from "../api/client";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { AdventureWizard } from "../components/AdventureWizard";
 import { SCENE_KINDS, SCENE_KIND_LABELS, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
@@ -36,6 +37,7 @@ import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { useSoundEngineOptional } from "../sound/engine";
+import { useAlert } from "../hooks/useConfirm";
 import "../canvas.css";
 import {
   NODE_COLORS,
@@ -1916,9 +1918,14 @@ function GroupAdd({
   const [form, setForm] = useState<null | "arc" | "board">(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const label = ownerType === "campaign" ? "Приключение кампании" : "Приключение";
 
   function open(kind: "arc" | "board") {
+    if (kind === "arc" && settingId != null) {
+      setWizardOpen(true);
+      return;
+    }
     setForm(kind);
     setName("");
   }
@@ -1929,31 +1936,28 @@ function GroupAdd({
     if (!value || busy) return;
     setBusy(true);
     try {
-      if (form === "board") {
-        const created = await api.post<{ scope_id: number }>("/canvas/free-boards", {
-          name: value,
-          owner_type: ownerType,
-          owner_id: ownerId,
-        });
-        setForm(null);
-        onCreatedBoard(created.scope_id);
-      } else {
-        // Приключение кампании живёт ТОЛЬКО в ней и в заготовку сеттинга не
-        // попадает (решение D0 §16). На экране выбора его поэтому не видно
-        // вовсе — списки там про сеттинг, — и оставлять Мастера смотреть на
-        // неизменившийся экран нельзя: уводим на карту, где узел уже стоит.
-        await api.post("/story/arcs", {
-          setting_id: settingId,
-          name: value,
-          kind: "adventure",
-          ...(ownerType === "campaign" ? { campaign_id: ownerId } : {}),
-        });
-        setForm(null);
-        onCreatedArc();
-      }
+      const created = await api.post<{ scope_id: number }>("/canvas/free-boards", {
+        name: value,
+        owner_type: ownerType,
+        owner_id: ownerId,
+      });
+      setForm(null);
+      onCreatedBoard(created.scope_id);
     } finally {
       setBusy(false);
     }
+  }
+
+  if (wizardOpen && settingId != null) {
+    return (
+      <AdventureWizard
+        settingId={settingId}
+        campaignId={ownerType === "campaign" ? ownerId : undefined}
+        onClose={() => setWizardOpen(false)}
+        onCreated={() => { setWizardOpen(false); onCreatedArc(); }}
+        onCreatedAndOpenCanvas={(arc) => { setWizardOpen(false); onCreatedArc(); navigate(`/canvas?setting=${settingId}&arc=${arc.id}`); }}
+      />
+    );
   }
 
   if (form) {
@@ -1962,8 +1966,8 @@ function GroupAdd({
         <input
           autoFocus
           autoComplete="off"
-          aria-label={form === "board" ? "Название новой доски" : "Название нового приключения"}
-          placeholder={form === "board" ? "Название доски" : "Название приключения"}
+          aria-label="Название новой доски"
+          placeholder="Название доски"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Escape") setForm(null); }}
@@ -2012,6 +2016,7 @@ export function CanvasPage() {
   const [settings, setSettings] = useState<Setting[]>([]);
   const [arcs, setArcs] = useState<StoryArc[]>([]);
   const [board, setBoard] = useState<CanvasBoard | null>(null);
+  const [alertDialog, showAlert] = useAlert();
 
   // Календарь нужен ради дат на нодах событий: месяцы и эра живут в
   // сеттинге, и без них «1492-06-15» осталось бы машинной строкой.
@@ -2100,7 +2105,7 @@ export function CanvasPage() {
   const [newBoardName, setNewBoardName] = useState<string | null>(null);
   // Имя нового приключения со схемы сеттинга — тоже строкой на месте, а не в
   // prompt(): та же причина, что у имени доски (блок D3).
-  const [newArcName, setNewArcName] = useState<string | null>(null);
+  const [newArcWizardOpen, setNewArcWizardOpen] = useState(false);
   const [creatingBoard, setCreatingBoard] = useState(false);
   // Стартовые наборы пустой доски (блок G5). Список приходит с сервера — там
   // же, где содержимое набора; какой набор сейчас ставится, помним отдельно,
@@ -3584,7 +3589,7 @@ export function CanvasPage() {
               role: rol,
             });
           } catch (e) {
-            alert(`Не удалось связать маршруты: ${e instanceof Error ? e.message : String(e)}`);
+            showAlert(`Не удалось связать маршруты: ${e instanceof Error ? e.message : String(e)}`);
             return;
           }
           loadBoard();
@@ -3636,7 +3641,7 @@ export function CanvasPage() {
           console.log("[reroute] " + (isIn ? "PUT ok" : "POST output ok"), { routeId, peerKey, kind, role });
         } catch (e) {
           console.error("[reroute] " + (isIn ? "PUT failed" : "POST output failed"), { routeId, peerKey, kind, role, error: e });
-          alert(`Не удалось подвести маршрут: ${e instanceof Error ? e.message : String(e)}`);
+          showAlert(`Не удалось подвести маршрут: ${e instanceof Error ? e.message : String(e)}`);
           return;
         }
         loadBoard();
@@ -4254,7 +4259,7 @@ export function CanvasPage() {
               }
               loadBoard();
             } else {
-              alert("Слишком много пинов (" + targetPins.length + ") — напишите Тофу, что такой функционал и правда нужен.");
+              showAlert("Слишком много пинов (" + targetPins.length + ") — напишите Тофу, что такой функционал и правда нужен.");
             }
           },
         });
@@ -4352,7 +4357,7 @@ export function CanvasPage() {
               }
               loadBoard();
             } else {
-              alert("Слишком много пинов (" + targetPins.length + ") — напишите Тофу, что такой функционал и правда нужен.");
+              showAlert("Слишком много пинов (" + targetPins.length + ") — напишите Тофу, что такой функционал и правда нужен.");
             }
           },
         });
@@ -5414,44 +5419,22 @@ export function CanvasPage() {
                 кампании и в заготовку сеттинга не попадает (решение D0 §16). */}
             {campaignMapId > 0 && <AddSettingArcButton campaignId={campaignMapId} onAdded={loadBoard} />}
             {(settingMapId > 0 || campaignMapId > 0) && (
-              newArcName === null ? (
-                <button className="primary" onClick={() => setNewArcName("")}>
-                  {campaignMapId ? "+ Приключение кампании" : "+ Приключение"}
-                </button>
-              ) : (
-                <form
-                  className="row"
-                  style={{ gap: 6 }}
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const name = newArcName.trim();
-                    if (!name) return;
-                    if (campaignMapId) {
-                      await api.post("/story/arcs", {
-                        setting_id: board?.campaign_map?.setting_id ?? settingId,
-                        campaign_id: campaignMapId,
-                        name,
-                        kind: "adventure",
-                      });
-                    } else {
-                      await api.post("/story/arcs", { setting_id: settingMapId, name, kind: "adventure" });
-                    }
-                    setNewArcName(null);
-                    loadBoard();
-                  }}
-                >
-                  <input
-                    autoFocus
-                    aria-label="Название нового приключения"
-                    placeholder="Название приключения"
-                    value={newArcName}
-                    onChange={(e) => setNewArcName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Escape") setNewArcName(null); }}
-                  />
-                  <button type="submit" className="primary" disabled={!newArcName.trim()}>Создать</button>
-                  <button type="button" onClick={() => setNewArcName(null)}>Отмена</button>
-                </form>
-              )
+              <button className="primary" onClick={() => setNewArcWizardOpen(true)}>
+                {campaignMapId ? "+ Приключение кампании" : "+ Приключение"}
+              </button>
+            )}
+            {newArcWizardOpen && (settingMapId > 0 || campaignMapId > 0) && (
+              <AdventureWizard
+                settingId={campaignMapId ? (board?.campaign_map?.setting_id ?? settingId) : settingMapId}
+                campaignId={campaignMapId || undefined}
+                onClose={() => setNewArcWizardOpen(false)}
+                onCreated={() => { setNewArcWizardOpen(false); loadBoard(); }}
+                onCreatedAndOpenCanvas={(arc) => {
+                  setNewArcWizardOpen(false);
+                  loadBoard();
+                  navigate(`/canvas?setting=${campaignMapId ? (board?.campaign_map?.setting_id ?? settingId) : settingMapId}&arc=${arc.id}`);
+                }}
+              />
             )}
             <div style={{ position: "relative" }}>
               <button onClick={() => setNodeMenuOpen((v) => !v)}>Узлы ▾</button>
@@ -5692,6 +5675,7 @@ export function CanvasPage() {
         />
       )}
       {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
+      {alertDialog}
     </div>
   );
 }

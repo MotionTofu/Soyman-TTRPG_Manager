@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { graphCache } from "./links";
 
 export const entityRelationsRouter = Router();
 
@@ -214,6 +215,7 @@ entityRelationsRouter.post("/batch", (req, res) => {
     }
   }
   res.status(201).json({ created, skipped });
+  graphCache.clear();
 });
 
 entityRelationsRouter.put("/:id", (req, res) => {
@@ -228,9 +230,11 @@ entityRelationsRouter.put("/:id", (req, res) => {
      WHERE id = ?`
   ).run(tone ?? null, label ?? null, description ?? null, req.params.id);
   res.json(db.prepare("SELECT * FROM entity_relations WHERE id = ?").get(req.params.id));
+  graphCache.clear();
 });
 
 entityRelationsRouter.delete("/:id", (req, res) => {
   db.prepare("DELETE FROM entity_relations WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+  graphCache.clear();
 });

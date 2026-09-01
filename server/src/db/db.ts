@@ -1630,6 +1630,14 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "artifacts", "description")) {
     database.exec("ALTER TABLE artifacts ADD COLUMN description TEXT DEFAULT ''");
   }
+  // Секрет предмета — тайна мастера, скрытая от игроков (аналог setting_beings.secret).
+  if (!columnExists(database, "artifacts", "secret")) {
+    database.exec("ALTER TABLE artifacts ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
+  }
+  // Теги предметов — свободная классификация (аналог setting_beings.tags).
+  if (!columnExists(database, "artifacts", "tags")) {
+    database.exec("ALTER TABLE artifacts ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
+  }
 
   // Событие сеттинга дорастает до самостоятельной сущности со своим профилем:
   // краткое описание остаётся в description (оно показывается в хронике),
@@ -2880,6 +2888,48 @@ export function openDatabase(dbDir: string): Database.Database {
       player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
       PRIMARY KEY (group_id, player_id)
     )`);
+  }
+
+  if (!tableExists(database, "setting_calendar_timelines")) {
+    database.exec(`CREATE TABLE setting_calendar_timelines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+  if (!columnExists(database, "setting_calendar_eras", "timeline_id")) {
+    database.exec("ALTER TABLE setting_calendar_eras ADD COLUMN timeline_id INTEGER REFERENCES setting_calendar_timelines(id) ON DELETE SET NULL");
+  }
+
+  if (!columnExists(database, "important_dates", "description")) {
+    database.exec("ALTER TABLE important_dates ADD COLUMN description TEXT DEFAULT ''");
+  }
+  if (!columnExists(database, "important_dates", "date_type")) {
+    database.exec("ALTER TABLE important_dates ADD COLUMN date_type TEXT DEFAULT ''");
+  }
+  if (!columnExists(database, "important_dates", "color")) {
+    database.exec("ALTER TABLE important_dates ADD COLUMN color TEXT DEFAULT ''");
+  }
+  if (!columnExists(database, "important_dates", "custom_rule")) {
+    database.exec("ALTER TABLE important_dates ADD COLUMN custom_rule TEXT DEFAULT ''");
+  }
+
+  // Which setting entities are explicitly included in a campaign's "Для
+  // игроков" panel.  Without a row here the entity is invisible to all
+  // players regardless of player_visibility_grants.
+  if (!tableExists(database, "campaign_setting_entities")) {
+    database.exec(`CREATE TABLE campaign_setting_entities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      entity_type TEXT NOT NULL CHECK (entity_type IN ('setting_location','setting_being','setting_community','setting_calendar_event')),
+      entity_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(campaign_id, entity_type, entity_id)
+    )`);
+    database.exec(`CREATE INDEX idx_cse_campaign ON campaign_setting_entities(campaign_id)`);
+    database.exec(`CREATE INDEX idx_cse_entity ON campaign_setting_entities(entity_type, entity_id)`);
   }
 
   compactIfBloated(database);

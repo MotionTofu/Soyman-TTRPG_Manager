@@ -71,6 +71,7 @@ export const GENRE_CATEGORIES: GenreCategory[] = [
       "Альтернативная история",
       "Меха",
       "Кайдзю",
+      "Супергерои",
     ],
   },
   {

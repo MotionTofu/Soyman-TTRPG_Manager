@@ -5,7 +5,15 @@ import { db } from "../db/db";
 import { worldExplorationEntryFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 
 export const worldExplorationEntriesRouter = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 function withAvatarUrl<T extends { avatar_image_path?: string | null }>(row: T) {
   return { ...row, avatar_image_url: row.avatar_image_path ? toFileUrl(row.avatar_image_path) : null };

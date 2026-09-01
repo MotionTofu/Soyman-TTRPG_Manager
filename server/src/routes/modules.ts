@@ -163,22 +163,27 @@ modulesRouter.get("/", (_req, res) => {
 });
 
 modulesRouter.post("/import", (req, res) => {
-  const { type, data } = req.body as { type: "system" | "setting"; data: unknown };
-  if (type !== "system" && type !== "setting") {
-    return res.status(400).json({ error: "type must be 'system' or 'setting'" });
-  }
-  const name =
-    type === "system"
-      ? (data as SystemExportData)?.system?.name
-      : (data as SettingExportData)?.setting?.name;
-  if (!name) return res.status(400).json({ error: "invalid export file" });
+  try {
+    const { type, data } = req.body as { type: "system" | "setting"; data: unknown };
+    if (type !== "system" && type !== "setting") {
+      return res.status(400).json({ error: "type must be 'system' or 'setting'" });
+    }
+    const name =
+      type === "system"
+        ? (data as SystemExportData)?.system?.name
+        : (data as SettingExportData)?.setting?.name;
+    if (!name) return res.status(400).json({ error: "invalid export file" });
 
-  const info = db
-    .prepare(
-      "INSERT INTO modules (type, name, source, source_json, enabled, system_id, setting_id) VALUES (?, ?, 'imported', ?, 0, NULL, NULL)"
-    )
-    .run(type, name, JSON.stringify(data));
-  res.status(201).json(db.prepare("SELECT id, type, name, source, enabled, system_id, setting_id, created_at FROM modules WHERE id = ?").get(info.lastInsertRowid));
+    const info = db
+      .prepare(
+        "INSERT INTO modules (type, name, source, source_json, enabled, system_id, setting_id) VALUES (?, ?, 'imported', ?, 0, NULL, NULL)"
+      )
+      .run(type, name, JSON.stringify(data));
+    res.status(201).json(db.prepare("SELECT id, type, name, source, enabled, system_id, setting_id, created_at FROM modules WHERE id = ?").get(info.lastInsertRowid));
+  } catch (e) {
+    console.error("Module import error:", e);
+    res.status(500).json({ error: e instanceof Error ? e.message : "Import failed" });
+  }
 });
 
 modulesRouter.put("/:id/enable", async (req, res) => {

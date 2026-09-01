@@ -121,6 +121,8 @@ export const TYPE_ROUTES: Record<string, string> = {
   being: "/beings",
   community: "/communities",
   artifact: "/artifacts",
+  resource: "/resources",
+  mastering: "/mastering",
   scene: "/scenes",
   adventure: "/adventures",
   compendium_entry: "/compendium",
@@ -608,6 +610,7 @@ export function simulateGraph(
       p.y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, p.y));
     }
     alpha *= decay;
+    if (alpha < ALPHA_MIN) break;
   }
 
   const isPinned = nodes.map((n) => pinned?.has(n.key) ?? false);

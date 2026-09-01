@@ -164,9 +164,6 @@ export function SystemDetailPage() {
         </h1>
         <div className="entity-header-actions">
           {/* Название правится в карточке «Описание системы» на обзоре. */}
-          <button onClick={() => navigate(`/import-system?system=${systemId}`)}>
-            Импорт книги правил
-          </button>
           {/* Соседство с импортом не случайно: чаще всего порядок наводят
               сразу после того, как книга разложилась по разделам. */}
           <button onClick={() => setTidying(true)}>Привести справочник в порядок</button>

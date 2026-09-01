@@ -188,15 +188,28 @@ export interface SettingCalendar {
   era: string;
 }
 
-export type DateRecurrence = "once" | "annual" | "monthly";
+export type DateRecurrence = "once" | "annual" | "monthly" | "weekly" | "custom";
+
+export interface CustomRule {
+  kind: "every" | "ordinal";
+  every_n?: number;
+  every_unit?: string;
+  ordinal?: number;
+  ordinal_unit?: string;
+  in_unit?: string;
+}
 
 export interface ImportantDate {
   id: number;
-  owner_type: "being" | "community";
+  owner_type: "being" | "community" | "location" | "setting";
   owner_id: number;
   owner_name?: string;
   title: string;
+  description: string;
+  date_type: string;
+  color: string;
   recurrence: DateRecurrence;
+  custom_rule: string;
   year: number | null;
   month: number | null;
   day: number;
@@ -1481,12 +1494,17 @@ export interface Artifact {
   power: string;
   history: string;
   notes: string;
+  /** Секрет предмета — тайна мастера, скрытая от игроков. */
+  secret: string;
   /** Род предмета: magic_item | equipment. От него зависит список типов. */
   item_class: string | null;
   item_type: string | null;
+  /** Теги — свободная классификация. */
+  tags: string[];
   /** Редкость и настройка есть только у магических предметов. */
   rarity: string | null;
   requires_attunement: boolean | number;
+  avatar_image_url: string | null;
   file_path: string | null;
   folder_path: string | null;
   created_at: string;
@@ -1494,6 +1512,32 @@ export interface Artifact {
   chapters: ArtifactChapter[];
   /** Записи компендиумов систем, описывающие этот же предмет. */
   compendium_links?: CompendiumLink[];
+  /** Важные даты — отмечаются на календаре сеттинга. */
+  important_dates: ImportantDate[];
+  /** Локация, где находится предмет (подставляется сервером через withRefs). */
+  location?: { id: number; name: string } | null;
+  /** Владелец-сущность (подставляется сервером через withRefs). */
+  owner_entity?: { type: string; id: number; name: string } | null;
+}
+
+/** Данные карточки предмета — быстрый взгляд (аналог CreatureCardPayload). */
+export interface ArtifactCardPayload {
+  id: number;
+  name: string;
+  short_name: string | null;
+  description: string;
+  owner: string;
+  power: string;
+  history: string;
+  notes: string;
+  secret: string;
+  item_class: string | null;
+  item_type: string | null;
+  rarity: string | null;
+  requires_attunement: boolean;
+  avatar_image_url: string | null;
+  location?: { id: number; name: string } | null;
+  owner_entity?: { type: string; id: number; name: string } | null;
 }
 
 export interface ArtifactChapter {
@@ -1624,6 +1668,15 @@ export interface SettingCalendarEra {
   setting_id: number;
   name: string;
   start_year: number;
+  timeline_id: number | null;
+  created_at: string;
+}
+
+export interface SettingCalendarTimeline {
+  id: number;
+  setting_id: number;
+  name: string;
+  position: number;
   created_at: string;
 }
 

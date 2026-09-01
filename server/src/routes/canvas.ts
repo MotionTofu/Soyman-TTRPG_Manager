@@ -17,7 +17,15 @@ import path from "path";
 import { ensureSubfolder, toFileUrl, VAULT_ROOT, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 
 export const canvasRouter = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const ALLOWED_CANVAS_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_CANVAS_MIMES.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 // «Полотно» — узловой редактор. Первый вид холста: одно приключение, его
 // сцены нодами и переходы между ними рёбрами.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "../components/EmptyState";
@@ -129,8 +129,9 @@ export function ModulesTab() {
       if (!type) throw new Error("Файл не похож на экспорт системы или сеттинга.");
       await api.post("/modules/import", { type, data });
       refresh();
-    } catch (e) {
-      setError(String(e));
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || String(e);
+      setError(`Ошибка импорта: ${msg}`);
     } finally {
       setImporting(false);
     }
@@ -174,6 +175,7 @@ export function ModulesTab() {
 
   const systemModules = modules.filter((m) => m.type === "system");
   const settingModules = modules.filter((m) => m.type === "setting");
+  const navigate = useNavigate();
 
   function renderRow(mod: Module) {
     const link = mod.system_id ? `/systems/${mod.system_id}` : mod.setting_id ? `/settings/${mod.setting_id}` : null;
@@ -291,6 +293,24 @@ export function ModulesTab() {
           <div className="stack">
             {settingModules.map(renderRow)}
             {settingModules.length === 0 && <EmptyState icon="barcode" title="Сеттингов пока нет" hint="Добавьте модуль из файла или установите из каталога." />}
+          </div>
+        </div>
+      </details>
+
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Импортёры</span>
+          <span className="badge tag" style={{ marginLeft: 8, fontSize: 10 }}>техническое</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12 }}>
+          <div className="stack" style={{ gap: 8 }}>
+            <p className="muted" style={{ margin: 0 }}>
+              Постраничный импорт книг: разбивает PDF на записи компендиума. Для одиночных файлов используйте «+ Добавить модуль из файла» выше.
+            </p>
+            <div className="row" style={{ gap: 8 }}>
+              <button onClick={() => navigate("/import")}>Импорт книги приключений</button>
+              <button onClick={() => navigate("/import-system")}>Импорт книги правил</button>
+            </div>
           </div>
         </div>
       </details>

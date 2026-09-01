@@ -9,6 +9,12 @@ import type { Campaign, Setting } from "../types";
 
 const DEPTH_OPTIONS = [1, 2, 3];
 
+// Типы, отключённые по умолчанию — не несут полезной структуры для графа связей,
+// но засоряют его (сцены, приключения, кампании — операционные сущности, а не то,
+// что ищет пользователь при просмотре связей).
+const DEFAULT_DISABLED_TYPES = new Set(["scene", "adventure", "campaign"]);
+const DEFAULT_ACTIVE_TYPES = new Set(Object.keys(TYPE_LABELS).filter((t) => !DEFAULT_DISABLED_TYPES.has(t)));
+
 export function GraphPage() {
   const [data, setData] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -17,9 +23,7 @@ export function GraphPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const focus = searchParams.get("focus");
   const depth = Number(searchParams.get("depth")) || 2;
-  const [activeTypes] = useState<Set<string>>(
-    () => new Set(Object.keys(TYPE_LABELS))
-  );
+  const activeTypes = DEFAULT_ACTIVE_TYPES;
   const [settings, setSettings] = useState<Setting[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [settingId, setSettingId] = useState<number | "">("");
@@ -119,11 +123,7 @@ export function GraphPage() {
       <RelationGraph
         data={data}
         layoutKey={campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}
-        emptyMessage={
-          activeTypes.size === 0
-            ? "Все типы сняты в фильтрах — отметьте хотя бы один."
-            : undefined
-        }
+        emptyMessage={undefined}
         scopeBar={
           <>
             <select

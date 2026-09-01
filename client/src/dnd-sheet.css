@@ -1,0 +1,814 @@
+/* Эффекты заклинаний/умений: та же чиповая раскладка, что у тэгов LitM, но
+   чип — не строка, а свёрнутая запись, которая раскрывает свои поля прямо
+   под собой. Модалка тут убила бы компактность, ради которой всё и берётся. */
+.dnd-effect-row {
+  gap: 3px;
+}
+.dnd-effect-chip,
+.dnd-check-chip,
+.dnd-cost-chip {
+  justify-content: space-between;
+}
+.dnd-check-chip {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
+}
+.dnd-effect-chip.is-open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.dnd-effect-summary {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+.dnd-effect-chip-fields {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.dnd-effect-chip-fields select,
+.dnd-effect-chip-fields input {
+  font-size: 12px;
+  padding: 1px 4px;
+  min-width: 0;
+}
+.dnd-effect-dc {
+  width: 56px;
+  flex: 0 0 auto;
+}
+.dnd-effect-item {
+  display: flex;
+  flex-direction: column;
+}
+.dnd-effect-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-top: none;
+  border-bottom-left-radius: var(--card-radius);
+  border-bottom-right-radius: var(--card-radius);
+}
+.dnd-effect-body input,
+.dnd-effect-body select {
+  font-size: 12px;
+  padding: 2px 5px;
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.dnd-effect-when {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 100%;
+}
+.dnd-effect-half {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.dnd-effect-half input {
+  flex: 0 0 auto;
+}
+.dnd-effect-add {
+  gap: 6px;
+  font-size: 12px;
+}
+.dnd-effect-add button {
+  border-left: var(--card-border-width, 1px) solid var(--line);
+  padding: 0 6px;
+}
+.dnd-effect-type-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 5px;
+  border: var(--card-border-width, 1px) dashed var(--line);
+  border-radius: var(--card-radius);
+}
+.dnd-effect-type-menu button {
+  font-size: 12px;
+  padding: 2px 7px;
+}
+
+/* Таблица развития класса. Широкая по своей природе (у полного заклинателя
+   пятнадцать колонок), поэтому едет по горизонтали внутри себя — страница
+   при этом не разъезжается. */
+.prog-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.prog-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.prog-table th,
+.prog-table td {
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: 2px 4px;
+  vertical-align: top;
+}
+.prog-table td input {
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  padding: 1px 2px;
+  width: 100%;
+  min-width: 44px;
+}
+/* Колонка умений — единственная длинная, остальным хватает пары символов. */
+.prog-table td input:focus {
+  outline: 1px solid var(--accent, var(--line));
+}
+.prog-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+}
+.prog-head input {
+  font-size: 12px;
+  padding: 1px 3px;
+  width: 100%;
+}
+.prog-role {
+  font-size: 11px;
+  padding: 1px 2px;
+  max-width: 150px;
+}
+.prog-rowactions {
+  border: none;
+  padding-left: 4px;
+}
+.prog-table-view th {
+  white-space: nowrap;
+}
+.prog-empty {
+  gap: 6px;
+}
+
+.litm-character-form > label,
+.litm-theme-card > label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.dnd-card > label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+/* Plain <input>/<label> siblings placed side by side in a .row (e.g. race,
+   background, alignment) have no intrinsic width of their own, so the
+   browser falls back to each input's default UA size (~170px) and the row
+   blows out the whole card. Give each a sane basis and let the row wrap
+   instead of forcing the whole page to overflow horizontally. */
+.dnd-card .row {
+  flex-wrap: wrap;
+}
+.dnd-card .row > input,
+.dnd-card .row > label {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+/* Inline checkbox/pip-track fields (Вдохновение, Спасброски от смерти) size
+   to their own content instead of stretching to the 120px basis above —
+   that basis fights their natural (wider) content width and produces
+   uneven, jumbled wrapping among the plain КД/Инициатива/Скорость inputs. */
+.dnd-card .row > label.dnd-inline-field {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+.dnd-title {
+  font-size: 17px;
+}
+.dnd-topline {
+  flex-wrap: wrap;
+}
+
+.dnd-abilities-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 8px;
+}
+.dnd-ability-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+}
+/* Character/creature wizards and the character-sheet accordion all wrap
+   this tile in `.card` — flatten there so the tile doesn't draw a second
+   frame inside the card's. The bare `.dnd-ability-box` rule above still
+   applies to the D&D creature statblock's "edit" view (StatblockList.tsx),
+   which renders the tile in a plain, unframed `.stack` and needs its own
+   border. */
+.card .dnd-ability-box {
+  border: none;
+  background: none;
+  border-radius: 0;
+  padding: 4px;
+}
+.dnd-ability-label {
+  font-size: 10px;
+  color: var(--sb-muted);
+  letter-spacing: 0.5px;
+}
+.dnd-ability-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+}
+.dnd-ability-input {
+  width: 44px;
+  text-align: center;
+  padding: 2px;
+  font-weight: 600;
+}
+.dnd-ability-mod {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.dnd-ability-save {
+  color: var(--muted);
+  font-weight: 400;
+}
+.dnd-ability-save.is-proficient {
+  color: var(--accent);
+  font-weight: 600;
+}
+.dnd-ability-save-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 400;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dnd-ability-save-toggle.is-proficient {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Read-only sheet's ability tile (AbilitySavesSkillsView) — click toggles
+   between showing the score+modifier and the saving throw in place, so it
+   needs a pointer cursor and a hover tint to read as tappable. */
+.dnd-ability-box-clickable {
+  cursor: pointer;
+}
+.dnd-ability-box-clickable:hover {
+  border-color: var(--accent);
+}
+.dnd-ability-score.is-proficient {
+  color: var(--accent);
+}
+
+/* ---- Dice — reusable "number on a die silhouette" component (design doc
+   §6.5, ticket 12): client/src/components/Dice.tsx. Silhouette is inline
+   SVG so it scales and themes via currentColor/tokens; the number sits in
+   the Display face centered over the shape, the caption sits in micro-caps
+   BELOW the shape (never inside it). ---- */
+.dice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+.dice-shape-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 36px;
+}
+.dice-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.dice-shape-outline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+.dice-shape-facet {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.35;
+  vector-effect: non-scaling-stroke;
+}
+.dice-dot {
+  fill: currentColor;
+  opacity: 0.6;
+}
+.dice-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--ink);
+}
+.dice-value {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+.dice-md .dice-value {
+  font-size: calc(var(--fs-stat) * var(--dice-value-scale, 1));
+}
+.dice-sm .dice-value {
+  font-size: calc(clamp(14px, 4vw, 18px) * var(--dice-value-scale, 1));
+}
+.dice-sub {
+  font-family: var(--font-mono);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 1px;
+}
+.dice-md .dice-sub {
+  font-size: 11px;
+}
+.dice-sm .dice-sub {
+  font-size: 8px;
+}
+.dice-label {
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* State: outline = normal (default look above), filled = active/used,
+   muted = unavailable. Never mix filled and outline dice within one row —
+   pick a state per row of callers. */
+.dice-outline .dice-shape-outline {
+  color: var(--ink);
+}
+.dice-filled .dice-shape-outline {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.dice-filled .dice-content {
+  color: var(--accent-text);
+}
+.dice-filled .dice-dot {
+  fill: var(--accent-text);
+}
+.dice-muted {
+  color: var(--muted);
+}
+.dice-muted .dice-shape-outline {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.dice-muted .dice-content {
+  color: var(--muted);
+}
+.dice-muted .dice-label {
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .dice-shape-box {
+    min-width: 30px;
+  }
+  .dice-sm .dice-value {
+    font-size: calc(clamp(12px, 5vw, 16px) * var(--dice-value-scale, 1));
+  }
+}
+
+.dnd-abilities-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* A derived value shown where an editable <input> used to be (proficiency
+   bonus, spell DC/attack bonus) — same box, but not focusable/editable. */
+.dnd-computed-field {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6em;
+  padding: 2px 8px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+}
+.dnd-ability-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dnd-save-skill-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 4px;
+  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+}
+.dnd-save-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.dnd-save-row input[type="checkbox"] {
+  align-self: center;
+  margin: 0;
+  flex-shrink: 0;
+}
+.dnd-save-dot {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--sb-muted);
+}
+.dnd-save-row.is-proficient .dnd-save-dot,
+.dnd-save-row.is-proficient .dnd-save-dot-btn {
+  color: var(--accent);
+}
+.dnd-save-row.is-expertise .dnd-save-name {
+  font-weight: 700;
+}
+.dnd-save-dot-btn {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--sb-muted);
+  cursor: pointer;
+}
+.dnd-save-dot-btn:hover {
+  color: var(--accent);
+}
+.dnd-save-name {
+  flex: 1;
+  white-space: normal;
+  word-break: break-word;
+  font-size: 12px;
+  color: var(--sb-muted);
+}
+.dnd-save-row.is-proficient .dnd-save-name {
+  color: var(--sb-ink);
+}
+.dnd-save-row-throw {
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+  padding-bottom: 3px;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+/* Source tint for skills granted by class / background / both — hue is
+   fixed, but mixing against the theme's own paper color keeps the tone in
+   step with light/dark/steampunk-etc. themes. */
+.dnd-save-row.skill-source-class {
+  background: color-mix(in oklab, dodgerblue 24%, var(--sb-paper));
+  border-radius: var(--card-radius);
+}
+.dnd-save-row.skill-source-background {
+  background: color-mix(in oklab, seagreen 24%, var(--sb-paper));
+  border-radius: var(--card-radius);
+}
+.dnd-save-row.skill-source-both {
+  background: color-mix(in oklab, crimson 22%, var(--sb-paper));
+  border-radius: var(--card-radius);
+}
+.dnd-skill-remaining {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in oklab, crimson 70%, var(--sb-ink));
+}
+.dnd-save-value {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Навыки tab gets its own full page (unlike the compact under-abilities
+   summary that .dnd-save-skill-col also serves), so it can afford — and
+   benefits from — bigger, easier-to-read rows during play. */
+.dnd-skills-tab {
+  gap: 6px;
+  padding: 10px 8px;
+}
+.dnd-skills-tab .dnd-save-row {
+  font-size: 14.5px;
+  gap: 6px;
+}
+.dnd-skills-tab .dnd-save-name {
+  font-size: 14.5px;
+}
+.dnd-skills-tab .dnd-save-value {
+  font-size: 14.5px;
+}
+.dnd-skills-tab .dnd-save-dot-btn {
+  font-size: 14.5px;
+}
+
+/* Always rendered inside an already-framed parent — the character-sheet
+   accordion's `.card` in edit mode, the statblock's own `.sb-card` in the
+   inventory tab's edit toggle. Named equipment sections are a divided list
+   within that frame, not boxed cards of their own; the drag-over state
+   still draws a temporary dashed frame since that's a functional
+   drop-target cue, not decorative chrome. */
+.dnd-equipment-section {
+  border: none;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  padding: 8px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dnd-equipment-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.dnd-equipment-section.drag-over {
+  border: var(--card-border-width, 1px) dashed var(--accent);
+  border-radius: var(--card-radius);
+  background: var(--bg-elevated);
+  padding: 8px;
+}
+.sb-entry.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.dnd-equipment-section-name {
+  font-weight: 600;
+  flex: 1;
+}
+.dnd-equipment-item-row {
+  cursor: grab;
+  align-items: center;
+}
+.dnd-equipment-view-list {
+  margin: 0;
+  padding-left: 18px;
+}
+.dnd-equipment-quick-row {
+  border-radius: var(--card-radius);
+  padding: 1px 4px;
+  margin-left: -4px;
+}
+.dnd-equipment-quick-row:hover {
+  background: color-mix(in oklab, var(--sb-paper) 90%, var(--sb-ink));
+}
+.dnd-equipment-name-link {
+  cursor: pointer;
+}
+.dnd-equip-toggle {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+.dnd-equip-toggle.is-equipped {
+  opacity: 1;
+  color: var(--accent, inherit);
+}
+/* Breaks the table out to the same edges as the rest of the card (ignoring
+   .sb-body's own --pad-x side padding) and falls back to horizontal scroll
+   instead of being silently clipped by .app-content's overflow-x:hidden —
+   the "Дальность"/"Урон" columns together are often wider than the padded
+   column, especially next to the 200px avatar sidebar on desktop. */
+.dnd-attacks-table-wrap {
+  overflow-x: auto;
+  margin: 4px calc(-1 * var(--pad-x, 0px)) 0;
+  padding: 0 var(--pad-x, 0px);
+}
+.dnd-attacks-table {
+  font-size: 13px;
+  margin-top: 4px;
+  min-width: 480px;
+}
+.dnd-attacks-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 4px 8px;
+}
+.dnd-attacks-table td {
+  padding: 4px 8px;
+  vertical-align: top;
+}
+.dnd-equipment-add-btn {
+  margin-top: 4px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+@media (max-width: 700px) {
+  .dnd-equipment-view-list .dnd-equipment-quick-row {
+    font-size: calc(1em * 0.85);
+  }
+  /* The desktop table is 480px min-width — wider than a phone screen, so it
+     used to fall back to an internal horizontal scrollbar (easy to miss,
+     reads as "text runs off the edge"). Below this width, un-table it into
+     stacked cards instead: each row becomes a block, each cell's own label
+     (the th text, carried via data-label) prefixes its value. */
+  .dnd-attacks-table-wrap {
+    overflow-x: visible;
+    margin: 4px 0 0;
+    padding: 0;
+  }
+  .dnd-attacks-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .dnd-attacks-table thead {
+    display: none;
+  }
+  .dnd-attacks-table tbody {
+    display: block;
+  }
+  .dnd-attacks-table tr {
+    display: block;
+    padding: 6px 0;
+    border-bottom: var(--card-border-width, 1px) solid var(--line);
+  }
+  .dnd-attacks-table tr:last-child {
+    border-bottom: none;
+  }
+  .dnd-attacks-table td {
+    display: block;
+    padding: 1px 0;
+  }
+  .dnd-attacks-table td:first-child {
+    font-weight: 600;
+  }
+  .dnd-attacks-table td[data-label]:not(:first-child)::before {
+    content: attr(data-label) ": ";
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+}
+
+/* SessionDetailPage's "Игроки" attendance table — same overflow problem and
+   fix as .dnd-attacks-table above: the "Оплачено" input + "Ставка (N)" button
+   columns together are wider than a phone screen, and .app-content's
+   overflow-x:hidden was silently clipping the overflow instead of scrolling
+   it. Below 700px, un-table it into stacked rows the same way. */
+.session-attendance-table-wrap {
+  overflow-x: auto;
+}
+.session-attendance-table {
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .session-attendance-table-wrap {
+    overflow-x: visible;
+  }
+  .session-attendance-table thead {
+    display: none;
+  }
+  .session-attendance-table tbody {
+    display: block;
+  }
+  .session-attendance-table tr {
+    display: block;
+    padding: var(--sp-2) 0;
+    border-bottom: var(--card-border-width, 1px) solid var(--line);
+  }
+  .session-attendance-table tr:last-child {
+    border-bottom: none;
+  }
+  .session-attendance-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding: 2px 0;
+  }
+  .session-attendance-table td:first-child {
+    font-weight: 600;
+  }
+  .session-attendance-table td[data-label]:not(:first-child)::before {
+    content: attr(data-label) ": ";
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+}
+
+.dnd-classes-block {
+  gap: 6px;
+}
+.dnd-class-row {
+  flex-wrap: wrap;
+}
+.dnd-class-row > select,
+.dnd-class-row > input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.dnd-class-level-input {
+  flex: 0 0 50px !important;
+  text-align: center;
+}
+.dnd-class-level-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.dnd-level-step-btn {
+  flex: 0 0 22px;
+  min-height: 0;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+}
+
+.dnd-proficiency-dropzone {
+  border: var(--card-border-width, 1px) dashed var(--line);
+  border-radius: var(--card-radius);
+  padding: 8px;
+  min-height: 36px;
+}
+.dnd-proficiency-dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.dnd-proficiency-row {
+  flex-wrap: wrap;
+}
+.dnd-proficiency-name {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.dnd-proficiency-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.dnd-proficiency-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.dnd-proficiency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: 2px 4px 2px 10px;
+  font-size: calc(var(--fs, 15px) * 0.87);
+}
+.dnd-proficiency-chip button {
+  border-radius: 50%;
+  line-height: 1;
+  padding: 2px 5px;
+}
+.dnd-proficiency-chip-add input {
+  height: 24px;
+  padding: 2px 8px;
+  font-size: calc(var(--fs, 15px) * 0.87);
+  width: 130px;
+}
