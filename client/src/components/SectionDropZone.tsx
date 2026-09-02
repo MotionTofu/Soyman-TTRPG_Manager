@@ -185,27 +185,44 @@ export const SectionDropZone = memo(function SectionDropZone({
       !acceptCompendiumKinds.includes(result.kind ?? "")
     )
       return;
-    await api.post("/entity-relations", {
-      from_type: entityType,
-      from_id: entityId,
-      to_type: result.type,
-      to_id: result.id,
-      section,
-      origin,
-      tone: "neutral",
-      label: "",
-      description: "",
-    });
+    if (entityType === "session") {
+      await api.post("/links", {
+        from_type: entityType,
+        from_id: entityId,
+        to_type: result.type,
+        to_id: result.id,
+        section,
+        origin: origin === "live" ? "live" : "planned",
+      });
+    } else {
+      await api.post("/entity-relations", {
+        from_type: entityType,
+        from_id: entityId,
+        to_type: result.type,
+        to_id: result.id,
+        section,
+        origin,
+        tone: "neutral",
+        label: "",
+        description: "",
+      });
+    }
     load();
   }
 
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [filter, setFilter] = useState("");
 
   async function remove(relationId: number) {
-    await api.del(`/entity-relations/${relationId}`);
+    if (entityType === "session") await api.del(`/links/${relationId}`);
+    else await api.del(`/entity-relations/${relationId}`);
     setPendingDelete(null);
     load();
   }
+
+  const filteredEntries = filter.trim()
+    ? entries.filter((e) => e.label.toLowerCase().includes(filter.trim().toLowerCase()))
+    : entries;
 
   return (
     <div
@@ -217,9 +234,13 @@ export const SectionDropZone = memo(function SectionDropZone({
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
+      {entries.length > 5 && (
+        <input placeholder="Фильтр…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 8, width: "100%" }} />
+      )}
       {entries.length === 0 && <span className="muted">{placeholder}</span>}
+      {entries.length > 0 && filteredEntries.length === 0 && <span className="muted">Ничего не найдено по фильтру.</span>}
       <div className="stack" style={{ gap: 0 }}>
-        {entries.map((entry) => (
+        {filteredEntries.map((entry) => (
           <div
             key={`${entry.type}-${entry.id}`}
             className="resource-row row"
@@ -307,17 +328,28 @@ export const SectionDropZone = memo(function SectionDropZone({
           acceptTypes={acceptTypes}
           acceptCompendiumKinds={acceptCompendiumKinds}
           onPick={async (result) => {
-            await api.post("/entity-relations", {
-              from_type: entityType,
-              from_id: entityId,
-              to_type: result.type,
-              to_id: result.id,
-              section,
-              origin,
-              tone: "neutral",
-              label: "",
-              description: "",
-            });
+            if (entityType === "session") {
+              await api.post("/links", {
+                from_type: entityType,
+                from_id: entityId,
+                to_type: result.type,
+                to_id: result.id,
+                section,
+                origin: origin === "live" ? "live" : "planned",
+              });
+            } else {
+              await api.post("/entity-relations", {
+                from_type: entityType,
+                from_id: entityId,
+                to_type: result.type,
+                to_id: result.id,
+                section,
+                origin,
+                tone: "neutral",
+                label: "",
+                description: "",
+              });
+            }
             setPickerOpen(false);
             load();
           }}

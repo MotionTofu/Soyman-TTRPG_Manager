@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { db } from "../db/db";
+import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
+import { debtsForCampaign } from "../services/finance";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
 import { campaignFolder, toFileUrl, VAULT_ROOT, vaultAbs, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
@@ -406,6 +408,14 @@ campaignsRouter.get("/:id/finance", (req, res) => {
   res.json(campaignEarnings(Number(req.params.id)));
 });
 
+// Кто должен по этой кампании. Смотрят сюда перед игрой, поэтому долг стоит
+// рядом с составом, а не только в профиле игрока.
+campaignsRouter.get("/:id/debts", (req, res) => {
+  const campaignId = Number(req.params.id);
+  if (!Number.isFinite(campaignId)) return res.status(400).json({ error: "bad id" });
+  res.json(debtsForCampaign(campaignId));
+});
+
 campaignsRouter.get("/:id/sessions", (req, res) => {
   const campaign = db
     .prepare("SELECT payment_type FROM campaigns WHERE id = ?")
@@ -413,9 +423,7 @@ campaignsRouter.get("/:id/sessions", (req, res) => {
   const rows = db
     .prepare(
       `SELECT s.*,
-              (SELECT COUNT(*) FROM sessions s2
-                 WHERE s2.campaign_id = s.campaign_id AND s2.archived_at IS NULL
-                   AND s2.date <= s.date) as session_number
+              ${SESSION_NUMBER_SQL} as session_number
        FROM sessions s
        WHERE s.campaign_id = ? AND s.archived_at IS NULL
        ORDER BY s.date`

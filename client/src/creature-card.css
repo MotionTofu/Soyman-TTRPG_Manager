@@ -1,5 +1,5 @@
 .creature-card {
-  border: 2px solid var(--ink);
+  border: var(--card-border-width) solid var(--ink);
   border-radius: var(--card-radius);
   background: var(--paper);
   color: var(--ink);
@@ -30,7 +30,7 @@
   height: 44px;
   flex: 0 0 auto;
   object-fit: cover;
-  border: 1.5px solid var(--on-surface);
+  border: var(--card-border-width) solid var(--on-surface);
   border-radius: 0;
 }
 .creature-card__portrait--empty {
@@ -45,12 +45,12 @@
   font-family: var(--font-display);
   text-transform: uppercase;
   line-height: 0.94;
-  font-size: 18px;
+  font-size: var(--fs-h3);
   overflow-wrap: anywhere;
 }
 .creature-card__cr {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--on-surface-muted);
   margin-top: 3px;
 }
@@ -61,7 +61,7 @@
 }
 .creature-card__mark {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 1;
   color: var(--on-surface-muted);
   align-self: flex-start;
@@ -91,10 +91,10 @@
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   line-height: 1.6;
   padding: 1px 6px;
-  border: 1.5px solid var(--ink);
+  border: var(--card-border-width) solid var(--ink);
   border-radius: 0;
   background: transparent;
   color: var(--ink);
@@ -107,7 +107,7 @@
   border: 0;
   padding: 1px 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0;
   text-transform: none;
   color: var(--muted);
@@ -116,7 +116,7 @@
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: 9px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   padding: 4px 10px 0;
 }
@@ -126,7 +126,7 @@
 .creature-card__empty {
   padding: 10px;
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
 }
 /* Подписи блоков — капс на разделителе 1.5px, не вторая плашка: плашка-
@@ -142,18 +142,18 @@
   padding: 7px 10px;
   background: none;
   border: 0;
-  border-top: 1.5px solid var(--line);
+  border-top: var(--card-border-width) solid var(--line);
   border-radius: 0;
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--ink);
   cursor: pointer;
 }
 .creature-card__section-mark {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 .creature-card__section-body {
@@ -177,7 +177,7 @@
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 .creature-card__label {
@@ -195,7 +195,7 @@
 /* Моноширинный — только под значения (§1.5). */
 .creature-card__value {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -207,7 +207,7 @@
 .creature-card__prose,
 .creature-card__secret {
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
   max-width: none;
   overflow-wrap: normal;
@@ -224,7 +224,7 @@
   gap: 8px;
   margin-top: auto;
   padding: 8px 10px;
-  border-top: 1.5px solid var(--line);
+  border-top: var(--card-border-width) solid var(--line);
 }
 /* Одна кнопка — ссылка, вторая — <button>, и без явных правил они расходились:
    выравнивание бралось из умолчаний браузера, а в докстанции пульта ссылку
@@ -239,14 +239,14 @@
   text-align: center;
   line-height: 1.2;
   padding: 6px 8px;
-  border: 1.5px solid var(--ink);
+  border: var(--card-border-width) solid var(--ink);
   border-radius: 0;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   text-decoration: none;
   cursor: pointer;
 }
@@ -317,7 +317,7 @@
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
@@ -333,7 +333,7 @@
   margin: 6px 0 2px;
 }
 .monster-tile {
-  border: 2px solid var(--ink);
+  border: var(--card-border-width) solid var(--ink);
   border-radius: var(--card-radius);
   background: var(--paper);
   color: var(--ink);
@@ -367,7 +367,7 @@
   font-family: var(--font-display);
   text-transform: uppercase;
   line-height: 0.96;
-  font-size: 16px;
+  font-size: var(--fs-h3);
   overflow-wrap: anywhere;
 }
 .monster-tile__star,
@@ -402,23 +402,25 @@
   width: 56px;
   height: 56px;
   flex: 0 0 auto;
-  border: 1.5px solid var(--ink);
+  border: var(--card-border-width) solid var(--ink);
   border-radius: 0;
 }
 .monster-tile__portrait {
   object-fit: cover;
 }
-/* Портрета почти нигде нет — монограмма делит сетку на узнаваемые полосы по
-   типу существа. Тон приглушённый: это заглушка, а не смысловой код. */
+/* Портрета почти нигде нет — монограмма — заглушка в paper-2, без цветового
+   кода (§1.7 тип кодируется формой, не цветом). Hue-вариация убрана: была
+   hsl(var(--monogram-tone)), стала плоская paper-2. */
 .monster-tile__monogram {
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: var(--fs-h2);
   line-height: 1;
-  color: #12100e;
-  background: hsl(var(--monogram-tone, 0) 16% 84%);
+  color: var(--ink);
+  background: var(--paper-2);
+  border-color: var(--line);
 }
 .monster-tile__facts {
   display: flex;
@@ -432,7 +434,7 @@
   overflow-wrap: anywhere;
 }
 .monster-tile__meta {
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--muted);
@@ -443,12 +445,12 @@
 .monster-tile__cr,
 .monster-tile__value {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   margin-top: 2px;
 }
 .monster-tile__actions {
   display: flex;
-  border-top: 1.5px solid var(--line);
+  border-top: var(--card-border-width) solid var(--line);
   margin-top: auto;
 }
 .monster-tile__actions > * {
@@ -458,7 +460,7 @@
   font-size: var(--fs-meta);
   background: none;
   border: 0;
-  border-left: 1.5px solid var(--line);
+  border-left: var(--card-border-width) solid var(--line);
   border-radius: 0;
   color: var(--text);
   text-decoration: none;
@@ -471,4 +473,4 @@
   background: var(--surface);
   color: var(--on-surface);
 }
-
+

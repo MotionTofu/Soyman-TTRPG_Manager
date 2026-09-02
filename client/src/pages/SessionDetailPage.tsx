@@ -29,6 +29,8 @@ import type {
   SessionSummary,
 } from "../types";
 import "../session.css";
+import { sessionLabel } from "../sessionLabel";
+import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 
 // Module-level so SectionDropZone (React.memo'd) sees a stable reference —
 // an inline array literal in the JSX below would be a new object every
@@ -62,6 +64,7 @@ export function SessionDetailPage() {
   const sessionId = Number(id);
   const navigate = useNavigate();
   const [tab, selectTab] = useTabState<SessionTab>(SESSION_TABS, "Обзор");
+  const [outcomeOpen, setOutcomeOpen] = useState(false);
 
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -387,7 +390,7 @@ export function SessionDetailPage() {
 
   async function updateAttendance(
     playerId: number,
-    field: "attended" | "amount_paid",
+    field: "attended" | "amount_paid" | "amount_forgiven",
     value: number
   ) {
     if (!session) return;
@@ -400,6 +403,7 @@ export function SessionDetailPage() {
         player_id: a.player_id,
         attended: !!a.attended,
         amount_paid: a.amount_paid,
+        amount_forgiven: a.amount_forgiven,
       })),
     });
     refresh();
@@ -538,10 +542,10 @@ export function SessionDetailPage() {
   return (
     <div className="stack session-profile">
       <div className="sp-nav">
-        <button className="sp-nav__btn" disabled={!prevSession} title={prevSession ? `${prevSession.title || `Сессия №${prevSession.session_number ?? ""}`} — ${prevSession.date}` : "Это первая сессия кампании"} onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}>
+        <button className="sp-nav__btn" disabled={!prevSession} title={prevSession ? `${sessionLabel(prevSession)} — ${prevSession.date}` : "Это первая сессия кампании"} onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}>
           ← {prevSession ? (prevSession.title || `№${prevSession.session_number ?? ""} · ${prevSession.date}`) : "Пред. сессия"}
         </button>
-        <button className="sp-nav__btn" disabled={!nextSession} title={nextSession ? `${nextSession.title || `Сессия №${nextSession.session_number ?? ""}`} — ${nextSession.date}` : "Это последняя сессия кампании"} onClick={() => nextSession && navigate(`/sessions/${nextSession.id}`)}>
+        <button className="sp-nav__btn" disabled={!nextSession} title={nextSession ? `${sessionLabel(nextSession)} — ${nextSession.date}` : "Это последняя сессия кампании"} onClick={() => nextSession && navigate(`/sessions/${nextSession.id}`)}>
           {nextSession ? (nextSession.title || `№${nextSession.session_number ?? ""} · ${nextSession.date}`) : "След. сессия"} →
         </button>
       </div>
@@ -572,7 +576,7 @@ export function SessionDetailPage() {
           <h1 className="sp-h1">
             <Link to={`/campaigns/${campaign.id}`}>{campaign.name}</Link> —{" "}
             <span className="sp-name" onClick={() => setEditingTitle(true)}>
-              {session.title || `Сессия №${session.session_number ?? ""}`}
+              {sessionLabel(session)}
             </span>
             <button
               className="sp-pencil"
@@ -1175,6 +1179,7 @@ export function SessionDetailPage() {
                       </th>
                     )}
                     {!isPlayer && !hideFinance && isPaidEffective && <th></th>}
+                    {!isPlayer && !hideFinance && isPaidEffective && <th title="Списанное Мастером — долг закрывает, в «заработано» не идёт">Прощено</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1211,6 +1216,19 @@ export function SessionDetailPage() {
                           </button>
                         </td>
                       )}
+                      {!isPlayer && !hideFinance && isPaidEffective && (
+                        <td data-label="Прощено">
+                          <input
+                            type="number"
+                            style={{ width: 90 }}
+                            value={a.amount_forgiven || ""}
+                            placeholder="0"
+                            onChange={(e) =>
+                              updateAttendance(a.player_id, "amount_forgiven", Number(e.target.value) || 0)
+                            }
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {session.attendance.length === 0 && (
@@ -1225,10 +1243,21 @@ export function SessionDetailPage() {
             </div>
           </details>
 
+          {/* Раньше кнопка просто ставила held, и деньги оставались невнесёнными:
+              статус проставлен, напоминать больше нечему, а сводка занижена.
+              Теперь оба вопроса задаёт одно окно, и его можно закрыть, ничего
+              не заполнив. */}
           {!isPlayer && !held && (
-            <button className="primary sp-finish" onClick={() => setStatus("held")}>
+            <button className="primary sp-finish" onClick={() => setOutcomeOpen(true)}>
               Отметить сессию проведённой
             </button>
+          )}
+          {!isPlayer && outcomeOpen && (
+            <SessionOutcomeModal
+              sessionId={sessionId}
+              onClose={() => setOutcomeOpen(false)}
+              onSaved={refresh}
+            />
           )}
         </div>
       )}

@@ -78,6 +78,107 @@ export const MECHANICS_WEAPON_PROPERTIES_GROUP = MECHANICS_GROUPS[10];
 export const MECHANICS_WEAPON_MASTERY_GROUP = MECHANICS_GROUPS[11];
 export const MECHANICS_ALIGNMENT_GROUP = MECHANICS_GROUPS[12];
 
+// 6 категорий справочника (44 списка) — группировка для UI.
+// Порядок — как показываем в разделе: Магия → Персонаж → Мир → Механики → Снаряжение → Опасности.
+export const MECHANICS_CATEGORIES = [
+  { key: "magic", label: "Магические эффекты" },
+  { key: "character", label: "Навыки и Владения" },
+  { key: "world", label: "Мироустройство" },
+  { key: "mechanics", label: "Базовые Механики" },
+  { key: "equipment", label: "Снаряжение и Экономика" },
+  { key: "hazards", label: "Опасности и Окружение" },
+] as const;
+export type MechanicsCategoryKey = (typeof MECHANICS_CATEGORIES)[number]["key"];
+
+// Маппинг группы → категория (покрывает все 44 списка из текущего справочника).
+export const MECHANICS_GROUP_TO_CATEGORY: Record<string, MechanicsCategoryKey> = {
+  // magic — 6
+  "Школы магии": "magic",
+  "Чары": "magic",
+  "Благословения": "magic",
+  "Проклятья и заражения": "magic",
+  "Эффекты планов": "magic",
+  "Области действия": "magic",
+  // character — 7 (Владения + Навыки)
+  "Характеристики": "character",
+  "Навыки": "character",
+  "Языки": "character",
+  "Владения доспехами": "character",
+  "Владения инструментами": "character",
+  "Владения оружием": "character",
+  "Мировоззрение": "character",
+  // world — 10 (Космология + Социалка)
+  "Космология": "world",
+  "Мультивселенная": "world",
+  "Мультивселенная — Внешние планы": "world",
+  "Мультивселенная — Внутренние планы": "world",
+  "Мультивселенная — Материальные планы": "world",
+  "Мультивселенная — Переходные планы": "world",
+  "Лор": "world",
+  "Отношения": "world",
+  "Репутация": "world",
+  "Знаки престижа": "world",
+  // mechanics — 11 (Правила боя)
+  "Правила": "mechanics",
+  "Действия": "mechanics",
+  "Типы существ и их особенности": "mechanics",
+  "Типы урона": "mechanics",
+  "Особое восприятие": "mechanics",
+  "Скорости передвижения и их особенности": "mechanics",
+  "Толпы": "mechanics",
+  "Погони": "mechanics",
+  "Свойства оружия": "mechanics",
+  "Мастерство оружия": "mechanics",
+  "Состояния": "mechanics",
+  // equipment — 5
+  "Магические предметы": "equipment",
+  "Сокровища": "equipment",
+  "Создание снаряжения": "equipment",
+  "Огнестрельное оружие": "equipment",
+  "Монеты": "equipment",
+  // hazards — 5
+  "Ловушки": "hazards",
+  "Двери": "hazards",
+  "Опасности": "hazards",
+  "Яды": "hazards",
+  "Эффекты окружающей среды": "hazards",
+  // Легаси / редкие — чтобы не вываливались в "Прочее"
+  "Особые владения": "character",
+};
+
+export function mechanicsCategoryForGroupName(name: string): MechanicsCategoryKey | null {
+  return MECHANICS_GROUP_TO_CATEGORY[name] ?? null;
+}
+export function mechanicsCategoryLabel(key: MechanicsCategoryKey): string {
+  return MECHANICS_CATEGORIES.find((c) => c.key === key)?.label ?? key;
+}
+
+// Стабильный ключ группы — переживает переименование (group_key). Имя — только подпись.
+export const MECHANICS_GROUP_KEYS: Record<string, string> = {
+  "Типы существ и их особенности": "creature_types",
+  "Особое восприятие": "senses",
+  "Скорости передвижения и их особенности": "speeds",
+  "Типы урона": "damage_types",
+  "Языки": "languages",
+  "Владения инструментами": "tools",
+  "Владения доспехами": "armor",
+  "Владения оружием": "weapons",
+  "Особые владения": "special",
+  "Школы магии": "schools",
+  "Свойства оружия": "weapon_properties",
+  "Мастерство оружия": "weapon_mastery",
+  "Мировоззрение": "alignment",
+  // Остальные 31 группа — без спец-ключа, маппится по имени через MECHANICS_GROUP_TO_CATEGORY
+};
+
+export function mechanicsKeyForGroupName(name: string): string | null {
+  return MECHANICS_GROUP_KEYS[name] ?? null;
+}
+export function mechanicsGroupNameForKey(key: string): string | null {
+  const e = Object.entries(MECHANICS_GROUP_KEYS).find(([, v]) => v === key);
+  return e ? e[0] : null;
+}
+
 export const FEAT_CATEGORIES = [
   "Черта происхождения",
   "Универсальная Черта",
@@ -100,6 +201,13 @@ export const EQUIPMENT_CATEGORIES = [
   "Безделушки",
   "Прочие предметы",
 ] as const;
+
+// Короткие лейблы для узких экранов (S-25): «Ремесленные инструменты» → «Рем. инструменты»
+export const EQUIPMENT_CATEGORY_SHORT: Record<string, string> = {
+  "Ремесленные инструменты": "Рем. инструменты",
+  "Наборы снаряжения": "Наборы",
+  "Прочие предметы": "Прочее",
+};
 
 // Безделушка — не магический предмет, а раздел снаряжения, поэтому она живёт
 // в EQUIPMENT_CATEGORIES, а не здесь.
@@ -307,6 +415,9 @@ export const KIND_DEFS: Record<string, KindDef> = {
     fields: [
       { key: "size", label: "Размер", type: "select", options: [...CREATURE_SIZES] },
       { key: "cr", label: "Класс опасности", type: "select", options: [...CHALLENGE_RATINGS] },
+      { key: "ac", label: "Класс доспеха", type: "text" },
+      { key: "hp", label: "Хиты", type: "text" },
+      { key: "speed", label: "Скорость", type: "text" },
     ],
   },
   vehicle: {

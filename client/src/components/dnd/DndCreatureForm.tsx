@@ -52,19 +52,19 @@ import { averageDiceFormula, rollDiceFormula } from "./diceRoll";
 import { PipTrack } from "../litm/PipTrack";
 import { api } from "../../api/client";
 import { NavIcon } from "../NavIcons";
+import { CHALLENGE_RATINGS, CREATURE_SIZES as COMPENDIUM_CREATURE_SIZES, normaliseCr } from "../../compendium";
 
-export const CREATURE_SIZES = ["Крошечный", "Маленький", "Средний", "Большой", "Огромный", "Громадный"] as const;
+export const CREATURE_SIZES = COMPENDIUM_CREATURE_SIZES;
 export const DIE_SIZES = [4, 6, 8, 10, 12] as const;
-export const CR_VALUES = [
-  "0", "1/8", "1/4", "1/2",
-  ...Array.from({ length: 30 }, (_, i) => String(i + 1)),
-];
+/** @deprecated — используйте CHALLENGE_RATINGS из compendium.ts (единый источник, C2) */
+export const CR_VALUES: readonly string[] = CHALLENGE_RATINGS;
 
 function crToNumber(cr: string): number {
-  if (cr === "1/8") return 0.125;
-  if (cr === "1/4") return 0.25;
-  if (cr === "1/2") return 0.5;
-  const n = Number(cr);
+  const c = normaliseCr(cr);
+  if (c === "1/8") return 0.125;
+  if (c === "1/4") return 0.25;
+  if (c === "1/2") return 0.5;
+  const n = Number(c);
   return Number.isFinite(n) ? n : 0;
 }
 

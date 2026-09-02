@@ -103,16 +103,32 @@ export function SessionTimeStrip({ session, settingId, campaignId, onChanged }: 
       .slice(0, NEAR_COUNT);
   }, [settingEvents, campaignEvents, months, nowElapsed]);
 
+  const [undo, setUndo] = useState<{ y: number | null; m: number | null; d: number | null } | null>(null);
+
   const advanceDay = useCallback(async () => {
     if (nowElapsed == null) return;
+    const prev = { y: session.inworld_year_end, m: session.inworld_month_end, d: session.inworld_day_end };
     const next = dateFromElapsed(nowElapsed + 1, months);
     await api.put(`/sessions/${session.id}`, {
       inworld_year_end: next.year,
       inworld_month_end: next.month,
       inworld_day_end: next.day,
     });
+    setUndo(prev);
+    setTimeout(() => setUndo((cur) => (cur === prev ? null : cur)), 5000);
     onChanged();
-  }, [nowElapsed, months, session.id, onChanged]);
+  }, [nowElapsed, months, session]);
+
+  const undoAdvance = useCallback(async () => {
+    if (!undo) return;
+    await api.put(`/sessions/${session.id}`, {
+      inworld_year_end: undo.y,
+      inworld_month_end: undo.m,
+      inworld_day_end: undo.d,
+    });
+    setUndo(null);
+    onChanged();
+  }, [undo, session.id, onChanged]);
 
   const applySuggested = useCallback(async () => {
     if (!suggested) return;
@@ -161,6 +177,11 @@ export function SessionTimeStrip({ session, settingId, campaignId, onChanged }: 
         <button onClick={advanceDay} title="Сдвинуть конец промежутка сессии">
           Прошёл день
         </button>
+        {undo && (
+          <button className="comp-mini" onClick={undoAdvance} title="Отменить сдвиг">
+            Отменить
+          </button>
+        )}
       </div>
     </div>
   );

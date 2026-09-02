@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { onDataChangedElsewhere } from "../dataSync";
 import { SESSION_PANEL_CONTENT, SESSION_PANEL_TITLES, type SessionPanelKey } from "./sessionLivePanels";
-import type { CampaignDetail, Character, SessionDetail } from "../types";
+import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
 
 // Rendered outside <AppShell> (see App.tsx) — no sidebar/search/audio-bar
 // chrome, just the one panel's content, meant to live in its own small
@@ -18,20 +18,33 @@ export function SessionPanelPopoutPage() {
   const [characters, setCharacters] = useState<Character[]>([]);
 
   const refresh = useCallback(() => {
-    api.get<SessionDetail>(`/sessions/${sessionId}`).then((s) => {
-      setSession(s);
-      api.get<CampaignDetail>(`/campaigns/${s.campaign_id}`).then(setCampaign);
-      api.get<Character[]>(`/characters?campaign_id=${s.campaign_id}`).then(setCharacters);
-    });
+    let cancelled = false;
+    api
+      .get<SessionDetail>(`/sessions/${sessionId}`)
+      .then((s) => {
+        if (cancelled) return;
+        setSession(s);
+        api.get<CampaignDetail>(`/campaigns/${s.campaign_id}`).then((c) => { if (!cancelled) setCampaign(c); }).catch(() => {});
+        api.get<Character[]>(`/characters?campaign_id=${s.campaign_id}`).then((ch) => { if (!cancelled) setCharacters(ch); }).catch(() => {});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [sessionId]);
 
-  useEffect(refresh, [refresh]);
+  useEffect(() => {
+    const c = refresh();
+    return c;
+  }, [refresh]);
 
   // Вынесенная панель живёт в своём окне и про запуск сцены в главном не
   // знает. Правки объявляются между окнами (dataSync.ts) — этого хватает:
   // отдельного канала под пульт заводить незачем.
   const [launches, setLaunches] = useState(0);
+  const [union, setUnion] = useState<SessionUnionRow[]>([]);
   useEffect(() => onDataChangedElsewhere(() => setLaunches((n) => n + 1)), []);
+  useEffect(() => {
+    api.get<SessionUnionRow[]>(`/sessions/${sessionId}/cast-union`).then(setUnion).catch(() => {});
+  }, [sessionId, launches]);
 
   if (!session || !campaign || !panelKey || !(panelKey in SESSION_PANEL_CONTENT)) return null;
 
@@ -46,6 +59,7 @@ export function SessionPanelPopoutPage() {
         campaign={campaign}
         characters={characters}
         launches={launches}
+        union={union}
       />
     </div>
   );

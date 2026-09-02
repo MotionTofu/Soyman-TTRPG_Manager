@@ -125,6 +125,9 @@ export function campaignPlayerSectionFolder(campaignFolderPath: string, name: st
   return vaultRel(freshDir(path.join(vaultAbs(campaignFolderPath), "ForPlayers"), name));
 }
 
+// Папки заводятся только для старой картотеки «Исследование Мира» в
+// кампаниях, где владелец сам играет (routes/worldExplorationEntries.ts).
+// У путевых заметок игрока папок нет: заметка — это текст в базе.
 const WORLD_EXPLORATION_KIND_FOLDERS: Record<string, string> = {
   being: "Существа",
   location: "Локации",

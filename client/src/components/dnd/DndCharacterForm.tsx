@@ -81,8 +81,8 @@ import { useBag } from "../../bag";
 import { computeArmorClass } from "./armorClass";
 import { allResources, applicableStats, type ClassResourceSource } from "./dndResources";
 import { Modal } from "../Modal";
-import { useIsMobile } from "../../hooks/useIsMobile";
 import { useConfirm } from "../../hooks/useConfirm";
+import { useIsMobile } from "../../hooks/useIsMobile";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { NavIcon } from "../NavIcons";
@@ -129,6 +129,7 @@ export function emptyDndCharacter(): DndCharacterData {
     attacks: [],
     equipmentSections: [{ name: "Общее", items: [] }],
     attunementCount: 0,
+    coins: { cp: "", sp: "", ep: "", gp: "", pp: "" },
     speciesFeatures: [],
     classFeatures: [],
     feats: [],
@@ -245,6 +246,19 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   merged.hitPointMaxTemp = typeof merged.hitPointMaxTemp === "string" ? merged.hitPointMaxTemp : "";
   merged.resourceUsed = merged.resourceUsed && typeof merged.resourceUsed === "object" ? merged.resourceUsed : {};
   merged.resourceBonus = merged.resourceBonus && typeof merged.resourceBonus === "object" ? merged.resourceBonus : {};
+  // Монеты — отдельное поле (S-08). Старые листы его не имели — дефолт пустые строки.
+  const rawCoins = r.coins as Record<string, unknown> | undefined;
+  if (rawCoins && typeof rawCoins === "object") {
+    merged.coins = {
+      cp: typeof rawCoins.cp === "string" ? rawCoins.cp : "",
+      sp: typeof rawCoins.sp === "string" ? rawCoins.sp : "",
+      ep: typeof rawCoins.ep === "string" ? rawCoins.ep : "",
+      gp: typeof rawCoins.gp === "string" ? rawCoins.gp : "",
+      pp: typeof rawCoins.pp === "string" ? rawCoins.pp : "",
+    };
+  } else {
+    merged.coins = { cp: "", sp: "", ep: "", gp: "", pp: "" };
+  }
   merged.speeds = merged.speeds && typeof merged.speeds === "object" ? { ...emptySpeed(), ...merged.speeds } : emptySpeed();
   merged.sensesList = Array.isArray(merged.sensesList) ? merged.sensesList : [];
   merged.damageResistances = Array.isArray(merged.damageResistances) ? merged.damageResistances : [];
@@ -803,7 +817,13 @@ function spellSnapshotFromEntry(entry: CompendiumEntry): DndSpellSnapshot {
 // add time — computeArmorClass() then reads these cached fields without a
 // live lookup. Заклинания от снапшота отказались (см. resolveSpell), но у
 // снаряжения он пока остаётся: КЗ считается вне рендера, где кэша нет.
+const equipmentMetaCache = new Map<number, Partial<DndEquipmentItem>>();
+export function clearEquipmentMetaCache(entryId?: number): void {
+  if (entryId != null) equipmentMetaCache.delete(entryId);
+  else equipmentMetaCache.clear();
+}
 async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipmentItem>> {
+  if (equipmentMetaCache.has(entryId)) return equipmentMetaCache.get(entryId)!;
   try {
     const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
     const weaponProperties = Array.isArray(entry.data.weapon_properties)
@@ -813,7 +833,7 @@ async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipment
       entry.data.weapon_mastery && typeof entry.data.weapon_mastery === "object"
         ? (entry.data.weapon_mastery as { name?: string }).name
         : undefined;
-    return {
+    const meta: Partial<DndEquipmentItem> = {
       entryId,
       armorType: typeof entry.data.armor_type === "string" ? entry.data.armor_type : undefined,
       ac: typeof entry.data.ac === "string" ? entry.data.ac : undefined,
@@ -825,6 +845,8 @@ async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipment
       weaponProperties: weaponProperties || undefined,
       weaponMastery: weaponMastery || undefined,
     };
+    equipmentMetaCache.set(entryId, meta);
+    return meta;
   } catch {
     return { entryId };
   }
@@ -1626,16 +1648,19 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
   itemsRef.current = section.items;
   const onItemsChangeRef = useRef(onItemsChange);
   onItemsChangeRef.current = onItemsChange;
+  const [confirmDialog, confirm] = useConfirm();
 
   const updateItem = useCallback((ii: number, patch: Partial<DndEquipmentItem>) => {
     const next = itemsRef.current.slice();
     next[ii] = { ...next[ii], ...patch };
     onItemsChangeRef.current(next);
   }, []);
-  const removeItem = useCallback((ii: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const removeItem = useCallback(async (ii: number) => {
+    const name = itemsRef.current[ii]?.name || "предмет";
+    const ok = await confirm({ title: "Удалить предмет?", message: `Удалить «${name}»?`, confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     onItemsChangeRef.current(itemsRef.current.filter((_, idx) => idx !== ii));
-  }, []);
+  }, [confirm]);
   function addItem() {
     onItemsChange([...section.items, { name: "", qty: "", weight: "", notes: "" }]);
   }
@@ -1672,22 +1697,24 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
   );
 
   return (
-    <div
-      className={`dnd-equipment-section${isDragOver ? " drag-over" : ""}`}
-      onDragOver={onSectionDragOver}
-      onDragLeave={onSectionDragLeave}
-      onDrop={onSectionDrop}
-    >
-      <div className="row">
-        <input
-          className="dnd-equipment-section-name"
-          value={section.name}
-          onChange={(e) => onNameChange(e.target.value)}
-        />
-        <button type="button" className="comp-mini" onClick={onRemoveSection}>
-          <NavIcon name="delete" /> Раздел
-        </button>
-      </div>
+    <>
+      {confirmDialog}
+      <div
+        className={`dnd-equipment-section${isDragOver ? " drag-over" : ""}`}
+        onDragOver={onSectionDragOver}
+        onDragLeave={onSectionDragLeave}
+        onDrop={onSectionDrop}
+      >
+        <div className="row">
+          <input
+            className="dnd-equipment-section-name"
+            value={section.name}
+            onChange={(e) => onNameChange(e.target.value)}
+          />
+          <button type="button" className="comp-mini" onClick={onRemoveSection}>
+            <NavIcon name="delete" /> Раздел
+          </button>
+        </div>
       <div className="stack" style={{ gap: 4 }}>
         {items.map((item, ii) => (
           <EquipmentItemRow
@@ -1709,7 +1736,8 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
           + Добавить предмет
         </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 });
 
@@ -1727,6 +1755,7 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
   sectionsRef.current = sections;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const [confirmDialog, confirm] = useConfirm();
 
   function addSection() {
     onChange([...sections, { name: "Новый раздел", items: [] }]);
@@ -1736,10 +1765,12 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
     next[si] = { ...next[si], name };
     onChangeRef.current(next);
   }, []);
-  const removeSection = useCallback((si: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const removeSection = useCallback(async (si: number) => {
+    const name = sectionsRef.current[si]?.name || "раздел";
+    const ok = await confirm({ title: "Удалить раздел?", message: `Удалить «${name}» и все предметы в нём?`, confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     onChangeRef.current(sectionsRef.current.filter((_, idx) => idx !== si));
-  }, []);
+  }, [confirm]);
   const setSectionItems = useCallback((si: number, items: DndEquipmentItem[]) => {
     const next = sectionsRef.current.slice();
     next[si] = { ...next[si], items };
@@ -1758,8 +1789,10 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
       setDragOverSection(null);
       const movePayload = e.dataTransfer.getData(EQUIPMENT_DRAG_MIME);
       if (movePayload) {
-        const { sectionIndex, itemIndex } = JSON.parse(movePayload);
-        moveItem(sectionIndex, itemIndex, si);
+        try {
+          const { sectionIndex, itemIndex } = JSON.parse(movePayload);
+          moveItem(sectionIndex, itemIndex, si);
+        } catch {}
         return;
       }
       const result = readSearchDrop(e);
@@ -1803,6 +1836,7 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="sb-section" style={{ margin: 0 }}>
         Снаряжение
       </div>
@@ -1854,6 +1888,14 @@ function DndEquipmentView({ sections }: { sections: DndEquipmentSection[] }) {
 
 const EMPTY_EQUIPMENT_ITEM: DndEquipmentItem = { name: "", qty: "", weight: "", notes: "" };
 
+function isValidQty(v: string): boolean {
+  if (!v.trim()) return true;
+  return /^-?\d+([.,]\d+)?$/.test(v.trim());
+}
+function isValidWeight(v: string): boolean {
+  if (!v.trim()) return true;
+  return /^-?\d+([.,]\d+)?$/.test(v.trim().split(" ")[0]);
+}
 function EquipmentInlineForm({
   draft,
   onChange,
@@ -1867,6 +1909,8 @@ function EquipmentInlineForm({
   onCancel: () => void;
   onRemove?: () => void;
 }) {
+  const qtyOk = isValidQty(draft.qty);
+  const wOk = isValidWeight(draft.weight);
   return (
     <div className="row" style={{ flexWrap: "wrap", gap: 6, margin: "4px 0" }}>
       <input
@@ -1880,13 +1924,15 @@ function EquipmentInlineForm({
         placeholder="Кол-во"
         value={draft.qty}
         onChange={(e) => onChange({ ...draft, qty: e.target.value })}
-        style={{ flex: "1 1 60px" }}
+        style={{ flex: "1 1 60px", borderColor: qtyOk ? undefined : "var(--accent)" }}
+        title={qtyOk ? undefined : "Число, напр. 2 или 1"}
       />
       <input
         placeholder="Вес"
         value={draft.weight}
         onChange={(e) => onChange({ ...draft, weight: e.target.value })}
-        style={{ flex: "1 1 60px" }}
+        style={{ flex: "1 1 60px", borderColor: wOk ? undefined : "var(--accent)" }}
+        title={wOk ? undefined : "Число, напр. 0.5"}
       />
       <input
         placeholder="Заметка"
@@ -1927,6 +1973,50 @@ function EquipmentInlineForm({
 // снаряжения (data.equipment_a_items / equipment_b_items). Пока набор не
 // размечен ссылками, здесь пусто — текстовое описание набора живёт в
 // компендиуме и переносится вручную, как и раньше.
+const COIN_LABELS: Record<keyof import("../../types").DndCoins, string> = {
+  cp: "ММ",
+  sp: "СМ",
+  ep: "ЭМ",
+  gp: "ЗМ",
+  pp: "ПМ",
+};
+const COIN_ORDER: (keyof import("../../types").DndCoins)[] = ["cp", "sp", "ep", "gp", "pp"];
+
+function DndCoinsView({ coins }: { coins: import("../../types").DndCoins }) {
+  const hasAny = COIN_ORDER.some((k) => coins[k]?.trim());
+  if (!hasAny) return null;
+  return (
+    <div className="sb-entry">
+      <span className="sb-prop-label">Монеты</span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+        {COIN_ORDER.filter((k) => coins[k]?.trim()).map((k) => `${coins[k]} ${COIN_LABELS[k]}`).join(" · ")}
+      </span>
+    </div>
+  );
+}
+
+function DndCoinsEdit({
+  coins,
+  onChange,
+}: {
+  coins: import("../../types").DndCoins;
+  onChange: (c: import("../../types").DndCoins) => void;
+}) {
+  return (
+    <div className="stack">
+      <div className="sb-section" style={{ margin: 0 }}>Монеты</div>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        {COIN_ORDER.map((k) => (
+          <label key={k} style={{ flex: "1 1 70px", minWidth: 0 }}>
+            {COIN_LABELS[k]}
+            <input value={coins[k] ?? ""} onChange={(e) => onChange({ ...coins, [k]: e.target.value })} placeholder="0" />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface StartingSet {
   label: string;
   gold: string;
@@ -1949,11 +2039,13 @@ function DndEquipmentQuickView({
   sections,
   systemId,
   startingSets,
+  coins,
   onQuickUpdate,
 }: {
   sections: DndEquipmentSection[];
   systemId: number | null;
   startingSets?: StartingSet[];
+  coins?: import("../../types").DndCoins;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
@@ -1966,6 +2058,7 @@ function DndEquipmentQuickView({
   const [descriptions, setDescriptions] = useState<Record<number, string>>({});
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const { items: bagItems } = useBag();
+  const [confirmDialog, confirm] = useConfirm();
 
   useEffect(() => {
     if (addMode !== "compendium" || !systemId) return;
@@ -2017,22 +2110,33 @@ function DndEquipmentQuickView({
   }
   // Кладёт весь набор в первую секцию инвентаря одним нажатием. Мета
   // (урон, КЗ) снимается так же, как при добавлении вручную, поэтому
-  // надетый доспех из набора сразу участвует в расчёте КЗ.
+  // надетый доспех из набора сразу участвует в расчёте КЗ. S-02: батч
+  // запрос, S-08: gold → coins.gp, S-20: ищет «Общее» а не idx 0.
   async function takeStartingSet(set: StartingSet) {
-    const added: DndEquipmentItem[] = [];
-    for (const item of set.items) {
-      const meta = await fetchEquipmentMeta(item.entryId);
-      added.push({
-        name: item.name,
-        qty: item.qty > 1 ? String(item.qty) : "",
-        weight: "",
-        notes: "",
-        entryId: item.entryId,
-        ...meta,
-      });
+    const metas = await Promise.all(set.items.map((it) => fetchEquipmentMeta(it.entryId)));
+    const added: DndEquipmentItem[] = set.items.map((item, idx) => ({
+      name: item.name,
+      qty: item.qty > 1 ? String(item.qty) : "",
+      weight: "",
+      notes: "",
+      entryId: item.entryId,
+      ...metas[idx],
+    }));
+    const targetIdx = (() => {
+      const found = sections.findIndex((s) => s.name.trim().toLowerCase() === "общее");
+      return found >= 0 ? found : 0;
+    })();
+    const nextSections = sections.map((sec, idx) => (idx !== targetIdx ? sec : { ...sec, items: [...sec.items, ...added] }));
+    const patch: Partial<DndCharacterData> = { equipmentSections: nextSections };
+    if (set.gold?.trim()) {
+      const cur = coins ?? { cp: "", sp: "", ep: "", gp: "", pp: "" };
+      const add = Number.parseInt(set.gold.trim(), 10);
+      if (Number.isFinite(add) && add !== 0) {
+        const curGp = Number.parseInt(cur.gp || "0", 10) || 0;
+        patch.coins = { ...cur, gp: String(curGp + add) };
+      }
     }
-    const next = sections.map((sec, idx) => (idx !== 0 ? sec : { ...sec, items: [...sec.items, ...added] }));
-    commit({ equipmentSections: next });
+    commit(patch);
   }
 
   async function addFromCompendium(si: number, entry: CompendiumEntry) {
@@ -2048,8 +2152,10 @@ function DndEquipmentQuickView({
       appendItem(si, { name: `${result.title}${suffix}`, qty: "", weight: "", notes: "" });
     }
   }
-  function removeItem(si: number, ii: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function removeItem(si: number, ii: number) {
+    const name = sections[si]?.items[ii]?.name || "предмет";
+    const ok = await confirm({ title: "Удалить предмет?", message: `Удалить «${name}»?`, confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     const next = sections.map((s, sIdx) =>
       sIdx !== si ? s : { ...s, items: s.items.filter((_, iIdx) => iIdx !== ii) }
     );
@@ -2090,9 +2196,42 @@ function DndEquipmentQuickView({
     ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
     : options;
 
+  // S-17: сводка веса/кол-ва/атюна над инвентарём
+  const summary = (() => {
+    const all = sections.flatMap((s) => s.items);
+    const totalItems = all.length;
+    const equipped = all.filter((i) => i.equipped).length;
+    let totalWeight = 0;
+    let hasWeight = false;
+    for (const it of all) {
+      const w = parseFloat(String(it.weight).replace(",", "."));
+      if (Number.isFinite(w)) {
+        const q = parseInt(String(it.qty).trim(), 10);
+        const qty = Number.isFinite(q) && q > 0 ? q : 1;
+        totalWeight += w * qty;
+        hasWeight = true;
+      }
+    }
+    return { totalItems, equipped, totalWeight, hasWeight };
+  })();
   return (
     <>
+      {confirmDialog}
       <div className="sb-section cs-mt">Снаряжение</div>
+      <div className="row muted" style={{ gap: 8, flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+        <span>Предметов: {summary.totalItems}</span>
+        {summary.equipped > 0 && <><span>·</span><span>Надето: {summary.equipped}</span></>}
+        {summary.hasWeight && <><span>·</span><span>Вес: {summary.totalWeight.toFixed(1).replace(/\.0$/, "")}</span></>}
+        {coins && (["cp","sp","ep","gp","pp"] as const).some((k) => (coins as unknown as Record<string,string>)[k]?.trim()) && (
+          <>
+            <span>·</span>
+            <span>
+              {([
+                ["cp","ММ"],["sp","СМ"],["ep","ЭМ"],["gp","ЗМ"],["pp","ПМ"]] as const).filter(([k]) => (coins as unknown as Record<string,string>)[k]?.trim()).map(([k,l]) => `${(coins as unknown as Record<string,string>)[k]} ${l}`).join(" · ")}
+            </span>
+          </>
+        )}
+      </div>
       {(startingSets ?? []).length > 0 && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
           {(startingSets ?? []).map((set) => (
@@ -2642,16 +2781,16 @@ function useDndOrigin(
         const grantedSkills = Array.isArray(entry.data.skills) ? (entry.data.skills as string[]) : [];
         patch.backgroundSkillNames = grantedSkills;
         if (grantedSkills.length > 0) {
-          const nextSkillProfs = { ...value.skillProfs };
+          const nextSkillProfs = { ...base.skillProfs };
           for (const s of grantedSkills) if (s in nextSkillProfs && !nextSkillProfs[s]) nextSkillProfs[s] = 1;
           patch.skillProfs = nextSkillProfs;
         }
         const tools = typeof entry.data.tools === "string" ? entry.data.tools : "";
-        if (tools && !value.proficiencies.some((p) => p.name === tools)) {
-          patch.proficiencies = [...value.proficiencies, { entryId: null, name: tools, abilityKey: null }];
+        if (tools && !base.proficiencies.some((p) => p.name === tools)) {
+          patch.proficiencies = [...base.proficiencies, { entryId: null, name: tools, abilityKey: null }];
         }
         const originFeat = entry.data.origin_feat as { id: number; name: string } | undefined;
-        if (originFeat && !value.feats.some((f) => f.name === originFeat.name)) {
+        if (originFeat && !base.feats.some((f) => f.name === originFeat.name)) {
           let description = "";
           try {
             const featEntry = await api.get<CompendiumEntry>(`/systems/entries/${originFeat.id}`);
@@ -3053,7 +3192,7 @@ function DndCharacterViewMini({ value }: { value: DndCharacterData }) {
         <div className="sb-head">
           <div className="sb-head-row">
             <div className="sb-name">{value.characterName || "Без имени"}</div>
-            {classLine && <div style={{ fontSize: 12.5, opacity: 0.8 }}>{classLine}</div>}
+            {classLine && <div style={{ fontSize: "var(--fs-meta)", opacity: 0.8 }}>{classLine}</div>}
           </div>
         </div>
         <div className="sb-body">
@@ -3459,7 +3598,7 @@ function DndResourcesView({
                 {r.label}
                 {showClass && <span className="muted"> · {r.className}</span>}
               </span>
-              <label className="row muted" style={{ gap: 4, fontSize: 12 }}>
+              <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
                 доп. бонус
                 <input
                   type="number"

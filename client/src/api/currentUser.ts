@@ -20,6 +20,14 @@ export function setCachedUser(user: CurrentUser | null) {
   cached = user;
   inflight = user ? Promise.resolve(user) : null;
 }
+// Роль без хука — для мест, которые вызываются сотнями на экран (подписи
+// упоминаний в тексте) и не могут позволить себе useState на каждую.
+// Смена роли всегда проходит через window.location.reload(), поэтому
+// читать кэш напрямую безопасно.
+export function getCachedUser(): CurrentUser | null {
+  return cached;
+}
+
 export function clearCachedUser() {
   cached = null;
   inflight = null;

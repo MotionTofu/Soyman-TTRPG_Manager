@@ -589,7 +589,7 @@ function StickerNode({ data, selected }: NodeProps<Node<StickerNodeData>>) {
   return (
     <div className={`canvas-node canvas-node--sticker${selected ? " is-selected" : ""}`} style={{ background: STICKER_COLORS[data.color] ?? STICKER_COLORS.paper, border: "1.5px solid var(--line)", boxShadow: "0 1px 0 rgba(18,16,14,0.06)" }}>
       <div className="canvas-node__body" style={{ padding: 10 }}>
-        <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-body)", fontWeight: 600, whiteSpace: "pre-wrap" }}>{data.name || data.text || "Заметка"}</span>
+        <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-meta)", fontWeight: 600, whiteSpace: "pre-wrap" }}>{data.name || data.text || "Заметка"}</span>
         {data.note && <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", whiteSpace: "pre-wrap", opacity: 0.85 }}><MentionText text={data.note} /></span>}
       </div>
     </div>

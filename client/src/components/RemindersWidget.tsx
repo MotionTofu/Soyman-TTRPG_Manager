@@ -36,8 +36,8 @@ export function RemindersWidget({ targetType, targetId }: Props) {
   return (
     <div className="card stack">
       {reminders.length === 0 ? (
-        <div className="card" style={{ borderStyle: "dashed", padding: "12px" }}>
-          <p className="muted" style={{ margin: 0, paddingLeft: 2, whiteSpace: "nowrap" }}>Нет активных напоминаний — напишите первое, оно появится у игроков на&nbsp;Главной.</p>
+        <div className="card" style={{ padding: "12px" }}>
+          <p className="muted" style={{ margin: 0 }}>Нет активных напоминаний — напишите первое, оно появится у игроков на&nbsp;Главной.</p>
         </div>
       ) : (
         reminders.map((r) => (

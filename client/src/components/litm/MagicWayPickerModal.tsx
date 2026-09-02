@@ -52,15 +52,15 @@ export function MagicWayPickerModal({ isOpen, onClose, onPick }: Props) {
                 padding: 12, borderRadius: 0, fontFamily: "inherit",
               }}
             >
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 8 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 8 }}>
                 {m.name}
               </div>
               {m.description && (
-                <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 8 }}>
+                <div style={{ fontSize: "var(--fs-meta)", color: "var(--ink-soft)", marginBottom: 8 }}>
                   {m.description}
                 </div>
               )}
-              <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+              <div style={{ fontSize: "var(--fs-meta)", color: "var(--ink-soft)" }}>
                 Станет типом темы "Магия"
               </div>
             </button>

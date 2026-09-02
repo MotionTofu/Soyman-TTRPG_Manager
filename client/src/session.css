@@ -1005,7 +1005,7 @@
   background: #8A453E;
   color: #F8F6F1;
   border-bottom-color: #8A453E;
-  padding: 7px 12px;
+  padding: 6px 10px;
 }
 .session-profile details.sp-card--plot > summary::before,
 .scene-detail details.sp-card--plot > summary::before { border-left-color: #F8F6F1; }
@@ -1014,7 +1014,7 @@
   background: #345B75;
   color: #F8F6F1;
   border-bottom-color: #345B75;
-  padding: 7px 12px;
+  padding: 6px 10px;
 }
 .session-profile details.sp-card--location > summary::before,
 .scene-detail details.sp-card--location > summary::before { border-left-color: #F8F6F1; }
@@ -1023,7 +1023,7 @@
   background: #563A62;
   color: #F8F6F1;
   border-bottom-color: #563A62;
-  padding: 7px 12px;
+  padding: 6px 10px;
 }
 .session-profile details.sp-card--enemies > summary::before,
 .scene-detail details.sp-card--enemies > summary::before { border-left-color: #F8F6F1; }
@@ -1032,7 +1032,7 @@
   background: #7E6D27;
   color: #F8F6F1;
   border-bottom-color: #7E6D27;
-  padding: 7px 12px;
+  padding: 6px 10px;
 }
 .session-profile details.sp-card--loot > summary::before,
 .scene-detail details.sp-card--loot > summary::before { border-left-color: #F8F6F1; }
@@ -1048,14 +1048,186 @@
 .session-profile details.sp-card--plot > .drop-zone,
 .session-profile details.sp-card--location > .drop-zone,
 .session-profile details.sp-card--enemies > .drop-zone,
-.session-profile details.sp-card--loot > .drop-zone {
+.session-profile details.sp-card--loot > .drop-zone,
+details.sp-card--plot > .drop-zone,
+details.sp-card--location > .drop-zone,
+details.sp-card--enemies > .drop-zone,
+details.sp-card--loot > .drop-zone {
   margin: 12px;
 }
 .session-profile details.sp-card--plot > .drop-zone:empty,
 .session-profile details.sp-card--location > .drop-zone:empty,
 .session-profile details.sp-card--enemies > .drop-zone:empty,
-.session-profile details.sp-card--loot > .drop-zone:empty {
+.session-profile details.sp-card--loot > .drop-zone:empty,
+details.sp-card--plot > .drop-zone:empty,
+details.sp-card--location > .drop-zone:empty,
+details.sp-card--enemies > .drop-zone:empty,
+details.sp-card--loot > .drop-zone:empty {
   margin: 12px;
+}
+
+.session-live {
+  gap: var(--sp-5);
+  padding-bottom: 25px;
+}
+.session-live .stack {
+  gap: 10px;
+}
+.app-content.has-player .session-live {
+  padding-bottom: calc(var(--player-bar-height) + 25px);
+}
+.session-live-idea-events {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .session-live-idea-events {
+    grid-template-columns: 1fr;
+  }
+}
+.session-live-central-tracker {
+  display: none;
+}
+@media (max-width: 860px) {
+  .session-live-central-tracker {
+    display: block;
+  }
+}
+
+/* Кнопки скрыть/показать боковые панели пульта — как иконки в ПОЛОТНЕ */
+body.live-hide-search .search-panel-slot,
+body.live-hide-search .search-panel {
+  display: none !important;
+}
+body.live-hide-dock .preview-dock,
+body.live-hide-dock .app-nav {
+  display: none !important;
+}
+body.live-hide-search .app-shell {
+  grid-template-columns: var(--app-nav-width) 1fr !important;
+}
+body.live-hide-search .app-shell-live {
+  grid-template-columns: var(--app-dock-width) 1fr !important;
+}
+body.live-hide-dock .app-shell {
+  grid-template-columns: 1fr var(--app-search-width) !important;
+}
+body.live-hide-dock .app-shell-live {
+  grid-template-columns: 1fr var(--app-search-width) !important;
+}
+body.live-hide-search.live-hide-dock .app-shell,
+body.live-hide-search.live-hide-dock .app-shell-live {
+  grid-template-columns: 1fr !important;
+}
+body.live-hide-search.live-hide-dock .app-content {
+  max-width: none;
+}
+.live-hide-search .app-shell {
+  grid-template-columns: var(--app-nav-width) 1fr !important;
+}
+.live-hide-search .app-shell-live {
+  grid-template-columns: var(--app-dock-width) 1fr !important;
+}
+.live-hide-dock .app-shell {
+  grid-template-columns: 1fr var(--app-search-width) !important;
+}
+.live-hide-dock .app-shell-live {
+  grid-template-columns: 1fr var(--app-search-width) !important;
+}
+.live-hide-search.live-hide-dock .app-shell,
+.live-hide-search.live-hide-dock .app-shell-live {
+  grid-template-columns: 1fr !important;
+}
+.live-hide-search.live-hide-dock .app-content {
+  max-width: none;
+}
+@media (max-width: 700px) {
+  .session-live-panels {
+    flex-direction: column;
+  }
+  .session-live-panels > .stack {
+    min-width: 0 !important;
+  }
+}
+
+/* Пульт сессии — те же 4 цвета что в профиле, для узнаваемости (заказ владельца, волна 2) */
+details.sp-card--plot,
+details.sp-card--location,
+details.sp-card--enemies,
+details.sp-card--loot {
+  padding: 0;
+  overflow: hidden;
+}
+details.sp-card--plot > summary,
+details.sp-card--location > summary,
+details.sp-card--enemies > summary,
+details.sp-card--loot > summary {
+  padding: 6px 10px;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  list-style: none;
+}
+details.sp-card--plot > summary { background: #8A453E; color: #F8F6F1; border-bottom-color: #8A453E; }
+details.sp-card--plot > summary::before { border-left-color: #F8F6F1; }
+details.sp-card--location > summary { background: #345B75; color: #F8F6F1; border-bottom-color: #345B75; }
+details.sp-card--location > summary::before { border-left-color: #F8F6F1; }
+details.sp-card--enemies > summary { background: #563A62; color: #F8F6F1; border-bottom-color: #563A62; }
+details.sp-card--enemies > summary::before { border-left-color: #F8F6F1; }
+details.sp-card--loot > summary { background: #7E6D27; color: #F8F6F1; border-bottom-color: #7E6D27; }
+details.sp-card--loot > summary::before { border-left-color: #F8F6F1; }
+details.sp-card--plot .entry-title,
+details.sp-card--location .entry-title,
+details.sp-card--enemies .entry-title,
+details.sp-card--loot .entry-title {
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+/* Остальные панели пульта (Состав, Напоминания, Компендиум, Тайны) — тёмно-зелёные как Задумка в профиле */
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary {
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 6px 10px;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  list-style: none;
+  border-bottom: var(--card-border-width) solid var(--surface);
+}
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary::before {
+  border-left-color: var(--on-surface);
+}
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) .entry-title {
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) {
+  padding: 0;
+  overflow: hidden;
+}
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary::-webkit-details-marker { display: none; }
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary::marker { content: ""; }
+/* Внутренний отступ у нейтральных панелей пульта — чтобы компендиум/тайны не липли к левому краю */
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > .stack {
+  padding: 12px;
+}
+.session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > div > .stack {
+  padding: 0;
 }
 
 /* sp-revealed — плотный список, а не stack с gap10. Иконка — коорд. отметка */

@@ -4,7 +4,7 @@ import { api } from "../api/client";
 import { MiniCalendar, type MiniEvent } from "../components/MiniCalendar";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
-import { SessionFinanceModal } from "../components/SessionFinanceModal";
+import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { copySessionPrep } from "../sessionCopy";
 import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
@@ -13,6 +13,7 @@ import { OnboardingHero } from "../components/OnboardingHero";
 import { HomeArticleCard } from "../components/HomeArticleCard";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
+import { sessionLabel } from "../sessionLabel";
 import { formatCompactNumber } from "../formatNumber";
 import { parseDateKey, toLocalDateKey } from "../utils/date";
 import { safeBackgroundImage } from "../utils/safeUrl";
@@ -142,6 +143,34 @@ export function HomeCalendarPage() {
     return planned.find(({ dt }) => dt.getTime() > now.getTime())?.s ?? null;
   })();
 
+  // Прошедшие, но не разобранные игры: статус всё ещё «запланирована», а время
+  // начала уже позади. Такая сессия проваливалась в тишину — в героя она не
+  // попадает (он смотрит вперёд), в «заработано» тоже (оно считает только
+  // held), и напомнить о ней было некому. Учитывается именно время начала:
+  // вечерняя игра сегодня в 19:00 не просрочена в 15:00.
+  const overdueSessions = sessions
+    .filter((s) => s.status === "planned")
+    .map((s) => {
+      const d = parseDateKey(s.date);
+      const [h, m] = (s.start_time ?? "00:00").split(":").map(Number);
+      d.setHours(h, m, 0, 0);
+      return { s, dt: d };
+    })
+    .filter(({ dt }) => dt.getTime() < now.getTime())
+    .sort((a, b) => a.dt.getTime() - b.dt.getTime())
+    .map(({ s }) => s);
+
+  // Кнопка «Состоялась» на герое появляется, только когда время игры уже
+  // наступило: на игре, до которой шесть дней, она была бы приглашением к
+  // ошибке в один клик.
+  const heroStarted = (() => {
+    if (!nearestSession) return false;
+    const d = parseDateKey(nearestSession.date);
+    const [h, m] = (nearestSession.start_time ?? "00:00").split(":").map(Number);
+    d.setHours(h, m, 0, 0);
+    return d.getTime() <= now.getTime();
+  })();
+
   function bgStyle(url: string | null, blob: string | null): string | undefined {
     if (!url) return undefined;
     if (url.startsWith("/files/")) return blob ? `url("${blob}")` : undefined;
@@ -212,10 +241,21 @@ export function HomeCalendarPage() {
                   refreshSessions();
                 },
               },
+              // Отменить существующую игру было нечем: статус cancelled в схеме
+              // есть и подписан «Отменена», но выставить его можно было только
+              // при создании — оставалось удалить сессию в архив, стерев то,
+              // что в феврале трижды срывались.
+              {
+                label: "Отменена",
+                onClick: async () => {
+                  await api.put(`/sessions/${event.id}`, { status: "cancelled" });
+                  refreshSessions();
+                },
+              },
             ],
           },
       ...(event.campaignRole === "gm" ? [{
-        label: "Финансы",
+        label: "Разобрать игру",
         onClick: () => setFinanceSessionId(event.id),
       }] : []),
       {
@@ -302,7 +342,7 @@ export function HomeCalendarPage() {
           {/* P1 D-02: дубль EmptyState «Начни с хранилища» убран — единый OnboardingHero покрывает §1.11 */}
           {initialLoad && !nearestSession && campaigns.length === 0 && sessionStorage.getItem("justCreated") && (
             <div className="card" style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "10px 12px", borderLeft: "3px solid var(--accent)" }}>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Добро пожаловать, Мастер!</span>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Добро пожаловать, Мастер!</span>
               <span className="muted" style={{ marginLeft: 8, fontSize: "var(--fs-meta)" }}>Начни с Системы — первый шаг ниже.</span>
             </div>
           )}
@@ -310,7 +350,13 @@ export function HomeCalendarPage() {
           {nearestSession ? (
             // Ведёт в карточку сессии, а не в пульт: с главной ныряют
             // ГОТОВИТЬ ближайшую игру. Кнопка в пульт есть в навигационном
-            // виджете из любой точки приложения.
+            // виджете из любой точки приложения — второй кнопкой поверх героя
+            // она спорила бы с этим обещанием.
+            //
+            // «Состоялась» лежит РЯДОМ со ссылкой, а не внутри неё: <button>
+            // внутри <a> — невалидная вложенность, и клик по кнопке уводил бы
+            // заодно на страницу сессии. Обёртка позиционирует её поверх.
+            <div className="home-hero-wrap">
             <Link
               to={`/sessions/${nearestSession.id}`}
               className="card home-hero"
@@ -348,14 +394,55 @@ export function HomeCalendarPage() {
                 </div>
               </div>
             </Link>
+            {heroStarted && (
+              <button
+                type="button"
+                className="home-hero-held"
+                title="Разобрать игру: кто пришёл, кто заплатил, что случилось"
+                onClick={(e) => { e.stopPropagation(); setFinanceSessionId(nearestSession.id); }}
+              >
+                Состоялась
+              </button>
+            )}
+            </div>
           ) : (
             <OnboardingHero
               systems={systems}
               settings={settings}
               campaigns={campaigns}
               players={players}
+              sessionsCount={sessions.length}
               onRefresh={loadInitial}
             />
+          )}
+
+          {/* Неразобранные игры. Стоит под героем, а не над ним: ближайшая игра
+              важнее — за ней сюда и приходят, — а бухгалтерия не должна вставать
+              между Мастером и подготовкой. Список строками, а не одной строкой
+              со счётчиком: это разные кампании и разные вечера, и Мастер сам
+              решает, с какой начать и где бросить. */}
+          {overdueSessions.length > 0 && (
+            <div className="card stack home-overdue" style={{ gap: 8 }}>
+              <SectionHeading level="section" icon="calendar">
+                Игры прошли, но не отмечены
+              </SectionHeading>
+              {overdueSessions.map((s) => (
+                <div key={s.id} className="row home-overdue-row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                    <Link to={`/sessions/${s.id}`}>
+                      <strong>{s.campaign_name ?? "Кампания"}</strong>
+                    </Link>
+                    <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {sessionLabel(s)} · {formatNearestDate(s.date)}
+                      {s.start_time ? ` · ${s.start_time}` : ""}
+                    </span>
+                  </div>
+                  <button className="primary" onClick={() => setFinanceSessionId(s.id)}>
+                    Разобрать
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Tiles — quick campaign row. */}
@@ -474,7 +561,7 @@ export function HomeCalendarPage() {
                   </option>
                 ))}
               </select>
-              {campaigns.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Сначала создайте кампанию в разделе «Кампании»</span>}
+              {campaigns.length === 0 && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сначала создайте кампанию в разделе «Кампании»</span>}
             </label>
             <label>
               Дата
@@ -520,7 +607,7 @@ export function HomeCalendarPage() {
       )}
 
       {financeSessionId && (
-        <SessionFinanceModal
+        <SessionOutcomeModal
           sessionId={financeSessionId}
           onClose={() => setFinanceSessionId(null)}
           onSaved={refreshSessions}

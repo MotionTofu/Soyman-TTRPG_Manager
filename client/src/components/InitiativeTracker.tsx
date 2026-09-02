@@ -8,6 +8,7 @@ import { parseDndStatblock } from "./EntityPreviewModal";
 import { abilityModifier, formatModifier } from "./dnd/AbilityScores";
 import { rollDiceFormula } from "./dnd/diceRoll";
 import { findDndSystemId, loadDndMechanicsGroup } from "./dnd/dndCompendium";
+import { fetchCreatureCard } from "./CreatureCard";
 import { loadUseEpithets, INITIATIVE_EPITHETS } from "../initiativeTrackerPrefs";
 import type {
   InitiativeKind,
@@ -90,6 +91,7 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [hpAmount, setHpAmount] = useState("");
   const [conditionPickerFor, setConditionPickerFor] = useState<number | null>(null);
   const [conditionOptions, setConditionOptions] = useState<{ id: number; name: string }[]>([]);
+  const [roleMap, setRoleMap] = useState<Map<number, { roles: string[]; tactics: string[] }>>(new Map());
   const sound = useSoundEngineOptional();
 
   function load() {
@@ -106,6 +108,42 @@ export function InitiativeTracker({ sessionId }: Props) {
       loadDndMechanicsGroup(systemId, "Состояния").then(setConditionOptions);
     });
   }, []);
+
+  // Роли из карточки существа — за столом видно «Танковый · Контроль» без открытия карточки (C3)
+  useEffect(() => {
+    let cancelled = false;
+    const cache = new Map<string, { roles: string[]; tactics: string[] }>();
+    // Копируем уже известные, чтобы не перетирать
+    roleMap.forEach((v, k) => {
+      const e = entries.find((en) => en.id === k);
+      if (e && e.entity_type && e.entity_id) cache.set(`${e.entity_type}-${e.entity_id}`, v);
+    });
+    const toFetch = entries.filter((e) => e.entity_type && e.entity_id && (e.entity_type === "being" || e.entity_type === "compendium_entry"));
+    if (toFetch.length === 0) return;
+    (async () => {
+      const next = new Map(roleMap);
+      for (const e of toFetch) {
+        const key = `${e.entity_type}-${e.entity_id}`;
+        if (cache.has(key)) {
+          next.set(e.id, cache.get(key)!);
+          continue;
+        }
+        try {
+          const card = await fetchCreatureCard(e.entity_type as string, e.entity_id as number);
+          const roles = card.combat_roles.length ? card.combat_roles : card.inherited?.combat_roles ?? [];
+          const tactics = card.tactics.length ? card.tactics : card.inherited?.tactics ?? [];
+          const value = { roles: roles.slice(0, 2), tactics };
+          cache.set(key, value);
+          next.set(e.id, value);
+        } catch {
+          cache.set(key, { roles: [], tactics: [] });
+        }
+      }
+      if (!cancelled) setRoleMap(next);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
 
   // Resolves everything a dropped/re-rolled entity needs from its dnd
   // statblock in one fetch — dex modifier (for tie-breaking) and hit points
@@ -502,6 +540,21 @@ export function InitiativeTracker({ sessionId }: Props) {
                 </span>
                 <span style={{ fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
                   {entry.name}
+                  {(() => {
+                    const info = roleMap.get(entry.id);
+                    const roles = info?.roles ?? [];
+                    if (roles.length === 0) return null;
+                    const tactics = info?.tactics ?? [];
+                    return (
+                      <span style={{ marginLeft: 6, display: "inline-flex", gap: 4, verticalAlign: "middle" }}>
+                        {roles.map((r) => (
+                          <span key={r} className="creature-card__chip is-role" style={{ fontSize: "var(--fs-micro)", padding: "0 4px", lineHeight: "1.4" }} title={tactics.length ? tactics.join("\n") : r}>
+                            {r}
+                          </span>
+                        ))}
+                      </span>
+                    );
+                  })()}
                 </span>
                 {editingId === entry.id ? (
                   <input

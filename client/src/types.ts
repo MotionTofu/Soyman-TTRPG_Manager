@@ -682,6 +682,7 @@ export interface DndCharacterData {
   attacks: DndManualAttack[];
   equipmentSections: DndEquipmentSection[];
   attunementCount: number;
+  coins: DndCoins;
 
   speciesFeatures: DndFeature[];
   classFeatures: DndFeature[];
@@ -756,6 +757,14 @@ export interface DndEquipmentItem {
   weaponAttackRanged?: boolean;
   weaponProperties?: string;
   weaponMastery?: string;
+}
+
+export interface DndCoins {
+  cp: string;
+  sp: string;
+  ep: string;
+  gp: string;
+  pp: string;
 }
 
 export interface DndEquipmentSection {
@@ -984,6 +993,7 @@ export interface MentioningSession {
   session_number: number | null;
   campaign_id: number;
   campaign_name: string;
+  status?: SessionStatus;
 }
 
 export interface SessionSummary {
@@ -1013,6 +1023,28 @@ export interface AttendanceRow {
   name: string;
   attended: number;
   amount_paid: number;
+  /** Прощённое Мастером. Долг закрывает, в «заработано» не идёт. */
+  amount_forgiven: number;
+}
+
+/** Неоплаченная сессия — считается сервером, нигде не хранится. */
+export interface UnpaidSession {
+  session_id: number;
+  campaign_id: number;
+  campaign_name: string;
+  date: string;
+  title: string | null;
+  expected: number;
+  paid: number;
+  forgiven: number;
+}
+
+/** Долг одного игрока по одной кампании (GET /campaigns/:id/debts). */
+export interface CampaignDebt {
+  player_id: number;
+  player_name: string;
+  owed: number;
+  sessions: number;
 }
 
 export interface SessionDetail extends SessionSummary {
@@ -1693,8 +1725,33 @@ export interface CampaignEntry {
 }
 
 export type WorldExplorationKind = "being" | "location" | "item" | "event";
+/** Метка типа необязательна: `""` — заметка без метки. */
+export type WorldExplorationTag = WorldExplorationKind | "";
 
+/**
+ * Заметка личного дневника персонажа. Обязателен только `description` —
+ * заголовок и метка типа опциональны, а `character_id === null` значит «чей
+ * это дневник, ещё не сказали» (см. server/src/routes/player.ts).
+ */
 export interface WorldExplorationEntry {
+  id: number;
+  campaign_id: number;
+  player_id: number;
+  character_id: number | null;
+  kind: WorldExplorationTag;
+  name: string;
+  description: string;
+  created_at: string;
+}
+
+/**
+ * Старая общая картотека «Исследование Мира» — только в кампаниях, где
+ * владелец сам играет (`campaigns.role = 'player'`, вкладка в
+ * CampaignDetailPage → WorldExplorationTab). У неё осталась прежняя модель:
+ * запись принадлежит игроку, видна всей партии, у неё есть аватар и доп. поле.
+ * Путевые заметки игрока (выше) устроены иначе, и общего типа у них больше нет.
+ */
+export interface LegacyWorldExplorationEntry {
   id: number;
   campaign_id: number;
   player_id: number;
@@ -1705,8 +1762,15 @@ export interface WorldExplorationEntry {
   extra_field: string;
   avatar_image_path: string | null;
   avatar_image_url: string | null;
-  folder_path: string;
   created_at: string;
+}
+
+/** Персонаж игрока в этой кампании — вход в его дневник. */
+export interface PlayerCampaignCharacter {
+  id: number;
+  character_name: string;
+  archived: boolean;
+  avatar_image_url: string | null;
 }
 
 export interface InitiativeEntry {

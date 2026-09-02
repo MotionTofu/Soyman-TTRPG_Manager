@@ -24,6 +24,7 @@ import { loadCoverDuotone, saveCoverDuotone } from "../imagePrefs";
 import { loadHideFinance, saveHideFinance } from "../financePrivacy";
 import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
+import { loadPultFinishAction, savePultFinishAction, type PultFinishAction } from "../pultPrefs";
 import {
   DND_ABILITY_PRIMARY_OPTIONS, DND_SKILL_SORT_OPTIONS, loadDndPrefs, saveDndPrefs,
   type DndAbilityPrimary, type DndSkillSortMode,
@@ -391,11 +392,14 @@ export function StoragesSettingsPage() {
   // сломал бы сохраненное состояние у существующих пользователей до перезагрузки.
   const [activeTab, setActiveTab] = useState(() => {
     const v = safeGetItem("storagesActiveTab") || "interface";
-    return v === "links" || v === "pult" ? "interface" : v;
+    // "pult" снова живая вкладка — настройки пульта вернулись отдельно от
+    // «Интерфейса», где они терялись среди тем и скруглений.
+    return v === "links" ? "interface" : v;
   });
   useEffect(() => {
     safeSetItem("storagesActiveTab", activeTab);
   }, [activeTab]);
+  const [pultFinish, setPultFinish] = useState<PultFinishAction>(loadPultFinishAction);
   // Фаза 4: перетаскивание zip вне зоны не должно открывать файл в браузере
   useEffect(() => {
     if (activeTab !== "store") return;
@@ -460,12 +464,48 @@ export function StoragesSettingsPage() {
         <button role="tab" aria-selected={activeTab === "player"} className={activeTab === "player" ? "active" : ""} onClick={() => setActiveTab("player")}>
           Плеер
         </button>
+        <button role="tab" aria-selected={activeTab === "pult"} className={activeTab === "pult" ? "active" : ""} onClick={() => setActiveTab("pult")}>
+          Пульт сессии
+        </button>
         {hasElectron && (
           <button role="tab" aria-selected={activeTab === "updates"} className={activeTab === "updates" ? "active" : ""} onClick={() => setActiveTab("updates")}>
             Обновления
           </button>
         )}
       </div>
+
+      {activeTab === "pult" && (
+        <div className="stack">
+          <div className="card stack">
+            <SectionHeading level="section" icon="navCockpit">
+              После завершения игры
+            </SectionHeading>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+              Пульт закрывают, когда игра только кончилась и все расходятся. Что
+              делать дальше — спросить про оплату сразу или отложить до Главной,
+              где неразобранные игры собираются в отдельную плашку.
+            </span>
+            <label className="row" style={{ gap: 8, alignItems: "center" }}>
+              <input
+                type="radio"
+                name="pult-finish"
+                checked={pultFinish === "banner"}
+                onChange={() => { setPultFinish("banner"); savePultFinishAction("banner"); }}
+              />
+              <span>Отложить — игра попадёт в плашку на Главной</span>
+            </label>
+            <label className="row" style={{ gap: 8, alignItems: "center" }}>
+              <input
+                type="radio"
+                name="pult-finish"
+                checked={pultFinish === "modal"}
+                onChange={() => { setPultFinish("modal"); savePultFinishAction("modal"); }}
+              />
+              <span>Спросить сразу — открыть разбор игры</span>
+            </label>
+          </div>
+        </div>
+      )}
 
       {activeTab === "store" && (
         <div className="stack" style={{ gap: 12 }}>
@@ -505,7 +545,7 @@ export function StoragesSettingsPage() {
                   )}
                   <span className="res-row__actions">
                     {s.id !== activeId && (
-                      <button type="button" className="res-row__act primary" onClick={() => activate(s.id)} disabled={!!activatingId || !!removingId} title="Активировать" aria-label={`Активировать ${s.name}`} style={{ width: "auto", padding: "0 8px", fontSize: 11 }}>
+                      <button type="button" className="res-row__act primary" onClick={() => activate(s.id)} disabled={!!activatingId || !!removingId} title="Активировать" aria-label={`Активировать ${s.name}`} style={{ width: "auto", padding: "0 8px", fontSize: "var(--fs-meta)" }}>
                         {activatingId === s.id ? "…" : "Активировать"}
                       </button>
                     )}
@@ -519,12 +559,12 @@ export function StoragesSettingsPage() {
                     )}
                   </span>
                 </div>
-                <div className="muted" style={{ padding: "0 12px 4px 44px", fontSize: 11, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="muted" style={{ padding: "0 12px 4px 44px", fontSize: "var(--fs-meta)", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 360 }}>{s.vaultRoot}</span>
-                  <button type="button" onClick={() => openInExplorer(s.vaultRoot)} style={{ fontSize: 11, padding: "2px 6px", height: 36 }}>
+                  <button type="button" onClick={() => openInExplorer(s.vaultRoot)} style={{ fontSize: "var(--fs-meta)", padding: "2px 6px", height: 36 }}>
                     Открыть
                   </button>
-                  <button type="button" onClick={() => { navigator.clipboard.writeText(s.vaultRoot).then(() => showToast("Скопировано")).catch(() => showToast("Не удалось скопировать")); }} style={{ fontSize: 11, padding: "2px 6px", height: 36 }}>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(s.vaultRoot).then(() => showToast("Скопировано")).catch(() => showToast("Не удалось скопировать")); }} style={{ fontSize: "var(--fs-meta)", padding: "2px 6px", height: 36 }}>
                     Копировать
                   </button>
                 </div>
@@ -594,10 +634,10 @@ export function StoragesSettingsPage() {
               {importing ? "Импортирую…" : "Импортировать"}
             </button>
           </div>
-          <div className="muted" style={{ fontSize: 11, padding: "0 4px" }}>
+          <div className="muted" style={{ fontSize: "var(--fs-meta)", padding: "0 4px" }}>
             {importDragOver ? "Отпусти zip — подхватим" : "Перетащи .zip сюда — бросим в зону. Zip содержит app.db + RPG-Vault."}
           </div>
-          <div className="muted" style={{ fontSize: 12, padding: "8px 4px", borderTop: "1px solid var(--line)" }}>
+          <div className="muted" style={{ fontSize: "var(--fs-meta)", padding: "8px 4px", borderTop: "1px solid var(--line)" }}>
             Битые ссылки — в <a href="/health" style={{ color: "var(--accent)" }}>Здоровье → Проверить</a>
           </div>
         </div>
@@ -625,7 +665,7 @@ export function StoragesSettingsPage() {
                     Убрать фон
                   </button>
                 )}
-                {uploadingHomeBg && <span className="muted" style={{ fontSize: 12 }}>Загружаю…</span>}
+                {uploadingHomeBg && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Загружаю…</span>}
               </div>
               <span className="muted image-hint" style={{ maxWidth: "62ch" }}>{IMAGE_HINT}</span>
             </div>
@@ -641,7 +681,7 @@ export function StoragesSettingsPage() {
               <label className="stack" style={{ maxWidth: 420, gap: 4 }}>
                 Скругление внешнего угла карточки: {radius}px
                 <input type="range" min={0} max={28} value={radius} onChange={(e) => changeRadius(Number(e.target.value))} />
-                <span className="muted" style={{ fontSize: 11, maxWidth: "62ch" }}>Действует только на внешний угол карточки; плашки, чипы и бейджи внутри остаются прямоугольными (§4).</span>
+                <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>Действует только на внешний угол карточки; плашки, чипы и бейджи внутри остаются прямоугольными (§4).</span>
               </label>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", maxWidth: 420 }}>
                 <input type="checkbox" checked={duotone} onChange={(e) => { setDuotone(e.target.checked); saveCoverDuotone(e.target.checked); }} />
@@ -813,7 +853,7 @@ export function StoragesSettingsPage() {
                   onKeyDown={(e) => e.key === "Enter" && saveFadeDurationNow((e.target as HTMLInputElement).value)}
                   aria-label="Затухание числом"
                 />
-                <span className="muted" style={{ fontSize: 12 }}>сек</span>
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>сек</span>
               </label>
               <span className="muted" style={{ maxWidth: "62ch" }}>Текущий трек затихает за это время перед следующим. 0 — резко. Сохраняется автоматически.</span>
             </div>

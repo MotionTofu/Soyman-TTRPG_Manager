@@ -87,19 +87,19 @@ export function TropePickerModal({ isOpen, onClose, onPick }: Props) {
                 padding: 12, borderRadius: 0, fontFamily: "inherit",
               }}
             >
-              <div style={{ fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 6 }}>
+              <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 6 }}>
                 {t.data.group}
               </div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 8 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 8 }}>
                 {t.name.split(" [")[0]}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
                 {t.data.themes_fixed.map((themebookEn: string) => {
                   const kit = kits.find(k => k.themebookEn === themebookEn);
-                  return <span key={themebookEn} className={`tg litm-power-${kit?.data.might ?? ""}`} style={{ fontSize: 10 }}>{kit?.name.split(" [")[0] ?? themebookEn}</span>;
+                  return <span key={themebookEn} className={`tg litm-power-${kit?.data.might ?? ""}`} style={{ fontSize: "var(--fs-micro)" }}>{kit?.name.split(" [")[0] ?? themebookEn}</span>;
                 })}
               </div>
-              <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+              <div style={{ fontSize: "var(--fs-meta)", color: "var(--ink-soft)" }}>
                 Рюкзак: {t.data.backpack.join(", ")}
               </div>
             </button>

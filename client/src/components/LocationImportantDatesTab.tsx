@@ -280,7 +280,7 @@ export function LocationImportantDatesTab({ locationId, locationName, settingId,
                     {d.source_event_id ? <span className="badge tag" title="Связана с событием Хроники мира">↗ Хроника</span> : null}
                     <span className="entity-row-actions" style={{ marginLeft: 8 }}>
                       {onShowOnMap && <button type="button" className="comp-mini" onClick={onShowOnMap} title="Показать локацию на карте">Карта</button>}
-                      <Link to={`/settings/${settingId}?tab=${encodeURIComponent("Хроника мира")}`} title="Открыть Хронику мира" style={{ fontSize: 11 }}>Хроника</Link>
+                      <Link to={`/settings/${settingId}?tab=${encodeURIComponent("Хроника мира")}`} title="Открыть Хронику мира" style={{ fontSize: "var(--fs-meta)" }}>Хроника</Link>
                       <button type="button" className="comp-mini" onClick={() => openEdit(d)} title="Редактировать">✎</button>
                       <button type="button" className="comp-mini danger" onClick={() => handleDelete(d.id, d.title, (d as unknown as { source_event_id: number | null }).source_event_id ?? null)} title="Удалить" aria-label={`Удалить ${d.title}`}>✕</button>
                     </span>

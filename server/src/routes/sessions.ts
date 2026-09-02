@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { ensureSubfolder, openInFileExplorer, sessionFolder, toFileUrl } from "../services/filesystem";
 import { sessionEarnings } from "../services/finance";
 import {
@@ -33,9 +34,7 @@ sessionsRouter.get("/:id", (req, res) => {
     .prepare(
       `SELECT s.*, c.name as campaign_name, c.payment_type as campaign_payment_type,
               c.session_rate as campaign_session_rate, c.currency,
-              (SELECT COUNT(*) FROM sessions s2
-                 WHERE s2.campaign_id = s.campaign_id AND s2.archived_at IS NULL
-                   AND s2.date <= s.date) as session_number
+              ${SESSION_NUMBER_SQL} as session_number
        FROM sessions s
        JOIN campaigns c ON c.id = s.campaign_id
        WHERE s.id = ?`
@@ -47,7 +46,8 @@ sessionsRouter.get("/:id", (req, res) => {
     .prepare(
       `SELECT p.id as player_id, p.name,
               COALESCE(sa.attended, 0) as attended,
-              COALESCE(sa.amount_paid, 0) as amount_paid
+              COALESCE(sa.amount_paid, 0) as amount_paid,
+              COALESCE(sa.amount_forgiven, 0) as amount_forgiven
        FROM campaign_roster cr
        JOIN players p ON p.id = cr.player_id
        LEFT JOIN session_attendance sa
@@ -283,12 +283,18 @@ sessionsRouter.put("/:id/restore", (req, res) => {
 
 sessionsRouter.put("/:id/attendance", (req, res) => {
   const { attendance } = req.body as {
-    attendance: { player_id: number; attended: boolean; amount_paid: number }[];
+    attendance: {
+      player_id: number;
+      attended: boolean;
+      amount_paid: number;
+      amount_forgiven?: number;
+    }[];
   };
   const upsert = db.prepare(
-    `INSERT INTO session_attendance (session_id, player_id, attended, amount_paid)
-     VALUES (@session_id, @player_id, @attended, @amount_paid)
-     ON CONFLICT(session_id, player_id) DO UPDATE SET attended = @attended, amount_paid = @amount_paid`
+    `INSERT INTO session_attendance (session_id, player_id, attended, amount_paid, amount_forgiven)
+     VALUES (@session_id, @player_id, @attended, @amount_paid, @amount_forgiven)
+     ON CONFLICT(session_id, player_id) DO UPDATE SET
+       attended = @attended, amount_paid = @amount_paid, amount_forgiven = @amount_forgiven`
   );
   const tx = db.transaction((rows: typeof attendance) => {
     for (const row of rows) {
@@ -297,6 +303,7 @@ sessionsRouter.put("/:id/attendance", (req, res) => {
         player_id: row.player_id,
         attended: row.attended ? 1 : 0,
         amount_paid: row.amount_paid || 0,
+        amount_forgiven: row.amount_forgiven || 0,
       });
     }
   });

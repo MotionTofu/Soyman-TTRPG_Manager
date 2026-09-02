@@ -593,7 +593,7 @@ function MasteringSectionBlock({
         </summary>
         <div className="res-group__body">
           {notes.length === 0 ? (
-            <div className="muted" style={{ padding: "8px 12px", fontSize: 12 }}>
+            <div className="muted" style={{ padding: "8px 12px", fontSize: "var(--fs-meta)" }}>
               Пока пусто — добавьте заметку.
             </div>
           ) : (
@@ -668,7 +668,7 @@ function MasteringSectionBlock({
               color: "var(--ink)",
               border: "1px solid var(--line)",
               fontFamily: "var(--font-ui)",
-              fontSize: 10,
+              fontSize: "var(--fs-micro)",
               letterSpacing: "0.08em",
               textTransform: "uppercase",
               whiteSpace: "nowrap",
@@ -692,7 +692,7 @@ function MasteringSectionBlock({
               color: "var(--danger-text)",
               border: "1px solid var(--danger-bg)",
               fontFamily: "var(--font-ui)",
-              fontSize: 10,
+              fontSize: "var(--fs-micro)",
               letterSpacing: "0.08em",
               textTransform: "uppercase",
               whiteSpace: "nowrap",
@@ -755,7 +755,7 @@ function MasteringSectionBlock({
           </div>
         )}
         {notes.length === 0 && !inlineOpen ? (
-          <div className="muted" style={{ padding: "8px 12px", fontSize: 12 }}>
+          <div className="muted" style={{ padding: "8px 12px", fontSize: "var(--fs-meta)" }}>
             Пока пусто — добавьте заметку в этот раздел.
           </div>
         ) : notes.length === 0 && inlineOpen ? null : (
@@ -901,7 +901,7 @@ export function NoteCard({
       {!editMode && hasContent && !expanded && (
         <div
           className="muted"
-          style={{ padding: "0 12px 4px 44px", fontSize: 12, lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+          style={{ padding: "0 12px 4px 44px", fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
         >
           {highlightParts(preview, query)}
         </div>

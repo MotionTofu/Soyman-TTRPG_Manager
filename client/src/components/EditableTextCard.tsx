@@ -40,6 +40,7 @@ interface Props {
   // это не сделать — черновик живёт внутри карточки, и кнопка под ней
   // сохранила бы прошлую версию текста.
   extraAction?: { label: string; onAct: (draft: string) => Promise<unknown> };
+  inlineFooter?: ReactNode;
 }
 
 export function EditableTextCard({
@@ -57,6 +58,7 @@ export function EditableTextCard({
   fields,
   onSaveFields,
   extraAction,
+  inlineFooter,
 }: Props) {
   const [editMode, setEditMode] = useState(() => !value);
   const [draft, setDraft] = useState(value);
@@ -166,14 +168,17 @@ export function EditableTextCard({
               </>
             );
           })()}
-          <div className="row">
-            <button onClick={startEdit}>Редактировать</button>
-            {extraAction && (
-              <>
-                <span style={{ flex: 1 }} />
-                <button onClick={() => extraAction.onAct(value)}>{extraAction.label}</button>
-              </>
-            )}
+          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <div className="row">
+              <button onClick={startEdit}>Редактировать</button>
+              {extraAction && (
+                <>
+                  <span style={{ flex: 1 }} />
+                  <button onClick={() => extraAction.onAct(value)}>{extraAction.label}</button>
+                </>
+              )}
+            </div>
+            {inlineFooter && <div style={{ display: "flex", alignItems: "center" }}>{inlineFooter}</div>}
           </div>
         </>
       )}

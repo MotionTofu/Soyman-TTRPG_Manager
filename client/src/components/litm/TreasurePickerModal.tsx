@@ -52,15 +52,15 @@ export function TreasurePickerModal({ isOpen, onClose, onPick }: Props) {
                 padding: 12, borderRadius: 0, fontFamily: "inherit",
               }}
             >
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 8 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 8 }}>
                 {t.name}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
                 {t.tags.map((tag, i) => (
-                  <span key={i} className="tg tg-story" style={{ fontSize: 11 }}>{tag}</span>
+                  <span key={i} className="tg tg-story" style={{ fontSize: "var(--fs-meta)" }}>{tag}</span>
                 ))}
               </div>
-              <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+              <div style={{ fontSize: "var(--fs-meta)", color: "var(--ink-soft)" }}>
                 Теги станут ключами силы темы
               </div>
             </button>

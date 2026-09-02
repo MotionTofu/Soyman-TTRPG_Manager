@@ -161,7 +161,7 @@ export function PlayersListPage() {
               border: "1px solid var(--line)",
               borderRadius: "var(--card-radius)",
               fontFamily: "var(--font-ui)",
-              fontSize: 11,
+              fontSize: "var(--fs-micro)",
               textTransform: "uppercase",
               letterSpacing: "0.06em",
               textDecoration: "none",
@@ -199,7 +199,7 @@ export function PlayersListPage() {
         {q && (
           <button
             onClick={() => setQ("")}
-            style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+            style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
             title="Сбросить поиск"
           >
             Сбросить

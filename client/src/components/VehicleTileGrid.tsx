@@ -28,11 +28,7 @@ function sizeName(entry: CompendiumEntry): string {
   return (entry.data?.size as string | undefined) ?? "";
 }
 
-function monogramTone(category: string): number {
-  let hash = 0;
-  for (const ch of category) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-  return hash;
-}
+/** Заглушка — paper-2 без цветового кода (§1.7), hue-вариация удалена в Фазе 5 (C1). */
 
 function monogramLetter(name: string): string {
   return (name.trim()[0] ?? "?").toUpperCase();
@@ -283,11 +279,7 @@ const VehicleTile = memo(function VehicleTile({
           // Портрет — изображение-СОДЕРЖИМОЕ, дуотон на него не ложится (§1.13).
           <img className="monster-tile__portrait" src={entry.avatar_image_url} alt="" />
         ) : (
-          <span
-            className="monster-tile__monogram"
-            style={{ ["--monogram-tone" as string]: `${monogramTone(category)}` }}
-            aria-hidden="true"
-          >
+          <span className="monster-tile__monogram" aria-hidden="true">
             {monogramLetter(entry.name)}
           </span>
         )}

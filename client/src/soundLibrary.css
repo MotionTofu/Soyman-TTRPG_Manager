@@ -30,7 +30,7 @@
 }
 .sl-alert-note {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-top: 2px;
 }
@@ -52,7 +52,7 @@
 }
 .sl-section-hint {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 .sl-section-spacer { flex: 1 1 auto; }
@@ -64,7 +64,7 @@
   border-radius: 0;
   padding: 6px 12px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -151,7 +151,7 @@
 }
 .sl-tile-note {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 .sl-tile-note.broken { color: var(--accent); }
@@ -165,7 +165,7 @@
 
 .sl-empty {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
@@ -228,7 +228,7 @@
   color: inherit;
   padding: 6px 10px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -296,7 +296,7 @@
   width: 100%;
   min-width: 0;
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -329,7 +329,7 @@
 .ss-editor-head { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
 .ss-editor-title {
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: var(--fs-h1);
   line-height: 0.95;
   letter-spacing: -0.01em;
   text-transform: uppercase;
@@ -341,7 +341,7 @@
   color: var(--accent-text);
   padding: 7px 14px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -363,7 +363,7 @@
   padding-bottom: 5px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -377,7 +377,7 @@
   color: inherit;
   padding: 1px 7px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
   cursor: pointer;
 }
@@ -399,7 +399,7 @@
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -414,7 +414,7 @@
 .ss-row-badge {
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -462,14 +462,14 @@
   cursor: grab;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.5;
   user-select: none;
 }
 .ss-track-num {
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   line-height: 1.6;
 }
@@ -477,7 +477,7 @@
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.35;
   overflow: hidden;
   display: -webkit-box;
@@ -494,7 +494,7 @@
   color: var(--muted);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.5;
   padding: 0 2px;
 }
@@ -520,7 +520,7 @@
 
 .ss-empty {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 

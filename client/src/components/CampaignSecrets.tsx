@@ -143,7 +143,7 @@ const SecretGroup = memo(function SecretGroup({
         {items.map((s) => (
           <SecretRow key={s.id} secret={s} onToggle={toggle} onRemove={remove} />
         ))}
-        {items.length === 0 && <p className="muted">Пока пусто.</p>}
+        {/* §1.11a — как и у вех: приглашение здесь уже есть, это форма ниже. */}
         <AddSecretForm arcId={arcId} campaignId={campaignId} onChange={onChange} />
       </div>
     </details>

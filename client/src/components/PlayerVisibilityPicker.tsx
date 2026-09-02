@@ -95,7 +95,7 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
                   const missing = roster.filter((p) => !grants?.some((g) => g.player_id === p.id)).map((p) => p.id);
                   void batchToggle(missing, true);
                 }}
-                style={{ fontSize: 11, padding: "2px 6px" }}
+                style={{ fontSize: "var(--fs-meta)", padding: "2px 6px" }}
               >
                 Выбрать всех
               </button>
@@ -104,7 +104,7 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
                   const present = roster.filter((p) => grants?.some((g) => g.player_id === p.id)).map((p) => p.id);
                   void batchToggle(present, false);
                 }}
-                style={{ fontSize: 11, padding: "2px 6px" }}
+                style={{ fontSize: "var(--fs-meta)", padding: "2px 6px" }}
               >
                 Снять всех
               </button>

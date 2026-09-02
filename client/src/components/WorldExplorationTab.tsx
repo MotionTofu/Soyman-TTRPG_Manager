@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
-import type { Player, WorldExplorationEntry, WorldExplorationKind } from "../types";
+import type { LegacyWorldExplorationEntry, Player, WorldExplorationKind } from "../types";
 
 const KIND_TABS: { kind: WorldExplorationKind; label: string; addLabel: string; extraLabel: string | null }[] = [
   { kind: "being", label: "Существа", addLabel: "+ Добавить существо", extraLabel: "Место обитания" },
@@ -15,13 +15,15 @@ interface Props {
   campaignId: number;
 }
 
-// Player-authored "Исследование мира" journal — shared by the whole party
-// (not private per player), four kind-scoped sub-tabs to avoid a long
-// vertical scroll. Used both on the desktop client's role=player campaign
-// view and mirrored in player-app.
+// Старая картотека «Исследование Мира»: общая на всю партию, четыре подвкладки
+// по типам. Живёт ТОЛЬКО в кампаниях, где владелец сам играет
+// (`campaigns.role = 'player'`) — сервер это и проверяет
+// (routes/worldExplorationEntries.ts). В кампаниях, которые владелец водит, те
+// же строки принадлежат игрокам как личные путевые заметки, и мастеру не
+// показываются вовсе: components/player/CharacterJournal.tsx.
 export function WorldExplorationTab({ campaignId }: Props) {
   const [kind, setKind] = useState<WorldExplorationKind>("being");
-  const [entries, setEntries] = useState<WorldExplorationEntry[]>([]);
+  const [entries, setEntries] = useState<LegacyWorldExplorationEntry[]>([]);
   const [selfPlayerId, setSelfPlayerId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -31,14 +33,14 @@ export function WorldExplorationTab({ campaignId }: Props) {
 
   function refresh() {
     api
-      .get<WorldExplorationEntry[]>(`/world-exploration-entries?campaign_id=${campaignId}&kind=${kind}`)
+      .get<LegacyWorldExplorationEntry[]>(`/world-exploration-entries?campaign_id=${campaignId}&kind=${kind}`)
       .then(setEntries);
   }
   useEffect(refresh, [campaignId, kind]);
 
   async function addEntry() {
     if (!selfPlayerId) return;
-    const created = await api.post<WorldExplorationEntry>("/world-exploration-entries", {
+    const created = await api.post<LegacyWorldExplorationEntry>("/world-exploration-entries", {
       campaign_id: campaignId,
       player_id: selfPlayerId,
       kind,
@@ -97,11 +99,11 @@ function EntryCard({
   onChange,
   onRemove,
 }: {
-  entry: WorldExplorationEntry;
+  entry: LegacyWorldExplorationEntry;
   extraLabel: string | null;
   expanded: boolean;
   onToggle: () => void;
-  onChange: (patch: Partial<WorldExplorationEntry>) => void;
+  onChange: (patch: Partial<LegacyWorldExplorationEntry>) => void;
   onRemove: () => void;
 }) {
   const [name, setName] = useState(entry.name);
@@ -110,7 +112,7 @@ function EntryCard({
   const [uploading, setUploading] = useState(false);
 
   async function save() {
-    const saved = await api.put<WorldExplorationEntry>(`/world-exploration-entries/${entry.id}`, {
+    const saved = await api.put<LegacyWorldExplorationEntry>(`/world-exploration-entries/${entry.id}`, {
       name,
       description,
       extra_field: extraField,
@@ -123,7 +125,7 @@ function EntryCard({
     setUploading(true);
     const form = new FormData();
     form.append("file", file);
-    const saved = await api.post<WorldExplorationEntry>(`/world-exploration-entries/${entry.id}/avatar`, form);
+    const saved = await api.post<LegacyWorldExplorationEntry>(`/world-exploration-entries/${entry.id}/avatar`, form);
     onChange(saved);
     setUploading(false);
   }

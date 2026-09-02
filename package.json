@@ -3,6 +3,7 @@
   "version": "2026.9.1",
   "private": true,
   "description": "SoyMan_ttrpg — личный менеджер настольных ролевых кампаний",
+  "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
   "scripts": {
     "build:server": "cd server && npm install && npm run build",
@@ -11,6 +12,7 @@
     "rebuild:native": "electron-rebuild -f -w better-sqlite3 --module-dir=server",
     "restore:native": "cd server/node_modules/better-sqlite3 && node ../prebuild-install/bin.js",
     "build-seed": "node scripts/build-seed.js",
+    "licenses": "node scripts/collect-licenses.js",
     "dist": "npm run build && npm run rebuild:native && electron-builder && npm run restore:native",
     "dist:empty": "npm run build && npm run rebuild:native && electron-builder --config electron-builder.empty.json && npm run restore:native",
     "dist:full": "npm run build && npm run build-seed && npm run rebuild:native && electron-builder --config electron-builder.full.json && npm run restore:native",
@@ -37,7 +39,10 @@
       "server/dist/**/*",
       "server/package.json",
       "client/dist/**/*",
-      "build/icon.png"
+      "build/icon.png",
+      "LICENSE",
+      "THIRD-PARTY-LICENSES.md",
+      "CONTENT-NOTICES.md"
     ],
     "extraResources": [
       {

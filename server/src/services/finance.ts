@@ -70,6 +70,8 @@ export interface UnpaidSession {
   title: string | null;
   expected: number;
   paid: number;
+  /** Прощённое Мастером — в долг не идёт, но и в «заработано» тоже. */
+  forgiven: number;
 }
 
 // Mirrors the client's defaultStake() (client/src/pages/SessionDetailPage.tsx):
@@ -82,7 +84,7 @@ export function unpaidSessionsForPlayer(playerId: number): UnpaidSession[] {
     .prepare(
       `SELECT s.id as session_id, s.campaign_id, c.name as campaign_name, s.date, s.title,
               s.stake_override, c.session_rate, c.rate_split, c.payment_type, s.payment_override,
-              sa.amount_paid
+              sa.amount_paid, sa.amount_forgiven
        FROM sessions s
        JOIN campaigns c ON c.id = s.campaign_id
        JOIN session_attendance sa ON sa.session_id = s.id AND sa.player_id = ?
@@ -101,6 +103,7 @@ export function unpaidSessionsForPlayer(playerId: number): UnpaidSession[] {
     payment_type: string;
     payment_override: string | null;
     amount_paid: number;
+    amount_forgiven: number;
   }[];
 
   const result: UnpaidSession[] = [];
@@ -114,7 +117,10 @@ export function unpaidSessionsForPlayer(playerId: number): UnpaidSession[] {
         .get(row.session_id) as { n: number };
       expected = (row.session_rate ?? 0) / (attended.n > 0 ? attended.n : 1);
     }
-    if (expected > 0 && row.amount_paid < expected) {
+    // Прощённое закрывает долг наравне с оплаченным: Мастер решил, что этих
+    // денег не будет, и напоминать о них больше не о чем. В заработок оно при
+    // этом не идёт — totalEarnings суммирует только amount_paid.
+    if (expected > 0 && row.amount_paid + row.amount_forgiven < expected) {
       result.push({
         session_id: row.session_id,
         campaign_id: row.campaign_id,
@@ -123,8 +129,52 @@ export function unpaidSessionsForPlayer(playerId: number): UnpaidSession[] {
         title: row.title,
         expected,
         paid: row.amount_paid,
+        forgiven: row.amount_forgiven,
       });
     }
   }
   return result;
+}
+
+export interface CampaignDebt {
+  player_id: number;
+  player_name: string;
+  owed: number;
+  sessions: number;
+}
+
+/**
+ * Кто и сколько должен по одной кампании.
+ *
+ * Считается тем же `unpaidSessionsForPlayer`, что показывает игроку его
+ * собственный долг, — иначе два конца показывали бы разные числа. Здесь
+ * результат только сужается до одной кампании и складывается по игрокам.
+ *
+ * Ростер, а не посещаемость: выбывший (`status = 'left'`) долг за собой
+ * уносит, и Мастеру он нужен на виду не меньше, чем долг действующего.
+ */
+export function debtsForCampaign(campaignId: number): CampaignDebt[] {
+  const roster = db
+    .prepare(
+      `SELECT p.id, p.name FROM campaign_roster r
+         JOIN players p ON p.id = r.player_id
+        WHERE r.campaign_id = ? AND p.archived_at IS NULL
+        ORDER BY p.name`
+    )
+    .all(campaignId) as { id: number; name: string }[];
+
+  const out: CampaignDebt[] = [];
+  for (const p of roster) {
+    const mine = unpaidSessionsForPlayer(p.id).filter((u) => u.campaign_id === campaignId);
+    if (mine.length === 0) continue;
+    const owed = mine.reduce((sum, u) => sum + (u.expected - u.paid - u.forgiven), 0);
+    if (owed <= 0) continue;
+    out.push({
+      player_id: p.id,
+      player_name: p.name,
+      owed: Math.round(owed * 100) / 100,
+      sessions: mine.length,
+    });
+  }
+  return out;
 }

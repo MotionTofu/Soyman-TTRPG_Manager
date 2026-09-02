@@ -10,7 +10,10 @@
     "server/dist/**/*",
     "server/package.json",
     "client/dist/**/*",
-    "build/icon.png"
+    "build/icon.png",
+    "LICENSE",
+    "THIRD-PARTY-LICENSES.md",
+    "CONTENT-NOTICES.md"
   ],
   "extraResources": [
     {

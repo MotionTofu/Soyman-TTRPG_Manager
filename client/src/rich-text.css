@@ -25,7 +25,7 @@
 .mention-dropdown-item {
   padding: 6px 10px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .mention-dropdown-item.active,
 .mention-dropdown-item:hover {
@@ -85,12 +85,12 @@
 }
 .about-table td {
   font-family: var(--font-body);
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
 }
 /* Data-голос: комбинации клавиш моноширинным (§1.5). */
 .about-table__combo {
   font-family: var(--font-mono);
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -105,7 +105,7 @@
    (Oswald капс), Data-значение (JetBrains Mono) по правому краю. */
 .about-author-intro {
   font-family: var(--font-body);
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
   margin: 0;
 }
 .about-contacts {
@@ -148,7 +148,7 @@
 }
 .about-contact__value {
   font-family: var(--font-mono);
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-left: auto;
 }
@@ -212,7 +212,7 @@
 }
 .rt-format-trigger {
   padding: 3px 10px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
@@ -237,7 +237,7 @@
 }
 .rt-btn {
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.6;
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
@@ -264,7 +264,7 @@
 }
 .rt-select {
   padding: 2px 4px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
@@ -352,7 +352,7 @@
 
 .mention-dropdown-type {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
 }
 

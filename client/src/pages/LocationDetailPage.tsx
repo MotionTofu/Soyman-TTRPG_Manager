@@ -60,7 +60,6 @@ const TABS = [
   "Отношения",
   "Важные даты",
   "Галерея",
-  "Карточка локации",
   "Упоминания",
 ] as const;
 
@@ -655,15 +654,6 @@ export function LocationDetailPage() {
         />
       )}
 
-      {tab === "Карточка локации" && (
-        <div className="card stack">
-          <p className="muted">
-            Карточка локации — скоро здесь появится компактная витрина для показа игрокам (пульт
-            управления сессией и другие места).
-          </p>
-        </div>
-      )}
-
       {tab === "Упоминания" && <MentionsTab entityType="location" entityId={locationId} />}
 
       {tab === "Вложенность" && (
@@ -744,7 +734,7 @@ export function LocationDetailPage() {
             )}
             {archivedChildren.length > 0 && (
               <>
-                <span className="muted" style={{ fontSize: 11, fontFamily: "var(--font-ui)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <span className="muted" style={{ fontSize: "var(--fs-micro)", fontFamily: "var(--font-ui)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Архивированные ({archivedChildren.length})
                 </span>
                 {archivedChildren.map((c) => (
@@ -791,7 +781,7 @@ export function LocationDetailPage() {
             <button className="primary" onClick={createCommunity} disabled={communitySaving || !communityName.trim()}>
               {communitySaving ? "…" : "Добавить общину"}
             </button>
-            <span className="muted" style={{ fontSize: 11, maxWidth: "32ch" }}>или перетащите общину из поиска — она станет фракцией</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "32ch" }}>или перетащите общину из поиска — она станет фракцией</span>
           </div>
           <div
             className={`drop-zone inhabitants-drop${inhabitantsDragOver ? " drag-over" : ""}`}
@@ -850,7 +840,7 @@ export function LocationDetailPage() {
             </div>
           )}
           {(allInhabitants.length > 0 || location.inhabitant_communities.length > 0) && (
-            <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: 11, fontFamily: "var(--font-mono)" }} aria-live="polite">
+            <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: "var(--fs-meta)", fontFamily: "var(--font-mono)" }} aria-live="polite">
               <span>Обитателей: {filteredCount}{filteredCount !== allInhabitants.length ? ` из ${allInhabitants.length}` : ""}</span>
               {showNestedInhabitants && location.nested_inhabitant_beings.length > 0 && (
                 <span>(+{location.nested_inhabitant_beings.length} из вложенных)</span>
@@ -868,7 +858,7 @@ export function LocationDetailPage() {
             />
             Показывать обитателей вложенных локаций
             {showNestedInhabitants && location.nested_inhabitant_beings.length > 0 && (
-              <span style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: 11 }}> +{location.nested_inhabitant_beings.length} из дочерних · {(Array.from(new Set(location.nested_inhabitant_beings.flatMap((b)=> b.location_names ?? []))).join(", ") || "—")}</span>
+              <span style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: "var(--fs-micro)" }}> +{location.nested_inhabitant_beings.length} из дочерних · {(Array.from(new Set(location.nested_inhabitant_beings.flatMap((b)=> b.location_names ?? []))).join(", ") || "—")}</span>
             )}
           </label>
           {allInhabitants.length === 0 && location.inhabitant_communities.length === 0 ? (

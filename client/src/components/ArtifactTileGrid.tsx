@@ -7,7 +7,7 @@ import { EntityPreviewContent } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
-import type { Artifact, SettingLocation, SettingBeing } from "../types";
+import type { Artifact, SettingLocation, SettingBeing, SettingCommunity } from "../types";
 
 const classLabels = Object.fromEntries(ITEM_CLASSES.map((c) => [c.value, c.label]));
 
@@ -123,27 +123,27 @@ function ArtifactEditModal({
       <div className="stack" style={{ padding: 16, gap: 12, minWidth: 360 }}>
         <h3 style={{ margin: 0 }}>Редактировать предмет</h3>
         <label className="stack" style={{ gap: 4 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Название</span>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Название</span>
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="stack" style={{ gap: 4 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Краткое название</span>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Краткое название</span>
           <input value={shortName} onChange={(e) => setShortName(e.target.value)} placeholder="Опционально" />
         </label>
         <label className="stack" style={{ gap: 4 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Владелец (текст)</span>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Владелец (текст)</span>
           <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Имя NPC, группа…" />
         </label>
         <div className="row" style={{ gap: 8 }}>
           <label className="stack" style={{ gap: 4, flex: 1 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Род</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Род</span>
             <select value={itemClass} onChange={(e) => { setItemClass(e.target.value); setItemType(""); }}>
               <option value="">—</option>
               {ITEM_CLASSES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </label>
           <label className="stack" style={{ gap: 4, flex: 1 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Тип</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Тип</span>
             <select value={itemType} onChange={(e) => setItemType(e.target.value)} disabled={!itemClass}>
               <option value="">—</option>
               {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -152,14 +152,14 @@ function ArtifactEditModal({
         </div>
         <div className="row" style={{ gap: 8 }}>
           <label className="stack" style={{ gap: 4, flex: 1 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Редкость</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Редкость</span>
             <select value={rarity} onChange={(e) => setRarity(e.target.value)}>
               <option value="">—</option>
               {MAGIC_ITEM_RARITIES.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </label>
           <label className="stack" style={{ gap: 4, flex: 1 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Настройка</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Настройка</span>
             <select value={requiresAttunement ? "1" : "0"} onChange={(e) => setRequiresAttunement(e.target.value === "1")}>
               <option value="0">Нет</option>
               <option value="1">Да</option>
@@ -192,6 +192,7 @@ function ArtifactAssignModal({
 }) {
   const [locations, setLocations] = useState<SettingLocation[]>([]);
   const [beings, setBeings] = useState<SettingBeing[]>([]);
+  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
   const [locationId, setLocationId] = useState<number | null>(artifact.location?.id ?? null);
   const [ownerType, setOwnerType] = useState<string>(artifact.owner_entity?.type ?? "");
   const [ownerId, setOwnerId] = useState<number | null>(artifact.owner_entity?.id ?? null);
@@ -202,9 +203,11 @@ function ArtifactAssignModal({
     Promise.all([
       api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: c.signal }),
       api.get<SettingBeing[]>(`/setting-beings?setting_id=${settingId}`, { signal: c.signal }),
-    ]).then(([locs, bgs]) => {
+      api.get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}`, { signal: c.signal }),
+    ]).then(([locs, bgs, comms]) => {
       setLocations(locs);
       setBeings(bgs);
+      setCommunities(comms);
     }).catch(() => {});
     return () => c.abort();
   }, [settingId]);
@@ -229,14 +232,14 @@ function ArtifactAssignModal({
       <div className="stack" style={{ padding: 16, gap: 12, minWidth: 360 }}>
         <h3 style={{ margin: 0 }}>Привязать «{artifact.name}»</h3>
         <label className="stack" style={{ gap: 4 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Локация</span>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Локация</span>
           <select value={locationId ?? ""} onChange={(e) => setLocationId(e.target.value ? Number(e.target.value) : null)}>
             <option value="">Без локации</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </label>
         <label className="stack" style={{ gap: 4 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Владелец-сущность</span>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Владелец-сущность</span>
           <select
             value={ownerType}
             onChange={(e) => { setOwnerType(e.target.value); setOwnerId(null); }}
@@ -248,7 +251,7 @@ function ArtifactAssignModal({
         </label>
         {ownerType === "being" && (
           <label className="stack" style={{ gap: 4 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Существо</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Существо</span>
             <select value={ownerId ?? ""} onChange={(e) => setOwnerId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">—</option>
               {beings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -257,10 +260,10 @@ function ArtifactAssignModal({
         )}
         {ownerType === "community" && (
           <label className="stack" style={{ gap: 4 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Сообщество</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сообщество</span>
             <select value={ownerId ?? ""} onChange={(e) => setOwnerId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">—</option>
-              {beings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {communities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
         )}
@@ -457,7 +460,7 @@ export function ArtifactTileGrid({
               minHeight: 140,
             }}
           >
-            <span style={{ fontSize: 32, color: "var(--muted)" }}>+</span>
+            <span style={{ fontSize: "var(--fs-h1)", color: "var(--muted)" }}>+</span>
           </article>
         </div>
       )}

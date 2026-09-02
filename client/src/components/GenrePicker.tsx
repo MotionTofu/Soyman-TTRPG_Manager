@@ -114,7 +114,7 @@ export function GenrePicker({
             {draft.length > 0 && (
               <button
                 onClick={() => setDraft([])}
-                style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+                style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
               >
                 Сбросить все
               </button>

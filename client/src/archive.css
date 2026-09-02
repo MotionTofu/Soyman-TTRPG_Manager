@@ -13,7 +13,7 @@
   padding: 0 4px;
   margin-left: 6px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   line-height: 1;
   background: var(--bg-elevated);
   color: var(--muted);
@@ -48,7 +48,7 @@
 .archive-card__head-title { color: var(--on-surface); }
 .archive-card__head-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   color: var(--on-surface-muted);
   letter-spacing: 0.06em;
 }
@@ -70,7 +70,7 @@
   flex: 0 0 auto;
   min-width: 84px;
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -85,7 +85,7 @@
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: var(--fs-meta);
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -98,7 +98,7 @@
 .archive-row__meta {
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -111,7 +111,7 @@
 }
 .archive-row__act {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -137,7 +137,7 @@
   flex: 0 0 auto;
   max-width: 160px;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .archive-toolbar__seg { flex: 0 0 auto; }
 
@@ -146,7 +146,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -184,7 +184,7 @@
 }
 .archive-bulk-bar__count {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--on-surface);
 }
 .archive-bulk-bar__actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -212,14 +212,14 @@
   color: var(--on-surface);
   border: 1px solid var(--line);
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   max-width: min(90vw, 520px);
 }
 .archive-toast__msg { flex: 1 1 auto; }
 .archive-toast__actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
 .archive-toast__undo {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   background: var(--paper);
@@ -231,7 +231,7 @@
   background: transparent;
   border: none;
   color: var(--on-surface-muted);
-  font-size: 18px;
+  font-size: var(--fs-h3);
   line-height: 1;
   padding: 0 4px;
 }

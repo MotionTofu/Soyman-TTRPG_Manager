@@ -176,7 +176,7 @@ export function ThemeEditorModal({ theme, prefs, onSave, onClose }: Props) {
                 onChange={(e) => setColors((prev) => ({ ...prev, [f.key]: e.target.value }))}
                 style={{ width: 32, height: 24, padding: 0, border: "1px solid var(--line)", cursor: "pointer" }}
               />
-              <span style={{ flex: 1, fontSize: 12 }}>{f.label}</span>
+              <span style={{ flex: 1, fontSize: "var(--fs-meta)" }}>{f.label}</span>
               <input
                 value={colors[f.key]}
                 onChange={(e) => {
@@ -184,7 +184,7 @@ export function ThemeEditorModal({ theme, prefs, onSave, onClose }: Props) {
                   if (/^#[0-9a-f]{6}$/i.test(v)) setColors((prev) => ({ ...prev, [f.key]: v }));
                   else setColors((prev) => ({ ...prev, [f.key]: v }));
                 }}
-                style={{ width: 80, fontFamily: "var(--font-mono)", fontSize: 11 }}
+                style={{ width: 80, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}
                 maxLength={7}
               />
             </label>
@@ -195,13 +195,13 @@ export function ThemeEditorModal({ theme, prefs, onSave, onClose }: Props) {
         <div className="stack" style={{ gap: 8 }}>
           <span className="muted" style={{ fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Шрифты</span>
           <label className="stack" style={{ gap: 4 }}>
-            <span style={{ fontSize: 12 }}>Заголовки (Display)</span>
+            <span style={{ fontSize: "var(--fs-meta)" }}>Заголовки (Display)</span>
             <select value={fontDisplay} onChange={(e) => setFontDisplay(e.target.value)}>
               {FONT_DISPLAY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
           <label className="stack" style={{ gap: 4 }}>
-            <span style={{ fontSize: 12 }}>Основной текст (Body)</span>
+            <span style={{ fontSize: "var(--fs-meta)" }}>Основной текст (Body)</span>
             <select value={fontBody} onChange={(e) => setFontBody(e.target.value)}>
               {FONT_BODY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -210,11 +210,11 @@ export function ThemeEditorModal({ theme, prefs, onSave, onClose }: Props) {
 
         {/* Preview */}
         <div className="card" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column", background: colors.paper, color: colors.ink, border: `1px solid ${colors.border}` }}>
-          <div style={{ fontFamily: fontDisplay, fontWeight: 600, fontSize: 18 }}>Заголовок карточки</div>
-          <div style={{ fontSize: 12, lineHeight: 1.4 }}>Пример текста на фоне темы. Чернила на бумаге, обводка вокруг.</div>
+          <div style={{ fontFamily: fontDisplay, fontWeight: 600, fontSize: "var(--fs-h3)" }}>Заголовок карточки</div>
+          <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.4 }}>Пример текста на фоне темы. Чернила на бумаге, обводка вокруг.</div>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <span style={{ background: colors.accent, color: "#fff", padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>АКЦЕНТ</span>
-            <span style={{ fontSize: 11, opacity: 0.6 }}>Число: 42</span>
+            <span style={{ background: colors.accent, color: "#fff", padding: "2px 8px", fontSize: "var(--fs-meta)", fontWeight: 600 }}>АКЦЕНТ</span>
+            <span style={{ fontSize: "var(--fs-meta)", opacity: 0.6 }}>Число: 42</span>
           </div>
         </div>
 

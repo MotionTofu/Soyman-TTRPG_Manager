@@ -1023,7 +1023,7 @@ export function LocationMap({
                 value={settingsDraft.maxZoom}
                 onChange={(e) => setSettingsDraft((d) => ({ ...d, maxZoom: e.target.value }))}
               />
-              <span className="muted" style={{ fontSize: 11 }}>Предел приближения колесом мыши и кнопками +/−.</span>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Предел приближения колесом мыши и кнопками +/−.</span>
             </label>
             <label className="stack" style={{ gap: 4 }}>
               Стартовый зум (при открытии страницы)
@@ -1033,7 +1033,7 @@ export function LocationMap({
                 value={settingsDraft.startZoom}
                 onChange={(e) => setSettingsDraft((d) => ({ ...d, startZoom: e.target.value }))}
               />
-              <span className="muted" style={{ fontSize: 11 }}>Какая степень приближения будет установлена при первом открытии карты.</span>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Какая степень приближения будет установлена при первом открытии карты.</span>
             </label>
             <label className="stack" style={{ gap: 4 }}>
               Зум при переходе к пину
@@ -1043,7 +1043,7 @@ export function LocationMap({
                 value={settingsDraft.gotoZoom}
                 onChange={(e) => setSettingsDraft((d) => ({ ...d, gotoZoom: e.target.value }))}
               />
-              <span className="muted" style={{ fontSize: 11 }}>Приближение при нажатии «Перейти» в поиске пинов.</span>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Приближение при нажатии «Перейти» в поиске пинов.</span>
             </label>
             <label className="row">
               <input

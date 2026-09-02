@@ -118,22 +118,22 @@ function ThemeKitPicker({
                   padding: 12, borderRadius: 0, fontFamily: "inherit",
                 }}
               >
-                <div className="litm-theme-subtitle" style={{ fontSize: 11, marginBottom: 6 }}>
+                <div className="litm-theme-subtitle" style={{ fontSize: "var(--fs-meta)", marginBottom: 6 }}>
                   {kit.name.split(" [")[1]?.replace("]", "") ?? ""}
                 </div>
-                <div style={{ fontWeight: "bold", fontSize: 14, marginBottom: 8 }}>
+                <div style={{ fontWeight: "bold", fontSize: "var(--fs-meta)", marginBottom: 8 }}>
                   {kit.name.split(" [")[0]}
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, fontSize: 11 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, fontSize: "var(--fs-meta)" }}>
                   {(kit.data.powerTags as string[] | undefined)?.slice(0, 3).map(t => (
-                    <span key={t} className="tg tg-pow" style={{ fontSize: 10 }}>{t}</span>
+                    <span key={t} className="tg tg-pow" style={{ fontSize: "var(--fs-micro)" }}>{t}</span>
                   ))}
                   {(kit.data.weaknessTags as string[] | undefined)?.slice(0, 2).map(t => (
-                    <span key={t} className="tg tg-weak" style={{ fontSize: 10 }}>{t}</span>
+                    <span key={t} className="tg tg-weak" style={{ fontSize: "var(--fs-micro)" }}>{t}</span>
                   ))}
                 </div>
                 {(kit.data.quest as string | undefined) && (
-                  <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                  <div className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 6 }}>
                     {String(kit.data.quest).slice(0, 60)}…
                   </div>
                 )}

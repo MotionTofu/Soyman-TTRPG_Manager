@@ -89,6 +89,31 @@ export function SceneSwitcher({
     }
   }
 
+  // Клавиатура за столом: ↑↓ — перебор Дальше+На вечер, Enter — запуск, Esc — отмена. Без мыши.
+  useEffect(() => {
+    if (!stage) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const all: StageScene[] = [...stage.exits.map((x) => x.scene), ...stage.planned.map((p) => ({ id: p.id, name: p.name, kind: null, arc_id: null, arc_name: p.arc_name ?? null } as StageScene))];
+      if (all.length === 0) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const idx = picked ? all.findIndex((s) => s.id === picked.id) : -1;
+        const next = e.key === "ArrowDown" ? (idx + 1) % all.length : (idx - 1 + all.length) % all.length;
+        setPicked(all[next]);
+      } else if (e.key === "Enter" && picked && stage.current && picked.id !== stage.current.id) {
+        e.preventDefault();
+        launch(picked);
+      } else if (e.key === "Escape" && picked) {
+        e.preventDefault();
+        setPicked(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stage, picked]);
+
   if (!stage) return null;
   const isPreview = picked != null && picked.id !== stage.current?.id;
 

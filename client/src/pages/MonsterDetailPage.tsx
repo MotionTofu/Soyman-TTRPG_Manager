@@ -95,6 +95,9 @@ export function MonsterDetailPage({
 
   const creatureType = entry.data?.creature_type as MechanicsOption | undefined;
   const size = typeof entry.data.size === "string" ? entry.data.size : "";
+  const ac = typeof entry.data.ac === "string" ? entry.data.ac : "";
+  const hp = typeof entry.data.hp === "string" ? entry.data.hp : "";
+  const speed = typeof entry.data.speed === "string" ? entry.data.speed : "";
   const alignment = typeof entry.data.alignment === "string" ? entry.data.alignment : "";
   const aliases = entry.aliases ?? [];
   const isPhb = system?.code === "phb";
@@ -129,6 +132,9 @@ export function MonsterDetailPage({
             value: size,
             options: [{ value: "", label: "—" }, ...CREATURE_SIZES.map((s) => ({ value: s, label: s }))],
           } as EntityField,
+          { key: "ac", label: "КД", value: ac } as EntityField,
+          { key: "hp", label: "Хиты", value: hp } as EntityField,
+          { key: "speed", label: "Скорость", value: speed } as EntityField,
         ]
       : []),
     {
@@ -148,6 +154,12 @@ export function MonsterDetailPage({
     const data: Record<string, unknown> = { ...entry.data };
     if (values.size) data.size = values.size;
     else delete data.size;
+    if ((values.ac ?? "").trim()) data.ac = values.ac.trim();
+    else delete data.ac;
+    if ((values.hp ?? "").trim()) data.hp = values.hp.trim();
+    else delete data.hp;
+    if ((values.speed ?? "").trim()) data.speed = values.speed.trim();
+    else delete data.speed;
     if (values.alignment.trim()) data.alignment = values.alignment.trim();
     else delete data.alignment;
     if (type) data.creature_type = type;
@@ -202,6 +214,9 @@ export function MonsterDetailPage({
           ownerCreatureType={creatureType?.name}
           ownerCreatureSize={size || undefined}
           ownerCreatureCR={typeof entry.data?.cr === "string" ? entry.data.cr : undefined}
+          ownerCreatureAC={ac || undefined}
+          ownerCreatureHP={hp || undefined}
+          ownerCreatureSpeed={speed || undefined}
         />
       )}
 

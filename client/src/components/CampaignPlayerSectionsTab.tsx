@@ -140,11 +140,11 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
           {saving ? "Создание…" : "+ Добавить подраздел"}
         </button>
       </div>
-      {newName.trim().length > SECTION_NAME_MAX && <span className="muted" style={{ fontSize: 11 }}>До {SECTION_NAME_MAX} символов</span>}
+      {newName.trim().length > SECTION_NAME_MAX && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>До {SECTION_NAME_MAX} символов</span>}
       {loading && <p className="muted">Загрузка…</p>}
       {error && (
         <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{error}</span>
+          <span style={{ color: "var(--danger, #c00)", fontSize: "var(--fs-meta)" }}>{error}</span>
           <button onClick={() => load()}>Повторить</button>
         </div>
       )}
@@ -195,7 +195,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
             <div className="stack">
               {sections.map((s) => (
                 <div key={s.id} className="card" style={{ padding: 12 }}>
-                  <strong style={{ fontFamily: "var(--font-ui)", textTransform: "uppercase", fontSize: 12 }}>{s.name}</strong> <span className="badge tag">{s.kind === "gallery" ? "Галерея" : "Статьи"}</span>
+                  <strong style={{ fontFamily: "var(--font-ui)", textTransform: "uppercase", fontSize: "var(--fs-meta)" }}>{s.name}</strong> <span className="badge tag">{s.kind === "gallery" ? "Галерея" : "Статьи"}</span>
                 </div>
               ))}
               {sections.length === 0 && <p className="muted">Подразделов нет.</p>}
@@ -282,7 +282,7 @@ function SectionCard({
             <strong className="entry-title">{section.name}</strong>
           )}
           <span className="badge tag">{section.kind === "gallery" ? "Галерея" : "Статьи"}</span>
-          {countLabel && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>· {countLabel}</span>}
+          {countLabel && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>· {countLabel}</span>}
         </span>
         <span className="row" onClick={(e) => e.stopPropagation()}>
           {renaming ? (
@@ -411,7 +411,7 @@ function ArticlesList({
       {loading && <p className="muted">Загрузка статей…</p>}
       {error && (
         <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{error}</span>
+          <span style={{ color: "var(--danger, #c00)", fontSize: "var(--fs-meta)" }}>{error}</span>
           <button onClick={() => load()}>Повторить</button>
         </div>
       )}
@@ -554,7 +554,7 @@ function ArticleCard({
                 {saving ? "Сохранение…" : "Сохранить"}
               </button>
               <button onClick={handleCancel} disabled={saving}>Отмена</button>
-              <span className="muted" style={{ fontSize: 11 }}>Ctrl+S</span>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Ctrl+S</span>
             </div>
           </div>
         ) : (

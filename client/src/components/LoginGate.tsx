@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { setUnauthorizedHandler } from "../api/client";
 import { loadMentionIndex } from "../mentions";
 import { LoginScreen } from "./LoginScreen";
-import { clearCachedUser } from "../api/currentUser";
+import { clearCachedUser, fetchCurrentUser } from "../api/currentUser";
 
 // Wraps the whole routed app. Auth is always on: any 401 (no token yet, or
 // an expired/invalid one) flips this into a full-screen login form — which
@@ -24,7 +24,12 @@ export function LoginGate({ children }: { children: ReactNode }) {
   // запрос требует токена — до входа он вернул бы 401.
   useEffect(() => {
     if (needsLogin) return;
-    void loadMentionIndex();
+    // Игроку этот запрос отвечает 403 (ролевой гейт), поэтому карта грузится
+    // только мастеру; у игрока подписи упоминаний — обычный текст
+    // (components/mentions/MentionText.tsx).
+    void fetchCurrentUser().then((u) => {
+      if (u && u.role !== "player") void loadMentionIndex();
+    });
   }, [needsLogin]);
 
   if (needsLogin) return <LoginScreen onAuthenticated={() => setNeedsLogin(false)} />;

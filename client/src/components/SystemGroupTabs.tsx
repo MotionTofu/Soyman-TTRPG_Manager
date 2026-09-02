@@ -178,7 +178,7 @@ export function SystemGroupTabs({ activeTab, onTabChange, onGroupsChanged }: Sys
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           {contextMenu.kind === "static" ? (
-            <span style={{ display: "block", padding: "6px 12px", color: "var(--muted)", fontSize: "var(--fs-body)" }}>
+            <span style={{ display: "block", padding: "6px 12px", color: "var(--muted)", fontSize: "var(--fs-meta)" }}>
               Эту вкладку не изменить
             </span>
           ) : (

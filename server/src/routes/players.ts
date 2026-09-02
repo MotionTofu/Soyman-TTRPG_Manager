@@ -5,6 +5,7 @@ import path from "path";
 import { db } from "../db/db";
 import { playerFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
+import { unpaidSessionsForPlayer } from "../services/finance";
 
 export const playersRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -153,6 +154,17 @@ playersRouter.put("/:id/restore", (req, res) => {
 
 // GM reminders shown to this one player only, on their player-app Главная.
 // See gm_reminders in schema.sql — lifecycle is entirely GM-controlled.
+// Неоплаченное этим игроком — то же вычисление, что видит он сам в своём
+// кабинете (routes/player.ts), только запрошенное Мастером. Долг нигде не
+// хранится: «ожидалось − оплачено − прощено». Действия над ним живут в
+// карточке конкретной сессии — сумма зависит от ставки и состава того вечера,
+// и гасить «вообще» значило бы дать приложению выбрать сессию за Мастера.
+playersRouter.get("/:id/unpaid", (req, res) => {
+  const playerId = Number(req.params.id);
+  if (!Number.isFinite(playerId)) return res.status(400).json({ error: "bad id" });
+  res.json(unpaidSessionsForPlayer(playerId));
+});
+
 playersRouter.get("/:id/reminders", (req, res) => {
   const rows = db
     .prepare("SELECT * FROM gm_reminders WHERE target_type = 'player' AND target_id = ? ORDER BY created_at DESC")

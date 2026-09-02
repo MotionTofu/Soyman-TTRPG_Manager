@@ -182,7 +182,7 @@ export const SettingBeingTileGrid = memo(function SettingBeingTileGrid({
       {onCreate && (
         <div className="monster-grid">
           <article className="monster-tile" onClick={onCreate} title="Создать" style={{ borderStyle: "dashed", background: "var(--paper-2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 140 }}>
-            <span style={{ fontSize: 32, color: "var(--muted)" }}>+</span>
+            <span style={{ fontSize: "var(--fs-h1)", color: "var(--muted)" }}>+</span>
           </article>
         </div>
       )}
@@ -256,7 +256,7 @@ export function SettingCommunityTileGrid({ communities, searchActive, dir = "asc
       {onCreate && (
         <div className="monster-grid">
           <article className="monster-tile" onClick={onCreate} title="Создать сообщество" style={{ borderStyle: "dashed", background: "var(--paper-2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 140 }}>
-            <span style={{ fontSize: 32, color: "var(--muted)" }}>+</span>
+            <span style={{ fontSize: "var(--fs-h1)", color: "var(--muted)" }}>+</span>
           </article>
         </div>
       )}

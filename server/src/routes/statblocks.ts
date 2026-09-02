@@ -56,32 +56,127 @@ function resolveStatblockOwnerFolder(ownerType: string, ownerId: number): string
   return null;
 }
 
+const ALLOWED_OWNER_TYPES = new Set(["character", "being", "compendium_entry"]);
+
+// Preview without DB write — returns parsed summary + warnings so client can show modal before confirm
+statblocksRouter.post("/import/preview", (req, res) => {
+  const { owner_type, owner_id, json } = req.body as {
+    owner_type: string;
+    owner_id: number;
+    json: string;
+  };
+  if (!owner_type || owner_id == null || !json)
+    return res.status(400).json({ error: "owner_type, owner_id и json обязательны" });
+  if (!ALLOWED_OWNER_TYPES.has(owner_type))
+    return res.status(400).json({ error: `Недопустимый owner_type: ${owner_type}` });
+  if (owner_type !== "character")
+    return res.status(400).json({ error: "Импорт Long Story Short доступен только для персонажей" });
+  const numericOwnerId = Number(owner_id);
+  if (!Number.isFinite(numericOwnerId) || numericOwnerId <= 0)
+    return res.status(400).json({ error: "Некорректный owner_id" });
+  if (typeof json !== "string" || !json.trim())
+    return res.status(400).json({ error: "json должен быть непустой строкой" });
+  let parsed: ReturnType<typeof parseLongStoryShort>;
+  try {
+    parsed = parseLongStoryShort(json);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(400).json({ error: "Не удалось разобрать файл: " + msg.split("\n")[0].slice(0, 500) });
+  }
+  // Summarize for preview table without leaking full characterData (too large)
+  const cd = parsed.characterData as Record<string, unknown>;
+  const classes = cd.classes as { className: string; subclassName: string; level: number }[] | undefined;
+  const attacks = cd.attacks as { name: string }[] | undefined;
+  const equipSections = cd.equipmentSections as { items: unknown[] }[] | undefined;
+  const preview = {
+    characterName: parsed.characterName,
+    shortText: parsed.shortText,
+    warnings: parsed.warnings,
+    summary: {
+      raceName: cd.raceName,
+      raceId: cd.raceId,
+      className: classes?.[0]?.className ?? "",
+      subclassName: classes?.[0]?.subclassName ?? "",
+      classId: (classes?.[0] as Record<string, unknown> | undefined)?.classId ?? null,
+      subclassId: (classes?.[0] as Record<string, unknown> | undefined)?.subclassId ?? null,
+      level: classes?.[0]?.level ?? 1,
+      armorClass: cd.armorClass,
+      hitPointMax: cd.hitPointMax,
+      speed: cd.speed,
+      abilities: cd.abilities,
+      skillCount: Object.keys((cd.skillProfs as object) ?? {}).length,
+      attackCount: attacks?.length ?? 0,
+      equipmentCount: equipSections?.[0]?.items?.length ?? 0,
+      hasSpells: false, // LSS spells are IDs, not mappable — preview flags via warnings
+    },
+  };
+  res.json(preview);
+});
+
 statblocksRouter.post("/import", (req, res) => {
   const { owner_type, owner_id, json } = req.body as {
     owner_type: string;
     owner_id: number;
     json: string;
   };
-  if (!owner_type || !owner_id || !json)
-    return res.status(400).json({ error: "owner_type, owner_id and json are required" });
+  if (!owner_type || owner_id == null || !json)
+    return res.status(400).json({ error: "owner_type, owner_id и json обязательны" });
+  if (!ALLOWED_OWNER_TYPES.has(owner_type))
+    return res.status(400).json({ error: `Недопустимый owner_type: ${owner_type}` });
+  const numericOwnerId = Number(owner_id);
+  if (!Number.isFinite(numericOwnerId) || numericOwnerId <= 0)
+    return res.status(400).json({ error: "Некорректный owner_id" });
+  if (typeof json !== "string" || !json.trim())
+    return res.status(400).json({ error: "json должен быть непустой строкой" });
+  // LSS import is only meaningful for characters — being/compendium_entry get a plain text fallback
+  if (owner_type !== "character") {
+    return res.status(400).json({ error: "Импорт Long Story Short доступен только для персонажей (owner_type=character)" });
+  }
+  // Early owner existence check (character)
+  const ownerExists = db.prepare("SELECT id FROM characters WHERE id = ?").get(numericOwnerId);
+  if (!ownerExists) return res.status(404).json({ error: "Персонаж не найден" });
 
-  let parsed;
+  let parsed: ReturnType<typeof parseLongStoryShort>;
   try {
     parsed = parseLongStoryShort(json);
   } catch (err) {
-    return res.status(400).json({ error: "Не удалось разобрать файл: " + String(err) });
+    const msg = err instanceof Error ? err.message : String(err);
+    // Avoid leaking full stack — only first line
+    const safe = msg.split("\n")[0].slice(0, 500);
+    return res.status(400).json({ error: "Не удалось разобрать файл: " + safe });
   }
 
   const note = `Импортировано из Long Story Short${parsed.characterName ? ` (${parsed.characterName})` : ""}`;
-  const info = db
-    .prepare(
-      "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .run(owner_type, owner_id, "full", "dnd_character", JSON.stringify(parsed.characterData), note);
+  const insert = db.transaction((content: string) => {
+    const info = db
+      .prepare(
+        "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .run(owner_type, numericOwnerId, "full", "dnd_character", content, note);
+    return info.lastInsertRowid;
+  });
 
+  let newId: number | bigint;
+  try {
+    newId = insert(JSON.stringify(parsed.characterData));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return res.status(500).json({ error: "Не удалось сохранить статблок: " + msg.slice(0, 300) });
+  }
+
+  // Realtime — same as PUT /:id so other windows refresh
+  try {
+    broadcastCharacterUpdate(numericOwnerId);
+  } catch {
+    /* broadcast is best-effort */
+  }
+
+  const row = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(newId) as { avatar_image_path: string | null };
   res.status(201).json({
     characterName: parsed.characterName,
-    statblock: withAvatarUrl(db.prepare("SELECT * FROM statblocks WHERE id = ?").get(info.lastInsertRowid) as { avatar_image_path: string | null }),
+    warnings: parsed.warnings,
+    shortText: parsed.shortText,
+    statblock: withAvatarUrl(row),
   });
 });
 

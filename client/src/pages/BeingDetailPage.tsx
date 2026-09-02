@@ -8,6 +8,8 @@ import { GalleryTab } from "../components/GalleryTab";
 import { MentionsTab } from "../components/MentionsTab";
 import { ChapterList } from "../components/ChapterList";
 import { CreatureCardEditor } from "../components/CreatureCardEditor";
+import { CreatureCardLoader } from "../components/CreatureCard";
+import { Modal } from "../components/Modal";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
@@ -25,6 +27,8 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { MonsterTemplatePicker } from "../components/MonsterTemplatePicker";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "../components/NavIcons";
+import { EmptyState } from "../components/EmptyState";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
 import type {
   CompendiumLink,
   Campaign,
@@ -90,14 +94,42 @@ export function BeingDetailPage() {
   const thumbnailStyles = loadThumbnailStyles();
   const avatarCrop = useImageCrop("square", handleAvatarChange);
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
+  const [dossierQuery, setDossierQuery] = useState("");
+  const [neighbourIds, setNeighbourIds] = useState<{ prev: number | null; next: number | null }>({ prev: null, next: null });
+  const [cardPreviewOpen, setCardPreviewOpen] = useState(false);
 
-  function refresh() {
-    api.get<SettingBeingDetail>(`/setting-beings/${beingId}`).then((b) => {
+  async function loadBeing(signal?: AbortSignal) {
+    setLoading(true);
+    setLoadError(null);
+    const opts = signal ? { signal } : undefined;
+    try {
+      const b = await api.get<SettingBeingDetail>(`/setting-beings/${beingId}`, opts as any);
+      if (signal?.aborted) return;
       setBeing(b);
       setCommunityDraft(b.communities.map((c) => c.id));
-    });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      if (signal?.aborted) return;
+      setLoadError(String(e instanceof Error ? e.message : e));
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
   }
-  useEffect(refresh, [beingId]);
+
+  function refresh() {
+    void loadBeing();
+  }
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadBeing(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beingId]);
 
   // Мешок выгружает сюда локации — то же, что перетаскивание в «Места
   // обитания» (см. unloadTargets.tsx).
@@ -109,41 +141,169 @@ export function BeingDetailPage() {
 
   useEffect(() => {
     if (!being) return;
+    const controller = new AbortController();
+    const opts = { signal: controller.signal } as any;
     api
-      .get<Campaign[]>("/campaigns")
-      .then((all) => setCampaigns(all.filter((c) => c.setting_id === being.setting_id)));
+      .get<Campaign[]>("/campaigns", opts)
+      .then((all) => {
+        if (controller.signal.aborted) return;
+        setCampaigns(all.filter((c) => c.setting_id === being.setting_id));
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+      });
     api
-      .get<SettingCommunity[]>(`/setting-communities?setting_id=${being.setting_id}`)
-      .then(setCommunities);
+      .get<SettingCommunity[]>(`/setting-communities?setting_id=${being.setting_id}`, opts)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setCommunities(data);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+      });
     api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${being.setting_id}`)
-      .then(setSettingLocations);
+      .get<SettingLocation[]>(`/setting-locations?setting_id=${being.setting_id}`, opts)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setSettingLocations(data);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+      });
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [being?.setting_id]);
+
+  // Соседи по сеттингу — для prev/next навигации (U-P0-1)
+  useEffect(() => {
+    if (!being) return;
+    const controller = new AbortController();
+    api
+      .get<{ id: number }[]>(`/setting-beings?setting_id=${being.setting_id}`, { signal: controller.signal } as any)
+      .then((all) => {
+        if (controller.signal.aborted) return;
+        const ids = all.map((r) => r.id).sort((a, b) => a - b);
+        const idx = ids.indexOf(being.id);
+        setNeighbourIds({
+          prev: idx > 0 ? ids[idx - 1] : null,
+          next: idx >= 0 && idx < ids.length - 1 ? ids[idx + 1] : null,
+        });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [being?.id, being?.setting_id]);
+
+  async function duplicateBeing() {
+    if (!being) return;
+    try {
+      const created = await api.post<{ id: number }>("/setting-beings", {
+        setting_id: being.setting_id,
+        name: `Копия — ${being.name}`,
+        category: being.category,
+        tags: being.tags,
+      });
+      navigate(`/beings/${created.id}`);
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
+  }
+
+  if (loadError && !being) {
+    return (
+      <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
+        {confirmDialog}
+        {alertDialog}
+        <div
+          className="card"
+          style={{
+            borderLeft: "3px solid var(--status-cancelled)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span>Не удалось загрузить существо: {loadError}</span>
+          <button className="primary" onClick={() => refresh()}>
+            Повторить
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !being) {
+    return (
+      <div className="stack" aria-busy="true" aria-label="Загрузка существа">
+        {confirmDialog}
+        {alertDialog}
+        <div
+          className="card"
+          style={{
+            height: 140,
+            opacity: 0.45,
+            background: "var(--bg-elevated)",
+            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
+          }}
+        />
+        <div
+          className="card"
+          style={{
+            height: 220,
+            opacity: 0.45,
+            background: "var(--bg-elevated)",
+            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
+            animationDelay: "120ms",
+          }}
+        />
+      </div>
+    );
+  }
 
   if (!being) return <p className="muted">Загрузка…</p>;
 
   async function saveTags(tags: string[]) {
-    await api.put(`/setting-beings/${beingId}`, { tags });
-    refresh();
+    setSaving(true);
+    try {
+      await api.put(`/setting-beings/${beingId}`, { tags });
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveDescription(value: string) {
-    await api.put(`/setting-beings/${beingId}`, { description: value });
-    refresh();
+    setSaving(true);
+    try {
+      await api.put(`/setting-beings/${beingId}`, { description: value });
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveName(values: { name: string; category: string; short_name: string }) {
-    await api.put(`/setting-beings/${beingId}`, {
-      name: values.name,
-      category: values.category,
-      short_name: values.short_name.trim(),
-      // Смена основы догружает её статблок и описание, ничего не затирая, —
-      // поэтому и уходит только когда её действительно поменяли.
-      ...(baseDraft?.id !== being?.base_monster_id ? { base_monster_id: baseDraft?.id ?? null } : {}),
-    });
-    await api.put(`/setting-beings/${beingId}/communities`, { community_ids: communityDraft });
-    refresh();
+    setSaving(true);
+    try {
+      await api.put(`/setting-beings/${beingId}`, {
+        name: values.name,
+        category: values.category,
+        short_name: values.short_name.trim(),
+        // Смена основы догружает её статблок и описание, ничего не затирая, —
+        // поэтому и уходит только когда её действительно поменяли.
+        ...(baseDraft?.id !== being?.base_monster_id ? { base_monster_id: baseDraft?.id ?? null } : {}),
+      });
+      await api.put(`/setting-beings/${beingId}/communities`, { community_ids: communityDraft });
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   function toggleCommunity(id: number) {
@@ -164,15 +324,29 @@ export function BeingDetailPage() {
 
   async function archiveBeing() {
     if (!being) return;
-    if (!confirm("Отправить существо в архив?")) return;
-    await api.del(`/setting-beings/${beingId}`);
-    navigate(`/settings/${being.setting_id}`);
+    const ok = await confirm({
+      title: "Отправить в архив?",
+      message: `Отправить существо «${being.name}» в архив? Его можно восстановить позже.`,
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/setting-beings/${beingId}`);
+      navigate(`/settings/${being.setting_id}`);
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function addLocation(result: SearchResult) {
     if (result.type !== "location") return;
-    await api.post(`/setting-beings/${beingId}/locations`, { location_id: result.id });
-    refresh();
+    try {
+      await api.post(`/setting-beings/${beingId}/locations`, { location_id: result.id });
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
   }
 
   function handleLocationDrop(e: DragEvent<HTMLDivElement>) {
@@ -184,70 +358,132 @@ export function BeingDetailPage() {
   }
 
   async function removeLocation(locationId: number) {
-    await api.del(`/setting-beings/${beingId}/locations/${locationId}`);
-    refresh();
+    try {
+      await api.del(`/setting-beings/${beingId}/locations/${locationId}`);
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function addLocationViaCascade() {
     if (!addLocationId) return;
-    await api.post(`/setting-beings/${beingId}/locations`, { location_id: addLocationId });
-    setAddLocationId(null);
-    refresh();
+    try {
+      await api.post(`/setting-beings/${beingId}/locations`, { location_id: addLocationId });
+      setAddLocationId(null);
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function addImportantDate() {
     if (!dateTitle.trim() || !dateDay) return;
-    await api.post(`/setting-beings/${beingId}/important-dates`, {
-      title: dateTitle,
-      recurrence: dateRecurrence,
-      year: dateRecurrence === "once" ? Number(dateYear) || null : null,
-      month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
-      day: Number(dateDay),
-    });
-    setDateTitle("");
-    setDateYear("");
-    setDateMonth("");
-    setDateDay("");
-    refresh();
+    try {
+      await api.post(`/setting-beings/${beingId}/important-dates`, {
+        title: dateTitle,
+        recurrence: dateRecurrence,
+        year: dateRecurrence === "once" ? Number(dateYear) || null : null,
+        month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
+        day: Number(dateDay),
+      });
+        setDateTitle("");
+      setDateYear("");
+      setDateMonth("");
+      setDateDay("");
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function removeImportantDate(dateId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
-    await api.del(`/setting-beings/important-dates/${dateId}`);
-    refresh();
+    const ok = await confirm({
+      title: "Удалить дату?",
+      message: "Удалить важную дату?",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/setting-beings/important-dates/${dateId}`);
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
   }
 
   async function handleAvatarChange(file: File | null) {
     if (!file) return;
     setUploadingAvatar(true);
-    const form = new FormData();
-    form.append("file", file);
-    await api.post(`/setting-beings/${beingId}/avatar`, form);
-    setUploadingAvatar(false);
-    refresh();
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await api.post(`/setting-beings/${beingId}/avatar`, form);
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   async function handleThumbnailChange(file: File | null) {
     if (!file) return;
     setUploadingThumbnail(true);
-    const form = new FormData();
-    form.append("file", file);
-    await api.post(`/setting-beings/${beingId}/thumbnail`, form);
-    setUploadingThumbnail(false);
-    refresh();
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await api.post(`/setting-beings/${beingId}/thumbnail`, form);
+      refresh();
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setUploadingThumbnail(false);
+    }
   }
 
   return (
-    <div className="stack">
-      <Breadcrumbs
-        items={[
-          {
-            label: "Население",
-            to: `/settings/${being.setting_id}?tab=${encodeURIComponent("Население")}`,
-          },
-          { label: being.name },
-        ]}
-      />
+    <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
+      {confirmDialog}
+      {alertDialog}
+      {loadError && being && (
+        <div
+          className="card"
+          style={{
+            borderLeft: "3px solid var(--status-cancelled)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span>Ошибка загрузки: {loadError}</span>
+          <button className="primary" onClick={() => refresh()}>
+            Повторить
+          </button>
+        </div>
+      )}
+      {saving && <span className="muted" aria-live="polite" style={{ fontSize: "var(--fs-meta)" }}>Сохранение…</span>}
+      {(() => {
+        const lastFilters = (() => {
+          try {
+            return sessionStorage.getItem(`population-last-filters-${being.setting_id}`) || "";
+          } catch {
+            return "";
+          }
+        })();
+        const baseTo = `/settings/${being.setting_id}?tab=${encodeURIComponent("Население")}`;
+        const to = lastFilters ? `${baseTo}&${lastFilters}` : baseTo;
+        return (
+          <Breadcrumbs
+            items={[
+              { label: "Население", to },
+              { label: being.name },
+            ]}
+          />
+        );
+      })()}
 
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row" style={{ alignItems: "flex-start" }}>
@@ -270,19 +506,48 @@ export function BeingDetailPage() {
           </div>
           <div>
             <div className="row" style={{ alignItems: "center" }}>
-              <h1>{being.name}</h1>
+              <h1
+                title="Нажмите чтобы перейти к редактированию основного"
+                style={{ cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 4 }}
+                onClick={() => {
+                  selectTab("Досье");
+                  setTimeout(() => document.getElementById("dossier-fields")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+                }}
+              >
+                {being.name}
+              </h1>
               <EntityTypeChip type="being" />
               <GraphNeighbourhoodLink type="being" id={being.id} />
+              <span className="row" style={{ gap: 4, marginLeft: 8 }}>
+                <button
+                  type="button"
+                  className="comp-mini"
+                  disabled={!neighbourIds.prev}
+                  title={neighbourIds.prev ? "Предыдущее существо" : "Нет предыдущего"}
+                  onClick={() => neighbourIds.prev && navigate(`/beings/${neighbourIds.prev}`)}
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  className="comp-mini"
+                  disabled={!neighbourIds.next}
+                  title={neighbourIds.next ? "Следующее существо" : "Нет следующего"}
+                  onClick={() => neighbourIds.next && navigate(`/beings/${neighbourIds.next}`)}
+                >
+                  →
+                </button>
+              </span>
             </div>
             {being.creature_meta && (
-              <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+              <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", letterSpacing: "0.02em" }}>
                 {[being.creature_meta.size, being.creature_meta.creatureType, being.creature_meta.alignment]
                   .filter((p) => p && p.trim())
-                  .join(", ")}
+                  .join(" · ")}
               </div>
             )}
             <div className="row">
-              <span className="badge tag">{CATEGORY_LABELS[being.category]}</span>
+              <span className="badge tag" style={{ fontFamily: "var(--font-ui)", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.10em" }}>{CATEGORY_LABELS[being.category]}</span>
               {being.locations.map((l) => (
                 <Link key={l.id} to={`/locations/${l.id}`} className="entity-type-chip location">
                   {l.name}
@@ -308,24 +573,70 @@ export function BeingDetailPage() {
           </div>
         </div>
         <div className="entity-header-actions">
-          {/* Имя, категория и сообщества правятся карточкой «Основное» во
-              вкладке «Досье». */}
+          <button onClick={() => setCardPreviewOpen(true)} title="Быстрый просмотр карточки — для стола">
+            <NavIcon name="card" /> Карточка
+          </button>
+          <button onClick={() => window.print()} title="Печать профиля">
+            <NavIcon name="document" /> Печать
+          </button>
+          <button onClick={duplicateBeing} title="Создать копию этого существа">
+            <NavIcon name="plus" /> Дублировать
+          </button>
           <button className="danger" onClick={archiveBeing}>
             <NavIcon name="archive" /> Архивировать
           </button>
         </div>
       </div>
+      {cardPreviewOpen && (
+        <Modal onClose={() => setCardPreviewOpen(false)}>
+          <div className="stack" style={{ minWidth: 320, maxWidth: 560 }}>
+            <CreatureCardLoader type="being" id={beingId} />
+            <button onClick={() => setCardPreviewOpen(false)}>Закрыть</button>
+          </div>
+        </Modal>
+      )}
 
       <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
+        {(() => {
+          const counts: Record<string, number> = {
+            Досье: being.chapters.length + (being.description ? 1 : 0),
+            Отношения: (being.relations?.length ?? 0),
+            "Места обитания": being.locations.length,
+            "Важные даты": being.important_dates.length,
+            Галерея: 0,
+            "Карточка существа": being.statblock_count ?? 0,
+            Упоминания: 0,
+          };
+          return TABS.map((t) => (
+            <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
+              {t}
+              {counts[t] !== undefined && counts[t] > 0 && (
+                <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "10px", marginLeft: 6, opacity: 0.7 }}>
+                  · {counts[t]}
+                </span>
+              )}
+            </button>
+          ));
+        })()}
       </div>
 
       {tab === "Досье" && (
         <div className="stack">
+          <div className="row" style={{ gap: 8 }}>
+            <input
+              placeholder="Поиск по досье — имя, описание, главы…"
+              value={dossierQuery}
+              onChange={(e) => setDossierQuery(e.target.value)}
+              aria-label="Поиск по досье"
+              style={{ flex: 1 }}
+            />
+            {dossierQuery && (
+              <button onClick={() => setDossierQuery("")} title="Сбросить">
+                ✕
+              </button>
+            )}
+          </div>
+          <div id="dossier-fields" />
           <EntityFieldsCard
             key={`fields-${being.id}`}
             fields={[
@@ -431,52 +742,94 @@ export function BeingDetailPage() {
             collapsible
             defaultOpen
           />
-          <details className="card">
-            <summary className="sb-section" style={{ margin: 0 }}>
-              История
+          <details className="card" open>
+            <summary className="card-header--inverted chevron-summary" style={{ margin: "-14px -14px 12px -14px", cursor: "pointer", listStyle: "none" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <NavIcon name="chevron" className="chevron-icon" /> История
+              </span>
+              <span className="card-header--inverted-count">· {being.chapters.filter((c) => c.section === "history").length}</span>
             </summary>
             <ChapterList
               ownerId={beingId}
               ownerType="being"
               apiBase="/setting-beings"
               section="history"
-              chapters={being.chapters.filter((c) => c.section === "history")}
+              chapters={being.chapters.filter((c) => c.section === "history" && (!dossierQuery.trim() || c.title.toLowerCase().includes(dossierQuery.toLowerCase()) || c.content.toLowerCase().includes(dossierQuery.toLowerCase())))}
               onChange={refresh}
               defaultSettingId={being.setting_id}
               visibilityToggle
             />
           </details>
-          <details className="card">
-            <summary className="sb-section" style={{ margin: 0 }}>
-              Поведение
+          <details className="card" open>
+            <summary className="card-header--inverted chevron-summary" style={{ margin: "-14px -14px 12px -14px", cursor: "pointer", listStyle: "none" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <NavIcon name="chevron" className="chevron-icon" /> Поведение
+              </span>
+              <span className="card-header--inverted-count">· {being.chapters.filter((c) => c.section === "behavior").length}</span>
             </summary>
             <ChapterList
               ownerId={beingId}
               ownerType="being"
               apiBase="/setting-beings"
               section="behavior"
-              chapters={being.chapters.filter((c) => c.section === "behavior")}
+              chapters={being.chapters.filter((c) => c.section === "behavior" && (!dossierQuery.trim() || c.title.toLowerCase().includes(dossierQuery.toLowerCase()) || c.content.toLowerCase().includes(dossierQuery.toLowerCase())))}
               onChange={refresh}
               defaultSettingId={being.setting_id}
               visibilityToggle
             />
           </details>
-          <details className="card">
-            <summary className="sb-section" style={{ margin: 0 }}>
-              Текущая ситуация
+          <details className="card" open>
+            <summary className="card-header--inverted chevron-summary" style={{ margin: "-14px -14px 12px -14px", cursor: "pointer", listStyle: "none" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <NavIcon name="chevron" className="chevron-icon" /> Текущая ситуация
+              </span>
+              <span className="card-header--inverted-count">· {being.chapters.filter((c) => c.section === "current_situation").length}</span>
             </summary>
             <ChapterList
               ownerId={beingId}
               ownerType="being"
               apiBase="/setting-beings"
               section="current_situation"
-              chapters={being.chapters.filter((c) => c.section === "current_situation")}
+              chapters={being.chapters.filter((c) => c.section === "current_situation" && (!dossierQuery.trim() || c.title.toLowerCase().includes(dossierQuery.toLowerCase()) || c.content.toLowerCase().includes(dossierQuery.toLowerCase())))}
               onChange={refresh}
               defaultSettingId={being.setting_id}
               campaigns={campaigns}
               visibilityToggle
             />
           </details>
+          {being.events.length > 0 && (
+            <div className="card stack">
+              <div className="card-header--inverted">
+                <span className="card-header--inverted-label">Лента сессий</span>
+                <span className="card-header--inverted-count">· {being.events.length}</span>
+              </div>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                В каких сессиях появлялось это существо — из `being_events` (мёртвый код G-P0-2 возвращён).
+              </span>
+              <div className="stack" style={{ gap: 8 }}>
+                {being.events
+                  .filter((ev) => !dossierQuery.trim() || ev.title.toLowerCase().includes(dossierQuery.toLowerCase()) || ev.description.toLowerCase().includes(dossierQuery.toLowerCase()))
+                  .map((ev) => (
+                    <div key={ev.id} className="row" style={{ justifyContent: "space-between", alignItems: "center", borderLeft: "2px solid var(--line)", paddingLeft: 8 }}>
+                      <span>
+                        <strong>{ev.title}</strong>
+                        {ev.campaign_name && <span className="muted"> · {ev.campaign_name}</span>}
+                        {ev.session_date && <span className="muted"> · {ev.session_date}</span>}
+                        {ev.description && <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>{ev.description}</div>}
+                      </span>
+                      {ev.session_id && <Link to={`/sessions/${ev.session_id}`} className="comp-mini">К сессии →</Link>}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+          <div className="card stack">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Упоминания</span>
+              <button className="comp-mini" onClick={() => selectTab("Упоминания")}>Открыть →</button>
+            </div>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Где ещё встречается это имя — полный список во вкладке «Упоминания».</span>
+          </div>
         </div>
       )}
 
@@ -510,6 +863,10 @@ export function BeingDetailPage() {
 
       {tab === "Места обитания" && (
         <div className="card stack">
+          <div className="card-header--inverted">
+            <span className="card-header--inverted-label">Места обитания</span>
+            <span className="card-header--inverted-count">· {being.locations.length}</span>
+          </div>
           <div
             className={`drop-zone${locationsDragOver ? " drag-over" : ""}`}
             onDragOver={(e) => {
@@ -563,18 +920,28 @@ export function BeingDetailPage() {
                 </Link>
               );
             })}
-            {being.locations.length === 0 && <p className="muted">Мест обитания пока нет.</p>}
+            {being.locations.length === 0 && (
+              <EmptyState
+                icon="anarchyStar"
+                title="МЕСТ ПОКА НЕТ"
+                hint="Перетащите локацию из поиска, выберите из списка или из мешка — существо появится на карте."
+              />
+            )}
           </div>
         </div>
       )}
 
       {tab === "Важные даты" && (
         <div className="card stack">
+          <div className="card-header--inverted">
+            <span className="card-header--inverted-label">Важные даты</span>
+            <span className="card-header--inverted-count">· {being.important_dates.length}</span>
+          </div>
           <span className="muted">
             Эти даты отмечаются на календаре сеттинга и переносятся в календари связанных с ним
             кампаний.
           </span>
-          <div className="row">
+          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
             <input
               placeholder="Название (напр. День рождения)"
               value={dateTitle}
@@ -626,7 +993,13 @@ export function BeingDetailPage() {
                 </button>
               </div>
             ))}
-            {being.important_dates.length === 0 && <p className="muted">Важных дат пока нет.</p>}
+            {being.important_dates.length === 0 && (
+              <EmptyState
+                icon="issueStamp"
+                title="ДАТ ПОКА НЕТ"
+                hint="Добавьте день рождения, годовщину или ритуал — попадёт в календарь сеттинга и кампаний."
+              />
+            )}
           </div>
         </div>
       )}
@@ -661,8 +1034,11 @@ function CompendiumLinksCard({
 
   return (
     <details className="card">
-      <summary className="sb-section" style={{ margin: 0 }}>
-        Записи компендиумов {links.length > 0 && `(${links.length})`}
+      <summary className="card-header--inverted chevron-summary" style={{ margin: "-14px -14px 12px -14px", cursor: "pointer", listStyle: "none" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <NavIcon name="chevron" className="chevron-icon" /> Записи компендиумов
+        </span>
+        <span className="card-header--inverted-count">· {links.length}</span>
       </summary>
       <div className="stack" style={{ marginTop: 8 }}>
         <span className="muted">

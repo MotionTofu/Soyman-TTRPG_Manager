@@ -84,7 +84,7 @@ export function BeingQuickCreate({
     <div className="stack" style={{ gap: 6 }}>
       <span className="inhabitants-quick-label">Быстрое создание</span>
       {error && (
-        <span style={{ fontSize: 11, color: "var(--danger-bg)", fontFamily: "var(--font-mono)" }}>{error}</span>
+        <span style={{ fontSize: "var(--fs-meta)", color: "var(--danger-bg)", fontFamily: "var(--font-mono)" }}>{error}</span>
       )}
       {toast && <div className="settings-toast" role="status" aria-live="polite">{toast}</div>}
       <div className="row" style={{ flexWrap: "wrap" }}>

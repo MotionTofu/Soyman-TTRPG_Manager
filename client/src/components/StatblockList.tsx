@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useQueuedSave } from "../hooks/useQueuedSave";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useConfirm } from "../hooks/useConfirm";
 import { NavIcon } from "./NavIcons";
+import { EmptyState } from "./EmptyState";
+import { Modal } from "./Modal";
 import type {
   Campaign,
   DndCharacterData,
@@ -81,11 +83,14 @@ interface Props {
   ownerName?: string;
   ownerPlayerName?: string;
   // Bestiary-only (ownerType === "compendium_entry"): pre-fills a new
-  // dnd_creature statblock's Размер/Тип/КО from the profile fields set on the
+  // dnd_creature statblock's Размер/Тип/КО/КД/Хиты/Скорость from the profile fields set on the
   // compendium monster entry itself, so they don't have to be typed twice.
   ownerCreatureType?: string;
   ownerCreatureSize?: string;
   ownerCreatureCR?: string;
+  ownerCreatureAC?: string;
+  ownerCreatureHP?: string;
+  ownerCreatureSpeed?: string;
 }
 
 export function StatblockList({
@@ -98,6 +103,9 @@ export function StatblockList({
   ownerCreatureType,
   ownerCreatureSize,
   ownerCreatureCR,
+  ownerCreatureAC,
+  ownerCreatureHP,
+  ownerCreatureSpeed,
 }: Props) {
   const [statblocks, setStatblocks] = useState<Statblock[]>([]);
   const [templates, setTemplates] = useState<Resource[]>([]);
@@ -107,6 +115,32 @@ export function StatblockList({
   const [newKind, setNewKind] = useState<"short" | "full">("full");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
+  const [importSuccess, setImportSuccess] = useState("");
+  const [importWarnings, setImportWarnings] = useState<{ field: string; message: string }[]>([]);
+  const [importDragOver, setImportDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+  const [preview, setPreview] = useState<null | {
+    characterName: string;
+    shortText: string;
+    warnings: { field: string; message: string }[];
+    summary: {
+      raceName: string;
+      raceId: number | null;
+      className: string;
+      subclassName: string;
+      classId: number | null;
+      subclassId: number | null;
+      level: number;
+      armorClass: string;
+      hitPointMax: string;
+      speed: string;
+      skillCount: number;
+      attackCount: number;
+      equipmentCount: number;
+    };
+  }>(null);
+  const [pendingJson, setPendingJson] = useState<string | null>(null);
   const [showDndWizard, setShowDndWizard] = useState(false);
   const [showDndCreatureWizard, setShowDndCreatureWizard] = useState(false);
   const [showLitmWizard, setShowLitmWizard] = useState(false);
@@ -265,22 +299,116 @@ export function StatblockList({
     });
   }
 
-
-  async function importFile(file: File | null) {
+  async function importFile(file: File | null, inputEl?: HTMLInputElement | null) {
     if (!file) return;
+    const targetInput = inputEl ?? fileInputRef.current;
+    if (file.size > MAX_IMPORT_BYTES) {
+      setImportError(`Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)} МБ). Лимит 5 МБ.`);
+      if (targetInput) targetInput.value = "";
+      return;
+    }
     setImporting(true);
     setImportError("");
+    setImportSuccess("");
+    setImportWarnings([]);
     try {
       const json = await file.text();
-      await api.post("/statblocks/import", { owner_type: ownerType, owner_id: ownerId, json });
-      refresh();
+      if (!json.trim()) throw new Error("Файл пустой");
+      try {
+        JSON.parse(json);
+      } catch {
+        throw new Error("Файл не похож на JSON — убедитесь, что это экспорт с next.dnd.su (Long Story Short)");
+      }
+      // Preview first — no DB write yet
+      const previewRes = await api.post<{
+        characterName: string;
+        shortText: string;
+        warnings: { field: string; message: string }[];
+        summary: {
+          raceName: string;
+          raceId: number | null;
+          className: string;
+          subclassName: string;
+          classId: number | null;
+          subclassId: number | null;
+          level: number;
+          armorClass: string;
+          hitPointMax: string;
+          speed: string;
+          skillCount: number;
+          attackCount: number;
+          equipmentCount: number;
+        };
+      }>("/statblocks/import/preview", { owner_type: ownerType, owner_id: ownerId, json });
+      setPendingJson(json);
+      setPreview(previewRes);
+      // reset input now — pendingJson holds the file
+      if (targetInput) targetInput.value = "";
     } catch (e) {
-      setImportError("Не удалось разобрать файл. Убедитесь, что это экспорт персонажа с Long Story Short.");
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.toLowerCase().includes("too large") || msg.includes("413") || msg.toLowerCase().includes("payload")) {
+        setImportError("Файл слишком большой (лимит 5 МБ). Попробуйте экспорт без лишних вложений.");
+      } else if (msg.includes("Не удалось разобрать") || msg.includes("Не JSON") || msg.includes("Файл пустой") || msg.includes("Файл не похож")) {
+        setImportError(msg);
+      } else if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+        setImportError("Персонаж не найден — обновите страницу и попробуйте снова.");
+      } else if (msg.toLowerCase().includes("character")) {
+        setImportError(msg);
+      } else {
+        setImportError(msg || "Не удалось разобрать файл. Убедитесь, что это экспорт персонажа с Long Story Short (next.dnd.su).");
+      }
+      if (targetInput) targetInput.value = "";
     } finally {
       setImporting(false);
     }
   }
 
+  async function confirmImport() {
+    if (!pendingJson || !preview) return;
+    const hasExisting = statblocks.some((s) => s.format === "dnd_character");
+    if (hasExisting) {
+      const ok = confirm("У персонажа уже есть чарник(и). Добавить ещё один?\n\nЛишний можно удалить после импорта.");
+      if (!ok) return;
+    }
+    setImporting(true);
+    setImportError("");
+    try {
+      const res = await api.post<{ characterName: string; warnings: { field: string; message: string }[]; shortText: string; statblock: Statblock }>(
+        "/statblocks/import",
+        { owner_type: ownerType, owner_id: ownerId, json: pendingJson }
+      );
+      setPreview(null);
+      setPendingJson(null);
+      refresh();
+      const wCount = res.warnings?.length ?? 0;
+      setImportSuccess(`Импортирован ${res.characterName ? `«${res.characterName}»` : "персонаж"}${wCount ? ` — ${wCount} замечаний` : ""}`);
+      if (wCount) setImportWarnings(res.warnings);
+      setTimeout(() => setImportSuccess(""), 6000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setImportError(msg || "Не удалось сохранить статблок.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  // Drag helpers for the import zone (desktop: перетащить файл)
+  function onImportDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setImportDragOver(true);
+  }
+  function onImportDragLeave() {
+    setImportDragOver(false);
+  }
+  function onImportDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setImportDragOver(false);
+    const file = e.dataTransfer.files?.[0] ?? null;
+    if (file) importFile(file);
+  }
+
+  const showLssImport = ownerType === "character";
+  const isEmpty = statblocks.length === 0;
   // Показываем один лист: аккордеона у чарника больше нет, и несколько
   // статблоков рисовались бы полными листами подряд. Выбор держится по id, а
   // не по индексу — список перезапрашивается после каждого добавления и
@@ -307,6 +435,31 @@ export function StatblockList({
           </div>
         </div>
       )}
+      {isEmpty && showLssImport && (
+        <EmptyState
+          icon="skullDie"
+          title="Чарника нет"
+          hint="Заполните лист на Long Story Short (next.dnd.su) и закиньте сюда JSON — получите полноценный статблок за один клик, или создайте чарник вручную."
+          action={
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+              <label className="primary" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--primary-bg)", background: "var(--primary-bg)", color: "var(--primary-text)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <NavIcon name="upload" /> {importing ? "Импортирую…" : "Выбрать JSON (LSS)"}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: "none" }}
+                  onChange={(e) => importFile(e.target.files?.[0] ?? null, e.target as HTMLInputElement)}
+                />
+              </label>
+              <a href="https://next.dnd.su" target="_blank" rel="noreferrer" className="muted" style={{ fontSize: "var(--fs-meta)", textDecoration: "underline" }}>
+                next.dnd.su ↗
+              </a>
+            </div>
+          }
+        />
+      )}
+
       {statblocks.length > 1 && (
         <div className="tabs sb-switcher">
           {statblocks.map((sb) => (
@@ -334,16 +487,99 @@ export function StatblockList({
         />
       ))}
 
-      <label className="character-avatar-upload" style={{ alignSelf: "flex-start" }}>
-        {importing ? "Импортирую…" : "Импортировать JSON (Long Story Short)"}
-        <input
-          type="file"
-          accept="application/json,.json"
-          style={{ display: "none" }}
-          onChange={(e) => importFile(e.target.files?.[0] ?? null)}
-        />
-      </label>
-      {importError && <div className="backup-info error">{importError}</div>}
+      {showLssImport && !isEmpty && (
+        <div
+          className={`import-drop-zone${importDragOver ? " drag-over" : ""}`}
+          onDragOver={onImportDragOver}
+          onDragLeave={onImportDragLeave}
+          onDrop={onImportDrop}
+          style={{ padding: 10, display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              <NavIcon name="upload" /> Импорт из Long Story Short
+            </span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+              JSON с <a href="https://next.dnd.su" target="_blank" rel="noreferrer">next.dnd.su</a> — перетащите файл сюда или
+            </span>
+          </div>
+          <label
+            className="character-avatar-upload"
+            style={{ alignSelf: "flex-start", width: "auto", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+          >
+            <NavIcon name="document" />
+            {importing ? "Импортирую…" : "Выбрать JSON"}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: "none" }}
+              onChange={(e) => importFile(e.target.files?.[0] ?? null, e.target as HTMLInputElement)}
+            />
+          </label>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35 }}>
+            Экспорт в LSS: откройте персонажа → меню → «Экспорт JSON». Мы создадим статблок «D&D — Персонаж».
+          </span>
+        </div>
+      )}
+      {showLssImport && isEmpty && (
+        <div
+          className={`import-drop-zone${importDragOver ? " drag-over" : ""}`}
+          onDragOver={onImportDragOver}
+          onDragLeave={onImportDragLeave}
+          onDrop={onImportDrop}
+          style={{ padding: 8, textAlign: "center", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", color: "var(--muted)" }}
+        >
+          или перетащите JSON-файл сюда
+        </div>
+      )}
+      {showLssImport && importError && <div className="backup-info error" role="alert">{importError}</div>}
+      {showLssImport && importSuccess && <div className="backup-info" style={{ borderColor: "var(--line)", background: "var(--paper)" }} role="status">{importSuccess}</div>}
+      {showLssImport && importWarnings.length > 0 && (
+        <details className="card" style={{ padding: 10 }}>
+          <summary style={{ cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Замечания импорта — {importWarnings.length}
+          </summary>
+          <ul style={{ margin: "8px 0 0 16px", display: "flex", flexDirection: "column", gap: 4, fontSize: "var(--fs-meta)" }}>
+            {importWarnings.map((w, i) => (
+              <li key={i} className="muted">
+                <strong>{w.field}:</strong> {w.message}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {preview && (
+        <Modal onClose={() => { setPreview(null); setPendingJson(null); }}>
+          <div className="stack" style={{ minWidth: 320 }}>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-display)", textTransform: "uppercase" }}>Предпросмотр импорта</h3>
+            <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", whiteSpace: "pre-wrap" }}>{preview.shortText}</div>
+            <div className="card" style={{ padding: 10, display: "grid", gridTemplateColumns: "140px 1fr", gap: "4px 10px", fontSize: "var(--fs-meta)" }}>
+              <span className="muted">Имя</span><span>{preview.characterName || "—"}</span>
+              <span className="muted">Раса</span><span>{preview.summary.raceName || "—"} {preview.summary.raceId ? "✓ в справочнике" : preview.summary.raceName ? "— текстом" : ""}</span>
+              <span className="muted">Класс</span><span>{[preview.summary.className, preview.summary.subclassName].filter(Boolean).join(" — ") || "—"} {preview.summary.classId ? "✓" : preview.summary.className ? "— текстом" : ""} · Ур. {preview.summary.level}</span>
+              <span className="muted">КД / Хиты / Скорость</span><span>{preview.summary.armorClass || "—"} / {preview.summary.hitPointMax || "—"} / {preview.summary.speed || "—"}</span>
+              <span className="muted">Навыков / Атак / Снаряжения</span><span>{preview.summary.skillCount} / {preview.summary.attackCount} / {preview.summary.equipmentCount}</span>
+            </div>
+            {preview.warnings.length > 0 && (
+              <div className="stack" style={{ gap: 4 }}>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Замечания — {preview.warnings.length}</span>
+                <ul style={{ margin: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 4, fontSize: "var(--fs-meta)" }}>
+                  {preview.warnings.map((w, i) => (
+                    <li key={i} className="muted"><strong>{w.field}:</strong> {w.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => { setPreview(null); setPendingJson(null); }}>Отмена</button>
+              <button className="primary" onClick={confirmImport} disabled={importing}>{importing ? "Сохраняю…" : "Импортировать"}</button>
+            </div>
+            <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>Создастся статблок «D&D — Персонаж». Заклинания LSS (по ID) пока переносятся вручную — см. замечания.</div>
+          </div>
+        </Modal>
+      )}
 
       {adding ? (
         <div className="card stack">
@@ -436,6 +672,9 @@ export function StatblockList({
           ownerCreatureSize={ownerCreatureSize}
           ownerCreatureType={ownerCreatureType}
           ownerCreatureCR={ownerCreatureCR}
+          ownerCreatureAC={ownerCreatureAC}
+          ownerCreatureHP={ownerCreatureHP}
+          ownerCreatureSpeed={ownerCreatureSpeed}
           onCancel={() => setShowDndCreatureWizard(false)}
           onDone={() => {
             setShowDndCreatureWizard(false);
@@ -592,6 +831,11 @@ function StatblockCard({
 
   // Lets tag add/remove in the collapsed view persist immediately, without
   // making the user open full edit mode first.
+  //
+  // Все три quickSave* идут через одну очередь (useQueuedSave): дебаунс 400 мс,
+  // один запрос в полёте, видимая ошибка вместо unhandled rejection. Раньше
+  // каждая из них делала `await api.put(...)` без catch и дёргала onChange()
+  // — то есть полный перезапрос списка статблоков на каждый щелчок пипса.
   function quickSave(v: LitMCharacterData | LitMChallengeData) {
     const json = JSON.stringify(v);
     setLitmValue(v);
@@ -621,7 +865,6 @@ function StatblockCard({
     setContent(json);
     queue.schedule(json);
   }
-
 
   // Быстрые правки уходят молча, и до сих пор при отвале сети на экране всё
   // выглядело сохранённым. Индикатор показывает очередь: «сохраняю…» и

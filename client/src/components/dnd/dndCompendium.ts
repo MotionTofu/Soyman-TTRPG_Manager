@@ -9,10 +9,15 @@ import type { CompendiumEntry, System, SystemSection } from "../../types";
 // bug: fetching /campaigns/:id 403s for a player token (GM-only route), so
 // the old campaign-lookup path silently left the pickers empty for players.
 let dndSystemIdCache: number | null | undefined;
+export function clearDndSystemIdCache(): void {
+  dndSystemIdCache = undefined;
+}
 export async function findDndSystemId(): Promise<number | null> {
   if (dndSystemIdCache !== undefined) return dndSystemIdCache;
   const systems = await api.get<System[]>("/systems");
-  dndSystemIdCache = systems.find((s) => s.name === "D&D 5.5")?.id ?? null;
+  const byCode = systems.find((s) => s.code === "phb" || s.code === "dnd55");
+  const byName = systems.find((s) => s.name === "D&D 5.5");
+  dndSystemIdCache = (byCode ?? byName)?.id ?? null;
   return dndSystemIdCache;
 }
 

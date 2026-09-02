@@ -1,8 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { DETAIL_ROUTES } from "../../entityTypes";
 import { ANY_MENTION_RE, resolveMention } from "../../mentions";
 import { DeadMention } from "./DeadMention";
+import { openMentionPreview } from "./mentionPreviewStore";
+import { getCachedUser } from "../../api/currentUser";
 
 // Inline markup recognized inside any text field, alongside the existing
 // [[type:id|Label]] mention token: **bold**, *italic*, [label](url) external
@@ -64,6 +64,12 @@ function findSpanClose(text: string, from: number): number {
 }
 
 function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): ReactNode[] {
+  // У роли «игрок» карты ключей нет: /api/mentions/index закрыт ролевым
+  // гейтом (services/playerAccess.ts), и без неё каждая ссылка выглядела бы
+  // зачёркнутой с неправдой «такой записи нет» и мастерской кнопкой «убрать
+  // все ссылки». Игроку подпись показывается обычной прозой — ровно так же,
+  // как она читается вслух за столом.
+  const inert = getCachedUser()?.role === "player";
   const nodes: ReactNode[] = [];
   let pos = 0;
   let key = 0;
@@ -95,23 +101,24 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
     if (refType) {
       // Подпись остаётся читаемой прозой в обоих случаях — «Мирт отправляет вас
       // в Синий переулок» читается одинаково; меняется только то, кликается
-      // ссылка или зачёркнута и объясняет, чего не хватает.
+      // карточка или зачёркнута и объясняет, чего не хватает.
+      // Глобально: клик по живой сущности открывает превью-модалку вместо
+      // навигации (запрос владельца: «не переходим, а карточка»).
       const target = resolveMention(refType, refUid);
       nodes.push(
         mentionsAsBold ? (
           <strong key={`${keyPrefix}-${key++}`}>{refLabel}</strong>
-        ) : target != null && DETAIL_ROUTES[refType] ? (
-          <Link
+        ) : inert ? (
+          <span key={`${keyPrefix}-${key++}`}>{refLabel}</span>
+        ) : target != null ? (
+          <button
             key={`${keyPrefix}-${key++}`}
+            type="button"
             className="mention-link"
-            to={`${DETAIL_ROUTES[refType]}/${target}`}
+            onClick={() => openMentionPreview(refType, target)}
           >
             {refLabel}
-          </Link>
-        ) : target != null ? (
-          <span key={`${keyPrefix}-${key++}`} className="mention-link">
-            {refLabel}
-          </span>
+          </button>
         ) : (
           <DeadMention
             key={`${keyPrefix}-${key++}`}
@@ -128,14 +135,17 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
       nodes.push(
         mentionsAsBold ? (
           <strong key={`${keyPrefix}-${key++}`}>{mLabel}</strong>
-        ) : DETAIL_ROUTES[mType] ? (
-          <Link key={`${keyPrefix}-${key++}`} className="mention-link" to={`${DETAIL_ROUTES[mType]}/${id}`}>
-            {mLabel}
-          </Link>
+        ) : inert ? (
+          <span key={`${keyPrefix}-${key++}`}>{mLabel}</span>
         ) : (
-          <span key={`${keyPrefix}-${key++}`} className="mention-link">
+          <button
+            key={`${keyPrefix}-${key++}`}
+            type="button"
+            className="mention-link"
+            onClick={() => openMentionPreview(mType, id)}
+          >
             {mLabel}
-          </span>
+          </button>
         )
       );
       pos += idx + full.length;

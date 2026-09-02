@@ -57,7 +57,7 @@ export const SettingChronicleEventRow = memo(function SettingChronicleEventRow({
             onClick={() => onToggleImportant(ev)}
             title={ev.important ? "Убрать из избранного" : "В избранное"}
             className={`comp-mini ${ev.important ? "primary" : ""}`}
-            style={{ padding: "2px 6px", fontSize: 14, lineHeight: 1 }}
+            style={{ padding: "2px 6px", fontSize: "var(--fs-meta)", lineHeight: 1 }}
           >
             {ev.important ? "★" : "☆"}
           </button>

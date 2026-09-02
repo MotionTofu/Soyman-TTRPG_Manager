@@ -17,11 +17,13 @@ export const StartingEquipmentPicker = memo(function StartingEquipmentPicker({
   systemId,
   items,
   gold,
+  hasText,
   onChange,
 }: {
   systemId: number;
   items: StartingEquipmentPick[];
   gold: string;
+  hasText?: boolean;
   onChange: (patch: { items?: StartingEquipmentPick[]; gold?: string }) => void;
 }) {
   const [options, setOptions] = useState<CompendiumEntry[]>([]);
@@ -34,8 +36,12 @@ export const StartingEquipmentPicker = memo(function StartingEquipmentPicker({
   }, [adding, systemId, options.length]);
 
   const safeItems = items ?? [];
+  // S-26: поиск по searchableText (имя+оригинал+алиасы) как у MonsterSection
   const filtered = query.trim()
-    ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
+    ? options.filter((o) => {
+        const hay = [o.name ?? "", (o as unknown as { name_original?: string }).name_original ?? "", ...((o as unknown as { aliases?: string[] }).aliases ?? [])].join(" ").toLowerCase();
+        return hay.includes(query.trim().toLowerCase());
+      })
     : options;
 
   function add(entry: CompendiumEntry) {
@@ -135,7 +141,7 @@ export const StartingEquipmentPicker = memo(function StartingEquipmentPicker({
       </span>
       {safeItems.length === 0 && !adding && (
         <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-Ничего не связано — набор существует только текстом
+          {hasText ? "Есть текст набора — свяжите предметы, чтобы работал «Взять набор»" : "Ничего не связано — набор существует только текстом"}
         </span>
       )}
     </div>

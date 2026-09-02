@@ -300,7 +300,7 @@ export function ModulesTab() {
       <details className="card res-group">
         <summary className="res-group__band">
           <span className="res-group__title">Импортёры</span>
-          <span className="badge tag" style={{ marginLeft: 8, fontSize: 10 }}>техническое</span>
+          <span className="badge tag" style={{ marginLeft: 8, fontSize: "var(--fs-micro)" }}>техническое</span>
         </summary>
         <div className="res-group__body" style={{ padding: 12 }}>
           <div className="stack" style={{ gap: 8 }}>

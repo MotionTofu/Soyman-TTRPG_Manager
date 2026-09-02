@@ -797,11 +797,31 @@ export function SettingDetailPage() {
       )}
 
       <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
+        {(() => {
+          const isNew = campaigns.length === 0;
+          const core = new Set(["Обзор", "География", "Население", "Хроника мира"]);
+          const visible = isNew ? TABS.filter((t) => core.has(t)) : TABS;
+          const hidden = isNew ? TABS.filter((t) => !core.has(t)) : [];
+          return (
+            <>
+              {visible.map((t) => (
+                <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
+                  {t}
+                </button>
+              ))}
+              {hidden.length > 0 && (
+                <details className="tabs-more" style={{ display: "inline-flex", position: "relative" }}>
+                  <summary style={{ listStyle: "none", cursor: "pointer", padding: "6px 10px", border: "1px solid var(--line)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ещё ▾</summary>
+                  <div style={{ position: "absolute", top: "100%", right: 0, background: "var(--paper)", border: "1px solid var(--line)", display: "flex", flexDirection: "column", zIndex: 5, minWidth: 160 }}>
+                    {hidden.map((t) => (
+                      <button key={t} style={{ textAlign: "left", border: "none", borderBottom: "1px solid var(--line)", background: tab === t ? "var(--paper-2)" : "var(--paper)", padding: "8px 12px" }} onClick={() => selectTab(t)}>{t}</button>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {tab === "Обзор" && (
@@ -855,25 +875,6 @@ export function SettingDetailPage() {
                       </button>
                     )}
         </div>
-      </div>
-      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <select value={filterClass} onChange={(e) => { setFilterClass(e.target.value); setFilterType(""); }} style={{ fontSize: 12 }}>
-          <option value="">Все роды</option>
-          {ITEM_CLASSES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ fontSize: 12 }} disabled={!filterClass}>
-          <option value="">Все типы</option>
-          {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} style={{ fontSize: 12 }}>
-          <option value="">Все редкости</option>
-          {MAGIC_ITEM_RARITIES.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-        {(filterClass || filterType || filterRarity) && (
-          <button style={{ fontSize: 12 }} onClick={() => { setFilterClass(""); setFilterType(""); setFilterRarity(""); }}>
-            Сбросить фильтры
-          </button>
-        )}
       </div>
               </div>
             );
@@ -1094,7 +1095,8 @@ export function SettingDetailPage() {
 
       {tab === "Хроника мира" && (
         <div className="stack">
-          <div ref={axisRef} className="card stack">
+          {(calendarEvents.length > 0 || timelines.length > 0 || cycles.length > 0 || eras.length > 0 || importantDates.length > 0) ? (
+            <div ref={axisRef} className="card stack">
             <Timeline
               focusDate={timelineFocus}
               events={filteredCalendarEvents.map((e) => ({
@@ -1151,14 +1153,17 @@ export function SettingDetailPage() {
               }
             />
           </div>
+          ) : null}
 
           <div className="chronicle-split">
             <div className="chronicle-left stack">
-              <div className="tabs">
-                {(["Хронология", "Повторяющиеся", "Циклы", "Календарь"] as const).map((t) => (
-                  <button key={t} className={chronicleTab === t ? "active" : ""} onClick={() => setChronicleTab(t)}>{t}</button>
-                ))}
-              </div>
+              {(calendarEvents.length > 0 || timelines.length > 0 || cycles.length > 0 || eras.length > 0 || importantDates.length > 0) && (
+                <div className="tabs">
+                  {(["Хронология", "Повторяющиеся", "Циклы", "Календарь"] as const).map((t) => (
+                    <button key={t} className={chronicleTab === t ? "active" : ""} onClick={() => setChronicleTab(t)}>{t}</button>
+                  ))}
+                </div>
+              )}
 
               {chronicleTab === "Хронология" && (
                 <div className="stack chronicle-scroll">
@@ -1240,7 +1245,7 @@ export function SettingDetailPage() {
             </div>
           </div>
         </div>
-      )}
+        )}
 
       {tab === "Для игроков" && <SettingPlayerContentTab settingId={settingId} campaigns={campaigns} />}
 
@@ -1517,6 +1522,22 @@ function BeingsSection({ settingId }: { settingId: number }) {
     const t = setTimeout(() => setDebouncedQuery(query), 250);
     return () => clearTimeout(t);
   }, [query]);
+
+  // Сохраняем последние фильтры для Breadcrumb в профиле существа (U-P0-2)
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams();
+      if (category !== "all") p.set("category", category);
+      if (locationFilter) p.set("location_id", locationFilter);
+      if (communityFilter) p.set("community_id", communityFilter);
+      if (debouncedQuery.trim()) p.set("q", debouncedQuery.trim());
+      if (sort !== "name") p.set("sort", sort);
+      if (sortDir === "desc") p.set("dir", "desc");
+      const str = p.toString();
+      if (str) sessionStorage.setItem(`population-last-filters-${settingId}`, str);
+      else sessionStorage.removeItem(`population-last-filters-${settingId}`);
+    } catch {}
+  }, [category, locationFilter, communityFilter, debouncedQuery, sort, sortDir, settingId]);
 
   function handleSort(next: typeof sort) {
     if (sort === next) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -2226,7 +2247,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
                 if (grouping === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
                 else { setGrouping(key); setSortDir("asc"); }
               }}
-              style={{ fontSize: 12 }}
+              style={{ fontSize: "var(--fs-meta)" }}
             >
               {label} {grouping === key ? (sortDir === "asc" ? "↑" : "↓") : ""}
             </button>
@@ -2234,20 +2255,20 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
         </div>
       </div>
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <select value={filterClass} onChange={(e) => { setFilterClass(e.target.value); setFilterType(""); }} style={{ fontSize: 12 }}>
+        <select value={filterClass} onChange={(e) => { setFilterClass(e.target.value); setFilterType(""); }} style={{ fontSize: "var(--fs-meta)" }}>
           <option value="">Все роды</option>
           {ITEM_CLASSES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ fontSize: 12 }} disabled={!filterClass}>
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ fontSize: "var(--fs-meta)" }} disabled={!filterClass}>
           <option value="">Все типы</option>
           {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)} style={{ fontSize: "var(--fs-meta)" }}>
           <option value="">Все редкости</option>
           {MAGIC_ITEM_RARITIES.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
         {(filterClass || filterType || filterRarity) && (
-          <button style={{ fontSize: 12 }} onClick={() => { setFilterClass(""); setFilterType(""); setFilterRarity(""); }}>
+          <button style={{ fontSize: "var(--fs-meta)" }} onClick={() => { setFilterClass(""); setFilterType(""); setFilterRarity(""); }}>
             Сбросить фильтры
           </button>
         )}

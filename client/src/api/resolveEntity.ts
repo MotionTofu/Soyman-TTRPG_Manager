@@ -85,25 +85,33 @@ export async function resolveEntityMapLabels(
   }
 }
 
+const labelCache = new Map<string, Promise<string>>();
+
 export async function resolveEntityLabel(type: string, id: number): Promise<string> {
-  if (type === "preproduction") {
-    try {
-      const campaign = await api.get<Record<string, unknown>>(`/campaigns/${id}`);
-      return `${campaign.name ?? id} — Препродакшен`;
-    } catch {
-      return `Препродакшен #${id} (не найдено)`;
+  const key = `${type}:${id}`;
+  if (labelCache.has(key)) return labelCache.get(key)!;
+  const promise = (async () => {
+    if (type === "preproduction") {
+      try {
+        const campaign = await api.get<Record<string, unknown>>(`/campaigns/${id}`);
+        return `${campaign.name ?? id} — Препродакшен`;
+      } catch {
+        return `Препродакшен #${id} (не найдено)`;
+      }
     }
-  }
-  const base = ENDPOINTS[type];
-  if (!base) return `${type} #${id}`;
-  try {
-    const entity = await api.get<Record<string, unknown>>(`${base}/${id}`);
-    if (type === "mastering" || type === "setting_event") return String(entity.title ?? id);
-    if (type === "session")
-      return `${entity.campaign_name ?? "Сессия"} — ${entity.date ?? id}`;
-    if (type === "character") return String(entity.character_name ?? id);
-    return String(entity.name ?? id);
-  } catch {
-    return `${type} #${id} (не найдено)`;
-  }
+    const base = ENDPOINTS[type];
+    if (!base) return `${type} #${id}`;
+    try {
+      const entity = await api.get<Record<string, unknown>>(`${base}/${id}`);
+      if (type === "mastering" || type === "setting_event") return String(entity.title ?? id);
+      if (type === "session")
+        return `${entity.campaign_name ?? "Сессия"} — ${entity.date ?? id}`;
+      if (type === "character") return String(entity.character_name ?? id);
+      return String(entity.name ?? id);
+    } catch {
+      return `${type} #${id} (не найдено)`;
+    }
+  })();
+  labelCache.set(key, promise);
+  return promise;
 }

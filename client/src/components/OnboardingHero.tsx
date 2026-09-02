@@ -37,11 +37,21 @@ interface Props {
   settings: Setting[];
   campaigns: Campaign[];
   players?: Player[];
+  /** Сколько сессий уже заведено — по нему закрывается пятый шаг. */
+  sessionsCount?: number;
   onRefresh: () => void;
 }
 
-export function OnboardingHero({ systems, settings, campaigns, players = [], onRefresh }: Props) {
-  const [dismissed, setDismissed] = useState(() => sessionStorage.getItem("onboarding-dismissed") === "1");
+// Скрытие живёт в localStorage, а не в sessionStorage: герой показывается
+// всегда, когда нет ближайшей сессии, то есть в штатном промежутке между
+// играми. С sessionStorage мастер, который его закрыл, получал чек-лист
+// новичка обратно при каждом запуске приложения.
+const DISMISS_KEY = "onboarding-dismissed";
+
+export function OnboardingHero({ systems, settings, campaigns, players = [], sessionsCount = 0, onRefresh }: Props) {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(DISMISS_KEY) === "1"; } catch { return false; }
+  });
   const [showSystemModal, setShowSystemModal] = useState(false);
   const [showSettingModal, setShowSettingModal] = useState(false);
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -68,7 +78,9 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
       case "setting": return hasSetting;
       case "campaign": return hasCampaign;
       case "players": return hasPlayer;
-      case "session": return false;
+      // Шаг закрывается заведённой сессией. Раньше здесь стоял жёсткий false,
+      // и прогресс не доходил до 5/5 никогда — даже после десятка игр.
+      case "session": return sessionsCount > 0;
       default: return false;
     }
   }
@@ -126,6 +138,8 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
     }
   }
 
+  if (dismissed) return null;
+
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {/* §1.4 шапка-инверсия */}
@@ -134,26 +148,26 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
           <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", lineHeight: 0.96, textTransform: "uppercase", letterSpacing: "-0.01em", color: "var(--on-surface)" }}>Твоя первая легенда</span>
           <button
             type="button"
-            onClick={() => { sessionStorage.setItem("onboarding-dismissed", "1"); setDismissed(true); }}
-            style={{ background: "none", border: "none", color: "var(--on-surface-muted)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 0 0 8px" }}
+            onClick={() => { try { localStorage.setItem(DISMISS_KEY, "1"); } catch {} setDismissed(true); }}
+            style={{ background: "none", border: "none", color: "var(--on-surface-muted)", cursor: "pointer", fontSize: "var(--fs-h3)", lineHeight: 1, padding: "0 0 0 8px" }}
             aria-label="Скрыть подсказки"
             title="Скрыть"
           >×</button>
         </div>
-        <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--on-surface-muted)" }}>Пять шагов до первой сессии — идём по порядку</span>
+        <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--on-surface-muted)" }}>Пять шагов до первой сессии — идём по порядку</span>
       </div>
 
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12, background: "var(--paper-2)", backgroundImage: "var(--card-body-texture)" }}>
         {/* Прогресс §1.5 Data Mono + Label */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--line)", padding: "2px 6px" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--line)", padding: "2px 6px" }}>
             {completedCount} / {STEPS.length} готово
           </span>
           <span style={{ flex: "1 1 auto", height: 6, background: "var(--paper)", border: "1px solid var(--line)", position: "relative", overflow: "hidden", maxWidth: 220 }}>
             <span style={{ position: "absolute", inset: 0, width: `${(completedCount / STEPS.length) * 100}%`, background: "var(--surface)", transition: "width 200ms" }} />
           </span>
           {nextStep && (
-            <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--ink)", padding: "3px 8px" }}>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--ink)", padding: "3px 8px" }}>
               Далее: {nextStep.title}
             </span>
           )}
@@ -164,9 +178,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
             const completed = isCompleted(step);
             const clickable = isClickable(step);
             const blocked = !completed && !clickable;
-  if (dismissed) return null;
-
-  return (
+            return (
               <button
                 key={step.key}
                 type="button"
@@ -201,15 +213,15 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
                     background: completed ? "var(--on-surface)" : clickable ? "var(--accent-soft)" : "transparent",
                     color: completed ? "var(--surface)" : clickable ? "var(--ink)" : "var(--muted)",
                     fontFamily: "var(--font-mono)",
-                    fontSize: 13,
+                    fontSize: "var(--fs-meta)",
                     fontWeight: 700,
                     lineHeight: 1,
                   }}
                 >
                   {completed ? <NavIcon name="check" /> : <span style={{ fontFamily: "var(--font-mono)" }}>{step.num}</span>}
                 </span>
-                <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", lineHeight: 1.1, textAlign: "center" }}>{step.title}</span>
-                <span style={{ fontFamily: "var(--font-body)", fontSize: 11, color: completed ? "var(--on-surface-muted)" : "var(--muted)", lineHeight: 1.2, textAlign: "center" }}>{completed ? "Готово" : blocked ? step.blockedHint : step.hint}</span>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", lineHeight: 1.1, textAlign: "center" }}>{step.title}</span>
+                <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", color: completed ? "var(--on-surface-muted)" : "var(--muted)", lineHeight: 1.2, textAlign: "center" }}>{completed ? "Готово" : blocked ? step.blockedHint : step.hint}</span>
               </button>
             );
           })}
@@ -218,7 +230,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], onR
         {/* Подсказка следующего действия — не даёт тыкать в серое молча (U-04) */}
         {nextStep && (
           <div className="card" style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "8px 10px", fontSize: "var(--fs-meta)", lineHeight: 1.35 }}>
-            <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Подсказка</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Подсказка</span>
             <span style={{ marginLeft: 8 }}>Нажми «{nextStep.title}» — {nextStep.hint.toLowerCase()}</span>
           </div>
         )}

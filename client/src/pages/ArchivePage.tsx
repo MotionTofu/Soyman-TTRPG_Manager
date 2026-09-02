@@ -584,7 +584,7 @@ export function ArchivePage() {
                       <button onClick={() => setVisible((v) => v + 50)}>
                         Показать ещё {Math.min(50, filtered.length - visible)} из {filtered.length - visible}
                       </button>
-                      <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>Показано {visible} из {filtered.length}</span>
+                      <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Показано {visible} из {filtered.length}</span>
                     </div>
                   )}
                 </div>
@@ -692,7 +692,7 @@ export function ArchivePage() {
                   {filteredFiles.length > visibleFiles && (
                     <div className="archive-more">
                       <button onClick={() => setVisibleFiles((v) => v + 50)}>Показать ещё {Math.min(50, filteredFiles.length - visibleFiles)}</button>
-                      <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>Показано {visibleFiles} из {filteredFiles.length}</span>
+                      <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Показано {visibleFiles} из {filteredFiles.length}</span>
                     </div>
                   )}
               </div>
@@ -746,7 +746,7 @@ export function ArchivePage() {
             ) : purgeTarget.impact ? (
               <div className="stack" style={{ gap: 8 }}>
                 {impactLines(purgeTarget.impact).map((ln, i) => (
-                  <p key={i} className="muted" style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 13 }}>
+                  <p key={i} className="muted" style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: "var(--fs-meta)" }}>
                     {ln}
                   </p>
                 ))}
@@ -820,7 +820,7 @@ export function ArchivePage() {
               <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
                 {previewItem.subtitle && <p style={{ margin: 0 }}><span className="muted">Контекст:</span> {previewItem.subtitle}</p>}
                 <p style={{ margin: 0 }}><span className="muted">Тип:</span> {TYPE_LABELS[previewItem.type] ?? previewItem.type}</p>
-                <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 12 }}><span className="muted">В архиве с:</span> {formatArchivedAt(previewItem.archived_at)} · {timeAgo(previewItem.archived_at)}</p>
+                <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}><span className="muted">В архиве с:</span> {formatArchivedAt(previewItem.archived_at)} · {timeAgo(previewItem.archived_at)}</p>
               </div>
             </div>
             <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>

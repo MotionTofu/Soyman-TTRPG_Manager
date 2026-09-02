@@ -79,7 +79,7 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
               <button onClick={() => setMode("create")}>Создать новую</button>
               <button onClick={onClose}>Отмена</button>
             </div>
-            <span className="muted" style={{ fontSize: 11 }}>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
               Файл JSON
             </span>
           </div>
@@ -101,7 +101,7 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
                   if (f) void handleImport(f);
                 }}
               />
-              {fileName && <span className="muted" style={{ fontSize: 11 }}>{fileName}</span>}
+              {fileName && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{fileName}</span>}
             </label>
             {error && <span className="backup-info error">{error}</span>}
             <div className="row">
@@ -140,7 +140,7 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
               <input type="checkbox" checked={dnd} onChange={(e) => setDnd(e.target.checked)} />
               <span>Создать как D&D-подобную (пустой шаблон)</span>
             </label>
-            <span className="muted" style={{ fontSize: 11 }}>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
               {dnd
                 ? "Будут созданы все разделы D&D: Заклинания, Классы, Виды, Предыстории, Черты, Снаряжение, Маг. предметы, Бестиарий, Транспорт, Бастионы, Справочник с группами и шаблоны существ/персонажей — без наполнения."
                 : "Будет создана пустая система с базовыми разделами Справочник и Транспорт."}
@@ -162,9 +162,9 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
 
         {mode === "success" && (
           <div className="stack" style={{ gap: 12, alignItems: "center", padding: "20px 0" }}>
-            <span style={{ fontSize: 24, color: "var(--success, #15803d)" }}>✓</span>
-            <span style={{ fontFamily: "var(--font-ui)", fontWeight: 600, fontSize: 14 }}>Успех!</span>
-            <span className="muted" style={{ fontSize: 12 }}>Система создана и загружена</span>
+            <span style={{ fontSize: "var(--fs-h2)", color: "var(--success, #15803d)" }}>✓</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontWeight: 600, fontSize: "var(--fs-meta)" }}>Успех!</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Система создана и загружена</span>
             <button className="primary" onClick={() => navigate(`/systems/${successId}`)}>
               Открыть систему
             </button>

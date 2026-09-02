@@ -682,7 +682,7 @@ const Row = memo(function Row({
           className={isIncl ? "active" : ""}
           onClick={() => isIncl ? entities.remove(targetType, targetId) : entities.add(targetType, targetId)}
           title={isIncl ? "Убрать из панели игроков" : "Добавить в панель игроков"}
-          style={{ fontSize: 11, padding: "4px 10px", lineHeight: 1 }}
+          style={{ fontSize: "var(--fs-meta)", padding: "4px 10px", lineHeight: 1 }}
         >
           {isIncl ? "В панели" : "+ Добавить"}
         </button>

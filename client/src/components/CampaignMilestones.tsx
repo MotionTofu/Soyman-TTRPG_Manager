@@ -136,7 +136,10 @@ const MilestoneGroup = memo(function MilestoneGroup({
         {items.map((m) => (
           <MilestoneRow key={m.id} milestone={m} onToggle={toggle} onRemove={remove} />
         ))}
-        {items.length === 0 && <p className="muted">Пока пусто.</p>}
+        {/* §1.11a: пустое тело секции создания — это приглашение к действию, а
+            не строка «пока пусто». Приглашение здесь уже есть — форма ниже с
+            кнопкой «+ Своя веха»; отдельный EmptyState был бы вторым зовом
+            рядом с первым, а приглушённая строка не звала вовсе. */}
         <AddMilestoneForm arcId={arcId} campaignId={campaignId} onChange={onChange} />
       </div>
     </details>
