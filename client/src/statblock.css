@@ -1080,3 +1080,15 @@ summary.sb-section {
 .sb-switcher {
   margin-bottom: 0;
 }
+
+/* Панель правки происхождения — раскрывается под плашкой-шапкой по карандашу
+   в ней же. Не карточка и не вторая шапка (§1.4): это продолжение шапки,
+   отделённое линией, на бумаге-2. */
+.sb-origin-edit {
+  padding: 12px var(--pad-x);
+  background: var(--paper-2);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+}
+.sb-origin-edit .sb-entry:last-child {
+  margin-bottom: 0;
+}

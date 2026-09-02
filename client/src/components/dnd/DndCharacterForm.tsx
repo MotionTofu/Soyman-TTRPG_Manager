@@ -2407,7 +2407,15 @@ function DndEquipmentQuickView({
 // что после роспуска формы правки (гриллинг 2026-09-03) этим пользуется
 // карандаш в плашке-шапке, а не только сама форма: происхождение правится
 // там, где оно написано.
-function useDndOrigin(value: DndCharacterData, onChange: (v: DndCharacterData) => void) {
+function useDndOrigin(
+  value: DndCharacterData,
+  onChange: (v: DndCharacterData) => void,
+  // Справочники компендиума (системы, иерархия классов, виды, предыстории,
+  // механики) нужны только когда происхождение действительно правят. Без
+  // этого флага каждый открытый лист — включая список статблоков бестиария —
+  // лез бы в сеть за пятью справочниками просто чтобы показаться.
+  enabled = true
+) {
   const [systems, setSystems] = useState<System[]>([]);
   const [hierarchy, setHierarchy] = useState<DndClassHierarchy>({ classes: [], subclassesByClass: {} });
   const [species, setSpecies] = useState<DndSpeciesOption[]>([]);
@@ -2698,19 +2706,22 @@ function useDndOrigin(value: DndCharacterData, onChange: (v: DndCharacterData) =
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     api.get<System[]>("/systems").then(setSystems);
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     findDndSystemId().then((sid) => {
       if (!sid) return;
       loadDndMechanicsGroup(sid, "Типы урона").then(setDamageTypes);
       loadDndMechanicsGroup(sid, "Состояния").then(setConditionOptions);
       loadDndMechanicsGroup(sid, "Особое восприятие").then(setSenseOptions);
     });
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     if (!value.systemId) {
       setHierarchy({ classes: [], subclassesByClass: {} });
       setSpecies([]);
@@ -2734,7 +2745,7 @@ function useDndOrigin(value: DndCharacterData, onChange: (v: DndCharacterData) =
     loadDndSpeciesOptions(value.systemId).then(setSpecies);
     loadDndBackgroundOptions(value.systemId).then(setBackgrounds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value.systemId]);
+  }, [value.systemId, enabled]);
 
   // Picking a species also fills its Видовые особенности and any
   // "Обретаемые заклинания" the character's total level already qualifies
@@ -3463,6 +3474,53 @@ function DndSkillsView({
   );
 }
 
+// Пассивные свойства персонажа: скорости, чувства, защиты и заметки класса
+// (владения и стартовое снаряжение, которые заполняет выбор класса). До
+// роспуска формы правки всё это хранилось, но нигде не показывалось — лист
+// молчал о том, что персонаж имеет сопротивление яду.
+function DndTraitsView({ value }: { value: DndCharacterData }) {
+  const speeds = formatSpeed(value.speeds);
+  const senses = value.sensesList
+    .map((sn) => [sn.name, sn.range].filter(Boolean).join(" "))
+    .filter(Boolean)
+    .join(", ");
+  const defences: [string, string[]][] = [
+    ["Уязвимости", value.damageVulnerabilities],
+    ["Сопротивления", value.damageResistances],
+    ["Иммунитет к урону", value.damageImmunities],
+    ["Иммунитет к состояниям", value.conditionImmunities],
+  ];
+  const rows: [string, string][] = [];
+  if (speeds) rows.push(["Скорости", speeds]);
+  if (senses) rows.push(["Чувства", senses]);
+  for (const [label, list] of defences) if (list.length > 0) rows.push([label, list.join(", ")]);
+  const notes = value.notes?.trim();
+  // §1.11: показывать нечего — блок не показывается.
+  if (rows.length === 0 && !notes) return null;
+  return (
+    <div className="cs-list">
+      {rows.length > 0 && (
+        <>
+          <div className="sb-section">Свойства</div>
+          {rows.map(([label, text]) => (
+            <div key={label} className="sb-entry">
+              <span className="sb-prop-label">{label}</span> {text}
+            </div>
+          ))}
+        </>
+      )}
+      {notes && (
+        <>
+          <div className="sb-section">Заметки класса</div>
+          <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
+            <MentionText text={notes} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[] }) {
   // Same popup-on-click treatment as spells (DndSpellLevelSection) — a
   // feature's full text opens in a modal instead of expanding inline, so a
@@ -4081,12 +4139,27 @@ export function DndCharacterView({
   // whole-card editMode.
   const [editingInventory, setEditingInventory] = useState(false);
   const [editingSpells, setEditingSpells] = useState(false);
+  const [editingTraits, setEditingTraits] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
+  // Происхождение правится карандашом в самой шапке — там, где класс, вид и
+  // предыстория и написаны (гриллинг 2026-09-03). Клик по значению остаётся
+  // переходом в статью компендиума: за столом он нужен чаще смены класса.
+  const [editingOrigin, setEditingOrigin] = useState(false);
+  // Собранным считается лист, у которого выбран хоть один источник из
+  // компендиума: дальше система становится свойством листа, а не настройкой.
+  const isSystemLocked =
+    value.raceId != null || value.backgroundId != null || value.classes.some((c) => c.classId != null);
   // Запасные таблицы подгружаются лениво и только когда без них не обойтись
   // (многоклассье без полного заклинателя) — обычному персонажу лишний
   // запрос ни к чему.
   const [fallbackProgressions, setFallbackProgressions] = useState<(ClassProgression | undefined)[]>([]);
   const isMobile = useIsMobile();
+  // Справочники грузятся только когда панель открыта — см. флаг в useDndOrigin.
+  const origin = useDndOrigin(
+    value,
+    (v) => onQuickUpdate?.(v),
+    editingOrigin
+  );
   // Считается до раннего выхода: ниже стоят хуки, а компактная карточка
   // возвращается раньше.
   const slotSources = value.classes
@@ -4217,6 +4290,16 @@ export function DndCharacterView({
                 </div>
               )}
               {onQuickUpdate && (
+                <button
+                  type="button"
+                  className="comp-mini"
+                  title={editingOrigin ? "Готово" : "Правка происхождения"}
+                  onClick={() => setEditingOrigin((v) => !v)}
+                >
+                  <NavIcon name={editingOrigin ? "check" : "edit"} />
+                </button>
+              )}
+              {onQuickUpdate && (
                 <button type="button" className="comp-mini" title="Отдых" onClick={() => setRestOpen(true)}>
                   <NavIcon name="moon" /> Отдых
                 </button>
@@ -4225,6 +4308,105 @@ export function DndCharacterView({
             </span>
           </div>
         </div>
+        {editingOrigin && onQuickUpdate && (
+          <div className="sb-origin-edit stack">
+            <div className="row">
+              <label style={{ flex: 1 }}>
+                Имя персонажа
+                <input
+                  value={value.characterName}
+                  onChange={(e) => onQuickUpdate({ characterName: e.target.value })}
+                />
+              </label>
+              <label style={{ flex: 1 }}>
+                Игрок
+                <input value={value.playerName} onChange={(e) => onQuickUpdate({ playerName: e.target.value })} />
+              </label>
+            </div>
+
+            <DndClassesEdit
+              classes={value.classes}
+              hierarchy={origin.hierarchy}
+              onChange={origin.setClasses}
+              onPickClass={origin.pickClass}
+              onPickSubclass={origin.pickSubclass}
+              onLevelChange={origin.changeClassLevel}
+              onRemoveClass={origin.removeClass}
+            />
+
+            <div className="row">
+              <label style={{ flex: 1 }}>
+                Вид
+                {origin.species.length > 0 ? (
+                  <select
+                    value={value.raceId ?? ""}
+                    onChange={(e) => origin.pickRace(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">Выбрать вид…</option>
+                    {origin.species.map((sp) => (
+                      <option key={sp.id} value={sp.id}>
+                        {sp.creatureTypeName ? `${sp.name}, ${sp.creatureTypeName}` : sp.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={value.raceName} onChange={(e) => onQuickUpdate({ raceName: e.target.value })} />
+                )}
+              </label>
+              <label style={{ flex: 1 }}>
+                Предыстория
+                {origin.backgrounds.length > 0 ? (
+                  <select
+                    value={value.backgroundId ?? ""}
+                    onChange={(e) => origin.pickBackground(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">Выбрать предысторию…</option>
+                    {origin.backgrounds.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={value.backgroundName}
+                    onChange={(e) => onQuickUpdate({ backgroundName: e.target.value })}
+                  />
+                )}
+              </label>
+              <label>
+                Мировоззрение
+                <input value={value.alignment} onChange={(e) => onQuickUpdate({ alignment: e.target.value })} />
+              </label>
+            </div>
+
+            {/* Система выбирается один раз: смена обрывает все ссылки на
+                компендиум — классы, вид, заклинания и умения остаются именами
+                без записей. На собранном листе поле только показывается. */}
+            {isSystemLocked ? (
+              <div className="sb-entry muted">
+                <span className="sb-prop-label">Система</span>{" "}
+                {origin.systems.find((sy) => sy.id === value.systemId)?.name ?? "не выбрана"} — менять нельзя,
+                иначе оборвутся ссылки на компендиум
+              </div>
+            ) : (
+              <label>
+                Система (для подсказок класса, вида и предыстории)
+                <select
+                  value={value.systemId ?? ""}
+                  onChange={(e) => onQuickUpdate({ systemId: e.target.value ? Number(e.target.value) : null })}
+                >
+                  <option value="">Не выбрана</option>
+                  {origin.systems.map((sy) => (
+                    <option key={sy.id} value={sy.id}>
+                      {sy.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        )}
         {restOpen && (
           <DndRestModal
             value={value}
@@ -4536,6 +4718,53 @@ export function DndCharacterView({
 
           {tab === "Особенности" && (
             <div>
+              {/* Чувства, скорости, защиты и заметки класса жили только внутри
+                  формы правки и в просмотре не показывались вовсе — то есть
+                  введённое было не увидеть, не открыв форму. После её роспуска
+                  им дом здесь: сопротивление огню по природе ничем не
+                  отличается от видовой особенности (гриллинг 2026-09-03).
+                  Правка — на месте, значения сохраняются сразу. */}
+              {onQuickUpdate && (
+                <TabEditToggle editing={editingTraits} onToggle={() => setEditingTraits((v) => !v)} />
+              )}
+              {editingTraits && onQuickUpdate ? (
+                <div className="stack">
+                  <SpeedEditor value={value.speeds} onChange={(v) => onQuickUpdate({ speeds: v })} />
+                  <SensesEditor
+                    value={value.sensesList}
+                    onChange={(v) => onQuickUpdate({ sensesList: v })}
+                    options={origin.senseOptions}
+                  />
+                  <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
+                    <ChecklistEditor
+                      label="Уязвимости к урону"
+                      value={value.damageVulnerabilities}
+                      onChange={(v) => onQuickUpdate({ damageVulnerabilities: v })}
+                      options={origin.damageTypes}
+                    />
+                    <ChecklistEditor
+                      label="Сопротивления урону"
+                      value={value.damageResistances}
+                      onChange={(v) => onQuickUpdate({ damageResistances: v })}
+                      options={origin.damageTypes}
+                    />
+                    <ChecklistEditor
+                      label="Иммунитет к урону"
+                      value={value.damageImmunities}
+                      onChange={(v) => onQuickUpdate({ damageImmunities: v })}
+                      options={origin.damageTypes}
+                    />
+                    <ChecklistEditor
+                      label="Иммунитет к состояниям"
+                      value={value.conditionImmunities}
+                      onChange={(v) => onQuickUpdate({ conditionImmunities: v })}
+                      options={origin.conditionOptions}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <DndTraitsView value={value} />
+              )}
               <SbFeatureGroup title="Видовые особенности" values={value.speciesFeatures} />
               <SbFeatureGroup title="Классовые особенности" values={value.classFeatures} />
               <SbFeatureGroup title="Черты" values={value.feats} />
