@@ -43,7 +43,7 @@
 
 /* Печать — не тема, а обязательная поправка: белая бумага, чёрные чернила,
    текстуры и обработка изображений выключены. Гарнитуры и радиус остаются
-   экранными: инвариант (§1.1 радиусов нет, §1.3 обводка 2px) на бумаге
+   экранными: инвариант (§1.1 радиусов нет, §1.3 обводка 1px) на бумаге
    действует ровно так же. */
 @media print {
   .sb-scope {
@@ -69,8 +69,10 @@
 /* ---- рамка карточки ---- */
 .sb-card {
   background: var(--paper);
-  /* §1.3: обводка внешнего контура 2px, промежуточных толщин не бывает. */
-  border: 2px solid var(--border);
+  /* §1.3 в редакции 2026-08-30: 1px по всему контуру — внешний, внутренние
+     разделители и чипы. Промежуточных толщин не бывает; прежние 2px и 1.5px
+     давали три толщины на одном экране. */
+  border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--radius-card);
   overflow: hidden;
   color: var(--ink);
@@ -99,7 +101,7 @@
 .sb-head-controls .comp-mini {
   background: transparent;
   color: inherit;
-  border: 1.5px solid var(--on-surface-muted);
+  border: var(--card-border-width, 1px) solid var(--on-surface-muted);
   border-radius: 0;
 }
 .sb-head-controls .comp-mini:hover {
@@ -134,8 +136,8 @@
   display: flex;
   flex-wrap: wrap;
   text-align: center;
-  border: 1.5px solid var(--line);
-  margin-bottom: var(--sec-gap);
+  border: var(--card-border-width, 1px) solid var(--line);
+  margin-bottom: 6px;
 }
 .sb-vitals > div {
   flex: 1;
@@ -144,7 +146,7 @@
   border-radius: var(--radius-cell);
 }
 .sb-vitals > div + div {
-  border-left: 1.5px solid var(--line);
+  border-left: var(--card-border-width, 1px) solid var(--line);
 }
 /* На узком экране лист персонажа несёт 8–9 ячеек — переносим их на
    несколько строк, а не сжимаем до нечитаемого. */
@@ -152,7 +154,7 @@
   .sb-vitals > div {
     flex: 1 1 30%;
     border-left: none !important;
-    border-top: 1.5px solid var(--line);
+    border-top: var(--card-border-width, 1px) solid var(--line);
   }
   .sb-vitals > div:nth-child(-n + 3) {
     border-top: none;
@@ -179,7 +181,7 @@
   margin-bottom: var(--sec-gap);
 }
 .sb-abilities > div {
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--radius-cell);
   padding: 6px 2px;
 }
@@ -218,7 +220,7 @@
   font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--ink);
-  border-top: 1.5px solid var(--line);
+  border-top: var(--card-border-width, 1px) solid var(--line);
   padding-top: 8px;
   margin: var(--sec-gap) 0 8px;
   text-transform: var(--section-transform);
@@ -238,7 +240,7 @@ summary.sb-section {
   font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--ink);
-  border-top: 1.5px solid var(--line);
+  border-top: var(--card-border-width, 1px) solid var(--line);
   padding-top: 8px;
   margin-bottom: 8px;
   text-transform: var(--section-transform);
@@ -1036,4 +1038,45 @@ summary.sb-section {
 .sb-save-status.is-error .comp-mini {
   border-color: currentColor;
   color: inherit;
+}
+
+/* Строка-подпись под виталами: то, что нужно часто, но не каждый ход
+   (пассивное восприятие, бонус мастерства). Голос Label + значение моно
+   (§1.5), без собственной рамки — она принадлежит блоку виталов выше. */
+.sb-vitals-caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-bottom: var(--sec-gap);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm2);
+}
+.sb-death-saves {
+  gap: 3px;
+  align-items: center;
+}
+.sb-death-saves .row {
+  gap: 3px;
+  font-size: var(--fs-label);
+  justify-content: center;
+}
+.sb-inspiration {
+  cursor: pointer;
+}
+.sb-inspiration:focus-visible {
+  outline: var(--card-border-width, 1px) solid var(--accent);
+  outline-offset: 2px;
+}
+/* Имя игрока и опыт в плашке-шапке — голос Label на чернилах. */
+.sb-head-player {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.04em;
+  color: var(--on-surface-muted);
+  white-space: nowrap;
+}
+/* Ярлыки переключения между несколькими статблоками одного персонажа —
+   обычный таббар системы (§5), просто над листом. */
+.sb-switcher {
+  margin-bottom: 0;
 }

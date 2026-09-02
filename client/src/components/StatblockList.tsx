@@ -111,6 +111,7 @@ export function StatblockList({
   const [showDndCreatureWizard, setShowDndCreatureWizard] = useState(false);
   const [showLitmWizard, setShowLitmWizard] = useState(false);
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
+  const [activeStatblockId, setActiveId] = useState<number | null>(null);
   const [confirmDialog, confirm] = useConfirm();
   const { toast: undoToast, deleteWithUndo, dismiss: dismissUndo } = useUndoDelete();
 
@@ -280,6 +281,16 @@ export function StatblockList({
     }
   }
 
+  // Показываем один лист: аккордеона у чарника больше нет, и несколько
+  // статблоков рисовались бы полными листами подряд. Выбор держится по id, а
+  // не по индексу — список перезапрашивается после каждого добавления и
+  // удаления.
+  const activeId = statblocks.some((sb) => sb.id === activeStatblockId)
+    ? activeStatblockId
+    : statblocks[0]?.id ?? null;
+  const shownStatblocks =
+    statblocks.length > 1 ? statblocks.filter((sb) => sb.id === activeId) : statblocks;
+
   return (
     <div className="stack">
       {confirmDialog}
@@ -296,7 +307,21 @@ export function StatblockList({
           </div>
         </div>
       )}
-      {statblocks.map((sb) => (
+      {statblocks.length > 1 && (
+        <div className="tabs sb-switcher">
+          {statblocks.map((sb) => (
+            <button
+              key={sb.id}
+              type="button"
+              className={sb.id === activeId ? "active" : ""}
+              onClick={() => setActiveId(sb.id)}
+            >
+              {statblockTitle(sb)}
+            </button>
+          ))}
+        </div>
+      )}
+      {shownStatblocks.map((sb) => (
         <StatblockCard
           key={sb.id}
           statblock={sb}
@@ -710,6 +735,28 @@ function StatblockCard({
         />
       </div>
     ) : null;
+  }
+
+  // Лист персонажа рисует собственную плашку-шапку (§1.4), поэтому обёртка
+  // <details className="card"> ниже давала вторую, более плоскую шапку поверх
+  // первой — с тем же именем и вторым набором кнопок. Она же прятала лист за
+  // аккордеоном, а свёрнутый чарник за столом бесполезен: аккордеон нужен
+  // списку, а не листу. Правка идёт по секциям внутри вида (гриллинг 2026-09-03).
+  if (statblock.format === "dnd_character" && dndValue) {
+    return (
+      <DndCharacterView
+        value={dndValue as DndCharacterData}
+        onQuickUpdate={quickSaveDnd}
+        headerExtra={
+          <>
+            {saveIndicator}
+            <button type="button" className="comp-mini" title="Удалить чарник" onClick={() => onRemove(statblock.id)}>
+              <NavIcon name="delete" />
+            </button>
+          </>
+        }
+      />
+    );
   }
 
   return (

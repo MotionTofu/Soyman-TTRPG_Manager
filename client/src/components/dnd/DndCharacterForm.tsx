@@ -3970,9 +3970,15 @@ export function DndCharacterView({
   value,
   compact,
   onQuickUpdate,
+  headerExtra,
 }: {
   value: DndCharacterData;
   compact?: boolean;
+  // Кнопки владельца карточки (сохранение, удаление) — в собственной плашке
+  // листа. Внешней обёртки-аккордеона у листа больше нет: она давала вторую
+  // шапку поверх этой (§1.4) и прятала лист, который за столом всегда нужен
+  // раскрытым.
+  headerExtra?: ReactNode;
   // View-mode quick edits (HP, inspiration, death saves, spell slots used)
   // save immediately without entering the full DndCharacterEdit form —
   // mirrors LitMCharacterView's onQuickUpdate for tag edits.
@@ -4104,6 +4110,14 @@ export function DndCharacterView({
   const perceptionProf = value.skillProfs["Внимание/восприятие"] ?? 0;
   const passivePerception =
     10 + abilityModifier(value.abilities.wis) + parseBonus(value.proficiencyBonus) * perceptionProf;
+  // Спасброски от смерти появляются сами, когда становятся нужны. «Хитов нет»
+  // — это ноль или меньше: урон уводит текущие хиты в минус (нижняя граница —
+  // Этап 2), и лист обязан показать дорожки и в этом случае. Пустое поле
+  // хитов у только что заведённого листа за смерть не считается.
+  const atZeroHp =
+    (value.hitPointsCurrent !== "" && (Number(value.hitPointsCurrent) || 0) <= 0) ||
+    value.deathSaveSuccesses > 0 ||
+    value.deathSaveFailures > 0;
   const computedAc = computeArmorClass(
     abilityModifier(value.abilities.dex),
     value.equipmentSections,
@@ -4127,9 +4141,9 @@ export function DndCharacterView({
                 </div>
               )}
             </div>
-            <span className="row" style={{ gap: 8, flexShrink: 0 }}>
+            <span className="sb-head-controls">
               {(value.playerName || value.experiencePoints) && (
-                <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", letterSpacing: "0.04em", opacity: 0.8, whiteSpace: "nowrap" }}>
+                <div className="sb-head-player">
                   {[value.playerName, value.experiencePoints && `Опыт ${value.experiencePoints}`].filter(Boolean).join(" · ")}
                 </div>
               )}
@@ -4138,6 +4152,7 @@ export function DndCharacterView({
                   <NavIcon name="moon" /> Отдых
                 </button>
               )}
+              {headerExtra}
             </span>
           </div>
         </div>
@@ -4149,55 +4164,33 @@ export function DndCharacterView({
           />
         )}
         <div className="sb-body">
+          {/* §1.11: постоянные ячейки — то, на что игрок смотрит каждый ход.
+              Условные показываются, только когда им есть что сказать:
+              спасброски от смерти на здоровом персонаже были шумом в самом
+              плотном месте листа. Пассивное восприятие и бонус мастерства
+              нужны часто, но не каждый ход — они ушли строкой-подписью под
+              ячейками, где не отнимают ширину у хитов и КЗ. */}
           <div className="sb-vitals">
             <AcQuickBox computed={computedAc} manualBonus={value.manualAcBonus} onQuickUpdate={onQuickUpdate} />
-            <TextQuickBox label="Инициатива" value={value.initiative} field="initiative" onQuickUpdate={onQuickUpdate} />
-            {value.speed && (
-              <div>
-                <div className="sb-label">Скорость</div>
-                <div className="sb-value">{value.speed}</div>
-              </div>
-            )}
-            {!value.speed && formatSpeed(value.speeds) && (
-              <div>
-                <div className="sb-label">Скорость</div>
-                <div className="sb-value">{formatSpeed(value.speeds)}</div>
-              </div>
-            )}
-            <div>
-              <div className="sb-label">Пасс. восприятие</div>
-              <div className="sb-value">{passivePerception}</div>
-            </div>
             <HpQuickBox value={value} onQuickUpdate={onQuickUpdate} />
+            <TextQuickBox label="Инициатива" value={value.initiative} field="initiative" onQuickUpdate={onQuickUpdate} />
+            {(value.speed || formatSpeed(value.speeds)) && (
+              <div>
+                <div className="sb-label">Скорость</div>
+                <div className="sb-value">{value.speed || formatSpeed(value.speeds)}</div>
+              </div>
+            )}
             {value.hitDice && (
               <div>
                 <div className="sb-label">Кость хитов</div>
                 <div className="sb-value">{value.hitDice}</div>
               </div>
             )}
-            {value.proficiencyBonus && (
-              <div>
-                <div className="sb-label">Бонус маст.</div>
-                <div className="sb-value">{value.proficiencyBonus}</div>
-              </div>
-            )}
-            {(value.inspiration || onQuickUpdate) && (
-              <div>
-                <div className="sb-label">Вдохновение</div>
-                <div
-                  className="sb-value"
-                  style={onQuickUpdate ? { cursor: "pointer" } : undefined}
-                  onClick={onQuickUpdate ? () => onQuickUpdate({ inspiration: !value.inspiration }) : undefined}
-                >
-                  {value.inspiration ? <NavIcon name="star" filled /> : "—"}
-                </div>
-              </div>
-            )}
-            {(onQuickUpdate || value.deathSaveSuccesses > 0 || value.deathSaveFailures > 0) && (
+            {atZeroHp && (
               <div>
                 <div className="sb-label">Спас от смерти</div>
-                <div className="stack" style={{ gap: 3 }}>
-                  <span className="row muted" style={{ gap: 3, fontSize: 11 }}>
+                <div className="stack sb-death-saves">
+                  <span className="row muted">
                     +
                     <PipTrack
                       value={value.deathSaveSuccesses}
@@ -4206,7 +4199,7 @@ export function DndCharacterView({
                       onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
                     />
                   </span>
-                  <span className="row muted" style={{ gap: 3, fontSize: 11 }}>
+                  <span className="row muted">
                     −
                     <PipTrack
                       value={value.deathSaveFailures}
@@ -4217,6 +4210,41 @@ export function DndCharacterView({
                   </span>
                 </div>
               </div>
+            )}
+            {(value.inspiration || onQuickUpdate) && (
+              <div>
+                <div className="sb-label">Вдохновение</div>
+                <div
+                  className="sb-value sb-inspiration"
+                  role={onQuickUpdate ? "button" : undefined}
+                  tabIndex={onQuickUpdate ? 0 : undefined}
+                  aria-pressed={onQuickUpdate ? value.inspiration : undefined}
+                  onClick={onQuickUpdate ? () => onQuickUpdate({ inspiration: !value.inspiration }) : undefined}
+                  onKeyDown={
+                    onQuickUpdate
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onQuickUpdate({ inspiration: !value.inspiration });
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  {value.inspiration ? <NavIcon name="star" filled /> : "—"}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="sb-vitals-caption">
+            <span>
+              <span className="sb-prop-label">Пасс. восприятие</span> {passivePerception}
+            </span>
+            {value.proficiencyBonus && (
+              <span>
+                <span className="sb-prop-label">Бонус мастерства</span> {value.proficiencyBonus}
+              </span>
             )}
           </div>
 

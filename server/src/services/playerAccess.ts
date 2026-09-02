@@ -103,7 +103,11 @@ export function apiRoleGate(req: AuthedRequest, res: Response, next: NextFunctio
     const { owner_type, owner_id } = req.body as { owner_type?: string; owner_id?: number };
     return owner_type === "character" && owner_id && ownsCharacter(playerId, owner_id) ? next() : forbid();
   }
-  if ((match = p.match(/^\/statblocks\/(\d+)$/))) {
+  // `/restore` идёт тем же правом, что и удаление: игрок, который может снести
+  // свой чарник, обязан мочь и отменить это. Без отдельной ветки путь не
+  // подпадал под regex выше и упирался в forbid() — кнопка «Отменить» в тосте
+  // работала бы только у мастера.
+  if ((match = p.match(/^\/statblocks\/(\d+)(\/restore)?$/))) {
     return statblockOwned(playerId, match[1]) ? next() : forbid();
   }
 
