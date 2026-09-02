@@ -6,6 +6,8 @@ import { UpdateChecker } from "../components/UpdateChecker";
 import { NavIcon } from "../components/NavIcons";
 
 const HOTKEYS: { combo: string; where: string; does: string }[] = [
+  { combo: "Ctrl + K", where: "любое место (кроме полей ввода)", does: "поставить курсор в глобальный поиск" },
+  { combo: "/", where: "любое место (кроме полей ввода)", does: "то же самое, одной клавишей" },
   { combo: "@", where: "любое текстовое поле", does: "открыть поиск и вставить упоминание сущности" },
   { combo: "Alt + Q", where: "любое текстовое поле", does: "то же самое, что «@», но без набора символа" },
   { combo: "Ctrl + B", where: "любое текстовое поле", does: "обернуть выделение в **жирный текст**" },

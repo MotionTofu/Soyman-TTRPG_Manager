@@ -50,6 +50,18 @@ export const COMPENDIUM_KINDS: ReadonlySet<string> = new Set([
   "themebook",
   "treasure",
   "trope",
+  // Золото и прах
+  "zip_archetype",
+  "zip_archetype_feature",
+  "zip_talisman_option",
+  "zip_talent",
+  "zip_gift",
+  "zip_equipment",
+  "zip_hireling",
+  "zip_creature",
+  "zip_relic",
+  "zip_trap",
+  "guide",
 ]);
 
 export function isCompendiumKind(kind: string | null | undefined): boolean {

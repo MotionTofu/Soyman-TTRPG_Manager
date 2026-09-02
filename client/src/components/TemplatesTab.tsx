@@ -12,6 +12,8 @@ const TEMPLATE_FORMAT_LABELS: Record<StatblockFormat, string> = {
   litm_challenge: "Legend in the Mist — Угроза (Challenge)",
   dnd_character: "D&D — Персонаж",
   dnd_creature: "D&D — Существо",
+  zip_character: "Золото и прах — Путешественник",
+  zip_creature: "Золото и прах — Существо",
 };
 
 interface Props {
@@ -130,6 +132,8 @@ export function TemplatesTab({ systemId }: Props) {
             <option value="text">{TEMPLATE_FORMAT_LABELS.text}</option>
             <option value="litm_challenge">{TEMPLATE_FORMAT_LABELS.litm_challenge}</option>
             <option value="dnd_creature">{TEMPLATE_FORMAT_LABELS.dnd_creature}</option>
+            <option value="zip_character">{TEMPLATE_FORMAT_LABELS.zip_character}</option>
+            <option value="zip_creature">{TEMPLATE_FORMAT_LABELS.zip_creature}</option>
           </select>
           {templateFormat === "text" && (
             <select

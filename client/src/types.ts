@@ -399,6 +399,79 @@ export type StatblockFormat =
   | "dnd_character"
   | "dnd_creature";
 
+export interface ZipFeature {
+  entryId: number | null;
+  name: string;
+  description: string;
+  sourceArchetypeId?: number | null;
+  level?: number | null;
+}
+export interface ZipEquipmentItem {
+  entryId: number | null;
+  name: string;
+  qty: string;
+  weight: string;
+  load: string;
+  cost: string;
+  damage?: string;
+  range?: string;
+  mode?: "Р" | "С" | "А";
+  ammo?: string;
+  armorBonus?: string;
+  equipped: boolean;
+  notes: string;
+}
+export interface ZipGiftInstance {
+  entryId: number | null;
+  name: string;
+  difficulty: string;
+  enhancements: string[];
+  preparationTurns: string;
+}
+export interface ZipCharacterData {
+  systemId: number | null;
+  characterName: string;
+  playerName: string;
+  abilities: { tel: string; lov: string; raz: string };
+  keyAbility: "tel" | "lov" | "raz";
+  level: string;
+  experience: string;
+  skills: { atletika: string; ulovki: string; znaniya: string; obschenie: string };
+  specialization: string;
+  specializationPoints: string;
+  characterTypeId: number | null;
+  characterTypeName: string;
+  talents: ZipFeature[];
+  talisman: string;
+  talismanBurned: boolean;
+  health: { resilienceCurrent: string; telCurrent: string; razCurrent: string; lovCurrent: string };
+  defenseMisc: string;
+  carry: { extraSlots: string };
+  languages: string[];
+  equipment: ZipEquipmentItem[];
+  coins: string;
+  hiredMercs: { entryId: number | null; name: string; position: string; treachery: string; wage: string }[];
+  gifts: ZipGiftInstance[];
+  echo: string;
+  notes: string;
+}
+export interface ZipCreatureData {
+  name: string;
+  level: string;
+  resilience: string;
+  competence: string;
+  meleeAttack: string;
+  rangedAttack: string;
+  damage: string;
+  defense: string;
+  resolve: string;
+  behavior: string;
+  features: ZipFeature[];
+  equipment: string;
+  habitat: string;
+  treasure: string;
+  notes: string;
+}
 export interface Statblock {
   id: number;
   owner_type: "character" | "being" | "compendium_entry";

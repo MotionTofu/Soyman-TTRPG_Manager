@@ -33,6 +33,15 @@ export const SECTION_KINDS: { value: string; label: string }[] = [
   { value: "magic_item", label: "Магические предметы" },
   { value: "vehicle", label: "Транспорт" },
   { value: "bastion", label: "Бастионы" },
+  { value: "zip_archetype", label: "Типажи ЗиП" },
+  { value: "zip_talent", label: "Таланты ЗиП" },
+  { value: "zip_gift", label: "Дары ЗиП" },
+  { value: "zip_equipment", label: "Снаряжение ЗиП" },
+  { value: "zip_hireling", label: "Наёмники ЗиП" },
+  { value: "zip_relic", label: "Реликвии и ловушки" },
+  { value: "zip_trap", label: "Ловушки ЗиП" },
+  { value: "zip_creature", label: "Существа ЗиП" },
+  { value: "guide", label: "Гайд" },
 ];
 
 // Транспорт делится по среде, а не по размеру: за столом ищут «чем плыть»,
