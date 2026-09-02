@@ -2401,13 +2401,13 @@ function DndEquipmentQuickView({
   );
 }
 
-export function DndCharacterEdit({
-  value,
-  onChange,
-}: {
-  value: DndCharacterData;
-  onChange: (v: DndCharacterData) => void;
-}) {
+// Происхождение персонажа — классы, вид, предыстория — и всё, что они за
+// собой тянут: справочники компендиума, выдача и снятие особенностей,
+// спасбросков, владений и заклинаний, гашение гонок. Вынесено в хук, потому
+// что после роспуска формы правки (гриллинг 2026-09-03) этим пользуется
+// карандаш в плашке-шапке, а не только сама форма: происхождение правится
+// там, где оно написано.
+function useDndOrigin(value: DndCharacterData, onChange: (v: DndCharacterData) => void) {
   const [systems, setSystems] = useState<System[]>([]);
   const [hierarchy, setHierarchy] = useState<DndClassHierarchy>({ classes: [], subclassesByClass: {} });
   const [species, setSpecies] = useState<DndSpeciesOption[]>([]);
@@ -2827,6 +2827,75 @@ export function DndCharacterEdit({
     if (seq !== opSeqRef.current) return;
     onChange({ ...valueRef.current, ...cleared, ...patch });
   }
+
+
+  return {
+    systems,
+    hierarchy,
+    species,
+    backgrounds,
+    damageTypes,
+    conditionOptions,
+    senseOptions,
+    setAttacks,
+    setEquipmentSections,
+    setSpeciesFeatures,
+    setClassFeatures,
+    setFeats,
+    setSpecialAbilities,
+    setProficiencies,
+    setSpellsPatch,
+    setAbilities,
+    setSavingThrowProfs,
+    setSkillProfs,
+    setNarrativeField,
+    setSpellcasting,
+    setClasses,
+    pickClass,
+    pickSubclass,
+    changeClassLevel,
+    removeClass,
+    pickRace,
+    pickBackground,
+  };
+}
+
+export function DndCharacterEdit({
+  value,
+  onChange,
+}: {
+  value: DndCharacterData;
+  onChange: (v: DndCharacterData) => void;
+}) {
+  const {
+    systems,
+    hierarchy,
+    species,
+    backgrounds,
+    damageTypes,
+    conditionOptions,
+    senseOptions,
+    setAttacks,
+    setEquipmentSections,
+    setSpeciesFeatures,
+    setClassFeatures,
+    setFeats,
+    setSpecialAbilities,
+    setProficiencies,
+    setSpellsPatch,
+    setAbilities,
+    setSavingThrowProfs,
+    setSkillProfs,
+    setNarrativeField,
+    setSpellcasting,
+    setClasses,
+    pickClass,
+    pickSubclass,
+    changeClassLevel,
+    removeClass,
+    pickRace,
+    pickBackground,
+  } = useDndOrigin(value, onChange);
 
   const spellAbilityKey = characterSpellcastingAbility(value.classes);
   const spellAbilityMod = spellAbilityKey ? abilityModifier(value.abilities[spellAbilityKey]) : 0;
