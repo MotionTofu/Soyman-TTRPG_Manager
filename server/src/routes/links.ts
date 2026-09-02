@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import {
   MENTIONABLE,
   exists,
@@ -382,10 +383,8 @@ linksRouter.get("/mentioning-sessions", (req, res) => {
   if (!type || !id) return res.status(400).json({ error: "type and id are required" });
   const rows = db
     .prepare(
-      `SELECT s.id, s.date, s.title, s.campaign_id, c.name as campaign_name,
-              (SELECT COUNT(*) FROM sessions s2
-                 WHERE s2.campaign_id = s.campaign_id AND s2.archived_at IS NULL
-                   AND s2.date <= s.date) as session_number
+      `SELECT s.id, s.date, s.title, s.campaign_id, s.status, c.name as campaign_name,
+              ${SESSION_NUMBER_SQL} as session_number
        FROM generic_links gl
        JOIN sessions s ON s.id = gl.from_id
        JOIN campaigns c ON c.id = s.campaign_id

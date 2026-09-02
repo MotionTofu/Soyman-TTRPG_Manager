@@ -36,7 +36,7 @@
   background: transparent;
   color: inherit;
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -127,7 +127,7 @@
   color: var(--accent);
   cursor: pointer;
   padding: 2px 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .audio-player-suggestion .nav-icon {
   width: 14px;
@@ -153,7 +153,7 @@
 }
 .audio-player-empty-hint {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--on-surface-muted);
   opacity: 0.7;
 }
@@ -162,7 +162,7 @@
      тот же, что у заголовков каналов в пульте, чтобы панель и пульт
      говорили одинаково. */
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -174,7 +174,7 @@
 }
 .audio-player-time {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--on-surface-muted);
   flex-shrink: 0;
   cursor: pointer;
@@ -184,7 +184,7 @@
 }
 .audio-player-counter {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--on-surface-muted);
   flex-shrink: 0;
 }
@@ -215,7 +215,7 @@
 }
 .audio-player-help {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 700;
   width: 20px;
   height: 20px;
@@ -240,7 +240,7 @@
 }
 .audio-player-shortcuts-title {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -251,13 +251,13 @@
   flex-direction: column;
   gap: 4px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .audio-player-shortcuts-list kbd {
   display: inline-block;
   min-width: 80px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--on-surface-muted);
 }
 .audio-player-volume {
@@ -284,7 +284,6 @@
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
 }
 .audio-player-volume-range::-moz-range-thumb {
   width: 14px;
@@ -293,7 +292,6 @@
   background: var(--accent);
   border: none;
   cursor: pointer;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
 }
 .audio-player-volume-range::-moz-range-track {
   height: 4px;

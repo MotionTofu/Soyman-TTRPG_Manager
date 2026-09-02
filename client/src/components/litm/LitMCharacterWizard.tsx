@@ -48,13 +48,13 @@ function ThemeChip({ kit, themebookEn, kits, books }: {
         minWidth: 0,
       }}
     >
-      <span style={{ fontWeight: "bold", fontSize: 13, lineHeight: 1.2 }}>
+      <span style={{ fontWeight: "bold", fontSize: "var(--fs-meta)", lineHeight: 1.2 }}>
         {ruName}
       </span>
-      <span style={{ fontSize: 11, color: "var(--ink-soft, #5c4a38)", lineHeight: 1.2 }}>
+      <span style={{ fontSize: "var(--fs-micro)", color: "var(--ink-soft, #5c4a38)", lineHeight: 1.2 }}>
         {typeRu}
       </span>
-      <span style={{ fontSize: 9, letterSpacing: ".08em", textTransform: "uppercase", opacity: .7, lineHeight: 1.3 }}>
+      <span style={{ fontSize: "var(--fs-micro)", letterSpacing: ".08em", textTransform: "uppercase", opacity: .7, lineHeight: 1.3 }}>
         {MIGHT_RU[might] ?? ""}
       </span>
     </span>
@@ -208,7 +208,7 @@ export function LitMCharacterWizard({
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 16 }}>
           <button
             style={{
-              fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".12em",
+              fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".12em",
               textTransform: "uppercase", padding: "4px 10px", cursor: "pointer",
               background: groupFilter === "" ? "var(--ink)" : "transparent",
               color: groupFilter === "" ? "var(--paper)" : "var(--ink)",
@@ -220,7 +220,7 @@ export function LitMCharacterWizard({
             <button
               key={g}
               style={{
-                fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".12em",
+                fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".12em",
                 textTransform: "uppercase", padding: "4px 10px", cursor: "pointer",
                 background: groupFilter === g ? "var(--ink)" : "transparent",
                 color: groupFilter === g ? "var(--paper)" : "var(--ink)",
@@ -250,7 +250,7 @@ export function LitMCharacterWizard({
                 {/* Шапка-плашка */}
                 <div style={{
                   background: "var(--ink)", color: "var(--paper)",
-                  fontFamily: "var(--font-ui)", fontSize: 10,
+                  fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)",
                   letterSpacing: ".14em", textTransform: "uppercase",
                   padding: "5px 10px", lineHeight: 1.3,
                 }}>
@@ -258,7 +258,7 @@ export function LitMCharacterWizard({
                 </div>
                 {/* Имя тропa */}
                 <div style={{
-                  fontFamily: "var(--font-display)", fontSize: 17,
+                  fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)",
                   textTransform: "uppercase", letterSpacing: ".03em",
                   lineHeight: 1.15, padding: "10px 12px 6px",
                 }}>
@@ -282,7 +282,7 @@ export function LitMCharacterWizard({
         {selectedTrope && (
           <div style={{ marginTop: 20, border: "2px solid var(--ink)", padding: 16 }}>
             <div style={{
-              fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".14em",
+              fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".14em",
               textTransform: "uppercase", marginBottom: 10,
             }}>
               Четвёртая тема — на выбор
@@ -303,7 +303,7 @@ export function LitMCharacterWizard({
               ))}
             </div>
             <div style={{
-              fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".14em",
+              fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".14em",
               textTransform: "uppercase", margin: "14px 0 6px",
             }}>
               Рюкзак — одно на выбор
@@ -311,7 +311,7 @@ export function LitMCharacterWizard({
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {selectedTrope.data.backpack.map((b, i) => (
                 <span key={i} style={{
-                  fontFamily: "var(--font-mono)", fontSize: 11,
+                  fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)",
                   border: "1px solid var(--ink)", padding: "2px 6px",
                 }}>{b}</span>
               ))}
@@ -356,7 +356,7 @@ export function LitMCharacterWizard({
                   <span className={`litm-power-${b.data.might}`} style={{ padding: "2px 8px", display: "inline-block" }}>
                     {b.ruName}
                   </span>
-                  <span className="muted" style={{ fontSize: 11, marginLeft: 4 }}>{MIGHT_RU[b.data.might] ?? ""}</span>
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)", marginLeft: 4 }}>{MIGHT_RU[b.data.might] ?? ""}</span>
                 </button>
               ))}
             </div>
@@ -365,14 +365,14 @@ export function LitMCharacterWizard({
         {currentType && currentBook && (
           <div className="stack">
             <h3>{currentBook.ruName} <span className="muted">[{currentBook.enName}]</span></h3>
-            <p className="muted" style={{ fontSize: 13 }}>
+            <p className="muted" style={{ fontSize: "var(--fs-meta)" }}>
               Ответьте минимум на 3 вопроса (включая первый) — каждый ответ станет тегом.
               Затем ответьте на один вопрос слабости.
             </p>
             <div className="litm-section-label">Вопросы силовых тегов (минимум 3)</div>
             {currentBook.data.powerQuestions.map((q, qi) => (
               <div key={qi}>
-                <label style={{ fontSize: 14 }}>
+                <label style={{ fontSize: "var(--fs-meta)" }}>
                   <strong>{String.fromCharCode(65 + qi)}.</strong> {q}
                   <input
                     value={tbPowerTags[themeIdx]?.[qi] ?? ""}
@@ -390,7 +390,7 @@ export function LitMCharacterWizard({
             <div className="litm-section-label">Слабость (одна)</div>
             {currentBook.data.weaknessQuestions.map((q, qi) => (
               <div key={qi}>
-                <label style={{ fontSize: 14 }}>
+                <label style={{ fontSize: "var(--fs-meta)" }}>
                   <strong>{String.fromCharCode(65 + qi)}.</strong> {q}
                   <input
                     value={tbWeakTags[themeIdx]?.[qi] ?? ""}
@@ -405,7 +405,7 @@ export function LitMCharacterWizard({
                 </label>
               </div>
             ))}
-            <label style={{ fontSize: 14 }}>
+            <label style={{ fontSize: "var(--fs-meta)" }}>
               <strong>Квест темы:</strong>
               <input
                 value={tbQuests[themeIdx] ?? ""}

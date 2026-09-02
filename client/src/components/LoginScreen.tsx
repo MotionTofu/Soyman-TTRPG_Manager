@@ -97,7 +97,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
           )}
 
           <label className="stack" style={{ gap: 4 }}>
-            <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--muted)" }}>Логин</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--muted)" }}>Логин</span>
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -107,12 +107,12 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
               spellCheck={false}
               autoComplete={needsSetup ? "username" : "username"}
               placeholder={needsSetup ? "например, Мастер" : "твой логин"}
-              style={{ fontFamily: "var(--font-body)", fontSize: 14 }}
+              style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)" }}
             />
           </label>
 
           <label className="stack" style={{ gap: 4 }}>
-            <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--muted)" }}>Пароль</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--muted)" }}>Пароль</span>
             <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
               <input
                 type={showPass ? "text" : "password"}
@@ -120,9 +120,9 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={needsSetup ? "new-password" : "current-password"}
                 placeholder="не короче 4 символов"
-                style={{ flex: 1, fontFamily: "var(--font-body)", fontSize: 14, paddingRight: 72 }}
+                style={{ flex: 1, fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", paddingRight: 72 }}
               />
-              <button type="button" onClick={() => setShowPass((v) => !v)} tabIndex={-1} style={{ position: "absolute", right: 4, height: 26, padding: "0 8px", fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <button type="button" onClick={() => setShowPass((v) => !v)} tabIndex={-1} style={{ position: "absolute", right: 4, height: 26, padding: "0 8px", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 {showPass ? "Скрыть" : "Показать"}
               </button>
             </span>
@@ -130,16 +130,16 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
 
           {needsSetup && (
             <label className="stack" style={{ gap: 4 }}>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--muted)" }}>Пароль ещё раз</span>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--muted)" }}>Пароль ещё раз</span>
               <span style={{ position: "relative", display: "flex", alignItems: "center" }}>
                 <input
                   type={showPass2 ? "text" : "password"}
                   value={password2}
                   onChange={(e) => setPassword2(e.target.value)}
                   autoComplete="new-password"
-                  style={{ flex: 1, fontFamily: "var(--font-body)", fontSize: 14, paddingRight: 72 }}
+                  style={{ flex: 1, fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", paddingRight: 72 }}
                 />
-                <button type="button" onClick={() => setShowPass2((v) => !v)} tabIndex={-1} style={{ position: "absolute", right: 4, height: 26, padding: "0 8px", fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <button type="button" onClick={() => setShowPass2((v) => !v)} tabIndex={-1} style={{ position: "absolute", right: 4, height: 26, padding: "0 8px", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   {showPass2 ? "Скрыть" : "Показать"}
                 </button>
               </span>
@@ -153,11 +153,11 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
           </button>
 
           <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-            <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Где хранятся данные?</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Где хранятся данные?</span>
             <span className="muted" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35 }}>
               Локально, офлайн. Папка хранилища по умолчанию — <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>%APPDATA%/RPG-Vault</span>. Переключишь в Настройки → Хранилище. Бэкап — там же, кнопка «Бэкап» в навигации.
             </span>
-            <button type="button" onClick={() => setAboutOpen((v) => !v)} style={{ alignSelf: "flex-start", fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", background: "transparent", border: "1px solid var(--line)", padding: "4px 8px" }}>
+            <button type="button" onClick={() => setAboutOpen((v) => !v)} style={{ alignSelf: "flex-start", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", background: "transparent", border: "1px solid var(--line)", padding: "4px 8px" }}>
               {aboutOpen ? "Скрыть подробности" : "Подробнее — Справка"}
             </button>
             {aboutOpen && (

@@ -153,6 +153,22 @@
 
 **✅ ВЫПОЛНЕНО 2026-08-29 (код) — сверено 2026-08-30.** `client/src/api/client.ts:20` слушает `storage` на `rpgManagerAuthToken`, сравнивает с `token` в памяти и — если не печатают и окно в фокусе — `location.reload()`, иначе ждёт `focus` (`client/src/api/client.ts:30`). Чтение/запись через `isBusyEditing()` не теряется. В `ToDo.md` оставалось открытым по недосмотру.
 
+### П0.7. `npm run build` не проходит: копятся ошибки типов в рабочей ветке
+
+`tsc -b` в `client/` падает на 16 ошибках в файлах, не связанных между собой:
+`Verstak/Verstak.tsx` (дублирующиеся ключи объекта, `onDragStart` вне пропсов,
+`"expand"` вне `NavIconName`), `CanvasPage.tsx:1958` (`navigate` не определён),
+`LocationDetailPage.tsx` (`communities`/`location_names` вне типа `SettingBeing`,
+`location` возможно `null`), `SettingCalendarSettings.tsx:67` (`api.delete` нет),
+`SettingDetailPage.tsx:2281`, `AdventureDetailPage.tsx:73`.
+
+Найдено 2026-09-02 при проверке правки лицензий — не чинено, потому что к ней
+не относится. Значимо тем, что `npm run build` — первый шаг выпуска по
+`RELEASE.md`, а `vite build` при этом проходит: ошибки не видны, пока не
+собираешь релиз. `оценка`
+
+---
+
 ---
 
 ## П1 — врёт Мастеру или мешает за столом

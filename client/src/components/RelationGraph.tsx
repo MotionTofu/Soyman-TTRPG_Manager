@@ -48,7 +48,7 @@ import {
 
 const ARROW_PAN_STEP = 90;
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 6;
+const MAX_ZOOM = 18;
 
 // Типы, скрытые по умолчанию — операционные сущности, засоряющие граф.
 const DEFAULT_HIDDEN_TYPES = new Set(["scene", "adventure", "campaign"]);
@@ -59,16 +59,20 @@ interface View {
   panY: number;
 }
 
+const PAN_OVERSCROLL = 150;
+
 function clampPan(
   zoom: number, panX: number, panY: number,
   canvasW: number, canvasH: number,
   worldW: number, worldH: number, fs: number,
 ) {
-  const minX = canvasW - worldW * zoom * fs;
-  const minY = canvasH - worldH * zoom * fs;
+  const minX = canvasW - worldW * zoom * fs - PAN_OVERSCROLL;
+  const minY = canvasH - worldH * zoom * fs - PAN_OVERSCROLL;
+  const maxX = PAN_OVERSCROLL;
+  const maxY = PAN_OVERSCROLL;
   return {
-    x: Math.max(minX, Math.min(0, panX)),
-    y: Math.max(minY, Math.min(0, panY)),
+    x: Math.max(minX, Math.min(maxX, panX)),
+    y: Math.max(minY, Math.min(maxY, panY)),
   };
 }
 

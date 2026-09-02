@@ -10,7 +10,7 @@ import {
 import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "./relations";
 import type { RelationTone } from "./types";
 
-const EDGE_LABEL_FONT_SIZE = 7;
+const EDGE_LABEL_FONT_SIZE = 1.9;
 const RELATION_ARROW_OFFSET = 5;
 const ARROW_POSITIONS = [0.3, 0.5, 0.7];
 
@@ -20,8 +20,10 @@ function pairKey(a: string, b: string) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-function labelScale(zoom: number) {
-  return 1 + 0.5 * (zoom - 1);
+function labelScale(_zoom: number) {
+  // Фиксируем размер в экранных px — иначе на zoom=6 старый 0.5 давал 3.5× рост.
+  // Даже 0.12 слишком много при 686 рёбрах. Лейбл должен оставаться ~2px всегда.
+  return 1;
 }
 
 // ── Shape drawing ────────────────────────────────────────────────
@@ -165,39 +167,43 @@ export function drawEdge(
     ctx.globalAlpha = 1;
   }
 
-  // Label — repeat along the edge based on length
+  // Label — только на фокусе/пути, на сером чипе чуть выше линии
   if (options.showLabel) {
+    if (!options.focused && !options.onPath) return;
     const relationLabel = e.section || (tone ? RELATION_TONE_LABELS[tone] : null);
     if (relationLabel) {
-      const dx = bx - ax;
-      const dy = by - ay;
-      const edgeLen = Math.sqrt(dx * dx + dy * dy);
-      const repeatCount = Math.max(1, Math.min(5, Math.round(edgeLen / 120)));
       const labelAngle = angle > 90 || angle < -90 ? angle + 180 : angle;
-      const counterScale = labelScale(options.zoom) / (options.zoom * options.fitScale);
-
+      const counterScale = 1 / (options.zoom * options.fitScale);
+      const labelText = relationLabel.toUpperCase();
+      const lx = (ax + bx) / 2;
+      const ly = (ay + by) / 2;
+      if (lx < options.vpMinX || lx > options.vpMaxX || ly < options.vpMinY || ly > options.vpMaxY) return;
       ctx.save();
+      ctx.translate(lx, ly);
       ctx.rotate((labelAngle * Math.PI) / 180);
       ctx.scale(counterScale, counterScale);
-      ctx.font = `600 ${EDGE_LABEL_FONT_SIZE}px var(--font-ui, sans-serif)`;
+      ctx.font = `500 ${EDGE_LABEL_FONT_SIZE}px var(--font-ui, sans-serif)`;
       ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.strokeStyle = resolveColor("--paper", "#fff");
-      ctx.lineWidth = 3;
-      ctx.lineJoin = "round";
+      ctx.textBaseline = "middle";
+      const padX = 3;
+      const padY = 1.8;
+      const textW = ctx.measureText(labelText).width;
+      const chipW = textW + padX * 2;
+      const chipH = EDGE_LABEL_FONT_SIZE + padY * 2;
+      const GAP = 3; // зазор от линии до чипа в экранных px
+      const chipY = -GAP - chipH; // верх чипа над линией
+      const textY = chipY + chipH / 2;
+      // серый чип — как просил: чуть выше линии, не на ней
+      ctx.globalAlpha = options.onPath ? 0.96 : 0.92;
+      ctx.fillStyle = resolveColor("--paper", "#ececec");
+      // лёгкая тень/граница чтобы чип отделялся от фона
+      ctx.fillRect(-chipW / 2, chipY, chipW, chipH);
+      ctx.strokeStyle = resolveColor("--line", "#d9d9d9");
+      ctx.lineWidth = 0.7;
+      ctx.strokeRect(-chipW / 2, chipY, chipW, chipH);
+      ctx.globalAlpha = options.onPath ? 0.95 : 0.88;
       ctx.fillStyle = resolveColor("--ink", "#1a1a1a");
-
-      for (let i = 0; i < repeatCount; i++) {
-        const t = repeatCount === 1 ? 0.5 : i / (repeatCount - 1);
-        const lx = ax + dx * t;
-        const ly = ay + dy * t;
-        if (lx < options.vpMinX || lx > options.vpMaxX || ly < options.vpMinY || ly > options.vpMaxY) continue;
-        ctx.save();
-        ctx.translate(lx, ly);
-        ctx.strokeText(relationLabel.toUpperCase(), 0, -3);
-        ctx.fillText(relationLabel.toUpperCase(), 0, -3);
-        ctx.restore();
-      }
+      ctx.fillText(labelText, 0, textY);
       ctx.restore();
     }
   }
@@ -401,8 +407,9 @@ export function drawGraph(input: DrawInput) {
 
     const dim = neighborKeys != null && !neighborKeys.has(e.from) && !neighborKeys.has(e.to);
     const offPath = pathKeys != null && !onPath;
-    const hasLabel = !!(e.section || (e.tone ? RELATION_TONE_LABELS[e.tone as RelationTone] : null));
-    const showLabel = onPath || focusedEdge || (hasLabel && !dim);
+    // Только фокус/путь — иначе 686 лейблов убивают FPS (репорт: «грузят систему»).
+    // Раньше: hasLabel && !dim → рисовали все 686 даже на обзоре.
+    const showLabel = onPath || focusedEdge;
 
     drawEdge(ctx, e, a, b, nodesByKey, pairCounts, {
       onPath,

@@ -134,7 +134,7 @@ export const LitmTreasureBody = memo(function LitmTreasureBody({
   return (
     <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
       {tags.map((t, i) => (
-        <span key={i} className="tg tg-story" style={{ fontSize: 14 }}>{t}</span>
+        <span key={i} className="tg tg-story" style={{ fontSize: "var(--fs-meta)" }}>{t}</span>
       ))}
     </div>
   );
@@ -147,5 +147,5 @@ export const LitmMagicWayBody = memo(function LitmMagicWayBody({
   entry: CompendiumEntry;
 }) {
   if (!entry.description) return null;
-  return <p style={{ fontSize: 15 }}>{entry.description}</p>;
+  return <p style={{ fontSize: "var(--fs-h3)" }}>{entry.description}</p>;
 });

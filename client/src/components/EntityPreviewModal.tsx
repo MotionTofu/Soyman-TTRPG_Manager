@@ -281,6 +281,31 @@ function OtherEntityPreview({
               )}
             </>
           )}
+
+          {!["location", "character", "resource"].includes(type) && (
+            <>
+              {/* Универсальный фолбэк для остальных типов (campaign/setting/community/adventure/scene/session/setting_event/player/mastering).
+                  Печатает первое непустое прозаическое поле; порядок отражает частоту использования. */}
+              {String(detail.description ?? "").trim() && <MentionText text={String(detail.description)} />}
+              {String(detail.notes ?? "").trim() && <MentionText text={String(detail.notes)} />}
+              {String(detail.content ?? "").trim() && <MentionText text={String(detail.content)} />}
+              {String(detail.main_events ?? "").trim() && <MentionText text={String(detail.main_events)} />}
+              {String(detail.current_situation ?? "").trim() && <MentionText text={String(detail.current_situation)} />}
+              {String(detail.backstory ?? "").trim() && <MentionText text={String(detail.backstory)} />}
+              {String(detail.history ?? "").trim() && <MentionText text={String(detail.history)} />}
+              {String(detail.secret ?? "").trim() && <MentionText text={String(detail.secret)} />}
+              {/* Сеттинг/кампания могут хранить system_name / status рядом с описанием */}
+              {(type === "campaign" || type === "setting") && detail.system_name && (
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{String(detail.system_name)}</span>
+              )}
+              {(type === "community" || type === "location") && detail.kind && (
+                <span className="muted">{String(detail.kind)}</span>
+              )}
+              {type === "setting_event" && detail.description != null && String(detail.description).trim() === "" && detail.title && (
+                <span className="muted">{String(detail.title)}</span>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -293,12 +318,10 @@ function OtherEntityPreview({
   );
 }
 
-// The one integration point this feeds today is SectionDropZone — clicking
-// an entity row opens this instead of navigating straight away, with a
-// "открыть полностью" escape hatch at the bottom for anyone who wants the
-// real page. Deliberately scoped to the 5 kinds SectionDropZone actually
-// uses (location/being/character/resource/artifact) — other places entities
-// are linked (SearchPanel, MentionText, etc.) still navigate directly.
+// Глобальная превью-модалка: клик по [[упоминанию]] в любом MentionText
+// открывает карточку вместо навигации (openMentionPreview → MentionPreviewRoot).
+// SectionDropZone и другие места также её используют; внизу остаётся
+// "Открыть полностью →" для перехода на детальную страницу.
 export function EntityPreviewModal({ type, id, onClose }: Props) {
   return (
     <Modal onClose={onClose}>

@@ -1,17 +1,39 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { SectionHeading } from "../components/SectionHeading";
+import { EmptyState } from "../components/EmptyState";
 import { cardThumbnailProps, loadThumbnailStyles } from "../thumbnailStyles";
 import { formatNearestDate } from "../nearestDate";
+import { isSafeImageUrl } from "../utils/safeUrl";
+import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import type { Campaign, Setting, System } from "../types";
 
 // Mobile-first browsing surface combining the three "library" entity lists
 // (Кампании/Сеттинги/Системы) into one screen reachable from the bottom
 // nav's "Библиотека" button — a full create/manage UI already exists on
 // each entity's own list page (/campaigns, /settings, /systems), so this
-// view is read/navigate-only by design.
+// view is read/navigate-only by design: every section carries a "все →" link
+// there, and an empty section offers that link as its one action instead of
+// dead-ending on «Пока нет …» (design_revision.md §1.11a).
+
+// Обложки хранилища лежат за авторизацией (/files отдаётся только по токену
+// или подписанному URL), поэтому сырой <img src> на них молча не грузится.
+// Тот же приём, что в SettingsListPage/CampaignsListPage: путь /files/*
+// подменяется blob-ссылкой, всё остальное отдаётся как есть.
+function ListAvatar({ url }: { url: string | null | undefined }) {
+  const safeUrl = url && isSafeImageUrl(url) ? url : null;
+  const authBlob = useAuthenticatedFileUrl(safeUrl);
+  const src = safeUrl?.startsWith("/files/") ? authBlob : safeUrl;
+  return src ? (
+    <img src={src} alt="" className="player-list-avatar" />
+  ) : (
+    <div className="player-list-avatar player-list-avatar-placeholder" />
+  );
+}
+
 export function LibraryPage() {
+  const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [settings, setSettings] = useState<Setting[]>([]);
   const [systems, setSystems] = useState<System[]>([]);
@@ -40,11 +62,7 @@ export function LibraryPage() {
                 to={`/campaigns/${c.id}`}
                 className="row player-list-row player-list-row-upcoming"
               >
-                {c.thumbnail_image_url ? (
-                  <img src={c.thumbnail_image_url} alt="" className="player-list-avatar" />
-                ) : (
-                  <div className="player-list-avatar player-list-avatar-placeholder" />
-                )}
+                <ListAvatar url={c.thumbnail_image_url} />
                 <div className="stack" style={{ gap: 2, minWidth: 0 }}>
                   <strong>{c.name}</strong>
                   <div className="muted player-list-notes-preview">{formatNearestDate(c.next_planned_date!)}</div>
@@ -65,11 +83,7 @@ export function LibraryPage() {
         <div className="card stack" style={{ gap: 0 }}>
           {campaigns.map((c) => (
             <Link key={c.id} to={`/campaigns/${c.id}`} className="row player-list-row">
-              {c.thumbnail_image_url ? (
-                <img src={c.thumbnail_image_url} alt="" className="player-list-avatar" />
-              ) : (
-                <div className="player-list-avatar player-list-avatar-placeholder" />
-              )}
+              <ListAvatar url={c.thumbnail_image_url} />
               <div className="stack" style={{ gap: 2, minWidth: 0 }}>
                 <strong>{c.name}</strong>
                 <div className="muted player-list-notes-preview">
@@ -78,7 +92,14 @@ export function LibraryPage() {
               </div>
             </Link>
           ))}
-          {campaigns.length === 0 && <p className="muted">Пока нет кампаний.</p>}
+          {campaigns.length === 0 && (
+            <EmptyState
+              icon="fantasySwords"
+              title="Ни одной кампании"
+              hint="История, игроки и расписание живут здесь."
+              action={<button className="primary" onClick={() => navigate("/campaigns")}>Завести кампанию</button>}
+            />
+          )}
         </div>
       </div>
 
@@ -94,16 +115,19 @@ export function LibraryPage() {
             const thumb = cardThumbnailProps(thumbnailStyles.settings, s.thumbnail_image_url ?? s.background_image_url);
             return (
               <Link key={s.id} to={`/settings/${s.id}`} className="row player-list-row">
-                {thumb.bannerUrl ? (
-                  <img src={thumb.bannerUrl} alt="" className="player-list-avatar" />
-                ) : (
-                  <div className="player-list-avatar player-list-avatar-placeholder" />
-                )}
+                <ListAvatar url={thumb.bannerUrl} />
                 <strong>{s.name}</strong>
               </Link>
             );
           })}
-          {settings.length === 0 && <p className="muted">Пока нет сеттингов.</p>}
+          {settings.length === 0 && (
+            <EmptyState
+              icon="cosmicOrbit"
+              title="Ни одного мира"
+              hint="География, население и хроника — всё оттуда."
+              action={<button className="primary" onClick={() => navigate("/settings")}>Создать сеттинг</button>}
+            />
+          )}
         </div>
       </div>
 
@@ -120,7 +144,14 @@ export function LibraryPage() {
               <strong>{s.name}</strong>
             </Link>
           ))}
-          {systems.length === 0 && <p className="muted">Пока нет систем.</p>}
+          {systems.length === 0 && (
+            <EmptyState
+              icon="skullDie"
+              title="Ни одной системы"
+              hint="Правила, по которым считаются статблоки."
+              action={<button className="primary" onClick={() => navigate("/systems")}>Добавить систему</button>}
+            />
+          )}
         </div>
       </div>
     </div>

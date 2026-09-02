@@ -150,6 +150,10 @@ CREATE TABLE IF NOT EXISTS session_attendance (
   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   attended INTEGER NOT NULL DEFAULT 0,
   amount_paid REAL NOT NULL DEFAULT 0,
+  -- Прощённое Мастером. Долг не хранится (считается как «ожидалось − оплачено
+  -- − прощено»), но прощение из чисел не выводится — это решение, и без записи
+  -- вычисление вернуло бы долг назад. В «заработано» не идёт.
+  amount_forgiven REAL NOT NULL DEFAULT 0,
   PRIMARY KEY (session_id, player_id)
 );
 
@@ -766,6 +770,7 @@ CREATE TABLE IF NOT EXISTS campaign_secret_state (
   -- выходные — время правки уведёт их не в тот вечер. У раскрытых до
   -- появления колонки она пустая, так и показываем: «раскрыто раньше».
   revealed_session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+  pinned INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (campaign_id, secret_id)
 );
@@ -1238,10 +1243,15 @@ CREATE TABLE IF NOT EXISTS world_exploration_entries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL, -- being | location | item | event
-  name TEXT NOT NULL DEFAULT '',
-  description TEXT NOT NULL DEFAULT '',
-  extra_field TEXT NOT NULL DEFAULT '',
+  -- Дневник ведёт персонаж, а не игрок: у двух персонажей одного игрока в
+  -- одной кампании — два независимых дневника, и видит их только автор.
+  -- NULL — запись, чей персонаж ещё не выбран (игрок пишет до того, как завёл
+  -- персонажа, или у него их несколько и он ещё не сказал, чей это дневник).
+  character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL, -- being | location | item | event | '' (без метки)
+  name TEXT NOT NULL DEFAULT '', -- необязательный заголовок заметки
+  description TEXT NOT NULL DEFAULT '', -- текст заметки, единственное обязательное
+  extra_field TEXT NOT NULL DEFAULT '', -- legacy: слито в description миграцией 2026-09-02, не используется
   avatar_image_path TEXT,
   folder_path TEXT,
   position INTEGER NOT NULL DEFAULT 0,
@@ -1249,6 +1259,7 @@ CREATE TABLE IF NOT EXISTS world_exploration_entries (
   archived_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_campaign ON world_exploration_entries(campaign_id, kind);
+CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_character ON world_exploration_entries(character_id);
 
 -- GM-authored reminder/message shown on a player's Главная in player-app.
 -- target_type='player': visible only to that one player. target_type=

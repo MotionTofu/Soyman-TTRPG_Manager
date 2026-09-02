@@ -315,9 +315,13 @@ function LocationOutline({
   return (
     <div className="stack editable-card-field">
       <span>Локации</span>
-      <span className="muted image-hint">
-        Напишите названия нескольких ключевых локаций вашего сеттинга и мы сразу создадим для них
-        профили.
+      <span className="muted image-hint" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: "var(--fs-meta)", lineHeight: 1.35 }}>
+        <span>Напишите названия нескольких ключевых локаций — мы сразу создадим профили.</span>
+        <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "2px 6px", fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>Enter → строка</span>
+          <span style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "2px 6px", fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>Tab → вложить</span>
+          <span style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "2px 6px", fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>Shift+Tab → вынести</span>
+        </span>
       </span>
       <div className="stack" style={{ gap: 4 }}>
         {rows.map((row, index) => (
@@ -355,7 +359,6 @@ function LocationOutline({
         >
           + Локация
         </button>
-        <span className="muted">Enter — строка, Tab — вложить, Shift+Tab — вынести</span>
       </div>
     </div>
   );

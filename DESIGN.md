@@ -23,6 +23,34 @@ where each piece actually lives in this codebase.
 | Dice-as-numbers component (`<Die>`, ability/save flip-dice) | `client/src/components/Dice.tsx`, used by `client/src/components/dnd/AbilitySavesSkills.tsx` |
 | Mobile bottom nav (raised center button + quick-access sheet) | `client/src/layout/AppShell.tsx`, `client/src/layout/MobileQuickAccess.tsx` |
 
+## Шкала кегля — как она принуждается
+
+Ступеней четыре, список замкнут: `--fs-micro` 10 (Label — капс-подписи,
+бейджи, счётчики), `--fs-meta` 12 (Body и Data — проза и числа), `--fs-h3` 16
+(Lead), `--fs-h2` 26 (H2). Плюс `--fs-h1` / `--fs-hero` / `--fs-stat` для
+крупного и чисел. Определены один раз в `client/src/index.css` `:root`, от темы
+не зависят.
+
+Почему 10 и 12 стоят рядом при требовании ×1.6: это не соседи по иерархии, а
+разные голоса (§1.5), и документ для этого случая прямо оговаривает уход «в
+другую гарнитуру или в капс с трекингом». Дальше скачки настоящие: 12→16 это
+×1.33, 16→26 это ×1.63.
+
+Ступень 14px (`--fs-body`) убрана: она сидела между Body и Lead и ни одному
+голосу не принадлежала.
+
+**Правило принуждается механически, а не соглашением** — как и «одна рамка на
+область». `client/scripts/check-type-scale.mjs` валит сборку на любом сыром
+`font-size: Npx` в `.css` и `fontSize: N` в `.tsx`; скрипт подключён к
+`npm run build` и `npm run lint` в `client/package.json`. Единственное
+исключение — печатная шпаргалка (`.cheatsheet-*`, `.dnd-cheatsheet-*`,
+`.combat-row*`, `.combat-field`, `.fill-box`): она верстается в миллиметрах под
+бумагу и экранной шкале не подчиняется. Список исключений живёт в самом скрипте.
+
+Повод: до этого в коде было 570 мест с сырым кеглем, 14 разных значений,
+включая половинные 9.5/10.5/12.5/14.5. Шкала существовала как документ, но
+удержать §1.6 при таком разбросе было нельзя даже теоретически.
+
 ## The "one frame per region" rule — implementation note
 
 The design doc's "no nested frame" constraint (a card placed inside another

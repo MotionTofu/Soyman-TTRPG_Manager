@@ -20,6 +20,12 @@ export function RealtimeListener() {
     socket.on("character-updated", (payload: { characterId: number }) => {
       window.dispatchEvent(new CustomEvent("character-updated", { detail: payload }));
     });
+    socket.on("show-entries", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("show-entries", { detail: payload }));
+    });
+    socket.on("show-image", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("show-image", { detail: payload }));
+    });
 
     return () => {
       socket.disconnect();

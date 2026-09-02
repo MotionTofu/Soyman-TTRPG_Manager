@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="muted" style={{ marginBottom: 16 }}>
             Произошла ошибка при отрисовке. Попробуйте перезагрузить страницу.
           </p>
-          <pre style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "pre-wrap", marginBottom: 16 }}>
+          <pre style={{ fontSize: "var(--fs-meta)", color: "var(--muted)", whiteSpace: "pre-wrap", marginBottom: 16 }}>
             {this.state.error?.message}
           </pre>
           <button className="primary" onClick={() => window.location.reload()}>

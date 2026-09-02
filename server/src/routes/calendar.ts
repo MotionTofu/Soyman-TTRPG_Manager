@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 
 export const calendarRouter = Router();
 
@@ -14,9 +15,7 @@ calendarRouter.get("/", (_req, res) => {
       `SELECT s.id, s.campaign_id, s.date, s.title, s.status, s.payment_override, s.start_time,
               c.payment_type as campaign_payment_type, c.role as campaign_role,
               c.name as campaign_name,
-              (SELECT COUNT(*) FROM sessions s2
-                 WHERE s2.campaign_id = s.campaign_id AND s2.archived_at IS NULL
-                   AND s2.date <= s.date) as session_number
+              ${SESSION_NUMBER_SQL} as session_number
        FROM sessions s
        JOIN campaigns c ON c.id = s.campaign_id
        WHERE s.archived_at IS NULL AND c.archived_at IS NULL

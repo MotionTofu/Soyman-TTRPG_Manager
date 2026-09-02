@@ -353,7 +353,7 @@ export function LocationTree({ settingId }: Props) {
         </button>
       </div>
       {stats.total > 0 && (
-        <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: 11, fontFamily: "var(--font-mono)" }}>
+        <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: "var(--fs-meta)", fontFamily: "var(--font-mono)" }}>
           <span>
             Всего: {filteredLocations.length}
             {filteredLocations.length !== stats.total ? ` / ${stats.total}` : ""}
@@ -363,7 +363,7 @@ export function LocationTree({ settingId }: Props) {
           <span style={{ color: stats.withoutMap ? "var(--status-cancelled-fg)" : undefined }}>Без карты: {stats.withoutMap}</span>
           {(stats.withoutDesc > 0 || stats.withoutMap > 0) && (
             <button
-              style={{ fontSize: 11, padding: "2px 6px" }}
+              style={{ fontSize: "var(--fs-meta)", padding: "2px 6px" }}
               onClick={() => {
                 if (stats.withoutDesc > 0) setDescFilter("without");
                 else setMapFilter("without");
@@ -568,7 +568,7 @@ export function LocationTree({ settingId }: Props) {
             />
           )}
           {draggedId != null && roots.length > 0 && (
-            <p className="muted" style={{ textAlign: "center", fontSize: 11 }}>
+            <p className="muted" style={{ textAlign: "center", fontSize: "var(--fs-meta)" }}>
               Перетащите на узел чтобы вложить, или сюда чтобы вернуть на верхний уровень
             </p>
           )}
@@ -958,7 +958,7 @@ export function LocationNode({
           {location.description && (
             <span
               style={{
-                fontSize: 11,
+                fontSize: "var(--fs-meta)",
                 lineHeight: 1.25,
                 color: "var(--on-surface-muted)",
                 fontFamily: "var(--font-body)",

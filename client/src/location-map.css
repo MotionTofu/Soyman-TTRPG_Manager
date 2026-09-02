@@ -48,7 +48,7 @@
   height: 28px;
   padding: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 /* Always an overlay inside the already-framed `.location-map-wrap` — no
    border of its own (that would be a frame nested in the map's frame). The
@@ -66,7 +66,7 @@
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: normal;
   pointer-events: none;
 }
@@ -104,7 +104,7 @@
   margin: 0 12px;
   width: 32px;
   height: 32px;
-  font-size: 16px;
+  font-size: var(--fs-h3);
 }
 .location-map-fullscreen .location-map-card {
   padding: 12px;
@@ -133,7 +133,7 @@
 .location-map-pin-search-item {
   padding: 6px 10px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .location-map-pin-search-item:hover {
   background: var(--bg-elevated);
@@ -165,7 +165,7 @@
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
   max-width: min(200px, 40vw);
   overflow: hidden;
@@ -198,7 +198,7 @@
   background: var(--surface);
   border: 2px solid var(--accent);
   color: var(--on-surface);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   padding: 7px 11px;
 }
 .location-map-pin-label.pin-label-location {
@@ -224,7 +224,7 @@
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 12px;
-  font-size: 14px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
   z-index: 10;
   display: flex;
@@ -233,7 +233,7 @@
   cursor: default;
 }
 .location-map-pin-toolbar button {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   padding: 5px 10px;
 }
 .location-map-pin-toolbar input[type="color"] {
@@ -259,12 +259,12 @@
   border-radius: var(--card-radius);
   padding: 4px 12px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--on-surface-muted);
 }
 .map-pin-count {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 400;
   color: var(--on-surface-muted);
 }
@@ -281,14 +281,13 @@
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 8px 16px;
-  font-size: 13px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  font-size: var(--fs-meta);
 }
 .location-map-toast-undo {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: .06em;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--accent);
   background: none;
   border: none;
@@ -299,7 +298,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--fs-h3);
   padding: 0 2px;
   color: var(--on-surface-muted);
 }

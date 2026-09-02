@@ -50,16 +50,10 @@ function crName(entry: CompendiumEntry): string {
 
 /**
  * Монограмма вместо портрета. Портрет есть у 243 записей бестиария D&D 5.5
- * из 535 — почти половина плиток осталась бы пустым серым квадратом, и это
- * было бы честно, но бесполезно. Цвет — не смысловой код (§1.7 тип
- * кодируется формой), а различитель заглушки: он появляется только там, где
- * портрета нет, и держится подтоном бумаги, а не заливкой.
+ * из 535 — почти половина плиток осталась бы пустым серым квадратом.
+ * Заглушка — paper-2 без цветового кода (§1.7 тип кодируется формой, не
+ * цветом). Hue-вариация удалена в Фазе 5 (C1) — монотонный фон.
  */
-function monogramTone(type: string): number {
-  let hash = 0;
-  for (const ch of type) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-  return hash;
-}
 
 /** Первая буква имени — на месте портрета. */
 function monogramLetter(ru: string): string {
@@ -281,6 +275,13 @@ const MonsterTile = memo(function MonsterTile({
   const type = creatureTypeName(entry);
   const size = sizeName(entry);
   const cr = crName(entry);
+  const raw = (entry.data ?? {}) as Record<string, unknown>;
+  const str = (k: string) => {
+    const v = raw[k];
+    return v == null || v === "" ? "" : String(v);
+  };
+  const ac = str("ac");
+  const hp = str("hp");
   const favourite = !!entry.favourite;
   const isPhb = systemCode === "phb";
 
@@ -328,11 +329,7 @@ const MonsterTile = memo(function MonsterTile({
           // Портрет — изображение-СОДЕРЖИМОЕ, дуотон на него не ложится (§1.13).
           <img className="monster-tile__portrait" src={entry.avatar_image_url} alt="" />
         ) : (
-          <span
-            className="monster-tile__monogram"
-            style={{ ["--monogram-tone" as string]: `${monogramTone(type)}` }}
-            aria-hidden="true"
-          >
+          <span className="monster-tile__monogram" aria-hidden="true">
             {monogramLetter(ru)}
           </span>
         )}
@@ -342,6 +339,9 @@ const MonsterTile = memo(function MonsterTile({
             {[type, isPhb ? size : null].filter(Boolean).join(" · ") || "Тип не указан"}
           </span>
           {isPhb && <span className="monster-tile__cr">{cr ? `КО ${cr}` : "КО —"}</span>}
+          <span className="monster-tile__value">
+            КД {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
+          </span>
         </div>
       </div>
 

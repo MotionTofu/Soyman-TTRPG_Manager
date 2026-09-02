@@ -9,15 +9,17 @@ import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { useCurrentUser } from "../api/currentUser";
-import type { Campaign, PlayerDetail, PlayerGroup } from "../types";
+import type { Campaign, PlayerDetail, PlayerGroup, UnpaidSession } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { loadHideFinance } from "../financePrivacy";
 
 export function PlayerDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useCurrentUser();
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
+  const [unpaid, setUnpaid] = useState<UnpaidSession[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campaignId, setCampaignId] = useState("");
   const [characterName, setCharacterName] = useState("");
@@ -103,6 +105,7 @@ export function PlayerDetailPage() {
       setNameDraft(p.name);
       setNotesDraft(p.notes);
     });
+    api.get<UnpaidSession[]>(`/players/${id}/unpaid`).then(setUnpaid).catch(() => setUnpaid([]));
   }
   useEffect(() => {
     refresh();
@@ -250,6 +253,27 @@ export function PlayerDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Долг нигде не хранится — сервер считает его как «ожидалось − оплачено
+          − прощено» тем же кодом, что показывает игроку его собственный
+          список. Гасить и прощать отсюда нельзя намеренно: сумма принадлежит
+          конкретной игре, и «погасить вообще» заставило бы приложение выбрать
+          сессию за Мастера. Поэтому — ссылка в нужную сессию. */}
+      {unpaid.length > 0 && !loadHideFinance() && (
+        <div className="card stack">
+          <div className="player-section-header">Не оплачено</div>
+          {unpaid.map((u) => (
+            <div key={u.session_id} className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <Link to={`/sessions/${u.session_id}`}>
+                {u.campaign_name} · {u.title?.trim() || u.date}
+              </Link>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                {Math.round((u.expected - u.paid - u.forgiven) * 100) / 100}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <RemindersWidget targetType="player" targetId={Number(id)} />
 

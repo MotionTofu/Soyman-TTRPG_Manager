@@ -504,13 +504,13 @@ export function HealthPage() {
                 <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <input placeholder="Фильтр: таблица, колонка, путь…" value={pathFilter} onChange={(e) => setPathFilter(e.target.value)} style={{ flex: "1 1 220px", minWidth: 140 }} aria-label="Фильтр битых путей" />
                   <span className="muted health-value">{filteredPaths.length} / {scan.brokenPaths.length}</span>
-                  {pathFilter && <button onClick={() => setPathFilter("")} style={{ fontFamily: "var(--font-ui)", fontSize: 11 }}>Сброс</button>}
+                  {pathFilter && <button onClick={() => setPathFilter("")} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>Сброс</button>}
                 </div>
                 <div className="stack health-mono" style={{ maxHeight: 400, overflowY: "auto", overflowX: "hidden" }}>
                   {filteredPaths.map((b, i) => (
                     <div key={`${b.table}:${b.column}:${b.id}:${i}`} className="muted health-row">
                       <span title={b.path} className="health-path" style={{ flex: "1 1 200px", minWidth: 0 }}>{b.table}.{b.column} #{b.id}: {b.path}</span>
-                      <button onClick={() => clearPath(b.table, b.column, b.id)} style={{ flex: "0 0 auto", fontSize: 11, padding: "2px 8px" }}>Очистить</button>
+                      <button onClick={() => clearPath(b.table, b.column, b.id)} style={{ flex: "0 0 auto", fontSize: "var(--fs-meta)", padding: "2px 8px" }}>Очистить</button>
                     </div>
                   ))}
                   {filteredPaths.length === 0 && <span className="muted health-value">Ничего не найдено по «{pathFilter}»</span>}
@@ -729,17 +729,17 @@ export function HealthPage() {
           <div className="dead-uid-modal">
             <div className="dead-uid-modal__head">
               <span className="dead-uid-modal__title">Мёртвые UID — ручная проверка<span className="dead-uid-modal__title-count">{deadGroups.length} групп · {total} ссылок</span></span>
-              <button onClick={handleCloseDeadModal} aria-label="Закрыть" style={{ border: "1px solid var(--line)", background: "var(--paper)", padding: "4px 8px", fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase" }}>✕</button>
+              <button onClick={handleCloseDeadModal} aria-label="Закрыть" style={{ border: "1px solid var(--line)", background: "var(--paper)", padding: "4px 8px", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: "0.06em", textTransform: "uppercase" }}>✕</button>
             </div>
             <p className="dead-uid-modal__hint">«— пропустить —» не трогает, «схлопнуть» оставляет текст «label». Авто-выбор — только единственный <span style={{ color: "#15803d", fontWeight: 600 }}>exact</span>/<span style={{ color: "#a16207", fontWeight: 600 }}>likely</span>; <span style={{ color: "#dc2626", fontWeight: 600 }}>doubtful</span> требует ручной проверки.</p>
             <div className="dead-uid-modal__filter">
               <input placeholder="Фильтр: тип, имя, код, uid…" value={deadFilter} onChange={(e) => setDeadFilter(e.target.value)} aria-label="Фильтр групп" />
               <span className="dead-uid-modal__filter-count">{filtered.length} / {deadGroups.length}</span>
-              {deadFilter && <button onClick={() => setDeadFilter("")} style={{ fontFamily: "var(--font-ui)", fontSize: 11 }}>Сброс</button>}
-              <button onClick={() => exportDeadCsv(filtered)} style={{ fontFamily: "var(--font-ui)", fontSize: 11, marginLeft: "auto" }}>CSV</button>
+              {deadFilter && <button onClick={() => setDeadFilter("")} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>Сброс</button>}
+              <button onClick={() => exportDeadCsv(filtered)} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", marginLeft: "auto" }}>CSV</button>
             </div>
             <div className="dead-uid-modal__body">
-              {filtered.length === 0 && <div className="muted" style={{ fontFamily: "var(--font-body)", fontSize: 12, padding: "12px 0" }}>Ничего не найдено по «{deadFilter}».</div>}
+              {filtered.length === 0 && <div className="muted" style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", padding: "12px 0" }}>Ничего не найдено по «{deadFilter}».</div>}
               {filtered.map((g) => {
                 const key = `${g.type}:${g.uid}`;
                 const choice = deadChoices[key];
@@ -752,7 +752,7 @@ export function HealthPage() {
                       <span className="dead-uid-group__label">«{g.label}»</span>
                       <span className="dead-uid-group__meta">({g.code || "unknown"})</span>
                       <span className="dead-uid-group__count">×{g.count}</span>
-                      <button onClick={() => copyUid(g.type, g.uid)} title="Копировать type@uid" style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "2px 6px", border: "1px solid var(--line)", background: "var(--paper)", marginLeft: 4 }}>копировать</button>
+                      <button onClick={() => copyUid(g.type, g.uid)} title="Копировать type@uid" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", padding: "2px 6px", border: "1px solid var(--line)", background: "var(--paper)", marginLeft: 4 }}>копировать</button>
                     </div>
                     <div className="dead-uid-group__samples">
                       Встречается ({showSamples.length}{g.count > showSamples.length ? ` из ${g.count}` : ""}):
@@ -764,7 +764,7 @@ export function HealthPage() {
                           </li>
                         ))}
                       </ul>
-                      {g.count > showSamples.length && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>…и ещё {g.count - showSamples.length} вхождений</span>}
+                      {g.count > showSamples.length && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>…и ещё {g.count - showSamples.length} вхождений</span>}
                     </div>
                     <label className="dead-uid-group__controls">
                       <span className="dead-uid-group__label-cap">Заменить на:</span>
@@ -813,7 +813,7 @@ export function HealthPage() {
                       </button>
                     </div>
                     {(manualResults[key]?.length ?? 0) > 0 && (
-                      <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>Найдено: {manualResults[key]!.length} — уже в списке</div>
+                      <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>Найдено: {manualResults[key]!.length} — уже в списке</div>
                     )}
                   </div>
                 );

@@ -222,14 +222,29 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
     return isSafeImageUrl(url) ? url : "";
   }
 
+  const galleryTitle =
+    ownerType === "being"
+      ? "ИЗОБРАЖЕНИЯ СУЩЕСТВА"
+      : ownerType === "community"
+        ? "ИЗОБРАЖЕНИЯ СООБЩЕСТВА"
+        : ownerType === "character"
+          ? "ИЗОБРАЖЕНИЯ ПЕРСОНАЖА"
+          : ownerType === "artifact"
+            ? "ИЗОБРАЖЕНИЯ ПРЕДМЕТА"
+            : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
+  const galleryHint =
+    ownerType === "being"
+      ? "Портреты, референсы и мудборд существа — изображения-содержимое не проходят дуотон и показываются как загружено."
+      : "Референсы, карты и мудборд локации — изображения-содержимое не проходят дуотон и показываются как загружено.";
+
   return (
     <div className="stack gallery-tab">
       <div className="gallery-tab-header">
-        <span className="gallery-tab-title">ИЗОБРАЖЕНИЯ ЛОКАЦИИ</span>
+        <span className="gallery-tab-title">{galleryTitle}</span>
         <span className="gallery-tab-count" aria-label={`Всего ${images.length} изображений`}>{images.length}</span>
       </div>
       <p className="muted gallery-tab-hint" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.4, margin: 0 }}>
-        Референсы, карты и мудборд локации — изображения-содержимое не проходят дуотон и показываются как загружено. {IMAGE_HINT} до 15MB. Перетащите файлы на сетку или нажмите «+ Добавить».
+        {galleryHint} {IMAGE_HINT} до 15MB. Перетащите файлы на сетку или нажмите «+ Добавить».
       </p>
 
       {(thumbnailUpload || avatarUpload) && (
@@ -266,7 +281,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
       {loading && <p className="muted" aria-busy="true">Загрузка…</p>}
       {error && (
         <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{error}</span>
+          <span style={{ color: "var(--danger, #c00)", fontSize: "var(--fs-meta)" }}>{error}</span>
           <button onClick={() => load()}>Повторить</button>
         </div>
       )}

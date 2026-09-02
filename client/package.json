@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "build": "node scripts/check-type-scale.mjs && tsc -b && vite build",
+    "lint": "oxlint && node scripts/check-type-scale.mjs",
+    "preview": "vite preview",
+    "check:scale": "node scripts/check-type-scale.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.3",

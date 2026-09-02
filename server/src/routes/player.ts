@@ -6,7 +6,6 @@ import { requireAuth, type AuthedRequest } from "../services/auth";
 import {
   standaloneCharacterFolder,
   toFileUrl,
-  worldExplorationEntryFolder,
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { unpaidSessionsForPlayer } from "../services/finance";
@@ -40,13 +39,27 @@ interface CharacterRow {
   created_at: string;
 }
 
+// Членство в кампании — по ростеру, а не по живым персонажам (2026-09-02).
+// Ростером Мастер управляет сам (кнопка «выбыл» в профиле кампании), по нему
+// же считаются посещаемость и список игроков. Прежняя проверка «есть активный
+// персонаж» склеивала два разных события: игрок, чей персонаж погиб, вместе с
+// ним терял всю кампанию — включая дневник этого персонажа, — а игрок,
+// добавленный Мастером до создания персонажа, не видел ничего.
 function myCampaignIds(playerId: number): number[] {
   const rows = db
-    .prepare(
-      "SELECT DISTINCT campaign_id FROM characters WHERE player_id = ? AND campaign_id IS NOT NULL AND archived_at IS NULL"
-    )
+    .prepare("SELECT campaign_id FROM campaign_roster WHERE player_id = ?")
     .all(playerId) as { campaign_id: number }[];
   return rows.map((r) => r.campaign_id);
+}
+
+// Выбывший (`status = 'left'`) читает всё, включая то, что Мастер откроет
+// после его ухода, но ничего не пишет. Совсем закрыть кампанию Мастер может,
+// убрав игрока из ростера — это соседняя кнопка.
+function canWriteInCampaign(playerId: number, campaignId: number): boolean {
+  const row = db
+    .prepare("SELECT status FROM campaign_roster WHERE player_id = ? AND campaign_id = ?")
+    .get(playerId, campaignId) as { status: string } | undefined;
+  return row?.status === "active";
 }
 
 // Throws-as-404 guard used by every route below that takes a :characterId —
@@ -182,14 +195,28 @@ playerRouter.get("/search", (req: AuthedRequest, res) => {
 
   if (campaignIds.length) {
     const inClause = campaignIds.map(() => "?").join(",");
+    // Дневник личный: в поиске находятся только собственные заметки, и ищется
+    // не только заголовок (он необязателен), но и сам текст.
     const entries = db
       .prepare(
-        `SELECT id, campaign_id, kind, name FROM world_exploration_entries
-         WHERE campaign_id IN (${inClause}) AND archived_at IS NULL AND lower_u(name) LIKE ?`
+        `SELECT id, campaign_id, kind, name, description FROM world_exploration_entries
+         WHERE campaign_id IN (${inClause}) AND player_id = ? AND archived_at IS NULL
+           AND (lower_u(name) LIKE ? OR lower_u(description) LIKE ?)`
       )
-      .all(...campaignIds, like) as { id: number; campaign_id: number; kind: string; name: string }[];
+      .all(...campaignIds, playerId, like, like) as {
+      id: number;
+      campaign_id: number;
+      kind: string;
+      name: string;
+      description: string;
+    }[];
     results.push(
-      ...entries.map((e) => ({ type: "world_exploration_entry", id: e.id, title: e.name, subtitle: e.kind }))
+      ...entries.map((e) => ({
+        type: "world_exploration_entry",
+        id: e.id,
+        title: e.name || e.description.slice(0, 60) || "Заметка",
+        subtitle: e.kind,
+      }))
     );
 
     const systemIds = db
@@ -417,25 +444,50 @@ playerRouter.get("/campaigns/:id/player-sections", (req: AuthedRequest, res) => 
     .prepare("SELECT * FROM campaign_player_sections WHERE campaign_id = ? ORDER BY position, id")
     .all(campaignId) as { id: number; kind: string; name: string }[];
 
+  // Batch load to avoid N+1 per-section queries (C-P2-4 / Phase 1.2)
+  const gallerySectionIds = allSections.filter((s) => s.kind === "gallery" && grantedSectionIds.has(s.id)).map((s) => s.id);
+  const galleryImagesBySection = new Map<number, { image_path: string; image_url: string }[]>();
+  if (gallerySectionIds.length) {
+    const inClause = gallerySectionIds.map(() => "?").join(",");
+    const galleryRows = db
+      .prepare(
+        `SELECT * FROM gallery_images WHERE owner_type = 'campaign_player_section' AND owner_id IN (${inClause}) ORDER BY position, id`
+      )
+      .all(...gallerySectionIds) as ({ owner_id: number; image_path: string } & Record<string, unknown>)[];
+    for (const r of galleryRows) {
+      const arr = galleryImagesBySection.get(r.owner_id) ?? [];
+      arr.push({ ...(r as object), image_url: toFileUrl(r.image_path) } as { image_path: string; image_url: string });
+      galleryImagesBySection.set(r.owner_id, arr);
+    }
+  }
+
+  const articleSectionIds = allSections.filter((s) => s.kind !== "gallery").map((s) => s.id);
+  const articlesBySection = new Map<number, { id: number }[]>();
+  if (articleSectionIds.length) {
+    const inClause = articleSectionIds.map(() => "?").join(",");
+    const articleRows = db
+      .prepare(`SELECT * FROM campaign_player_articles WHERE section_id IN (${inClause}) ORDER BY position, id`)
+      .all(...articleSectionIds) as { id: number; section_id: number }[];
+    for (const r of articleRows) {
+      const arr = articlesBySection.get(r.section_id) ?? [];
+      arr.push(r as { id: number });
+      articlesBySection.set(r.section_id, arr);
+    }
+  }
+
   const result = [];
   for (const section of allSections) {
     const sectionGranted = grantedSectionIds.has(section.id);
     if (section.kind === "gallery") {
       if (!sectionGranted) continue;
-      const images = db
-        .prepare("SELECT * FROM gallery_images WHERE owner_type = 'campaign_player_section' AND owner_id = ? ORDER BY position, id")
-        .all(section.id) as { image_path: string }[];
-      result.push({ ...section, images: images.map((img) => ({ ...img, image_url: toFileUrl(img.image_path) })) });
+      const images = galleryImagesBySection.get(section.id) ?? [];
+      result.push({ ...section, images });
     } else {
-      let articles;
+      const own = (articlesBySection.get(section.id) ?? []) as { id: number }[];
+      let articles: { id: number }[];
       if (sectionGranted) {
-        articles = db
-          .prepare("SELECT * FROM campaign_player_articles WHERE section_id = ? ORDER BY position, id")
-          .all(section.id);
+        articles = own;
       } else {
-        const own = db
-          .prepare("SELECT * FROM campaign_player_articles WHERE section_id = ? ORDER BY position, id")
-          .all(section.id) as { id: number }[];
         articles = own.filter((a) => grantedArticleIds.has(a.id));
         if (articles.length === 0) continue;
       }
@@ -593,34 +645,90 @@ playerRouter.get("/compendium/:systemId", (req: AuthedRequest, res) => {
   const entries = db.prepare("SELECT * FROM compendium_entries WHERE system_id = ? ORDER BY position").all(systemId);
   res.json({ sections, entries });
 });
+// «Исследование мира» — личный дневник персонажа (2026-09-02, разбор в
+// SideWorks/Профиль_Кампании_Игрок.md). Раньше это был общий блокнот партии:
+// любой участник кампании читал, правил и архивировал чужие записи. Теперь
+// запись принадлежит персонажу, видит её только автор, а Мастер не видит
+// вовсе — прежний мастерский роут /api/world-exploration-entries удалён.
+//
+// character_id = NULL — законное состояние: игрок пишет до того, как завёл
+// персонажа, или у него их несколько и он ещё не сказал, чей это дневник.
+// Такие записи показываются автору отдельной группой с предложением выбрать.
+const WORLD_ENTRY_COLUMNS =
+  "id, campaign_id, player_id, character_id, kind, name, description, created_at";
 
-function withEntryAvatarUrl<T extends { avatar_image_path?: string | null }>(row: T) {
-  return { ...row, avatar_image_url: row.avatar_image_path ? toFileUrl(row.avatar_image_path) : null };
+// Метка типа теперь необязательна: пустая строка — «без метки». Белый список
+// нужен, чтобы в базу не попадали значения, которых нет ни на одной вкладке —
+// такую запись потом не найти и не удалить из интерфейса.
+const WORLD_ENTRY_KINDS = new Set(["", "being", "location", "item", "event"]);
+
+// Длины совпадают с maxLength полей формы. Клиентская проверка — удобство, а
+// не защита: запрос приходит и мимо формы.
+function clampField(value: unknown, max: number): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-// "Исследование мира" — shared party journal, not private per player: any
-// party member (anyone in myCampaignIds for this campaign) can read/create/
-// edit/delete any entry, same as sitting around one shared notebook.
-playerRouter.get("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
+// Персонаж, на которого можно писать: мой, в этой кампании и не в архиве.
+// Дневник погибшего (архивного) персонажа читается, но не пополняется — иначе
+// его знание тихо продолжало бы расти после его смерти.
+function writableCharacter(playerId: number, campaignId: number, characterId: unknown): number | null {
+  if (characterId == null) return null;
+  const row = db
+    .prepare(
+      "SELECT id FROM characters WHERE id = ? AND player_id = ? AND campaign_id = ? AND archived_at IS NULL"
+    )
+    .get(characterId, playerId, campaignId) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+// Персонажи игрока в этой кампании — для переключателя дневников. Архивные
+// приходят тоже: их дневник открывается на чтение, поэтому в списке они есть,
+// помеченные `archived`.
+playerRouter.get("/campaigns/:id/my-characters", (req: AuthedRequest, res) => {
   const campaignId = Number(req.params.id);
-  if (!myCampaignIds(req.user!.playerId!).includes(campaignId)) {
+  const playerId = req.user!.playerId!;
+  if (!myCampaignIds(playerId).includes(campaignId)) {
     return res.status(404).json({ error: "not found" });
-  }
-  const { kind } = req.query as { kind?: string };
-  const clauses = ["e.campaign_id = ?", "e.archived_at IS NULL"];
-  const params: (string | number)[] = [campaignId];
-  if (kind) {
-    clauses.push("e.kind = ?");
-    params.push(kind);
   }
   const rows = db
     .prepare(
-      `SELECT e.*, p.name as player_name FROM world_exploration_entries e
-       LEFT JOIN players p ON p.id = e.player_id
-       WHERE ${clauses.join(" AND ")} ORDER BY e.name COLLATE NOCASE`
+      `SELECT id, character_name, avatar_image_path, archived_at
+       FROM characters WHERE player_id = ? AND campaign_id = ?
+       ORDER BY archived_at IS NOT NULL, character_name COLLATE NOCASE`
     )
-    .all(...params);
-  res.json(rows.map((r) => withEntryAvatarUrl(r as { avatar_image_path: string | null })));
+    .all(playerId, campaignId) as {
+    id: number;
+    character_name: string;
+    avatar_image_path: string | null;
+    archived_at: string | null;
+  }[];
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      character_name: r.character_name,
+      archived: r.archived_at != null,
+      avatar_image_url: r.avatar_image_path ? toFileUrl(r.avatar_image_path) : null,
+    }))
+  );
+});
+
+playerRouter.get("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
+  const campaignId = Number(req.params.id);
+  const playerId = req.user!.playerId!;
+  if (!myCampaignIds(playerId).includes(campaignId)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  // Свежее сверху: дневник читают, чтобы вспомнить последнее, а не чтобы
+  // листать алфавит. Порядок задаётся здесь, а не на клиенте, чтобы поиск и
+  // лента не разъезжались.
+  const rows = db
+    .prepare(
+      `SELECT ${WORLD_ENTRY_COLUMNS} FROM world_exploration_entries
+       WHERE campaign_id = ? AND player_id = ? AND archived_at IS NULL
+       ORDER BY created_at DESC, id DESC`
+    )
+    .all(campaignId, playerId);
+  res.json(rows);
 });
 
 playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
@@ -629,83 +737,98 @@ playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
   if (!myCampaignIds(playerId).includes(campaignId)) {
     return res.status(404).json({ error: "not found" });
   }
-  const { kind, name, description, extra_field } = req.body as {
+  if (!canWriteInCampaign(playerId, campaignId)) {
+    return res.status(403).json({ error: "read only in this campaign" });
+  }
+  const { kind, name, description, character_id } = req.body as {
     kind?: string;
     name?: string;
     description?: string;
-    extra_field?: string;
+    character_id?: number | null;
   };
-  if (!kind) return res.status(400).json({ error: "kind is required" });
-  const campaign = db.prepare("SELECT folder_path FROM campaigns WHERE id = ?").get(campaignId) as
-    | { folder_path: string }
-    | undefined;
-  if (!campaign) return res.status(404).json({ error: "not found" });
-  const folder = worldExplorationEntryFolder(campaign.folder_path, kind, name || "Без имени");
+  const cleanKind = typeof kind === "string" ? kind : "";
+  if (!WORLD_ENTRY_KINDS.has(cleanKind)) return res.status(400).json({ error: "unknown kind" });
+  const cleanName = clampField(name, 80);
+  const cleanDescription = clampField(description, 5000);
+  if (!cleanName && !cleanDescription) return res.status(400).json({ error: "empty entry" });
   const info = db
     .prepare(
-      `INSERT INTO world_exploration_entries (campaign_id, player_id, kind, name, description, extra_field, folder_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO world_exploration_entries (campaign_id, player_id, character_id, kind, name, description)
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(campaignId, playerId, kind, name ?? "", description ?? "", extra_field ?? "", folder);
+    .run(
+      campaignId,
+      playerId,
+      writableCharacter(playerId, campaignId, character_id),
+      cleanKind,
+      cleanName,
+      cleanDescription
+    );
   res
     .status(201)
     .json(
-      withEntryAvatarUrl(
-        db.prepare("SELECT * FROM world_exploration_entries WHERE id = ?").get(info.lastInsertRowid) as {
-          avatar_image_path: string | null;
-        }
-      )
+      db
+        .prepare(`SELECT ${WORLD_ENTRY_COLUMNS} FROM world_exploration_entries WHERE id = ?`)
+        .get(info.lastInsertRowid)
     );
 });
 
-// Throws-as-404 guard mirroring requireOwnCharacter, but scoped to "my
-// campaign" rather than "my own record" — the journal is shared party-wide.
-function requireEntryInMyCampaign(playerId: number, entryId: string | number) {
-  const entry = db.prepare("SELECT * FROM world_exploration_entries WHERE id = ?").get(entryId) as
-    | { id: number; campaign_id: number; folder_path: string; avatar_image_path: string | null }
-    | undefined;
-  if (!entry || !myCampaignIds(playerId).includes(entry.campaign_id)) return null;
+// Гвард дневника: своя запись, и кампания, в которой ещё можно писать.
+// «Своя» здесь — по автору: даже соседу по партии чужая заметка невидима, а
+// значит и неправима.
+function requireMyWritableEntry(playerId: number, entryId: string | number) {
+  const entry = db
+    .prepare("SELECT * FROM world_exploration_entries WHERE id = ? AND player_id = ?")
+    .get(entryId, playerId) as { id: number; campaign_id: number; character_id: number | null } | undefined;
+  if (!entry || !canWriteInCampaign(playerId, entry.campaign_id)) return null;
   return entry;
 }
 
 playerRouter.put("/world-entries/:id", (req: AuthedRequest, res) => {
-  const entry = requireEntryInMyCampaign(req.user!.playerId!, req.params.id);
+  const playerId = req.user!.playerId!;
+  const entry = requireMyWritableEntry(playerId, req.params.id);
   if (!entry) return res.status(404).json({ error: "not found" });
-  const { name, description, extra_field } = req.body as {
+  const { name, description, kind, character_id } = req.body as {
     name?: string;
     description?: string;
-    extra_field?: string;
+    kind?: string;
+    character_id?: number | null;
   };
+  if (kind !== undefined && !WORLD_ENTRY_KINDS.has(kind)) {
+    return res.status(400).json({ error: "unknown kind" });
+  }
   db.prepare(
     `UPDATE world_exploration_entries SET
-       name = COALESCE(?, name), description = COALESCE(?, description), extra_field = COALESCE(?, extra_field)
+       name = COALESCE(?, name), description = COALESCE(?, description),
+       kind = COALESCE(?, kind), character_id = COALESCE(?, character_id)
      WHERE id = ?`
-  ).run(name ?? null, description ?? null, extra_field ?? null, entry.id);
+  ).run(
+    name === undefined ? null : clampField(name, 80),
+    description === undefined ? null : clampField(description, 5000),
+    kind === undefined ? null : kind,
+    // Привязать заметку к персонажу можно, отвязать обратно в «ничьё» — нет:
+    // это не действие, которого кто-то хочет, а способ потерять запись из виду.
+    character_id === undefined ? null : writableCharacter(playerId, entry.campaign_id, character_id),
+    entry.id
+  );
   res.json(
-    withEntryAvatarUrl(
-      db.prepare("SELECT * FROM world_exploration_entries WHERE id = ?").get(entry.id) as {
-        avatar_image_path: string | null;
-      }
-    )
+    db.prepare(`SELECT ${WORLD_ENTRY_COLUMNS} FROM world_exploration_entries WHERE id = ?`).get(entry.id)
   );
 });
 
 playerRouter.delete("/world-entries/:id", (req: AuthedRequest, res) => {
-  const entry = requireEntryInMyCampaign(req.user!.playerId!, req.params.id);
+  const entry = requireMyWritableEntry(req.user!.playerId!, req.params.id);
   if (!entry) return res.status(404).json({ error: "not found" });
   db.prepare("UPDATE world_exploration_entries SET archived_at = datetime('now') WHERE id = ?").run(entry.id);
   res.json({ ok: true });
 });
 
-playerRouter.post("/world-entries/:id/avatar", upload.single("file"), async (req: AuthedRequest, res) => {
-  const entry = requireEntryInMyCampaign(req.user!.playerId!, req.params.id);
+// Возврат только что удалённой записи — под кнопкой «Отменить» в тосте
+// (client/src/hooks/useUndoDelete.tsx). Отдельного экрана архива у игрока нет:
+// либо вернул сразу, либо запись ушла.
+playerRouter.post("/world-entries/:id/restore", (req: AuthedRequest, res) => {
+  const entry = requireMyWritableEntry(req.user!.playerId!, req.params.id);
   if (!entry) return res.status(404).json({ error: "not found" });
-  if (!req.file) return res.status(400).json({ error: "file is required" });
-
-  const ext = path.extname(req.file.originalname) || ".jpg";
-  const target = path.join(entry.folder_path, `avatar${ext}`);
-  await writeReplacingOldFile(target, req.file.buffer, entry.avatar_image_path, "avatar");
-
-  db.prepare("UPDATE world_exploration_entries SET avatar_image_path = ? WHERE id = ?").run(target, entry.id);
-  res.json(withEntryAvatarUrl({ avatar_image_path: target }));
+  db.prepare("UPDATE world_exploration_entries SET archived_at = NULL WHERE id = ?").run(entry.id);
+  res.json({ ok: true });
 });

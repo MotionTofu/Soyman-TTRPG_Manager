@@ -1,19 +1,16 @@
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
+import { NavIcon } from "./NavIcons";
+import { Verstak } from "./Verstak/Verstak";
 import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag } from "../bag";
 import { detectCurrentEntity, resolveCurrentEntityDetails } from "../currentEntity";
 import { useUnloadTargets, type UnloadTarget } from "../unloadTargets";
-import type { SearchResult } from "../types";
+import { api } from "../api/client";
+import { stripMentions } from "../mentions";
+import type { CompendiumEntry, SearchResult } from "../types";
 
-// A small grid of slots between search and pinned pages. Empty slots show a
-// "+" that grabs whatever entity the current page is about (see
-// currentEntity.ts) and drops it into the bag; filled slots are draggable
-// with the same SEARCH_DRAG_MIME payload a search result carries, so they
-// work on every existing drop target (session Локации/Противники,
-// LinkDropZone, playlists, …) with no changes needed there. Класть в мешок
-// можно и перетаскиванием — сетка принимает тот же payload.
 export function BagWidget() {
   const location = useLocation();
   const { items, size } = useBag();
@@ -21,6 +18,7 @@ export function BagWidget() {
   const [dragOver, setDragOver] = useState(false);
   const [unloading, setUnloading] = useState(false);
   const [toast, setToast] = useState<{ message: string; kind: "info" | "error" } | null>(null);
+  const [verstakOpen, setVerstakOpen] = useState(false);
 
   useEffect(() => {
     const off = onBagToast((payload) => {
@@ -52,17 +50,14 @@ export function BagWidget() {
     try {
       addToBag(JSON.parse(raw) as SearchResult);
     } catch {
-      // битый DnD — addToBag уже покажет тост через isValidBagItem, но parse может кинуть
     }
   }
 
-  // Куда именно можно положить каждую вещь на этой странице.
   const targetsFor = (item: SearchResult) => targets.filter((t) => t.accepts(item));
   const unloadable = items.filter((i) => targetsFor(i).length > 0);
   const distinctTargets = new Set(unloadable.flatMap((i) => targetsFor(i).map((t) => t.id)));
 
   async function unloadAll() {
-    // Одна цель на всю страницу — спрашивать не о чем.
     const plan = unloadable.map((item) => ({ item, target: targetsFor(item)[0] }));
     await runUnload(plan);
   }
@@ -74,8 +69,6 @@ export function BagWidget() {
         await target.drop(item);
         done.push(item);
       } catch (err) {
-        // Одна неудачная вещь не должна отменять остальные; она просто
-        // остаётся в мешке.
         console.error("Не удалось выгрузить из мешка:", item, err);
       }
     }
@@ -96,15 +89,26 @@ export function BagWidget() {
     <div className="bag-widget">
       <div className="search-heading bag-heading">
         <strong>Мешок</strong>
-        <button
-          type="button"
-          className="bag-unload"
-          disabled={unloadable.length === 0}
-          title={unloadTitle}
-          onClick={() => (distinctTargets.size > 1 ? setUnloading(true) : unloadAll())}
-        >
-          Выгрузить
-        </button>
+        <div className="row" style={{ gap: 4 }}>
+          <button
+            type="button"
+            className="bag-unload"
+            disabled={items.length === 0}
+            title={items.length === 0 ? "Мешок пуст" : "Открыть все карточки из мешка на верстаке"}
+            onClick={() => setVerstakOpen(true)}
+          >
+            На верстак
+          </button>
+          <button
+            type="button"
+            className="bag-unload"
+            disabled={unloadable.length === 0}
+            title={unloadTitle}
+            onClick={() => (distinctTargets.size > 1 ? setUnloading(true) : unloadAll())}
+          >
+            Выгрузить
+          </button>
+        </div>
       </div>
       {toast && (
         <div className={`bag-toast bag-toast-${toast.kind}`} role="status" aria-live="polite">
@@ -161,13 +165,17 @@ export function BagWidget() {
           onConfirm={runUnload}
         />
       )}
+      {verstakOpen && (
+        <BagVerstakModal
+          items={items}
+          onClose={() => setVerstakOpen(false)}
+          onRemove={removeFromBag}
+        />
+      )}
     </div>
   );
 }
 
-// Выбор «что и куда» — показывается, когда на странице больше одной цели.
-// По умолчанию каждая вещь идёт в первую подходящую; «не выгружать» оставляет
-// её в мешке.
 function UnloadModal({
   items,
   targetsFor,
@@ -236,5 +244,76 @@ function UnloadModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function BagVerstakModal({
+  items,
+  onClose,
+  onRemove,
+}: {
+  items: SearchResult[];
+  onClose: () => void;
+  onRemove: (index: number) => void;
+}) {
+  const [entries, setEntries] = useState<CompendiumEntry[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const compendiumItems = items.filter((i) => i.type === "compendium_entry");
+      if (compendiumItems.length === 0) {
+        if (!cancelled) { setEntries([]); setLoading(false); }
+        return;
+      }
+      try {
+        const ids = compendiumItems.map((i) => i.id);
+        const fetched = await api.get<CompendiumEntry[]>(`/systems/entries/batch?ids=${ids.join(",")}`);
+        if (!cancelled) {
+          setEntries(fetched);
+          setSelectedIds(new Set(fetched.map((e) => e.id)));
+        }
+      } catch {
+        if (!cancelled) { setEntries([]); setSelectedIds(new Set()); }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [items]);
+
+  async function handleShowToPlayers() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const systemId = entries[0]?.system_id;
+    if (!systemId) return;
+    try {
+      await api.post(`/systems/${systemId}/show-entries`, { entry_ids: ids });
+    } catch (e) {
+      console.error("Не удалось показать игрокам:", e);
+    }
+  }
+
+  if (loading) {
+    return <Verstak entries={[]} selectedIds={new Set()} onPrint={() => {}} onShow={() => {}} forceOpen onClose={onClose} />;
+  }
+
+  return (
+    <Verstak
+      entries={entries}
+      selectedIds={selectedIds}
+      onPrint={() => {}}
+      onShow={handleShowToPlayers}
+      forceOpen
+      onClose={onClose}
+      onRemove={(id) => {
+        setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+        const idx = items.findIndex((it) => it.type === "compendium_entry" && it.id === id);
+        if (idx >= 0) onRemove(idx);
+      }}
+    />
   );
 }

@@ -51,6 +51,12 @@ export function parseMentions(text: string): MentionToken[] {
   return out;
 }
 
+export function stripMentions(text: string): string {
+  if (!text) return text;
+  // глобальные упоминания → только подпись, чтобы печать/показ были плейн-текстом
+  return text.replace(MENTION_RE, (_m, _t, _u, _s, label) => label).replace(LEGACY_MENTION_RE, (_m, _t, _id, label) => label);
+}
+
 export function formatMentionToken(
   type: string,
   uid: string,

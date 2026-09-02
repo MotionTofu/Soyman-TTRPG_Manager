@@ -123,7 +123,9 @@ export function EntityFieldsCard({
 
   return (
     <div className="card stack">
-      <h3>{title}</h3>
+      <div className="card-header--inverted">
+        <span className="card-header--inverted-label">{title}</span>
+      </div>
       {editMode ? (
         <>
           <EntityFieldInputs

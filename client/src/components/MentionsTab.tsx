@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { MentioningSession } from "../types";
+import { sessionLabel } from "../sessionLabel";
 
 // "Упоминания" tab for Being/Location/Community/Artifact pages: lists every
 // session whose Задумка/Основные события text @-mentions this entity.
@@ -24,7 +25,7 @@ export function MentionsTab({ entityType, entityId }: { entityType: string; enti
         <div key={s.id} className="row" style={{ gap: 6 }}>
           <Link to={`/campaigns/${s.campaign_id}`}>{s.campaign_name}</Link>
           <span className="muted">—</span>
-          <Link to={`/sessions/${s.id}`}>{s.title || `Сессия №${s.session_number ?? ""}`}</Link>
+          <Link to={`/sessions/${s.id}`}>{sessionLabel(s)}</Link>
           <span className="muted">— {s.date}</span>
         </div>
       ))}

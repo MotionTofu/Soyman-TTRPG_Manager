@@ -3,11 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./layout/AppShell";
 import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
+import { ShowEntriesListener } from "./components/ShowEntriesListener";
 import { CrossWindowSyncBanner } from "./components/CrossWindowSyncBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useCurrentUser } from "./api/currentUser";
 import { EmptyState } from "./components/EmptyState";
 import { Link } from "react-router-dom";
+import { MentionPreviewRoot } from "./components/mentions/MentionPreviewRoot";
 
 // Every route below is its own chunk (Vite code-splits on dynamic import)
 // instead of one large bundle — mainly matters for the hosted web/server
@@ -139,7 +141,9 @@ function App() {
     <BrowserRouter>
       <LoginGate>
         <RealtimeListener />
+        <ShowEntriesListener />
         <CrossWindowSyncBanner />
+        <MentionPreviewRoot />
         <ErrorBoundary>
           <Suspense fallback={
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", padding: 48 }}>

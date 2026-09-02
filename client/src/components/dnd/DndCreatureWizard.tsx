@@ -21,8 +21,9 @@ import {
   LootEditor,
 } from "./DndCreatureForm";
 import { ABILITY_LABELS, AbilityScoresEdit, ALL_SKILLS, abilityModifier, formatModifier } from "./AbilityScores";
-import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
-import { MECHANICS_CREATURE_TYPE_GROUP, MECHANICS_ALIGNMENT_GROUP } from "../../compendium";
+import { findDndSystemId } from "./dndCompendium";
+import type { DndMechanicsOption } from "./dndCompendium";
+import { loadMechanicsOptions } from "../../compendiumMechanics";
 
 const STEPS = ["База", "Общее", "Защита", "Характеристики", "Заклинания", "Действия", "Снаряжение", "Обзор"] as const;
 type Step = (typeof STEPS)[number];
@@ -34,6 +35,9 @@ interface Props {
   ownerCreatureSize?: string;
   ownerCreatureType?: string;
   ownerCreatureCR?: string;
+  ownerCreatureAC?: string;
+  ownerCreatureHP?: string;
+  ownerCreatureSpeed?: string;
   onDone: () => void;
   onCancel: () => void;
 }
@@ -51,6 +55,9 @@ export function DndCreatureWizard({
   ownerCreatureSize,
   ownerCreatureType,
   ownerCreatureCR,
+  ownerCreatureAC,
+  ownerCreatureHP,
+  ownerCreatureSpeed,
   onDone,
   onCancel,
 }: Props) {
@@ -66,6 +73,19 @@ export function DndCreatureWizard({
     if (ownerCreatureSize && (CREATURE_SIZES as readonly string[]).includes(ownerCreatureSize)) d.size = ownerCreatureSize;
     if (ownerCreatureType) d.creatureType = ownerCreatureType;
     if (ownerCreatureCR) d.challenge = { rating: ownerCreatureCR, proficiencyBonus: computeProficiencyBonusForCR(ownerCreatureCR) };
+    if (ownerCreatureAC && ownerCreatureAC.trim()) {
+      const n = Number(ownerCreatureAC.trim());
+      if (Number.isFinite(n)) d.armorClass = { value: n, note: "" };
+    }
+    if (ownerCreatureHP && ownerCreatureHP.trim()) {
+      // Паспортные хиты — строка, кладём как formula, разбор на кости оставим мастеру
+      d.hitPoints = { diceCount: null, dieSize: null, bonus: null, formula: ownerCreatureHP.trim() };
+    }
+    if (ownerCreatureSpeed && ownerCreatureSpeed.trim()) {
+      const n = Number(ownerCreatureSpeed.trim().split(/\D/)[0]);
+      if (Number.isFinite(n) && n > 0) d.speed = { ...d.speed, walk: n };
+      else d.speed = { ...d.speed, note: ownerCreatureSpeed.trim() };
+    }
     return d;
   });
 
@@ -80,11 +100,14 @@ export function DndCreatureWizard({
     findDndSystemId().then((sid) => {
       setSystemId(sid);
       if (!sid) return;
-      loadDndMechanicsGroup(sid, "Типы урона").then(setDamageTypes);
-      loadDndMechanicsGroup(sid, "Состояния").then(setConditions);
-      loadDndMechanicsGroup(sid, "Особое восприятие").then(setSenseOptions);
-      loadDndMechanicsGroup(sid, MECHANICS_CREATURE_TYPE_GROUP).then(setCreatureTypeOptions);
-      loadDndMechanicsGroup(sid, MECHANICS_ALIGNMENT_GROUP).then(setAlignmentOptions);
+      // Один батч: 1× GET /sections + 1× GET /entries вместо 5× каждого
+      loadMechanicsOptions(sid).then((opts) => {
+        setDamageTypes(opts.damageTypes.map((o) => ({ id: o.id, name: o.name })));
+        setConditions(opts.conditions.map((o) => ({ id: o.id, name: o.name })));
+        setSenseOptions(opts.senses.map((o) => ({ id: o.id, name: o.name })));
+        setCreatureTypeOptions(opts.creatureTypes.map((o) => ({ id: o.id, name: o.name })));
+        setAlignmentOptions(opts.alignments.map((o) => ({ id: o.id, name: o.name })));
+      });
     });
   }, []);
 

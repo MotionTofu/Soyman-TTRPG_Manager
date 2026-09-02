@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api/client";
 import type {
@@ -69,6 +69,7 @@ import {
   type DndEffect,
 } from "./effects";
 import { useCompendiumEntries } from "./useCompendiumEntries";
+import { ensureEntries, getCachedEntry } from "./entryCache";
 import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
 import type { ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
@@ -80,6 +81,7 @@ import { useBag } from "../../bag";
 import { computeArmorClass } from "./armorClass";
 import { allResources, applicableStats, type ClassResourceSource } from "./dndResources";
 import { Modal } from "../Modal";
+import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
@@ -127,6 +129,7 @@ export function emptyDndCharacter(): DndCharacterData {
     attacks: [],
     equipmentSections: [{ name: "Общее", items: [] }],
     attunementCount: 0,
+    coins: { cp: "", sp: "", ep: "", gp: "", pp: "" },
     speciesFeatures: [],
     classFeatures: [],
     feats: [],
@@ -243,6 +246,19 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   merged.hitPointMaxTemp = typeof merged.hitPointMaxTemp === "string" ? merged.hitPointMaxTemp : "";
   merged.resourceUsed = merged.resourceUsed && typeof merged.resourceUsed === "object" ? merged.resourceUsed : {};
   merged.resourceBonus = merged.resourceBonus && typeof merged.resourceBonus === "object" ? merged.resourceBonus : {};
+  // Монеты — отдельное поле (S-08). Старые листы его не имели — дефолт пустые строки.
+  const rawCoins = r.coins as Record<string, unknown> | undefined;
+  if (rawCoins && typeof rawCoins === "object") {
+    merged.coins = {
+      cp: typeof rawCoins.cp === "string" ? rawCoins.cp : "",
+      sp: typeof rawCoins.sp === "string" ? rawCoins.sp : "",
+      ep: typeof rawCoins.ep === "string" ? rawCoins.ep : "",
+      gp: typeof rawCoins.gp === "string" ? rawCoins.gp : "",
+      pp: typeof rawCoins.pp === "string" ? rawCoins.pp : "",
+    };
+  } else {
+    merged.coins = { cp: "", sp: "", ep: "", gp: "", pp: "" };
+  }
   merged.speeds = merged.speeds && typeof merged.speeds === "object" ? { ...emptySpeed(), ...merged.speeds } : emptySpeed();
   merged.sensesList = Array.isArray(merged.sensesList) ? merged.sensesList : [];
   merged.damageResistances = Array.isArray(merged.damageResistances) ? merged.damageResistances : [];
@@ -358,6 +374,105 @@ function removeFeaturesBySource(features: DndFeature[], ...sourceParentIds: (num
   const ids = new Set(sourceParentIds.filter((id): id is number => id != null));
   if (ids.size === 0) return features;
   return features.filter((f) => f.sourceParentId == null || !ids.has(f.sourceParentId));
+}
+
+// ---------------------------------------------------------------------------
+// Снятие выданного при смене источника.
+//
+// Класс, подкласс и предыстория не только дают (особенности, спасброски,
+// инструменты, навыки, черту происхождения) — их ещё и меняют. Раньше
+// снимались только особенности (removeFeaturesBySource); всё остальное
+// оставалось навсегда: три смены предыстории давали три черты в списке, а
+// Волшебник, побывавший Воином, навсегда сохранял владение спасбросками Силы
+// и Телосложения. Ниже — общий разбор «что дал этот источник», чтобы при
+// смене снять ровно это и ровно тогда, когда того же не даёт никто другой.
+interface SourceGrants {
+  savingThrows: DndAbilityKey[];
+  toolIds: number[];
+  toolNames: string[];
+  skills: string[];
+  featNames: string[];
+}
+
+const EMPTY_GRANTS: SourceGrants = {
+  savingThrows: [],
+  toolIds: [],
+  toolNames: [],
+  skills: [],
+  featNames: [],
+};
+
+// Поля не пересекаются: у класса — спасброски и инструменты, у предыстории —
+// навыки, инструмент и черта происхождения. Поэтому разбор один на оба.
+function grantsFromEntry(entry: CompendiumEntry | undefined): SourceGrants {
+  if (!entry) return EMPTY_GRANTS;
+  const data = entry.data;
+  const toolPicks = Array.isArray(data.tool_profs)
+    ? (data.tool_profs as { id: number; name: string }[])
+    : [];
+  const bgTool = typeof data.tools === "string" && data.tools ? [data.tools] : [];
+  const originFeat = data.origin_feat as { id: number; name: string } | undefined;
+  return {
+    savingThrows: parseAbilityNames(data.saving_throws),
+    toolIds: toolPicks.map((t) => t.id).filter((id) => typeof id === "number"),
+    toolNames: [...toolPicks.map((t) => t.name).filter(Boolean), ...bgTool],
+    skills: Array.isArray(data.skills) ? (data.skills as string[]) : [],
+    featNames: originFeat?.name ? [originFeat.name] : [],
+  };
+}
+
+function mergeGrants(list: SourceGrants[]): SourceGrants {
+  return {
+    savingThrows: list.flatMap((g) => g.savingThrows),
+    toolIds: list.flatMap((g) => g.toolIds),
+    toolNames: list.flatMap((g) => g.toolNames),
+    skills: list.flatMap((g) => g.skills),
+    featNames: list.flatMap((g) => g.featNames),
+  };
+}
+
+/**
+ * Снимает то, что давал ушедший источник, оставляя всё, что подтверждает
+ * хоть один из оставшихся (`kept`) — иначе у мультикласса смена одного класса
+ * забрала бы спасбросок, положенный по второму.
+ *
+ * Экспертизу (уровень 2) не трогаем: её ставит не предыстория, а игрок.
+ */
+function revokeGrants(
+  value: DndCharacterData,
+  revoked: SourceGrants,
+  kept: SourceGrants[]
+): Pick<DndCharacterData, "savingThrowProfs" | "proficiencies" | "skillProfs" | "feats"> {
+  const keep = mergeGrants(kept);
+  const savingThrowProfs = { ...value.savingThrowProfs };
+  for (const k of revoked.savingThrows) {
+    if (!keep.savingThrows.includes(k)) savingThrowProfs[k] = false;
+  }
+  const skillProfs = { ...value.skillProfs };
+  for (const skill of revoked.skills) {
+    if (keep.skills.includes(skill)) continue;
+    if ((skillProfs[skill] ?? 0) === 1) skillProfs[skill] = 0;
+  }
+  const proficiencies = value.proficiencies.filter((p) => {
+    const byId = p.entryId != null && revoked.toolIds.includes(p.entryId);
+    const byName = !!p.name && revoked.toolNames.includes(p.name);
+    if (!byId && !byName) return true;
+    const keptById = p.entryId != null && keep.toolIds.includes(p.entryId);
+    const keptByName = !!p.name && keep.toolNames.includes(p.name);
+    return keptById || keptByName;
+  });
+  const feats = value.feats.filter(
+    (f) => !revoked.featNames.includes(f.name) || keep.featNames.includes(f.name)
+  );
+  return { savingThrowProfs, proficiencies, skillProfs, feats };
+}
+
+// Записи всех источников, кроме уходящего: по ним решается, что оставить.
+async function loadGrants(ids: (number | null | undefined)[]): Promise<SourceGrants[]> {
+  const real = ids.filter((id): id is number => typeof id === "number");
+  if (real.length === 0) return [];
+  await ensureEntries(real);
+  return real.map((id) => grantsFromEntry(getCachedEntry(id)));
 }
 
 function classAndLevelSummary(classes: DndClassEntry[]): string {
@@ -808,7 +923,13 @@ function spellSnapshotFromEntry(entry: CompendiumEntry): DndSpellSnapshot {
 // add time — computeArmorClass() then reads these cached fields without a
 // live lookup. Заклинания от снапшота отказались (см. resolveSpell), но у
 // снаряжения он пока остаётся: КЗ считается вне рендера, где кэша нет.
+const equipmentMetaCache = new Map<number, Partial<DndEquipmentItem>>();
+export function clearEquipmentMetaCache(entryId?: number): void {
+  if (entryId != null) equipmentMetaCache.delete(entryId);
+  else equipmentMetaCache.clear();
+}
 async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipmentItem>> {
+  if (equipmentMetaCache.has(entryId)) return equipmentMetaCache.get(entryId)!;
   try {
     const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
     const weaponProperties = Array.isArray(entry.data.weapon_properties)
@@ -818,7 +939,7 @@ async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipment
       entry.data.weapon_mastery && typeof entry.data.weapon_mastery === "object"
         ? (entry.data.weapon_mastery as { name?: string }).name
         : undefined;
-    return {
+    const meta: Partial<DndEquipmentItem> = {
       entryId,
       armorType: typeof entry.data.armor_type === "string" ? entry.data.armor_type : undefined,
       ac: typeof entry.data.ac === "string" ? entry.data.ac : undefined,
@@ -830,6 +951,8 @@ async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipment
       weaponProperties: weaponProperties || undefined,
       weaponMastery: weaponMastery || undefined,
     };
+    equipmentMetaCache.set(entryId, meta);
+    return meta;
   } catch {
     return { entryId };
   }
@@ -1465,6 +1588,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
   onLevelChange: (i: number, level: number) => void;
   onRemoveClass: (i: number) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const hasCompendiumClasses = hierarchy.classes.length > 0;
   // Lets the level input sit empty mid-edit (so the user can clear it and
   // type a fresh number) without every keystroke snapping back to "1" —
@@ -1586,7 +1710,22 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 <NavIcon name="navUp" />
               </button>
             </span>
-            <button type="button" className="comp-mini" onClick={() => onRemoveClass(i)}>
+            <button
+              type="button"
+              className="comp-mini"
+              title="Убрать класс"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Убрать класс?",
+                  message: c.className
+                    ? `«${c.className}» уйдёт из листа вместе со своими особенностями, спасбросками и инструментами.`
+                    : "Строка класса будет убрана.",
+                  confirmLabel: "Убрать",
+                  danger: true,
+                });
+                if (ok) onRemoveClass(i);
+              }}
+            >
               <NavIcon name="close" />
             </button>
           </div>
@@ -1595,6 +1734,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
       <button type="button" onClick={add} style={{ alignSelf: "flex-start" }}>
         + Добавить класс
       </button>
+      {confirmDialog}
     </div>
   );
 });
@@ -1681,16 +1821,19 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
   itemsRef.current = section.items;
   const onItemsChangeRef = useRef(onItemsChange);
   onItemsChangeRef.current = onItemsChange;
+  const [confirmDialog, confirm] = useConfirm();
 
   const updateItem = useCallback((ii: number, patch: Partial<DndEquipmentItem>) => {
     const next = itemsRef.current.slice();
     next[ii] = { ...next[ii], ...patch };
     onItemsChangeRef.current(next);
   }, []);
-  const removeItem = useCallback((ii: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const removeItem = useCallback(async (ii: number) => {
+    const name = itemsRef.current[ii]?.name || "предмет";
+    const ok = await confirm({ title: "Удалить предмет?", message: `Удалить «${name}»?`, confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     onItemsChangeRef.current(itemsRef.current.filter((_, idx) => idx !== ii));
-  }, []);
+  }, [confirm]);
   function addItem() {
     onItemsChange([...section.items, { name: "", qty: "", weight: "", notes: "" }]);
   }
@@ -1727,22 +1870,24 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
   );
 
   return (
-    <div
-      className={`dnd-equipment-section${isDragOver ? " drag-over" : ""}`}
-      onDragOver={onSectionDragOver}
-      onDragLeave={onSectionDragLeave}
-      onDrop={onSectionDrop}
-    >
-      <div className="row">
-        <input
-          className="dnd-equipment-section-name"
-          value={section.name}
-          onChange={(e) => onNameChange(e.target.value)}
-        />
-        <button type="button" className="comp-mini" onClick={onRemoveSection}>
-          <NavIcon name="delete" /> Раздел
-        </button>
-      </div>
+    <>
+      {confirmDialog}
+      <div
+        className={`dnd-equipment-section${isDragOver ? " drag-over" : ""}`}
+        onDragOver={onSectionDragOver}
+        onDragLeave={onSectionDragLeave}
+        onDrop={onSectionDrop}
+      >
+        <div className="row">
+          <input
+            className="dnd-equipment-section-name"
+            value={section.name}
+            onChange={(e) => onNameChange(e.target.value)}
+          />
+          <button type="button" className="comp-mini" onClick={onRemoveSection}>
+            <NavIcon name="delete" /> Раздел
+          </button>
+        </div>
       <div className="stack" style={{ gap: 4 }}>
         {items.map((item, ii) => (
           <EquipmentItemRow
@@ -1764,7 +1909,8 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
           + Добавить предмет
         </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 });
 
@@ -1782,6 +1928,7 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
   sectionsRef.current = sections;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const [confirmDialog, confirm] = useConfirm();
 
   function addSection() {
     onChange([...sections, { name: "Новый раздел", items: [] }]);
@@ -1791,10 +1938,12 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
     next[si] = { ...next[si], name };
     onChangeRef.current(next);
   }, []);
-  const removeSection = useCallback((si: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const removeSection = useCallback(async (si: number) => {
+    const name = sectionsRef.current[si]?.name || "раздел";
+    const ok = await confirm({ title: "Удалить раздел?", message: `Удалить «${name}» и все предметы в нём?`, confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     onChangeRef.current(sectionsRef.current.filter((_, idx) => idx !== si));
-  }, []);
+  }, [confirm]);
   const setSectionItems = useCallback((si: number, items: DndEquipmentItem[]) => {
     const next = sectionsRef.current.slice();
     next[si] = { ...next[si], items };
@@ -1813,8 +1962,10 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
       setDragOverSection(null);
       const movePayload = e.dataTransfer.getData(EQUIPMENT_DRAG_MIME);
       if (movePayload) {
-        const { sectionIndex, itemIndex } = JSON.parse(movePayload);
-        moveItem(sectionIndex, itemIndex, si);
+        try {
+          const { sectionIndex, itemIndex } = JSON.parse(movePayload);
+          moveItem(sectionIndex, itemIndex, si);
+        } catch {}
         return;
       }
       const result = readSearchDrop(e);
@@ -1858,6 +2009,7 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="sb-section" style={{ margin: 0 }}>
         Снаряжение
       </div>
@@ -1909,6 +2061,14 @@ function DndEquipmentView({ sections }: { sections: DndEquipmentSection[] }) {
 
 const EMPTY_EQUIPMENT_ITEM: DndEquipmentItem = { name: "", qty: "", weight: "", notes: "" };
 
+function isValidQty(v: string): boolean {
+  if (!v.trim()) return true;
+  return /^-?\d+([.,]\d+)?$/.test(v.trim());
+}
+function isValidWeight(v: string): boolean {
+  if (!v.trim()) return true;
+  return /^-?\d+([.,]\d+)?$/.test(v.trim().split(" ")[0]);
+}
 function EquipmentInlineForm({
   draft,
   onChange,
@@ -1922,6 +2082,8 @@ function EquipmentInlineForm({
   onCancel: () => void;
   onRemove?: () => void;
 }) {
+  const qtyOk = isValidQty(draft.qty);
+  const wOk = isValidWeight(draft.weight);
   return (
     <div className="row" style={{ flexWrap: "wrap", gap: 6, margin: "4px 0" }}>
       <input
@@ -1935,13 +2097,15 @@ function EquipmentInlineForm({
         placeholder="Кол-во"
         value={draft.qty}
         onChange={(e) => onChange({ ...draft, qty: e.target.value })}
-        style={{ flex: "1 1 60px" }}
+        style={{ flex: "1 1 60px", borderColor: qtyOk ? undefined : "var(--accent)" }}
+        title={qtyOk ? undefined : "Число, напр. 2 или 1"}
       />
       <input
         placeholder="Вес"
         value={draft.weight}
         onChange={(e) => onChange({ ...draft, weight: e.target.value })}
-        style={{ flex: "1 1 60px" }}
+        style={{ flex: "1 1 60px", borderColor: wOk ? undefined : "var(--accent)" }}
+        title={wOk ? undefined : "Число, напр. 0.5"}
       />
       <input
         placeholder="Заметка"
@@ -1982,6 +2146,50 @@ function EquipmentInlineForm({
 // снаряжения (data.equipment_a_items / equipment_b_items). Пока набор не
 // размечен ссылками, здесь пусто — текстовое описание набора живёт в
 // компендиуме и переносится вручную, как и раньше.
+const COIN_LABELS: Record<keyof import("../../types").DndCoins, string> = {
+  cp: "ММ",
+  sp: "СМ",
+  ep: "ЭМ",
+  gp: "ЗМ",
+  pp: "ПМ",
+};
+const COIN_ORDER: (keyof import("../../types").DndCoins)[] = ["cp", "sp", "ep", "gp", "pp"];
+
+function DndCoinsView({ coins }: { coins: import("../../types").DndCoins }) {
+  const hasAny = COIN_ORDER.some((k) => coins[k]?.trim());
+  if (!hasAny) return null;
+  return (
+    <div className="sb-entry">
+      <span className="sb-prop-label">Монеты</span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+        {COIN_ORDER.filter((k) => coins[k]?.trim()).map((k) => `${coins[k]} ${COIN_LABELS[k]}`).join(" · ")}
+      </span>
+    </div>
+  );
+}
+
+function DndCoinsEdit({
+  coins,
+  onChange,
+}: {
+  coins: import("../../types").DndCoins;
+  onChange: (c: import("../../types").DndCoins) => void;
+}) {
+  return (
+    <div className="stack">
+      <div className="sb-section" style={{ margin: 0 }}>Монеты</div>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        {COIN_ORDER.map((k) => (
+          <label key={k} style={{ flex: "1 1 70px", minWidth: 0 }}>
+            {COIN_LABELS[k]}
+            <input value={coins[k] ?? ""} onChange={(e) => onChange({ ...coins, [k]: e.target.value })} placeholder="0" />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface StartingSet {
   label: string;
   gold: string;
@@ -2004,11 +2212,13 @@ function DndEquipmentQuickView({
   sections,
   systemId,
   startingSets,
+  coins,
   onQuickUpdate,
 }: {
   sections: DndEquipmentSection[];
   systemId: number | null;
   startingSets?: StartingSet[];
+  coins?: import("../../types").DndCoins;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
@@ -2021,6 +2231,7 @@ function DndEquipmentQuickView({
   const [descriptions, setDescriptions] = useState<Record<number, string>>({});
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const { items: bagItems } = useBag();
+  const [confirmDialog, confirm] = useConfirm();
 
   useEffect(() => {
     if (addMode !== "compendium" || !systemId) return;
@@ -2072,22 +2283,33 @@ function DndEquipmentQuickView({
   }
   // Кладёт весь набор в первую секцию инвентаря одним нажатием. Мета
   // (урон, КЗ) снимается так же, как при добавлении вручную, поэтому
-  // надетый доспех из набора сразу участвует в расчёте КЗ.
+  // надетый доспех из набора сразу участвует в расчёте КЗ. S-02: батч
+  // запрос, S-08: gold → coins.gp, S-20: ищет «Общее» а не idx 0.
   async function takeStartingSet(set: StartingSet) {
-    const added: DndEquipmentItem[] = [];
-    for (const item of set.items) {
-      const meta = await fetchEquipmentMeta(item.entryId);
-      added.push({
-        name: item.name,
-        qty: item.qty > 1 ? String(item.qty) : "",
-        weight: "",
-        notes: "",
-        entryId: item.entryId,
-        ...meta,
-      });
+    const metas = await Promise.all(set.items.map((it) => fetchEquipmentMeta(it.entryId)));
+    const added: DndEquipmentItem[] = set.items.map((item, idx) => ({
+      name: item.name,
+      qty: item.qty > 1 ? String(item.qty) : "",
+      weight: "",
+      notes: "",
+      entryId: item.entryId,
+      ...metas[idx],
+    }));
+    const targetIdx = (() => {
+      const found = sections.findIndex((s) => s.name.trim().toLowerCase() === "общее");
+      return found >= 0 ? found : 0;
+    })();
+    const nextSections = sections.map((sec, idx) => (idx !== targetIdx ? sec : { ...sec, items: [...sec.items, ...added] }));
+    const patch: Partial<DndCharacterData> = { equipmentSections: nextSections };
+    if (set.gold?.trim()) {
+      const cur = coins ?? { cp: "", sp: "", ep: "", gp: "", pp: "" };
+      const add = Number.parseInt(set.gold.trim(), 10);
+      if (Number.isFinite(add) && add !== 0) {
+        const curGp = Number.parseInt(cur.gp || "0", 10) || 0;
+        patch.coins = { ...cur, gp: String(curGp + add) };
+      }
     }
-    const next = sections.map((sec, idx) => (idx !== 0 ? sec : { ...sec, items: [...sec.items, ...added] }));
-    commit({ equipmentSections: next });
+    commit(patch);
   }
 
   async function addFromCompendium(si: number, entry: CompendiumEntry) {
@@ -2103,8 +2325,10 @@ function DndEquipmentQuickView({
       appendItem(si, { name: `${result.title}${suffix}`, qty: "", weight: "", notes: "" });
     }
   }
-  function removeItem(si: number, ii: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function removeItem(si: number, ii: number) {
+    const name = sections[si]?.items[ii]?.name || "предмет";
+    const ok = await confirm({ title: "Удалить предмет?", message: `Удалить «${name}»?`, confirmLabel: "Удалить", danger: true });
+    if (!ok) return;
     const next = sections.map((s, sIdx) =>
       sIdx !== si ? s : { ...s, items: s.items.filter((_, iIdx) => iIdx !== ii) }
     );
@@ -2145,9 +2369,42 @@ function DndEquipmentQuickView({
     ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
     : options;
 
+  // S-17: сводка веса/кол-ва/атюна над инвентарём
+  const summary = (() => {
+    const all = sections.flatMap((s) => s.items);
+    const totalItems = all.length;
+    const equipped = all.filter((i) => i.equipped).length;
+    let totalWeight = 0;
+    let hasWeight = false;
+    for (const it of all) {
+      const w = parseFloat(String(it.weight).replace(",", "."));
+      if (Number.isFinite(w)) {
+        const q = parseInt(String(it.qty).trim(), 10);
+        const qty = Number.isFinite(q) && q > 0 ? q : 1;
+        totalWeight += w * qty;
+        hasWeight = true;
+      }
+    }
+    return { totalItems, equipped, totalWeight, hasWeight };
+  })();
   return (
     <>
+      {confirmDialog}
       <div className="sb-section cs-mt">Снаряжение</div>
+      <div className="row muted" style={{ gap: 8, flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+        <span>Предметов: {summary.totalItems}</span>
+        {summary.equipped > 0 && <><span>·</span><span>Надето: {summary.equipped}</span></>}
+        {summary.hasWeight && <><span>·</span><span>Вес: {summary.totalWeight.toFixed(1).replace(/\.0$/, "")}</span></>}
+        {coins && (["cp","sp","ep","gp","pp"] as const).some((k) => (coins as unknown as Record<string,string>)[k]?.trim()) && (
+          <>
+            <span>·</span>
+            <span>
+              {([
+                ["cp","ММ"],["sp","СМ"],["ep","ЭМ"],["gp","ЗМ"],["pp","ПМ"]] as const).filter(([k]) => (coins as unknown as Record<string,string>)[k]?.trim()).map(([k,l]) => `${(coins as unknown as Record<string,string>)[k]} ${l}`).join(" · ")}
+            </span>
+          </>
+        )}
+      </div>
       {(startingSets ?? []).length > 0 && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
           {(startingSets ?? []).map((set) => (
@@ -2315,6 +2572,11 @@ export function DndCharacterEdit({
   onChangeRef.current = onChange;
   const hierarchyRef = useRef(hierarchy);
   hierarchyRef.current = hierarchy;
+  // Все пикеры ниже ходят в сеть, а потом пишут в лист. Раньше побеждал тот,
+  // чей запрос доехал последним, а не тот, который нажали последним: щёлкнув
+  // уровень 1→5 подряд, можно было получить набор особенностей от третьего
+  // щелчка. Номер операции отсекает всё, что пришло после начала следующей.
+  const opSeqRef = useRef(0);
   const {
     setAttacks,
     setEquipmentSections,
@@ -2354,13 +2616,22 @@ export function DndCharacterEdit({
     // from a class (or clearing the row) removes both again — including any
     // subclass features, since the subclass resets when the class changes.
     async function pickClass(i: number, classId: number | null) {
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const hierarchy = hierarchyRef.current;
       const oldClass = value.classes[i];
       let notes = oldClass?.className ? removeClassNotesBlock(value.notes, oldClass.className) : value.notes;
       let classFeatures = removeFeaturesBySource(value.classFeatures, oldClass?.classId, oldClass?.subclassId);
-      let savingThrowProfs = value.savingThrowProfs;
-      let proficiencies = value.proficiencies;
+      // Уходящий класс забирает свои спасброски и инструменты — но только те,
+      // которых не даёт ни один из оставшихся источников.
+      const revoked = mergeGrants(await loadGrants([oldClass?.classId, oldClass?.subclassId]));
+      const kept = await loadGrants([
+        ...value.classes.filter((_, idx) => idx !== i).flatMap((c) => [c.classId, c.subclassId]),
+        value.backgroundId,
+      ]);
+      const cleared = revokeGrants(value, revoked, kept);
+      let savingThrowProfs = cleared.savingThrowProfs;
+      let proficiencies = cleared.proficiencies;
       const opt = hierarchy.classes.find((cl) => cl.id === classId);
       const nextClasses = value.classes.slice();
       nextClasses[i] = {
@@ -2436,6 +2707,7 @@ export function DndCharacterEdit({
       // granted spells from nextClasses; recompute picks up that removal
       // (and any species grant that a level change made newly eligible).
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
@@ -2443,6 +2715,7 @@ export function DndCharacterEdit({
     // Классовые особенности (and any "Обретаемые заклинания", filtered to
     // this class row's own level).
     async function pickSubclass(i: number, subclassId: number | null) {
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const hierarchy = hierarchyRef.current;
       const oldClass = value.classes[i];
@@ -2460,6 +2733,7 @@ export function DndCharacterEdit({
       }
       const nextValue = { ...valueRef.current, classes: nextClasses, classFeatures };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
@@ -2469,6 +2743,7 @@ export function DndCharacterEdit({
     // row's own level (subclass grants), so granted spells get recomputed
     // in every branch below.
     async function changeClassLevel(i: number, level: number) {
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const c = value.classes[i];
       const nextClasses = value.classes.slice();
@@ -2482,6 +2757,7 @@ export function DndCharacterEdit({
           proficiencyBonus,
         };
         const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+        if (seq !== opSeqRef.current) return;
         onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
         return;
       }
@@ -2502,25 +2778,39 @@ export function DndCharacterEdit({
         proficiencyBonus,
       };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
+    // Подтверждение спрашивает вызывающая сторона (DndClassesEdit) — из
+    // useMemo-фабрики модалку не показать, а `confirm("удалить ЭТО?")` здесь
+    // и был тем самым системным окном, от которого уходим.
     async function removeClass(i: number) {
-      if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const removed = value.classes[i];
       const notes = removed?.className ? removeClassNotesBlock(value.notes, removed.className) : value.notes;
       const classFeatures = removeFeaturesBySource(value.classFeatures, removed?.classId, removed?.subclassId);
       const nextClasses = value.classes.filter((_, idx) => idx !== i);
+      // Убранный класс забирает спасброски и инструменты с собой.
+      const revoked = mergeGrants(await loadGrants([removed?.classId, removed?.subclassId]));
+      const kept = await loadGrants([
+        ...nextClasses.flatMap((c) => [c.classId, c.subclassId]),
+        value.backgroundId,
+      ]);
+      const cleared = revokeGrants(value, revoked, kept);
       const nextValue = {
         ...valueRef.current,
         classes: nextClasses,
         hitDice: computeHitDice(nextClasses),
         notes,
         classFeatures,
+        savingThrowProfs: cleared.savingThrowProfs,
+        proficiencies: cleared.proficiencies,
         proficiencyBonus: computeProficiencyBonus(nextClasses),
       };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
@@ -2575,8 +2865,12 @@ export function DndCharacterEdit({
       // Classes picked before the hierarchy finished loading (e.g. a saved
       // statblock reopened) had no hit die available yet — recompute now
       // that classHitDieCache is populated.
-      if (value.classes.some((c) => c.classId != null)) {
-        onChange({ ...value, hitDice: computeHitDice(value.classes) });
+      // Через ref, а не через захваченный эффектом `value`: иерархия грузится
+      // заметное время, и всё, что мастер успел набрать за это время,
+      // затиралось устаревшим снимком.
+      const fresh = valueRef.current;
+      if (fresh.classes.some((c) => c.classId != null)) {
+        onChangeRef.current({ ...fresh, hitDice: computeHitDice(fresh.classes) });
       }
     });
     loadDndSpeciesOptions(value.systemId).then(setSpecies);
@@ -2589,6 +2883,7 @@ export function DndCharacterEdit({
   // for (always marked prepared); switching away removes the old species'
   // features and granted spells again.
   async function pickRace(id: number | null) {
+    const seq = ++opSeqRef.current;
     const opt = species.find((s) => s.id === id);
     let speciesFeatures = removeFeaturesBySource(value.speciesFeatures, value.raceId);
     if (id && value.systemId) {
@@ -2604,7 +2899,20 @@ export function DndCharacterEdit({
       speed: opt?.walkSpeed ? `${opt.walkSpeed} фт.` : value.speed,
     };
     const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
-    onChange({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
+    if (seq !== opSeqRef.current) return;
+    // Снимок, от которого считали, устарел на время загрузки — накладываем
+    // посчитанное на свежий лист, а не подменяем его целиком.
+    onChange({
+      ...valueRef.current,
+      speciesFeatures: nextValue.speciesFeatures,
+      raceId: nextValue.raceId,
+      raceName: nextValue.raceName,
+      raceTypeName: nextValue.raceTypeName,
+      speed: nextValue.speed,
+      cantrips,
+      spellsByLevel,
+      spellSlotLevels,
+    });
   }
 
   // Requirement 5: picking a background also fills in what it grants —
@@ -2612,7 +2920,22 @@ export function DndCharacterEdit({
   // proficiency row) and the origin feat (appended to Черты, with its full
   // description) — so the player doesn't have to re-enter them by hand.
   async function pickBackground(id: number | null) {
+    const seq = ++opSeqRef.current;
     const opt = backgrounds.find((b) => b.id === id);
+    // Прежняя предыстория забирает своё: навыки, инструмент и черту
+    // происхождения. Раньше не снималось ничего — три смены предыстории
+    // оставляли три черты и все накопленные навыки.
+    const previous = mergeGrants(await loadGrants([value.backgroundId]));
+    const revoked: SourceGrants = {
+      ...previous,
+      // backgroundSkillNames — то, что реально было применено к листу;
+      // запись компендиума могла с тех пор измениться.
+      skills: [...new Set([...previous.skills, ...value.backgroundSkillNames])],
+    };
+    const kept = await loadGrants(value.classes.flatMap((c) => [c.classId, c.subclassId]));
+    const cleared = revokeGrants(value, revoked, kept);
+    const base: DndCharacterData = { ...value, ...cleared };
+
     const patch: Partial<DndCharacterData> = { backgroundId: id, backgroundName: opt?.name ?? "", backgroundSkillNames: [] };
     if (id) {
       try {
@@ -2620,16 +2943,16 @@ export function DndCharacterEdit({
         const grantedSkills = Array.isArray(entry.data.skills) ? (entry.data.skills as string[]) : [];
         patch.backgroundSkillNames = grantedSkills;
         if (grantedSkills.length > 0) {
-          const nextSkillProfs = { ...value.skillProfs };
+          const nextSkillProfs = { ...base.skillProfs };
           for (const s of grantedSkills) if (s in nextSkillProfs && !nextSkillProfs[s]) nextSkillProfs[s] = 1;
           patch.skillProfs = nextSkillProfs;
         }
         const tools = typeof entry.data.tools === "string" ? entry.data.tools : "";
-        if (tools && !value.proficiencies.some((p) => p.name === tools)) {
-          patch.proficiencies = [...value.proficiencies, { entryId: null, name: tools, abilityKey: null }];
+        if (tools && !base.proficiencies.some((p) => p.name === tools)) {
+          patch.proficiencies = [...base.proficiencies, { entryId: null, name: tools, abilityKey: null }];
         }
         const originFeat = entry.data.origin_feat as { id: number; name: string } | undefined;
-        if (originFeat && !value.feats.some((f) => f.name === originFeat.name)) {
+        if (originFeat && !base.feats.some((f) => f.name === originFeat.name)) {
           let description = "";
           try {
             const featEntry = await api.get<CompendiumEntry>(`/systems/entries/${originFeat.id}`);
@@ -2637,13 +2960,14 @@ export function DndCharacterEdit({
           } catch {
             /* feat entry missing — leave description blank */
           }
-          patch.feats = [...value.feats, { name: originFeat.name, description }];
+          patch.feats = [...base.feats, { name: originFeat.name, description }];
         }
       } catch {
         /* background has no compendium entry (freehand) — nothing to fill */
       }
     }
-    onChange({ ...value, ...patch });
+    if (seq !== opSeqRef.current) return;
+    onChange({ ...valueRef.current, ...cleared, ...patch });
   }
 
   const spellAbilityKey = characterSpellcastingAbility(value.classes);
@@ -2869,6 +3193,7 @@ export function DndCharacterEdit({
       <AttackListEdit values={value.attacks} onChange={setAttacks} />
 
       <DndEquipmentEdit sections={value.equipmentSections} onChange={setEquipmentSections} />
+      <DndCoinsEdit coins={value.coins} onChange={(coins) => onChange({ ...value, coins })} />
       <label className="row">
         Настроено предметов
         <PipTrack
@@ -3262,7 +3587,7 @@ function DndCharacterViewMini({ value }: { value: DndCharacterData }) {
         <div className="sb-head">
           <div className="sb-head-row">
             <div className="sb-name">{value.characterName || "Без имени"}</div>
-            {classLine && <div style={{ fontSize: 12.5, opacity: 0.8 }}>{classLine}</div>}
+            {classLine && <div style={{ fontSize: "var(--fs-meta)", opacity: 0.8 }}>{classLine}</div>}
           </div>
         </div>
         <div className="sb-body">
@@ -3406,6 +3731,36 @@ function HpEditModal({
   onClose: () => void;
 }) {
   const [amount, setAmount] = useState("");
+  // Черновик четырёх полей. Раньше каждое из них звало onQuickUpdate прямо из
+  // onChange — то есть на каждое нажатие клавиши пересобирался весь чарник и
+  // уходил PUT: набрать «15» стоило двух запросов, а промежуточное пустое
+  // поле на секунду записывало «хитов нет». Теперь правка живёт локально до
+  // blur или Enter.
+  const [draft, setDraft] = useState({
+    hitPointsCurrent: value.hitPointsCurrent,
+    hitPointMax: value.hitPointMax,
+    hitPointsTemp: value.hitPointsTemp,
+    hitPointMaxTemp: value.hitPointMaxTemp,
+  });
+  type HpField = keyof typeof draft;
+  // Урон и лечение считают от сохранённого значения, поэтому набранное в полях
+  // надо сначала зафиксировать — иначе кнопка «Урон» вычтет из старых хитов.
+  function commitField(field: HpField) {
+    if (draft[field] === value[field]) return;
+    onQuickUpdate({ [field]: draft[field] } as Partial<DndCharacterData>);
+  }
+  function hpFieldProps(field: HpField) {
+    return {
+      type: "number",
+      value: draft[field],
+      onChange: (e: ChangeEvent<HTMLInputElement>) =>
+        setDraft((d) => ({ ...d, [field]: e.target.value })),
+      onBlur: () => commitField(field),
+      onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") commitField(field);
+      },
+    };
+  }
 
   function applyDamage() {
     const n = Number(amount) || 0;
@@ -3414,7 +3769,9 @@ function HpEditModal({
     const curNow = Number(value.hitPointsCurrent) || 0;
     const fromTemp = Math.min(n, Math.max(0, tempNow));
     const rest = n - fromTemp;
-    onQuickUpdate({ hitPointsTemp: String(tempNow - fromTemp), hitPointsCurrent: String(curNow - rest) });
+    const patch = { hitPointsTemp: String(tempNow - fromTemp), hitPointsCurrent: String(curNow - rest) };
+    onQuickUpdate(patch);
+    setDraft((d) => ({ ...d, ...patch }));
     setAmount("");
   }
   function applyHeal() {
@@ -3424,6 +3781,7 @@ function HpEditModal({
     const cap = (Number(value.hitPointMax) || 0) + (Number(value.hitPointMaxTemp) || 0);
     const healed = cap > 0 ? Math.min(curNow + n, cap) : curNow + n;
     onQuickUpdate({ hitPointsCurrent: String(healed) });
+    setDraft((d) => ({ ...d, hitPointsCurrent: String(healed) }));
     setAmount("");
   }
 
@@ -3433,35 +3791,19 @@ function HpEditModal({
         <h3 style={{ margin: 0 }}>Хиты</h3>
         <label>
           Текущие ХП
-          <input
-            type="number"
-            value={value.hitPointsCurrent}
-            onChange={(e) => onQuickUpdate({ hitPointsCurrent: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointsCurrent")} />
         </label>
         <label>
           Максимум ХП
-          <input
-            type="number"
-            value={value.hitPointMax}
-            onChange={(e) => onQuickUpdate({ hitPointMax: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointMax")} />
         </label>
         <label>
           Временные ХП
-          <input
-            type="number"
-            value={value.hitPointsTemp}
-            onChange={(e) => onQuickUpdate({ hitPointsTemp: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointsTemp")} />
         </label>
         <label>
           Временный максимум ХП
-          <input
-            type="number"
-            value={value.hitPointMaxTemp}
-            onChange={(e) => onQuickUpdate({ hitPointMaxTemp: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointMaxTemp")} />
         </label>
         {/* Урон first depletes temp HP, then current — standard 5e rule.
             Лечение caps at max + temp max, also per the rules. */}
@@ -3651,7 +3993,7 @@ function DndResourcesView({
                 {r.label}
                 {showClass && <span className="muted"> · {r.className}</span>}
               </span>
-              <label className="row muted" style={{ gap: 4, fontSize: 12 }}>
+              <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
                 доп. бонус
                 <input
                   type="number"
@@ -3998,7 +4340,7 @@ export function DndCharacterView({
               <div>
                 <div className="sb-label">Спас от смерти</div>
                 <div className="stack" style={{ gap: 3 }}>
-                  <span className="row muted" style={{ gap: 3, fontSize: 11 }}>
+                  <span className="row muted" style={{ gap: 3, fontSize: "var(--fs-meta)" }}>
                     +
                     <PipTrack
                       value={value.deathSaveSuccesses}
@@ -4007,7 +4349,7 @@ export function DndCharacterView({
                       onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
                     />
                   </span>
-                  <span className="row muted" style={{ gap: 3, fontSize: 11 }}>
+                  <span className="row muted" style={{ gap: 3, fontSize: "var(--fs-meta)" }}>
                     −
                     <PipTrack
                       value={value.deathSaveFailures}
@@ -4207,17 +4549,24 @@ export function DndCharacterView({
                 <TabEditToggle editing={editingInventory} onToggle={() => setEditingInventory((v) => !v)} />
               )}
               {editingInventory ? (
-                <DndEquipmentEdit
-                  sections={value.equipmentSections}
-                  onChange={(next) => onQuickUpdate?.({ equipmentSections: next })}
-                />
+                <>
+                  <DndEquipmentEdit
+                    sections={value.equipmentSections}
+                    onChange={(next) => onQuickUpdate?.({ equipmentSections: next })}
+                  />
+                  <DndCoinsEdit coins={value.coins} onChange={(coins) => onQuickUpdate?.({ coins })} />
+                </>
               ) : (
-                <DndEquipmentQuickView
-                  sections={value.equipmentSections}
-                  systemId={value.systemId}
-                  startingSets={startingSets}
-                  onQuickUpdate={onQuickUpdate}
-                />
+                <>
+                  <DndEquipmentQuickView
+                    sections={value.equipmentSections}
+                    systemId={value.systemId}
+                    startingSets={startingSets}
+                    onQuickUpdate={onQuickUpdate}
+                    coins={value.coins}
+                  />
+                  <DndCoinsView coins={value.coins} />
+                </>
               )}
               {value.attunementCount > 0 && (
                 <div className="sb-entry">

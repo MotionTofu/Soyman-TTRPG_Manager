@@ -56,32 +56,127 @@ function resolveStatblockOwnerFolder(ownerType: string, ownerId: number): string
   return null;
 }
 
+const ALLOWED_OWNER_TYPES = new Set(["character", "being", "compendium_entry"]);
+
+// Preview without DB write — returns parsed summary + warnings so client can show modal before confirm
+statblocksRouter.post("/import/preview", (req, res) => {
+  const { owner_type, owner_id, json } = req.body as {
+    owner_type: string;
+    owner_id: number;
+    json: string;
+  };
+  if (!owner_type || owner_id == null || !json)
+    return res.status(400).json({ error: "owner_type, owner_id и json обязательны" });
+  if (!ALLOWED_OWNER_TYPES.has(owner_type))
+    return res.status(400).json({ error: `Недопустимый owner_type: ${owner_type}` });
+  if (owner_type !== "character")
+    return res.status(400).json({ error: "Импорт Long Story Short доступен только для персонажей" });
+  const numericOwnerId = Number(owner_id);
+  if (!Number.isFinite(numericOwnerId) || numericOwnerId <= 0)
+    return res.status(400).json({ error: "Некорректный owner_id" });
+  if (typeof json !== "string" || !json.trim())
+    return res.status(400).json({ error: "json должен быть непустой строкой" });
+  let parsed: ReturnType<typeof parseLongStoryShort>;
+  try {
+    parsed = parseLongStoryShort(json);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(400).json({ error: "Не удалось разобрать файл: " + msg.split("\n")[0].slice(0, 500) });
+  }
+  // Summarize for preview table without leaking full characterData (too large)
+  const cd = parsed.characterData as Record<string, unknown>;
+  const classes = cd.classes as { className: string; subclassName: string; level: number }[] | undefined;
+  const attacks = cd.attacks as { name: string }[] | undefined;
+  const equipSections = cd.equipmentSections as { items: unknown[] }[] | undefined;
+  const preview = {
+    characterName: parsed.characterName,
+    shortText: parsed.shortText,
+    warnings: parsed.warnings,
+    summary: {
+      raceName: cd.raceName,
+      raceId: cd.raceId,
+      className: classes?.[0]?.className ?? "",
+      subclassName: classes?.[0]?.subclassName ?? "",
+      classId: (classes?.[0] as Record<string, unknown> | undefined)?.classId ?? null,
+      subclassId: (classes?.[0] as Record<string, unknown> | undefined)?.subclassId ?? null,
+      level: classes?.[0]?.level ?? 1,
+      armorClass: cd.armorClass,
+      hitPointMax: cd.hitPointMax,
+      speed: cd.speed,
+      abilities: cd.abilities,
+      skillCount: Object.keys((cd.skillProfs as object) ?? {}).length,
+      attackCount: attacks?.length ?? 0,
+      equipmentCount: equipSections?.[0]?.items?.length ?? 0,
+      hasSpells: false, // LSS spells are IDs, not mappable — preview flags via warnings
+    },
+  };
+  res.json(preview);
+});
+
 statblocksRouter.post("/import", (req, res) => {
   const { owner_type, owner_id, json } = req.body as {
     owner_type: string;
     owner_id: number;
     json: string;
   };
-  if (!owner_type || !owner_id || !json)
-    return res.status(400).json({ error: "owner_type, owner_id and json are required" });
+  if (!owner_type || owner_id == null || !json)
+    return res.status(400).json({ error: "owner_type, owner_id и json обязательны" });
+  if (!ALLOWED_OWNER_TYPES.has(owner_type))
+    return res.status(400).json({ error: `Недопустимый owner_type: ${owner_type}` });
+  const numericOwnerId = Number(owner_id);
+  if (!Number.isFinite(numericOwnerId) || numericOwnerId <= 0)
+    return res.status(400).json({ error: "Некорректный owner_id" });
+  if (typeof json !== "string" || !json.trim())
+    return res.status(400).json({ error: "json должен быть непустой строкой" });
+  // LSS import is only meaningful for characters — being/compendium_entry get a plain text fallback
+  if (owner_type !== "character") {
+    return res.status(400).json({ error: "Импорт Long Story Short доступен только для персонажей (owner_type=character)" });
+  }
+  // Early owner existence check (character)
+  const ownerExists = db.prepare("SELECT id FROM characters WHERE id = ?").get(numericOwnerId);
+  if (!ownerExists) return res.status(404).json({ error: "Персонаж не найден" });
 
-  let parsed;
+  let parsed: ReturnType<typeof parseLongStoryShort>;
   try {
     parsed = parseLongStoryShort(json);
   } catch (err) {
-    return res.status(400).json({ error: "Не удалось разобрать файл: " + String(err) });
+    const msg = err instanceof Error ? err.message : String(err);
+    // Avoid leaking full stack — only first line
+    const safe = msg.split("\n")[0].slice(0, 500);
+    return res.status(400).json({ error: "Не удалось разобрать файл: " + safe });
   }
 
   const note = `Импортировано из Long Story Short${parsed.characterName ? ` (${parsed.characterName})` : ""}`;
-  const info = db
-    .prepare(
-      "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .run(owner_type, owner_id, "full", "dnd_character", JSON.stringify(parsed.characterData), note);
+  const insert = db.transaction((content: string) => {
+    const info = db
+      .prepare(
+        "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .run(owner_type, numericOwnerId, "full", "dnd_character", content, note);
+    return info.lastInsertRowid;
+  });
 
+  let newId: number | bigint;
+  try {
+    newId = insert(JSON.stringify(parsed.characterData));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return res.status(500).json({ error: "Не удалось сохранить статблок: " + msg.slice(0, 300) });
+  }
+
+  // Realtime — same as PUT /:id so other windows refresh
+  try {
+    broadcastCharacterUpdate(numericOwnerId);
+  } catch {
+    /* broadcast is best-effort */
+  }
+
+  const row = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(newId) as { avatar_image_path: string | null };
   res.status(201).json({
     characterName: parsed.characterName,
-    statblock: withAvatarUrl(db.prepare("SELECT * FROM statblocks WHERE id = ?").get(info.lastInsertRowid) as { avatar_image_path: string | null }),
+    warnings: parsed.warnings,
+    shortText: parsed.shortText,
+    statblock: withAvatarUrl(row),
   });
 });
 
@@ -91,7 +186,7 @@ statblocksRouter.get("/", (req, res) => {
     return res.status(400).json({ error: "owner_type and owner_id are required" });
   const rows = db
     .prepare(
-      "SELECT * FROM statblocks WHERE owner_type = ? AND owner_id = ? ORDER BY created_at"
+      "SELECT * FROM statblocks WHERE owner_type = ? AND owner_id = ? AND archived_at IS NULL ORDER BY created_at"
     )
     .all(owner_type, owner_id) as { avatar_image_path: string | null }[];
   res.json(rows.map(withAvatarUrl));
@@ -127,6 +222,10 @@ statblocksRouter.post("/", (req, res) => {
   res.status(201).json(withAvatarUrl(row));
 });
 
+// Форматы, у которых `content` — это JSON. Пустая строка допустима: так
+// заводится свежий статблок до первого сохранения.
+const JSON_FORMATS = new Set(["litm_character", "litm_challenge", "dnd_character", "dnd_creature"]);
+
 statblocksRouter.put("/:id", (req, res) => {
   const { kind, content, note, theme, density } = req.body as {
     kind?: string;
@@ -135,6 +234,23 @@ statblocksRouter.put("/:id", (req, res) => {
     theme?: string;
     density?: string;
   };
+  // Раньше UPDATE по несуществующему id молча ничего не менял, а ответом
+  // уходил 200 с пустым телом — клиент считал, что сохранил. Статблок, снесённый
+  // на другом устройстве, съедал правку без единого следа.
+  const existing = db.prepare("SELECT id, format FROM statblocks WHERE id = ?").get(req.params.id) as
+    | { id: number; format: string }
+    | undefined;
+  if (!existing) return res.status(404).json({ error: "Статблок не найден — возможно, он удалён" });
+  // Битый JSON в content означает, что лист откроется пустым (normalize*
+  // разбирает `{}` вместо данных) — то есть тихая потеря чарника. Дешевле
+  // отказать здесь, чем разбирать потом.
+  if (typeof content === "string" && content.trim() && JSON_FORMATS.has(existing.format)) {
+    try {
+      JSON.parse(content);
+    } catch {
+      return res.status(400).json({ error: "content не разбирается как JSON" });
+    }
+  }
   db.prepare(
     `UPDATE statblocks SET
        kind = COALESCE(?, kind), content = COALESCE(?, content), note = COALESCE(?, note),
@@ -150,7 +266,7 @@ statblocksRouter.put("/:id", (req, res) => {
       }
     | undefined;
   if (!updated) {
-    res.json(updated);
+    res.status(404).json({ error: "Статблок не найден" });
     return;
   }
   if (updated.owner_type === "character") broadcastCharacterUpdate(updated.owner_id);
@@ -207,68 +323,85 @@ statblocksRouter.delete("/:id/avatar", (req, res) => {
   res.json({ avatar_image_url: null });
 });
 
+// Мягкое удаление. Раньше строка сносилась физически, и единственной
+// преградой был `confirm("удалить ЭТО?")` — импортированный из LSS чарник
+// уходил навсегда с одного промаха. Теперь ставится `archived_at`, GET такой
+// статблок не отдаёт, а PUT /:id/restore возвращает его целиком, вместе с
+// портретом: файл-портрет поэтому здесь НЕ архивируется.
 statblocksRouter.delete("/:id", (req, res) => {
   const statblock = db
-    .prepare("SELECT id, owner_type, owner_id, format, avatar_image_path FROM statblocks WHERE id = ?")
+    .prepare(
+      "SELECT id, owner_type, owner_id, format FROM statblocks WHERE id = ? AND archived_at IS NULL"
+    )
     .get(req.params.id) as
-    | {
-        id: number;
-        owner_type: string;
-        owner_id: number;
-        format: string;
-        avatar_image_path: string | null;
-      }
+    | { id: number; owner_type: string; owner_id: number; format: string }
     | undefined;
   if (!statblock) return res.status(404).json({ error: "not found" });
 
-  // Для компендиум-монстра: если сносится последний dnd_creature, сводка
-  // записи (data.cr/size/creature_type) перестаёт подтверждаться источником
-  // истины — чистим её, чтобы фильтры бестиария не показывали мёртвые
-  // значения (находка 10.2). Живые dnd_character/litm статблоки не мешают:
-  // их поля живут в другом пространстве имён.
-  const cleanupData =
-    statblock.owner_type === "compendium_entry" && statblock.format === "dnd_creature";
   db.transaction(() => {
-    db.prepare("DELETE FROM statblocks WHERE id = ?").run(statblock.id);
-    if (cleanupData) {
-      const remaining = db
-        .prepare(
-          "SELECT COUNT(*) AS c FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ? AND format = 'dnd_creature'"
-        )
-        .get(statblock.owner_id) as { c: number };
-      if (remaining.c === 0) {
-        const entry = db
-          .prepare("SELECT data FROM compendium_entries WHERE id = ?")
-          .get(statblock.owner_id) as { data: string } | undefined;
-        if (entry) {
-          try {
-            const data = JSON.parse(entry.data ?? "{}") as Record<string, unknown>;
-            if ("cr" in data || "size" in data || "creature_type" in data) {
-              delete data.cr;
-              delete data.size;
-              delete data.creature_type;
-              db.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(
-                JSON.stringify(data),
-                statblock.owner_id
-              );
-            }
-          } catch {
-            // Битый JSON в data не должен мешать удалению статблока.
-          }
-        }
-      }
-    }
+    db.prepare("UPDATE statblocks SET archived_at = datetime('now') WHERE id = ?").run(statblock.id);
+    syncEntrySummaryAfterCreatureChange(statblock);
   })();
 
-  // Файл-портрет — после коммита SQL, архивной дорогой (как DELETE /:id/avatar).
-  if (statblock.avatar_image_path) {
-    removeOrArchive(
-      statblock.avatar_image_path,
-      "archive",
-      "statblock",
-      statblock.id,
-      `Портрет статблока ${statblock.id}`
-    );
-  }
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
   res.json({ ok: true });
 });
+
+// Отмена удаления (тост «Отменить» в StatblockList).
+statblocksRouter.put("/:id/restore", (req, res) => {
+  const statblock = db
+    .prepare("SELECT id, owner_type, owner_id, format FROM statblocks WHERE id = ?")
+    .get(req.params.id) as
+    | { id: number; owner_type: string; owner_id: number; format: string }
+    | undefined;
+  if (!statblock) return res.status(404).json({ error: "not found" });
+
+  db.prepare("UPDATE statblocks SET archived_at = NULL WHERE id = ?").run(statblock.id);
+  // Сводка записи бестиария снимается при удалении — на возврате её надо
+  // пересобрать из вернувшегося статблока, иначе фильтры останутся пустыми.
+  if (statblock.owner_type === "compendium_entry" && statblock.format === "dnd_creature") {
+    syncCreatureDataFromStatblock(db, statblock.owner_id);
+  }
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  const row = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(statblock.id) as {
+    avatar_image_path: string | null;
+  };
+  res.json(withAvatarUrl(row));
+});
+
+// Для компендиум-монстра: если убран последний живой dnd_creature, сводка
+// записи (data.cr/size/creature_type) перестаёт подтверждаться источником
+// истины — чистим её, чтобы фильтры бестиария не показывали мёртвые значения
+// (находка 10.2). Живые dnd_character/litm статблоки не мешают: их поля живут
+// в другом пространстве имён. Вызывается внутри транзакции удаления.
+function syncEntrySummaryAfterCreatureChange(statblock: {
+  owner_type: string;
+  owner_id: number;
+  format: string;
+}): void {
+  if (statblock.owner_type !== "compendium_entry" || statblock.format !== "dnd_creature") return;
+  const remaining = db
+    .prepare(
+      "SELECT COUNT(*) AS c FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ? AND format = 'dnd_creature' AND archived_at IS NULL"
+    )
+    .get(statblock.owner_id) as { c: number };
+  if (remaining.c > 0) return;
+  const entry = db.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(statblock.owner_id) as
+    | { data: string }
+    | undefined;
+  if (!entry) return;
+  try {
+    const data = JSON.parse(entry.data ?? "{}") as Record<string, unknown>;
+    if ("cr" in data || "size" in data || "creature_type" in data) {
+      delete data.cr;
+      delete data.size;
+      delete data.creature_type;
+      db.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(
+        JSON.stringify(data),
+        statblock.owner_id
+      );
+    }
+  } catch {
+    // Битый JSON в data не должен мешать удалению статблока.
+  }
+}

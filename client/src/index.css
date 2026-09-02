@@ -118,15 +118,30 @@
   --text-name: 18px;
   --text-name-sub: 14px;
 
-  /* Type scale (design doc §4.2) — identical on every theme, so it lives
-     here and is never duplicated into a theme object. */
+  /* Шкала кегля. Одна на все режимы — поэтому живёт здесь и никогда не
+     дублируется в объект темы.
+
+     Ступеней ЧЕТЫРЕ, и это замкнутый список: 10 / 12 / 16 / 26. Сырых
+     пикселей в кегле больше нет нигде, кроме печатной шпаргалки
+     (.cheatsheet-*, .dnd-cheatsheet-*) — печатный лист живёт по своим
+     бумажным правилам и экранной шкале не подчиняется.
+
+     Почему 10 и 12 стоят рядом, хотя §1.6 требует скачка ×1.6: это не
+     соседи по иерархии, а РАЗНЫЕ ГОЛОСА (§1.5). 10 — голос Label: капс с
+     трекингом, подписи, бейджи, счётчики. 12 — голоса Body и Data: проза
+     интерфейса и числа в строках. Документ ровно для этого случая
+     оговаривает: «если два текста близки по размеру — один уходит в другую
+     гарнитуру или в капс с трекингом». Дальше скачки настоящие:
+     12 → 16 это ×1.33, 16 → 26 это ×1.63.
+
+     Ступень 14px убрана (была --fs-body): она сидела между Body и Lead и
+     ни одному голосу не принадлежала. Её 53 места разошлись по 12 и 16. */
   --fs-hero: clamp(40px, 6vw, 76px);
   --fs-h1: clamp(28px, 3.4vw, 40px);
-  --fs-h2: 26px;
-  --fs-h3: 16px;
-  --fs-body: 14px;
-  --fs-meta: 12px;
-  --fs-micro: 10px;
+  --fs-h2: 26px;   /* H2 — заголовки разделов */
+  --fs-h3: 16px;   /* Lead — подзаголовки, крупные значения */
+  --fs-meta: 12px; /* Body + Data — основная проза и числа */
+  --fs-micro: 10px;/* Label — капс-подписи, бейджи, счётчики */
   --fs-stat: clamp(24px, 3vw, 34px);
 
   /* Spacing scale (§6.2) */
@@ -168,6 +183,15 @@
   --sb-muted: var(--muted);
 }
 
+*::selection {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+*::-moz-selection {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -197,7 +221,7 @@ body {
   background-image: var(--page-texture);
   color: var(--ink);
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: var(--fs-meta);
 }
 
 a {
@@ -288,7 +312,7 @@ h3, h4 {
   line-height: 1.15;
 }
 h3 { font-size: var(--fs-h3); }
-h4 { font-size: var(--fs-body); }
+h4 { font-size: var(--fs-h3); }
 
 .card {
   background: var(--paper-2);
@@ -440,7 +464,7 @@ h4 { font-size: var(--fs-body); }
 }
 .inhabitants-quick-label {
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.10em;
@@ -462,7 +486,7 @@ h4 { font-size: var(--fs-body); }
   gap: 6px;
   align-items: center;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
@@ -622,7 +646,7 @@ h4 { font-size: var(--fs-body); }
 }
 .dead-uid-modal__title {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -631,7 +655,7 @@ h4 { font-size: var(--fs-body); }
 }
 .dead-uid-modal__title-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: none;
@@ -643,7 +667,7 @@ h4 { font-size: var(--fs-body); }
   margin: 0;
   padding: 8px 14px;
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.35;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
@@ -663,7 +687,7 @@ h4 { font-size: var(--fs-body); }
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 6px 8px;
   border: 1px solid var(--line);
   background: var(--paper);
@@ -671,7 +695,7 @@ h4 { font-size: var(--fs-body); }
 }
 .dead-uid-modal__filter-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -693,20 +717,20 @@ h4 { font-size: var(--fs-body); }
 }
 .dead-uid-group__type {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--ink);
   font-weight: 600;
 }
 .dead-uid-group__label {
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--ink);
   word-break: break-word;
 }
 .dead-uid-group__meta {
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -714,13 +738,13 @@ h4 { font-size: var(--fs-body); }
 }
 .dead-uid-group__count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-left: auto;
 }
 .dead-uid-group__samples {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   line-height: 1.4;
 }
@@ -728,7 +752,7 @@ h4 { font-size: var(--fs-body); }
 .dead-uid-group__controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dead-uid-group__label-cap {
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -739,7 +763,7 @@ h4 { font-size: var(--fs-body); }
   flex: 1 1 200px;
   min-width: 0;
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 6px 8px;
   border: 1px solid var(--line);
   background: var(--paper);
@@ -750,7 +774,7 @@ h4 { font-size: var(--fs-body); }
 .dead-uid-tier { display: inline-flex; align-items: center; gap: 4px; }
 .dead-uid-tier__badge {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   padding: 1px 5px;
   border: 1px solid var(--line);
   line-height: 1.2;
@@ -778,7 +802,7 @@ h4 { font-size: var(--fs-body); }
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   padding: 5px 7px;
   border: 1px solid var(--line);
   background: var(--paper);
@@ -786,7 +810,7 @@ h4 { font-size: var(--fs-body); }
 }
 .dead-uid-diff {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   background: var(--bg-elevated);
   border: 1px solid var(--line);
@@ -981,7 +1005,7 @@ h4 { font-size: var(--fs-body); }
 }
 .geography-node-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--on-surface-muted);
   white-space: nowrap;
 }
@@ -996,7 +1020,7 @@ h4 { font-size: var(--fs-body); }
   min-width: 24px;
   padding: 0 8px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1242,7 +1266,7 @@ h4 { font-size: var(--fs-body); }
   padding: 0 0 0 4px;
   margin: 0;
   color: inherit;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1;
   cursor: pointer;
 }
@@ -1254,7 +1278,7 @@ h4 { font-size: var(--fs-body); }
   background: none;
   border: none;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   width: 70px;
   color: var(--muted);
 }
@@ -1337,7 +1361,7 @@ h4 { font-size: var(--fs-body); }
 .entity-row-actions button,
 .entity-row-actions a {
   padding: 3px 8px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
   display: inline-flex;
   align-items: center;
@@ -1378,7 +1402,7 @@ h4 { font-size: var(--fs-body); }
 }
 .entity-group-header-toggle::before {
   content: "▾";
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 .entity-group:not([open]) > .entity-group-header-toggle::before {
@@ -1397,7 +1421,7 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   gap: 12px;
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .entity-group-actions a,
 .entity-group-actions button {
@@ -1408,7 +1432,7 @@ h4 { font-size: var(--fs-body); }
   color: var(--accent);
   text-decoration: underline;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .entity-row-meta {
   display: block;
@@ -1436,7 +1460,7 @@ h4 { font-size: var(--fs-body); }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .location-cascade {
@@ -1445,7 +1469,7 @@ h4 { font-size: var(--fs-body); }
   gap: 4px;
 }
 .location-cascade-breadcrumb {
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .location-cascade-row {
   display: flex;
@@ -1461,7 +1485,7 @@ h4 { font-size: var(--fs-body); }
 .entity-type-chip {
   display: inline-block;
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   background: var(--bg-elevated);
   border: 1px solid var(--line);
@@ -1595,7 +1619,7 @@ h4 { font-size: var(--fs-body); }
   border-radius: var(--card-radius);
   background: var(--paper);
   border: var(--card-border-width, 1px) solid var(--line);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 1;
   cursor: pointer;
   opacity: 0.92;
@@ -1636,7 +1660,7 @@ h4 { font-size: var(--fs-body); }
 
 .btn-capsule {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.10em;
   border: 1px solid var(--line);
@@ -1704,7 +1728,7 @@ h4 { font-size: var(--fs-body); }
 }
 .floating-action-bar-count {
   font-family: var(--font-ui);
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
   color: var(--text);
   white-space: nowrap;
 }
@@ -1735,7 +1759,7 @@ h4 { font-size: var(--fs-body); }
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--fs-meta);
   padding: 2px;
   border-radius: 0;
   line-height: 1;
@@ -1748,7 +1772,7 @@ h4 { font-size: var(--fs-body); }
   width: 24px;
   height: 24px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1786,7 +1810,7 @@ h4 { font-size: var(--fs-body); }
   border-radius: 0;
   background: var(--paper);
   border: var(--card-border-width, 1px) solid var(--line);
-  font-size: 18px;
+  font-size: var(--fs-h3);
   cursor: pointer;
   z-index: 1000;
   display: flex;
@@ -2037,6 +2061,33 @@ h4 { font-size: var(--fs-body); }
 .app-shell-live {
   grid-template-columns: var(--app-dock-width) 1fr var(--app-search-width);
 }
+body.live-hide-search .search-panel-slot,
+body.live-hide-search .search-panel {
+  display: none !important;
+}
+body.live-hide-dock .preview-dock,
+body.live-hide-dock .app-nav {
+  display: none !important;
+}
+body.live-hide-search .app-shell {
+  grid-template-columns: var(--app-nav-width) 1fr !important;
+}
+body.live-hide-search .app-shell-live {
+  grid-template-columns: var(--app-dock-width) 1fr !important;
+}
+body.live-hide-dock .app-shell {
+  grid-template-columns: 1fr var(--app-search-width) !important;
+}
+body.live-hide-dock .app-shell-live {
+  grid-template-columns: 1fr var(--app-search-width) !important;
+}
+body.live-hide-search.live-hide-dock .app-shell,
+body.live-hide-search.live-hide-dock .app-shell-live {
+  grid-template-columns: 1fr !important;
+}
+body.live-hide-search.live-hide-dock .app-content {
+  max-width: none;
+}
 
 .app-nav {
   position: relative;
@@ -2072,7 +2123,7 @@ h4 { font-size: var(--fs-body); }
 .preview-dock-header button {
   flex: 0 0 auto;
   font-family: var(--font-ui);
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 400;
@@ -2250,6 +2301,28 @@ h4 { font-size: var(--fs-body); }
   font-weight: 600;
 }
 
+/* Погашенный пункт навигации — раздел, в котором пока ничего нет. Это <span>,
+   а не ссылка: серое, что всё равно переходит, обещает «нельзя» и тут же
+   врёт. Геометрия повторяет .app-nav a, чтобы ряд не дёргался, когда в
+   разделе появится первая запись и <span> сменится ссылкой. */
+.app-nav .nav-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--card-radius);
+  font-family: var(--font-display);
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+.app-nav .nav-empty .nav-empty-count {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  padding: 1px 5px;
+}
+
 /* Neon theme — each section's page-level <h1> (SectionHeading level="page",
    `section` prop) gets its own acid-neon color instead of the single --ink
    color every other theme uses. The left nav itself stays the theme's plain
@@ -2393,7 +2466,7 @@ h4 { font-size: var(--fs-body); }
   background: none;
   border: none;
   padding: 2px 4px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1;
   color: var(--muted);
   cursor: pointer;
@@ -2428,7 +2501,7 @@ h4 { font-size: var(--fs-body); }
 }
 
 .search-panel .filters label {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
@@ -2456,7 +2529,7 @@ h4 { font-size: var(--fs-body); }
 }
 .bag-unload {
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.6;
 }
 .bag-grid {
@@ -2496,7 +2569,7 @@ h4 { font-size: var(--fs-body); }
 .bag-cell-empty {
   background: transparent;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--fs-h3);
   cursor: pointer;
 }
 .bag-cell-empty:hover {
@@ -2509,7 +2582,7 @@ h4 { font-size: var(--fs-body); }
   cursor: grab;
 }
 .bag-cell-label {
-  font-size: 9px;
+  font-size: var(--fs-micro);
   line-height: 1.15;
   text-align: center;
   overflow: hidden;
@@ -2519,12 +2592,14 @@ h4 { font-size: var(--fs-body); }
   word-break: break-word;
 }
 .bag-cell-remove {
+  /* Глубина — обводкой, а не тенью (§1.2): теней в системе нет. */
+  border: var(--card-border-width) solid var(--line);
   position: absolute;
   top: 1px;
   right: 1px;
   width: 14px;
   height: 14px;
-  font-size: 9px;
+  font-size: var(--fs-micro);
   line-height: 1;
   padding: 0;
   border-radius: 50%;
@@ -2541,10 +2616,9 @@ h4 { font-size: var(--fs-body); }
     height: 32px;
     top: 2px;
     right: 2px;
-    font-size: 14px;
+    font-size: var(--fs-meta);
     background: var(--paper);
     border: var(--card-border-width, 1px) solid var(--line);
-    box-shadow: 0 1px 4px rgba(0,0,0,.18);
     /* 44px hit-area: visual 32 + 6px transparent padding */
     padding: 6px;
   }
@@ -2563,6 +2637,59 @@ h4 { font-size: var(--fs-body); }
 .bag-toast-error {
   background: var(--status-cancelled);
   color: var(--status-cancelled-fg);
+}
+
+/* Верстак-модалка из мешка — боковая панель со списком предметов */
+.bag-verstak-sidebar {
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+.bag-verstak-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: default;
+  user-select: none;
+}
+.bag-verstak-item:hover {
+  background: var(--bg-elevated);
+}
+.bag-verstak-item-type {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.bag-verstak-item-name {
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bag-verstak-context-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  padding: 4px;
+  min-width: 160px;
+}
+.bag-verstak-context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  font-size: var(--fs-meta);
+  border: none;
+  background: transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.bag-verstak-context-menu button:hover {
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
 }
 
 /* Home sidebar's compact calendar (see MiniCalendar.tsx) — square day cells
@@ -2603,7 +2730,7 @@ h4 { font-size: var(--fs-body); }
 }
 .mini-calendar-nav button {
   padding: 1px 6px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
 }
 .mini-calendar-month,
@@ -2626,7 +2753,7 @@ h4 { font-size: var(--fs-body); }
 }
 .mini-calendar-weekday {
   font-family: var(--font-ui);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.10em;
   text-transform: uppercase;
   color: var(--muted);
@@ -2730,7 +2857,7 @@ h4 { font-size: var(--fs-body); }
      ним больше не нужна: под числом нет иконки, от которой его надо было
      отделять. */
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--ink);
   line-height: 1;
 }
@@ -2740,7 +2867,7 @@ h4 { font-size: var(--fs-body); }
 }
 .mini-calendar-count {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   line-height: 1;
   color: var(--on-surface-muted);
 }
@@ -2813,7 +2940,6 @@ h4 { font-size: var(--fs-body); }
   background: var(--paper-2);
   border: var(--card-border-width, 1px) solid var(--ink);
   border-radius: var(--card-radius);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.22);
   /* Если ячейка у правого края — поповер не уезжает за экран */
   transform: translateX(0);
 }
@@ -2883,7 +3009,7 @@ h4 { font-size: var(--fs-body); }
   white-space: nowrap;
 }
 .search-result-context {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2928,7 +3054,7 @@ h4 { font-size: var(--fs-body); }
   min-width: 26px;
   min-height: 26px;
   padding: 0;
-  font-size: 20px;
+  font-size: var(--fs-h2);
   line-height: 1;
   font-weight: 700;
   color: var(--accent);
@@ -3073,7 +3199,7 @@ h4 { font-size: var(--fs-body); }
   height: auto;
 }
 .search-result .type {
-  font-size: 11px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   text-transform: uppercase;
 }
@@ -3107,7 +3233,7 @@ th, td {
 }
 .thumbnail-style-table th button {
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .thumbnail-style-table input[type="radio"] {
   width: 16px;
@@ -3128,7 +3254,7 @@ th, td {
   gap: 4px;
 }
 .month-calendar .weekday {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   text-align: center;
   padding: 4px 4px 8px;
@@ -3156,7 +3282,7 @@ th, td {
   cursor: default;
 }
 .month-calendar .day .num {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   display: inline-block;
   padding-bottom: 5px;
@@ -3166,7 +3292,7 @@ th, td {
   font-weight: 600;
 }
 .month-calendar .dot {
-  font-size: 11.5px;
+  font-size: var(--fs-meta);
   border-radius: var(--card-radius);
   padding: 2px 6px;
   color: #0d0d10;
@@ -3293,6 +3419,11 @@ th, td {
 .modal:has(.mention-picker-modal) {
   width: 480px;
 }
+/* Разбор прошедшей игры: имя, «пришёл», две денежные графы с кнопками. В 420 px
+   базового окна это не помещалось — «Прощено» уезжало за край. */
+.modal:has(.session-outcome-modal) {
+  width: min(620px, 92vw);
+}
 /* Удалён дубль — актуальное правило выше (720px + overflow:hidden, §1.3/§1.4/P0-3). */
 
 /* Подтверждение перехода на внешний ресурс (Boosty, Telegram) — зинная модалка
@@ -3314,7 +3445,7 @@ th, td {
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -3327,7 +3458,7 @@ th, td {
 .external-confirm__text {
   margin: 0 0 18px;
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
 }
 .external-confirm__actions {
@@ -3378,7 +3509,7 @@ th, td {
   align-items: center;
   gap: 6px;
   font-weight: normal;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   cursor: pointer;
 }
 .crop-viewport {
@@ -3446,7 +3577,7 @@ th, td {
 .dnd-section-picker {
   width: 100%;
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--fs-h3);
   padding: 10px 12px;
   margin-bottom: 12px;
 }
@@ -3474,18 +3605,23 @@ th, td {
   width: 100%;
   text-align: left;
   font-family: var(--font-ui);
-  font-size: var(--fs-h3);
+  font-size: var(--fs-meta);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 14px 16px;
-  background: var(--paper-2);
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
   border: var(--card-border-width) solid var(--line);
-  border-radius: var(--card-radius);
+  border-radius: 0;
+  line-height: 1.2;
 }
 .player-section-header.open {
-  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--line);
 }
+.player-section-header .muted { color: var(--on-surface-muted); }
 .player-section-items {
   display: flex;
   flex-direction: column;
@@ -3515,8 +3651,13 @@ th, td {
 .player-reader-overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /* Ниже .modal-backdrop (50) и выше .nav-widget (40): читалка непрозрачна, и
+     при z-index 60 модалка, открытая из неё (подтверждение, карточка
+     упоминания), уезжала ПОД читалку — клик выглядел как «ничего не
+     произошло», хотя фокус уходил в невидимый диалог. */
+  z-index: 45;
   background: var(--paper-2);
+  background-image: var(--page-texture);
   display: flex;
   flex-direction: column;
 }
@@ -3528,12 +3669,12 @@ th, td {
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .player-reader-section {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .player-reader-close {
-  font-size: 22px;
+  font-size: var(--fs-h2);
   line-height: 1;
   padding: 4px 10px;
   background: transparent;
@@ -3548,7 +3689,7 @@ th, td {
   width: 100%;
 }
 .player-reader-title {
-  font-size: var(--fs-h1);
+  font-size: clamp(22px, 6vw, 34px);
   margin: 0 0 16px 0;
 }
 .player-reader-tapzone {
@@ -3556,11 +3697,11 @@ th, td {
   top: 56px;
   bottom: 40px;
   width: 15%;
-  min-width: 36px;
+  min-width: 44px;
   max-width: 64px;
   background: transparent;
   border: none;
-  font-size: 28px;
+  font-size: var(--fs-h1);
   color: var(--muted);
   opacity: 0.5;
 }
@@ -3579,7 +3720,7 @@ th, td {
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   pointer-events: none;
 }
 
@@ -3654,7 +3795,7 @@ details.card[open] summary {
   .mobile-topbar-button {
     background: transparent;
     border: none;
-    font-size: 22px;
+    font-size: var(--fs-h2);
     line-height: 1;
     padding: 4px 8px;
     color: var(--ink);
@@ -3755,7 +3896,7 @@ details.card[open] summary {
     position: relative;
   }
   .entity-header-actions button:first-child:not(.danger)::before {
-    font-size: 15px;
+    font-size: var(--fs-h3);
     content: "✎";
   }
 
@@ -3804,7 +3945,7 @@ details.card[open] summary {
     border: none;
     border-radius: var(--card-radius);
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--fs-meta);
     line-height: 1.1;
   }
   .mobile-bottom-nav .nav-icon {
@@ -3846,7 +3987,11 @@ details.card[open] summary {
     height: 88px;
     transform: translateX(-50%);
     border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 50%, transparent) 0%, transparent 72%);
+    /* Свечения в системе нет нигде, кроме неона (§1.2). Раньше здесь висел
+       радиальный градиент акцента, и он рисовался ВО ВСЕХ темах — в нуаре,
+       где --glow: none, вокруг кнопки всё равно светился ореол. Градиент
+       теперь включает только неон, ниже по файлу. */
+    background: none;
     pointer-events: none;
     z-index: 0;
     /* var(--glow) resolves to the literal string "none" on every theme
@@ -3857,6 +4002,10 @@ details.card[open] summary {
        shadow with a comma-separated "none" layer is invalid CSS and drops
        the whole declaration.) */
     box-shadow: var(--glow);
+  }
+  /* Единственный светящийся элемент системы — здесь. */
+  [data-theme-id="neon"] .mobile-bottom-nav-halo {
+    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 50%, transparent) 0%, transparent 72%);
   }
   /* Compound selector (two classes) is needed to out-specificity the
      generic ".mobile-bottom-nav button" rule above (class+element beats a
@@ -3988,13 +4137,13 @@ details.card[open] summary {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-meta);
   }
   .mini-player-bar button {
     flex: 0 0 auto;
     background: transparent;
     border: none;
-    font-size: 18px;
+    font-size: var(--fs-h3);
     line-height: 1;
     color: inherit;
     padding: 2px 4px;
@@ -4027,7 +4176,7 @@ details.card[open] summary {
 .now-playing-topbar button {
   background: transparent;
   border: none;
-  font-size: 22px;
+  font-size: var(--fs-h2);
   line-height: 1;
   padding: 4px 10px;
 }
@@ -4072,7 +4221,7 @@ details.card[open] summary {
   padding-top: 12px;
 }
 .now-playing-queue-head {
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   padding-bottom: 6px;
@@ -4099,7 +4248,7 @@ details.card[open] summary {
 .now-playing-queue-num {
   flex: 0 0 auto;
   min-width: 1.8em;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   opacity: 0.7;
 }
 .now-playing-queue-name {
@@ -4184,14 +4333,50 @@ details.card[open] summary {
   border-radius: var(--card-radius);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
+  overflow: hidden;
+}
+.character-avatar.cover-photo {
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+}
+.character-avatar.cover-photo .cover-art-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 .character-avatar-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   text-align: center;
+}
+.character-avatar-wrap {
+  display: block;
+}
+.character-name-block.card {
+  padding-top: 0;
+}
+.character-dossier {
+  gap: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+}
+.character-dossier .card .card {
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+  background-image: var(--card-body-texture);
+  padding: 14px;
+  clip-path: none;
+}
+.character-dossier .card .card .card {
+  border: none;
+  background: none;
+  padding: 0;
+  clip-path: none;
 }
 .character-avatar-upload {
   cursor: pointer;
@@ -4199,7 +4384,7 @@ details.card[open] summary {
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   text-align: center;
   width: 100%;
   white-space: nowrap;
@@ -4222,7 +4407,7 @@ details.card[open] summary {
   justify-content: center;
   background: color-mix(in srgb, var(--ink) 55%, transparent);
   color: var(--paper);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   text-align: center;
   padding: 8px;
   border-radius: var(--card-radius);
@@ -4242,7 +4427,7 @@ details.card[open] summary {
 .editable-card-field > span,
 .editable-card-field-label {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 /* «Данные изменились в другом окне» — видна, только когда автообновление
    отложено из-за незаконченной правки (см. dataSync.ts). */
@@ -4259,7 +4444,6 @@ details.card[open] summary {
   border-radius: var(--card-radius);
   border: var(--card-border-width, 1px) solid var(--accent);
   background: var(--paper);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 25%);
 }
 
 /* Пошаговое создание сущности (EntityWizard). */
@@ -4386,7 +4570,7 @@ details.card[open] summary {
   opacity: 1;
 }
 .entity-image-empty {
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .entity-image-delete {
   position: absolute;
@@ -4402,11 +4586,10 @@ details.card[open] summary {
   background: var(--paper);
   border: 1px solid var(--line);
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--fs-meta);
   line-height: 1;
   cursor: pointer;
   border-radius: var(--card-radius);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
 }
 .entity-image-delete:hover {
   background: var(--danger-bg);
@@ -4452,7 +4635,7 @@ details.card[open] summary {
     flex-shrink: 0;
   }
   .avatar-upload-hint {
-    font-size: 12px;
+    font-size: var(--fs-meta);
   }
 
   /* An expanded statblock (Чарник tap) — plain-text/LitM/D&D character via
@@ -4534,7 +4717,7 @@ details.card[open] summary {
 .player-list-letter {
   font-weight: 600;
   color: var(--accent);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   padding-left: 4px;
 }
 .player-list-section {
@@ -4596,7 +4779,7 @@ details.card[open] summary {
   opacity: 0.4;
 }
 .player-list-notes-preview {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4656,7 +4839,7 @@ details.card[open] summary {
 .player-profile-notes {
   margin-top: 6px;
   color: var(--on-surface-muted);
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
 }
 .player-cabinet-password {
   max-width: 400px;
@@ -4708,7 +4891,7 @@ details.card[open] summary {
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   text-align: center;
 }
 
@@ -4799,7 +4982,7 @@ details.card[open] summary {
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-size: 22px;
+  font-size: var(--fs-h2);
 }
 .gallery-thumb-caption {
   position: absolute;
@@ -4808,7 +4991,7 @@ details.card[open] summary {
   bottom: 0;
   padding: 4px 6px;
   font-family: var(--font-ui);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   line-height: 1.2;
@@ -4838,7 +5021,7 @@ details.card[open] summary {
   border-radius: 0;
   background: var(--paper);
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--fs-meta);
   line-height: 1;
   cursor: pointer;
   opacity: 0;
@@ -4910,7 +5093,7 @@ details.card[open] summary {
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--font-ui);
-  font-size: 28px;
+  font-size: var(--fs-h1);
   line-height: 1;
   padding: 6px 12px;
   background: color-mix(in srgb, var(--ink) 40%, transparent);
@@ -5122,7 +5305,7 @@ details.card[open] summary {
 }
 .nav-bottom a {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 6px 10px;
 }
 .nav-bottom a.active {
@@ -5141,7 +5324,7 @@ details.card[open] summary {
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 6px 10px;
   border-radius: var(--card-radius);
   cursor: pointer;
@@ -5243,7 +5426,7 @@ input.litm-theme-title {
   width: 100%;
 }
 .litm-theme-subtitle {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
@@ -5259,7 +5442,7 @@ input.litm-theme-title {
   gap: 3px;
 }
 .litm-track-label {
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
@@ -5276,7 +5459,7 @@ input.litm-theme-title {
   gap: 4px;
   padding: 3px 8px;
   border-radius: var(--card-radius);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   border: var(--card-border-width, 1px) solid var(--line);
 }
 .litm-tag-power {
@@ -5304,7 +5487,7 @@ input.litm-theme-title {
   background: transparent;
   flex: 1;
   padding: 0 4px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .litm-tag-add button {
   border-left: var(--card-border-width, 1px) solid var(--line);
@@ -5321,7 +5504,7 @@ input.litm-theme-title {
   border-radius: var(--card-radius);
 }
 .dnd-spell-row {
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .dnd-spell-row.comp-row {
   padding: 3px 6px;
@@ -5337,7 +5520,7 @@ input.litm-theme-title {
   font-weight: 600;
 }
 .dnd-spell-name {
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 /* SbFeatureGroup: each feature is a click-to-open row (opens its
    description in a popup, see .dnd-spell-modal) instead of an inline
@@ -5369,7 +5552,7 @@ input.litm-theme-title {
   white-space: pre-wrap;
 }
 .dnd-equipment-tags {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--ink, inherit);
   padding: 4px 8px 0;
@@ -5446,6 +5629,27 @@ input.litm-theme-title {
 }
 [data-theme-id="peace"] .mention-link {
   color: color-mix(in srgb, var(--accent) 80%, white 20%);
+}
+button.mention-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  display: inline;
+}
+button.mention-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+button.mention-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Уровни уверенности в визарде расстановки ссылок. Цвет — быстрый сигнал,
@@ -5588,7 +5792,7 @@ input.litm-theme-title {
   gap: 6px;
   padding: 6px 10px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .entity-search-item:hover,
 .entity-search-item.highlighted {
@@ -5658,7 +5862,7 @@ input.litm-theme-title {
 }
 .relation-group-header-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 400;
   color: var(--on-surface-muted);
   letter-spacing: 0.04em;
@@ -5666,7 +5870,7 @@ input.litm-theme-title {
 }
 .relation-group-header-hint {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
@@ -5691,7 +5895,7 @@ input.litm-theme-title {
   gap: 6px;
   padding: 4px 2px 2px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -5708,7 +5912,7 @@ input.litm-theme-title {
     min-height: 28px;
   }
   .relation-drop-zone .muted {
-    font-size: 11px;
+    font-size: var(--fs-meta);
   }
   .relation-drop-zone-mobile-hint {
     display: inline;
@@ -5723,7 +5927,7 @@ input.litm-theme-title {
   padding: 2px 6px;
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .relation-target-chip button {
   padding: 0 4px;
@@ -5767,7 +5971,7 @@ input.litm-theme-title {
 }
 
 .relation-graph-path-chain {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   max-width: 60ch;
   overflow-x: auto;
   white-space: nowrap;
@@ -5781,7 +5985,7 @@ input.litm-theme-title {
   gap: 4px 14px;
   max-height: 220px;
   overflow-y: auto;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .relation-graph-fullscreen {
   position: fixed;
@@ -5914,7 +6118,7 @@ input.litm-theme-title {
   gap: 4px;
 }
 .initiative-condition-chip {
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   color: #fff;
   padding: 1px 6px;
@@ -5996,7 +6200,7 @@ input.litm-theme-title {
 }
 /* Quiet capsule, not a control-dense strip: dark masthead band + one accent
    color, matching the reference's minimal floating player.
-   Shared tokens with .mini-player-bar: font-size:13px (track name), padding:8px
+   Shared tokens with .mini-player-bar: font-size: var(--fs-meta) (track name), padding:8px
    (vertical), gap:8-10px. Visual differences (solid vs blur, no-radius vs radius)
    are intentional: docked bar vs floating capsule. */
 
@@ -6052,7 +6256,7 @@ input.litm-theme-title {
 }
 
 .image-hint {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   display: block;
   max-width: 220px;
 }
@@ -6063,7 +6267,7 @@ input.litm-theme-title {
   gap: 4px;
 }
 .backup-info {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   word-break: break-all;
   padding: 0 10px;
@@ -6080,7 +6284,7 @@ input.litm-theme-title {
   padding: 6px 0;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .comp-list {
@@ -6090,27 +6294,66 @@ input.litm-theme-title {
 .comp-node {
   border-bottom: var(--card-border-width, 1px) solid color-mix(in srgb, var(--line) 60%, transparent);
 }
+.comp-node--group {
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+}
 .comp-row {
   display: flex;
   align-items: baseline;
   gap: 12px;
   padding: 6px 8px;
   margin: 0 -8px;
-  border-radius: var(--card-radius);
+  border-radius: 0;
   font-size: var(--text-name);
+}
+.comp-row--group {
+  margin: 6px -14px 0;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  gap: 8px;
+}
+.comp-row--group .comp-name {
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.comp-row--group .comp-toggle,
+.comp-row--group .comp-badge,
+.comp-row--group .comp-level {
+  color: var(--on-surface-muted);
+}
+.comp-row--group .comp-actions button,
+.comp-row--group .comp-mini {
+  border-color: var(--on-surface);
+  color: var(--on-surface);
+  background: transparent;
+}
+.comp-row--group:hover {
+  background: var(--surface);
 }
 .comp-row:hover {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 
 /* Shared "click almost anywhere to expand" header row, used by card-based
-   collapsible lists (CampaignEntryList, TaskTracker, SettingEntryList,
-   CampaignPlayerSectionsTab) — same interaction as .comp-row above and the
-   native <details><summary> rows elsewhere, just for plain divs. Action
-   buttons inside must stopPropagation() so they don't also trigger toggle. */
+    collapsible lists (CampaignEntryList, TaskTracker, SettingEntryList,
+    CampaignPlayerSectionsTab) — same interaction as .comp-row above and the
+    native <details><summary> rows elsewhere, just for plain divs. Action
+    buttons inside must stopPropagation() so they don't also trigger toggle. */
 .collapsible-header {
   cursor: pointer;
-  border-radius: var(--card-radius);
+  border-radius: 0;
   margin: -4px -6px;
   padding: 4px 6px;
 }
@@ -6122,7 +6365,7 @@ input.litm-theme-title {
 }
 .comp-row-focus {
   background: var(--accent-soft);
-  border-radius: var(--card-radius);
+  border-radius: 0;
 }
 .comp-toggle {
   background: none;
@@ -6190,7 +6433,16 @@ details[open] > summary.chevron-summary .chevron-icon,
   cursor: grabbing;
 }
 .comp-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.comp-children .comp-name {
+  font-family: var(--font-body);
   font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
 }
 /* Значок «есть статблок» рядом с именем монстра — тот же, что в строке
    Населения (.entity-row-badge), поэтому и выглядит так же. */
@@ -6201,8 +6453,11 @@ details[open] > summary.chevron-summary .chevron-icon,
   color: var(--accent);
 }
 .comp-level {
-  font-size: 0.55em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  font-weight: 400;
   color: var(--muted);
+  letter-spacing: 0.04em;
 }
 .comp-class-short-desc {
   font-style: italic;
@@ -6216,12 +6471,18 @@ details[open] > summary.chevron-summary .chevron-icon,
   opacity: 0;
   font-size: 0.5em;
 }
-.comp-row:hover .comp-actions {
+.comp-row:hover .comp-actions,
+.comp-row:focus-within .comp-actions {
   opacity: 1;
+}
+@media (pointer: coarse) {
+  .comp-actions {
+    opacity: 1;
+  }
 }
 .comp-mini {
   padding: 1px 6px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
 }
 .comp-mini .nav-icon {
@@ -6239,7 +6500,7 @@ details[open] > summary.chevron-summary .chevron-icon,
 }
 .sort-toggle button {
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   background: transparent;
 }
 .sort-toggle button.active-sort {
@@ -6255,14 +6516,16 @@ details[open] > summary.chevron-summary .chevron-icon,
   display: flex;
   flex-direction: column;
   gap: 1px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   margin-bottom: 4px;
 }
 .comp-children {
   margin-left: 1em;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 500px;
 }
 .comp-level-label {
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--muted);
@@ -6297,8 +6560,14 @@ details[open] > summary.chevron-summary .chevron-icon,
 .card-header--inverted-count {
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   opacity: 0.7;
+}
+/* Тематическая плашка справочника — фон темы, текст акцент (§ по просьбе: 6 блоков). */
+.card-header--inverted.is-themed {
+  background: var(--paper);
+  color: var(--accent);
+  border-bottom: 1px solid var(--line);
 }
 .comp-category summary.comp-level-label {
   cursor: pointer;
@@ -6638,7 +6907,7 @@ body.printing-cheatsheet #root {
 
 /* === Шаг 2 ревизии: страница системы (инвариант панк-зина) === */
 .sys-card {
-  border: var(--card-border-width, 2px) solid var(--ink);
+  border: var(--card-border-width, 1px) solid var(--ink);
   border-radius: var(--card-radius);
 }
 .sys-card-head {
@@ -6663,16 +6932,16 @@ body.printing-cheatsheet #root {
   align-content: start;
 }
 .sys-card-body img {
-  border: var(--card-border-width, 2px) solid var(--ink);
+  border: var(--card-border-width, 1px) solid var(--ink);
   max-width: 300px;
   width: 100%;
   height: auto;
 }
 .sys-stamp {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1;
-  border: 1.5px solid var(--ink);
+  border: var(--card-border-width) solid var(--ink);
   padding: 2px 6px;
   display: inline-block;
 }
@@ -6681,12 +6950,12 @@ body.printing-cheatsheet #root {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 11px;
+  font-size: var(--fs-micro);
 }
 
 .litm-power-chip {
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1.5;
@@ -6702,13 +6971,13 @@ body.printing-cheatsheet #root {
   color: var(--muted);
   margin-bottom: 6px;
 }
-.litm-q { margin-bottom: 4px; font-size: 15px; line-height: 1.4; }
+.litm-q { margin-bottom: 4px; font-size: var(--fs-h3); line-height: 1.4; }
 .litm-ideas { list-style: none; padding-left: 0; }
 .litm-ideas li {
   padding-left: 18px;
   position: relative;
   margin-bottom: 4px;
-  font-size: 15px;
+  font-size: var(--fs-h3);
 }
 .litm-ideas li::before {
   content: "❧";
@@ -6852,8 +7121,26 @@ details.card summary.res-group__band:hover {
   background: var(--accent);
   color: var(--accent-text);
 }
-details.card summary.res-group__band:hover .res-group__count {
+details.card summary.res-group__band:hover .res-group__count,
+details.card summary.res-group__band:hover .res-group__title {
   color: var(--accent-text);
+}
+/* Peace: accent #8BBB92 на светлом тексте давал 1.3:1 — меняем ховер на тёмный accent2 #2A835F + белый текст (7:1) */
+[data-theme-id="peace"] details.card summary.res-group__band:hover {
+  background: var(--accent-2);
+  color: #FFFFFF;
+}
+[data-theme-id="peace"] details.card summary.res-group__band:hover .res-group__count,
+[data-theme-id="peace"] details.card summary.res-group__band:hover .res-group__title {
+  color: #FFFFFF;
+}
+.player-section-header:hover {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+[data-theme-id="peace"] .player-section-header:hover {
+  background: var(--accent-2);
+  color: #FFFFFF;
 }
 details[open] > .res-group__band .chevron-icon {
   transform: rotate(90deg);
@@ -6941,7 +7228,7 @@ details[open] > .res-group__band .chevron-icon {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-body);
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
   color: var(--ink);
   text-decoration: none;
 }
@@ -7016,7 +7303,7 @@ details[open] > .res-group__band .chevron-icon {
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: var(--fs-micro);
   line-height: 1;
 }
 /* Правка раскрывается под строкой, соседние строки не двигаются. */
@@ -7065,6 +7352,21 @@ details[open] > .res-group__band .chevron-icon {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
+/* LSS import — компактная зона поверх .import-drop-zone (StatblockList.tsx) */
+.import-drop-zone .character-avatar-upload {
+  width: auto;
+  white-space: normal;
+  word-break: break-word;
+}
+@media (max-width: 520px) {
+  .import-drop-zone {
+    padding: 10px 8px !important;
+  }
+  .import-drop-zone .character-avatar-upload {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .settings-toast {
   background: var(--surface);
   color: var(--on-surface);
@@ -7102,7 +7404,7 @@ details[open] > .res-group__band .chevron-icon {
 .mastering-article {
   padding: 12px 16px 12px 44px;
   font-family: var(--font-body);
-  font-size: 16px;
+  font-size: var(--fs-h3);
   line-height: 1.65;
   color: var(--ink);
   overflow-wrap: normal;
@@ -7117,9 +7419,9 @@ details[open] > .res-group__band .chevron-icon {
   line-height: 1.15;
   margin: 1.1em 0 0.45em;
 }
-.mastering-article .rt-h1 { font-size: 22px; }
-.mastering-article .rt-h2 { font-size: 19px; }
-.mastering-article .rt-h3 { font-size: 16px; }
+.mastering-article .rt-h1 { font-size: var(--fs-h2); }
+.mastering-article .rt-h2 { font-size: var(--fs-h2); }
+.mastering-article .rt-h3 { font-size: var(--fs-h3); }
 .mastering-article .rt-ul {
   margin: 0.6em 0;
   padding-left: 1.4em;
@@ -7130,12 +7432,12 @@ details[open] > .res-group__band .chevron-icon {
 }
 .mastering-article .rt-table th,
 .mastering-article .rt-table td {
-  font-size: 14px;
+  font-size: var(--fs-meta);
 }
 @media (max-width: 760px) {
   .mastering-article {
     padding: 10px 12px 10px 12px;
-    font-size: 15px;
+    font-size: var(--fs-h3);
     line-height: 1.6;
   }
 }
@@ -7164,11 +7466,11 @@ details[open] > .res-group__band .chevron-icon {
 .genre-add-btn {
   width: 28px;
   height: 28px;
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: 18px;
+  font-size: var(--fs-h3);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -7207,7 +7509,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 .campaign-tile .genre-chips { gap: 4px; }
 .campaign-tile .genre-chip {
-  font-size: 8px;
+  font-size: var(--fs-micro);
   padding: 2px 6px;
   gap: 3px;
 }
@@ -7262,7 +7564,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 .genre-category-count {
   margin-left: 6px;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   opacity: 0.55;
   font-weight: 400;
 }
@@ -7375,7 +7677,7 @@ details[open] > .res-group__band .chevron-icon {
   border: none;
   padding: 6px 12px;
   font: inherit;
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
   color: var(--ink);
   cursor: pointer;
 }
@@ -7402,7 +7704,7 @@ details[open] > .res-group__band .chevron-icon {
 .detail-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
 }
 .detail-table td {
   padding: 4px 8px;
@@ -7417,7 +7719,7 @@ details[open] > .res-group__band .chevron-icon {
   white-space: nowrap;
   width: 140px;
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.10em;
   font-weight: 400;
@@ -7465,7 +7767,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 .campaign-field-label {
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.10em;
   color: var(--muted);

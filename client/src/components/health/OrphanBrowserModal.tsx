@@ -18,13 +18,13 @@ function OrphanThumb({ path }: { path: string }) {
   if (isImg) {
     return (
       <div style={{ width: 56, height: 56, border: "1px solid var(--line)", overflow: "hidden", background: "var(--paper-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        {url ? <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span className="muted" style={{ fontSize: 10 }}>…</span>}
+        {url ? <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>…</span>}
       </div>
     );
   }
   const ext = path.slice(path.lastIndexOf(".")).toLowerCase() || "?";
   return (
-    <div style={{ width: 56, height: 56, border: "1px solid var(--line)", background: "var(--paper-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+    <div style={{ width: 56, height: 56, border: "1px solid var(--line)", background: "var(--paper-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", color: "var(--muted)" }}>
       {ext}
     </div>
   );
@@ -212,16 +212,16 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
             previewUrl ? <img src={previewUrl} alt={orphanPath} style={{ width: "100%", height: "100%", objectFit: "contain", maxHeight: 450 }} /> : <span className="muted" style={{ padding: 12 }}>Загрузка превью…</span>
           ) : (
             <div className="stack" style={{ alignItems: "center", padding: 16 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 24 }}>{orphanPath.slice(orphanPath.lastIndexOf(".")).toLowerCase() || "?"}</span>
-              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11, wordBreak: "break-all", textAlign: "center" }}>{orphanPath}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-h2)" }}>{orphanPath.slice(orphanPath.lastIndexOf(".")).toLowerCase() || "?"}</span>
+              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", wordBreak: "break-all", textAlign: "center" }}>{orphanPath}</span>
             </div>
           )}
         </div>
         <div className="stack" style={{ flex: "1 1 280px", minWidth: 260 }}>
-          <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11, wordBreak: "break-all" }}>{orphanPath}{progressLabel}</strong>
+          <strong className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", wordBreak: "break-all" }}>{orphanPath}{progressLabel}</strong>
           <label className="stack" style={{ gap: 4 }}>
-            <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>Тип владельца</span>
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: 12 }}>
+            <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".08em", textTransform: "uppercase" }}>Тип владельца</span>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>
               <option value="compendium_entry">Бестиарий (система)</option>
               <option value="being">Существо</option>
               <option value="location">Локация</option>
@@ -236,24 +236,24 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
           </label>
           {typeFilter === "compendium_entry" && (
             <label className="stack" style={{ gap: 4 }}>
-              <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>Система (фильтр Бестиария)</span>
-              <select value={systemId} onChange={(e) => setSystemId(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: 12 }}>
+              <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".08em", textTransform: "uppercase" }}>Система (фильтр Бестиария)</span>
+              <select value={systemId} onChange={(e) => setSystemId(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>
                 <option value="">Все системы</option>
                 {systems.map((s) => (
                   <option key={s.id} value={String(s.id)}>{s.name} #{s.id}</option>
                 ))}
               </select>
-              <span className="muted" style={{ fontSize: 10 }}>ДнД 5.5 — выбери систему чтобы искать «Гоблин» только в ней.</span>
+              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>ДнД 5.5 — выбери систему чтобы искать «Гоблин» только в ней.</span>
             </label>
           )}
           <label className="stack" style={{ gap: 4 }}>
-            <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>К кому пришить</span>
+            <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".08em", textTransform: "uppercase" }}>К кому пришить</span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Введи ≥2 символа, напр. Мирт" aria-label="Поиск владельца" />
             {!selected ? (
               (busy || q.trim().length >= 2) ? (
                 <div className="stack" style={{ maxHeight: 160, overflowY: "auto", border: "1px solid var(--line)", background: "var(--paper)", padding: 4, gap: 2 }}>
-                  {busy && <span className="muted" style={{ fontSize: 11, padding: 4 }}>Ищу…</span>}
-                  {!busy && results.length === 0 && <span className="muted" style={{ fontSize: 11, padding: 4 }}>Ничего не найдено</span>}
+                  {busy && <span className="muted" style={{ fontSize: "var(--fs-meta)", padding: 4 }}>Ищу…</span>}
+                  {!busy && results.length === 0 && <span className="muted" style={{ fontSize: "var(--fs-meta)", padding: 4 }}>Ничего не найдено</span>}
                   {results.map((r) => (
                     <button
                       key={`${r.type}:${r.id}`}
@@ -264,38 +264,38 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
                         border: "1px solid transparent",
                         background: "transparent",
                         fontFamily: "var(--font-body)",
-                        fontSize: 12,
+                        fontSize: "var(--fs-meta)",
                       }}
                     >
                       <div style={{ fontWeight: 600 }}>{r.title}</div>
-                      <div className="muted" style={{ fontSize: 11 }}>{r.context ?? r.subtitle ?? r.type}</div>
+                      <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>{r.context ?? r.subtitle ?? r.type}</div>
                     </button>
                   ))}
                 </div>
               ) : null
             ) : (
               <div className="row" style={{ alignItems: "center", gap: 8, padding: "6px 8px", border: "1px solid var(--ink)", background: "var(--paper-2)" }}>
-                <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11, flex: "1 1 auto" }}>Выбрано: {selected.title} ({selected.type} #{selected.id})</span>
-                <button onClick={() => { setSelected(null); setQ(""); setResults([]); }} style={{ fontFamily: "var(--font-ui)", fontSize: 10, padding: "4px 8px", border: "1px solid var(--line)", background: "var(--paper)" }}>Сменить</button>
+                <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", flex: "1 1 auto" }}>Выбрано: {selected.title} ({selected.type} #{selected.id})</span>
+                <button onClick={() => { setSelected(null); setQ(""); setResults([]); }} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", padding: "4px 8px", border: "1px solid var(--line)", background: "var(--paper)" }}>Сменить</button>
               </div>
             )}
           </label>
           <label className="stack" style={{ gap: 4 }}>
-            <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>Поле</span>
-            <select value={column} onChange={(e) => setColumn(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: 12 }}>
+            <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".08em", textTransform: "uppercase" }}>Поле</span>
+            <select value={column} onChange={(e) => setColumn(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>
               {cols.map((c) => (
                 <option key={c.value} value={c.value} className={occupiedColumns.has(c.value) ? "orphan-occupied" : ""}>{c.label} — {c.value}{occupiedColumns.has(c.value) ? " ●" : ""}</option>
               ))}
             </select>
-            <span className="muted" style={{ fontSize: 11 }}>Авто: {autoColumnFor(orphanPath, selected?.type ?? typeFilter)} — можно поменять перед «Пришить».</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Авто: {autoColumnFor(orphanPath, selected?.type ?? typeFilter)} — можно поменять перед «Пришить».</span>
           </label>
           {selected?.type === "compendium_entry" && column === "statblock_avatar" && (
             <label className="stack" style={{ gap: 4 }}>
-              <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>Статблок</span>
+              <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", letterSpacing: ".08em", textTransform: "uppercase" }}>Статблок</span>
               {entryStatblocks.length === 0 ? (
-                <span className="muted" style={{ fontSize: 11 }}>У записи нет статблоков — сначала создай его в карточке записи.</span>
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>У записи нет статблоков — сначала создай его в карточке записи.</span>
               ) : (
-                <select value={selectedStatblockId} onChange={(e) => setSelectedStatblockId(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: 12 }}>
+                <select value={selectedStatblockId} onChange={(e) => setSelectedStatblockId(e.target.value)} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>
                   <option value="">— выбери статблок —</option>
                   {entryStatblocks.map((sb) => (
                     <option key={sb.id} value={String(sb.id)}>{sb.kind === "short" ? "Краткий" : "Полный"} #{sb.id} {sb.note ? `— ${sb.note.slice(0, 40)}` : ""}</option>
@@ -304,7 +304,7 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
               )}
             </label>
           )}
-          {msg && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: msg === "Пришито" || msg === "Пришито к статблоку" ? "var(--accent)" : undefined }}>{msg}</span>}
+          {msg && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", color: msg === "Пришито" || msg === "Пришито к статблоку" ? "var(--accent)" : undefined }}>{msg}</span>}
           <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
             <button onClick={onClose}>Отмена</button>
             {total != null && total > 1 && onSkip && <button onClick={onSkip}>Пропустить</button>}
@@ -419,30 +419,30 @@ export function OrphanBrowserModal({ files, onClose, onDone }: { files: OrphanFi
       <Modal onClose={onClose}>
         <div className="orphan-browser">
           <div className="orphan-browser__head">
-            <strong style={{ fontFamily: "var(--font-ui)", fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase" }}>Файлы-сироты — браузер ({files.length})</strong>
-            <button onClick={onClose} aria-label="Закрыть" style={{ border: "1px solid var(--line)", background: "var(--paper)", padding: "4px 8px", fontFamily: "var(--font-ui)", fontSize: 10 }}>✕</button>
+            <strong style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", letterSpacing: ".08em", textTransform: "uppercase" }}>Файлы-сироты — браузер ({files.length})</strong>
+            <button onClick={onClose} aria-label="Закрыть" style={{ border: "1px solid var(--line)", background: "var(--paper)", padding: "4px 8px", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)" }}>✕</button>
           </div>
           <div className="orphan-browser__body stack">
-            <p className="muted" style={{ margin: 0, fontSize: 11 }}>Отметь файлы и выбери действие. Превью — без дуотона (§1.13), до 100 файлов.</p>
+            <p className="muted" style={{ margin: 0, fontSize: "var(--fs-meta)" }}>Отметь файлы и выбери действие. Превью — без дуотона (§1.13), до 100 файлов.</p>
             <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input placeholder="Фильтр по пути…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ flex: "1 1 200px", minWidth: 140 }} aria-label="Фильтр сирот" />
-              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>{filtered.length} / {files.length}</span>
-              {filter && <button onClick={() => setFilter("")} style={{ fontFamily: "var(--font-ui)", fontSize: 11 }}>Сброс</button>}
-              <button onClick={toggleAll} style={{ fontFamily: "var(--font-ui)", fontSize: 11 }}>{selected.size === filtered.length && filtered.length > 0 ? "Снять все" : "Выбрать все"}</button>
+              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>{filtered.length} / {files.length}</span>
+              {filter && <button onClick={() => setFilter("")} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>Сброс</button>}
+              <button onClick={toggleAll} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)" }}>{selected.size === filtered.length && filtered.length > 0 ? "Снять все" : "Выбрать все"}</button>
             </div>
             <div className="stack" style={{ maxHeight: "50vh", overflowY: "auto", overflowX: "hidden", border: "1px solid var(--line)", padding: 6, gap: 6, background: "var(--paper)" }}>
-              {filtered.length === 0 && <span className="muted" style={{ fontFamily: "var(--font-body)", fontSize: 12, padding: 8 }}>Ничего не найдено по «{filter}»</span>}
+              {filtered.length === 0 && <span className="muted" style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", padding: 8 }}>Ничего не найдено по «{filter}»</span>}
               {filtered.map((f) => (
                 <label key={f.path} className="row" style={{ alignItems: "center", gap: 10, flexWrap: "nowrap", border: selected.has(f.path) ? "1px solid var(--ink)" : "1px solid var(--line)", padding: 6, background: selected.has(f.path) ? "var(--paper-2)" : "var(--paper)", cursor: "pointer" }}>
                   <input type="checkbox" checked={selected.has(f.path)} onChange={() => toggle(f.path)} style={{ flexShrink: 0 }} />
                   <OrphanThumb path={f.path} />
-                  <span style={{ flex: "1 1 auto", minWidth: 0, fontFamily: "var(--font-mono)", fontSize: 11, wordBreak: "break-all" }}>
+                  <span style={{ flex: "1 1 auto", minWidth: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", wordBreak: "break-all" }}>
                     <div style={{ fontWeight: 600 }}>{f.path.split(/[/\\]/).pop()}</div>
-                    <div className="muted" style={{ fontSize: 10 }}>{f.path} · {(f.size / 1024).toFixed(1)} КБ</div>
+                    <div className="muted" style={{ fontSize: "var(--fs-micro)" }}>{f.path} · {(f.size / 1024).toFixed(1)} КБ</div>
                   </span>
                   <button
                     onClick={(e) => { e.preventDefault(); openWizard([f.path]); }}
-                    style={{ flex: "0 0 auto", fontFamily: "var(--font-ui)", fontSize: 10, padding: "4px 8px", border: "1px solid var(--line)", background: "var(--paper)" }}
+                    style={{ flex: "0 0 auto", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", padding: "4px 8px", border: "1px solid var(--line)", background: "var(--paper)" }}
                   >
                     Пришить…
                   </button>
@@ -451,7 +451,7 @@ export function OrphanBrowserModal({ files, onClose, onDone }: { files: OrphanFi
             </div>
           </div>
           <div className="orphan-browser__foot">
-            <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>Отмечено: {selected.size} {msg && `· ${msg}`}</span>
+            <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Отмечено: {selected.size} {msg && `· ${msg}`}</span>
             <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
               <button onClick={doArchive} disabled={selected.size === 0 || !!busy}>{busy === "archive" ? "…" : `В архив (${selected.size})`}</button>
               <button onClick={doCreateResources} disabled={selected.size === 0 || !!busy}>{busy === "resources" ? "…" : `Создать ресурсы (${selected.size})`}</button>

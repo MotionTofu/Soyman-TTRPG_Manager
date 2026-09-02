@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
@@ -40,6 +40,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
   const liveMatch = location.pathname.match(LIVE_SESSION_PATH);
   const { user } = useCurrentUser();
   const isPlayer = user?.role === "player";
+  const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [activeTypes, setActiveTypes] = useState<Set<string>>(
     () => new Set(TYPES.map((t) => t.key))
@@ -63,6 +64,27 @@ export function SearchPanel({ horizontal }: Props = {}) {
       .get<{ id: number; name: string }[]>("/systems")
       .then((systems) => setDndSystemId(systems.find((s) => s.name === "D&D 5.5")?.id ?? null))
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        const ae = document.activeElement as HTMLElement | null;
+        if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const ae = document.activeElement as HTMLElement | null;
+        if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+        // Не перехватывать "/" внутри набора механик/описаний — только когда фокус на body
+        if (ae && ae !== document.body) return;
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   function pinCurrentPage() {
@@ -130,7 +152,8 @@ export function SearchPanel({ horizontal }: Props = {}) {
       <div className="row search-input-row">
         <div className="search-input-wrap">
           <input
-            placeholder="Например: Гоблин"
+            ref={inputRef}
+            placeholder="Например: Гоблин (Ctrl+K, /)"
             aria-label="Поиск"
             value={query}
             onChange={(e) => setQuery(e.target.value)}

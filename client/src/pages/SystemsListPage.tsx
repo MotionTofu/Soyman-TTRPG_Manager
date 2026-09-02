@@ -11,6 +11,7 @@ import { SystemGroupTabs } from "../components/SystemGroupTabs";
 import { SystemGroupMembersModal } from "../components/SystemGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
+import { clearDndSystemIdCache } from "../components/dnd/dndCompendium";
 
 import type { System, SystemGroup } from "../types";
 
@@ -146,6 +147,7 @@ export function SystemsListPage() {
     if (!name.trim()) return;
     try {
       await api.post("/systems", { name, description });
+      clearDndSystemIdCache();
       setCreating(false);
       setName("");
       setDescription("");
@@ -187,7 +189,7 @@ export function SystemsListPage() {
         {q && (
           <button
             onClick={() => setQ("")}
-            style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+            style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
             title="Сбросить поиск"
           >
             Сбросить

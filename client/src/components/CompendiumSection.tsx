@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionTextarea } from "./mentions/MentionTextarea";
@@ -13,11 +13,22 @@ import { NavIcon } from "./NavIcons";
 import { EffectList } from "./dnd/EffectList";
 import { ProgressionEditor, ProgressionView } from "./dnd/ProgressionEditor";
 import { StartingEquipmentPicker, type StartingEquipmentPick } from "./dnd/StartingEquipmentPicker";
+import { useCompendiumViewMode } from "../hooks/useCompendiumViewMode";
 import { EMPTY_PROGRESSION, type ClassProgression } from "./dnd/progression";
 import { EMPTY_COST, type DndCheck, type DndCost, type DndEffect } from "./dnd/effects";
+import { Verstak } from "./Verstak/Verstak";
+import { EquipmentTileGrid } from "./EquipmentTileGrid";
+import { SpellTileGrid } from "./SpellTileGrid";
+import { ClassTileGrid } from "./ClassTileGrid";
+import { SimpleKindTileGrid } from "./SimpleKindTileGrid";
+import { stripMentions } from "../mentions";
 import {
   ABILITY_SCORES,
   ARMOR_TYPES,
+  mechanicsKeyForGroupName,
+  mechanicsCategoryForGroupName,
+  MECHANICS_CATEGORIES,
+  searchableText,
   CREATURE_SIZES,
   VEHICLE_CATEGORIES,
   EQUIPMENT_CATEGORIES,
@@ -34,6 +45,8 @@ import { EMPTY_MECHANICS_OPTIONS, loadMechanicsOptions, type MechanicsOptions } 
 import { ALL_SKILLS } from "./dnd/AbilityScores";
 import type { CompendiumEntry, SearchResult, SystemSection } from "../types";
 import { useAlert } from "../hooks/useConfirm";
+import { EmptyState } from "./EmptyState";
+import { useCurrentUser } from "../api/currentUser";
 
 interface Props {
   systemId: number;
@@ -245,7 +258,10 @@ function getExtraFields(entry: CompendiumEntry, parentGroupName?: string): Field
         { key: "level", label: "ключ:", type: "select", options: ["origin", "adventure", "greatness", "variable"] },
       ];
     }
-    return parentGroupName === MECHANICS_TOOL_GROUP ? [TOOL_ABILITY_FIELD] : [];
+    // group_key-aware check — переживает переименование «Владения инструментами» → «Инструменты»
+    const isToolsGroup = parentGroupName === MECHANICS_TOOL_GROUP || (parentGroupName ? mechanicsKeyForGroupName(parentGroupName) === "tools" : false);
+    if (isToolsGroup) return [TOOL_ABILITY_FIELD];
+    return [];
   }
   const category =
     entry.kind === "equipment"
@@ -427,20 +443,136 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [filterAttunement, setFilterAttunement] = useState("");
   const [filterVehicleCategory, setFilterVehicleCategory] = useState("");
   const [filterSize, setFilterSize] = useState("");
+  const [filterEquipmentCategory, setFilterEquipmentCategory] = useState("");
+  const [verstakOpen, setVerstakOpen] = useState(false);
+  const { user } = useCurrentUser();
+  const sortKey = `compendium-sort-${user?.id ?? "anon"}-${section.id}`;
   const [alertDialog, showAlert] = useAlert();
   const [sortMode, setSortMode] = useState<SortMode>(() => {
-    const raw = localStorage.getItem(`compendium-sort-${section.id}`);
+    const raw = localStorage.getItem(`compendium-sort-${user?.id ?? "anon"}-${section.id}`);
     const stored = raw?.split(":")[0] as SortMode | null;
     const valid: SortMode[] = ["manual", "alpha", "level", "school", "type", "rarity"];
-    return stored && valid.includes(stored) ? stored : (section.kind === "spell" ? "level" : "manual");
+    if (stored && valid.includes(stored)) return stored;
+    if (section.kind === "spell") return "level";
+    if (section.kind === "mechanics") return "alpha";
+    return "manual";
   });
   const [sortDir, setSortDir] = useState<SortDir>(() => {
-    const raw = localStorage.getItem(`compendium-sort-${section.id}`);
+    const raw = localStorage.getItem(`compendium-sort-${user?.id ?? "anon"}-${section.id}`);
     const dir = raw?.split(":")[1] as SortDir | undefined;
     return dir === "desc" ? "desc" : "asc";
   });
   const [dragId, setDragId] = useState<number | null>(null);
   const [systemCode, setSystemCode] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useCompendiumViewMode(section.id, "grid");
+  // Совместимость: старый ключ снаряжения уже мигрирован хуком, оставляем алиас
+  const equipmentViewMode = viewMode;
+  const setEquipmentViewMode = setViewMode;
+  const equipGrouping: "alpha" | "category" = sortMode === "alpha" ? "alpha" : "category";
+  const spellGrouping: "alpha" | "level" | "school" = sortMode === "level" ? "level" : sortMode === "school" ? "school" : "alpha";
+  const isClassSection = section.kind === "class";
+  const isSpeciesSection = section.kind === "species";
+  const isBackgroundSection = section.kind === "background";
+  const isFeatSection = section.kind === "feat";
+  // Мультивыбор для печати / показа игрокам (только для справочника)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const isMechanicsSection = section.kind === "mechanics";
+  // Выбор раздела (напр. Благословления) — выбирает всё внутри раздела (группу + всех потомков)
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const entry = entries.find((e) => e.id === id);
+      if (entry?.kind === "mechanic_group") {
+        // собираем всё поддерево (группа + дети рекурсивно) через childrenOf (ещё не объявлен — берём из entries)
+        const byParent = new Map<number | null, number[]>();
+        for (const e of entries) {
+          const k = e.parent_id;
+          if (!byParent.has(k)) byParent.set(k, []);
+          byParent.get(k)!.push(e.id);
+        }
+        const collect = (root: number): number[] => {
+          const out: number[] = [];
+          const stack = [root];
+          while (stack.length) {
+            const cur = stack.pop()!;
+            out.push(cur);
+            const kids = byParent.get(cur) ?? [];
+            for (const kid of kids) stack.push(kid);
+          }
+          return out;
+        };
+        const subtree = collect(id);
+        const allSelected = subtree.every((did) => next.has(did));
+        if (allSelected) subtree.forEach((did) => next.delete(did));
+        else subtree.forEach((did) => next.add(did));
+      } else {
+        if (next.has(id)) next.delete(id); else next.add(id);
+      }
+      return next;
+    });
+  }
+  function toggleCategorySelection(groups: CompendiumEntry[]) {
+    // собирает все mechanic_item внутри категории (все группы + их потомки)
+    const byParent = new Map<number | null, number[]>();
+    for (const e of entries) {
+      const k = e.parent_id;
+      if (!byParent.has(k)) byParent.set(k, []);
+      byParent.get(k)!.push(e.id);
+    }
+    const collect = (root: number): number[] => {
+      const out: number[] = [];
+      const stack = [root];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        out.push(cur);
+        const kids = byParent.get(cur) ?? [];
+        for (const kid of kids) stack.push(kid);
+      }
+      return out;
+    };
+    const allIds = groups.flatMap((g) => collect(g.id));
+    // для печати/показа нужны только mechanic_item, но для чекбокса категории считаем всё поддерево
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = allIds.every((did) => next.has(did));
+      if (allSelected) allIds.forEach((did) => next.delete(did));
+      else allIds.forEach((did) => next.add(did));
+      return next;
+    });
+  }
+  function handlePrint() {
+    const ids = [...selectedIds];
+    const toPrint = entries.filter((e) => ids.includes(e.id));
+    if (toPrint.length === 0) { showAlert("Выберите записи для печати."); return; }
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Справочник — печать</title><style>
+      body{font-family:Georgia,serif;padding:24px;color:#111}
+      .card{border:1.5px solid #111;padding:14px;margin-bottom:12px;page-break-inside:avoid}
+      .card h3{margin:0 0 6px;font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:0.06em}
+      .muted{color:#666;font-size:12px}
+      @media print{body{padding:0}}
+    </style></head><body><h1>Справочник — ${section.name}</h1>${toPrint.map((e) => {
+      const plain = stripMentions(e.description || "").replace(/</g, "&lt;");
+      return `
+      <div class="card">
+        <h3>${(e.name || "Без названия").replace(/</g, "&lt;")}</h3>
+        ${plain ? `<div style="white-space:pre-wrap">${plain}</div>` : `<div class="muted">Без описания</div>`}
+        ${e.data && Object.keys(e.data).length ? `<div class="muted" style="margin-top:6px">${Object.entries(e.data).map(([k,v]) => `${String(k).replace(/</g, "&lt;")}: ${String(v).replace(/</g, "&lt;")}`).join(" · ")}</div>` : ""}
+      </div>`;
+    }).join("")}<script>window.print()</script></body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+  async function handleShowToPlayers() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) { showAlert("Выберите записи для показа."); return; }
+    // Если выбран один — показываем его карточкой, если несколько — пачкой
+    try {
+      await api.post(`/systems/${systemId}/show-entries`, { entry_ids: ids });
+      showAlert(ids.length === 1 ? "Показано игрокам." : `Показано игрокам: ${ids.length} записей.`);
+    } catch (e) {
+      showAlert(String(e instanceof Error ? e.message : e));
+    }
+  }
   useEffect(() => {
     api.get<{ code: string | null }>(`/systems/${systemId}`).then((s) => setSystemCode(s.code)).catch(() => setSystemCode(null));
   }, [systemId]);
@@ -454,19 +586,19 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (mode === "manual") {
       setSortMode(mode);
       setSortDir("asc");
-      localStorage.setItem(`compendium-sort-${section.id}`, `${mode}:asc`);
+      localStorage.setItem(sortKey, `${mode}:asc`);
       return;
     }
     if (mode === sortMode) {
       setSortDir((prev) => {
         const next = prev === "asc" ? "desc" : "asc";
-        localStorage.setItem(`compendium-sort-${section.id}`, `${mode}:${next}`);
+        localStorage.setItem(sortKey, `${mode}:${next}`);
         return next;
       });
     } else {
       setSortMode(mode);
       setSortDir("asc");
-      localStorage.setItem(`compendium-sort-${section.id}`, `${mode}:asc`);
+      localStorage.setItem(sortKey, `${mode}:asc`);
     }
   }
 
@@ -507,22 +639,45 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   function refresh() {
     api
       .get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`)
-      .then(setEntries);
+      .then(setEntries)
+      .catch(() => showAlert("Не удалось загрузить записи раздела."));
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [systemId, section.id]);
 
+  // Favourite (звёздочка) для mechanic_item/mechanic_group — как в бестиарии, один запрос на запись, без перезагрузки 13 групп
+  const favouriteChains = useRef(new Map<number, Promise<void>>());
+  const toggleFavourite = useCallback(async (entry: CompendiumEntry, favourite: boolean) => {
+    const prev = favouriteChains.current.get(entry.id) ?? Promise.resolve();
+    const next = prev.then(async () => {
+      setEntries((cur) => cur.map((e) => (e.id === entry.id ? { ...e, favourite } : e)));
+      try {
+        await api.put(`/systems/entries/${entry.id}/favourite`, { favourite });
+      } catch {
+        setEntries((cur) => cur.map((e) => (e.id === entry.id && e.favourite === favourite ? { ...e, favourite: !favourite } : e)));
+      }
+    });
+    favouriteChains.current.set(entry.id, next);
+    try { await next; } finally { if (favouriteChains.current.get(entry.id) === next) favouriteChains.current.delete(entry.id); }
+  }, []);
+
   useEffect(() => {
+    const ac = new AbortController();
+    let cancelled = false;
     if (isSpellSection || isMagicItemSection) {
-      loadClassOptions(systemId).then(setClassOptions);
-      loadClassHierarchy(systemId).then(setClassHierarchy);
+      loadClassOptions(systemId).then((v) => { if (!cancelled) setClassOptions(v); }).catch(() => { if (!cancelled) showAlert("Не удалось загрузить классы."); });
+      loadClassHierarchy(systemId).then((v) => { if (!cancelled) setClassHierarchy(v); }).catch(() => {});
     }
     if (isSpellSection || isEquipmentSection || isMagicItemSection) {
       // Needed for the school/creature-type filter dropdowns above the list
       // and for the pickers inside each entry's edit form (weapon
       // properties/mastery for equipment and magic-item weapons/armor).
-      loadMechanicsOptions(systemId).then(setMechanicsOptions);
+      loadMechanicsOptions(systemId, { signal: ac.signal }).then((v) => { if (!cancelled) setMechanicsOptions(v); }).catch((e) => {
+        if ((e as Error)?.name === "AbortError") return;
+        if (!cancelled) showAlert("Не удалось загрузить справочник (механики).");
+      });
     }
+    return () => { cancelled = true; ac.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemId, isSpellSection, isMagicItemSection, isEquipmentSection]);
 
@@ -564,15 +719,20 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   // expand-on-match pattern as the focusEntryId deep-link effect above) so
   // a match isn't hidden behind a collapsed parent.
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const h = setTimeout(() => setDebouncedQuery(searchQuery), 200);
+    return () => clearTimeout(h);
+  }, [searchQuery]);
 
   const searchVisible = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     if (!q) return null;
     const byId = new Map(entries.map((e) => [e.id, e]));
     const visible = new Set<number>();
     const toExpand = new Set<number>();
     for (const e of entries) {
-      if (!e.name.toLowerCase().includes(q)) continue;
+      if (!searchableText(e).includes(q)) continue;
       visible.add(e.id);
       let cur = e;
       while (cur.parent_id != null) {
@@ -585,7 +745,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       }
     }
     return { visible, toExpand };
-  }, [searchQuery, entries]);
+  }, [debouncedQuery, entries]);
 
   useEffect(() => {
     if (!searchVisible || searchVisible.toExpand.size === 0) return;
@@ -748,6 +908,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       showAlert("Выберите ровно 3 характеристики (или ни одной).");
       return;
     }
+    // mechanic_item: запрет дубля имени внутри одной группы (P2-3)
+    if (original?.kind === "mechanic_item" && editing.name.trim()) {
+      const siblings = entries.filter((e) => e.parent_id === original.parent_id && e.id !== editing.id && e.kind === "mechanic_item");
+      const norm = editing.name.trim().toLowerCase();
+      if (siblings.some((s) => s.name.trim().toLowerCase() === norm)) {
+        showAlert(`В этом списке уже есть пункт «${editing.name.trim()}». Дубли имён ломают пикера — выберите другое имя.`);
+        return;
+      }
+    }
     const data: Record<string, unknown> = { ...editing.data };
     if (original?.kind === "species") {
       data.creature_type = editing.creatureType;
@@ -825,6 +994,18 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data,
       description: editing.description,
     });
+    // Инвалидация кешей — пикера классов/видов и КЗ-снапшоты должны увидеть новый пункт без перезагрузки
+    try {
+      const { invalidateMechanicsCache } = await import("../compendiumMechanics");
+      invalidateMechanicsCache(systemId);
+    } catch {}
+    try {
+      const { clearEquipmentMetaCache } = await import("./dnd/DndCharacterForm");
+      if (original?.kind === "equipment" || original?.kind === "magic_item" || original?.kind === "mechanic_item") {
+        if (original) clearEquipmentMetaCache(original.id);
+        else clearEquipmentMetaCache();
+      }
+    } catch {}
     await syncMentionLinks(
       "compendium_entry",
       editing.id,
@@ -835,12 +1016,34 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     refresh();
   }
 
+  function countUsages(entry: CompendiumEntry): number {
+    // Сколько записей ссылается на этот mechanic_item (подсчёт в памяти — без доп. запроса, достаточно для предупреждения)
+    let n = 0;
+    const targetId = entry.id;
+    const targetName = entry.name.trim().toLowerCase();
+    for (const e of entries) {
+      if (e.id === entry.id) continue;
+      const d = e.data as Record<string, unknown>;
+      const checkRef = (v: unknown) => {
+        if (!v || typeof v !== "object" || !("id" in (v as Record<string, unknown>))) return false;
+        return (v as { id: number }).id === targetId;
+      };
+      const checkArr = (arr: unknown) => Array.isArray(arr) && arr.some(checkRef);
+      // fuzzy по имени — если id потерялся после пересоздания, но имя совпадает
+      const checkArrName = (arr: unknown) => Array.isArray(arr) && arr.some((x) => x && typeof x === "object" && "name" in (x as Record<string, unknown>) && String((x as { name: string }).name).trim().toLowerCase() === targetName);
+      if (checkRef(d.creature_type) || checkRef(d.school) || checkRef(d.origin_feat) || checkRef(d.weapon_mastery)) n++;
+      if (checkArr(d.senses) || checkArr(d.speeds) || checkArr(d.weapon_profs) || checkArr(d.armor_profs) || checkArr(d.tool_profs) || checkArr(d.classes) || checkArr(d.weapon_properties) || checkArrName(d.classes)) n++;
+      // Equipment/magic_item weapon properties etc. уже покрыты выше
+    }
+    return n;
+  }
+
   async function remove(entry: CompendiumEntry) {
     const kids = childrenOf(entry.id);
-    const msg =
-      kids.length > 0
-        ? `Удалить «${entry.name}» и все вложенные записи (${kids.length})?`
-        : `Удалить «${entry.name}»?`;
+    const usages = (entry.kind === "mechanic_item" || entry.kind === "mechanic_group") ? countUsages(entry) : 0;
+    let msg = `Удалить «${entry.name}»?`;
+    if (kids.length > 0) msg = `Удалить «${entry.name}» и все вложенные записи (${kids.length})?`;
+    if (usages > 0) msg += `\n\nВнимание: на эту запись ссылаются ещё ${usages} записей (пикеры сломаются).`;
     if (!confirm(msg)) return;
     await api.del(`/systems/entries/${entry.id}`);
     refresh();
@@ -905,12 +1108,18 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         if (filterSize !== "" && (e.data.size as string | undefined) !== filterSize) return false;
         return true;
       });
+    if (isEquipmentSection)
+      return topLevel.filter((e) => {
+        if (filterEquipmentCategory !== "" && (e.data.category as string | undefined) !== filterEquipmentCategory) return false;
+        return true;
+      });
     return topLevel;
   }, [
     topLevel,
     isSpellSection,
     isMagicItemSection,
     isVehicleSection,
+    isEquipmentSection,
     filterLevel,
     filterClass,
     filterSubclass,
@@ -922,6 +1131,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     filterAttunement,
     filterVehicleCategory,
     filterSize,
+    filterEquipmentCategory,
     classHierarchy,
   ]);
 
@@ -946,6 +1156,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     onDropEntry: reorderWithinGroup,
     sortForDisplay,
     systemCode,
+    onToggleFavourite: toggleFavourite,
+    selectedIds,
+    onToggleSelect: toggleSelect,
   };
 
   const magicItemGroups: [string, CompendiumEntry[]][] | null = !isMagicItemSection
@@ -956,71 +1169,326 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     ? groupByCategory(sortForDisplay(filteredTopLevel), "rarity", MAGIC_ITEM_RARITIES, sortDir)
     : null;
 
+  // 6 категорий справочника — группировка mechanic_group по MECHANICS_CATEGORIES.
+  const mechanicsByCategory = useMemo(() => {
+    if (!isMechanicsSection) return null;
+    const map = new Map<string, CompendiumEntry[]>();
+    for (const c of MECHANICS_CATEGORIES) map.set(c.key, []);
+    const sorted = sortForDisplay(topLevel);
+    for (const e of sorted) {
+      const cat = mechanicsCategoryForGroupName(e.name) ?? "mechanics";
+      if (map.has(cat)) map.get(cat)!.push(e);
+      else map.get("mechanics")!.push(e);
+    }
+    return map;
+  }, [isMechanicsSection, topLevel, sortForDisplay]);
+
+  // Избранное — отдельный раздел для помеченных звёздочкой записей (пока ни одной — раздела нет).
+  const favouriteEntries = useMemo(() => {
+    if (!isMechanicsSection) return [] as CompendiumEntry[];
+    return entries.filter((e) => e.favourite);
+  }, [isMechanicsSection, entries]);
+
+  // Справочник — 6 блоков как ОБЩЕЕ + отдельный Избранное. Остальные разделы — прежний один-карточный вид.
+  if (isMechanicsSection) {
+    // Избранные "уходят" из категорий — в блоках показываем только незазвёздоченные
+    const nonFavouriteTopLevel = topLevel.filter((e) => !e.favourite);
+    const nonFavouriteByCategory = (() => {
+      const map = new Map<string, CompendiumEntry[]>();
+      for (const c of MECHANICS_CATEGORIES) map.set(c.key, []);
+      const sorted = sortForDisplay(nonFavouriteTopLevel);
+      for (const e of sorted) {
+        const cat = mechanicsCategoryForGroupName(e.name) ?? "mechanics";
+        if (map.has(cat)) map.get(cat)!.push(e);
+        else map.get("mechanics")!.push(e);
+      }
+      return map;
+    })();
+    const blocks = MECHANICS_CATEGORIES.map((cat) => [cat.label, nonFavouriteByCategory.get(cat.key) ?? []] as [string, CompendiumEntry[]]).filter(([, list]) => list.length > 0);
+    return (
+      <div className="stack">
+          <div className="card stack">
+            <div className="row sort-toggle" style={{ gap: 4 }}>
+              <span className="muted">Сортировка:</span>
+              <button className={sortMode === "alpha" ? "active-sort" : ""} onClick={() => changeSortMode("alpha")} title={sortMode === "alpha" ? (sortDir === "asc" ? "А-Я (повтор — Я-А)" : "Я-А (повтор — А-Я)") : "А-Я"}>
+                {sortMode === "alpha" ? (sortDir === "asc" ? "А-Я ↑" : "Я-А ↓") : "А-Я"}
+              </button>
+              <button className={sortMode === "manual" ? "active-sort" : ""} onClick={() => changeSortMode("manual")}>Вручную</button>
+            </div>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <input type="text" placeholder="Поиск по названию…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ maxWidth: 260 }} />
+              {searchQuery !== "" && (
+                <button type="button" className="comp-mini" title="Очистить поиск" onClick={() => setSearchQuery("")}>
+                  <NavIcon name="close" />
+                </button>
+              )}
+              {topLevel.length > 0 && (
+                <>
+                  <label className="row" style={{ gap: 6, cursor: "pointer", marginLeft: 4 }}>
+                    <input type="checkbox" checked={selectedIds.size === entries.filter((e) => e.kind === "mechanic_item").length && entries.filter((e) => e.kind === "mechanic_item").length > 0} onChange={(e) => { if (e.target.checked) setSelectedIds(new Set(entries.filter((en) => en.kind === "mechanic_item").map((en) => en.id))); else setSelectedIds(new Set()); }} />
+                    Выбрать всё
+                  </label>
+                  <button type="button" className="primary" disabled={selectedIds.size === 0} onClick={() => setVerstakOpen(true)} title="Открыть Верстак — превью, печать, показать игрокам">
+                    <NavIcon name="eye" /> {selectedIds.size > 0 ? `Верстак · ${selectedIds.size}` : "Верстак"}
+                  </button>
+                  {selectedIds.size > 0 && <button type="button" onClick={() => setSelectedIds(new Set())}>Сбросить</button>}
+                </>
+              )}
+              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", marginLeft: "auto" }}>
+                {selectedIds.size > 0 ? `Выбрано: ${selectedIds.size}` : ""}
+              </span>
+            </div>
+          {topLevel.length === 0 && searchQuery.trim() && <p className="muted">Ничего не найдено по «{searchQuery.trim()}».</p>}
+          {topLevel.length === 0 && !searchQuery.trim() && (
+            <EmptyState title="Справочник пуст" hint="Заведите списки — типы существ, школы магии, свойства оружия и другие — чтобы пикера классов и заклинаний заработали." action={<button className="primary" onClick={() => addEntry(null, rootKind)}>+ Добавить {kindLabel(rootKind).toLowerCase()}</button>} />
+          )}
+        </div>
+        {favouriteEntries.length > 0 && (
+          <details className="card stack" open>
+            <summary className="card-header--inverted is-themed chevron-summary" style={{ cursor: "pointer", listStyle: "none" }}>
+              <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                <NavIcon name="chevron" className="chevron-icon" />
+                <span className="card-header--inverted-label">Избранное</span>
+              </span>
+              <span className="card-header--inverted-count">{favouriteEntries.length}</span>
+            </summary>
+            <div className="comp-list" style={{ marginTop: 8 }}>
+              {sortForDisplay(favouriteEntries).map((e) => (
+                <SortableRow key={e.id} entry={e} group={favouriteEntries} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
+                  <EntryNode entry={e} depth={0} {...nodeProps} />
+                </SortableRow>
+              ))}
+            </div>
+          </details>
+        )}
+        {blocks.length === 0 && topLevel.length > 0 && <div className="card stack"><p className="muted">В этой категории пока пусто.</p></div>}
+        {blocks.map(([label, list]) => {
+          // чекбокс раздела — выбирает всё внутри раздела (все группы категории + их потомки)
+          const getAllIds = () => {
+            const byParent = new Map<number | null, number[]>();
+            for (const e of entries) {
+              const k = e.parent_id;
+              if (!byParent.has(k)) byParent.set(k, []);
+              byParent.get(k)!.push(e.id);
+            }
+            const collect = (root: number): number[] => {
+              const out: number[] = [];
+              const stack = [root];
+              while (stack.length) {
+                const cur = stack.pop()!;
+                out.push(cur);
+                const kids = byParent.get(cur) ?? [];
+                for (const kid of kids) stack.push(kid);
+              }
+              return out;
+            };
+            return list.flatMap((g) => collect(g.id));
+          };
+          const allIds = getAllIds();
+          const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+          const someSelected = allIds.some((id) => selectedIds.has(id));
+          const catChecked = allSelected;
+          const catIndeterminate = !allSelected && someSelected;
+          return (
+          <details key={label} className="card stack" open>
+            <summary className="card-header--inverted is-themed chevron-summary" style={{ cursor: "pointer", listStyle: "none" }}>
+              <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                <input type="checkbox" checked={catChecked} ref={(el) => { if (el) el.indeterminate = catIndeterminate; }} onChange={() => toggleCategorySelection(list)} onClick={(e) => e.stopPropagation()} aria-label={`Выбрать ${label}`} title="Выбрать всё в разделе" />
+                <NavIcon name="chevron" className="chevron-icon" />
+                <span className="card-header--inverted-label">{label}</span>
+              </span>
+              <span className="card-header--inverted-count">{list.length}</span>
+            </summary>
+            <div className="comp-list" style={{ marginTop: 8 }}>
+              {list.map((e) => (
+                <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
+                  <EntryNode entry={e} depth={0} {...nodeProps} />
+                </SortableRow>
+              ))}
+            </div>
+          </details>
+          );
+        })}
+        {verstakOpen && <Verstak entries={entries} selectedIds={selectedIds} onPrint={handlePrint} onShow={handleShowToPlayers} forceOpen onClose={() => setVerstakOpen(false)} onRemove={(id) => setSelectedIds((prev) => { const n = new Set(prev); // удаляем группу вместе с потомками
+                const byParent = new Map<number | null, number[]>();
+                for (const e of entries) { const k = e.parent_id; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k)!.push(e.id); }
+                const collect = (root: number): number[] => { const out:number[]=[]; const stack=[root]; while(stack.length){ const cur=stack.pop()!; out.push(cur); const kids=byParent.get(cur)??[]; for(const kid of kids) stack.push(kid);} return out; };
+                collect(id).forEach((did) => n.delete(did));
+                return n; })} />}
+        {alertDialog}
+      </div>
+    );
+  }
+
   return (
     <div className="card stack">
-      {section.kind === "mechanics" && <h4 style={{ margin: 0 }}>Общее</h4>}
-      <div className="row sort-toggle" style={{ gap: 4 }}>
-        <span className="muted">Сортировка:</span>
-        <button
-          className={sortMode === "alpha" ? "active-sort" : ""}
-          onClick={() => changeSortMode("alpha")}
-          title={sortMode === "alpha" ? (sortDir === "asc" ? "А-Я (повтор — Я-А)" : "Я-А (повтор — А-Я)") : "А-Я"}
-        >
-          {sortMode === "alpha" ? (sortDir === "asc" ? "А-Я ↑" : "Я-А ↓") : "А-Я"}
-        </button>
-        <button
-          className={sortMode === "manual" ? "active-sort" : ""}
-          onClick={() => changeSortMode("manual")}
-        >
-          Вручную
-        </button>
-        {isSpellSection && (
-          <>
-            <button
-              className={sortMode === "level" ? "active-sort" : ""}
-              onClick={() => changeSortMode("level")}
-            >
-              По уровню{sortMode === "level" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-            </button>
-            <button
-              className={sortMode === "school" ? "active-sort" : ""}
-              onClick={() => changeSortMode("school")}
-            >
-              По школе{sortMode === "school" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-            </button>
-          </>
-        )}
-        {isMagicItemSection && (
-          <>
+      {section.kind === "mechanics" && <div className="card-header--inverted"><span className="card-header--inverted-label">Общее</span><span className="card-header--inverted-count">{topLevel.length}</span></div>}
+      <div className="row sort-toggle" style={{ gap: 4, justifyContent: "space-between", flexWrap: "wrap" }}>
+        <span className="row" style={{ gap: 4, alignItems: "center" }}>
+          <span className="muted">Сортировка:</span>
+          <button
+            className={sortMode === "alpha" ? "active-sort" : ""}
+            onClick={() => changeSortMode("alpha")}
+            title={sortMode === "alpha" ? (sortDir === "asc" ? "А-Я (повтор — Я-А)" : "Я-А (повтор — А-Я)") : "А-Я"}
+          >
+            {sortMode === "alpha" ? (sortDir === "asc" ? "А-Я ↑" : "Я-А ↓") : "А-Я"}
+          </button>
+          <button
+            className={sortMode === "manual" ? "active-sort" : ""}
+            onClick={() => changeSortMode("manual")}
+          >
+            Вручную
+          </button>
+          {isSpellSection && (
+            <>
+              <button
+                className={sortMode === "level" ? "active-sort" : ""}
+                onClick={() => changeSortMode("level")}
+              >
+                По уровню{sortMode === "level" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+              </button>
+              <button
+                className={sortMode === "school" ? "active-sort" : ""}
+                onClick={() => changeSortMode("school")}
+              >
+                По школе{sortMode === "school" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+              </button>
+            </>
+          )}
+          {isMagicItemSection && (
+            <>
+              <button
+                className={sortMode === "type" ? "active-sort" : ""}
+                onClick={() => changeSortMode("type")}
+              >
+                По типу{sortMode === "type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+              </button>
+              <button
+                className={sortMode === "rarity" ? "active-sort" : ""}
+                onClick={() => changeSortMode("rarity")}
+              >
+                По редкости{sortMode === "rarity" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+              </button>
+            </>
+          )}
+          {isEquipmentSection && (
             <button
               className={sortMode === "type" ? "active-sort" : ""}
               onClick={() => changeSortMode("type")}
             >
-              По типу{sortMode === "type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+              По категории{sortMode === "type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+            </button>
+          )}
+        </span>
+        {(isEquipmentSection || isSpellSection || isClassSection || isSpeciesSection || isBackgroundSection || isFeatSection || isMagicItemSection) && (
+          <span className="row" style={{ gap: 6, alignItems: "center" }}>
+            <button
+              type="button"
+              className={viewMode === "grid" ? "active-sort" : ""}
+              onClick={() => setViewMode("grid")}
+              title="Плитками"
+            >
+              ▦ Плитки
             </button>
             <button
-              className={sortMode === "rarity" ? "active-sort" : ""}
-              onClick={() => changeSortMode("rarity")}
+              type="button"
+              className={viewMode === "list" ? "active-sort" : ""}
+              onClick={() => setViewMode("list")}
+              title="Списком"
             >
-              По редкости{sortMode === "rarity" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+              ☰ Список
             </button>
-          </>
+          </span>
         )}
       </div>
-      <div className="row" style={{ gap: 4 }}>
+      <div className="res-toolbar" style={{ marginTop: 8 }}>
         <input
+          className="res-toolbar__search"
           type="text"
           placeholder="Поиск по названию…"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ maxWidth: 260 }}
         />
+        {isEquipmentSection && (
+          <select value={filterEquipmentCategory} onChange={(e) => setFilterEquipmentCategory(e.target.value)} style={{ maxWidth: 220 }}>
+            <option value="">Все категории</option>
+            {EQUIPMENT_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
+        {isEquipmentSection && filterEquipmentCategory && (
+          <button type="button" onClick={() => setFilterEquipmentCategory("")} style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }} title="Сбросить категорию">
+            Сбросить
+          </button>
+        )}
+        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
+          {isEquipmentSection ? `${filteredTopLevel.length} / ${topLevel.length}` : ""}
+        </span>
         {searchQuery !== "" && (
           <button type="button" className="comp-mini" title="Очистить поиск" onClick={() => setSearchQuery("")}>
             <NavIcon name="close" />
           </button>
         )}
+        {isMechanicsSection && topLevel.length > 0 && (
+          <>
+            <label className="row" style={{ gap: 6, cursor: "pointer", marginLeft: 4 }}>
+              <input
+                type="checkbox"
+                checked={selectedIds.size === entries.filter((e) => e.kind === "mechanic_item").length && entries.filter((e) => e.kind === "mechanic_item").length > 0}
+                onChange={(e) => {
+                  if (e.target.checked) setSelectedIds(new Set(entries.filter((en) => en.kind === "mechanic_item").map((en) => en.id)));
+                  else setSelectedIds(new Set());
+                }}
+              />
+              Выбрать всё
+            </label>
+            <button type="button" onClick={handlePrint} disabled={selectedIds.size === 0} title="Печать выбранных">
+              <NavIcon name="download" /> Печать
+            </button>
+            <button type="button" className="primary" onClick={handleShowToPlayers} disabled={selectedIds.size === 0} title="Показать игрокам карточкой">
+              <NavIcon name="eye" /> Показать игрокам
+            </button>
+            {selectedIds.size > 0 && (
+              <button type="button" onClick={() => setSelectedIds(new Set())}>Сбросить</button>
+            )}
+          </>
+        )}
+        {isMechanicsSection && (
+          <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", marginLeft: "auto" }}>
+            {selectedIds.size > 0 ? `Выбрано: ${selectedIds.size}` : ""}
+          </span>
+        )}
       </div>
+      {isMechanicsSection && topLevel.length > 0 && mechanicsByCategory && (
+        <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className={mechanicsCategoryFilter === "" ? "active-sort" : ""}
+            onClick={() => setMechanicsCategoryFilter("")}
+          >
+            Все · {topLevel.length}
+          </button>
+          {MECHANICS_CATEGORIES.map((cat) => {
+            const count = mechanicsByCategory.get(cat.key)?.length ?? 0;
+            if (count === 0) return null;
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                className={mechanicsCategoryFilter === cat.key ? "active-sort" : ""}
+                onClick={() => setMechanicsCategoryFilter((prev) => (prev === cat.key ? "" : cat.key))}
+                title={cat.label}
+              >
+                {cat.label} · {count}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {isMagicItemSection && (
         <div className="row" style={{ flexWrap: "wrap" }}>
           <select value={filterItemType} onChange={(e) => setFilterItemType(e.target.value)}>
@@ -1123,8 +1591,81 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           </select>
         </div>
       )}
+
       <div className="comp-list">
-        {isSpellSection
+        {isSpellSection && viewMode === "grid" ? (
+          <SpellTileGrid
+            entries={filteredTopLevel}
+            grouping={spellGrouping}
+            sortDir={sortDir}
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+          />
+        ) : isClassSection && viewMode === "grid" ? (
+          <ClassTileGrid
+            entries={filteredTopLevel}
+            grouping={sortMode === "alpha" ? "alpha" : "category"}
+            sortDir={sortDir}
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+          />
+        ) : isSpeciesSection && viewMode === "grid" ? (
+          <SimpleKindTileGrid
+            entries={filteredTopLevel}
+            grouping={sortMode === "alpha" ? "alpha" : "category"}
+            sortDir={sortDir}
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+            categoryField="size"
+            kindLabel="Вид"
+          />
+        ) : isFeatSection && viewMode === "grid" ? (
+          <SimpleKindTileGrid
+            entries={filteredTopLevel}
+            grouping={sortMode === "alpha" ? "alpha" : "category"}
+            sortDir={sortDir}
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+            categoryField="category"
+            kindLabel="Черта"
+          />
+        ) : isBackgroundSection && viewMode === "grid" ? (
+          <SimpleKindTileGrid
+            entries={filteredTopLevel}
+            grouping="alpha"
+            sortDir={sortDir}
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+            categoryField={null}
+            kindLabel="Предыстория"
+          />
+        ) : isMagicItemSection && viewMode === "grid" ? (
+          <SimpleKindTileGrid
+            entries={filteredTopLevel}
+            grouping={sortMode === "type" ? "category" : sortMode === "rarity" ? "category" : "alpha"}
+            sortDir={sortDir}
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+            categoryField={sortMode === "rarity" ? "rarity" : "item_type"}
+            kindLabel="Маг. предмет"
+          />
+        ) : isEquipmentSection && viewMode === "grid" ? (
+          <EquipmentTileGrid
+            entries={filteredTopLevel}
+            grouping={equipGrouping as "alpha" | "category"}
+            sortDir={sortDir}
+            sectionId={section.id}
+            searchActive={searchQuery.trim() !== ""}
+            onToggleFavourite={toggleFavourite}
+            onEdit={startEdit}
+          />
+        ) : isSpellSection
           ? sortMode === "school"
             ? groupBySchool(sortForDisplay(filteredTopLevel), sortDir).map(
                 ([label, list]) => [label, list] as [string, CompendiumEntry[]]
@@ -1173,8 +1714,31 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                   <EntryNode entry={e} depth={0} {...nodeProps} />
                 </SortableRow>
               ))
+          : isMechanicsSection && mechanicsByCategory
+          ? (() => {
+              const catsToShow = mechanicsCategoryFilter
+                ? MECHANICS_CATEGORIES.filter((c) => c.key === mechanicsCategoryFilter)
+                : MECHANICS_CATEGORIES;
+              const blocks = catsToShow
+                .map((cat) => [cat.label, mechanicsByCategory.get(cat.key) ?? []] as [string, CompendiumEntry[]])
+                .filter(([, list]) => list.length > 0);
+              if (blocks.length === 0) return <p className="muted">В этой категории пока пусто.</p>;
+              return blocks.map(([label, list]) => (
+                <details key={label} className="comp-category" open={!!mechanicsCategoryFilter || !!searchQuery.trim()}>
+                  <summary className="comp-level-label chevron-summary">
+                    <NavIcon name="chevron" className="chevron-icon" />
+                    {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
+                  </summary>
+                  {list.map((e) => (
+                    <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
+                      <EntryNode entry={e} depth={0} {...nodeProps} />
+                    </SortableRow>
+                  ))}
+                </details>
+              ));
+            })()
           : categoryGroups
-          ? groupByCategory(sortForDisplay(topLevel), "category", categoryGroups, sortDir).map(([cat, list]) => (
+          ? groupByCategory(sortForDisplay(isEquipmentSection ? filteredTopLevel : topLevel), "category", categoryGroups, sortDir).map(([cat, list]) => (
               <details key={cat} className="comp-category">
                 <summary className="comp-level-label chevron-summary">
                   <NavIcon name="chevron" className="chevron-icon" />
@@ -1207,21 +1771,35 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                 <EntryNode entry={e} depth={0} {...nodeProps} />
               </SortableRow>
             ))
+          : isEquipmentSection
+          ? sortForDisplay(filteredTopLevel).map((e) => (
+              <SortableRow key={e.id} entry={e} group={filteredTopLevel} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
+                <EntryNode entry={e} depth={0} {...nodeProps} />
+              </SortableRow>
+            ))
           : sortForDisplay(topLevel).map((e) => (
               <SortableRow key={e.id} entry={e} group={topLevel} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
                 <EntryNode entry={e} depth={0} {...nodeProps} />
               </SortableRow>
             ))}
         {topLevel.length === 0 && (
-          <p className="muted">
-            {searchQuery.trim() ? `Ничего не найдено по «${searchQuery.trim()}».` : "Пока пусто."}
-          </p>
+          searchQuery.trim() ? (
+            <p className="muted">Ничего не найдено по «{searchQuery.trim()}».</p>
+          ) : section.kind === "mechanics" ? (
+            <EmptyState
+              title="Справочник пуст"
+              hint="Заведите списки — типы существ, школы магии, свойства оружия и другие — чтобы пикера классов и заклинаний заработали."
+              action={<button className="primary" onClick={() => addEntry(null, rootKind)}>+ Добавить {kindLabel(rootKind).toLowerCase()}</button>}
+            />
+          ) : (
+            <p className="muted">Пока пусто.</p>
+          )
         )}
-        {(isSpellSection || isMagicItemSection) && topLevel.length > 0 && filteredTopLevel.length === 0 && (
+        {(isSpellSection || isMagicItemSection || isEquipmentSection || isVehicleSection) && topLevel.length > 0 && filteredTopLevel.length === 0 && (
           <p className="muted">Ничего не найдено по фильтрам.</p>
         )}
       </div>
-      {section.kind !== "mechanics" && (
+      {section.kind !== "mechanics" && topLevel.length > 0 && (
         <button style={{ alignSelf: "flex-start" }} onClick={() => addEntry(null, rootKind)}>
           + Добавить {kindLabel(rootKind).toLowerCase()}
         </button>
@@ -1255,6 +1833,9 @@ interface NodeProps {
   sortForDisplay: (list: CompendiumEntry[]) => CompendiumEntry[];
   parentGroupName?: string;
   systemCode?: string | null;
+  onToggleFavourite?: (entry: CompendiumEntry, favourite: boolean) => void;
+  selectedIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
 }
 
 // Drop target for one row when the section is in manual sort mode — shared
@@ -1299,7 +1880,20 @@ function EntryNode(props: NodeProps) {
   const [linkCopied, setLinkCopied] = useState(false);
   async function copyLink() {
     const url = `${window.location.origin}/systems/${entry.system_id}?section=${entry.section_id}&entry=${entry.id}`;
-    await navigator.clipboard.writeText(url);
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+      else throw new Error("no clipboard");
+    } catch {
+      // fallback для Electron/HTTP без secure context
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(ta);
+    }
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 1500);
   }
@@ -1435,22 +2029,64 @@ function EntryNode(props: NodeProps) {
     classProgression.columns.length > 0 ||
     isMonster;
 
+  const isMechanicGroup = entry.kind === "mechanic_group";
   const canToggle = hasBody || isEditing;
 
   return (
-    <div className="comp-node" id={`comp-entry-${entry.id}`}>
+    <div className={`comp-node${isMechanicGroup ? " comp-node--group" : ""}`} id={`comp-entry-${entry.id}`} role="listitem">
       <div
-        className={`comp-row${props.focusEntryId === entry.id ? " comp-row-focus" : ""}${litmMight ? ` litm-power-${litmMight}` : ""}`}
+        role="button"
+        tabIndex={canToggle ? 0 : -1}
+        aria-expanded={canToggle ? (isOpen || isEditing) : undefined}
+        aria-label={isMechanicGroup ? `Список ${entry.name || "Без названия"}` : entry.name || "Без названия"}
+        className={`comp-row${isMechanicGroup ? " comp-row--group" : ""}${props.focusEntryId === entry.id ? " comp-row-focus" : ""}${litmMight ? ` litm-power-${litmMight}` : ""}`}
         onClick={() => canToggle && props.onToggle(entry.id)}
+        onKeyDown={(e) => { if (canToggle && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); props.onToggle(entry.id); } }}
         style={{ cursor: canToggle ? "pointer" : "default" }}
       >
         <span className={`comp-toggle${canToggle ? "" : " comp-toggle-disabled"}`} aria-hidden="true">
           <NavIcon name="chevron" className={`chevron-icon${isOpen || isEditing ? " is-open" : ""}`} />
         </span>
+        {props.selectedIds && (entry.kind === "mechanic_item" || entry.kind === "mechanic_group") && (() => {
+          const isGroup = entry.kind === "mechanic_group";
+          let checked = props.selectedIds!.has(entry.id);
+          let indeterminate = false;
+          if (isGroup) {
+            const collect = (root: number): number[] => {
+              const out: number[] = [];
+              const stack = [root];
+              while (stack.length) {
+                const cur = stack.pop()!;
+                out.push(cur);
+                const kids = props.childrenOf(cur);
+                for (const k of kids) stack.push(k.id);
+              }
+              return out;
+            };
+            const subtree = collect(entry.id);
+            const all = subtree.every((id) => props.selectedIds!.has(id));
+            const some = subtree.some((id) => props.selectedIds!.has(id));
+            checked = all;
+            indeterminate = !all && some;
+          }
+          return (
+            <input
+              type="checkbox"
+              checked={checked}
+              ref={(el) => { if (el) el.indeterminate = indeterminate; }}
+              onChange={() => props.onToggleSelect?.(entry.id)}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Выбрать ${entry.name || "Без названия"}`}
+              title={isGroup ? "Выбрать раздел — всё внутри" : "Выбрать для печати/показа"}
+            />
+          );
+        })()}
         {props.sortMode === "manual" && (
           <span
             className="comp-drag-handle"
             title="Перетащить, чтобы изменить порядок"
+            role="button"
+            aria-label="Перетащить для сортировки"
             draggable
             onClick={(e) => e.stopPropagation()}
             onDragStart={(ev) => {
@@ -1488,6 +2124,16 @@ function EntryNode(props: NodeProps) {
         )}
         {entry.level != null && !isSpell && <span className="comp-level">ур. {entry.level}</span>}
         <span className="comp-actions" onClick={(e) => e.stopPropagation()}>
+          {(entry.kind === "mechanic_item" || entry.kind === "mechanic_group") && (
+            <button
+              className={`comp-mini${entry.favourite ? " is-active" : ""}`}
+              title={entry.favourite ? "Убрать из избранного" : "В избранное"}
+              aria-label={entry.favourite ? "Убрать из избранного" : "В избранное"}
+              onClick={() => props.onToggleFavourite?.(entry, !entry.favourite)}
+            >
+              <NavIcon name="star" filled={!!entry.favourite} />
+            </button>
+          )}
           <button
             className="comp-mini"
             title="Отправить в мешок"
@@ -1908,6 +2554,7 @@ function EntryNode(props: NodeProps) {
                   systemId={entry.system_id}
                   items={editing.equipmentAItems}
                   gold={editing.equipmentAGold}
+                  hasText={!!editing.equipmentA.trim()}
                   onChange={(patch) =>
                     props.onDraftChange({
                       ...editing,
@@ -1926,6 +2573,7 @@ function EntryNode(props: NodeProps) {
                   systemId={entry.system_id}
                   items={editing.equipmentBItems}
                   gold={editing.equipmentBGold}
+                  hasText={!!editing.equipmentB.trim()}
                   onChange={(patch) =>
                     props.onDraftChange({
                       ...editing,
@@ -2090,6 +2738,7 @@ function EntryNode(props: NodeProps) {
                   systemId={entry.system_id}
                   items={editing.equipmentAItems}
                   gold={editing.equipmentAGold}
+                  hasText={!!editing.equipmentA.trim()}
                   onChange={(patch) =>
                     props.onDraftChange({
                       ...editing,
@@ -2108,6 +2757,7 @@ function EntryNode(props: NodeProps) {
                   systemId={entry.system_id}
                   items={editing.equipmentBItems}
                   gold={editing.equipmentBGold}
+                  hasText={!!editing.equipmentB.trim()}
                   onChange={(patch) =>
                     props.onDraftChange({
                       ...editing,
@@ -2465,7 +3115,7 @@ function EntryNode(props: NodeProps) {
           {isClass
             ? <ChildGroups {...props} />
             : kids.length > 0 && <ChildGroups {...props} />}
-          {!isClass && def?.childKinds && (
+          {!isClass && def?.childKinds && (entry.kind !== "mechanic_item" || props.depth < 2) && (
             <div className="row" style={{ marginTop: 6 }}>
               {def.childKinds.map((ck) => (
                 <button key={ck.kind} className="comp-mini" onClick={() => props.onAddChild(entry.id, ck.kind)}>
@@ -2827,9 +3477,14 @@ function ChildGroups(props: NodeProps) {
   const isClassParent = props.entry.kind === "class";
   const featuresBlock = levelGrouped(features);
   const sortedOthers = props.sortForDisplay(others);
+  // Пагинация для справочника: 50 за раз, иначе 200+ пунктов вешают мобилку
+  const PAGE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => { setVisibleCount(PAGE); }, [sortedOthers.length, props.entry.id]);
+  const pagedOthers = sortedOthers.slice(0, visibleCount);
   const othersBlock = sortedOthers.length > 0 && (
     <div>
-      {sortedOthers.map((o) => (
+      {pagedOthers.map((o) => (
         <SortableRow key={o.id} entry={o} group={sortedOthers} sortMode={props.sortMode} dragId={props.dragId} onDragStartEntry={props.onDragStartEntry} onDropEntry={props.onDropEntry}>
           <EntryNode
             {...props}
@@ -2839,6 +3494,11 @@ function ChildGroups(props: NodeProps) {
           />
         </SortableRow>
       ))}
+      {visibleCount < sortedOthers.length && (
+        <button type="button" className="comp-mini" style={{ marginTop: 6 }} onClick={() => setVisibleCount((n) => n + PAGE)}>
+          Показать ещё {Math.min(PAGE, sortedOthers.length - visibleCount)} из {sortedOthers.length}
+        </button>
+      )}
     </div>
   );
 

@@ -201,7 +201,8 @@ CREATE TABLE IF NOT EXISTS statblocks (
   note TEXT DEFAULT '',
   theme TEXT, -- statblock visual theme (see statblock themes), NULL = default "╨У╤А╨░╨▓╤О╤А╨░" (theme-color)
   density TEXT, -- 'comfortable' | 'compact', NULL = comfortable
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS character_chapters (

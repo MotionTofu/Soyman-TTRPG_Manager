@@ -5,6 +5,7 @@ import multer from "multer";
 import path from "path";
 import { db } from "../db/db";
 import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../db/defaultSections";
+import { broadcastToCampaign } from "../services/realtime";
 import {
   entryImageFolder,
   ensureSubfolder,
@@ -109,22 +110,72 @@ const MECHANICS_GROUPS = [
   "Мировоззрение",
 ];
 
+const MECHANICS_CATEGORIES = [
+  { key: "magic", label: "Магические эффекты" },
+  { key: "character", label: "Навыки и Владения" },
+  { key: "world", label: "Мироустройство" },
+  { key: "mechanics", label: "Базовые Механики" },
+  { key: "equipment", label: "Снаряжение и Экономика" },
+  { key: "hazards", label: "Опасности и Окружение" },
+] as const;
+
+const MECHANICS_GROUP_TO_CATEGORY: Record<string, string> = {
+  "Школы магии": "magic", "Чары": "magic", "Благословения": "magic", "Проклятья и заражения": "magic", "Эффекты планов": "magic", "Области действия": "magic",
+  "Характеристики": "character", "Навыки": "character", "Языки": "character", "Владения доспехами": "character", "Владения инструментами": "character", "Владения оружием": "character", "Мировоззрение": "character", "Особые владения": "character",
+  "Космология": "world", "Мультивселенная": "world", "Мультивселенная — Внешние планы": "world", "Мультивселенная — Внутренние планы": "world", "Мультивселенная — Материальные планы": "world", "Мультивселенная — Переходные планы": "world", "Лор": "world", "Отношения": "world", "Репутация": "world", "Знаки престижа": "world",
+  "Правила": "mechanics", "Действия": "mechanics", "Типы существ и их особенности": "mechanics", "Типы урона": "mechanics", "Особое восприятие": "mechanics", "Скорости передвижения и их особенности": "mechanics", "Толпы": "mechanics", "Погони": "mechanics", "Свойства оружия": "mechanics", "Мастерство оружия": "mechanics", "Состояния": "mechanics",
+  "Магические предметы": "equipment", "Сокровища": "equipment", "Создание снаряжения": "equipment", "Огнестрельное оружие": "equipment", "Монеты": "equipment",
+  "Ловушки": "hazards", "Двери": "hazards", "Опасности": "hazards", "Яды": "hazards", "Эффекты окружающей среды": "hazards",
+};
+
+const MECHANICS_GROUP_KEYS: Record<string, string> = {
+  "Типы существ и их особенности": "creature_types",
+  "Особое восприятие": "senses",
+  "Скорости передвижения и их особенности": "speeds",
+  "Типы урона": "damage_types",
+  "Языки": "languages",
+  "Владения инструментами": "tools",
+  "Владения доспехами": "armor",
+  "Владения оружием": "weapons",
+  "Особые владения": "special",
+  "Школы магии": "schools",
+  "Свойства оружия": "weapon_properties",
+  "Мастерство оружия": "weapon_mastery",
+  "Мировоззрение": "alignment",
+};
+
 function seedMechanicsGroups(systemId: string | number, sectionId: number) {
   const existingRows = db
-    .prepare("SELECT name FROM compendium_entries WHERE section_id = ? AND parent_id IS NULL")
-    .all(sectionId) as { name: string }[];
+    .prepare("SELECT name, data FROM compendium_entries WHERE section_id = ? AND parent_id IS NULL")
+    .all(sectionId) as { name: string; data: string }[];
   const existingNames = new Set(existingRows.map((r) => r.name));
+  const existingKeys = new Set(
+    existingRows.map((r) => {
+      try { return (JSON.parse(r.data || "{}") as { group_key?: string }).group_key; } catch { return undefined; }
+    }).filter(Boolean) as string[]
+  );
   const insert = db.prepare(
     `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, data, description, position)
-     VALUES (?, ?, NULL, 'mechanic_group', ?, '{}', '', ?)`
+     VALUES (?, ?, NULL, 'mechanic_group', ?, ?, '', ?)`
   );
+  // Backfill missing group_key for legacy rows (переименование не ломает связи)
+  for (const row of existingRows) {
+    let data: Record<string, unknown> = {};
+    try { data = JSON.parse(row.data || "{}"); } catch {}
+    const expectedKey = MECHANICS_GROUP_KEYS[row.name];
+    if (expectedKey && !data.group_key) {
+      data.group_key = expectedKey;
+      db.prepare("UPDATE compendium_entries SET data = ? WHERE section_id = ? AND name = ?").run(JSON.stringify(data), sectionId, row.name);
+    }
+  }
   // On a brand-new section this seeds all groups; on an existing one it only
   // backfills groups added since (e.g. "Школы магии"), so upgrading doesn't
   // touch systems that already have their mechanics lists populated.
   let position = existingRows.length;
   for (const name of MECHANICS_GROUPS) {
-    if (existingNames.has(name)) continue;
-    insert.run(systemId, sectionId, name, position++);
+    const key = MECHANICS_GROUP_KEYS[name];
+    if (existingNames.has(name) || (key && existingKeys.has(key))) continue;
+    insert.run(systemId, sectionId, name, JSON.stringify({ group_key: key }), position++);
   }
 }
 
@@ -481,6 +532,10 @@ systemsRouter.delete("/entries/chapters/:chapterId", (req, res) => {
 // Загружается с вкладки «Изображения» профиля; картинки статблоков лежат
 // там же на вкладке, но грузятся своим маршрутом (routes/statblocks.ts).
 systemsRouter.post("/entries/:entryId/avatar", upload.single("file"), async (req, res) => {
+  if (req.file) {
+    const rawExt = path.extname(req.file.originalname).toLowerCase();
+    if (rawExt && !ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Недопустимое расширение файла" });
+  }
   const entry = db
     .prepare(
       `SELECT ce.id, ce.kind, ce.avatar_image_path, sy.folder_path AS system_folder_path
@@ -666,6 +721,36 @@ systemsRouter.post("/:id/tidy", (req, res) => {
     ? move_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0)
     : [];
   res.json(applyTidy(db, Number(req.params.id), ids));
+});
+
+// Показать записи справочника игрокам — карточкой на их устройствах (Фаза 3)
+systemsRouter.post("/:id/show-entries", (req: AuthedRequest, res) => {
+  const user = req.user;
+  if (!user || user.role !== "gm") return res.status(403).json({ error: "forbidden" });
+  const { entry_ids } = req.body as { entry_ids?: unknown };
+  if (!Array.isArray(entry_ids) || entry_ids.length === 0) return res.status(400).json({ error: "entry_ids required" });
+  const ids = entry_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 20);
+  if (ids.length === 0) return res.status(400).json({ error: "no valid ids" });
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = db.prepare(
+    `SELECT id, name, description, data, kind FROM compendium_entries WHERE id IN (${placeholders}) AND system_id = ?`
+  ).all(...ids, req.params.id) as { id: number; name: string; description: string; data: string; kind: string }[];
+  if (rows.length === 0) return res.status(404).json({ error: "no entries found for this system" });
+  const parsed = rows.map((r) => {
+    let data: unknown = {};
+    try { data = JSON.parse(r.data || "{}"); } catch {}
+    return { id: r.id, name: r.name, description: r.description, kind: r.kind, data };
+  });
+  const campaigns = db.prepare("SELECT id FROM campaigns WHERE system_id = ? AND archived_at IS NULL").all(req.params.id) as { id: number }[];
+  // Если у системы нет кампаний — шлём всем игрокам напрямую (редко, но бывает у новой системы)
+  if (campaigns.length === 0) {
+    // fallback: broadcast to all campaign rooms is impossible, so just return payload for GM preview
+    return res.json({ ok: true, broadcast: 0, entries: parsed, note: "Нет кампаний с этой системой — игроки не получат, но карточка готова." });
+  }
+  for (const c of campaigns) {
+    broadcastToCampaign(c.id, "show-entries", { system_id: Number(req.params.id), entries: parsed });
+  }
+  res.json({ ok: true, broadcast: campaigns.length, entries: parsed });
 });
 
 systemsRouter.post("/", (req, res) => {

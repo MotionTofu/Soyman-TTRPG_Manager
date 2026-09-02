@@ -36,7 +36,7 @@
 }
 .dnd-effect-chip-fields select,
 .dnd-effect-chip-fields input {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 1px 4px;
   min-width: 0;
 }
@@ -60,7 +60,7 @@
 }
 .dnd-effect-body input,
 .dnd-effect-body select {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 2px 5px;
   flex: 1 1 120px;
   min-width: 0;
@@ -75,7 +75,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   flex: 0 0 auto;
 }
@@ -84,7 +84,7 @@
 }
 .dnd-effect-add {
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .dnd-effect-add button {
   border-left: var(--card-border-width, 1px) solid var(--line);
@@ -99,7 +99,7 @@
   border-radius: var(--card-radius);
 }
 .dnd-effect-type-menu button {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 2px 7px;
 }
 
@@ -112,7 +112,7 @@
 }
 .prog-table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .prog-table th,
 .prog-table td {
@@ -123,7 +123,7 @@
 .prog-table td input {
   border: none;
   background: transparent;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 1px 2px;
   width: 100%;
   min-width: 44px;
@@ -139,12 +139,12 @@
   min-width: 96px;
 }
 .prog-head input {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 1px 3px;
   width: 100%;
 }
 .prog-role {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   padding: 1px 2px;
   max-width: 150px;
 }
@@ -196,7 +196,7 @@
   gap: 6px;
 }
 .dnd-title {
-  font-size: 17px;
+  font-size: var(--fs-h3);
 }
 .dnd-topline {
   flex-wrap: wrap;
@@ -230,14 +230,14 @@
   padding: 4px;
 }
 .dnd-ability-label {
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--sb-muted);
   letter-spacing: 0.5px;
 }
 .dnd-ability-score {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 15px;
+  font-size: var(--fs-h3);
   font-weight: 600;
 }
 .dnd-ability-input {
@@ -249,7 +249,7 @@
 .dnd-ability-mod {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--accent);
   font-weight: 600;
 }
@@ -361,10 +361,10 @@
   margin-top: 1px;
 }
 .dice-md .dice-sub {
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .dice-sm .dice-sub {
-  font-size: 8px;
+  font-size: var(--fs-micro);
 }
 .dice-label {
   font-size: var(--fs-micro);
@@ -448,7 +448,7 @@
   display: flex;
   align-items: baseline;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.3;
 }
 .dnd-save-row input[type="checkbox"] {
@@ -458,7 +458,7 @@
 }
 .dnd-save-dot {
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: var(--fs-micro);
   color: var(--sb-muted);
 }
 .dnd-save-row.is-proficient .dnd-save-dot,
@@ -475,7 +475,7 @@
   margin: 0;
   border: none;
   background: transparent;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1;
   color: var(--sb-muted);
   cursor: pointer;
@@ -487,7 +487,7 @@
   flex: 1;
   white-space: normal;
   word-break: break-word;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--sb-muted);
 }
 .dnd-save-row.is-proficient .dnd-save-name {
@@ -516,7 +516,7 @@
 }
 .dnd-skill-remaining {
   align-self: center;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 700;
   color: color-mix(in oklab, crimson 70%, var(--sb-ink));
 }
@@ -536,17 +536,17 @@
   padding: 10px 8px;
 }
 .dnd-skills-tab .dnd-save-row {
-  font-size: 14.5px;
+  font-size: var(--fs-meta);
   gap: 6px;
 }
 .dnd-skills-tab .dnd-save-name {
-  font-size: 14.5px;
+  font-size: var(--fs-meta);
 }
 .dnd-skills-tab .dnd-save-value {
-  font-size: 14.5px;
+  font-size: var(--fs-meta);
 }
 .dnd-skills-tab .dnd-save-dot-btn {
-  font-size: 14.5px;
+  font-size: var(--fs-meta);
 }
 
 /* Always rendered inside an already-framed parent — the character-sheet
@@ -619,12 +619,12 @@
   padding: 0 var(--pad-x, 0px);
 }
 .dnd-attacks-table {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   margin-top: 4px;
   min-width: 480px;
 }
 .dnd-attacks-table th {
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
   color: var(--muted);
   padding: 4px 8px;
@@ -635,7 +635,7 @@
 }
 .dnd-equipment-add-btn {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 3px 8px;
 }
 @media (max-width: 700px) {
@@ -680,7 +680,7 @@
   }
   .dnd-attacks-table td[data-label]:not(:first-child)::before {
     content: attr(data-label) ": ";
-    font-size: 11px;
+    font-size: var(--fs-micro);
     text-transform: uppercase;
     color: var(--muted);
   }
@@ -727,7 +727,7 @@
   }
   .session-attendance-table td[data-label]:not(:first-child)::before {
     content: attr(data-label) ": ";
-    font-size: 11px;
+    font-size: var(--fs-micro);
     text-transform: uppercase;
     color: var(--muted);
   }
@@ -759,7 +759,7 @@
   min-height: 0;
   padding: 0;
   line-height: 1;
-  font-size: 14px;
+  font-size: var(--fs-meta);
 }
 
 .dnd-proficiency-dropzone {

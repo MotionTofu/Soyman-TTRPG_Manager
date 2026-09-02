@@ -285,6 +285,28 @@ searchRouter.get("/", (req, res) => {
         context: `Сеттинг: ${r.setting_name}`,
       })
     );
+
+    // Главы досье НПЦ ищутся так же, как главы локации, сообщества и
+    // персонажа: колонки history/behavior выше покрывают только те поля,
+    // что завёл шаблон, а всё дописанное мастером живёт здесь.
+    const beingChapters = db
+      .prepare(
+        `SELECT sb.id, sb.name, s.name as setting_name, (bc.title || ' ' || bc.content) as blob
+         FROM being_chapters bc
+         JOIN setting_beings sb ON sb.id = bc.being_id
+         JOIN settings s ON s.id = sb.setting_id
+         WHERE lower_u(blob) LIKE ? AND sb.archived_at IS NULL`
+      )
+      .all(like) as { id: number; name: string; setting_name: string; blob: string }[];
+    beingChapters.forEach((r) =>
+      push({
+        type: "being",
+        id: r.id,
+        title: r.name,
+        subtitle: snippet(r.blob, q),
+        context: `Сеттинг: ${r.setting_name}`,
+      })
+    );
   }
 
   if (wantsType("artifact")) {
@@ -425,8 +447,11 @@ searchRouter.get("/", (req, res) => {
     }
     const rows = db
       .prepare(
-        `SELECT e.id, e.name, e.kind, e.level, e.data, e.system_id, e.section_id, s.name as system_name
-         FROM compendium_entries e JOIN systems s ON s.id = e.system_id
+        `SELECT e.id, e.name, e.kind, e.level, e.data, e.system_id, e.section_id, s.name as system_name,
+                p.name as parent_name
+         FROM compendium_entries e
+         JOIN systems s ON s.id = e.system_id
+         LEFT JOIN compendium_entries p ON p.id = e.parent_id
          WHERE ${clauses.join(" AND ")}`
       )
       .all(...args) as {
@@ -438,6 +463,7 @@ searchRouter.get("/", (req, res) => {
       system_id: number;
       section_id: number;
       system_name: string;
+      parent_name: string | null;
     }[];
     rows.forEach((r) => {
       // Only mechanic_item entries carry a governing ability (tool
@@ -452,17 +478,18 @@ searchRouter.get("/", (req, res) => {
           // ignore malformed data
         }
       }
+      const groupHint = r.parent_name ? ` · ${r.parent_name}` : "";
       push({
         type: "compendium_entry",
         id: r.id,
         title: r.name,
-        subtitle: `${r.kind} · ${r.system_name}`,
+        subtitle: `${r.kind}${groupHint} · ${r.system_name}`,
         system_id: r.system_id,
         section_id: r.section_id,
         kind: r.kind,
         level: r.level,
         ability,
-        context: `Система: ${r.system_name}`,
+        context: `Система: ${r.system_name}${groupHint ? ` — ${r.parent_name}` : ""}`,
       });
     });
   }

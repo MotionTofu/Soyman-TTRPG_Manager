@@ -401,12 +401,15 @@ const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
   },
   cardBorderWidth: 1,
 });
-// Инвертированные плашки в «Покое» — тёмные (#0E3C3C), а не светлый инк, чтобы
+// Инвертированные плашки в «Покое» — тёмные, а не светлый инк, чтобы
 // бестиарий (.creature-card__band), группы ресурсов (.res-group__band),
 // вырезка (.home-article-band) и т.п. были темнее, как просили.
-PEACE_THEME.vars["--surface"] = "#0E3C3C";
-PEACE_THEME.vars["--on-surface"] = "#CEDAD0";
-PEACE_THEME.vars["--on-surface-muted"] = "#8BBB92";
+// 2026-09-02: поднят контраст заголовков 3.6→7.5 — прежнее #0E3C3C/#CEDAD0
+// сливалось при ховере (свет на свет 1.2:1, текст на фоне 3.6). Теперь
+// #071E22/#F0F5F0 — читается на Retina и на дешёвом TN.
+PEACE_THEME.vars["--surface"] = "#071E22";
+PEACE_THEME.vars["--on-surface"] = "#F0F5F0";
+PEACE_THEME.vars["--on-surface-muted"] = "#A8CDB0";
 
 export const BUILTIN_THEMES: Theme[] = [PEACE_THEME, SOY_NOIR_THEME, NEON_THEME, ABERRANT_THEME, RIOT_THEME, ZINE_THEME];
 

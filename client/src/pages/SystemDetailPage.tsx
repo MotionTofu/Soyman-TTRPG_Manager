@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -6,6 +6,7 @@ import { Modal } from "../components/Modal";
 import { CompendiumSection } from "../components/CompendiumSection";
 import { MonsterSection } from "../components/MonsterSection";
 import { VehicleSection } from "../components/VehicleSection";
+import { MechanicsSection } from "../components/MechanicsSection";
 import { downloadJson } from "../downloadJson";
 import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemGroup, SystemSection } from "../types";
@@ -13,6 +14,7 @@ import { NavIcon } from "../components/NavIcons";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { clearDndSystemIdCache } from "../components/dnd/dndCompendium";
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -35,6 +37,7 @@ export function SystemDetailPage() {
   // меняется, раздел перечитывает записи.
   const [tidyRun, setTidyRun] = useState(0);
   const [exportImages, setExportImages] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("section") ?? "overview";
@@ -112,6 +115,7 @@ export function SystemDetailPage() {
       name,
       code,
     });
+    clearDndSystemIdCache();
     if (saved.code_taken_by) {
       showAlert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
     }
@@ -148,6 +152,7 @@ export function SystemDetailPage() {
   async function importSystem(file: File) {
     const data = JSON.parse(await file.text());
     const created = await api.post<System>("/systems/import", data);
+    clearDndSystemIdCache();
     navigate(`/systems/${created.id}`);
   }
 
@@ -163,10 +168,23 @@ export function SystemDetailPage() {
           {system.code && <span className="sys-stamp">{system.code}</span>}
         </h1>
         <div className="entity-header-actions">
-          {/* Название правится в карточке «Описание системы» на обзоре. */}
-          {/* Соседство с импортом не случайно: чаще всего порядок наводят
-              сразу после того, как книга разложилась по разделам. */}
           <button onClick={() => setTidying(true)}>Привести справочник в порядок</button>
+          <button onClick={() => setExporting(true)}>Экспорт</button>
+          <button type="button" onClick={() => importInputRef.current?.click()}>
+            Импорт
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importSystem(f);
+              // сброс чтобы повторный выбор того же файла снова сработал
+              e.currentTarget.value = "";
+            }}
+          />
           <button className="danger" onClick={archiveSystem}>
             <NavIcon name="archive" /> Архивировать
           </button>
@@ -184,18 +202,6 @@ export function SystemDetailPage() {
               {s.name}
             </button>
           ))}
-        </div>
-        <div className="row">
-          <button onClick={() => setExporting(true)}>Экспорт</button>
-          <label className="row" style={{ cursor: "pointer" }}>
-            Импорт
-            <input
-              type="file"
-              accept="application/json"
-              style={{ display: "none" }}
-              onChange={(e) => e.target.files?.[0] && importSystem(e.target.files[0])}
-            />
-          </label>
         </div>
       </div>
 
@@ -311,6 +317,13 @@ export function SystemDetailPage() {
               key={`${currentSection.id}-${tidyRun}`}
               systemId={systemId}
               section={currentSection}
+            />
+          ) : currentSection.kind === "mechanics" ? (
+            <MechanicsSection
+              key={`${currentSection.id}-${tidyRun}`}
+              systemId={systemId}
+              section={currentSection}
+              focusEntryId={focusEntryId}
             />
           ) : (
             <CompendiumSection

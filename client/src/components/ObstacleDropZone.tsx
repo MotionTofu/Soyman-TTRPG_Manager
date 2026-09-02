@@ -134,27 +134,29 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
     }
     if (!ACCEPT_TYPES.includes(result.type)) return;
     if (result.type === "compendium_entry" && result.kind !== "monster") return;
-    await api.post("/entity-relations", {
+    await api.post("/links", {
       from_type: "session",
       from_id: sessionId,
       to_type: result.type,
       to_id: result.id,
       section: "enemies",
-      origin,
-      tone: "neutral",
-      label: "",
-      description: "",
+      origin: origin === "live" ? "live" : "planned",
     });
     load();
   }
 
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [filter, setFilter] = useState("");
 
   async function remove(relationId: number) {
-    await api.del(`/entity-relations/${relationId}`);
+    await api.del(`/links/${relationId}`);
     setPendingDelete(null);
     load();
   }
+
+  const filteredEntries = filter.trim()
+    ? entries.filter((e) => e.label.toLowerCase().includes(filter.trim().toLowerCase()))
+    : entries;
 
   return (
     <div
@@ -166,13 +168,17 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
+      {entries.length > 5 && (
+        <input placeholder="Фильтр…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 8, width: "100%" }} />
+      )}
       {entries.length === 0 && (
         <span className="muted">
           Перетащите сюда из поиска — существо, персонажа, локацию, артефакт, сообщество…
         </span>
       )}
+      {entries.length > 0 && filteredEntries.length === 0 && <span className="muted">Ничего не найдено по фильтру.</span>}
       <div className="stack" style={{ gap: 0 }}>
-        {entries.map((entry) => (
+        {filteredEntries.map((entry) => (
           <div
             key={`${entry.type}:${entry.id}:${entry.linkId ?? "union"}`}
             className="resource-row row"
@@ -255,16 +261,13 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       {pickerOpen && (
         <ObstaclePicker
           onPick={async (result) => {
-            await api.post("/entity-relations", {
+            await api.post("/links", {
               from_type: "session",
               from_id: sessionId,
               to_type: result.type,
               to_id: result.id,
               section: "enemies",
-              origin,
-              tone: "neutral",
-              label: "",
-              description: "",
+              origin: origin === "live" ? "live" : "planned",
             });
             setPickerOpen(false);
             load();

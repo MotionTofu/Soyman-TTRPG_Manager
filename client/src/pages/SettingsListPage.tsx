@@ -198,7 +198,7 @@ export function SettingsListPage() {
         {q && (
           <button
             onClick={() => setQ("")}
-            style={{ fontSize: 11, padding: "2px 8px", height: 26 }}
+            style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
             title="Сбросить поиск"
           >
             Сбросить

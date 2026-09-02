@@ -6,6 +6,8 @@ import { UpdateChecker } from "../components/UpdateChecker";
 import { NavIcon } from "../components/NavIcons";
 
 const HOTKEYS: { combo: string; where: string; does: string }[] = [
+  { combo: "Ctrl + K", where: "любое место (кроме полей ввода)", does: "поставить курсор в глобальный поиск" },
+  { combo: "/", where: "любое место (кроме полей ввода)", does: "то же самое, одной клавишей" },
   { combo: "@", where: "любое текстовое поле", does: "открыть поиск и вставить упоминание сущности" },
   { combo: "Alt + Q", where: "любое текстовое поле", does: "то же самое, что «@», но без набора символа" },
   { combo: "Ctrl + B", where: "любое текстовое поле", does: "обернуть выделение в **жирный текст**" },
@@ -24,9 +26,17 @@ const HOTKEYS: { combo: string; where: string; does: string }[] = [
   { combo: "Ctrl + Y", where: "Полотно приключений", does: "повторить отменённое действие" },
   { combo: "Ctrl + K", where: "Полотно приключений", does: "быстрый поиск ноды" },
   { combo: "1–9", where: "Пульт звука (отдельное окно)", does: "проиграть стингер-звук" },
+  { combo: "[ / Х", where: "Пульт сессии (глобально)", does: "скрыть/показать левую докстанцию превью" },
+  { combo: "] / Ъ", where: "Пульт сессии (глобально)", does: "скрыть/показать правый поиск" },
+  { combo: "Ctrl + \\", where: "Пульт сессии (глобально)", does: "скрыть/показать обе боковые панели" },
+  { combo: "↑ / ↓", where: "Пульт сессии — переключатель сцен", does: "выбрать следующую/предыдущую сцену (Дальше + На вечер)" },
+  { combo: "Enter", where: "Пульт сессии — переключатель сцен", does: "запустить выбранную сцену" },
+  { combo: "Alt + F1", where: "любое место (кроме полей ввода)", does: "вернуться на Главную" },
+  { combo: "Alt + F2", where: "любое место (кроме полей ввода)", does: "показать / скрыть нижний плеер" },
+  { combo: "Alt + F3", where: "любое место (кроме полей ввода)", does: "свернуть / развернуть все блоки на странице" },
 ];
 
-const TABS = ["Версия", "Горячие клавиши", "Фишки", "Автор"] as const;
+const TABS = ["Версия", "Горячие клавиши", "Фишки", "Лицензии", "Автор"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AboutPage() {
@@ -183,7 +193,7 @@ export function AboutPage() {
               </p>
               <p className="muted">
                 <strong>Материалы сцены</strong> — все локации, персонажи и противники
-                текущей сцены доступны без離開 пульта. Можно быстро показать изображение
+                текущей сцены доступны, не покидая пульта. Можно быстро показать изображение
                 игрокам на их устройствах.
               </p>
             </div>
@@ -274,6 +284,83 @@ export function AboutPage() {
                 Кроме встроенных, можно создавать собственные темы и настраивать скругление
                 углов карточек. Статблоки не наследуют цветовую тему приложения — у них
                 своё оформление, которое можно назначить по типу существа.
+              </p>
+            </div>
+          </details>
+        </div>
+      )}
+
+      {tab === "Лицензии" && (
+        <div className="stack">
+          <details className="about-sub" open>
+            <summary>Само приложение</summary>
+            <div className="about-sub__body">
+              <p className="muted">
+                SoyMan распространяется по лицензии <strong>PolyForm Noncommercial 1.0.0</strong> с
+                дополнительным разрешением. Полный текст — в файле <code>LICENSE</code> рядом
+                с программой и в репозитории.
+              </p>
+              <ul>
+                <li>
+                  <strong>Мастеру можно всё</strong>, включая платные игры. Если вы берёте
+                  с игроков деньги за сессии — приложение всё равно бесплатное, отдельно
+                  договариваться не нужно.
+                </li>
+                <li>
+                  <strong>Организации — по отдельной лицензии.</strong> Клубы, площадки,
+                  антикафе, студии, компании, а также платное распространение и
+                  предоставление приложения как услуги: motion.tofu@gmail.com.
+                </li>
+                <li>
+                  Некоммерческим организациям, учебным заведениям и государственным
+                  учреждениям использование разрешает сама лицензия PolyForm.
+                </li>
+              </ul>
+              <p className="muted">
+                Текст лицензии: polyformproject.org/licenses/noncommercial/1.0.0
+              </p>
+            </div>
+          </details>
+
+          <details className="about-sub">
+            <summary>Правила игровых систем</summary>
+            <div className="about-sub__body">
+              <p className="muted">
+                Правила настольных игр принадлежат их издателям, и лицензия приложения
+                на них не распространяется. <strong>Эта сборка не содержит текста правил
+                ни одной системы</strong> — при первом запуске создаются только названия
+                систем как пустые контейнеры.
+              </p>
+              <p className="muted">
+                Если вы собираете модуль на материале D&amp;D SRD 5.2 (он выпущен под
+                Creative Commons Attribution 4.0 и разрешён к коммерческому
+                использованию), модуль обязан содержать дословно:
+              </p>
+              <blockquote>
+                This work includes material from the System Reference Document 5.2
+                («SRD 5.2») by Wizards of the Coast LLC, available at
+                https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the
+                Creative Commons Attribution 4.0 International License, available at
+                https://creativecommons.org/licenses/by/4.0/legalcode.
+              </blockquote>
+              <p className="muted">
+                Тексты книг вне SRD и их переводы не лицензируются никак — ни платно,
+                ни бесплатно. Условия по Daggerheart и Legend in the Mist — в файле
+                <code>CONTENT-NOTICES.md</code> рядом с программой.
+              </p>
+            </div>
+          </details>
+
+          <details className="about-sub">
+            <summary>Сторонние компоненты и шрифты</summary>
+            <div className="about-sub__body">
+              <p className="muted">
+                Приложение собрано из открытых библиотек — их лицензии и уведомления
+                об авторстве лежат в файле <code>THIRD-PARTY-LICENSES.md</code> рядом
+                с программой.
+              </p>
+              <p className="muted">
+                Шрифты интерфейса распространяются под SIL Open Font License 1.1.
               </p>
             </div>
           </details>

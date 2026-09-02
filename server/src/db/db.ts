@@ -615,6 +615,14 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "statblocks", "density")) {
     database.exec("ALTER TABLE statblocks ADD COLUMN density TEXT");
   }
+  // Мягкое удаление статблока. Чарник — это часы работы (или импорт из LSS),
+  // а сносился он по одному `confirm` и физическим DELETE, без отката. Строка
+  // теперь помечается, а не удаляется; GET её не отдаёт, PUT /:id/restore
+  // возвращает. В общий экран «Архив» статблоки не попадают: это часть
+  // персонажа, а не самостоятельная сущность (см. SideWorks, Этап 0 п.4).
+  if (!columnExists(database, "statblocks", "archived_at")) {
+    database.exec("ALTER TABLE statblocks ADD COLUMN archived_at TEXT");
+  }
   if (!columnExists(database, "resources", "template_format")) {
     database.exec("ALTER TABLE resources ADD COLUMN template_format TEXT NOT NULL DEFAULT 'text'");
   }
@@ -2623,6 +2631,9 @@ export function openDatabase(dbDir: string): Database.Database {
       "ALTER TABLE campaign_secret_state ADD COLUMN revealed_session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL"
     );
   }
+  if (!columnExists(database, "campaign_secret_state", "pinned")) {
+    database.exec("ALTER TABLE campaign_secret_state ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+  }
 
   // Приключение внутри приключения — след эксперимента, а не замысел: четыре
   // пустые строки под «Атакой склада» с kind='adventure' при родителе. В новом
@@ -2916,6 +2927,51 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec("ALTER TABLE important_dates ADD COLUMN custom_rule TEXT DEFAULT ''");
   }
 
+  // Дневник персонажа (2026-09-02). «Исследование мира» перестаёт быть общим
+  // блокнотом партии: запись принадлежит персонажу, а не игроку, и видит её
+  // только автор. Переезд делается тремя шагами в одном условии, потому что
+  // все три обязаны случиться вместе:
+  //   1) колонка character_id (ON DELETE SET NULL — удаление персонажа не
+  //      уносит написанное; персонажей в этом приложении и так не удаляют, а
+  //      архивируют);
+  //   2) `extra_field` («Место обитания» / «Обитатели») сливается в текст —
+  //      отдельного поля у заметки больше нет. Сама колонка остаётся в базе
+  //      до отдельной чистки: перестроение таблицы ради одного мёртвого
+  //      столбца на живой базе владельца не стоит риска;
+  //   3) привязка к персонажу — только там, где она однозначна: у автора
+  //      ровно один активный персонаж в этой кампании. Спорные остаются с
+  //      NULL, и владелец выбирает сам в интерфейсе — приписать чужое знание
+  //      чужому персонажу молча нельзя.
+  if (
+    tableExists(database, "world_exploration_entries") &&
+    !columnExists(database, "world_exploration_entries", "character_id")
+  ) {
+    database.exec(
+      "ALTER TABLE world_exploration_entries ADD COLUMN character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL"
+    );
+    database.exec(`
+      UPDATE world_exploration_entries
+         SET description = TRIM(CASE WHEN TRIM(description) = '' THEN extra_field
+                                     ELSE description || char(10) || extra_field END),
+             extra_field = ''
+       WHERE TRIM(COALESCE(extra_field, '')) <> ''
+    `);
+    database.exec(`
+      UPDATE world_exploration_entries AS e
+         SET character_id = (SELECT ch.id FROM characters ch
+                              WHERE ch.player_id = e.player_id
+                                AND ch.campaign_id = e.campaign_id
+                                AND ch.archived_at IS NULL)
+       WHERE (SELECT COUNT(*) FROM characters ch
+               WHERE ch.player_id = e.player_id
+                 AND ch.campaign_id = e.campaign_id
+                 AND ch.archived_at IS NULL) = 1
+    `);
+    database.exec(
+      "CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_character ON world_exploration_entries(character_id)"
+    );
+  }
+
   // Which setting entities are explicitly included in a campaign's "Для
   // игроков" panel.  Without a row here the entity is invisible to all
   // players regardless of player_visibility_grants.
@@ -2930,6 +2986,48 @@ export function openDatabase(dbDir: string): Database.Database {
     )`);
     database.exec(`CREATE INDEX idx_cse_campaign ON campaign_setting_entities(campaign_id)`);
     database.exec(`CREATE INDEX idx_cse_entity ON campaign_setting_entities(entity_type, entity_id)`);
+  }
+
+  // Прощённый долг. Долг сам по себе не хранится — он считается как
+  // «ожидалось − оплачено» (см. unpaidSessionsForPlayer). Но прощение из чисел
+  // не выводится: это решение Мастера, и без записи оно не пережило бы
+  // перерисовку — вычисление вернуло бы долг обратно. Поэтому хранится ровно
+  // то, чего в числах нет, а долг становится «ожидалось − оплачено − прощено».
+  // В «заработано» прощённое не идёт: сводка обязана показывать полученное.
+  if (!columnExists(database, "session_attendance", "amount_forgiven")) {
+    database.exec(
+      "ALTER TABLE session_attendance ADD COLUMN amount_forgiven REAL NOT NULL DEFAULT 0"
+    );
+  }
+
+  // Членство по ростеру против членства по персонажу.
+  //
+  // Раньше участником кампании считался тот, у кого в ней есть живой персонаж;
+  // теперь — тот, кто числится в ростере (см. myCampaignIds в routes/player.ts).
+  // У игроков Мастера ростер заполнен, а вот сам Мастер в чужих кампаниях, где
+  // он игрок, в ростер не попал: строки завести было неоткуда. Из-за этого его
+  // собственная посещаемость и оплата в чужих играх не имели куда записаться —
+  // session_attendance хранит строку на члена ростера.
+  //
+  // Починка идёт по прежнему правилу («есть персонаж — значит участник»), то
+  // есть возвращает данные к тому, что и так подразумевалось, а не выдумывает
+  // членство. INSERT OR IGNORE делает её идемпотентной, а прав она никому не
+  // добавляет: доступ игрока считается по users.player_id, и у записи без
+  // привязанной учётки он никакой.
+  {
+    const key = "roster_backfilled_from_characters";
+    if (!appSettingFlag(database, key)) {
+      database.exec(`
+        INSERT OR IGNORE INTO campaign_roster (campaign_id, player_id)
+        SELECT DISTINCT ch.campaign_id, ch.player_id
+          FROM characters ch
+          JOIN campaigns c ON c.id = ch.campaign_id
+         WHERE ch.campaign_id IS NOT NULL
+           AND ch.archived_at IS NULL
+           AND c.archived_at IS NULL
+      `);
+      setAppSettingFlag(database, key);
+    }
   }
 
   compactIfBloated(database);

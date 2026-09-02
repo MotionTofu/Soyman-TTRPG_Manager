@@ -8,7 +8,11 @@ import type { DndEquipmentSection } from "../../types";
 // (Shield/Mage Armor spells, etc.).
 export function computeArmorClass(dexMod: number, sections: DndEquipmentSection[], manualBonus: number): number {
   const equipped = sections.flatMap((s) => s.items).filter((i) => i.equipped);
-  const armor = equipped.find((i) => i.armorType && i.ac);
+  // S-03: если надето несколько доспехов — берём лучший (макс КЗ), а не первый по порядку.
+  const armors = equipped.filter((i) => i.armorType && i.ac);
+  const armor = armors.length
+    ? armors.reduce((best, cur) => ((parseInt(cur.ac ?? "", 10) || 0) > (parseInt(best.ac ?? "", 10) || 0) ? cur : best))
+    : undefined;
 
   let base: number;
   let dexBonus: number;

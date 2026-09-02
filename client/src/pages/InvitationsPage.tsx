@@ -172,7 +172,7 @@ export function InvitationsPage() {
           {!loading && entries.length > 1 && (
             <button
               onClick={copyAll}
-              style={{ marginLeft: "auto", fontFamily: "var(--font-ui)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", height: 22, padding: "0 8px" }}
+              style={{ marginLeft: "auto", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", height: 22, padding: "0 8px" }}
             >
               Копировать всё
             </button>
@@ -225,8 +225,8 @@ export function InvitationsPage() {
                   >
                     <div style={{ flex: "1 1 220px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                       {e.name && (
-                        <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", lineHeight: 1 }}>
-                          {e.name} {badge && <span className={`badge ${badge.kind === "ok" ? "held" : badge.kind === "warn" ? "rescheduled" : "tag"}`} style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", verticalAlign: "middle" }}>{badge.label}</span>}
+                        <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", lineHeight: 1 }}>
+                          {e.name} {badge && <span className={`badge ${badge.kind === "ok" ? "held" : badge.kind === "warn" ? "rescheduled" : "tag"}`} style={{ marginLeft: 6, fontSize: "var(--fs-micro)", padding: "1px 6px", verticalAlign: "middle" }}>{badge.label}</span>}
                         </span>
                       )}
                       <code
@@ -277,7 +277,7 @@ export function InvitationsPage() {
                           className={isCopied ? "primary" : undefined}
                           style={{
                             fontFamily: "var(--font-ui)",
-                            fontSize: 11,
+                            fontSize: "var(--fs-micro)",
                             textTransform: "uppercase",
                             letterSpacing: "0.06em",
                             height: 26,
@@ -290,14 +290,14 @@ export function InvitationsPage() {
                         <button
                           onClick={() => setQrModal(url)}
                           aria-label={`QR для ${url}`}
-                          style={{ fontFamily: "var(--font-ui)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", height: 22, padding: "0 8px" }}
+                          style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", height: 22, padding: "0 8px" }}
                         >
                           QR
                         </button>
                         <button
                           onClick={() => share(url)}
                           aria-label={`Поделиться ${url}`}
-                          style={{ fontFamily: "var(--font-ui)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", height: 22, padding: "0 8px" }}
+                          style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", height: 22, padding: "0 8px" }}
                         >
                           Поделиться
                         </button>
@@ -315,7 +315,7 @@ export function InvitationsPage() {
           </div>
 
           <div className="row" style={{ justifyContent: "flex-start" }}>
-            <Link to="/players" className="primary" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: "var(--primary-bg)", color: "var(--primary-text)", border: "1px solid var(--primary-bg)", borderRadius: "var(--card-radius)", fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", textDecoration: "none" }}>
+            <Link to="/players" className="primary" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: "var(--primary-bg)", color: "var(--primary-text)", border: "1px solid var(--primary-bg)", borderRadius: "var(--card-radius)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", textDecoration: "none" }}>
               К игрокам — выдать доступ →
             </Link>
           </div>

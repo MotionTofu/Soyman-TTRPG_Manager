@@ -348,7 +348,7 @@ export function SceneDetailPage() {
               Добавить
             </button>
           </div>
-          <span className="muted" style={{ fontSize: 11, maxWidth: "62ch" }}>Два поля «При успехе/при провале» создадут исходы «Успех/Провал» — остальные (3–4) добавляются на Полотне.</span>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>Два поля «При успехе/при провале» создадут исходы «Успех/Провал» — остальные (3–4) добавляются на Полотне.</span>
         </div>
       </details>
 
@@ -552,7 +552,7 @@ function SceneAudioCard({ sceneId }: { sceneId: number }) {
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          {current && <span className="muted" style={{ fontSize: 11 }}>{current.name}</span>}
+          {current && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{current.name}</span>}
         </div>
         <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
       </div>

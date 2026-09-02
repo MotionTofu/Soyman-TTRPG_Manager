@@ -120,7 +120,7 @@
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   color: var(--on-surface-muted);
   margin-top: 5px;
 }
@@ -185,12 +185,12 @@
 }
 .sb-score {
   font-family: var(--font-mono);
-  font-size: 16px;
+  font-size: var(--fs-h3);
   font-weight: 600;
 }
 .sb-mod {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
@@ -215,7 +215,7 @@
 
 .sb-section {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.12em;
   color: var(--ink);
   border-top: 1.5px solid var(--line);
@@ -235,7 +235,7 @@ summary.sb-section {
 }
 .dnd-spell-level-summary {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.12em;
   color: var(--ink);
   border-top: 1.5px solid var(--line);
@@ -279,7 +279,7 @@ summary.sb-section {
   gap: 3px;
 }
 .cs-note {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-top: 6px;
 }
@@ -340,7 +340,7 @@ summary.sb-section {
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 28px;
+  font-size: var(--fs-h1);
   color: var(--muted);
 }
 .sb-top-avatar-hint {
@@ -354,7 +354,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   text-align: center;
   padding: 6px;
   opacity: 0;
@@ -418,7 +418,7 @@ summary.sb-section {
   display: block;
 }
 .sbc__portrait-sm .sbc__portrait-empty {
-  font-size: 18px;
+  font-size: var(--fs-h3);
   color: var(--on-surface-muted);
 }
 /* Подпись «Изменить» на миниатюре не помещается — миниатюра просто
@@ -439,20 +439,20 @@ summary.sb-section {
   font-family: var(--font-display);
   text-transform: uppercase;
   line-height: 0.94;
-  font-size: 23px;
+  font-size: var(--fs-h2);
   overflow-wrap: anywhere;
 }
 .sbc__meta {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   color: var(--on-surface-muted);
   margin-top: 6px;
 }
 .sbc__cr {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--on-surface-muted);
   white-space: nowrap;
   align-self: flex-start;
@@ -500,7 +500,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   flex: 0 0 96px;
 }
@@ -510,19 +510,19 @@ summary.sb-section {
 /* Моноширинный — только под значения (§1.5). */
 .sbc__val {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   min-width: 0;
   overflow-wrap: anywhere;
 }
 .sbc__val--big {
-  font-size: 17px;
+  font-size: var(--fs-h3);
   font-weight: 700;
 }
 .sbc__hint {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: 8.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   line-height: 1.5;
 }
@@ -574,7 +574,7 @@ summary.sb-section {
   position: relative;
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 14px;
+  font-size: var(--fs-meta);
   line-height: 1;
 }
 .sbc__die.is-prof .sbc__die-num {
@@ -582,7 +582,7 @@ summary.sb-section {
 }
 .sbc__die-lab {
   font-family: var(--font-ui);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -614,7 +614,7 @@ summary.sb-section {
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 24px;
+  font-size: var(--fs-h2);
   color: var(--muted);
 }
 .sbc__portrait-hint {
@@ -628,7 +628,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -647,7 +647,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--ink);
 }
 .sbc__scroll > .sbc__sec:first-child {
@@ -665,7 +665,7 @@ summary.sb-section {
   padding: 2px 14px 14px;
 }
 .sbc__entry {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   line-height: 1.42;
   /* Мера чтения, а не ширина колонки: на 2560 колонка свитка выходит за
      1600 px, и строка описания становится вчетверо длиннее читаемой — тот же
@@ -679,14 +679,14 @@ summary.sb-section {
 }
 .sbc__mech {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--ink-2);
 }
 .sbc__toggle {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9px;
+  font-size: var(--fs-micro);
   padding: 3px 8px;
   border: 1.5px solid var(--ink);
   border-radius: 0;
@@ -702,7 +702,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   padding: 6px 10px;
   border: 1.5px dashed var(--line);
   border-radius: 0;
@@ -730,7 +730,7 @@ summary.sb-section {
   padding: 12px 14px;
 }
 .sbc__invite-text {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.45;
   max-width: 52ch;
 }
@@ -751,7 +751,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 9px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   cursor: pointer;
 }
@@ -785,7 +785,7 @@ summary.sb-section {
 .sbc__val-sub {
   display: block;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   font-weight: 400;
   color: var(--muted);
   margin-top: 1px;
@@ -812,7 +812,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   list-style: none;
 }
@@ -832,7 +832,7 @@ summary.sb-section {
 }
 .sbc__slot-count {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   margin-left: 4px;
 }
@@ -858,12 +858,12 @@ summary.sb-section {
 .sbc__spell-name {
   font-family: var(--font-ui);
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.02em;
 }
 .sbc__spell-meta {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-left: auto;
   text-align: right;
@@ -873,7 +873,7 @@ summary.sb-section {
   color: var(--muted);
 }
 .sbc__spell-desc {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.42;
   color: var(--ink-2);
   padding: 2px 6px 6px;
@@ -928,7 +928,7 @@ summary.sb-section {
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: 9px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   /* Ровно по первой строке поля рядом, а не по верхнему краю ячейки. */
   padding-top: 8px;
@@ -959,7 +959,7 @@ summary.sb-section {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 /* Пока правится «Основное», левая колонка занимает всю карточку: в 300 px
    таблица не встаёт, а именно из-за этого подписи и вылезали за край. */
@@ -1009,4 +1009,31 @@ summary.sb-section {
 }
 .sb-scope .litm-tag-add {
   border-color: var(--line);
+}
+
+/* Состояние очереди быстрых правок (useQueuedSave) — стоит в шапке карточки
+   статблока рядом с кнопками. Голос Label (§1.5), обводка 1px (§1.3),
+   радиусов нет (§1.1). Акцент берёт только «не сохранено»: это тот самый один
+   горячий объект карточки, ради которого держится бюджет (§1.8). */
+.sb-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.sb-save-status.is-saving {
+  color: var(--muted);
+}
+.sb-save-status.is-error {
+  color: var(--accent);
+  border: var(--card-border-width, 1px) solid var(--accent);
+  padding: 1px 6px;
+}
+.sb-save-status.is-error .comp-mini {
+  border-color: currentColor;
+  color: inherit;
 }

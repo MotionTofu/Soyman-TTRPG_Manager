@@ -45,7 +45,6 @@ import { statblocksRouter } from "./routes/statblocks";
 import { creatureCardRouter } from "./routes/creatureCard";
 import { linkNotesRouter } from "./routes/linkNotes";
 import { campaignEntriesRouter } from "./routes/campaignEntries";
-import { worldExplorationEntriesRouter } from "./routes/worldExplorationEntries";
 import { initiativeEntriesRouter } from "./routes/initiativeEntries";
 import { settingEntriesRouter } from "./routes/settingEntries";
 import { backupRouter } from "./routes/backup";
@@ -57,6 +56,7 @@ import { soundsRouter, soundSetsRouter } from "./routes/sounds";
 import { filesRouter } from "./routes/files";
 import { authRouter } from "./routes/auth";
 import { playerRouter } from "./routes/player";
+import { worldExplorationEntriesRouter } from "./routes/worldExplorationEntries";
 import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
 import { visibilityGrantsRouter } from "./routes/visibilityGrants";
 import { campaignSettingEntitiesRouter } from "./routes/campaignSettingEntities";
@@ -147,10 +147,18 @@ app.use(
 );
 // JSON limit: 1mb default — prevents OOM from 999mb payloads. Imports with
 // ?include=images legitimately embed base64 (opt-in) and need up to 50mb.
+// LSS character sheet JSON nests an inner JSON string (`data`) and can carry
+// several ProseMirror text blocks — up to ~2-3mb in the wild.
 app.use((req, res, next) => {
   const isImport =
-    req.path.startsWith("/api/import") || req.path.startsWith("/api/system-import");
-  const limit = isImport ? "50mb" : "1mb";
+    req.path.startsWith("/api/import") ||
+    req.path.startsWith("/api/system-import") ||
+    req.path.startsWith("/api/statblocks/import");
+  const limit = isImport
+    ? req.path.startsWith("/api/statblocks/import")
+      ? "5mb"
+      : "50mb"
+    : "1mb";
   return (express.json({ limit }) as unknown as express.RequestHandler)(req, res, next);
 });
 app.use(attachUser);
@@ -310,7 +318,6 @@ app.use("/api/finance", financeRouter);
 app.use("/api/statblocks", statblocksRouter);
 app.use("/api/link-notes", linkNotesRouter);
 app.use("/api/campaign-entries", campaignEntriesRouter);
-app.use("/api/world-exploration-entries", worldExplorationEntriesRouter);
 app.use("/api/initiative-entries", initiativeEntriesRouter);
 app.use("/api/setting-entries", settingEntriesRouter);
 app.use("/api/backup", backupRouter);
@@ -324,6 +331,9 @@ app.use("/api/sounds", soundsRouter);
 app.use("/api/sound-sets", soundSetsRouter);
 app.use("/api/files", filesRouter);
 app.use("/api/campaign-player-sections", campaignPlayerSectionsRouter);
+// Старая картотека «Исследование Мира» — только для кампаний, где владелец
+// сам играет (campaigns.role = 'player'); проверка внутри роутера.
+app.use("/api/world-exploration-entries", worldExplorationEntriesRouter);
 app.use("/api/visibility-grants", visibilityGrantsRouter);
 app.use("/api/campaign-setting-entities", campaignSettingEntitiesRouter);
 app.use("/api/story", storyRouter);

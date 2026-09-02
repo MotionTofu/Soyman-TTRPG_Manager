@@ -176,11 +176,11 @@ const SceneList = memo(function SceneList({
 
   return (
     <div className="stack" style={{ gap: 4 }}>
-      {title && <span className="muted" style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase" }}>{title}</span>}
+      {title && <span className="muted" style={{ fontSize: "var(--fs-micro)", letterSpacing: "0.06em", textTransform: "uppercase" }}>{title}</span>}
       {scenes.map((s) => (
         <SceneRow key={s.id} scene={s} campaignId={campaignId} onStatus={setStatus} />
       ))}
-      {scenes.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Сцен пока нет.</span>}
+      {scenes.length === 0 && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сцен пока нет.</span>}
     </div>
   );
 });
@@ -200,8 +200,8 @@ const SceneRow = memo(function SceneRow({
   return (
     <details className="entity-row" style={{ display: "block", padding: 0, borderBottom: "1px solid var(--line)" }}>
       <summary className="entity-row" style={{ cursor: "pointer", listStyle: "none", margin: 0, borderBottom: "none" }}>
-        <span className="entity-type-chip" style={{ fontSize: 10 }}>{SCENE_KIND_LABELS[s.kind] ?? s.kind}</span>
-        <span className="entity-row-name" style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-body)", fontWeight: 600 }}>{s.name}</span>
+        <span className="entity-type-chip" style={{ fontSize: "var(--fs-micro)" }}>{SCENE_KIND_LABELS[s.kind] ?? s.kind}</span>
+        <span className="entity-row-name" style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-meta)", fontWeight: 600 }}>{s.name}</span>
         {statusBadge}
         {s.is_override && <span className="badge tag">правка</span>}
         {s.campaign_only && <span className="badge tag">только в кампании</span>}
@@ -212,17 +212,17 @@ const SceneRow = memo(function SceneRow({
             <MentionText text={s.summary} />
           </div>
         ) : (
-          <span className="muted" style={{ fontSize: 12 }}>Сводки нет — откройте сцену, чтобы добавить.</span>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сводки нет — откройте сцену, чтобы добавить.</span>
         )}
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <select value={s.state?.status ?? "pending"} onChange={(e) => onStatus(s, e.target.value)} style={{ fontSize: 12 }}>
+          <select value={s.state?.status ?? "pending"} onChange={(e) => onStatus(s, e.target.value)} style={{ fontSize: "var(--fs-meta)" }}>
             {SCENE_STATUSES.map((st) => (
               <option key={st.key} value={st.key}>
                 {st.label}
               </option>
             ))}
           </select>
-          <Link to={`/scenes/${s.id}?campaign=${campaignId}`} style={{ fontSize: 12 }}>Открыть сцену →</Link>
+          <Link to={`/scenes/${s.id}?campaign=${campaignId}`} style={{ fontSize: "var(--fs-meta)" }}>Открыть сцену →</Link>
         </div>
       </div>
     </details>

@@ -1,0 +1,62 @@
+{
+  "_comment": "Синтетический образец экспорта Long Story Short (next.dnd.su) — по структуре, наблюдаемой в server/src/services/lssImport.ts. Анонимизирован, для тестов/регресса фазы 2. Реальные экспорты оборачивают inner в JSON-строку outer.data.",
+  "outer": {
+    "data": "{\"name\":{\"value\":\"Тестовый Персонаж\"},\"info\":{\"race\":{\"value\":\"Человек\"},\"charClass\":{\"value\":\"Воин\"},\"charSubclass\":{\"value\":\"Чемпион\"},\"level\":{\"value\":\"3\"},\"background\":{\"value\":\"Солдат\"},\"alignment\":{\"value\":\"Нейтральный\"}},\"stats\":{\"str\":{\"score\":16},\"dex\":{\"score\":14},\"con\":{\"score\":14},\"int\":{\"score\":10},\"wis\":{\"score\":12},\"cha\":{\"score\":8}},\"saves\":{\"str\":{\"isProf\":true},\"dex\":{\"isProf\":false},\"con\":{\"isProf\":true},\"int\":{\"isProf\":false},\"wis\":{\"isProf\":false},\"cha\":{\"isProf\":false}},\"skills\":{\"skill0\":{\"name\":\"athletics\",\"isProf\":true},\"skill1\":{\"name\":\"perception\",\"isProf\":true},\"skill2\":{\"name\":\"stealth\",\"isProf\":false}},\"vitality\":{\"ac\":{\"value\":16},\"hp-max\":{\"value\":28},\"hp-current\":{\"value\":24},\"speed\":{\"value\":30},\"hit-die\":{\"value\":\"к10\"}},\"weaponsList\":[{\"name\":{\"value\":\"Длинный меч\"},\"mod\":{\"value\":\"+5\"},\"dmg\":{\"value\":\"1к8+3 рубящий\"}},{\"name\":{\"value\":\"Ручной арбалет\"},\"mod\":{\"value\":\"+4\"},\"dmg\":{\"value\":\"1к6+2 колющий\"}}],\"text\":{\"features\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Людское упорство — дополнительное владение навыком\"}]}]}}},\"traits\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Второе дыхание, Боевой стиль\"}]}]}}},\"prof\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Владение доспехами, Владение простым оружием\"}]}]}}},\"feats\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Атлет\"}]}]}}},\"equipment\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"bulletList\",\"content\":[{\"type\":\"listItem\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Кольчуга\"}]}]},{\"type\":\"listItem\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Щит\"}]}]},{\"type\":\"listItem\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Набор путешественника\"}]}]}]}]}}},\"personality\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Храбр и прямолинеен\"}]}]}}},\"ideals\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Справедливость\"}]}]}}},\"bonds\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Мой отряд\"}]}]}}},\"flaws\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Вспыльчив\"}]}]}}},\"appearance\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Высокий, шрам на щеке\"}]}]}}},\"background\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Служил в страже Невервинтера\"}]}]}}},\"quests\":{\"value\":{\"data\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Найти пропавшего капитана\"}]}]}}}}}"
+  },
+  "unwrapped_inner_example": {
+    "name": { "value": "Тестовый Персонаж" },
+    "info": {
+      "race": { "value": "Человек" },
+      "charClass": { "value": "Воин" },
+      "charSubclass": { "value": "Чемпион" },
+      "level": { "value": "3" },
+      "background": { "value": "Солдат" },
+      "alignment": { "value": "Нейтральный" }
+    },
+    "stats": {
+      "str": { "score": 16 },
+      "dex": { "score": 14 },
+      "con": { "score": 14 },
+      "int": { "score": 10 },
+      "wis": { "score": 12 },
+      "cha": { "score": 8 }
+    },
+    "saves": {
+      "str": { "isProf": true },
+      "con": { "isProf": true }
+    },
+    "skills": {
+      "skill0": { "name": "athletics", "isProf": true },
+      "skill1": { "name": "perception", "isProf": true }
+    },
+    "vitality": {
+      "ac": { "value": 16 },
+      "hp-max": { "value": 28 },
+      "hp-current": { "value": 24 },
+      "speed": { "value": 30 },
+      "hit-die": { "value": "к10" }
+    },
+    "weaponsList": [
+      { "name": { "value": "Длинный меч" }, "mod": { "value": "+5" }, "dmg": { "value": "1к8+3 рубящий" } }
+    ],
+    "text": {
+      "equipment": {
+        "value": {
+          "data": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "bulletList",
+                "content": [
+                  { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Кольчуга" }] }] },
+                  { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Щит" }] }] }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "notes": "Поля spells/inventory/coins/senses/languages в реальных экспортах встречаются эпизодически и не зафиксированы в этом образце — фаза 2 оставила warnings для них (см. lssImport.ts: rawSpells/rawInventory). При появлении реального дампа — дополнить этот файл и расширить маппинг cantrips/spellsByLevel/proficiencies/sensesList."
+}

@@ -256,7 +256,7 @@ function BackupButton() {
               <div
                 style={{
                   fontFamily: "var(--font-ui)",
-                  fontSize: 10,
+                  fontSize: "var(--fs-micro)",
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
@@ -269,7 +269,7 @@ function BackupButton() {
               <div
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: 11,
+                  fontSize: "var(--fs-meta)",
                   lineHeight: 1.35,
                   color: "var(--ink)",
                   overflowWrap: "anywhere",
@@ -333,6 +333,16 @@ function LogoutButton({ username }: { username?: string }) {
     </>
   );
 }
+
+// Подсказка к погашенному пункту навигации — по разделу, а не одна на всех.
+// Ключ — путь без ведущего слэша, как его считает navCounts.
+const NAV_EMPTY_HINT: Record<string, string> = {
+  campaigns: "Кампаний пока нет — заведи первую на Главной",
+  settings: "Сеттингов пока нет — мир создаётся мастером сеттингов",
+  players: "Игроков пока нет — добавь их к кампании",
+  resources: "Ресурсов пока нет — сюда кладут карты, музыку и файлы",
+  mastering: "Заметок мастерения пока нет",
+};
 
 const CRUMB_LABEL: Record<string, string> = {
   campaigns: "Кампании",
@@ -501,6 +511,76 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen, searchOpen]);
 
+  // Глобальные хоткеи пульта — независимы от раскладки (code + key), не спорят с существующими
+  // [ / Х — левая докстанция, ] / Ъ — правый поиск, Ctrl+\ — оба. Игнор когда в поле ввода.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const ae = document.activeElement as HTMLElement | null;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || ae?.isContentEditable) return;
+      const k = e.key.toLowerCase();
+      const isLeft = e.code === "BracketLeft" || k === "[" || k === "х";
+      const isRight = e.code === "BracketRight" || k === "]" || k === "ъ";
+      const isSlash = e.code === "Backslash" || k === "\\" || k === "|" || e.code === "IntlBackslash";
+      // Не мешаем системным Ctrl+K, Ctrl+S, Ctrl+Z и т.д. — для скобок требуем без Ctrl/Meta/Alt
+      if (isLeft && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        document.body.classList.toggle("live-hide-dock");
+      } else if (isRight && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        document.body.classList.toggle("live-hide-search");
+      } else if (isSlash && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        const hide = !(document.body.classList.contains("live-hide-search") && document.body.classList.contains("live-hide-dock"));
+        document.body.classList.toggle("live-hide-search", hide);
+        document.body.classList.toggle("live-hide-dock", hide);
+      }
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true } as any);
+  }, []);
+
+  const [playerHidden, setPlayerHidden] = useState(() => {
+    try { return localStorage.getItem("playerHidden") === "1"; } catch { return false; }
+  });
+
+  // Alt+F1 — на главную, Alt+F2 — показать/скрыть нижний плеер, Alt+F3 — свернуть/развернуть все <details>
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key !== "F1" && e.key !== "F2" && e.key !== "F3") return;
+      const ae = document.activeElement as HTMLElement | null;
+      const tag = ae?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || ae?.isContentEditable) return;
+      if (e.key === "F1") {
+        e.preventDefault();
+        navigate("/");
+        return;
+      }
+      if (e.key === "F2") {
+        e.preventDefault();
+        setPlayerHidden((v) => {
+          const nv = !v;
+          try { localStorage.setItem("playerHidden", nv ? "1" : "0"); } catch {}
+          return nv;
+        });
+        return;
+      }
+      if (e.key === "F3") {
+        e.preventDefault();
+        const nodes = document.querySelectorAll<HTMLDetailsElement>(".app-content details");
+        if (nodes.length === 0) return;
+        const openCount = [...nodes].filter((d) => d.open).length;
+        const shouldOpen = openCount < nodes.length / 2;
+        nodes.forEach((d) => {
+          d.open = shouldOpen;
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate]);
+
   return (
     // Движок пульта звука живёт здесь, а не в main.tsx: окно самого пульта
     // рендерится ВНЕ AppShell, и звук в нём заводиться не должен — иначе
@@ -557,22 +637,35 @@ export function AppShell() {
             const key = item.to?.replace(/^\//, "") ?? "";
             const cnt = navCounts[key];
             const isEmpty = cnt === 0;
-            // 2.1 grey: пока пусто — muted + badge 0 + tooltip, не скрываем
-            const emptyLabel = isEmpty ? "Пока пусто — заведи кампанию" : undefined;
+            // Пустой раздел гасится и ПЕРЕСТАЁТ нажиматься: серый пункт,
+            // который всё равно уводит в пустоту, обещает «нельзя» и тут же
+            // это обещание нарушает. Подсказка — своя на раздел: одна общая
+            // («заведи кампанию») висела и на «Игроках», и на «Ресурсах».
+            const emptyLabel = isEmpty ? (NAV_EMPTY_HINT[key] ?? "Пока пусто") : undefined;
+            if (isEmpty) {
+              return (
+                <span
+                  key={item.to}
+                  className="nav-empty"
+                  title={emptyLabel}
+                  aria-disabled="true"
+                >
+                  <NavIcon name={item.icon} />
+                  {item.label}
+                  <span className="badge tag nav-empty-count">0</span>
+                </span>
+              );
+            }
             return (
               <NavLink
                 key={item.to}
                 to={item.to!}
                 end={item.end}
-                className={({ isActive }) => (isActive ? "active" : "") + (isEmpty ? " nav-empty" : "")}
+                className={({ isActive }) => (isActive ? "active" : "")}
                 onClick={() => setNavOpen(false)}
-                title={emptyLabel}
-                aria-disabled={isEmpty ? true : undefined}
-                style={isEmpty ? { opacity: 0.52 } : undefined}
               >
                 <NavIcon name={item.icon} />
                 {item.label}
-                {isEmpty && <span className="badge tag" style={{ marginLeft: 6, fontFamily: "var(--font-mono)", fontSize: 10, padding: "1px 5px" }}>0</span>}
               </NavLink>
             );
           })}
@@ -634,12 +727,12 @@ export function AppShell() {
           via CSS, see index.css); mobile gets MiniPlayerBar below instead —
           a small "now playing" capsule that only exists while something is
           actually playing, tapping it opens NowPlayingPage. */}
-      {!userLoading && !isPlayer && (
+      {!userLoading && !isPlayer && !playerHidden && (
         <div className="audio-player-slot">
           <AudioPlayerBar extras={<SoundBarExtras />} empty={<SoundSetEmpty />} />
         </div>
       )}
-      {!userLoading && !isPlayer && pathname !== "/now-playing" && <MiniPlayerBar />}
+      {!userLoading && !isPlayer && !playerHidden && pathname !== "/now-playing" && <MiniPlayerBar />}
       {!userLoading && (
         <MobileBottomNav
           leftItems={bottomNavLeft}

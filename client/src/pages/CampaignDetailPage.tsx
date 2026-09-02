@@ -72,8 +72,10 @@ import type {
   SettingCycle,
   StorySecret,
   System,
+  CampaignDebt,
 } from "../types";
 import { Timeline } from "../components/Timeline";
+import { sessionLabel } from "../sessionLabel";
 
 // Три вида одних и тех же событий: сетка показывает месяц, список — порядок,
 // ось — расстояния.
@@ -109,6 +111,7 @@ export function CampaignDetailPage() {
   const calendar = useSettingCalendar(campaign?.setting_id);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [debts, setDebts] = useState<CampaignDebt[]>([]);
   const tabs = campaign?.role === "player" ? PLAYER_TABS : GM_TABS;
   const [tab, selectTab] = useTabState(
     tabs,
@@ -260,6 +263,10 @@ export function CampaignDetailPage() {
   }, [campaign?.setting_id]);
 
   function refreshCampaign(signal?: AbortSignal) {
+    api
+      .get<CampaignDebt[]>(`/campaigns/${campaignId}/debts`, signal ? { signal } : undefined)
+      .then(setDebts)
+      .catch(() => {});
     return api.get<CampaignDetail>(`/campaigns/${campaignId}`, signal ? { signal } : undefined).then(setCampaign);
   }
   function refreshSessions(signal?: AbortSignal) {
@@ -292,7 +299,7 @@ export function CampaignDetailPage() {
     status: s.status,
     paymentType: s.effective_payment_type,
     campaignRole: campaign.role,
-    label: s.title || `Сессия №${s.session_number ?? ""}`,
+    label: sessionLabel(s),
   }));
 
   const inworldItems: InworldDatedItem[] = [
@@ -303,7 +310,7 @@ export function CampaignDetailPage() {
         year: s.inworld_year!,
         month: s.inworld_month!,
         day: s.inworld_day!,
-        label: s.title || `Сессия №${s.session_number ?? ""}`,
+        label: sessionLabel(s),
         kind: "session" as const,
       })),
     ...calendarEvents.map((e) => ({
@@ -434,7 +441,7 @@ export function CampaignDetailPage() {
     }
     if (daySessions.length > 0) {
       for (const s of daySessions) {
-        items.push({ label: `Сессия: ${s.title || `№${s.session_number ?? ""}`}`, onClick: () => navigate(`/sessions/${s.id}`) });
+        items.push({ label: `Сессия: ${sessionLabel(s)}`, onClick: () => navigate(`/sessions/${s.id}`) });
       }
     }
     items.push({ label: "Создать событие", onClick: () => openCreateEventModal(year, month, day) });
@@ -445,7 +452,7 @@ export function CampaignDetailPage() {
     const daySessions = sessions.filter((s) => s.date === date);
     const items: import("../components/ContextMenu").ContextMenuItem[] = [];
     for (const s of daySessions) {
-      items.push({ label: `Сессия: ${s.title || `№${s.session_number ?? ""}`}`, onClick: () => navigate(`/sessions/${s.id}`) });
+      items.push({ label: `Сессия: ${sessionLabel(s)}`, onClick: () => navigate(`/sessions/${s.id}`) });
     }
     items.push({ label: "Создать сессию", onClick: () => setCreatingDate(date) });
     setCalendarMenu({ x, y, items });
@@ -705,7 +712,7 @@ export function CampaignDetailPage() {
           <section className="stack">
             <div className="section-heading-sub">
               <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◆</span> Состав</h3>
-              <span className="muted" style={{ fontSize: 11 }}>{campaign.roster.length} в игре</span>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{campaign.roster.length} в игре</span>
             </div>
             <PlayersAndCharactersTab
               campaignId={campaignId}
@@ -713,11 +720,27 @@ export function CampaignDetailPage() {
               allPlayers={allPlayers}
               onRosterChange={refreshCampaign}
             />
+            {/* Долг стоит рядом с составом, потому что перед игрой смотрят
+                именно сюда. Считается сервером, нигде не хранится; действия над
+                ним — в самой сессии, где видно, за какой вечер и какая ставка. */}
+            {debts.length > 0 && !loadHideFinance() && (
+              <div className="card stack" style={{ gap: 6 }}>
+                <div className="player-section-header">Не оплачено</div>
+                {debts.map((d) => (
+                  <div key={d.player_id} className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+                    <Link to={`/players/${d.player_id}`}>{d.player_name}</Link>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                      {d.owed} · {d.sessions} {d.sessions === 1 ? "игра" : d.sessions < 5 ? "игры" : "игр"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
           <section className="stack">
             <div className="section-heading-sub">
               <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">✦</span> Напоминания игрокам</h3>
-              <span className="muted" style={{ fontSize: 11 }}>видны на Главной игроков</span>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>видны на Главной игроков</span>
             </div>
             <RemindersWidget targetType="campaign" targetId={campaignId} />
           </section>
@@ -746,7 +769,7 @@ export function CampaignDetailPage() {
                         onChange={(e) => setChronicleFilter(e.target.value)}
                         style={{ flex: "1 1 220px", minWidth: 180 }}
                       />
-                      <label className="row" style={{ gap: 6, fontSize: 12, cursor: "pointer" }}>
+                      <label className="row" style={{ gap: 6, fontSize: "var(--fs-meta)", cursor: "pointer" }}>
                         <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} /> Показать отменённые
                       </label>
                       {chronicleFilter && (
@@ -783,7 +806,7 @@ export function CampaignDetailPage() {
                           <div key={s.id} className="timeline-entry">
                             <div className="timeline-date">
                               <Link to={`/sessions/${s.id}`}>
-                                {formatDateKeyRu(s.date)} — {s.title || `Сессия №${s.session_number ?? ""}`}
+                                {formatDateKeyRu(s.date)} — {sessionLabel(s)}
                               </Link>
                               <span className={`badge ${s.status}`}>{STATUS_LABEL[s.status] ?? s.status}</span>
                               {calendar &&
@@ -832,7 +855,7 @@ export function CampaignDetailPage() {
                       {nextPlanned ? (
                         <span>
                           след. <span style={{ color: "var(--on-surface)" }}>{formatDateKeyRu(nextPlanned.date)}</span>
-                          {nextPlanned.start_time ? ` ${nextPlanned.start_time}` : ""} · {nextPlanned.title || `№${nextPlanned.session_number ?? ""}`}
+                          {nextPlanned.start_time ? ` ${nextPlanned.start_time}` : ""} · {sessionLabel(nextPlanned)}
                           {diffLabel ? ` · ${diffLabel}` : ""}
                         </span>
                       ) : (
@@ -907,7 +930,7 @@ export function CampaignDetailPage() {
                   .filter((s) => s.inworld_year != null && s.status !== "cancelled")
                   .map((s) => ({
                     id: -s.id,
-                    title: s.title || `Сессия №${s.session_number ?? ""}`,
+                    title: sessionLabel(s),
                     year: s.inworld_year as number,
                     month: s.inworld_month ?? 1,
                     day: s.inworld_day ?? 1,
@@ -969,7 +992,7 @@ export function CampaignDetailPage() {
                                 onClick={() => toggleEventImportant(ev)}
                                 title={ev.important ? "Убрать из избранного" : "В избранное"}
                                 className={`comp-mini ${ev.important ? "primary" : ""}`}
-                                style={{ padding: "2px 6px", fontSize: 14, lineHeight: 1 }}
+                                style={{ padding: "2px 6px", fontSize: "var(--fs-meta)", lineHeight: 1 }}
                               >
                                 {ev.important ? "★" : "☆"}
                               </button>
@@ -1419,6 +1442,7 @@ function PlayersAndCharactersTab({
   const [characters, setCharacters] = useState<Character[]>([]);
   const [addingFor, setAddingFor] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const [peekCharId, setPeekCharId] = useState<number | null>(null);
   const thumbnailStyles = loadThumbnailStyles();
   const [pcConfirmDialog, pcConfirm] = useConfirm();
   const [pcAlertDialog, showPcAlert] = useAlert();
@@ -1477,14 +1501,14 @@ function PlayersAndCharactersTab({
             </option>
           ))}
         </select>
-        <span className="muted" style={{ fontSize: 11 }}>{roster.length} в составе{available.length ? ` · ещё ${available.length} вне` : ""}</span>
+        <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{roster.length} в составе{available.length ? ` · ещё ${available.length} вне` : ""}</span>
       </div>
       {roster.length === 0 ? (
         <EmptyState
           icon="skullDie"
           title="КОМАНДА ЕЩЁ НЕ СОБРАНА"
           hint="Добавьте первого игрока — его персонажи появятся здесь же, на карточке."
-          action={available.length > 0 ? <span className="muted" style={{ fontSize: 12 }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
+          action={available.length > 0 ? <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
         />
       ) : (
         <div className="grid-cards roster-grid">
@@ -1508,18 +1532,114 @@ function PlayersAndCharactersTab({
                 onThumbnailChanged={onRosterChange}
               >
                 {playerCharacters.map((c) => (
-                  <Link key={c.id} to={`/characters/${c.id}`} className="badge tag">
-                    {c.character_name}
-                  </Link>
+                  <span key={c.id} className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+                    <Link to={`/characters/${c.id}`} className="badge tag">
+                      {c.character_name}
+                    </Link>
+                    <button className="comp-mini" onClick={() => setPeekCharId(c.id)} aria-label={`Быстрый просмотр ${c.character_name}`} title="Быстрый просмотр">
+                      <NavIcon name="eye" />
+                    </button>
+                  </span>
                 ))}
               </RosterCard>
             );
           })}
           </div>
        )}
+      {characters.length > 0 && <CampaignSquadSummary characters={characters} />}
+      {characters.length > 0 && <CampaignSquadDates characters={characters} />}
       {pcConfirmDialog}
       {pcAlertDialog}
+      {peekCharId != null && <CharacterPeekModal characterId={peekCharId} onClose={() => setPeekCharId(null)} />}
     </div>
+  );
+}
+
+function CampaignSquadSummary({ characters }: { characters: Character[] }) {
+  const [rows, setRows] = useState<{ id: number; name: string; level: string; ac: string; hp: string; speed: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const out: typeof rows = [];
+      for (const c of characters) {
+        try {
+          const sbs = await api.get<{ content: string; format: string }[]>(`/statblocks?owner_type=character&owner_id=${c.id}`);
+          const dnd = sbs.find((s) => s.format === "dnd_character");
+          if (!dnd) { out.push({ id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" }); continue; }
+          const data = JSON.parse(dnd.content || "{}") as { armorClass?: string; hitPointMax?: string; speed?: string; speeds?: { walk?: number|null }; classes?: { level: number }[] };
+          const lvl = (data.classes ?? []).reduce((s, cl) => s + (cl.level || 0), 0) || "—";
+          out.push({ id: c.id, name: c.character_name, level: String(lvl), ac: data.armorClass?.trim() || "—", hp: data.hitPointMax?.trim() || "—", speed: data.speed?.trim() || (data.speeds?.walk ? String(data.speeds.walk) : "—") });
+        } catch { out.push({ id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" }); }
+      }
+      if (!cancelled) setRows(out);
+    })();
+    return () => { cancelled = true; };
+  }, [characters]);
+  if (rows.length === 0) return null;
+  const hasAny = rows.some((r) => r.ac !== "—" || r.hp !== "—");
+  if (!hasAny) return null;
+  return (
+    <div className="card stack" style={{ marginTop: 8, overflowX: "auto" }}>
+      <div className="campaign-player-header" style={{ margin: "-14px -14px 10px" }}><span>Сводка отряда</span><span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{rows.length} ПК</span></div>
+      <table style={{ width: "100%", fontSize: "var(--fs-meta)", borderCollapse: "collapse" }}>
+        <thead><tr className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em" }}><th style={{ textAlign: "left", padding: "4px 6px" }}>Персонаж</th><th style={{ padding: "4px 6px" }}>Ур.</th><th style={{ padding: "4px 6px" }}>КД</th><th style={{ padding: "4px 6px" }}>Хиты</th><th style={{ padding: "4px 6px" }}>Скорость</th><th></th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.id} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: "4px 6px" }}><Link to={`/characters/${r.id}`}>{r.name}</Link></td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.level}</td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.ac}</td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.hp}</td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.speed}</td><td style={{ padding: "4px 6px" }}><button className="comp-mini" onClick={() => { window.location.hash = `peek-${r.id}`; }} style={{ visibility: "hidden" }} aria-hidden="true">·</button></td></tr>
+        ))}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function CampaignSquadDates({ characters }: { characters: Character[] }) {
+  const [dates, setDates] = useState<{ charId: number; charName: string; date: ImportantDate }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const all: typeof dates = [];
+      for (const c of characters) {
+        try {
+          const full = await api.get<Character & { important_dates?: ImportantDate[] }>(`/characters/${c.id}`);
+          for (const d of full.important_dates ?? []) all.push({ charId: c.id, charName: c.character_name, date: d });
+        } catch {}
+      }
+      if (!cancelled) setDates(all);
+    })();
+    return () => { cancelled = true; };
+  }, [characters]);
+  if (dates.length === 0) return null;
+  return (
+    <div className="card stack" style={{ marginTop: 8 }}>
+      <div className="campaign-player-header" style={{ margin: "-14px -14px 10px" }}><span>Важные даты отряда</span><span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{dates.length}</span></div>
+      <div className="stack" style={{ gap: 4 }}>
+        {dates.slice(0, 8).map((r) => (
+          <div key={`${r.charId}-${r.date.id}`} className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+            <span><strong>{r.charName}</strong> — {r.date.title} <span className="muted">· {r.date.day}.{r.date.month ?? "—"}.{r.date.year ?? "—"}</span></span>
+            <Link to={`/characters/${r.charId}`} className="comp-mini">→ лист</Link>
+          </div>
+        ))}
+        {dates.length > 8 && <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>+ ещё {dates.length - 8}</span>}
+      </div>
+    </div>
+  );
+}
+
+function CharacterPeekModal({ characterId, onClose }: { characterId: number; onClose: () => void }) {
+  const [char, setChar] = useState<Character | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    api.get<Character>(`/characters/${characterId}`, { signal: ctrl.signal }).then(setChar).catch(() => {});
+    return () => ctrl.abort();
+  }, [characterId]);
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack" style={{ minWidth: 320, maxWidth: 520 }}>
+        <h3 style={{ margin: 0 }}>{char ? char.character_name : "Загрузка…"}</h3>
+        {char && <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>Игрок: {char.player_name} · <Link to={`/characters/${char.id}`} onClick={onClose}>Открыть лист →</Link></div>}
+        {char && <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>{char.short_name ? `Короткое: ${char.short_name}` : ""}</div>}
+        {!char && <p className="muted">Загрузка…</p>}
+      </div>
+    </Modal>
   );
 }
 
@@ -1849,7 +1969,7 @@ function PlayerOverviewTab({
                 <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
                   {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                 </select>
-                <span className="muted" style={{ fontSize: 11 }}>Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
               </label>
               {form.payment_type === "paid" && (
                 <>
@@ -1870,7 +1990,7 @@ function PlayerOverviewTab({
                       {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
                       {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}</span>
                     <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} placeholder="500" />
-                    <span className="muted" style={{ fontSize: 11 }}>С человека — сумма × игроков, со стола — фикс за игру</span>
+                    <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>С человека — сумма × игроков, со стола — фикс за игру</span>
                   </label>
                 </>
               )}
@@ -1900,8 +2020,8 @@ function PlayerOverviewTab({
           )}
 
           <div style={{ marginTop: 8 }}>
-            <span className="campaign-field-label" style={{ fontSize: 11 }}>Группы кампаний</span>
-            <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: 11 }}>Настроить группы →</Link>
+            <span className="campaign-field-label" style={{ fontSize: "var(--fs-meta)" }}>Группы кампаний</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)", marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: "var(--fs-meta)" }}>Настроить группы →</Link>
             {allGroups.length > 0 ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
                 {allGroups.map((g) => {
@@ -2123,7 +2243,7 @@ function OverviewTab({
                 <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
                   {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                 </select>
-                <span className="muted" style={{ fontSize: 11 }}>Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
               </label>
               {form.payment_type === "paid" && (
                 <>
@@ -2144,7 +2264,7 @@ function OverviewTab({
                       {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
                       {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}</span>
                     <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} placeholder="500" />
-                    <span className="muted" style={{ fontSize: 11 }}>С человека — сумма × игроков, со стола — фикс за игру</span>
+                    <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>С человека — сумма × игроков, со стола — фикс за игру</span>
                   </label>
                 </>
               )}
@@ -2174,8 +2294,8 @@ function OverviewTab({
           )}
 
           <div style={{ marginTop: 8 }}>
-            <span className="campaign-field-label" style={{ fontSize: 11 }}>Группы кампаний</span>
-            <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: 11 }}>Настроить группы →</Link>
+            <span className="campaign-field-label" style={{ fontSize: "var(--fs-meta)" }}>Группы кампаний</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)", marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: "var(--fs-meta)" }}>Настроить группы →</Link>
             {allGroups.length > 0 ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
                 {allGroups.map((g) => {
@@ -2248,7 +2368,7 @@ function OverviewTab({
         <div className="res-group__body" style={{ padding: 12 }}>
           <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
           <div style={{ flex: "1 1 280px", minWidth: 260 }}>
-            <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Фон страницы — на всю ширину, приглушён на 30 % (как в плитке):</div>
+            <div className="muted" style={{ marginBottom: 6, fontSize: "var(--fs-meta)" }}>Фон страницы — на всю ширину, приглушён на 30 % (как в плитке):</div>
             {safeBg ? (
               <div className="campaign-tile-cover cover-halftone" style={{ border: "1px solid var(--line)", marginBottom: 8, aspectRatio: "16 / 10", background: "var(--paper-2)" }}>
                 <div className="cover-art cover-photo">
@@ -2268,7 +2388,7 @@ function OverviewTab({
             {bgCrop.modal}
           </div>
           <div style={{ flex: "1 1 280px", minWidth: 260 }}>
-            <div className="muted" style={{ marginBottom: 6, fontSize: 11 }}>Тамбнейл — 16×10, так в сетке «Кампании» и на Главной:</div>
+            <div className="muted" style={{ marginBottom: 6, fontSize: "var(--fs-meta)" }}>Тамбнейл — 16×10, так в сетке «Кампании» и на Главной:</div>
             {safeThumb ? (
               <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
                 <div className="campaign-tile-cover cover-halftone">
@@ -2286,7 +2406,7 @@ function OverviewTab({
             ) : (
               <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
                 <div className="campaign-tile-cover campaign-card-band zine-grain" style={{ aspectRatio: "16 / 10" }} aria-hidden="true" />
-                <div className="campaign-tile-meta"><span className="muted" style={{ fontSize: 11 }}>Без тамбнейла — показывается полоса темы</span></div>
+                <div className="campaign-tile-meta"><span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Без тамбнейла — показывается полоса темы</span></div>
               </div>
             )}
             <label>
@@ -2336,8 +2456,8 @@ function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: Cam
       <div className="card stack">
         <span className="campaign-field-label">Ближайшая сессия</span>
         {nextSession ? (
-          <Link to={`/sessions/${nextSession.id}`} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>
-            {nextSession.date} — {nextSession.title || `Сессия №${nextSession.session_number ?? ""}`}
+          <Link to={`/sessions/${nextSession.id}`} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+            {nextSession.date} — {sessionLabel(nextSession)}
           </Link>
         ) : (
           <EmptyState
@@ -2354,7 +2474,7 @@ function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: Cam
           recentChronicle.map((s) => (
             <div key={s.id} className="stack" style={{ gap: 2 }}>
               <Link to={`/sessions/${s.id}`}>
-                {s.date} — {s.title || `Сессия №${s.session_number ?? ""}`}
+                {s.date} — {sessionLabel(s)}
               </Link>
               <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={s.main_events ?? ""} />
@@ -2555,15 +2675,6 @@ function PreproductionTab({
               Сохранить
             </button>
             <button onClick={() => setEditMode(false)}>Отмена</button>
-          </div>
-        </div>
-      )}
-      {undoToast && (
-        <div className="archive-toast" role="status" aria-live="polite">
-          <span className="archive-toast__msg">{undoToast.msg}</span>
-          <div className="archive-toast__actions">
-            <button className="archive-toast__undo" onClick={() => { const cb = undoToast.onUndo; cb(); }}>Отменить</button>
-            <button className="archive-toast__close" onClick={() => {}} aria-label="Закрыть">×</button>
           </div>
         </div>
       )}

@@ -569,39 +569,44 @@ settingBeingsRouter.post("/", (req, res) => {
   const folder = beingFolder(setting.folder_path, trimmedName);
 
   const sanitizedTags = Array.isArray(tags) ? tags.filter((t) => typeof t === "string").slice(0, 12).map((t) => String(t).slice(0, 24)) : [];
-  const info = db
-    .prepare(
-      `INSERT INTO setting_beings
+  let insertedId: number | bigint = 0;
+  const createTx = db.transaction(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO setting_beings
          (setting_id, name, category, location_id, statblock_short, statblock_full, history, behavior, folder_path, tags, base_monster_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      setting_id,
-      trimmedName,
-      category ?? "bestiary",
-      location_id ?? null,
-      statblock_short ?? "",
-      statblock_full ?? "",
-      history ?? "",
-      behavior ?? "",
-      folder,
-      JSON.stringify(sanitizedTags),
-      base_monster_id ?? null
-    );
-  if (location_id) {
-    db.prepare(
-      "INSERT OR IGNORE INTO being_locations (being_id, location_id) VALUES (?, ?)"
-    ).run(info.lastInsertRowid, location_id);
-  }
-  if (community_ids && community_ids.length > 0) {
-    const insertCommunity = db.prepare(
-      "INSERT OR IGNORE INTO being_communities (being_id, community_id) VALUES (?, ?)"
-    );
-    for (const communityId of community_ids) insertCommunity.run(info.lastInsertRowid, communityId);
-  }
-  if (base_monster_id) {
-    inheritFromBaseMonster(Number(info.lastInsertRowid), base_monster_id);
-  }
+      )
+      .run(
+        setting_id,
+        trimmedName,
+        category ?? "bestiary",
+        location_id ?? null,
+        statblock_short ?? "",
+        statblock_full ?? "",
+        history ?? "",
+        behavior ?? "",
+        folder,
+        JSON.stringify(sanitizedTags),
+        base_monster_id ?? null
+      );
+    insertedId = info.lastInsertRowid;
+    if (location_id) {
+      db.prepare(
+        "INSERT OR IGNORE INTO being_locations (being_id, location_id) VALUES (?, ?)"
+      ).run(insertedId, location_id);
+    }
+    if (community_ids && community_ids.length > 0) {
+      const insertCommunity = db.prepare(
+        "INSERT OR IGNORE INTO being_communities (being_id, community_id) VALUES (?, ?)"
+      );
+      for (const communityId of community_ids) insertCommunity.run(insertedId, communityId);
+    }
+    if (base_monster_id) {
+      inheritFromBaseMonster(Number(insertedId), base_monster_id);
+    }
+  });
+  createTx();
   res
     .status(201)
     .json(
@@ -611,7 +616,7 @@ settingBeingsRouter.post("/", (req, res) => {
            LEFT JOIN compendium_entries m ON m.id = b.base_monster_id
            WHERE b.id = ?`
         )
-        .get(info.lastInsertRowid)
+        .get(insertedId)
     );
 });
 
@@ -658,12 +663,26 @@ settingBeingsRouter.put("/:id", (req, res) => {
     tactics?: string[];
     secret?: string;
   };
+  if (name !== undefined) {
+    const trimmed = String(name).trim();
+    if (!trimmed) return res.status(400).json({ error: "name is required" });
+    if (trimmed.length > 120) return res.status(400).json({ error: "name too long (max 120)" });
+  }
+  if (category !== undefined) {
+    const allowed = new Set(["key_figure", "influential", "notable", "bestiary"]);
+    if (category !== null && !allowed.has(category)) return res.status(400).json({ error: "invalid category" });
+  }
+  if (Array.isArray(tags) && tags.length > 12) return res.status(400).json({ error: "too many tags (max 12)" });
+  if (Array.isArray(combat_roles) && combat_roles.length > 2) return res.status(400).json({ error: "too many combat_roles (max 2)" });
+  if (Array.isArray(tactics) && tactics.length > 10) return res.status(400).json({ error: "too many tactics (max 10)" });
+  if (typeof short_name === "string" && short_name.length > 40) return res.status(400).json({ error: "short_name too long (max 40)" });
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
-  db.prepare(
-    `UPDATE setting_beings SET
+  const updateTx = db.transaction(() => {
+    db.prepare(
+      `UPDATE setting_beings SET
        name = COALESCE(?, name), category = COALESCE(?, category),
        statblock_short = COALESCE(?, statblock_short),
        statblock_full = COALESCE(?, statblock_full),
@@ -679,34 +698,32 @@ settingBeingsRouter.put("/:id", (req, res) => {
        secret = COALESCE(?, secret),
        folder_path = ?
      WHERE id = ?`
-  ).run(
-    name ?? null,
-    category ?? null,
-    statblock_short ?? null,
-    statblock_full ?? null,
-    history ?? null,
-    behavior ?? null,
-    description ?? null,
-    tags ? JSON.stringify(tags) : null,
-    base_monster_id !== undefined ? 1 : 0,
-    base_monster_id ?? null,
-    short_name !== undefined ? 1 : 0,
-    short_name ?? null,
-    aliases ? JSON.stringify(aliases) : null,
-    name_original ?? null,
-    combat_roles ? JSON.stringify(combat_roles) : null,
-    tactics ? JSON.stringify(tactics) : null,
-    secret ?? null,
-    folderPath,
-    req.params.id
-  );
-  // Основу поменяли у уже существующего — новое приезжает так же, как при
-  // создании. Ничего не затирается: inheritFromBaseMonster только дополняет,
-  // так что своё описание и свой статблок остаются на месте, а прежняя основа
-  // не «отзывается» — то, что от неё уже написано, могло быть дополнено руками.
-  if (base_monster_id && base_monster_id !== existing.base_monster_id) {
-    inheritFromBaseMonster(Number(req.params.id), base_monster_id);
-  }
+    ).run(
+      name ?? null,
+      category ?? null,
+      statblock_short ?? null,
+      statblock_full ?? null,
+      history ?? null,
+      behavior ?? null,
+      description ?? null,
+      tags ? JSON.stringify(tags.slice(0, 12).map((t) => String(t).slice(0, 24))) : null,
+      base_monster_id !== undefined ? 1 : 0,
+      base_monster_id ?? null,
+      short_name !== undefined ? 1 : 0,
+      short_name ?? null,
+      aliases ? JSON.stringify((aliases as string[]).slice(0, 10).map((a) => String(a).slice(0, 80))) : null,
+      name_original ?? null,
+      combat_roles ? JSON.stringify((combat_roles as string[]).slice(0, 2)) : null,
+      tactics ? JSON.stringify((tactics as string[]).slice(0, 10).map((t) => String(t).slice(0, 200))) : null,
+      secret ?? null,
+      folderPath,
+      req.params.id
+    );
+    if (base_monster_id && base_monster_id !== existing.base_monster_id) {
+      inheritFromBaseMonster(Number(req.params.id), base_monster_id);
+    }
+  });
+  updateTx();
   res.json(
     db
       .prepare(
@@ -867,13 +884,19 @@ settingBeingsRouter.delete("/relations/:relationId", (req, res) => {
 // Community (people/culture) membership — replace the full set on each save.
 settingBeingsRouter.put("/:id/communities", (req, res) => {
   const { community_ids } = req.body as { community_ids: number[] };
-  db.prepare("DELETE FROM being_communities WHERE being_id = ?").run(req.params.id);
-  const insert = db.prepare(
-    "INSERT INTO being_communities (being_id, community_id) VALUES (?, ?)"
-  );
-  for (const communityId of community_ids ?? []) {
-    insert.run(req.params.id, communityId);
+  if (Array.isArray(community_ids) && community_ids.length > 50) {
+    return res.status(400).json({ error: "too many communities (max 50)" });
   }
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM being_communities WHERE being_id = ?").run(req.params.id);
+    const insert = db.prepare(
+      "INSERT INTO being_communities (being_id, community_id) VALUES (?, ?)"
+    );
+    for (const communityId of community_ids ?? []) {
+      insert.run(req.params.id, communityId);
+    }
+  });
+  tx();
   const communities = db
     .prepare(
       `SELECT sc.id, sc.name FROM being_communities bc

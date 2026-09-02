@@ -99,7 +99,7 @@ export function apiRoleGate(req: AuthedRequest, res: Response, next: NextFunctio
     const { owner_type, owner_id } = req.query as { owner_type?: string; owner_id?: string };
     return owner_type === "character" && owner_id && ownsCharacter(playerId, owner_id) ? next() : forbid();
   }
-  if ((p === "/statblocks" || p === "/statblocks/import") && m === "POST") {
+  if ((p === "/statblocks" || p === "/statblocks/import" || p === "/statblocks/import/preview") && m === "POST") {
     const { owner_type, owner_id } = req.body as { owner_type?: string; owner_id?: number };
     return owner_type === "character" && owner_id && ownsCharacter(playerId, owner_id) ? next() : forbid();
   }

@@ -49,7 +49,7 @@ function ToneMark({ tone }: { tone: RelationTone }) {
         background: RELATION_TONE_COLORS[tone],
         marginRight: 6,
         flexShrink: 0,
-        fontSize: 7,
+        fontSize: "var(--fs-micro)",
         lineHeight: 1,
         fontWeight: 700,
         color: "var(--ink)",
@@ -540,7 +540,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
           ) : (
             <div className="stack" style={{ gap: 4 }}>
               {draftDescription.trim() && (
-                <span style={{ color: "var(--danger-bg)", fontSize: 11, fontFamily: "var(--font-body)" }}>
+                <span style={{ color: "var(--danger-bg)", fontSize: "var(--fs-meta)", fontFamily: "var(--font-body)" }}>
                   ⚠ Текст лора «{draftDescription.slice(0, 32)}…» не сохранится для нескольких связей — он записывается только когда адресат один. ДопИшешь потом в каждой связи отдельно.
                 </span>
               )}
@@ -640,7 +640,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
                     title="Связей пока нет"
                     hint={`Укажите, как ${entityName} относится к другим — союз, долг, страх, торговля.`}
                     action={
-                      <span className="muted" style={{ fontSize: 12 }}>
+                      <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
                         Найдите сущность выше и нажмите «Добавить связь»
                       </span>
                     }

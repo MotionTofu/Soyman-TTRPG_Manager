@@ -899,7 +899,7 @@ function campaignGrouped(campaignId: number, kind: "milestones" | "secrets") {
           "SELECT achieved, note FROM campaign_milestone_state WHERE campaign_id = ? AND milestone_id = ?"
         )
       : db.prepare(
-          "SELECT revealed, note FROM campaign_secret_state WHERE campaign_id = ? AND secret_id = ?"
+          "SELECT revealed, note, pinned, revealed_session_id FROM campaign_secret_state WHERE campaign_id = ? AND secret_id = ?"
         );
   const withState = (rows: { id: number }[]) =>
     rows.map((r) => ({ ...r, state: stateFor.get(campaignId, r.id) ?? null }));
@@ -1081,13 +1081,24 @@ storyRouter.delete("/secrets/:secretId", (req, res) => {
 });
 
 storyRouter.put("/secrets/:secretId/state", (req, res) => {
-  const { campaign_id, revealed, note, session_id } = req.body as {
+  const { campaign_id, revealed, note, session_id, pinned } = req.body as {
     campaign_id: number;
     revealed?: boolean;
     note?: string;
     session_id?: number | null;
+    pinned?: boolean | number;
   };
   if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  // pinned — отдельная ось, может меняться независимо от revealed
+  if (pinned !== undefined) {
+    const val = pinned ? 1 : 0;
+    db.prepare(
+      `INSERT INTO campaign_secret_state (campaign_id, secret_id, pinned, revealed, note, updated_at)
+       VALUES (?, ?, ?, 0, '', datetime('now'))
+       ON CONFLICT(campaign_id, secret_id) DO UPDATE SET pinned = excluded.pinned, updated_at = datetime('now')`
+    ).run(campaign_id, req.params.secretId, val);
+    return res.json({ ok: true });
+  }
   // Сессия запоминается только при раскрытии и только если её прислали:
   // тайну отмечают и с пульта, и из профиля сессии, и из профиля кампании —
   // в последнем случае вечера у неё нет. Снятие отметки чистит и сессию,
