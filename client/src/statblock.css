@@ -1010,3 +1010,30 @@ summary.sb-section {
 .sb-scope .litm-tag-add {
   border-color: var(--line);
 }
+
+/* Состояние очереди быстрых правок (useQueuedSave) — стоит в шапке карточки
+   статблока рядом с кнопками. Голос Label (§1.5), обводка 1px (§1.3),
+   радиусов нет (§1.1). Акцент берёт только «не сохранено»: это тот самый один
+   горячий объект карточки, ради которого держится бюджет (§1.8). */
+.sb-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.sb-save-status.is-saving {
+  color: var(--muted);
+}
+.sb-save-status.is-error {
+  color: var(--accent);
+  border: var(--card-border-width, 1px) solid var(--accent);
+  padding: 1px 6px;
+}
+.sb-save-status.is-error .comp-mini {
+  border-color: currentColor;
+  color: inherit;
+}

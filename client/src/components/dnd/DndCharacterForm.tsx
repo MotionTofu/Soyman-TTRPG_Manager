@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api/client";
 import type {
@@ -69,6 +69,7 @@ import {
   type DndEffect,
 } from "./effects";
 import { useCompendiumEntries } from "./useCompendiumEntries";
+import { ensureEntries, getCachedEntry } from "./entryCache";
 import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
 import type { ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
@@ -358,6 +359,105 @@ function removeFeaturesBySource(features: DndFeature[], ...sourceParentIds: (num
   const ids = new Set(sourceParentIds.filter((id): id is number => id != null));
   if (ids.size === 0) return features;
   return features.filter((f) => f.sourceParentId == null || !ids.has(f.sourceParentId));
+}
+
+// ---------------------------------------------------------------------------
+// Снятие выданного при смене источника.
+//
+// Класс, подкласс и предыстория не только дают (особенности, спасброски,
+// инструменты, навыки, черту происхождения) — их ещё и меняют. Раньше
+// снимались только особенности (removeFeaturesBySource); всё остальное
+// оставалось навсегда: три смены предыстории давали три черты в списке, а
+// Волшебник, побывавший Воином, навсегда сохранял владение спасбросками Силы
+// и Телосложения. Ниже — общий разбор «что дал этот источник», чтобы при
+// смене снять ровно это и ровно тогда, когда того же не даёт никто другой.
+interface SourceGrants {
+  savingThrows: DndAbilityKey[];
+  toolIds: number[];
+  toolNames: string[];
+  skills: string[];
+  featNames: string[];
+}
+
+const EMPTY_GRANTS: SourceGrants = {
+  savingThrows: [],
+  toolIds: [],
+  toolNames: [],
+  skills: [],
+  featNames: [],
+};
+
+// Поля не пересекаются: у класса — спасброски и инструменты, у предыстории —
+// навыки, инструмент и черта происхождения. Поэтому разбор один на оба.
+function grantsFromEntry(entry: CompendiumEntry | undefined): SourceGrants {
+  if (!entry) return EMPTY_GRANTS;
+  const data = entry.data;
+  const toolPicks = Array.isArray(data.tool_profs)
+    ? (data.tool_profs as { id: number; name: string }[])
+    : [];
+  const bgTool = typeof data.tools === "string" && data.tools ? [data.tools] : [];
+  const originFeat = data.origin_feat as { id: number; name: string } | undefined;
+  return {
+    savingThrows: parseAbilityNames(data.saving_throws),
+    toolIds: toolPicks.map((t) => t.id).filter((id) => typeof id === "number"),
+    toolNames: [...toolPicks.map((t) => t.name).filter(Boolean), ...bgTool],
+    skills: Array.isArray(data.skills) ? (data.skills as string[]) : [],
+    featNames: originFeat?.name ? [originFeat.name] : [],
+  };
+}
+
+function mergeGrants(list: SourceGrants[]): SourceGrants {
+  return {
+    savingThrows: list.flatMap((g) => g.savingThrows),
+    toolIds: list.flatMap((g) => g.toolIds),
+    toolNames: list.flatMap((g) => g.toolNames),
+    skills: list.flatMap((g) => g.skills),
+    featNames: list.flatMap((g) => g.featNames),
+  };
+}
+
+/**
+ * Снимает то, что давал ушедший источник, оставляя всё, что подтверждает
+ * хоть один из оставшихся (`kept`) — иначе у мультикласса смена одного класса
+ * забрала бы спасбросок, положенный по второму.
+ *
+ * Экспертизу (уровень 2) не трогаем: её ставит не предыстория, а игрок.
+ */
+function revokeGrants(
+  value: DndCharacterData,
+  revoked: SourceGrants,
+  kept: SourceGrants[]
+): Pick<DndCharacterData, "savingThrowProfs" | "proficiencies" | "skillProfs" | "feats"> {
+  const keep = mergeGrants(kept);
+  const savingThrowProfs = { ...value.savingThrowProfs };
+  for (const k of revoked.savingThrows) {
+    if (!keep.savingThrows.includes(k)) savingThrowProfs[k] = false;
+  }
+  const skillProfs = { ...value.skillProfs };
+  for (const skill of revoked.skills) {
+    if (keep.skills.includes(skill)) continue;
+    if ((skillProfs[skill] ?? 0) === 1) skillProfs[skill] = 0;
+  }
+  const proficiencies = value.proficiencies.filter((p) => {
+    const byId = p.entryId != null && revoked.toolIds.includes(p.entryId);
+    const byName = !!p.name && revoked.toolNames.includes(p.name);
+    if (!byId && !byName) return true;
+    const keptById = p.entryId != null && keep.toolIds.includes(p.entryId);
+    const keptByName = !!p.name && keep.toolNames.includes(p.name);
+    return keptById || keptByName;
+  });
+  const feats = value.feats.filter(
+    (f) => !revoked.featNames.includes(f.name) || keep.featNames.includes(f.name)
+  );
+  return { savingThrowProfs, proficiencies, skillProfs, feats };
+}
+
+// Записи всех источников, кроме уходящего: по ним решается, что оставить.
+async function loadGrants(ids: (number | null | undefined)[]): Promise<SourceGrants[]> {
+  const real = ids.filter((id): id is number => typeof id === "number");
+  if (real.length === 0) return [];
+  await ensureEntries(real);
+  return real.map((id) => grantsFromEntry(getCachedEntry(id)));
 }
 
 function classAndLevelSummary(classes: DndClassEntry[]): string {
@@ -1586,7 +1686,22 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 <NavIcon name="navUp" />
               </button>
             </span>
-            <button type="button" className="comp-mini" onClick={() => onRemoveClass(i)}>
+            <button
+              type="button"
+              className="comp-mini"
+              title="Убрать класс"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Убрать класс?",
+                  message: c.className
+                    ? `«${c.className}» уйдёт из листа вместе со своими особенностями, спасбросками и инструментами.`
+                    : "Строка класса будет убрана.",
+                  confirmLabel: "Убрать",
+                  danger: true,
+                });
+                if (ok) onRemoveClass(i);
+              }}
+            >
               <NavIcon name="close" />
             </button>
           </div>
@@ -2315,6 +2430,11 @@ export function DndCharacterEdit({
   onChangeRef.current = onChange;
   const hierarchyRef = useRef(hierarchy);
   hierarchyRef.current = hierarchy;
+  // Все пикеры ниже ходят в сеть, а потом пишут в лист. Раньше побеждал тот,
+  // чей запрос доехал последним, а не тот, который нажали последним: щёлкнув
+  // уровень 1→5 подряд, можно было получить набор особенностей от третьего
+  // щелчка. Номер операции отсекает всё, что пришло после начала следующей.
+  const opSeqRef = useRef(0);
   const {
     setAttacks,
     setEquipmentSections,
@@ -2354,13 +2474,22 @@ export function DndCharacterEdit({
     // from a class (or clearing the row) removes both again — including any
     // subclass features, since the subclass resets when the class changes.
     async function pickClass(i: number, classId: number | null) {
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const hierarchy = hierarchyRef.current;
       const oldClass = value.classes[i];
       let notes = oldClass?.className ? removeClassNotesBlock(value.notes, oldClass.className) : value.notes;
       let classFeatures = removeFeaturesBySource(value.classFeatures, oldClass?.classId, oldClass?.subclassId);
-      let savingThrowProfs = value.savingThrowProfs;
-      let proficiencies = value.proficiencies;
+      // Уходящий класс забирает свои спасброски и инструменты — но только те,
+      // которых не даёт ни один из оставшихся источников.
+      const revoked = mergeGrants(await loadGrants([oldClass?.classId, oldClass?.subclassId]));
+      const kept = await loadGrants([
+        ...value.classes.filter((_, idx) => idx !== i).flatMap((c) => [c.classId, c.subclassId]),
+        value.backgroundId,
+      ]);
+      const cleared = revokeGrants(value, revoked, kept);
+      let savingThrowProfs = cleared.savingThrowProfs;
+      let proficiencies = cleared.proficiencies;
       const opt = hierarchy.classes.find((cl) => cl.id === classId);
       const nextClasses = value.classes.slice();
       nextClasses[i] = {
@@ -2436,6 +2565,7 @@ export function DndCharacterEdit({
       // granted spells from nextClasses; recompute picks up that removal
       // (and any species grant that a level change made newly eligible).
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
@@ -2443,6 +2573,7 @@ export function DndCharacterEdit({
     // Классовые особенности (and any "Обретаемые заклинания", filtered to
     // this class row's own level).
     async function pickSubclass(i: number, subclassId: number | null) {
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const hierarchy = hierarchyRef.current;
       const oldClass = value.classes[i];
@@ -2460,6 +2591,7 @@ export function DndCharacterEdit({
       }
       const nextValue = { ...valueRef.current, classes: nextClasses, classFeatures };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
@@ -2469,6 +2601,7 @@ export function DndCharacterEdit({
     // row's own level (subclass grants), so granted spells get recomputed
     // in every branch below.
     async function changeClassLevel(i: number, level: number) {
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const c = value.classes[i];
       const nextClasses = value.classes.slice();
@@ -2482,6 +2615,7 @@ export function DndCharacterEdit({
           proficiencyBonus,
         };
         const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+        if (seq !== opSeqRef.current) return;
         onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
         return;
       }
@@ -2502,25 +2636,39 @@ export function DndCharacterEdit({
         proficiencyBonus,
       };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
+    // Подтверждение спрашивает вызывающая сторона (DndClassesEdit) — из
+    // useMemo-фабрики модалку не показать, а `confirm("удалить ЭТО?")` здесь
+    // и был тем самым системным окном, от которого уходим.
     async function removeClass(i: number) {
-      if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+      const seq = ++opSeqRef.current;
       const value = valueRef.current;
       const removed = value.classes[i];
       const notes = removed?.className ? removeClassNotesBlock(value.notes, removed.className) : value.notes;
       const classFeatures = removeFeaturesBySource(value.classFeatures, removed?.classId, removed?.subclassId);
       const nextClasses = value.classes.filter((_, idx) => idx !== i);
+      // Убранный класс забирает спасброски и инструменты с собой.
+      const revoked = mergeGrants(await loadGrants([removed?.classId, removed?.subclassId]));
+      const kept = await loadGrants([
+        ...nextClasses.flatMap((c) => [c.classId, c.subclassId]),
+        value.backgroundId,
+      ]);
+      const cleared = revokeGrants(value, revoked, kept);
       const nextValue = {
         ...valueRef.current,
         classes: nextClasses,
         hitDice: computeHitDice(nextClasses),
         notes,
         classFeatures,
+        savingThrowProfs: cleared.savingThrowProfs,
+        proficiencies: cleared.proficiencies,
         proficiencyBonus: computeProficiencyBonus(nextClasses),
       };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
+      if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
     }
 
@@ -2575,8 +2723,12 @@ export function DndCharacterEdit({
       // Classes picked before the hierarchy finished loading (e.g. a saved
       // statblock reopened) had no hit die available yet — recompute now
       // that classHitDieCache is populated.
-      if (value.classes.some((c) => c.classId != null)) {
-        onChange({ ...value, hitDice: computeHitDice(value.classes) });
+      // Через ref, а не через захваченный эффектом `value`: иерархия грузится
+      // заметное время, и всё, что мастер успел набрать за это время,
+      // затиралось устаревшим снимком.
+      const fresh = valueRef.current;
+      if (fresh.classes.some((c) => c.classId != null)) {
+        onChangeRef.current({ ...fresh, hitDice: computeHitDice(fresh.classes) });
       }
     });
     loadDndSpeciesOptions(value.systemId).then(setSpecies);
@@ -2589,6 +2741,7 @@ export function DndCharacterEdit({
   // for (always marked prepared); switching away removes the old species'
   // features and granted spells again.
   async function pickRace(id: number | null) {
+    const seq = ++opSeqRef.current;
     const opt = species.find((s) => s.id === id);
     let speciesFeatures = removeFeaturesBySource(value.speciesFeatures, value.raceId);
     if (id && value.systemId) {
@@ -2604,7 +2757,20 @@ export function DndCharacterEdit({
       speed: opt?.walkSpeed ? `${opt.walkSpeed} фт.` : value.speed,
     };
     const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
-    onChange({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
+    if (seq !== opSeqRef.current) return;
+    // Снимок, от которого считали, устарел на время загрузки — накладываем
+    // посчитанное на свежий лист, а не подменяем его целиком.
+    onChange({
+      ...valueRef.current,
+      speciesFeatures: nextValue.speciesFeatures,
+      raceId: nextValue.raceId,
+      raceName: nextValue.raceName,
+      raceTypeName: nextValue.raceTypeName,
+      speed: nextValue.speed,
+      cantrips,
+      spellsByLevel,
+      spellSlotLevels,
+    });
   }
 
   // Requirement 5: picking a background also fills in what it grants —
@@ -2612,7 +2778,22 @@ export function DndCharacterEdit({
   // proficiency row) and the origin feat (appended to Черты, with its full
   // description) — so the player doesn't have to re-enter them by hand.
   async function pickBackground(id: number | null) {
+    const seq = ++opSeqRef.current;
     const opt = backgrounds.find((b) => b.id === id);
+    // Прежняя предыстория забирает своё: навыки, инструмент и черту
+    // происхождения. Раньше не снималось ничего — три смены предыстории
+    // оставляли три черты и все накопленные навыки.
+    const previous = mergeGrants(await loadGrants([value.backgroundId]));
+    const revoked: SourceGrants = {
+      ...previous,
+      // backgroundSkillNames — то, что реально было применено к листу;
+      // запись компендиума могла с тех пор измениться.
+      skills: [...new Set([...previous.skills, ...value.backgroundSkillNames])],
+    };
+    const kept = await loadGrants(value.classes.flatMap((c) => [c.classId, c.subclassId]));
+    const cleared = revokeGrants(value, revoked, kept);
+    const base: DndCharacterData = { ...value, ...cleared };
+
     const patch: Partial<DndCharacterData> = { backgroundId: id, backgroundName: opt?.name ?? "", backgroundSkillNames: [] };
     if (id) {
       try {
@@ -2637,13 +2818,14 @@ export function DndCharacterEdit({
           } catch {
             /* feat entry missing — leave description blank */
           }
-          patch.feats = [...value.feats, { name: originFeat.name, description }];
+          patch.feats = [...base.feats, { name: originFeat.name, description }];
         }
       } catch {
         /* background has no compendium entry (freehand) — nothing to fill */
       }
     }
-    onChange({ ...value, ...patch });
+    if (seq !== opSeqRef.current) return;
+    onChange({ ...valueRef.current, ...cleared, ...patch });
   }
 
   const spellAbilityKey = characterSpellcastingAbility(value.classes);
@@ -3406,6 +3588,36 @@ function HpEditModal({
   onClose: () => void;
 }) {
   const [amount, setAmount] = useState("");
+  // Черновик четырёх полей. Раньше каждое из них звало onQuickUpdate прямо из
+  // onChange — то есть на каждое нажатие клавиши пересобирался весь чарник и
+  // уходил PUT: набрать «15» стоило двух запросов, а промежуточное пустое
+  // поле на секунду записывало «хитов нет». Теперь правка живёт локально до
+  // blur или Enter.
+  const [draft, setDraft] = useState({
+    hitPointsCurrent: value.hitPointsCurrent,
+    hitPointMax: value.hitPointMax,
+    hitPointsTemp: value.hitPointsTemp,
+    hitPointMaxTemp: value.hitPointMaxTemp,
+  });
+  type HpField = keyof typeof draft;
+  // Урон и лечение считают от сохранённого значения, поэтому набранное в полях
+  // надо сначала зафиксировать — иначе кнопка «Урон» вычтет из старых хитов.
+  function commitField(field: HpField) {
+    if (draft[field] === value[field]) return;
+    onQuickUpdate({ [field]: draft[field] } as Partial<DndCharacterData>);
+  }
+  function hpFieldProps(field: HpField) {
+    return {
+      type: "number",
+      value: draft[field],
+      onChange: (e: ChangeEvent<HTMLInputElement>) =>
+        setDraft((d) => ({ ...d, [field]: e.target.value })),
+      onBlur: () => commitField(field),
+      onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") commitField(field);
+      },
+    };
+  }
 
   function applyDamage() {
     const n = Number(amount) || 0;
@@ -3414,7 +3626,9 @@ function HpEditModal({
     const curNow = Number(value.hitPointsCurrent) || 0;
     const fromTemp = Math.min(n, Math.max(0, tempNow));
     const rest = n - fromTemp;
-    onQuickUpdate({ hitPointsTemp: String(tempNow - fromTemp), hitPointsCurrent: String(curNow - rest) });
+    const patch = { hitPointsTemp: String(tempNow - fromTemp), hitPointsCurrent: String(curNow - rest) };
+    onQuickUpdate(patch);
+    setDraft((d) => ({ ...d, ...patch }));
     setAmount("");
   }
   function applyHeal() {
@@ -3424,6 +3638,7 @@ function HpEditModal({
     const cap = (Number(value.hitPointMax) || 0) + (Number(value.hitPointMaxTemp) || 0);
     const healed = cap > 0 ? Math.min(curNow + n, cap) : curNow + n;
     onQuickUpdate({ hitPointsCurrent: String(healed) });
+    setDraft((d) => ({ ...d, hitPointsCurrent: String(healed) }));
     setAmount("");
   }
 
@@ -3433,35 +3648,19 @@ function HpEditModal({
         <h3 style={{ margin: 0 }}>Хиты</h3>
         <label>
           Текущие ХП
-          <input
-            type="number"
-            value={value.hitPointsCurrent}
-            onChange={(e) => onQuickUpdate({ hitPointsCurrent: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointsCurrent")} />
         </label>
         <label>
           Максимум ХП
-          <input
-            type="number"
-            value={value.hitPointMax}
-            onChange={(e) => onQuickUpdate({ hitPointMax: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointMax")} />
         </label>
         <label>
           Временные ХП
-          <input
-            type="number"
-            value={value.hitPointsTemp}
-            onChange={(e) => onQuickUpdate({ hitPointsTemp: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointsTemp")} />
         </label>
         <label>
           Временный максимум ХП
-          <input
-            type="number"
-            value={value.hitPointMaxTemp}
-            onChange={(e) => onQuickUpdate({ hitPointMaxTemp: e.target.value })}
-          />
+          <input {...hpFieldProps("hitPointMaxTemp")} />
         </label>
         {/* Урон first depletes temp HP, then current — standard 5e rule.
             Лечение caps at max + temp max, also per the rules. */}

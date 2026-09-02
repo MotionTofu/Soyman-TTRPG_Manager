@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useQueuedSave } from "../hooks/useQueuedSave";
+import { useUndoDelete } from "../hooks/useUndoDelete";
+import { useConfirm } from "../hooks/useConfirm";
 import { NavIcon } from "./NavIcons";
 import type {
   Campaign,
@@ -11,6 +14,7 @@ import type {
   Statblock,
   StatblockFormat,
 } from "../types";
+import { emptyZipCharacter, emptyZipCreature, normalizeZipCharacter, normalizeZipCreature, ZipCharacterEdit, ZipCharacterView, ZipCreatureEdit, ZipCreatureView } from "./zip/ZipCharacterForm";
 import { emptyChallenge, LitMChallengeEdit, LitMChallengeView } from "./litm/LitMChallengeForm";
 import {
   emptyCharacter,
@@ -31,8 +35,31 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 
 const TEMPLATE_TYPE = "statblock_template";
+
+// Имя статблока для модалки удаления и тоста отмены: «ЭТО» из прежнего
+// confirm() не называло, что именно сносится.
+function statblockTitle(sb: Statblock): string {
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(sb.content || "{}") as Record<string, unknown>;
+  } catch {
+    /* битый JSON — обойдёмся форматом */
+  }
+  const named =
+    typeof parsed.characterName === "string" && parsed.characterName
+      ? parsed.characterName
+      : typeof parsed.name === "string" && parsed.name
+      ? parsed.name
+      : typeof parsed.title === "string" && parsed.title
+      ? parsed.title
+      : "";
+  if (named) return named;
+  return sb.note?.trim() || FORMAT_LABELS[sb.format] || "Статблок";
+}
 const KIND_LABELS: Record<string, string> = { short: "Краткий", full: "Полный" };
 const FORMAT_LABELS: Record<StatblockFormat, string> = {
+  zip_character: "Золото и прах — Путешественник",
+  zip_creature: "Золото и прах — Существо",
   text: "Обычный текст",
   litm_character: "Legend in the Mist — Персонаж",
   litm_challenge: "Legend in the Mist — Угроза (Challenge)",
@@ -84,6 +111,8 @@ export function StatblockList({
   const [showDndCreatureWizard, setShowDndCreatureWizard] = useState(false);
   const [showLitmWizard, setShowLitmWizard] = useState(false);
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
+  const { toast: undoToast, deleteWithUndo, dismiss: dismissUndo } = useUndoDelete();
 
   const litmFormat: StatblockFormat = ownerType === "character" ? "litm_character" : "litm_challenge";
   const dndFormat: StatblockFormat = ownerType === "character" ? "dnd_character" : "dnd_creature";
@@ -118,7 +147,9 @@ export function StatblockList({
               !t.template_format ||
               t.template_format === "text" ||
               t.template_format === litmFormat ||
-              t.template_format === dndFormat
+              t.template_format === dndFormat ||
+              t.template_format === "zip_character" ||
+              t.template_format === "zip_creature"
           )
         )
       );
@@ -158,6 +189,25 @@ export function StatblockList({
         content: JSON.stringify(emptyChallenge()),
       });
 
+        } else if (format === "zip_character") {
+      const character = emptyZipCharacter();
+      character.characterName = ownerName ?? "";
+      if (ownerType === "character") character.playerName = ownerPlayerName ?? "";
+      await api.post("/statblocks", {
+        owner_type: ownerType,
+        owner_id: ownerId,
+        format,
+        kind: "full",
+        content: JSON.stringify(character),
+      });
+    } else if (format === "zip_creature") {
+      await api.post("/statblocks", {
+        owner_type: ownerType,
+        owner_id: ownerId,
+        format,
+        kind: "full",
+        content: JSON.stringify(emptyZipCreature()),
+      });
     } else if (format === "dnd_character") {
       const character = emptyDndCharacter();
       character.characterName = ownerName ?? "";
@@ -187,11 +237,33 @@ export function StatblockList({
     refresh();
   }
 
+  // Чарник — часы работы или импорт из LSS, а сносился он по одному
+  // `confirm("удалить ЭТО?")` и физическому DELETE, без отката. Теперь: модалка
+  // называет, что именно удаляется, сервер помечает строку архивной, а тост
+  // восемь секунд держит «Отменить» (PUT /statblocks/:id/restore).
   async function removeStatblock(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
-    await api.del(`/statblocks/${id}`);
-    refresh();
+    const sb = statblocks.find((s) => s.id === id);
+    const name = sb ? statblockTitle(sb) : "Статблок";
+    const ok = await confirm({
+      title: "Удалить статблок?",
+      message: `«${name}» уйдёт из списка. Восемь секунд после удаления будет доступна отмена.`,
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
+    await deleteWithUndo({
+      entityName: name,
+      deleteFn: async () => {
+        await api.del(`/statblocks/${id}`);
+        refresh();
+      },
+      restoreFn: async () => {
+        await api.put(`/statblocks/${id}/restore`);
+        refresh();
+      },
+    });
   }
+
 
   async function importFile(file: File | null) {
     if (!file) return;
@@ -210,6 +282,20 @@ export function StatblockList({
 
   return (
     <div className="stack">
+      {confirmDialog}
+      {undoToast && (
+        <div className="archive-toast" role="status" aria-live="polite">
+          <span className="archive-toast__msg">{undoToast.msg}</span>
+          <div className="archive-toast__actions">
+            <button className="archive-toast__undo" onClick={() => undoToast.onUndo()}>
+              Отменить
+            </button>
+            <button className="archive-toast__close" onClick={dismissUndo} aria-label="Закрыть">
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       {statblocks.map((sb) => (
         <StatblockCard
           key={sb.id}
@@ -241,6 +327,8 @@ export function StatblockList({
               <option value="text">{FORMAT_LABELS.text}</option>
               <option value={litmFormat}>{FORMAT_LABELS[litmFormat]}</option>
               <option value={dndFormat}>{FORMAT_LABELS[dndFormat]}</option>
+              <option value="zip_character">{FORMAT_LABELS.zip_character}</option>
+              <option value="zip_creature">{FORMAT_LABELS.zip_creature}</option>
             </select>
             {format === "text" && (
               <>
@@ -354,6 +442,7 @@ function StatblockCard({
 }) {
   const isLitm = statblock.format === "litm_character" || statblock.format === "litm_challenge";
   const isDnd = statblock.format === "dnd_character" || statblock.format === "dnd_creature";
+  const isZip = statblock.format === "zip_character" || statblock.format === "zip_creature";
 
   function parseLitm(raw: string): LitMCharacterData | LitMChallengeData {
     let parsed: unknown;
@@ -365,6 +454,12 @@ function StatblockCard({
     return statblock.format === "litm_character"
       ? normalizeCharacter(parsed)
       : { ...emptyChallenge(), ...(parsed as object) };
+  }
+
+  function parseZip(raw: string): import("../types").ZipCharacterData | import("../types").ZipCreatureData {
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw || "{}"); } catch { parsed = {}; }
+    return statblock.format === "zip_character" ? normalizeZipCharacter(parsed) : normalizeZipCreature(parsed);
   }
 
   function parseDnd(raw: string): DndCharacterData | DndCreatureData {
@@ -418,6 +513,14 @@ function StatblockCard({
   // slot (separate from whatever avatar the owning being/character has).
   const [avatarUrl, setAvatarUrl] = useState(statblock.avatar_image_url);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const queue = useQueuedSave(
+    useCallback(
+      async (json: string) => {
+        await api.put(`/statblocks/${statblock.id}`, { content: json });
+      },
+      [statblock.id]
+    )
+  );
 
   async function uploadAvatar(file: File) {
     setAvatarUploading(true);
@@ -434,6 +537,25 @@ function StatblockCard({
     }
   }
 
+  // Живая синхронизация (событие character-updated → refresh списка) до сих
+  // пор до открытой карточки не доходила: dndValue/litmValue разбирались
+  // лениво один раз и из пропа больше не пересчитывались. Список обновлялся,
+  // карточка держала старый разбор — и первая же быстрая правка отправляла
+  // устаревший снимок целиком, стирая правку со второго клиента.
+  //
+  // Принимаем внешнее обновление, только когда у нас нечего терять: ничего не
+  // висит в очереди сохранения и не открыта полная форма правки (там лежит
+  // набранный, ещё не сохранённый текст).
+  useEffect(() => {
+    if (statblock.content === content) return;
+    if (editMode || queue.hasPending()) return;
+    setContent(statblock.content);
+    if (isLitm) setLitmValue(parseLitm(statblock.content));
+    if (isDnd) setDndValue(parseDnd(statblock.content));
+    // parseLitm/parseDnd читают только statblock.format, который у карточки не меняется
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statblock.content]);
+
   async function save() {
     await api.put(`/statblocks/${statblock.id}`, { content, note });
     // [[type:id|Label]] mention tokens survive JSON-encoding as plain
@@ -445,36 +567,55 @@ function StatblockCard({
 
   // Lets tag add/remove in the collapsed view persist immediately, without
   // making the user open full edit mode first.
-  async function quickSave(v: LitMCharacterData | LitMChallengeData) {
+  function quickSave(v: LitMCharacterData | LitMChallengeData) {
     const json = JSON.stringify(v);
     setLitmValue(v);
     setContent(json);
-    await api.put(`/statblocks/${statblock.id}`, { content: json });
-    onChange();
+    queue.schedule(json);
   }
+
 
   // Same idea as quickSave above, for D&D character view-mode quick edits
   // (HP, inspiration, death saves, spell slots used) — merges a partial patch
   // instead of replacing the whole value.
-  async function quickSaveDnd(patch: Partial<DndCharacterData>) {
+  function quickSaveDnd(patch: Partial<DndCharacterData>) {
     const next = { ...(dndValue as DndCharacterData), ...patch };
     const json = JSON.stringify(next);
     setDndValue(next);
     setContent(json);
-    await api.put(`/statblocks/${statblock.id}`, { content: json });
-    onChange();
+    queue.schedule(json);
   }
+
 
   // Same idea, for D&D creature view-mode per-tab quick edits (Основное/
   // Действия/Заклинания/Снаряжение/Особенности each edit in place).
-  async function quickSaveDndCreature(patch: Partial<DndCreatureData>) {
+  function quickSaveDndCreature(patch: Partial<DndCreatureData>) {
     const next = { ...(dndValue as DndCreatureData), ...patch };
     const json = JSON.stringify(next);
     setDndValue(next);
     setContent(json);
-    await api.put(`/statblocks/${statblock.id}`, { content: json });
-    onChange();
+    queue.schedule(json);
   }
+
+
+  // Быстрые правки уходят молча, и до сих пор при отвале сети на экране всё
+  // выглядело сохранённым. Индикатор показывает очередь: «сохраняю…» и
+  // «не сохранено» с повтором.
+  const saveIndicator =
+    queue.status === "idle" ? null : (
+      <span className={`sb-save-status is-${queue.status}`} role="status" aria-live="polite">
+        {queue.status === "saving" ? (
+          "сохраняю…"
+        ) : (
+          <>
+            не сохранено
+            <button type="button" className="comp-mini" onClick={() => void queue.flush()}>
+              Повторить
+            </button>
+          </>
+        )}
+      </span>
+    );
 
   const summaryTitle =
     statblock.format === "litm_challenge"
@@ -483,6 +624,10 @@ function StatblockCard({
       ? (dndValue as DndCreatureData)?.name || "Без названия"
       : statblock.format === "dnd_character"
       ? (dndValue as DndCharacterData)?.characterName || "Без имени"
+      : statblock.format === "zip_character"
+      ? (zipValue as import("../types").ZipCharacterData)?.characterName || "Без имени"
+      : statblock.format === "zip_creature"
+      ? (zipValue as import("../types").ZipCreatureData)?.name || "Без названия"
       : null;
 
   // Статблок существа сам рисует плашку-шапку (§1.4), поэтому обёртка
@@ -490,11 +635,36 @@ function StatblockCard({
   // поверх первой: кнопки уезжают в саму плашку, и она же служит
   // переключателем свёрнутости. Правка идёт ПО СЕКЦИЯМ внутри вида —
   // кнопки «редактировать» здесь больше нет (design_revision.md, шаг 6).
+  if (statblock.format === "zip_creature") {
+    const headerExtraZip = (
+      <>
+        {saveIndicator}
+        <button type="button" className="comp-mini" onClick={() => onRemove(statblock.id)}>
+          <NavIcon name="delete" />
+        </button>
+      </>
+    );
+    return zipValue ? (
+      <div className={!collapsed ? "sb-fullscreen-mobile" : undefined}>
+        <div className="card stack" style={{ padding: 12 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}><h3 style={{ margin: 0 }}>{(zipValue as import("../types").ZipCreatureData).name || "Существо ЗиП"}</h3>{headerExtraZip}</div>
+          {editMode ? <ZipCreatureEdit value={zipValue as import("../types").ZipCreatureData} onChange={(v) => { setZipValue(v); setContent(JSON.stringify(v)); }} /> : <ZipCreatureView value={zipValue as import("../types").ZipCreatureData} onQuickUpdate={quickSaveZipCreature} />}
+          <div className="row" style={{ gap: 8 }}>
+            {editMode ? <><button className="primary" onClick={save}>Сохранить</button><button onClick={() => setEditMode(false)}>Отмена</button></> : <button onClick={() => setEditMode(true)}>Редактировать</button>}
+          </div>
+        </div>
+      </div>
+    ) : null;
+  }
+
   if (statblock.format === "dnd_creature") {
     const headerExtra = (
-      <button type="button" className="comp-mini" onClick={() => onRemove(statblock.id)}>
-        <NavIcon name="delete" />
-      </button>
+      <>
+        {saveIndicator}
+        <button type="button" className="comp-mini" onClick={() => onRemove(statblock.id)}>
+          <NavIcon name="delete" />
+        </button>
+      </>
     );
 
     // Краткий статблок существа — это и есть быстрый взгляд, просто в
@@ -551,12 +721,13 @@ function StatblockCard({
       <summary className="row" style={{ justifyContent: "space-between" }}>
         <span>
           <span className="badge planned">
-            {isLitm || isDnd ? FORMAT_LABELS[statblock.format] : KIND_LABELS[statblock.kind]}
+            {isLitm || isDnd || isZip ? FORMAT_LABELS[statblock.format] : KIND_LABELS[statblock.kind]}
           </span>
           {summaryTitle && <span className="muted"> {summaryTitle}</span>}
           {!isLitm && !isDnd && statblock.note && <span className="muted"> {statblock.note}</span>}
         </span>
         <span className="row" style={{ gap: 4 }}>
+          {saveIndicator}
           <button
             type="button"
             className="comp-mini"
@@ -603,6 +774,24 @@ function StatblockCard({
                 }}
               />
             )}
+            {statblock.format === "zip_character" && zipValue && (
+              <ZipCharacterEdit
+                value={zipValue as import("../types").ZipCharacterData}
+                onChange={(v) => {
+                  setZipValue(v);
+                  setContent(JSON.stringify(v));
+                }}
+              />
+            )}
+            {statblock.format === "zip_creature" && zipValue && (
+              <ZipCreatureEdit
+                value={zipValue as import("../types").ZipCreatureData}
+                onChange={(v) => {
+                  setZipValue(v);
+                  setContent(JSON.stringify(v));
+                }}
+              />
+            )}
             {statblock.format === "dnd_character" && dndValue && (
               <DndCharacterEdit
                 value={dndValue as DndCharacterData}
@@ -612,7 +801,7 @@ function StatblockCard({
                 }}
               />
             )}
-            {!isLitm && !isDnd && (
+            {!isLitm && !isDnd && !isZip && (
               <MentionTextarea value={content} onChange={setContent} rows={8} defaultSettingId={settingId} />
             )}
             <label>
@@ -646,6 +835,15 @@ function StatblockCard({
             {statblock.format === "litm_challenge" && litmValue && (
               <LitMChallengeView value={litmValue as LitMChallengeData} />
             )}
+            {statblock.format === "zip_character" && zipValue && (
+              <ZipCharacterView
+                value={zipValue as import("../types").ZipCharacterData}
+                onQuickUpdate={quickSaveZip}
+              />
+            )}
+            {statblock.format === "zip_creature" && zipValue && (
+              <ZipCreatureView value={zipValue as import("../types").ZipCreatureData} onQuickUpdate={quickSaveZipCreature} />
+            )}
             {statblock.format === "dnd_character" && dndValue && (
               <DndCharacterView
                 value={dndValue as DndCharacterData}
@@ -653,7 +851,7 @@ function StatblockCard({
                 onQuickUpdate={quickSaveDnd}
               />
             )}
-            {!isLitm && !isDnd && (
+            {!isLitm && !isDnd && !isZip && (
               <div style={{ whiteSpace: "pre-wrap" }}>
                 {statblock.content ? <MentionText text={statblock.content} /> : <span className="muted">Пусто</span>}
               </div>

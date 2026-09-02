@@ -60,6 +60,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [step, setStep] = useState<Step>("Личность");
   const [systemId, setSystemId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [characterName, setCharacterName] = useState(ownerName ?? "");
   const [playerName, setPlayerName] = useState(ownerType === "character" ? ownerPlayerName ?? "" : "");
@@ -192,6 +193,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
 
   async function finish() {
     setSaving(true);
+    setSaveError(null);
     const character = emptyDndCharacter();
     character.systemId = systemId;
     character.characterName = characterName;
@@ -298,14 +300,27 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       /* compendium unreachable — leave spells empty, editable later */
     }
 
-    await api.post("/statblocks", {
-      owner_type: ownerType,
-      owner_id: ownerId,
-      format: "dnd_character",
-      kind: "full",
-      content: JSON.stringify(character),
-    });
-    setSaving(false);
+    // Раньше здесь стоял голый `await api.post(...)`, а `setSaving(false)` и
+    // `onDone()` — за ним: отвал сети на последнем шаге навсегда оставлял
+    // кнопку в «Создаю…», а семь заполненных шагов выбрасывались без следа.
+    try {
+      await api.post("/statblocks", {
+        owner_type: ownerType,
+        owner_id: ownerId,
+        format: "dnd_character",
+        kind: "full",
+        content: JSON.stringify(character),
+      });
+    } catch (e) {
+      setSaveError(
+        e instanceof Error && e.message
+          ? `Не удалось создать персонажа: ${e.message}`
+          : "Не удалось создать персонажа — проверьте связь и попробуйте ещё раз."
+      );
+      return;
+    } finally {
+      setSaving(false);
+    }
     onDone();
   }
 
@@ -542,6 +557,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         </div>
       )}
 
+      {saveError && (
+        <div className="sb-save-status is-error" role="alert">
+          {saveError}
+        </div>
+      )}
+
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row">
           <button onClick={onCancel}>Отмена</button>
@@ -549,7 +570,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         </div>
         {step === "Обзор" ? (
           <button className="primary" onClick={finish} disabled={saving || !characterName}>
-            {saving ? "Создаю…" : "Создать персонажа"}
+            {saving ? "Создаю…" : saveError ? "Попробовать ещё раз" : "Создать персонажа"}
           </button>
         ) : (
           <button className="primary" onClick={next} disabled={step === "Личность" && !characterName}>

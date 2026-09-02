@@ -615,6 +615,14 @@ export function openDatabase(dbDir: string): Database.Database {
   if (!columnExists(database, "statblocks", "density")) {
     database.exec("ALTER TABLE statblocks ADD COLUMN density TEXT");
   }
+  // Мягкое удаление статблока. Чарник — это часы работы (или импорт из LSS),
+  // а сносился он по одному `confirm` и физическим DELETE, без отката. Строка
+  // теперь помечается, а не удаляется; GET её не отдаёт, PUT /:id/restore
+  // возвращает. В общий экран «Архив» статблоки не попадают: это часть
+  // персонажа, а не самостоятельная сущность (см. SideWorks, Этап 0 п.4).
+  if (!columnExists(database, "statblocks", "archived_at")) {
+    database.exec("ALTER TABLE statblocks ADD COLUMN archived_at TEXT");
+  }
   if (!columnExists(database, "resources", "template_format")) {
     database.exec("ALTER TABLE resources ADD COLUMN template_format TEXT NOT NULL DEFAULT 'text'");
   }
