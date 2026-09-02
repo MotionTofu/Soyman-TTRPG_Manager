@@ -82,6 +82,7 @@ import { computeArmorClass } from "./armorClass";
 import { allResources, applicableStats, type ClassResourceSource } from "./dndResources";
 import { Modal } from "../Modal";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { useConfirm } from "../../hooks/useConfirm";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { NavIcon } from "../NavIcons";
@@ -516,112 +517,6 @@ function readSearchDrop(e: DragEvent): SearchResult | null {
 // its bonus (score modifier + proficiency bonus) — left unset, the row is
 // just a plain proficiency/language name with no value (matching how
 // languages don't have a "check").
-const DndProficienciesEdit = memo(function DndProficienciesEdit({
-  value,
-  proficiencyBonus,
-  abilities,
-  onChange,
-}: {
-  value: DndProficiencyEntry[];
-  proficiencyBonus: string;
-  abilities: DndCharacterData["abilities"];
-  onChange: (v: DndProficiencyEntry[]) => void;
-}) {
-  const [dragOver, setDragOver] = useState(false);
-  const [manualName, setManualName] = useState("");
-  const profBonus = parseBonus(proficiencyBonus);
-
-  function update(i: number, patch: Partial<DndProficiencyEntry>) {
-    const next = value.slice();
-    next[i] = { ...next[i], ...patch };
-    onChange(next);
-  }
-  function remove(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
-    onChange(value.filter((_, idx) => idx !== i));
-  }
-  function handleDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragOver(false);
-    const result = readSearchDrop(e);
-    if (!result) return;
-    // Tool proficiencies carry their governing ability on the compendium
-    // entry itself (see CompendiumSection's TOOL_ABILITY_FIELD) — use it so
-    // the user doesn't have to pick the same ability manually every time.
-    const abilityKey = result.ability ? ABILITY_NAME_TO_KEY[result.ability] ?? null : null;
-    onChange([...value, { entryId: result.id, name: result.title, abilityKey }]);
-  }
-  function addManual() {
-    if (!manualName.trim()) return;
-    onChange([...value, { entryId: null, name: manualName.trim(), abilityKey: null }]);
-    setManualName("");
-  }
-
-  return (
-    <div className="stack">
-      <div className="sb-section" style={{ margin: 0 }}>
-        Владения и языки
-      </div>
-      <div
-        className={`dnd-proficiency-dropzone${dragOver ? " drag-over" : ""}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-      >
-        {value.length === 0 && (
-          <span className="muted">Перетащите сюда результат поиска — предмет, владение, язык…</span>
-        )}
-        <div className="stack" style={{ gap: 4 }}>
-          {value.map((p, i) => (
-            <div key={i} className="row dnd-proficiency-row">
-              <span className="dnd-proficiency-name">{p.name}</span>
-              <select
-                value={p.abilityKey ?? ""}
-                onChange={(e) => update(i, { abilityKey: (e.target.value || null) as DndAbilityKey | null })}
-              >
-                <option value="">— без бонуса —</option>
-                {ABILITY_LABELS.map(({ key, label }) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              {p.abilityKey && (
-                <span className="dnd-proficiency-value">
-                  {formatModifier(abilityModifier(abilities[p.abilityKey]) + profBonus)}
-                </span>
-              )}
-              <button type="button" className="comp-mini" onClick={() => remove(i)}>
-                <NavIcon name="close" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="row">
-        <input
-          placeholder="Добавить вручную"
-          value={manualName}
-          onChange={(e) => setManualName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addManual()}
-        />
-        <button type="button" onClick={addManual}>
-          + Добавить
-        </button>
-      </div>
-    </div>
-  );
-});
-
-// onChange is optional: passed by DndSkillsView (which already has
-// onQuickUpdate) so a proficiency/language can be added or removed right
-// here, without opening the full DndCharacterEdit form just for that — the
-// same "Manage" button used to require. Ability-linked proficiencies (tools
-// with a governing stat) still need the full edit form; this quick-add only
-// covers plain name entries, matching DndProficienciesEdit's own manual-add.
 function DndProficienciesView({
   value,
   onChange,
@@ -1407,73 +1302,6 @@ function DndSpellLevelSection({
 // Memoized: with up to 10 level sections (each its own search/drop UI), this
 // is one of the largest subtrees on the sheet — without memo it fully
 // re-renders on every keystroke anywhere else in the form.
-const DndSpellsEdit = memo(function DndSpellsEdit({
-  systemId,
-  cantrips,
-  spellSlotLevels,
-  spellSlotPips,
-  spellsByLevel,
-  onChange,
-}: {
-  systemId: number | null;
-  cantrips: DndSpellEntry[];
-  spellSlotLevels: number;
-  spellSlotPips: number[];
-  spellsByLevel: DndSpellEntry[][];
-  onChange: (
-    patch: Partial<Pick<DndCharacterData, "cantrips" | "spellSlotLevels" | "spellSlotPips" | "spellsByLevel">>
-  ) => void;
-}) {
-  return (
-    <div className="stack">
-      <label>
-        Кругов заклинаний
-        <select
-          value={spellSlotLevels}
-          onChange={(e) => onChange({ spellSlotLevels: Number(e.target.value) })}
-        >
-          {Array.from({ length: SPELL_LEVELS + 1 }, (_, n) => (
-            <option key={n} value={n}>
-              {n === 0 ? "Нет" : n}
-            </option>
-          ))}
-        </select>
-      </label>
-      <DndSpellLevelSection
-        level={0}
-        systemId={systemId}
-        slots={0}
-        spells={cantrips}
-        edit
-        showSlots={false}
-        onSlotsChange={() => {}}
-        onSpellsChange={(v) => onChange({ cantrips: v })}
-      />
-      {Array.from({ length: spellSlotLevels }, (_, i) => (
-        <DndSpellLevelSection
-          key={i}
-          level={i + 1}
-          systemId={systemId}
-          slots={spellSlotPips[i]}
-          spells={spellsByLevel[i]}
-          edit
-          showSlots
-          onSlotsChange={(v) => {
-            const next = spellSlotPips.slice();
-            next[i] = v;
-            onChange({ spellSlotPips: next });
-          }}
-          onSpellsChange={(v) => {
-            const next = spellsByLevel.slice();
-            next[i] = v;
-            onChange({ spellsByLevel: next });
-          }}
-        />
-      ))}
-    </div>
-  );
-});
-
 function DndSpellsView({
   cantrips,
   spellSlotLevels,
@@ -1565,6 +1393,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
   onLevelChange: (i: number, level: number) => void;
   onRemoveClass: (i: number) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const hasCompendiumClasses = hierarchy.classes.length > 0;
   // Lets the level input sit empty mid-edit (so the user can clear it and
   // type a fresh number) without every keystroke snapping back to "1" —
@@ -1710,6 +1539,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
       <button type="button" onClick={add} style={{ alignSelf: "flex-start" }}>
         + Добавить класс
       </button>
+      {confirmDialog}
     </div>
   );
 });
@@ -2871,354 +2701,6 @@ function useDndOrigin(
   };
 }
 
-export function DndCharacterEdit({
-  value,
-  onChange,
-}: {
-  value: DndCharacterData;
-  onChange: (v: DndCharacterData) => void;
-}) {
-  const {
-    systems,
-    hierarchy,
-    species,
-    backgrounds,
-    damageTypes,
-    conditionOptions,
-    senseOptions,
-    setAttacks,
-    setEquipmentSections,
-    setSpeciesFeatures,
-    setClassFeatures,
-    setFeats,
-    setSpecialAbilities,
-    setProficiencies,
-    setSpellsPatch,
-    setAbilities,
-    setSavingThrowProfs,
-    setSkillProfs,
-    setNarrativeField,
-    setSpellcasting,
-    setClasses,
-    pickClass,
-    pickSubclass,
-    changeClassLevel,
-    removeClass,
-    pickRace,
-    pickBackground,
-  } = useDndOrigin(value, onChange);
-
-  const spellAbilityKey = characterSpellcastingAbility(value.classes);
-  const spellAbilityMod = spellAbilityKey ? abilityModifier(value.abilities[spellAbilityKey]) : 0;
-  const spellProfBonus = parseBonus(value.proficiencyBonus);
-  const spellAttackBonus = spellAbilityMod + spellProfBonus + parseBonus(value.spellAttackMisc);
-  const spellDc = 8 + spellAbilityMod + spellProfBonus + parseBonus(value.spellDcMisc);
-
-  // Stable per-field callbacks (NARRATIVE_FIELDS never changes) so the
-  // memoized MentionTextarea for one narrative field doesn't re-render just
-  // because a keystroke landed in a different field or elsewhere on the sheet.
-  const narrativeCallbacks = useMemo(
-    () => NARRATIVE_FIELDS.map(({ key }) => (v: string) => setNarrativeField(key, v)),
-    [setNarrativeField]
-  );
-
-  return (
-    <div className="stack dnd-card">
-      <div className="row">
-        <label style={{ flex: 1 }}>
-          Система (для подсказок класса/расы/предыстории)
-          <select
-            value={value.systemId ?? ""}
-            onChange={(e) => onChange({ ...value, systemId: e.target.value ? Number(e.target.value) : null })}
-          >
-            <option value="">Не выбрана</option>
-            {systems.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="row">
-        <input
-          placeholder="Имя персонажа"
-          value={value.characterName}
-          onChange={(e) => onChange({ ...value, characterName: e.target.value })}
-          style={{ flex: 1 }}
-        />
-        <input
-          placeholder="Игрок"
-          value={value.playerName}
-          onChange={(e) => onChange({ ...value, playerName: e.target.value })}
-        />
-      </div>
-
-      <DndClassesEdit
-        classes={value.classes}
-        hierarchy={hierarchy}
-        onChange={setClasses}
-        onPickClass={pickClass}
-        onPickSubclass={pickSubclass}
-        onLevelChange={changeClassLevel}
-        onRemoveClass={removeClass}
-      />
-
-      <div className="row">
-        <label style={{ flex: 1 }}>
-          Вид
-          {species.length > 0 ? (
-            <select value={value.raceId ?? ""} onChange={(e) => pickRace(e.target.value ? Number(e.target.value) : null)}>
-              <option value="">Выбрать вид…</option>
-              {species.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.creatureTypeName ? `${s.name}, ${s.creatureTypeName}` : s.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input value={value.raceName} onChange={(e) => onChange({ ...value, raceName: e.target.value })} />
-          )}
-        </label>
-        <label style={{ flex: 1 }}>
-          Предыстория
-          {backgrounds.length > 0 ? (
-            <select
-              value={value.backgroundId ?? ""}
-              onChange={(e) => pickBackground(e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">Выбрать предысторию…</option>
-              {backgrounds.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={value.backgroundName}
-              onChange={(e) => onChange({ ...value, backgroundName: e.target.value })}
-            />
-          )}
-        </label>
-      </div>
-
-      <div className="row">
-        <label>
-          Бонус мастерства
-          <div className="dnd-computed-field">{value.proficiencyBonus}</div>
-        </label>
-      </div>
-
-      <AbilitySavesSkillsEdit
-        abilities={value.abilities}
-        proficiencyBonus={value.proficiencyBonus}
-        savingThrowProfs={value.savingThrowProfs}
-        skillProfs={value.skillProfs}
-        classSkillPool={classSkillPool(value.classes)}
-        classSkillChoiceCount={classSkillChoiceTotal(value.classes)}
-        backgroundSkillNames={value.backgroundSkillNames}
-        onAbilitiesChange={setAbilities}
-        onSavingThrowProfsChange={setSavingThrowProfs}
-        onSkillProfsChange={setSkillProfs}
-      />
-
-      <div className="row">
-        <label>
-          КЗ (вычисляется: 10/КЗ доспеха + Лов, надетые предметы, ниже)
-          <input
-            value={computeArmorClass(
-              abilityModifier(value.abilities.dex),
-              value.equipmentSections,
-              parseBonus(value.manualAcBonus)
-            )}
-            disabled
-            style={{ width: 48 }}
-          />
-        </label>
-        <label>
-          Доп. бонус к КЗ
-          <input
-            value={value.manualAcBonus}
-            onChange={(e) => onChange({ ...value, manualAcBonus: e.target.value })}
-            style={{ width: 48 }}
-          />
-        </label>
-        <label>
-          Инициатива
-          <input value={value.initiative} onChange={(e) => onChange({ ...value, initiative: e.target.value })} />
-        </label>
-        <label>
-          Скорость
-          <input value={value.speed} onChange={(e) => onChange({ ...value, speed: e.target.value })} />
-        </label>
-        <label className="row dnd-inline-field">
-          <input
-            type="checkbox"
-            checked={value.inspiration}
-            onChange={(e) => onChange({ ...value, inspiration: e.target.checked })}
-          />
-          Вдохновение
-        </label>
-      </div>
-
-      <SpeedEditor value={value.speeds} onChange={(v) => onChange({ ...value, speeds: v })} />
-      <SensesEditor
-        value={value.sensesList}
-        onChange={(v) => onChange({ ...value, sensesList: v })}
-        options={senseOptions}
-      />
-      <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
-        <ChecklistEditor
-          label="Уязвимости к урону"
-          value={value.damageVulnerabilities}
-          onChange={(v) => onChange({ ...value, damageVulnerabilities: v })}
-          options={damageTypes}
-        />
-        <ChecklistEditor
-          label="Сопротивления урону"
-          value={value.damageResistances}
-          onChange={(v) => onChange({ ...value, damageResistances: v })}
-          options={damageTypes}
-        />
-        <ChecklistEditor
-          label="Иммунитет к урону"
-          value={value.damageImmunities}
-          onChange={(v) => onChange({ ...value, damageImmunities: v })}
-          options={damageTypes}
-        />
-        <ChecklistEditor
-          label="Иммунитет к состояниям"
-          value={value.conditionImmunities}
-          onChange={(v) => onChange({ ...value, conditionImmunities: v })}
-          options={conditionOptions}
-        />
-      </div>
-
-      <div className="row">
-        <label>
-          ХП максимум
-          <input value={value.hitPointMax} onChange={(e) => onChange({ ...value, hitPointMax: e.target.value })} />
-        </label>
-        <label>
-          ХП текущие
-          <input
-            value={value.hitPointsCurrent}
-            onChange={(e) => onChange({ ...value, hitPointsCurrent: e.target.value })}
-          />
-        </label>
-        <label>
-          Временные ХП
-          <input
-            value={value.hitPointsTemp}
-            onChange={(e) => onChange({ ...value, hitPointsTemp: e.target.value })}
-          />
-        </label>
-        <label>
-          Временный макс. ХП
-          <input
-            value={value.hitPointMaxTemp}
-            onChange={(e) => onChange({ ...value, hitPointMaxTemp: e.target.value })}
-          />
-        </label>
-        <label>
-          Кости хитов
-          <input value={value.hitDice} onChange={(e) => onChange({ ...value, hitDice: e.target.value })} />
-        </label>
-      </div>
-
-      <AttackListEdit values={value.attacks} onChange={setAttacks} />
-
-      <DndEquipmentEdit sections={value.equipmentSections} onChange={setEquipmentSections} />
-      <label className="row">
-        Настроено предметов
-        <PipTrack
-          value={value.attunementCount}
-          max={3}
-          onChange={(n) => onChange({ ...value, attunementCount: n })}
-        />
-      </label>
-
-      <AutoFeatureListEdit title="Видовые особенности" values={value.speciesFeatures} onChange={setSpeciesFeatures} />
-      <AutoFeatureListEdit title="Классовые особенности" values={value.classFeatures} onChange={setClassFeatures} />
-      <AutoFeatureListEdit title="Черты" values={value.feats} onChange={setFeats} allowSearchDrop />
-      <FeatureListEdit title="Особые умения" values={value.specialAbilities} onChange={setSpecialAbilities} />
-
-      <DndProficienciesEdit
-        value={value.proficiencies}
-        proficiencyBonus={value.proficiencyBonus}
-        abilities={value.abilities}
-        onChange={setProficiencies}
-      />
-
-      <details className="card">
-        <summary className="sb-section" style={{ margin: 0 }}>
-          Личностные качества
-        </summary>
-        <div className="dnd-personality-grid">
-          {NARRATIVE_FIELDS.map(({ key, label }, i) => (
-            <label key={key}>
-              {label}
-              <MentionTextarea value={value[key] as string} onChange={narrativeCallbacks[i]} rows={3} />
-            </label>
-          ))}
-        </div>
-      </details>
-
-      <div className="sb-section" style={{ margin: 0 }}>
-        Магия
-      </div>
-      <div className="row">
-        <label>
-          Сложность заклинаний
-          <div className="dnd-computed-field">{spellDc}</div>
-        </label>
-        <label>
-          Прочие бонусы к сложности
-          <input
-            style={{ width: 70 }}
-            value={value.spellDcMisc}
-            onChange={(e) => onChange({ ...value, spellDcMisc: e.target.value })}
-          />
-        </label>
-        <label>
-          Бонус к атаке заклинаниями
-          <div className="dnd-computed-field">{formatModifier(spellAttackBonus)}</div>
-        </label>
-        <label>
-          Прочие бонусы к атаке
-          <input
-            style={{ width: 70 }}
-            value={value.spellAttackMisc}
-            onChange={(e) => onChange({ ...value, spellAttackMisc: e.target.value })}
-          />
-        </label>
-      </div>
-      <label>
-        Заклинания — общая информация
-        <MentionTextarea value={value.spellcasting} onChange={setSpellcasting} rows={3} />
-      </label>
-      <DndSpellsEdit
-        systemId={value.systemId}
-        cantrips={value.cantrips}
-        spellSlotLevels={value.spellSlotLevels}
-        spellSlotPips={value.spellSlotPips}
-        spellsByLevel={value.spellsByLevel}
-        onChange={setSpellsPatch}
-      />
-    </div>
-  );
-}
-
-// Requirement: features auto-filled from a class/subclass/species pick show
-// like the compendium's own feature entries — a collapsible article per
-// feature, collapsed by default, rather than always-visible text.
-
-// One row of the "Бой" tab's unified Атаки table — either a structured
-// weapon/spell (bonus/damage/range each their own column) or a hand-written
-// freeform attack (no structured fields, so its description spans the rest
-// of the row instead of forcing three empty cells).
 interface AttackRow {
   name: string;
   bonus: string;
@@ -3481,7 +2963,7 @@ function DndSkillsView({
 function DndTraitsView({ value }: { value: DndCharacterData }) {
   const speeds = formatSpeed(value.speeds);
   const senses = value.sensesList
-    .map((sn) => [sn.name, sn.range].filter(Boolean).join(" "))
+    .map((sn) => [sn.name, sn.distance].filter(Boolean).join(" "))
     .filter(Boolean)
     .join(", ");
   const defences: [string, string[]][] = [
@@ -4127,7 +3609,15 @@ export function DndCharacterView({
   // local (not saved on every keystroke, unlike the single-click quick edits
   // elsewhere on this sheet) — an explicit "Сохранить" commits via
   // onQuickUpdate, "Отмена" discards.
-  const [draftSpecial, setDraftSpecial] = useState<DndFeature[] | null>(null);
+  // Все четыре списка особенностей — тексты, а тексты по общему правилу
+  // правятся через черновик с явным сохранением: набранный абзац терять
+  // нельзя (гриллинг 2026-09-03). Видовые и классовые приходят из
+  // компендиума, но править их руками лист позволял и раньше — роспуск формы
+  // не должен этого отнимать.
+  const [draftFeatures, setDraftFeatures] = useState<Pick<
+    DndCharacterData,
+    "speciesFeatures" | "classFeatures" | "feats" | "specialAbilities"
+  > | null>(null);
   const [draftDossier, setDraftDossier] = useState<Pick<
     DndCharacterData,
     "personalityTraits" | "ideals" | "bonds" | "flaws"
@@ -4140,6 +3630,8 @@ export function DndCharacterView({
   const [editingInventory, setEditingInventory] = useState(false);
   const [editingSpells, setEditingSpells] = useState(false);
   const [editingTraits, setEditingTraits] = useState(false);
+  const [editingAbilities, setEditingAbilities] = useState(false);
+  const [editingActions, setEditingActions] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
   // Происхождение правится карандашом в самой шапке — там, где класс, вид и
   // предыстория и написаны (гриллинг 2026-09-03). Клик по значению остаётся
@@ -4155,11 +3647,10 @@ export function DndCharacterView({
   const [fallbackProgressions, setFallbackProgressions] = useState<(ClassProgression | undefined)[]>([]);
   const isMobile = useIsMobile();
   // Справочники грузятся только когда панель открыта — см. флаг в useDndOrigin.
-  const origin = useDndOrigin(
-    value,
-    (v) => onQuickUpdate?.(v),
-    editingOrigin
-  );
+  // Справочники нужны обеим панелям правки: происхождению — иерархия классов,
+  // виды и предыстории, свойствам — типы урона и состояния. Грузим, когда
+  // открыта любая из них, и не грузим, пока лист просто читают.
+  const origin = useDndOrigin(value, (v) => onQuickUpdate?.(v), editingOrigin || editingTraits);
   // Считается до раннего выхода: ниже стоят хуки, а компактная карточка
   // возвращается раньше.
   const slotSources = value.classes
@@ -4499,14 +3990,36 @@ export function DndCharacterView({
             )}
           </div>
 
-          <AbilitySavesSkillsView
-            abilities={value.abilities}
-            proficiencyBonus={value.proficiencyBonus}
-            savingThrowProfs={value.savingThrowProfs}
-            skillProfs={value.skillProfs}
-            classSkillPool={classSkillPool(value.classes)}
-            backgroundSkillNames={value.backgroundSkillNames}
-          />
+          {/* Характеристики меняются редко (повышение, предмет), но менять их
+              было негде, кроме как открыв всю форму. Карандаш меняет тот же
+              блок на редактируемый прямо на месте; значения сохраняются
+              сразу — правило «значения мгновенно» (гриллинг 2026-09-03). */}
+          {onQuickUpdate && (
+            <TabEditToggle editing={editingAbilities} onToggle={() => setEditingAbilities((v) => !v)} />
+          )}
+          {editingAbilities && onQuickUpdate ? (
+            <AbilitySavesSkillsEdit
+              abilities={value.abilities}
+              proficiencyBonus={value.proficiencyBonus}
+              savingThrowProfs={value.savingThrowProfs}
+              skillProfs={value.skillProfs}
+              classSkillPool={classSkillPool(value.classes)}
+              classSkillChoiceCount={classSkillChoiceTotal(value.classes)}
+              backgroundSkillNames={value.backgroundSkillNames}
+              onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
+              onSavingThrowProfsChange={(v) => onQuickUpdate({ savingThrowProfs: v })}
+              onSkillProfsChange={(v) => onQuickUpdate({ skillProfs: v })}
+            />
+          ) : (
+            <AbilitySavesSkillsView
+              abilities={value.abilities}
+              proficiencyBonus={value.proficiencyBonus}
+              savingThrowProfs={value.savingThrowProfs}
+              skillProfs={value.skillProfs}
+              classSkillPool={classSkillPool(value.classes)}
+              backgroundSkillNames={value.backgroundSkillNames}
+            />
+          )}
 
           {isMobile ? (
             // Same 6+1 sections as the desktop tab row, but a 7-button strip
@@ -4536,6 +4049,15 @@ export function DndCharacterView({
 
           {tab === "Действия" && (
             <div className="stack">
+              {/* Вручную вписанные атаки (то, чего нет ни в оружии, ни в
+                  заклинаниях) правились только в форме. Теперь — там же, где
+                  показываются. */}
+              {onQuickUpdate && (
+                <TabEditToggle editing={editingActions} onToggle={() => setEditingActions((v) => !v)} />
+              )}
+              {editingActions && onQuickUpdate && (
+                <AttackListEdit values={value.attacks} onChange={(v) => onQuickUpdate({ attacks: v })} />
+              )}
               {(() => {
                 // Вкладка собирает всё, что персонаж может применить, из
                 // всех источников сразу: оружие, заклинания, умения классов,
@@ -4575,9 +4097,42 @@ export function DndCharacterView({
                       {formatModifier(spellAttackBonus)}
                     </div>
                   )}
-                  {value.spellcasting && (
+                  {value.spellcasting && !editingSpells && (
                     <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
                       <MentionText text={value.spellcasting} />
+                    </div>
+                  )}
+                  {/* Прочие бонусы к СЛ и к атаке заклинаниями (предметы,
+                      черты) и общий текст о магии правились только в форме.
+                      Их место — под самими СЛ и бонусом, которые они меняют. */}
+                  {editingSpells && onQuickUpdate && (
+                    <div className="stack sb-entry">
+                      <div className="row">
+                        <label>
+                          Прочие бонусы к сложности
+                          <input
+                            style={{ width: 70 }}
+                            value={value.spellDcMisc}
+                            onChange={(e) => onQuickUpdate({ spellDcMisc: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Прочие бонусы к атаке
+                          <input
+                            style={{ width: 70 }}
+                            value={value.spellAttackMisc}
+                            onChange={(e) => onQuickUpdate({ spellAttackMisc: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <label>
+                        Заклинания — общая информация
+                        <MentionTextarea
+                          value={value.spellcasting}
+                          onChange={(v) => onQuickUpdate({ spellcasting: v })}
+                          rows={3}
+                        />
+                      </label>
                     </div>
                   )}
                 </>
@@ -4685,22 +4240,34 @@ export function DndCharacterView({
                 <TabEditToggle editing={editingInventory} onToggle={() => setEditingInventory((v) => !v)} />
               )}
               {editingInventory ? (
-                <DndEquipmentEdit
-                  sections={value.equipmentSections}
-                  onChange={(next) => onQuickUpdate?.({ equipmentSections: next })}
-                />
+                <>
+                  <DndEquipmentEdit
+                    sections={value.equipmentSections}
+                    onChange={(next) => onQuickUpdate?.({ equipmentSections: next })}
+                  />
+                  {/* Монеты хранились, но в просмотре их не было вовсе —
+                      правились только в форме. */}
+                </>
               ) : (
-                <DndEquipmentQuickView
-                  sections={value.equipmentSections}
-                  systemId={value.systemId}
-                  startingSets={startingSets}
-                  onQuickUpdate={onQuickUpdate}
-                />
+                <>
+                  <DndEquipmentQuickView
+                    sections={value.equipmentSections}
+                    systemId={value.systemId}
+                    startingSets={startingSets}
+                    onQuickUpdate={onQuickUpdate}
+                  />
+                </>
               )}
-              {value.attunementCount > 0 && (
+              {/* Настройка предметов: дорожка кликабельна, а не просто
+                  показывается — настроить предмет можно и посреди боя. */}
+              {(value.attunementCount > 0 || onQuickUpdate) && (
                 <div className="sb-entry">
                   <span className="sb-prop-label">Настроено предметов</span>{" "}
-                  <PipTrack value={value.attunementCount} max={3} />
+                  <PipTrack
+                    value={value.attunementCount}
+                    max={3}
+                    onChange={onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined}
+                  />
                 </div>
               )}
             </div>
@@ -4765,30 +4332,60 @@ export function DndCharacterView({
               ) : (
                 <DndTraitsView value={value} />
               )}
-              <SbFeatureGroup title="Видовые особенности" values={value.speciesFeatures} />
-              <SbFeatureGroup title="Классовые особенности" values={value.classFeatures} />
-              <SbFeatureGroup title="Черты" values={value.feats} />
-              {draftSpecial ? (
+              {draftFeatures ? (
                 <>
-                  <FeatureListEdit title="Особые умения" values={draftSpecial} onChange={setDraftSpecial} />
+                  <AutoFeatureListEdit
+                    title="Видовые особенности"
+                    values={draftFeatures.speciesFeatures}
+                    onChange={(v) => setDraftFeatures({ ...draftFeatures, speciesFeatures: v })}
+                  />
+                  <AutoFeatureListEdit
+                    title="Классовые особенности"
+                    values={draftFeatures.classFeatures}
+                    onChange={(v) => setDraftFeatures({ ...draftFeatures, classFeatures: v })}
+                  />
+                  <AutoFeatureListEdit
+                    title="Черты"
+                    values={draftFeatures.feats}
+                    onChange={(v) => setDraftFeatures({ ...draftFeatures, feats: v })}
+                    allowSearchDrop
+                  />
+                  <FeatureListEdit
+                    title="Особые умения"
+                    values={draftFeatures.specialAbilities}
+                    onChange={(v) => setDraftFeatures({ ...draftFeatures, specialAbilities: v })}
+                  />
                   <div className="row" style={{ marginTop: 6, alignItems: "center" }}>
                     <TabEditToggle
                       editing
                       onToggle={() => {
-                        onQuickUpdate?.({ specialAbilities: draftSpecial });
-                        setDraftSpecial(null);
+                        onQuickUpdate?.(draftFeatures);
+                        setDraftFeatures(null);
                       }}
                     />
-                    <button type="button" onClick={() => setDraftSpecial(null)}>
+                    <button type="button" onClick={() => setDraftFeatures(null)}>
                       Отмена
                     </button>
                   </div>
                 </>
               ) : (
                 <>
+                  <SbFeatureGroup title="Видовые особенности" values={value.speciesFeatures} />
+                  <SbFeatureGroup title="Классовые особенности" values={value.classFeatures} />
+                  <SbFeatureGroup title="Черты" values={value.feats} />
                   <SbFeatureGroup title="Особые умения" values={value.specialAbilities} />
                   {onQuickUpdate && (
-                    <TabEditToggle editing={false} onToggle={() => setDraftSpecial([...value.specialAbilities])} />
+                    <TabEditToggle
+                      editing={false}
+                      onToggle={() =>
+                        setDraftFeatures({
+                          speciesFeatures: [...value.speciesFeatures],
+                          classFeatures: [...value.classFeatures],
+                          feats: [...value.feats],
+                          specialAbilities: [...value.specialAbilities],
+                        })
+                      }
+                    />
                   )}
                 </>
               )}

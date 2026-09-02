@@ -25,7 +25,7 @@ import {
 } from "./litm/LitMCharacterForm";
 import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { CreatureCardLoader } from "./CreatureCard";
-import { emptyDndCharacter, normalizeDndCharacter, DndCharacterEdit, DndCharacterView } from "./dnd/DndCharacterForm";
+import { emptyDndCharacter, normalizeDndCharacter, DndCharacterView } from "./dnd/DndCharacterForm";
 import { findDndSystemId } from "./dnd/dndCompendium";
 import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
 import { DndCharacterWizard } from "./dnd/DndCharacterWizard";
@@ -835,15 +835,6 @@ function StatblockCard({
                 value={zipValue as import("../types").ZipCreatureData}
                 onChange={(v) => {
                   setZipValue(v);
-                  setContent(JSON.stringify(v));
-                }}
-              />
-            )}
-            {statblock.format === "dnd_character" && dndValue && (
-              <DndCharacterEdit
-                value={dndValue as DndCharacterData}
-                onChange={(v) => {
-                  setDndValue(v);
                   setContent(JSON.stringify(v));
                 }}
               />
