@@ -53,12 +53,16 @@ function ThemeKitPicker({
   onPick: (kit: CompendiumEntry) => void;
   themeTypeFilter?: string; // optional filter by themebook type (e.g. "Personality")
 }): React.ReactElement | null {
-  if (!isOpen) return null;
+  // Хуки идут до любого возврата: `if (!isOpen) return null` стоял выше них,
+  // и при открытии модалки число хуков менялось между рендерами. Закрытая
+  // модалка теперь тоже проходит через хуки, но ничего не грузит — за это
+  // отвечает ранний выход внутри эффекта.
   const [kits, setKits] = useState<CompendiumEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    if (!isOpen) return;
     async function load() {
       try {
         const systems = await api.get<{ id: number; name: string }[]>("/systems");
@@ -79,7 +83,7 @@ function ThemeKitPicker({
       }
     }
     load();
-  }, [themeTypeFilter]);
+  }, [themeTypeFilter, isOpen]);
 
   function getThemebookId(entries: CompendiumEntry[], themebookEn: string): number | null {
     const tb = entries.find(e => e.kind === "themebook" && e.name.includes(`[${themebookEn}]`));
@@ -90,6 +94,8 @@ function ThemeKitPicker({
     k.name.toLowerCase().includes(search.toLowerCase()) ||
     (k.data.powerTags as string[] | undefined)?.some(t => t.toLowerCase().includes(search.toLowerCase()))
   );
+
+  if (!isOpen) return null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

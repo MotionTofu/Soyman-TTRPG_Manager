@@ -52,6 +52,11 @@ export function InworldCalendar({
   useEffect(() => {
     if (focusDate) setCursor({ year: focusDate.year, month: focusDate.month });
   }, [focusDate?.year, focusDate?.month]);
+  // Держится выше раннего возврата: при ненастроенном календаре компонент
+  // выходил на `months.length === 0` до этого `useRef`, и число хуков
+  // менялось между рендерами — как только месяцы приходили, React получал
+  // другой порядок.
+  const longPress = useRef<number | null>(null);
 
   if (months.length === 0) {
     return <p className="muted">Календарь сеттинга не настроен.</p>;
@@ -94,7 +99,6 @@ export function InworldCalendar({
     }
   }
 
-  const longPress = useRef<number | null>(null);
   function clearLongPress() {
     if (longPress.current != null) { clearTimeout(longPress.current); longPress.current = null; }
   }

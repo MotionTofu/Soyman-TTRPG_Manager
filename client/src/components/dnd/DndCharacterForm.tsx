@@ -2054,50 +2054,6 @@ function EquipmentInlineForm({
 // снаряжения (data.equipment_a_items / equipment_b_items). Пока набор не
 // размечен ссылками, здесь пусто — текстовое описание набора живёт в
 // компендиуме и переносится вручную, как и раньше.
-const COIN_LABELS: Record<keyof import("../../types").DndCoins, string> = {
-  cp: "ММ",
-  sp: "СМ",
-  ep: "ЭМ",
-  gp: "ЗМ",
-  pp: "ПМ",
-};
-const COIN_ORDER: (keyof import("../../types").DndCoins)[] = ["cp", "sp", "ep", "gp", "pp"];
-
-function DndCoinsView({ coins }: { coins: import("../../types").DndCoins }) {
-  const hasAny = COIN_ORDER.some((k) => coins[k]?.trim());
-  if (!hasAny) return null;
-  return (
-    <div className="sb-entry">
-      <span className="sb-prop-label">Монеты</span>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-        {COIN_ORDER.filter((k) => coins[k]?.trim()).map((k) => `${coins[k]} ${COIN_LABELS[k]}`).join(" · ")}
-      </span>
-    </div>
-  );
-}
-
-function DndCoinsEdit({
-  coins,
-  onChange,
-}: {
-  coins: import("../../types").DndCoins;
-  onChange: (c: import("../../types").DndCoins) => void;
-}) {
-  return (
-    <div className="stack">
-      <div className="sb-section" style={{ margin: 0 }}>Монеты</div>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        {COIN_ORDER.map((k) => (
-          <label key={k} style={{ flex: "1 1 70px", minWidth: 0 }}>
-            {COIN_LABELS[k]}
-            <input value={coins[k] ?? ""} onChange={(e) => onChange({ ...coins, [k]: e.target.value })} placeholder="0" />
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 interface StartingSet {
   label: string;
   gold: string;
@@ -4273,6 +4229,22 @@ export function DndCharacterView({
     DndCharacterData,
     "personalityTraits" | "ideals" | "bonds" | "flaws"
   > | null>(null);
+  // `MentionTextarea` — memo, но пока onChange создавался заново на каждый
+  // рендер, мемоизация не работала вовсе: нажатие клавиши в «Идеалах»
+  // перерисовывало и «Черты характера», и «Привязанности», и «Слабости».
+  // Колбэки берут прежнее состояние через функциональный сеттер, поэтому
+  // зависимостей нет и ссылки стабильны на всю жизнь компонента.
+  const narrativeCallbacks = useMemo(
+    () =>
+      Object.fromEntries(
+        NARRATIVE_FIELDS.map(({ key }) => [
+          key,
+          (v: string) =>
+            setDraftDossier((prev) => (prev ? { ...prev, [key]: v } : prev)),
+        ])
+      ) as Record<string, (v: string) => void>,
+    []
+  );
   // Same idea as draftSpecial/draftDossier above, but these two commit on
   // every keystroke like the rest of the sheet (no local draft to lose) —
   // the pencil just toggles between the compact quick-view and the fuller
@@ -5216,7 +5188,7 @@ export function DndCharacterView({
                     <span className="sb-prop-label">{label}</span>
                     <MentionTextarea
                       value={draftDossier[dossierKey] ?? ""}
-                      onChange={(v) => setDraftDossier({ ...draftDossier, [dossierKey]: v })}
+                      onChange={narrativeCallbacks[key]}
                       rows={3}
                     />
                   </div>
