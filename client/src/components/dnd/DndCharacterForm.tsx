@@ -3033,6 +3033,7 @@ function DndSkillsView({
   backgroundSkillNames,
   proficiencies,
   onQuickUpdate,
+  highlight,
 }: {
   abilities: DndCharacterData["abilities"];
   proficiencyBonus: string;
@@ -3041,6 +3042,8 @@ function DndSkillsView({
   backgroundSkillNames: string[];
   proficiencies: DndProficiencyEntry[];
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+  /** Ключ строки, на которую увёл поиск (см. DndSheetSearch). */
+  highlight?: string | null;
 }) {
   const profBonus = parseBonus(proficiencyBonus);
   const rows = useMemo(() => {
@@ -3064,7 +3067,7 @@ function DndSkillsView({
           return (
             <div
               key={skill}
-              className={`dnd-save-row${level > 0 ? " is-proficient" : ""}${level === 2 ? " is-expertise" : ""}${skillSourceClass(skill, pool, backgroundSkillNames)}`}
+              className={`dnd-save-row${level > 0 ? " is-proficient" : ""}${level === 2 ? " is-expertise" : ""}${skillSourceClass(skill, pool, backgroundSkillNames)}${highlight === `skill-${skill}` ? " is-search-hit" : ""}`}
             >
               <button
                 type="button"
@@ -3099,6 +3102,181 @@ function DndSkillsView({
 // (владения и стартовое снаряжение, которые заполняет выбор класса). До
 // роспуска формы правки всё это хранилось, но нигде не показывалось — лист
 // молчал о том, что персонаж имеет сопротивление яду.
+// Поиск по листу. Главный вопрос игрока за столом — «что оно делает», а не
+// «на какой оно вкладке»: поэтому результат заклинания или умения открывает
+// его карточку сразу, а не переключает раздел и оставляет искать глазами.
+// У того, что карточки не имеет (навыки, свободно вписанные предметы),
+// остаётся переход на вкладку с подсветкой строки.
+interface SheetSearchHit {
+  key: string;
+  name: string;
+  tab: DndViewTab;
+  /** Заклинание или умение — открывается карточкой прямо из поиска. */
+  card?: { kind: "spell"; spell: DndSpellEntry } | { kind: "feature"; feature: DndFeature };
+  /** Всё остальное — подсветка строки на своей вкладке. */
+  highlight?: string;
+  meta?: string;
+}
+
+function collectSheetHits(
+  value: DndCharacterData,
+  liveCantrips: DndSpellEntry[],
+  liveSpellsByLevel: DndSpellEntry[][],
+  liveFeatureGroups: DndFeature[][]
+): SheetSearchHit[] {
+  const hits: SheetSearchHit[] = [];
+  const spellLabel = (lvl: number) => (lvl === 0 ? "Заговор" : `${lvl} круг`);
+  liveCantrips.forEach((sp, i) =>
+    hits.push({ key: `spell-0-${i}`, name: sp.name, tab: "Заклинания", meta: spellLabel(0), card: { kind: "spell", spell: sp } })
+  );
+  liveSpellsByLevel.forEach((lvl, li) =>
+    lvl.forEach((sp, i) =>
+      hits.push({
+        key: `spell-${li + 1}-${i}`,
+        name: sp.name,
+        tab: "Заклинания",
+        meta: spellLabel(li + 1),
+        card: { kind: "spell", spell: sp },
+      })
+    )
+  );
+  // Порядок строго как в liveFeatureGroups у вызывающего: классовые, видовые,
+  // черты, особые умения.
+  const groupNames = ["Классовая особенность", "Видовая особенность", "Черта", "Особое умение"];
+  liveFeatureGroups.forEach((group, gi) =>
+    group.forEach((f, i) =>
+      hits.push({
+        key: `feature-${gi}-${i}`,
+        name: f.name || "Без названия",
+        tab: "Особенности",
+        meta: groupNames[gi],
+        card: { kind: "feature", feature: f },
+      })
+    )
+  );
+  value.equipmentSections.forEach((sec, si) =>
+    sec.items.forEach((it, i) => {
+      if (!it.name) return;
+      hits.push({
+        key: `equip-${si}-${i}`,
+        name: it.name,
+        tab: "Инвентарь",
+        meta: sec.name || "Снаряжение",
+        highlight: `equip-${si}-${i}`,
+      });
+    })
+  );
+  for (const { key, label } of ABILITY_LABELS) {
+    for (const skill of SKILLS_BY_ABILITY[key]) {
+      hits.push({ key: `skill-${skill}`, name: skill, tab: "Навыки", meta: label, highlight: `skill-${skill}` });
+    }
+  }
+  value.proficiencies.forEach((pr, i) => {
+    if (!pr.name) return;
+    hits.push({ key: `prof-${i}`, name: pr.name, tab: "Навыки", meta: "Владение", highlight: `prof-${i}` });
+  });
+  return hits;
+}
+
+function DndSheetSearch({
+  hits,
+  onGo,
+  getEntry,
+}: {
+  hits: SheetSearchHit[];
+  onGo: (hit: SheetSearchHit) => void;
+  getEntry: (id: number | null | undefined) => CompendiumEntry | undefined;
+}) {
+  const [query, setQuery] = useState("");
+  const [openCard, setOpenCard] = useState<SheetSearchHit | null>(null);
+  const q = query.trim().toLowerCase();
+  const found = q
+    ? hits.filter((h) => h.name.toLowerCase().includes(q)).slice(0, 12)
+    : [];
+
+  function pick(hit: SheetSearchHit) {
+    setQuery("");
+    if (hit.card) setOpenCard(hit);
+    onGo(hit);
+  }
+
+  const spell = openCard?.card?.kind === "spell" ? openCard.card.spell : null;
+  const feature = openCard?.card?.kind === "feature" ? openCard.card.feature : null;
+  const detail = spell?.entryId ? getEntry(spell.entryId) : undefined;
+
+  return (
+    <div className="dnd-sheet-search">
+      <input
+        type="search"
+        value={query}
+        placeholder="Найти на листе: заклинание, умение, предмет, навык…"
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setQuery("");
+          if (e.key === "Enter" && found.length > 0) pick(found[0]);
+        }}
+      />
+      {q && (
+        <div className="dnd-sheet-search-results">
+          {found.length === 0 ? (
+            <div className="dnd-sheet-search-empty muted">Ничего не нашлось</div>
+          ) : (
+            found.map((h) => (
+              <button key={h.key} type="button" className="dnd-sheet-search-hit" onMouseDown={(e) => { e.preventDefault(); pick(h); }}>
+                <span className="dnd-sheet-search-name">{h.name}</span>
+                <span className="dnd-sheet-search-where">
+                  {h.tab}
+                  {h.meta ? ` · ${h.meta}` : ""}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+      {openCard && (spell || feature) && (
+        <Modal onClose={() => setOpenCard(null)}>
+          <div className="stack dnd-spell-modal">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <h3 style={{ margin: 0 }}>{openCard.name}</h3>
+              <button type="button" className="comp-mini" onClick={() => setOpenCard(null)}>
+                <NavIcon name="close" />
+              </button>
+            </div>
+            {spell && detail && (() => {
+              const d = buildSpellDetail(detail);
+              const fields: [string, ReactNode][] = (
+                [
+                  ["Школа", d.school],
+                  ["Время накладывания", d.castingTime],
+                  ["Дистанция", d.range],
+                  ["Компоненты", d.componentsText],
+                  ["Длительность", d.duration],
+                ] as [string, ReactNode][]
+              ).filter(([, v]) => !!v);
+              return (
+                <>
+                  {fields.length > 0 && (
+                    <div className="comp-fields">
+                      {fields.map(([label, v]) => (
+                        <div key={label} className="muted">
+                          <strong>{label}:</strong> {v}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <MentionText text={d.description} />
+                </>
+              );
+            })()}
+            {spell && !detail && <span className="muted">Описание берётся из компендиума — запись не найдена.</span>}
+            {feature && <MentionText text={feature.description} />}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 function DndTraitsView({ value }: { value: DndCharacterData }) {
   const speeds = formatSpeed(value.speeds);
   const senses = value.sensesList
@@ -3771,6 +3949,10 @@ export function DndCharacterView({
   const [editingTraits, setEditingTraits] = useState(false);
   const [editingAbilities, setEditingAbilities] = useState(false);
   const [editingActions, setEditingActions] = useState(false);
+  // Подсветка строки, на которую увёл поиск, — для того, у чего нет карточки
+  // (навык, свободно вписанный предмет, владение). Гаснет по следующему
+  // касанию листа.
+  const [highlight, setHighlight] = useState<string | null>(null);
   const [restOpen, setRestOpen] = useState(false);
   // Происхождение правится карандашом в самой шапке — там, где класс, вид и
   // предыстория и написаны (гриллинг 2026-09-03). Клик по значению остаётся
@@ -3837,6 +4019,9 @@ export function DndCharacterView({
     value.feats,
     value.specialAbilities,
   ].map((g) => g.map((f) => resolveFeature(f, getEntry)));
+  // Индекс поиска. Порядок групп особенностей здесь и в liveFeatureGroups
+  // должен совпадать — подписи результата берутся по индексу группы.
+  const searchHits = collectSheetHits(value, liveCantrips, liveSpellsByLevel, liveFeatureGroups);
   const metaChunks: ReactNode[] = [];
   const namedClasses = value.classes.filter((c) => c.className);
   if (namedClasses.length > 0) {
@@ -3896,7 +4081,7 @@ export function DndCharacterView({
     parseBonus(value.manualAcBonus)
   );
   return (
-    <div className="sb-scope">
+    <div className="sb-scope" onClickCapture={() => highlight && setHighlight(null)}>
       <div className="sb-card">
         <div className="sb-head">
           <div className="sb-head-row">
@@ -4160,6 +4345,18 @@ export function DndCharacterView({
             />
           )}
 
+          {/* Поиск стоит над разделами и виден всегда: на телефоне пролистать
+              девять кругов заклинаний дороже всего, и прятать вход в поиск за
+              вторым касанием — экономия площади за счёт главного жеста. */}
+          <DndSheetSearch
+            hits={searchHits}
+            getEntry={getEntry}
+            onGo={(hit) => {
+              setTab(hit.tab);
+              setHighlight(hit.highlight ?? null);
+            }}
+          />
+
           {isMobile ? (
             // Same 6+1 sections as the desktop tab row, but a 7-button strip
             // wraps onto 2-3 cramped rows on a phone — a dropdown picker
@@ -4363,6 +4560,7 @@ export function DndCharacterView({
 
           {tab === "Навыки" && (
             <DndSkillsView
+              highlight={highlight}
               abilities={value.abilities}
               proficiencyBonus={value.proficiencyBonus}
               skillProfs={value.skillProfs}

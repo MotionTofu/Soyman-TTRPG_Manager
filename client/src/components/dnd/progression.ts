@@ -45,10 +45,30 @@ export type ProgressionRole =
   // на листе, но тратить его нечем.
   | "stat";
 
+// Когда пул восстанавливается. Без этого признака короткий отдых не может
+// сбросить «Второе дыхание», не сбросив «Ярость», а длинный обнуляет вообще
+// всё — включая заряды, которые отдыхом не восстанавливаются. Признак —
+// свойство самого ресурса, поэтому живёт у колонки таблицы развития, а не
+// списком классов в коде (см. комментарий про dndResources ниже).
+export type ProgressionRecharge = "long" | "short" | "none";
+
+export const PROGRESSION_RECHARGE_LABELS: Record<ProgressionRecharge, string> = {
+  long: "Длинный отдых",
+  short: "Короткий отдых",
+  none: "Не восстанавливается отдыхом",
+};
+
 export interface ProgressionColumn {
   key: string; // стабильный ключ ячейки в строке
   label: string; // то, что видно в шапке
   role: ProgressionRole;
+  // Только для role === "resource". Отсутствует у колонок, заведённых до
+  // появления признака, — такие считаются длинными.
+  recharge?: ProgressionRecharge;
+}
+
+export function columnRecharge(col: ProgressionColumn): ProgressionRecharge {
+  return col.recharge ?? "long";
 }
 
 export interface ClassProgression {

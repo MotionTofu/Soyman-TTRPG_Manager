@@ -1,10 +1,13 @@
 import { memo, useState } from "react";
 import {
+  PROGRESSION_RECHARGE_LABELS,
   PROGRESSION_ROLE_LABELS,
   PROGRESSION_ROLE_ORDER,
+  columnRecharge,
   parseProgressionTable,
   type ClassProgression,
   type ProgressionColumn,
+  type ProgressionRecharge,
   type ProgressionRole,
 } from "./progression";
 import { NavIcon } from "../NavIcons";
@@ -149,6 +152,25 @@ export const ProgressionEditor = memo(function ProgressionEditor({
                       onChange={(e) => patchColumn(c.key, { label: e.target.value })}
                     />
                     <RoleSelect value={c.role} used={used} onChange={(role) => patchColumn(c.key, { role })} />
+                    {/* Только у расходуемого пула: когда он восстанавливается.
+                        Умолчание — длинный отдых, как у всех колонок, заведённых
+                        до появления признака. */}
+                    {c.role === "resource" && (
+                      <select
+                        className="prog-role"
+                        title="Когда восстанавливается"
+                        value={columnRecharge(c)}
+                        onChange={(e) =>
+                          patchColumn(c.key, { recharge: e.target.value as ProgressionRecharge })
+                        }
+                      >
+                        {(Object.keys(PROGRESSION_RECHARGE_LABELS) as ProgressionRecharge[]).map((r) => (
+                          <option key={r} value={r}>
+                            {PROGRESSION_RECHARGE_LABELS[r]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       type="button"
                       className="comp-mini danger"
