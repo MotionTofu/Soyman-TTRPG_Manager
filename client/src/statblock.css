@@ -1232,3 +1232,10 @@ summary.sb-section {
   text-transform: uppercase;
   color: var(--accent);
 }
+
+/* Обрыв связи с компендиумом: лист живёт на сохранённых именах и говорит
+   об этом. Рамка акцентом — это состояние ошибки, а не украшение. */
+.dnd-entries-failed {
+  border: var(--card-border-width, 1px) solid var(--accent);
+  padding: 6px 8px;
+}

@@ -12,10 +12,15 @@ export function useCompendiumEntries(ids: (number | null | undefined)[]): (id: n
   // Ключ по значению, а не по ссылке: массив id пересобирается на каждый
   // рендер, и зависимость по нему зациклила бы эффект.
   const key = ids.filter((i) => typeof i === "number").join(",");
+  // Версия кэша — не только повод перерисоваться, но и повод сходить заново.
+  // Инвалидация записи (правка в компендиуме) и снятие пометки неудачи
+  // меняют версию, а список id при этом прежний — без версии в зависимостях
+  // эффект бы не сработал, и лист остался бы без живых данных до
+  // перезагрузки страницы.
+  const version = useSyncExternalStore(subscribeEntryCache, () => cacheVersion, () => cacheVersion);
   useEffect(() => {
     if (key) void ensureEntries(key.split(",").map(Number));
-  }, [key]);
-  useSyncExternalStore(subscribeEntryCache, () => cacheVersion, () => cacheVersion);
+  }, [key, version]);
   return getCachedEntry;
 }
 

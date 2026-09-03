@@ -69,7 +69,7 @@ import {
   type DndEffect,
 } from "./effects";
 import { useCompendiumEntries } from "./useCompendiumEntries";
-import { ensureEntries, getCachedEntry } from "./entryCache";
+import { ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
 import type { ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
@@ -1176,9 +1176,11 @@ function DndSpellLevelSection({
     loadDndSpellsByLevel(systemId, level).then(setOptions);
   }, [adding, systemId, level]);
 
-  // Requirement 15 (and requirement 2's expanded fields): clicking a spell's
-  // name reveals its full compendium fields + description inline, fetched
-  // on demand and cached per entry.
+  // Клик по названию раскрывает полные поля заклинания. Запись берётся из
+  // общего кэша листа (entryCache), а не отдельным GET на каждое открытие:
+  // тот же кэш уже вытянул её пачкой ради мета-строки, и поштучный запрос
+  // был ровно тем, что entryCache и заводился устранить. Заодно правка в
+  // компендиуме теперь доходит и сюда — кэш сбрасывается на сохранении.
   async function toggleDescription(realIndex: number, entryId: number | null) {
     if (!entryId) return;
     if (expandedIndex === realIndex) {
@@ -1187,12 +1189,12 @@ function DndSpellLevelSection({
     }
     setExpandedIndex(realIndex);
     if (!(entryId in details)) {
-      try {
-        const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
-        setDetails((d) => ({ ...d, [entryId]: buildSpellDetail(entry) }));
-      } catch {
-        setDetails((d) => ({ ...d, [entryId]: { description: "Нет описания." } }));
-      }
+      await ensureEntries([entryId]);
+      const entry = getCachedEntry(entryId);
+      setDetails((d) => ({
+        ...d,
+        [entryId]: entry ? buildSpellDetail(entry) : { description: "Описание не загрузилось." },
+      }));
     }
   }
 
@@ -4410,6 +4412,9 @@ export function DndCharacterView({
   // в значения навыков, спасбросков, бонусы атак и пассивное восприятие, но
   // НЕ в КЗ и не в сложность заклинаний: это не броски к20.
   const exhaustionPenalty = value.exhaustion * 2;
+  // Считается на каждый рендер намеренно: подписка на кэш уже перерисовывает
+  // лист при любой смене его состояния, включая появление и снятие неудач.
+  const entriesFailed = hasFailedEntries() && sheetEntryIds(value).some((id) => typeof id === "number");
   // Спасброски от смерти появляются сами, когда становятся нужны. «Хитов нет»
   // — это ноль или меньше: урон уводит текущие хиты в минус (нижняя граница —
   // Этап 2), и лист обязан показать дорожки и в этом случае. Пустое поле
@@ -4782,6 +4787,17 @@ export function DndCharacterView({
             />
           )}
 
+          {/* Данные компендиума не доехали: лист рисуется по сохранённым
+              именам, но молчать об этом нельзя — иначе «у заклинания пропало
+              описание» выглядит как потеря данных, а не как обрыв связи. */}
+          {entriesFailed && (
+            <div className="sb-entry dnd-entries-failed">
+              <span className="sb-prop-label">Компендиум</span> данные не загрузились — показаны сохранённые имена.{" "}
+              <button type="button" className="comp-mini" onClick={() => retryFailedEntries()}>
+                Повторить
+              </button>
+            </div>
+          )}
           {/* Поиск стоит над разделами и виден всегда: на телефоне пролистать
               девять кругов заклинаний дороже всего, и прятать вход в поиск за
               вторым касанием — экономия площади за счёт главного жеста. */}

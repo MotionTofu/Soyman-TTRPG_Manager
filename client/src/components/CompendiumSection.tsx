@@ -1009,6 +1009,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         else clearEquipmentMetaCache();
       }
     } catch {}
+    // Лист персонажа держит живые данные заклинаний и умений в общем кэше
+    // (entryCache): он ради того и заведён, чтобы правка в компендиуме была
+    // видна открытому рядом листу без перезагрузки. Сбрасывать его,
+    // однако, до сих пор было некому — invalidateEntry не вызывался нигде,
+    // и лист показывал доперестроечное описание до перезагрузки страницы.
+    try {
+      const { invalidateEntry } = await import("./dnd/entryCache");
+      invalidateEntry(editing.id);
+    } catch {}
     await syncMentionLinks(
       "compendium_entry",
       editing.id,
