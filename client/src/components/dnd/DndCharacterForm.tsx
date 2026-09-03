@@ -88,7 +88,7 @@ import { useEvent, useLatest } from "../../hooks/useEvent";
 import { featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TIMING_KEY_TO_LABEL } from "./dndFeatures";
 import { saveDndPrefs } from "../../dndPrefs";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
-import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
+import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { NavIcon } from "../NavIcons";
 
 const SPELL_LEVELS = 9;
@@ -364,6 +364,32 @@ function computeHitDice(classes: DndClassEntry[]): string {
 // Populated as class hierarchies load, so computeHitDice (called from onChange
 // handlers without async access) can look up a class's hit die synchronously.
 const classHitDieCache = new Map<number, string>();
+
+// Поле, чей справочник не загрузился. Остаётся списком — нерабочим, но
+// списком, и с кнопкой «Повторить». Свободный ввод на этом месте читается
+// как «так и задумано»: мастер вписывает класс руками и теряет связь с
+// компендиумом навсегда, а причина (сеть, права, упавший сервер) так и не
+// названа (P1-Р8).
+function CompendiumFieldError({
+  current,
+  error,
+  onRetry,
+}: {
+  current: string;
+  error: string;
+  onRetry: () => void;
+}) {
+  return (
+    <span className="row" style={{ gap: 6 }}>
+      <select disabled value="" style={{ flex: 1 }} title={`Справочник не загрузился: ${error}`}>
+        <option value="">{current || "Справочник не загрузился"}</option>
+      </select>
+      <button type="button" className="comp-mini" onClick={onRetry} title={error}>
+        Повторить
+      </button>
+    </span>
+  );
+}
 
 // Picking a class also writes its "Владения навыками"/"Снаряжение А"/
 // "Снаряжение Б" fields into the character's free-text Заметки (labeled, so
@@ -1454,6 +1480,8 @@ const DndClassesEdit = memo(function DndClassesEdit({
   onPickSubclass,
   onLevelChange,
   onRemoveClass,
+  loadError,
+  onRetryLoad,
 }: {
   classes: DndClassEntry[];
   hierarchy: DndClassHierarchy;
@@ -1467,6 +1495,10 @@ const DndClassesEdit = memo(function DndClassesEdit({
   onPickSubclass: (i: number, subclassId: number | null) => void;
   onLevelChange: (i: number, level: number) => void;
   onRemoveClass: (i: number) => void;
+  // Справочник классов не загрузился — поле остаётся списком с причиной,
+  // а не подменяется свободным вводом (P1-Р8).
+  loadError?: string | null;
+  onRetryLoad?: () => void;
 }) {
   const [confirmDialog, confirm] = useConfirm();
   const hasCompendiumClasses = hierarchy.classes.length > 0;
@@ -1539,6 +1571,8 @@ const DndClassesEdit = memo(function DndClassesEdit({
                   </option>
                 ))}
               </select>
+            ) : loadError && onRetryLoad ? (
+              <CompendiumFieldError current={c.className} error={loadError} onRetry={onRetryLoad} />
             ) : (
               <input
                 placeholder="Класс"
@@ -2425,6 +2459,17 @@ function useDndOrigin(
   const [damageTypes, setDamageTypes] = useState<DndMechanicsOption[]>([]);
   const [conditionOptions, setConditionOptions] = useState<DndMechanicsOption[]>([]);
   const [senseOptions, setSenseOptions] = useState<DndMechanicsOption[]>([]);
+  // Справочник не загрузился. Раньше это было неотличимо от «в компендиуме
+  // ничего нет»: пустой список подменял выпадающий список свободным вводом,
+  // и мастер вписывал класс руками, теряя связь с компендиумом навсегда
+  // (P1-Р8). Теперь поле остаётся списком и говорит, что случилось.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Бампается кнопкой «Повторить» — перезапускает эффекты загрузки.
+  const [reloadKey, setReloadKey] = useState(0);
+  const reloadOrigin = useCallback(() => {
+    setLoadError(null);
+    setReloadKey((n) => n + 1);
+  }, []);
 
   // Kept in sync every commit so the field-setter callbacks below can have a
   // permanently stable identity (empty deps) while still always acting on the
@@ -2708,20 +2753,40 @@ function useDndOrigin(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Все три эффекта ниже ходят в сеть и пишут в состояние. Без отмены запрос,
+  // начатый до размонтирования или до смены системы, дописывал форму, которой
+  // уже нет; без `catch` любая сетевая ошибка уходила в unhandled rejection и
+  // на экране выглядела как «в компендиуме пусто».
   useEffect(() => {
     if (!enabled) return;
-    api.get<System[]>("/systems").then(setSystems);
-  }, [enabled]);
+    const ac = new AbortController();
+    api
+      .get<System[]>("/systems", { signal: ac.signal })
+      .then(setSystems)
+      .catch((e) => {
+        if (!isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
+  }, [enabled, reloadKey]);
 
   useEffect(() => {
     if (!enabled) return;
-    findDndSystemId().then((sid) => {
-      if (!sid) return;
-      loadDndMechanicsGroup(sid, "Типы урона").then(setDamageTypes);
-      loadDndMechanicsGroup(sid, "Состояния").then(setConditionOptions);
-      loadDndMechanicsGroup(sid, "Особое восприятие").then(setSenseOptions);
-    });
-  }, [enabled]);
+    const ac = new AbortController();
+    findDndSystemId()
+      .then((sid) => {
+        if (!sid || ac.signal.aborted) return;
+        const opts = { signal: ac.signal };
+        return Promise.all([
+          loadDndMechanicsGroup(sid, "Типы урона", opts).then(setDamageTypes),
+          loadDndMechanicsGroup(sid, "Состояния", opts).then(setConditionOptions),
+          loadDndMechanicsGroup(sid, "Особое восприятие", opts).then(setSenseOptions),
+        ]);
+      })
+      .catch((e) => {
+        if (!isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
+  }, [enabled, reloadKey]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -2731,24 +2796,32 @@ function useDndOrigin(
       setBackgrounds([]);
       return;
     }
-    loadDndClassHierarchy(value.systemId).then((h) => {
-      setHierarchy(h);
-      for (const c of h.classes) classHitDieCache.set(c.id, c.hitDie);
-      // Classes picked before the hierarchy finished loading (e.g. a saved
-      // statblock reopened) had no hit die available yet — recompute now
-      // that classHitDieCache is populated.
-      // Через ref, а не через захваченный эффектом `value`: иерархия грузится
-      // заметное время, и всё, что мастер успел набрать за это время,
-      // затиралось устаревшим снимком.
-      const fresh = valueRef.current;
-      if (fresh.classes.some((c) => c.classId != null)) {
-        onChangeRef.current({ ...fresh, hitDice: computeHitDice(fresh.classes) });
-      }
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    const systemId = value.systemId;
+    Promise.all([
+      loadDndClassHierarchy(systemId, opts).then((h) => {
+        setHierarchy(h);
+        for (const c of h.classes) classHitDieCache.set(c.id, c.hitDie);
+        // Classes picked before the hierarchy finished loading (e.g. a saved
+        // statblock reopened) had no hit die available yet — recompute now
+        // that classHitDieCache is populated.
+        // Через ref, а не через захваченный эффектом `value`: иерархия грузится
+        // заметное время, и всё, что мастер успел набрать за это время,
+        // затиралось устаревшим снимком.
+        const fresh = valueRef.current;
+        if (fresh.classes.some((c) => c.classId != null)) {
+          onChangeRef.current({ ...fresh, hitDice: computeHitDice(fresh.classes) });
+        }
+      }),
+      loadDndSpeciesOptions(systemId, opts).then(setSpecies),
+      loadDndBackgroundOptions(systemId, opts).then(setBackgrounds),
+    ]).catch((e) => {
+      if (!isAbortError(e)) setLoadError(errorMessage(e));
     });
-    loadDndSpeciesOptions(value.systemId).then(setSpecies);
-    loadDndBackgroundOptions(value.systemId).then(setBackgrounds);
+    return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value.systemId, enabled]);
+  }, [value.systemId, enabled, reloadKey]);
 
   // Picking a species also fills its Видовые особенности and any
   // "Обретаемые заклинания" the character's total level already qualifies
@@ -2851,6 +2924,8 @@ function useDndOrigin(
     damageTypes,
     conditionOptions,
     senseOptions,
+    loadError,
+    reloadOrigin,
     setAttacks,
     setEquipmentSections,
     setSpeciesFeatures,
@@ -4562,6 +4637,8 @@ export function DndCharacterView({
               onPickSubclass={origin.pickSubclass}
               onLevelChange={origin.changeClassLevel}
               onRemoveClass={origin.removeClass}
+              loadError={origin.loadError}
+              onRetryLoad={origin.reloadOrigin}
             />
 
             <div className="row">
@@ -4579,6 +4656,12 @@ export function DndCharacterView({
                       </option>
                     ))}
                   </select>
+                ) : origin.loadError ? (
+                  <CompendiumFieldError
+                    current={value.raceName}
+                    error={origin.loadError}
+                    onRetry={origin.reloadOrigin}
+                  />
                 ) : (
                   <input value={value.raceName} onChange={(e) => onQuickUpdate({ raceName: e.target.value })} />
                 )}
@@ -4597,6 +4680,12 @@ export function DndCharacterView({
                       </option>
                     ))}
                   </select>
+                ) : origin.loadError ? (
+                  <CompendiumFieldError
+                    current={value.backgroundName}
+                    error={origin.loadError}
+                    onRetry={origin.reloadOrigin}
+                  />
                 ) : (
                   <input
                     value={value.backgroundName}

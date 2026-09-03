@@ -1,6 +1,25 @@
 import { api } from "../../api/client";
 import type { CompendiumEntry, System, SystemSection } from "../../types";
 
+// Загрузчики принимают signal, чтобы эффект, снятый при размонтировании
+// или при смене системы, не дописывал состояние уже неактуальной формой.
+// Каждый ходит в сеть дважды (разделы, потом записи), и без отмены второй
+// запрос уезжает уже после того, как первый стал не нужен.
+export interface LoadOpts {
+  signal?: AbortSignal;
+}
+
+const get = <T>(path: string, opts?: LoadOpts) => api.get<T>(path, opts?.signal ? { signal: opts.signal } : undefined);
+
+// Отменённый запрос — не ошибка: так эффект убирает за собой при
+// размонтировании и при смене системы. Сообщать о нём мастеру нечего.
+export function isAbortError(e: unknown): boolean {
+  return e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError");
+}
+export function errorMessage(e: unknown): string {
+  return e instanceof Error && e.message ? e.message : "неизвестная ошибка";
+}
+
 // A D&D statblock is always D&D 5.5 mechanically, whether or not the owning
 // campaign happens to have its system_id set to it (campaigns can go
 // without a system, or use a different one for other purposes) — so class/
@@ -44,13 +63,11 @@ export interface DndClassHierarchy {
   subclassesByClass: Record<number, DndSubclassOption[]>;
 }
 
-export async function loadDndClassHierarchy(systemId: number): Promise<DndClassHierarchy> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndClassHierarchy(systemId: number, opts?: LoadOpts): Promise<DndClassHierarchy> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const classSection = sections.find((s) => s.kind === "class");
   if (!classSection) return { classes: [], subclassesByClass: {} };
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${classSection.id}`
-  );
+  const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${classSection.id}`, opts);
   const classes = entries
     .filter((e) => e.kind === "class" && e.parent_id === null)
     .sort((a, b) => a.position - b.position)
@@ -72,25 +89,21 @@ export async function loadDndClassHierarchy(systemId: number): Promise<DndClassH
 
 // Feature entries (kind "feature") of a given class or subclass entry, for
 // auto-filling Классовые особенности when a class/subclass is picked.
-export async function loadDndClassFeatures(systemId: number, parentId: number): Promise<CompendiumEntry[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndClassFeatures(systemId: number, parentId: number, opts?: LoadOpts): Promise<CompendiumEntry[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const classSection = sections.find((s) => s.kind === "class");
   if (!classSection) return [];
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${classSection.id}`
-  );
+  const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${classSection.id}`, opts);
   return entries.filter((e) => e.kind === "feature" && e.parent_id === parentId);
 }
 
 // Feature entries of a given species entry, for auto-filling Видовые
 // особенности when a species is picked.
-export async function loadDndSpeciesFeatures(systemId: number, speciesId: number): Promise<CompendiumEntry[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndSpeciesFeatures(systemId: number, speciesId: number, opts?: LoadOpts): Promise<CompendiumEntry[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const speciesSections = sections.filter((s) => s.kind === "species");
   for (const section of speciesSections) {
-    const entries = await api.get<CompendiumEntry[]>(
-      `/systems/${systemId}/entries?section_id=${section.id}`
-    );
+    const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     if (entries.some((e) => e.id === speciesId)) {
       return entries.filter((e) => e.kind === "feature" && e.parent_id === speciesId);
     }
@@ -105,14 +118,12 @@ export interface DndSpeciesOption {
   walkSpeed: string; // e.g. "30" — distance value of the "Ходьба" speed pick, if any
 }
 
-export async function loadDndSpeciesOptions(systemId: number): Promise<DndSpeciesOption[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndSpeciesOptions(systemId: number, opts?: LoadOpts): Promise<DndSpeciesOption[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const speciesSections = sections.filter((s) => s.kind === "species");
   const results: DndSpeciesOption[] = [];
   for (const section of speciesSections) {
-    const entries = await api.get<CompendiumEntry[]>(
-      `/systems/${systemId}/entries?section_id=${section.id}`
-    );
+    const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     for (const e of entries) {
       if (e.kind !== "species") continue;
       const creatureType = e.data.creature_type as { name: string } | undefined;
@@ -134,14 +145,12 @@ export interface DndBackgroundOption {
   name: string;
 }
 
-export async function loadDndBackgroundOptions(systemId: number): Promise<DndBackgroundOption[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndBackgroundOptions(systemId: number, opts?: LoadOpts): Promise<DndBackgroundOption[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const bgSections = sections.filter((s) => s.kind === "background");
   const results: DndBackgroundOption[] = [];
   for (const section of bgSections) {
-    const entries = await api.get<CompendiumEntry[]>(
-      `/systems/${systemId}/entries?section_id=${section.id}`
-    );
+    const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     for (const e of entries) {
       if (e.kind === "background") results.push({ id: e.id, name: e.name });
     }
@@ -156,14 +165,12 @@ export interface DndSpellOption {
 
 // Spells of one specific level, for the "+ Добавить заклинание" live-search
 // suggestions in that level's section.
-export async function loadDndSpellsByLevel(systemId: number, level: number): Promise<DndSpellOption[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndSpellsByLevel(systemId: number, level: number, opts?: LoadOpts): Promise<DndSpellOption[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const spellSections = sections.filter((s) => s.kind === "spell");
   const results: DndSpellOption[] = [];
   for (const section of spellSections) {
-    const entries = await api.get<CompendiumEntry[]>(
-      `/systems/${systemId}/entries?section_id=${section.id}`
-    );
+    const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     for (const e of entries) {
       if (e.kind === "spell" && e.level === level) results.push({ id: e.id, name: e.name });
     }
@@ -175,13 +182,11 @@ export async function loadDndSpellsByLevel(systemId: number, level: number): Pro
 // персонаж многоклассовый и среди его классов нет ни одного полного
 // заклинателя (Паладин/Следопыт) — таблицу многоклассья тогда неоткуда взять,
 // кроме как у полного заклинателя из компендиума.
-export async function loadDndClassProgressions(systemId: number): Promise<Record<string, unknown>[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndClassProgressions(systemId: number, opts?: LoadOpts): Promise<Record<string, unknown>[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const classSection = sections.find((s) => s.kind === "class");
   if (!classSection) return [];
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${classSection.id}`
-  );
+  const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${classSection.id}`, opts);
   return entries
     .filter((e) => e.kind === "class" && e.data.progression)
     .map((e) => e.data.progression as Record<string, unknown>);
@@ -197,13 +202,11 @@ export interface DndMechanicsOption {
 // loaders CompendiumSection.tsx keeps for its own species/class pickers,
 // kept separate here (creature wizard/editor only) so neither can regress
 // the other's behavior.
-export async function loadDndMechanicsGroup(systemId: number, groupName: string): Promise<DndMechanicsOption[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndMechanicsGroup(systemId: number, groupName: string, opts?: LoadOpts): Promise<DndMechanicsOption[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const mechSection = sections.find((s) => s.kind === "mechanics");
   if (!mechSection) return [];
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${mechSection.id}`
-  );
+  const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${mechSection.id}`, opts);
   const group = entries.find((e) => e.parent_id === null && e.name === groupName);
   if (!group) return [];
   return entries
@@ -214,14 +217,12 @@ export async function loadDndMechanicsGroup(systemId: number, groupName: string)
 
 // Снаряжение/Магические предметы entries, for the Инвентарь tab's
 // "добавить из компендиума" live-search suggestions.
-export async function loadDndEquipmentEntries(systemId: number): Promise<CompendiumEntry[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+export async function loadDndEquipmentEntries(systemId: number, opts?: LoadOpts): Promise<CompendiumEntry[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const equipSections = sections.filter((s) => s.kind === "equipment" || s.kind === "magic_item");
   const results: CompendiumEntry[] = [];
   for (const section of equipSections) {
-    const entries = await api.get<CompendiumEntry[]>(
-      `/systems/${systemId}/entries?section_id=${section.id}`
-    );
+    const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     results.push(...entries.filter((e) => e.kind === "equipment" || e.kind === "magic_item"));
   }
   return results;

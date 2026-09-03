@@ -22,6 +22,8 @@ import {
   type DndBackgroundOption,
   type DndClassHierarchy,
   type DndSpeciesOption,
+  errorMessage,
+  isAbortError,
 } from "./dndCompendium";
 
 const STEPS = ["Личность", "Класс", "Вид", "Предыстория", "Характеристики", "Навыки", "Обзор"] as const;
@@ -56,6 +58,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [systemId, setSystemId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Справочник не загрузился. Отдельно от saveError: одно про сохранение,
+  // другое про то, что выбирать не из чего и почему.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [characterName, setCharacterName] = useState(ownerName ?? "");
   const [playerName, setPlayerName] = useState(ownerType === "character" ? ownerPlayerName ?? "" : "");
@@ -93,14 +98,31 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [chosenSkills, setChosenSkills] = useState<string[]>([]);
 
   useEffect(() => {
-    findDndSystemId().then(setSystemId);
+    let alive = true;
+    findDndSystemId()
+      .then((sid) => alive && setSystemId(sid))
+      .catch((e) => alive && !isAbortError(e) && setLoadError(errorMessage(e)));
+    return () => {
+      alive = false;
+    };
   }, []);
 
+  // Визард — мастер создания, и он листается быстро: шаг «Класс» может
+  // смениться раньше, чем доедет ответ. Без отмены доехавший ответ дописывал
+  // уже закрытую форму, а любая ошибка уходила в unhandled rejection и на
+  // экране выглядела пустым списком.
   useEffect(() => {
     if (!systemId) return;
-    loadDndClassHierarchy(systemId).then(setHierarchy);
-    loadDndSpeciesOptions(systemId).then(setSpeciesOptions);
-    loadDndBackgroundOptions(systemId).then(setBackgroundOptions);
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    Promise.all([
+      loadDndClassHierarchy(systemId, opts).then(setHierarchy),
+      loadDndSpeciesOptions(systemId, opts).then(setSpeciesOptions),
+      loadDndBackgroundOptions(systemId, opts).then(setBackgroundOptions),
+    ]).catch((e) => {
+      if (!isAbortError(e)) setLoadError(errorMessage(e));
+    });
+    return () => ac.abort();
   }, [systemId]);
 
   useEffect(() => {
@@ -108,7 +130,14 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       setClassEntry(null);
       return;
     }
-    api.get<CompendiumEntry>(`/systems/entries/${classId}`).then(setClassEntry);
+    const ac = new AbortController();
+    api
+      .get<CompendiumEntry>(`/systems/entries/${classId}`, { signal: ac.signal })
+      .then(setClassEntry)
+      .catch((e) => {
+        if (!isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
   }, [classId]);
 
   useEffect(() => {
@@ -116,7 +145,14 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       setBackgroundEntry(null);
       return;
     }
-    api.get<CompendiumEntry>(`/systems/entries/${backgroundId}`).then(setBackgroundEntry);
+    const ac = new AbortController();
+    api
+      .get<CompendiumEntry>(`/systems/entries/${backgroundId}`, { signal: ac.signal })
+      .then(setBackgroundEntry)
+      .catch((e) => {
+        if (!isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
   }, [backgroundId]);
 
   // Standard array/roll assignment is a permutation of a fixed pool — picking
@@ -549,6 +585,13 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           <span className="muted">
             Снаряжение и заклинания добавляются после создания, в обычном режиме редактирования персонажа.
           </span>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="sb-save-status is-error" role="alert">
+          Справочник не загрузился: {loadError}. Выбор класса, вида и предыстории
+          будет пустым — закройте визард и попробуйте ещё раз.
         </div>
       )}
 
