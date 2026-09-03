@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { Breadcrumbs } from "../components/Breadcrumbs";
@@ -10,7 +10,11 @@ import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
+import { addToBag } from "../bag";
 import { useConfirm, usePrompt } from "../hooks/useConfirm";
+import { useLongPress } from "../hooks/useLongPress";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 
 // «Действующие лица» и «Награды» убраны с профиля: список действующих лиц
 // собирался из связей сцен и информационной пользы не нёс, а награды книги без
@@ -236,6 +240,9 @@ function ChaptersAndScenes({
 }) {
   const [confirmDialog, confirm] = useConfirm();
   const [promptDialog, promptText] = usePrompt();
+  const { deleteWithUndo } = useUndoDelete();
+  const navigate = useNavigate();
+  const [menu, setMenu] = useState<{ x: number; y: number; scene: StoryScene } | null>(null);
   const [chapterName, setChapterName] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [dragId, setDragId] = useState<number | null>(null);
@@ -329,9 +336,16 @@ function ChaptersAndScenes({
   async function archiveScene(scene: StoryScene) {
     if (!(await confirm({ message: `Отправить сцену «${scene.name}» в архив?`, confirmLabel: "Архивировать", danger: true })))
       return;
-    await api.del(`/story/scenes/${scene.id}`);
-    onChange();
+    await deleteWithUndo({
+      entityName: scene.name,
+      deleteFn: async () => { await api.del(`/story/scenes/${scene.id}`); onChange(); },
+      restoreFn: async () => { await api.put(`/story/scenes/${scene.id}/restore`, {}); onChange(); },
+    });
   }
+
+  const openMenu = useCallback((scene: StoryScene, at: { clientX: number; clientY: number }) => {
+    setMenu({ x: at.clientX, y: at.clientY, scene });
+  }, []);
 
   function renderGroup(title: string, groupArcId: number, scenes: StoryScene[], controls?: ReactNode) {
     const isCollapsed = collapsed.includes(groupArcId);
@@ -357,13 +371,12 @@ function ChaptersAndScenes({
           <>
             <div className="entity-row-list">
               {scenes.map((s) => (
-                <div
+                <SceneRow
                   key={s.id}
-                  className="entity-row"
-                  draggable
+                  scene={s}
                   onDragStart={() => setDragId(s.id)}
-                  onDragOver={(e) => e.preventDefault()}
                   onDrop={() => dragId != null && reorderScenes(scenes, dragId, s.id)}
+                  onMenu={openMenu}
                 >
                   <Link to={`/scenes/${s.id}${suffix}`} className="entity-row-name">
                     {s.name}
@@ -394,7 +407,7 @@ function ChaptersAndScenes({
                       </button>
                     )}
                   </span>
-                </div>
+                </SceneRow>
               ))}
               {scenes.length === 0 && <p className="muted">Сцен пока нет.</p>}
             </div>
@@ -414,10 +427,27 @@ function ChaptersAndScenes({
 
   const direct = arc.scenes.filter((s) => s.arc_id === arc.id);
 
+  // Сцену сеттинга нельзя убрать изнутри кампании — она пропала бы у всех
+  // остальных; собственную сцену кампании можно. То же правило, что и у
+  // кнопки в строке.
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        { label: "Открыть", onClick: () => navigate(`/scenes/${menu.scene.id}${suffix}`) },
+        { label: "Переименовать", onClick: () => renameScene(menu.scene) },
+        { label: "В мешок", onClick: () => addToBag({ type: "scene", id: menu.scene.id, title: menu.scene.name }) },
+        ...(!campaignId || menu.scene.campaign_only
+          ? [{ label: "Архивировать", danger: true, onClick: () => archiveScene(menu.scene) }]
+          : []),
+      ]
+    : [];
+
   return (
     <div className="stack">
       {confirmDialog}
       {promptDialog}
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} title={menu.scene.name} items={menuItems} onClose={() => setMenu(null)} />
+      )}
       <span className="muted">
         Сцены перетаскиваются внутри главы, главы двигаются стрелками и сворачиваются.
       </span>
@@ -670,6 +700,41 @@ function Secrets({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Строка сцены. Живёт отдельным компонентом ради собственного `useLongPress`:
+// хук нельзя звать внутри `map`, а зажатие нужно каждой строке — на планшете
+// правой кнопки нет, а действия строки прячутся в контекстное меню.
+function SceneRow({
+  scene,
+  onDragStart,
+  onDrop,
+  onMenu,
+  children,
+}: {
+  scene: StoryScene;
+  onDragStart: () => void;
+  onDrop: () => void;
+  onMenu: (scene: StoryScene, at: { clientX: number; clientY: number }) => void;
+  children: ReactNode;
+}) {
+  const longPress = useLongPress(useCallback((at) => onMenu(scene, at), [onMenu, scene]));
+  return (
+    <div
+      className="entity-row"
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(scene, { clientX: e.clientX, clientY: e.clientY });
+      }}
+      {...longPress}
+    >
+      {children}
     </div>
   );
 }

@@ -657,6 +657,19 @@ storyRouter.delete("/arcs/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// Возврат из архива. Главы и сцены своей отметки не получали: списки берут их
+// через `parent_id`/`arc_id` уже архивированного приключения, поэтому уходит и
+// возвращается всё вместе, одной строкой.
+//
+// Раньше вернуть заархивированное приключение было нечем вовсе: страница
+// Архива приключений не показывает, а `DELETE` ставит дату второй раз. Так что
+// «Архивировать» из списка было односторонней дверью — а промахнуться по
+// строке списка легче, чем по кнопке в шапке профиля.
+storyRouter.put("/arcs/:id/restore", (req, res) => {
+  db.prepare("UPDATE story_arcs SET archived_at = NULL WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ------------------------------------------- приключения кампании (привязка)
 
 // Кампания видит не все приключения своего сеттинга, а только привязанные —
@@ -1775,6 +1788,16 @@ storyRouter.delete("/scenes/:id", (req, res) => {
   insertions.forEach((i) => detachFromLibrary(i.id));
   db.prepare("UPDATE story_scenes SET archived_at = datetime('now') WHERE id = ?").run(req.params.id);
   res.json({ ok: true, materialized: insertions.length });
+});
+
+// Возврат сцены из архива — пара к `DELETE` выше, для отмены удаления.
+// Отменяется именно архивация: вставки, которые при удалении заготовки успели
+// материализоваться, так и остаются самостоятельными сценами. Обратной
+// операции у `detachFromLibrary` нет, и придумывать её ради отмены значило бы
+// молча переписать чужие приключения второй раз.
+storyRouter.put("/scenes/:id/restore", (req, res) => {
+  db.prepare("UPDATE story_scenes SET archived_at = NULL WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
 });
 
 // Drop a campaign's override so the setting's original shows through again.
