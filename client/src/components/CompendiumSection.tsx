@@ -44,6 +44,7 @@ import {
 } from "../compendium";
 import { EMPTY_MECHANICS_OPTIONS, loadMechanicsOptions, type MechanicsOptions } from "../compendiumMechanics";
 import { ALL_SKILLS } from "./dnd/AbilityScores";
+import { DndSkillNamesPanel } from "./dnd/DndSkillNamesPanel";
 import type { CompendiumEntry, SearchResult, SystemSection } from "../types";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "./EmptyState";
@@ -1216,6 +1217,13 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     const blocks = activeCategoryLabel ? allBlocks.filter(([label]) => label === activeCategoryLabel) : allBlocks;
     return (
       <div className="stack">
+          {/* Сверка имён навыков — только там, где есть группа «Навыки»:
+              в LitM или «Золоте и прахе» этому экрану нечего показывать.
+              Стоит первым: пока имя не сведено, выданное под ним владение не
+              ставится, и это важнее порядка сортировки групп. */}
+          {entries.some((e) => e.parent_id === null && e.name === "Навыки") && (
+            <DndSkillNamesPanel systemId={systemId} />
+          )}
           <div className="card stack">
             <div className="row sort-toggle" style={{ gap: 4 }}>
               <span className="muted">Сортировка:</span>

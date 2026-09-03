@@ -202,11 +202,23 @@ export interface DndMechanicsOption {
 // loaders CompendiumSection.tsx keeps for its own species/class pickers,
 // kept separate here (creature wizard/editor only) so neither can regress
 // the other's behavior.
-export async function loadDndMechanicsGroup(systemId: number, groupName: string, opts?: LoadOpts): Promise<DndMechanicsOption[]> {
+// Разделов вида `mechanics` у системы может быть несколько: один заводится
+// базовым (`ensureDefaultMechanicsSection`), второй приезжает импортом
+// модуля — в базе владельца у D&D 5.5 их два, и всё содержимое лежит во
+// втором. `find` по первому подходящему возвращал пустой раздел, и список
+// молча оказывался пустым — ровно тот способ терять данные, от которого
+// уходим. Поэтому ищем во всех.
+async function loadMechanicsEntries(systemId: number, opts?: LoadOpts): Promise<CompendiumEntry[]> {
   const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
-  const mechSection = sections.find((s) => s.kind === "mechanics");
-  if (!mechSection) return [];
-  const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${mechSection.id}`, opts);
+  const mechSections = sections.filter((s) => s.kind === "mechanics");
+  const lists = await Promise.all(
+    mechSections.map((s) => get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${s.id}`, opts))
+  );
+  return lists.flat();
+}
+
+export async function loadDndMechanicsGroup(systemId: number, groupName: string, opts?: LoadOpts): Promise<DndMechanicsOption[]> {
+  const entries = await loadMechanicsEntries(systemId, opts);
   const group = entries.find((e) => e.parent_id === null && e.name === groupName);
   if (!group) return [];
   return entries
@@ -245,13 +257,7 @@ export interface DndSkillEntry {
 // справочник есть, берутся отсюда: второй список имён — это ровно та
 // первопричина, из-за которой владения терялись (гриллинг 2026-09-04).
 export async function loadDndSkillEntries(systemId: number, opts?: LoadOpts): Promise<DndSkillEntry[]> {
-  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
-  const mechSection = sections.find((s) => s.kind === "mechanics");
-  if (!mechSection) return [];
-  const entries = await get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${mechSection.id}`,
-    opts
-  );
+  const entries = await loadMechanicsEntries(systemId, opts);
   const group = entries.find((e) => e.parent_id === null && e.name === "Навыки");
   if (!group) return [];
   return entries
