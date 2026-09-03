@@ -64,7 +64,7 @@ export function SettingCalendarSettings({ settingId }: Props) {
 
   async function deleteEra(id: number) {
     if (!await confirm("Удалить эпоху?")) return;
-    await api.delete(`/settings/${settingId}/calendar-eras/${id}`);
+    await api.del(`/settings/${settingId}/calendar-eras/${id}`);
     refresh();
   }
 

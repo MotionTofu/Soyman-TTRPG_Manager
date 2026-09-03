@@ -224,7 +224,7 @@ statblocksRouter.post("/", (req, res) => {
 
 // Форматы, у которых `content` — это JSON. Пустая строка допустима: так
 // заводится свежий статблок до первого сохранения.
-const JSON_FORMATS = new Set(["litm_character", "litm_challenge", "dnd_character", "dnd_creature"]);
+const JSON_FORMATS = new Set(["litm_character", "litm_challenge", "dnd_character", "dnd_creature", "zip_character", "zip_creature"]);
 
 statblocksRouter.put("/:id", (req, res) => {
   const { kind, content, note, theme, density } = req.body as {

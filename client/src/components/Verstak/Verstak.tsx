@@ -390,10 +390,6 @@ export function Verstak({ entries, selectedIds, onPrint, onShow, forceOpen, onCl
                 onResize={(w, h) => setCustomSizes((prev) => ({ ...prev, [entry.id]: { w, h } }))}
                 onResetPos={() => setCustomPos((prev) => { const n = { ...prev }; delete n[entry.id]; return n; })}
                 onContextMenu={(x, y) => setTileMenu({ x, y, id: entry.id })}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData("text/plain", String(entry.id));
-                  e.dataTransfer.effectAllowed = "move";
-                }}
               />
             ))}
             {page.texts.map((t) => (
@@ -428,7 +424,6 @@ export function Verstak({ entries, selectedIds, onPrint, onShow, forceOpen, onCl
                   left: s.x,
                   top: s.y,
                   width: s.w,
-                  height: s.h,
                   border: s.kind === "line" ? undefined : `2px solid ${s.color}`,
                   background: s.kind === "line" ? s.color : "transparent",
                   borderRadius: s.kind === "circle" ? "50%" : undefined,
@@ -457,7 +452,6 @@ export function Verstak({ entries, selectedIds, onPrint, onShow, forceOpen, onCl
                 left: drawing.x,
                 top: drawing.y,
                 width: drawing.w,
-                height: drawing.h,
                 border: drawing.kind === "line" ? undefined : `2px dashed var(--accent)`,
                 background: drawing.kind === "line" ? "var(--accent)" : "color-mix(in oklab, var(--accent) 12%, transparent)",
                 borderRadius: drawing.kind === "circle" ? "50%" : undefined,
@@ -493,7 +487,7 @@ export function Verstak({ entries, selectedIds, onPrint, onShow, forceOpen, onCl
             <button type="button" className={mode === "preview" ? "active-sort" : ""} onClick={() => setMode("preview")}>Превью</button>
             <button type="button" className={mode === "print" ? "active-sort" : ""} onClick={() => setMode("print")}>Печать</button>
             <button type="button" className="comp-mini" onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Свернуть" : "Во весь экран"}>
-              <NavIcon name={fullscreen ? "close" : "expand"} /> {fullscreen ? "Свернуть" : "Во весь экран"}
+              <NavIcon name={fullscreen ? "close" : "fullscreen"} /> {fullscreen ? "Свернуть" : "Во весь экран"}
             </button>
           </div>
         )}

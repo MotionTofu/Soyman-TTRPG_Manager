@@ -40,6 +40,7 @@ import {
   MAGIC_ITEM_TYPES,
   MECHANICS_TOOL_GROUP,
   type FieldDef,
+  type MechanicsCategoryKey,
 } from "../compendium";
 import { EMPTY_MECHANICS_OPTIONS, loadMechanicsOptions, type MechanicsOptions } from "../compendiumMechanics";
 import { ALL_SKILLS } from "./dnd/AbilityScores";
@@ -477,6 +478,8 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   // Мультивыбор для печати / показа игрокам (только для справочника)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const isMechanicsSection = section.kind === "mechanics";
+  // Фильтр по категории справочника: пусто — показывать все шесть.
+  const [mechanicsCategoryFilter, setMechanicsCategoryFilter] = useState<MechanicsCategoryKey | "">("");
   // Выбор раздела (напр. Благословления) — выбирает всё внутри раздела (группу + всех потомков)
   function toggleSelect(id: number) {
     setSelectedIds((prev) => {

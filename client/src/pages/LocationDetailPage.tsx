@@ -32,6 +32,7 @@ import type {
   SettingCommunity,
   SettingLocation,
   SettingLocationDetail,
+  LocationInhabitantBeing,
 } from "../types";
 
 // Every location reachable from `id` by walking down parent_id links — used
@@ -242,7 +243,7 @@ export function LocationDetailPage() {
   }, [allLocations, locationId]);
 
   const { allInhabitants, directIds, sortedFactionGroups, noFactionBeings, filteredCount, categoryCounts } = useMemo(() => {
-    if (!location) return { allInhabitants: [] as typeof location.inhabitant_beings, directIds: new Set<number>(), sortedFactionGroups: [] as { id: number; name: string; beings: typeof location.inhabitant_beings }[], noFactionBeings: [] as typeof location.inhabitant_beings, filteredCount: 0, categoryCounts: new Map<string, number>() };
+    if (!location) return { allInhabitants: [] as LocationInhabitantBeing[], directIds: new Set<number>(), sortedFactionGroups: [] as { id: number; name: string; beings: LocationInhabitantBeing[] }[], noFactionBeings: [] as LocationInhabitantBeing[], filteredCount: 0, categoryCounts: new Map<string, number>() };
     const rawAll = showNestedInhabitants
       ? [...location.inhabitant_beings, ...location.nested_inhabitant_beings]
       : location.inhabitant_beings;

@@ -15,6 +15,8 @@ import type {
   Resource,
   Statblock,
   StatblockFormat,
+  ZipCharacterData,
+  ZipCreatureData,
 } from "../types";
 import { emptyZipCharacter, emptyZipCreature, normalizeZipCharacter, normalizeZipCreature, ZipCharacterEdit, ZipCharacterView, ZipCreatureEdit, ZipCreatureView } from "./zip/ZipCharacterForm";
 import { emptyChallenge, LitMChallengeEdit, LitMChallengeView } from "./litm/LitMChallengeForm";
@@ -749,6 +751,9 @@ function StatblockCard({
   const [dndValue, setDndValue] = useState<DndCharacterData | DndCreatureData | null>(() =>
     isDnd ? parseDnd(statblock.content) : null
   );
+  const [zipValue, setZipValue] = useState<ZipCharacterData | ZipCreatureData | null>(() =>
+    isZip ? parseZip(statblock.content) : null
+  );
   const [editMode, setEditMode] = useState(() => {
     if (isLitm) {
       return statblock.format === "litm_character"
@@ -862,6 +867,24 @@ function StatblockCard({
     const next = { ...(dndValue as DndCreatureData), ...patch };
     const json = JSON.stringify(next);
     setDndValue(next);
+    setContent(json);
+    queue.schedule(json);
+  }
+
+  // То же для zip-листа: правки в режиме просмотра уходят через ту же очередь,
+  // что у litm и D&D, — дебаунс и один запрос в полёте.
+  function quickSaveZip(patch: Partial<ZipCharacterData>) {
+    const next = { ...(zipValue as ZipCharacterData), ...patch };
+    const json = JSON.stringify(next);
+    setZipValue(next);
+    setContent(json);
+    queue.schedule(json);
+  }
+
+  function quickSaveZipCreature(patch: Partial<ZipCreatureData>) {
+    const next = { ...(zipValue as ZipCreatureData), ...patch };
+    const json = JSON.stringify(next);
+    setZipValue(next);
     setContent(json);
     queue.schedule(json);
   }
@@ -1073,15 +1096,6 @@ function StatblockCard({
                 }}
               />
             )}
-            {statblock.format === "zip_creature" && zipValue && (
-              <ZipCreatureEdit
-                value={zipValue as import("../types").ZipCreatureData}
-                onChange={(v) => {
-                  setZipValue(v);
-                  setContent(JSON.stringify(v));
-                }}
-              />
-            )}
             {!isLitm && !isDnd && !isZip && (
               <MentionTextarea value={content} onChange={setContent} rows={8} defaultSettingId={settingId} />
             )}
@@ -1121,9 +1135,6 @@ function StatblockCard({
                 value={zipValue as import("../types").ZipCharacterData}
                 onQuickUpdate={quickSaveZip}
               />
-            )}
-            {statblock.format === "zip_creature" && zipValue && (
-              <ZipCreatureView value={zipValue as import("../types").ZipCreatureData} onQuickUpdate={quickSaveZipCreature} />
             )}
             {statblock.format === "dnd_character" && dndValue && (
               <DndCharacterView

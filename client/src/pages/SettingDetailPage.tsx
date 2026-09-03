@@ -2278,7 +2278,9 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           initialType="artifact"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={refresh}
+          // Визард отдаёт (id, type), а refresh принимает AbortSignal — обёртка
+          // гасит несовпадение: обновляем список, аргументы визарда не нужны.
+          onCreated={() => refresh()}
         />
       )}
       {loading && <p className="muted">Загрузка…</p>}

@@ -726,7 +726,7 @@ export function LocationMap({
   const debouncedPinQuery = pinQuery;
 
   const imageBox = computeImageBox(naturalSize, wrapSize);
-  const safeMapUrl = isSafeImageUrl(mapImageUrl) ? mapImageUrl : null;
+  const safeMapUrl = mapImageUrl && isSafeImageUrl(mapImageUrl) ? mapImageUrl : null;
 
   const mapBody = safeMapUrl && (
     <div

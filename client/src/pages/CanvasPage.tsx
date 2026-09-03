@@ -1915,6 +1915,9 @@ function GroupAdd({
   onCreatedBoard: (scopeId: number) => void;
   onCreatedArc: () => void;
 }) {
+  // Свой useNavigate: navigate соседнего компонента сюда не виден, а «создать и
+  // открыть на полотне» уводит на /canvas сразу после создания приключения.
+  const navigate = useNavigate();
   const [form, setForm] = useState<null | "arc" | "board">(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);

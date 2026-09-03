@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { ArtifactCard, type ArtifactCardPayload } from "./ArtifactCard";
+import { ArtifactCard } from "./ArtifactCard";
+import type { ArtifactCardPayload } from "../types";
 
 // Вкладка «Карточка предмета» — единственное место, где карточка правится.
 // Аналог CreatureCardEditor, но проще: нет ролей и тактики.
