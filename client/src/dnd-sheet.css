@@ -499,20 +499,54 @@
   margin-bottom: 2px;
   font-weight: 600;
 }
-/* Source tint for skills granted by class / background / both — hue is
-   fixed, but mixing against the theme's own paper color keeps the tone in
-   step with light/dark/steampunk-etc. themes. */
+/* Заливка строки навыка по источнику владения — класс / предыстория / оба.
+   Значения приходят токенами темы (themes.ts): раньше тон был вшит здесь
+   подмесом `dodgerblue`/`seagreen`/`crimson` в бумагу, и ни одна тема не
+   могла его поправить, а на печати он оставался серым пятном.
+
+   Сознательное отступление от §1.7 «цветом не кодируем»: на печати заливки
+   гаснут и источник подписывается словом — см. @media print ниже. */
 .dnd-save-row.skill-source-class {
-  background: color-mix(in oklab, dodgerblue 24%, var(--sb-paper));
-  border-radius: var(--card-radius);
+  background: var(--skill-source-class);
 }
 .dnd-save-row.skill-source-background {
-  background: color-mix(in oklab, seagreen 24%, var(--sb-paper));
-  border-radius: var(--card-radius);
+  background: var(--skill-source-background);
 }
 .dnd-save-row.skill-source-both {
-  background: color-mix(in oklab, crimson 22%, var(--sb-paper));
+  background: var(--skill-source-both);
+}
+/* Плашка светлая в любом режиме, поэтому чернила на ней свои: `--sb-ink` в
+   тёмных темах светлый и на пастели пропадает. */
+.dnd-save-row.skill-source-class,
+.dnd-save-row.skill-source-background,
+.dnd-save-row.skill-source-both {
   border-radius: var(--card-radius);
+  color: var(--skill-source-ink);
+}
+.dnd-save-row.skill-source-class .muted,
+.dnd-save-row.skill-source-background .muted,
+.dnd-save-row.skill-source-both .muted {
+  color: var(--skill-source-ink-muted);
+}
+/* Подпись источника словом. На экране её нет: цвет уже сказал всё, а
+   восемнадцать строк с приписками — это лишний текст в поле зрения. */
+.dnd-skill-source-word {
+  display: none;
+}
+@media print {
+  .dnd-save-row.skill-source-class,
+  .dnd-save-row.skill-source-background,
+  .dnd-save-row.skill-source-both {
+    background: none;
+  }
+  .dnd-skill-source-word {
+    display: inline;
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--sb-muted);
+    margin-left: 6px;
+  }
 }
 .dnd-skill-remaining {
   align-self: center;

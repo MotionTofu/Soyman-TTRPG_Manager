@@ -28,23 +28,6 @@ export function computed(mod: number, level: number, profBonus: number, penalty 
   return formatModifier(mod + profBonus * level - penalty);
 }
 
-// Blueish = from class, greenish = from background, reddish = both — tone
-// comes from color-mix against the theme's own paper/ink, so it adapts per
-// theme (see .skill-source-* rules in index.css). Exported — the standalone
-// "Навыки" tab in DndCharacterForm.tsx uses the same tinting.
-export function skillSourceClass(
-  skill: string,
-  classSkillPool: string[],
-  backgroundSkillNames: string[]
-): string {
-  const fromClass = classSkillPool.includes(skill);
-  const fromBackground = backgroundSkillNames.includes(skill);
-  if (fromClass && fromBackground) return " skill-source-both";
-  if (fromClass) return " skill-source-class";
-  if (fromBackground) return " skill-source-background";
-  return "";
-}
-
 export const SKILL_DOTS = ["○", "●", "◎"];
 export const SKILL_TITLES = ["Не владеет", "Владение", "Экспертиза (бонус ×2)"];
 

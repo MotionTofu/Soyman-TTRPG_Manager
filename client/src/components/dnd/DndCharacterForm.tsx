@@ -41,8 +41,8 @@ import {
   computed as computeSkillValue,
   SKILL_DOTS,
   SKILL_TITLES,
-  skillSourceClass,
 } from "./AbilitySavesSkills";
+import { skillSourceClass, skillSourceWord } from "./skillSource";
 import { loadDndPrefs } from "../../dndPrefs";
 import {
   loadDndBackgroundOptions,
@@ -3264,6 +3264,12 @@ function DndSkillsView({
               </button>
               <span className="dnd-save-name">
                 {skill} <span className="muted">({abilityLabel})</span>
+                {/* Видно только на печати: там заливка источника гаснет. */}
+                {skillSourceWord(skill, pool, backgroundSkillNames) && (
+                  <span className="dnd-skill-source-word">
+                    {skillSourceWord(skill, pool, backgroundSkillNames)}
+                  </span>
+                )}
               </span>
               <span className="dnd-save-value">{computeSkillValue(mod, level, profBonus, exhaustionPenalty)}</span>
             </div>
