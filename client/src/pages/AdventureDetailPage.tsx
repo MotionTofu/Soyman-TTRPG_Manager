@@ -10,7 +10,7 @@ import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
 import { NavIcon } from "../components/NavIcons";
-import { useConfirm } from "../hooks/useConfirm";
+import { useConfirm, usePrompt } from "../hooks/useConfirm";
 
 // «Действующие лица» и «Награды» убраны с профиля: список действующих лиц
 // собирался из связей сцен и информационной пользы не нёс, а награды книги без
@@ -30,6 +30,7 @@ const SECRET_KINDS = [
 // progress.
 export function AdventureDetailPage() {
   const [confirmDialog, confirm] = useConfirm();
+  const [promptDialog, promptText] = usePrompt();
   const { id } = useParams();
   const arcId = Number(id);
   const navigate = useNavigate();
@@ -70,6 +71,7 @@ export function AdventureDetailPage() {
   return (
     <div className="stack">
       {confirmDialog}
+      {promptDialog}
       <Breadcrumbs
         items={[
           { label: setting?.name ?? "Сеттинг", to: `/settings/${arc.setting_id}` },
@@ -104,8 +106,8 @@ export function AdventureDetailPage() {
           {arc.is_default !== 1 && (
             <>
               <button
-                onClick={() => {
-                  const name = prompt("Название приключения", arc.name);
+                onClick={async () => {
+                  const name = await promptText({ title: "Переименовать приключение", message: "Название приключения", defaultValue: arc.name });
                   if (name?.trim()) save({ name: name.trim() });
                 }}
               >
@@ -233,6 +235,7 @@ function ChaptersAndScenes({
   onChange: () => void;
 }) {
   const [confirmDialog, confirm] = useConfirm();
+  const [promptDialog, promptText] = usePrompt();
   const [chapterName, setChapterName] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [dragId, setDragId] = useState<number | null>(null);
@@ -317,7 +320,7 @@ function ChaptersAndScenes({
   // Renaming a scene from inside a campaign goes through the same
   // copy-on-write path as any other edit, so the setting's title is safe.
   async function renameScene(scene: StoryScene) {
-    const name = prompt("Название сцены", scene.name);
+    const name = await promptText({ title: "Переименовать сцену", message: "Название сцены", defaultValue: scene.name });
     if (!name?.trim() || name.trim() === scene.name) return;
     await api.put(`/story/scenes/${scene.id}`, { name: name.trim(), campaign_id: campaignId });
     onChange();
@@ -414,6 +417,7 @@ function ChaptersAndScenes({
   return (
     <div className="stack">
       {confirmDialog}
+      {promptDialog}
       <span className="muted">
         Сцены перетаскиваются внутри главы, главы двигаются стрелками и сворачиваются.
       </span>
@@ -430,7 +434,7 @@ function ChaptersAndScenes({
               <>
                 <button
                   onClick={async () => {
-                    const name = prompt("Название главы", c.name);
+                    const name = await promptText({ title: "Переименовать главу", message: "Название главы", defaultValue: c.name });
                     if (name?.trim()) {
                       await api.put(`/story/arcs/${c.id}`, { name: name.trim() });
                       onChange();

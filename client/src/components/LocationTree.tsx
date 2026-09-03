@@ -7,7 +7,7 @@ import { NavIcon } from "./NavIcons";
 import { EntityWizard } from "./entityWizard/EntityWizard";
 import { EmptyState } from "./EmptyState";
 import { isSafeImageUrl } from "../utils/safeUrl";
-import { useConfirm, useAlert } from "../hooks/useConfirm";
+import { useConfirm, useAlert, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { addToBag } from "../bag";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -686,6 +686,7 @@ export function LocationNode({
 
   const [confirmDialogNode, confirmNode] = useConfirm();
   const [alertDialogNode, showAlert] = useAlert();
+  const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
@@ -720,7 +721,8 @@ export function LocationNode({
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      prompt("Скопируйте упоминание:", text);
+      // Буфер обмена недоступен — показываем текст, чтобы его выделили руками.
+      await promptText({ title: "Упоминание", message: "Скопируйте упоминание:", defaultValue: text, readOnly: true });
     }
   }
 
@@ -826,6 +828,7 @@ export function LocationNode({
     <>
       {confirmDialogNode}
       {alertDialogNode}
+      {promptDialog}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       <details ref={detailsRef} className="card" draggable onDragStart={handleDragStart} onDragEnd={handleDragEnd} data-location-id={location.id}>
         <summary

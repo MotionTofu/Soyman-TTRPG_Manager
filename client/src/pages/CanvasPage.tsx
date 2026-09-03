@@ -37,7 +37,7 @@ import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { useSoundEngineOptional } from "../sound/engine";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import "../canvas.css";
 import {
   NODE_COLORS,
@@ -2023,6 +2023,7 @@ export function CanvasPage() {
   const [arcs, setArcs] = useState<StoryArc[]>([]);
   const [board, setBoard] = useState<CanvasBoard | null>(null);
   const [alertDialog, showAlert] = useAlert();
+  const [promptDialog, promptText] = usePrompt();
 
   // Календарь нужен ради дат на нодах событий: месяцы и эра живут в
   // сеттинге, и без них «1492-06-15» осталось бы машинной строкой.
@@ -2979,7 +2980,7 @@ export function CanvasPage() {
   const handleQuickCanvas = useCallback(async () => {
     // сосед текущей сцены/главы/приключения, как просил: смотришь сцену в Синий переулок Вотердип → рядом там же
     if (selectedSceneId && arcId) {
-      const name = prompt("Название быстрой сцены", "Новая сцена");
+      const name = await promptText({ title: "Быстрая сцена", message: "Название сцены", defaultValue: "Новая сцена", confirmLabel: "Создать" });
       if (!name?.trim()) return;
       // находим arc_id сцены (из board.nodes или из selectedSceneId)
       const sc = board?.nodes.find((n) => n.node_type === "scene" && n.node_id === selectedSceneId) as { scene?: { arc_id: number | null } } | undefined;
@@ -2995,7 +2996,7 @@ export function CanvasPage() {
       return;
     }
     if (arcId) {
-      const name = prompt("Название быстрой сцены", "Новая сцена");
+      const name = await promptText({ title: "Быстрая сцена", message: "Название сцены", defaultValue: "Новая сцена", confirmLabel: "Создать" });
       if (!name?.trim()) return;
       const created = await api.post<{ id: number }>("/story/scenes", { setting_id: settingId, arc_id: arcId, name: name.trim() });
       loadBoard();
@@ -3003,17 +3004,17 @@ export function CanvasPage() {
       return;
     }
     if (settingId) {
-      const name = prompt("Название быстрого приключения", "Новое приключение");
+      const name = await promptText({ title: "Быстрое приключение", message: "Название приключения", defaultValue: "Новое приключение", confirmLabel: "Создать" });
       if (!name?.trim()) return;
       const created = await api.post<{ id: number }>("/story/arcs", { setting_id: settingId, name: name.trim(), kind: "adventure" });
       setSearchParams({ setting: String(settingId), arc: String(created.id) });
       return;
     }
-    const name = prompt("Название быстрой доски", `Быстрый ${new Date().toLocaleDateString()}`);
+    const name = await promptText({ title: "Быстрая доска", message: "Название доски", defaultValue: `Быстрый ${new Date().toLocaleDateString()}`, confirmLabel: "Создать" });
     if (!name?.trim()) return;
     const created = await api.post<{ id: number; scope_id: number; name: string }>("/canvas/free-boards", { name: name.trim() });
     setSearchParams({ free_id: String(created.scope_id) });
-  }, [settingId, arcId, selectedSceneId, nodes, board, loadBoard, setSearchParams]);
+  }, [settingId, arcId, selectedSceneId, nodes, board, loadBoard, setSearchParams, promptText]);
 
   /**
    * Кого рамка может забрать себе в дети.
@@ -4430,7 +4431,7 @@ export function CanvasPage() {
           label: "Переименовать",
           onClick: async () => {
             const cur = nodeTitle(node.data) ?? "";
-            const name = prompt("Новое имя", String(cur));
+            const name = await promptText({ title: "Переименовать", message: "Новое имя", defaultValue: String(cur) });
             if (!name?.trim()) return;
             if (type === "sticker") await api.put(`/canvas/stickers/${id}`, { text: name.trim(), name: name.trim() });
             else if (type === "adventure") await api.put(`/story/arcs/${id}`, { name: name.trim() });
@@ -4616,7 +4617,7 @@ export function CanvasPage() {
         {
           label: "Создать стикер",
           onClick: async () => {
-            const text = prompt("Текст стикера", "Заметка");
+            const text = await promptText({ title: "Стикер", message: "Текст стикера", defaultValue: "Заметка", confirmLabel: "Создать" });
             if (text == null) return;
             await api.post("/canvas/stickers", { board_id: board?.board_id, text: text || "Заметка", color: "yellow", x: Math.round(flowPos.x), y: Math.round(flowPos.y) });
             loadBoard();
@@ -5682,6 +5683,7 @@ export function CanvasPage() {
       )}
       {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
       {alertDialog}
+      {promptDialog}
     </div>
   );
 }
