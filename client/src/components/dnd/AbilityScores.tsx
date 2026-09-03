@@ -1,4 +1,5 @@
 import type { DndAbilityKey, DndAbilityScores, DndClassEntry, DndSkillProfLevel } from "../../types";
+import { SKILL_CATALOG } from "./skillCatalog";
 
 const LABELS: { key: keyof DndAbilityScores; label: string }[] = [
   { key: "str", label: "СИЛ" },
@@ -9,15 +10,20 @@ const LABELS: { key: keyof DndAbilityScores; label: string }[] = [
   { key: "cha", label: "ХАР" },
 ];
 
-// Skills grouped by the ability they depend on, in the order given.
+// Навыки по характеристикам — ИМЕНАМИ. Отдельно от ключей: лист персонажа
+// перешёл на английский `original` (см. skillCatalog.ts), а статблок существа
+// и редактор компендиума по-прежнему держат в `skillProfs` русское имя. Здесь
+// список один, выведенный из каталога, чтобы имя навыка во всём приложении
+// было одно и то же.
 export const SKILLS_BY_ABILITY: Record<DndAbilityKey, string[]> = {
-  str: ["Атлетика"],
-  dex: ["Акробатика", "Ловкость рук", "Скрытность"],
+  str: [],
+  dex: [],
   con: [],
-  int: ["Анализ/расследование", "История", "Магия", "Природа", "Религия"],
-  wis: ["Внимание/восприятие", "Выживание", "Медицина", "Проницательность", "Уход за животными"],
-  cha: ["Выступление", "Запугивание", "Обман", "Убеждение"],
+  int: [],
+  wis: [],
+  cha: [],
 };
+for (const def of SKILL_CATALOG) SKILLS_BY_ABILITY[def.ability].push(def.name);
 
 export const ALL_SKILLS: string[] = Object.values(SKILLS_BY_ABILITY).flat();
 
@@ -29,11 +35,11 @@ export function emptySavingThrowProfs(): Record<DndAbilityKey, boolean> {
   return { str: false, dex: false, con: false, int: false, wis: false, cha: false };
 }
 
+// Только для листа персонажа — и потому по английскому ключу. У существа
+// `skillProfs` другого вида (булев словарь по имени) и своим путём.
 export function emptySkillProfs(): Record<string, DndSkillProfLevel> {
   const profs: Record<string, DndSkillProfLevel> = {};
-  for (const skills of Object.values(SKILLS_BY_ABILITY)) {
-    for (const skill of skills) profs[skill] = 0;
-  }
+  for (const def of SKILL_CATALOG) profs[def.original] = 0;
   return profs;
 }
 

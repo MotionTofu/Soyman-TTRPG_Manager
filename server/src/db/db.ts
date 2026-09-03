@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { entryImageFolder, systemFolder, vaultAbs } from "../services/filesystem";
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
+import { migrateDndSkillNames } from "./dndSkillNames";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -2706,6 +2707,10 @@ export function openDatabase(dbDir: string): Database.Database {
   backfillDefaultVehicleSections(database);
   migrateBastionsToOwnSection(database);
 
+  // Навыки D&D 5.5: оригинальные имена, характеристики и алиасы переводов —
+  // один раз и только по пустым полям (см. dndSkillNames.ts).
+  migrateDndSkillNames(database);
+
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
   }
@@ -3041,6 +3046,51 @@ export function openDatabase(dbDir: string): Database.Database {
       `);
       setAppSettingFlag(database, key);
     }
+  }
+
+  // Карты (раздел «Карты»): тайловые поля гексы/квадраты + генератор по
+  // сиду. Клетки — компактным JSON-blob'ом на строке карты (60×44 = 2640
+  // клеток, пер-клеточные строки здесь не нужны): {v:1, cells:{"x,y":code},
+  // roads:["x,y"]}. По умолчанию клетка — равнина без дороги и в blob не
+  // пишется. Вариант отрисовки клетки считается от хэша (x,y,seed) и не
+  // хранится. `parent_map_id` + `portal_to_map_id` в клетке — задел под
+  // иерархию-порталы, в UI не показываются (см. MainWorks/Maps).
+  if (!tableExists(database, "maps")) {
+    database.exec(`CREATE TABLE maps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      grid TEXT NOT NULL CHECK (grid IN ('square','hex')),
+      scale TEXT NOT NULL CHECK (scale IN ('planet','continent','country','region','settlement','locality')),
+      width INTEGER NOT NULL DEFAULT 40,
+      height INTEGER NOT NULL DEFAULT 30,
+      cell_lore TEXT NOT NULL DEFAULT '',
+      seed INTEGER NOT NULL DEFAULT 0,
+      sea INTEGER NOT NULL DEFAULT 55,
+      mountains INTEGER NOT NULL DEFAULT 12,
+      forest INTEGER NOT NULL DEFAULT 30,
+      cells TEXT NOT NULL DEFAULT '{"v":1,"cells":{},"roads":[]}',
+      thumbnail TEXT,
+      player_visible INTEGER NOT NULL DEFAULT 0,
+      parent_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(`CREATE INDEX idx_maps_updated ON maps(updated_at)`);
+  }
+
+  // Привязки карты многие-ко-многим (одна карта — к нескольким
+  // сеттингам/кампаниям/локациям). Схема сейчас, UI — следующим шагом.
+  if (!tableExists(database, "map_bindings")) {
+    database.exec(`CREATE TABLE map_bindings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL CHECK (target_type IN ('setting','campaign','location')),
+      target_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(map_id, target_type, target_id)
+    )`);
+    database.exec(`CREATE INDEX idx_map_bindings_map ON map_bindings(map_id)`);
+    database.exec(`CREATE INDEX idx_map_bindings_target ON map_bindings(target_type, target_id)`);
   }
 
   compactIfBloated(database);

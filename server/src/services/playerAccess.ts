@@ -67,6 +67,10 @@ export function apiRoleGate(req: AuthedRequest, res: Response, next: NextFunctio
   // Read-only compendium (statblock editor pickers + Системы section).
   if (m === "GET" && p.startsWith("/systems")) return next();
 
+  // Карты: только чтение, скрытые режутся внутри routes/maps.ts по
+  // player_visible (список фильтруется, одиночка отдаёт 404).
+  if (m === "GET" && (p === "/maps" || p.startsWith("/maps/"))) return next();
+
   let match: RegExpMatchArray | null;
 
   // Кабинет (own account): read their own player record, edit its name/

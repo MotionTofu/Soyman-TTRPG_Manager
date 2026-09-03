@@ -40,6 +40,7 @@ const GM_NAV_ITEMS: NavItem[] = [
   { to: "/resources", label: "Ресурсы", icon: "resources" },
   { to: "/canvas", label: "Полотно", icon: "canvas" },
   { to: "/graph", label: "Граф связей", icon: "graph" },
+  { to: "/maps", label: "Карты", icon: "map" },
 ];
 
 // Player role: no GM tooling (Мастерение/Ресурсы/Граф связей). The player's
@@ -49,6 +50,7 @@ const PLAYER_NAV_ITEMS: NavItem[] = [
   { to: "/campaigns", label: "Кампании", icon: "campaigns" },
   { to: "/settings", label: "Сеттинги", icon: "settings" },
   { to: "/systems", label: "Системы", icon: "systems" },
+  { to: "/maps", label: "Карты", icon: "map" },
   { to: "/cabinet", label: "Кабинет", icon: "storages" },
 ];
 
@@ -356,6 +358,7 @@ const CRUMB_LABEL: Record<string, string> = {
   resources: "Ресурсы",
   canvas: "Полотно",
   graph: "Граф",
+  maps: "Карты",
   storages: "Настройки",
   health: "Здоровье",
   about: "Справка",

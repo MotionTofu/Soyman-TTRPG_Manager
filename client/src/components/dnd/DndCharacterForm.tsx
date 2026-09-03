@@ -43,6 +43,7 @@ import {
   SKILL_TITLES,
 } from "./AbilitySavesSkills";
 import { skillSourceClass, skillSourceWord } from "./skillSource";
+import { resolveSkillOriginal, SKILL_CATALOG, skillByOriginal } from "./skillCatalog";
 import { loadDndPrefs } from "../../dndPrefs";
 import {
   loadDndBackgroundOptions,
@@ -165,6 +166,19 @@ export function emptyDndCharacter(): DndCharacterData {
 // Bridges old saved statblocks (single `classAndLevel`/`race`/`background`
 // strings, free-text `savingThrows`/`skills`) into the new structured shape,
 // so existing data keeps displaying instead of going blank after this change.
+// Список имён навыков → список ключей, без дублей и без потерь: имя, которое
+// не свелось, остаётся как есть и попадёт в строку «нет в справочнике».
+function toSkillKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string" || !v.trim()) continue;
+    const key = resolveSkillOriginal(v) ?? v.trim();
+    if (!out.includes(key)) out.push(key);
+  }
+  return out;
+}
+
 export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   const base = emptyDndCharacter();
   if (!raw || typeof raw !== "object") return base;
@@ -185,11 +199,11 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   // Older saved characters' class rows predate skillChoiceOptions/Count/spellcastingAbility.
   merged.classes = merged.classes.map((c) => ({
     ...c,
-    skillChoiceOptions: c.skillChoiceOptions ?? [],
+    skillChoiceOptions: toSkillKeys(c.skillChoiceOptions),
     skillChoiceCount: c.skillChoiceCount ?? 0,
     spellcastingAbility: c.spellcastingAbility ?? "",
   }));
-  merged.backgroundSkillNames = Array.isArray(merged.backgroundSkillNames) ? merged.backgroundSkillNames : [];
+  merged.backgroundSkillNames = toSkillKeys(merged.backgroundSkillNames);
   // Pre-existing attacks predate the timing field (Действие/Бонусное/Реакция/
   // Иное) — default them to "Действие" so they still show up in the "Бой"
   // tab's new sectioned layout instead of silently dropping out.
@@ -208,10 +222,20 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   // skillProfs used to be a plain boolean map (proficient or not) — old
   // `true`/`false` values become 1/0 so they still work with the new
   // 0/1/2 (none/proficient/expertise) scale.
+  //
+  // И ключ: раньше это было русское имя, теперь английский `original`
+  // (гриллинг 2026-09-04). Несводимое имя сохраняется как есть — лист
+  // покажет его отдельной строкой с пометкой, а не потеряет молча.
   const rawSkillProfs = { ...emptySkillProfs(), ...(r.skillProfs as object | undefined) };
-  merged.skillProfs = Object.fromEntries(
-    Object.entries(rawSkillProfs).map(([k, v]) => [k, typeof v === "boolean" ? (v ? 1 : 0) : v])
-  ) as DndCharacterData["skillProfs"];
+  const skillProfs: Record<string, DndSkillProfLevel> = {};
+  for (const [rawKey, rawLevel] of Object.entries(rawSkillProfs)) {
+    const key = resolveSkillOriginal(rawKey) ?? rawKey;
+    const level = (typeof rawLevel === "boolean" ? (rawLevel ? 1 : 0) : rawLevel) as DndSkillProfLevel;
+    // Два имени могли свестись в один ключ (например «Аркана» и «Магия» на
+    // одном листе) — выигрывает большее владение, а не последнее прочитанное.
+    skillProfs[key] = Math.max(skillProfs[key] ?? 0, level || 0) as DndSkillProfLevel;
+  }
+  merged.skillProfs = skillProfs;
 
   // Old saved statblocks kept Снаряжение as one free-text field — split it
   // into one item per non-empty line inside a single "Общее" section, so a

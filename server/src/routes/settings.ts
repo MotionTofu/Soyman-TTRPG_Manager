@@ -2053,7 +2053,7 @@ export async function importSettingExport(
   // Import adventures if present
   if (body.adventures && body.adventures.length > 0) {
     for (const adventure of body.adventures) {
-      importAdventureExport(newSettingId, adventure as Record<string, unknown>);
+      await importAdventureExport(newSettingId, adventure as Record<string, unknown>, { withImages });
     }
   }
 

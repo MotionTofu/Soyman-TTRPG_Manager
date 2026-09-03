@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
-import { readFileAsBase64, vaultAbs } from "../services/filesystem";
+import { ensureSubfolder, readFileAsBase64, sanitizeName, vaultAbs, writeBase64File } from "../services/filesystem";
 import { storeDeduped } from "../services/vaultDedup";
 import { pruneRoutesForKeys } from "./canvas";
 import {
@@ -1534,11 +1534,82 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
 // Accepts an adventure-export/1 JSON and creates the adventure with all
 // related data in the target setting.
 
-export function importAdventureExport(
+interface ImportedFile {
+  filename: string;
+  mime: string;
+  base64: string;
+}
+
+// Куда лечь картинкам приключения. У `story_arcs` своей папки нет — заводим
+// её под сеттингом рядом с остальными: `Settings/<сеттинг>/Adventures/<имя>`.
+function adventureImageFolder(settingId: number, arcName: string): string | null {
+  const setting = db.prepare("SELECT folder_path FROM settings WHERE id = ?").get(settingId) as
+    | { folder_path: string | null }
+    | undefined;
+  if (!setting?.folder_path) return null;
+  return ensureSubfolder(setting.folder_path, `Adventures/${sanitizeName(arcName || "Приключение")}`);
+}
+
+function asFile(value: unknown): ImportedFile | null {
+  if (!value || typeof value !== "object") return null;
+  const f = value as Partial<ImportedFile>;
+  return typeof f.base64 === "string" && typeof f.filename === "string"
+    ? { filename: f.filename, mime: f.mime ?? "", base64: f.base64 }
+    : null;
+}
+
+/**
+ * Раскладывает картинки файла по хранилищу ДО транзакции.
+ *
+ * Запись на диск асинхронная, а вставка строк идёт одной синхронной
+ * транзакцией `better-sqlite3` — внутрь неё `await` не поставить. Поэтому
+ * сначала файлы, потом строки: транзакция получает уже готовые пути.
+ * Если она откатится, на диске останутся лишние картинки — их подберёт
+ * `sweepOrphans`, это дешевле недописанной базы.
+ */
+async function writeAdventureImages(
   settingId: number,
   data: Record<string, unknown>
-): number | null {
+): Promise<{ thumbnail: string | null; canvasImages: Map<string, string> }> {
+  const adv = (data.adventure ?? {}) as Record<string, unknown>;
+  const canvas = data.canvas as Record<string, unknown> | undefined;
+  const images = (canvas?.images ?? []) as Record<string, unknown>[];
+  const thumbData = asFile(adv.thumbnail_image_path);
+  const withCanvas = images.filter((i) => asFile(i.file_data));
+  const canvasImages = new Map<string, string>();
+  if (!thumbData && withCanvas.length === 0) return { thumbnail: null, canvasImages };
+
+  const folder = adventureImageFolder(settingId, String(adv.name ?? ""));
+  if (!folder) return { thumbnail: null, canvasImages };
+
+  const thumbnail = thumbData
+    ? await writeBase64File(folder, `thumbnail-${thumbData.filename}`, thumbData.base64)
+    : null;
+  if (withCanvas.length > 0) {
+    const canvasFolder = ensureSubfolder(folder, "Canvas");
+    for (const img of withCanvas) {
+      const f = asFile(img.file_data)!;
+      const key = String(img.key ?? "");
+      if (!key) continue;
+      canvasImages.set(key, await writeBase64File(canvasFolder, f.filename, f.base64));
+    }
+  }
+  return { thumbnail, canvasImages };
+}
+
+export async function importAdventureExport(
+  settingId: number,
+  data: Record<string, unknown>,
+  opts: { withImages?: boolean } = {}
+): Promise<number | null> {
   if (data.format !== "adventure-export/1") return null;
+
+  // «Без картинок» — сознательный выбор Мастера на загрузке: файл книги может
+  // весить сотни мегабайт, а разложить их по хранилищу он не обязан.
+  const { thumbnail, canvasImages } =
+    opts.withImages === false
+      ? { thumbnail: null, canvasImages: new Map<string, string>() }
+      : await writeAdventureImages(settingId, data);
 
   const adv = data.adventure as Record<string, unknown>;
   const chapters = (data.chapters ?? []) as Record<string, unknown>[];
@@ -1587,7 +1658,7 @@ export function importAdventureExport(
       settingId, null, adv.name, "adventure",
       adv.description ?? "", adv.hook ?? "", adv.recommended_level ?? "",
       adv.player_count ?? "", adv.duration ?? "", adv.source ?? "",
-      adv.tags ?? "", null, 0
+      adv.tags ?? "", thumbnail, 0
     );
     const newArcId = Number(arcResult.lastInsertRowid);
 
@@ -1723,6 +1794,18 @@ export function importAdventureExport(
         nodeIdMap.set(p.key as string, Number(r.lastInsertRowid));
       }
 
+      // Изображения. Файлы уже лежат на диске (writeAdventureImages выше);
+      // при загрузке без картинок карта пуста и блок ничего не делает.
+      const exportImages = (canvas.images ?? []) as Record<string, unknown>[];
+      for (const img of exportImages) {
+        const filePath = canvasImages.get(String(img.key ?? ""));
+        if (!filePath) continue;
+        const r = db
+          .prepare("INSERT INTO canvas_images (board_id, file_path, w, h) VALUES (?, ?, ?, ?)")
+          .run(boardId, filePath, img.w ?? 320, img.h ?? 240);
+        nodeIdMap.set(img.key as string, Number(r.lastInsertRowid));
+      }
+
       // Bundles
       const exportBundles = (canvas.bundles ?? []) as Record<string, unknown>[];
       for (const b of exportBundles) {
@@ -1776,6 +1859,228 @@ export function importAdventureExport(
 
   return result;
 }
+
+// --- Слияние приключения из файла в уже существующее ----------------------
+//
+// Обещание в диалоге — «Тексты из файла перезапишут ваши», и делается ровно
+// это: у совпавших по имени глав и сцен переписываются текстовые поля, чего в
+// приключении нет — создаётся. Ничего локального не удаляется.
+//
+// Совпадение ищется по имени, а не по uid: в `adventure-export/1` uid-ов нет,
+// ключи собираются из имён (`slugify`). Для сцен имя сверяется внутри своей
+// главы — две «Встречи в таверне» в разных главах это разные сцены.
+//
+// Переходы, вехи, тайны и схема при слиянии не трогаются: они связывают
+// сущности между собой, и накладывать их поверх чужого дерева значит рвать
+// местные связи ради чужих. Приходят они только с новым приключением
+// («Создать новое» и «Заменить»).
+const MERGE_ARC_FIELDS = ["description", "hook", "recommended_level", "player_count", "duration", "source", "tags"] as const;
+const MERGE_SCENE_FIELDS = ["summary", "read_aloud", "whats_happening", "entry_condition", "outcomes"] as const;
+
+export interface MergeSummary {
+  added_chapters: number;
+  added_scenes: number;
+  updated_scenes: number;
+  kept_local_scenes: number;
+}
+
+// Тот же ключ, что строит выгрузка (`slugify` внутри importAdventureExport):
+// слияние ищет совпадения по нему, значит считать его надо ровно так же.
+function slugifyKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60) || "unnamed";
+}
+
+function mergeAdventureExport(
+  settingId: number,
+  targetArcId: number,
+  data: Record<string, unknown>
+): MergeSummary {
+  const adv = (data.adventure ?? {}) as Record<string, unknown>;
+  const chapters = (data.chapters ?? []) as Record<string, unknown>[];
+  const scenes = (data.scenes ?? []) as Record<string, unknown>[];
+  const summary: MergeSummary = { added_chapters: 0, added_scenes: 0, updated_scenes: 0, kept_local_scenes: 0 };
+
+  const run = db.transaction(() => {
+    const arcSets = MERGE_ARC_FIELDS.filter((f) => adv[f] != null);
+    if (arcSets.length > 0) {
+      db.prepare(`UPDATE story_arcs SET ${arcSets.map((f) => `${f} = ?`).join(", ")} WHERE id = ?`)
+        .run(...arcSets.map((f) => adv[f]), targetArcId);
+    }
+
+    const localChapters = db
+      .prepare("SELECT id, name FROM story_arcs WHERE parent_id = ? AND archived_at IS NULL AND campaign_id IS NULL")
+      .all(targetArcId) as { id: number; name: string }[];
+    // Ключ файла (`chp.<slug>`) — id главы на этом устройстве.
+    const chapterByKey = new Map<string, number>();
+    for (const c of localChapters) chapterByKey.set(`chp.${slugifyKey(c.name)}`, c.id);
+
+    let nextChapterPos = localChapters.length;
+    for (const ch of chapters) {
+      const key = `chp.${slugifyKey(String(ch.name ?? ""))}`;
+      const existing = chapterByKey.get(key);
+      if (existing != null) {
+        if (ch.description != null) {
+          db.prepare("UPDATE story_arcs SET description = ? WHERE id = ?").run(ch.description, existing);
+        }
+        continue;
+      }
+      const r = db
+        .prepare(
+          `INSERT INTO story_arcs (setting_id, parent_id, name, kind, description, position)
+           VALUES (?, ?, ?, 'chapter', ?, ?)`
+        )
+        .run(settingId, targetArcId, ch.name, ch.description ?? "", nextChapterPos++);
+      chapterByKey.set(key, Number(r.lastInsertRowid));
+      summary.added_chapters++;
+    }
+
+    const arcIds = [targetArcId, ...chapterByKey.values()];
+    const placeholders = arcIds.map(() => "?").join(",");
+    const localScenes = db
+      .prepare(
+        `SELECT id, arc_id, name FROM story_scenes
+          WHERE arc_id IN (${placeholders}) AND archived_at IS NULL AND campaign_id IS NULL`
+      )
+      .all(...arcIds) as { id: number; arc_id: number; name: string }[];
+    const sceneByKey = new Map<string, number>();
+    for (const sc of localScenes) sceneByKey.set(`${sc.arc_id}|${slugifyKey(sc.name)}`, sc.id);
+
+    const touched = new Set<number>();
+    for (let i = 0; i < scenes.length; i++) {
+      const sc = scenes[i];
+      const chapterKey = sc.chapter as string | undefined;
+      const arcId = (chapterKey && chapterByKey.get(chapterKey)) || targetArcId;
+      const key = `${arcId}|${slugifyKey(String(sc.name ?? ""))}`;
+      const existing = sceneByKey.get(key);
+      if (existing != null) {
+        const sets = MERGE_SCENE_FIELDS.filter((f) => sc[f] != null);
+        if (sets.length > 0) {
+          db.prepare(`UPDATE story_scenes SET ${sets.map((f) => `${f} = ?`).join(", ")} WHERE id = ?`)
+            .run(...sets.map((f) => sc[f]), existing);
+        }
+        touched.add(existing);
+        summary.updated_scenes++;
+        continue;
+      }
+      const r = db
+        .prepare(
+          `INSERT INTO story_scenes (setting_id, arc_id, name, kind, summary, read_aloud, whats_happening, entry_condition, outcomes, hidden_from_players, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          settingId, arcId, sc.name, sc.kind ?? "scene",
+          sc.summary ?? "", sc.read_aloud ?? "", sc.whats_happening ?? "",
+          sc.entry_condition ?? "", sc.outcomes ?? "",
+          sc.hidden_from_players ?? 1, sc.position ?? i
+        );
+      const newSceneId = Number(r.lastInsertRowid);
+      sceneByKey.set(key, newSceneId);
+      touched.add(newSceneId);
+      summary.added_scenes++;
+
+      // У новой сцены проверки и награды приходят целиком: местных связей,
+      // которые они могли бы порвать, у неё ещё нет.
+      const checks = (sc.checks ?? []) as Record<string, unknown>[];
+      for (let ci = 0; ci < checks.length; ci++) {
+        const c = checks[ci];
+        const cr = db
+          .prepare("INSERT INTO story_scene_checks (scene_id, what, difficulty, position) VALUES (?, ?, ?, ?)")
+          .run(newSceneId, c.what ?? "", c.difficulty ?? "", ci);
+        const outcomes = (c.outcomes ?? []) as Record<string, unknown>[];
+        for (let oi = 0; oi < outcomes.length; oi++) {
+          db.prepare("INSERT INTO story_check_outcomes (check_id, label, consequence, position) VALUES (?, ?, ?, ?)")
+            .run(Number(cr.lastInsertRowid), outcomes[oi].label ?? "", outcomes[oi].consequence ?? "", oi);
+        }
+      }
+      const rewards = (sc.rewards ?? []) as Record<string, unknown>[];
+      for (let ri = 0; ri < rewards.length; ri++) {
+        const rw = rewards[ri];
+        db.prepare("INSERT INTO story_scene_rewards (scene_id, arc_id, what, where_found, notes, position) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(newSceneId, null, rw.what ?? "", rw.where_found ?? "", rw.notes ?? "", rw.position ?? ri);
+      }
+    }
+
+    summary.kept_local_scenes = localScenes.filter((sc) => !touched.has(sc.id)).length;
+  });
+  run();
+  return summary;
+}
+
+// --- Выгрузка и загрузка приключения --------------------------------------
+
+storyRouter.get("/arcs/:id/export", (req, res) => {
+  const data = buildAdventureExportData(req.params.id);
+  if (!data) return res.status(404).json({ error: "not found" });
+  res.json(data);
+});
+
+/**
+ * Загрузка приключения из файла.
+ *
+ * Совпадение имени — не ошибка и не повод молча слить: клиент присылает файл
+ * без `mode`, получает 409 с именем и id найденного приключения и спрашивает
+ * Мастера. Три ответа названы последствием, а не механикой:
+ *
+ * - `new` — ляжет рядом, ничего не тронет;
+ * - `replace` — старое уйдёт в архив, оттуда его можно вернуть;
+ * - `merge` — тексты из файла перезапишут ваши, но перед этим в архив уедет
+ *   копия сегодняшнего состояния.
+ *
+ * Копия перед слиянием делается тем же кодом, что выгрузка и загрузка: снять
+ * `buildAdventureExportData` с текущего приключения, поставить его рядом и
+ * сразу заархивировать. Отдельного «дублировать приключение» ради этого
+ * заводить не пришлось.
+ */
+storyRouter.post("/import", async (req, res) => {
+  const settingId = Number(req.query.setting_id);
+  const mode = req.query.mode as "new" | "replace" | "merge" | undefined;
+  const withImages = req.query.images !== "0";
+  const data = req.body as Record<string, unknown>;
+  if (!Number.isInteger(settingId) || settingId <= 0) {
+    return res.status(400).json({ error: "setting_id is required" });
+  }
+  if (data?.format !== "adventure-export/1") {
+    return res.status(400).json({ error: "Это не файл приключения" });
+  }
+  const setting = db.prepare("SELECT id FROM settings WHERE id = ? AND archived_at IS NULL").get(settingId);
+  if (!setting) return res.status(404).json({ error: "setting not found" });
+
+  const name = String((data.adventure as Record<string, unknown> | undefined)?.name ?? "").trim();
+  const clash = db
+    .prepare(
+      `SELECT id, name FROM story_arcs
+        WHERE setting_id = ? AND parent_id IS NULL AND campaign_id IS NULL
+          AND archived_at IS NULL AND name = ?`
+    )
+    .get(settingId, name) as { id: number; name: string } | undefined;
+  if (clash && !mode) return res.status(409).json({ conflict: true, arc_id: clash.id, name: clash.name });
+
+  try {
+    if (clash && mode === "merge") {
+      const backup = buildAdventureExportData(clash.id);
+      if (backup) {
+        const backupAdv = backup.adventure as Record<string, unknown>;
+        backupAdv.name = `${clash.name} — копия до слияния`;
+        const backupId = await importAdventureExport(settingId, backup, { withImages: false });
+        if (backupId) {
+          db.prepare("UPDATE story_arcs SET archived_at = datetime('now') WHERE id = ?").run(backupId);
+        }
+      }
+      const summary = mergeAdventureExport(settingId, clash.id, data);
+      return res.json({ mode: "merge", arc_id: clash.id, ...summary });
+    }
+    if (clash && mode === "replace") {
+      db.prepare("UPDATE story_arcs SET archived_at = datetime('now') WHERE id = ?").run(clash.id);
+    }
+    const arcId = await importAdventureExport(settingId, data, { withImages });
+    if (!arcId) return res.status(400).json({ error: "Это не файл приключения" });
+    return res
+      .status(201)
+      .json({ mode: clash && mode === "replace" ? "replace" : "new", arc_id: arcId, replaced_arc_id: clash?.id ?? null });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : "Не удалось загрузить приключение" });
+  }
+});
 
 storyRouter.delete("/scenes/:id", (req, res) => {
   // Уходящая с полки заготовка сначала материализует свои вставки: каждая
