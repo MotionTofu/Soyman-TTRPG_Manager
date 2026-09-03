@@ -20,8 +20,12 @@ interface CommonProps {
 
 // level is a proficiency multiplier: 0 = none, 1 = proficient, 2 = expertise
 // (double proficiency bonus) — saving throws only ever use 0/1.
-export function computed(mod: number, level: number, profBonus: number): string {
-  return formatModifier(mod + profBonus * level);
+// `penalty` — штраф истощения (5.5: −2 за уровень к любому броску к20).
+// Показанное число должно быть тем, которое бросают: иначе лист говорит
+// «+5», а верно «+1». На КЗ и на сложность заклинаний истощение не влияет —
+// это не броски к20, и туда штраф не передаётся.
+export function computed(mod: number, level: number, profBonus: number, penalty = 0): string {
+  return formatModifier(mod + profBonus * level - penalty);
 }
 
 // Blueish = from class, greenish = from background, reddish = both — tone
@@ -176,7 +180,8 @@ export function AbilitySavesSkillsView({
   abilities,
   proficiencyBonus,
   savingThrowProfs,
-}: CommonProps) {
+  exhaustionPenalty = 0,
+}: CommonProps & { exhaustionPenalty?: number }) {
   const profBonus = parseBonus(proficiencyBonus);
   const prefs = useDndPrefs();
 
@@ -194,7 +199,7 @@ export function AbilitySavesSkillsView({
               label={label}
               score={abilities[key]}
               mod={mod}
-              save={computed(mod, savingThrowProfs[key] ? 1 : 0, profBonus)}
+              save={computed(mod, savingThrowProfs[key] ? 1 : 0, profBonus, exhaustionPenalty)}
               isSaveProficient={savingThrowProfs[key]}
               primary={prefs.abilityPrimary}
             />

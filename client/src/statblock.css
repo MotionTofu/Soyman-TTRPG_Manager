@@ -1210,3 +1210,25 @@ summary.sb-section {
   border: var(--card-border-width, 1px) solid var(--accent);
   padding: 6px 8px;
 }
+
+/* Истощение: дорожка в виталах и пометка причины под ними. Пометка —
+   единственное место, где акцент оправдан вне бюджета страницы: она
+   объясняет, почему все остальные числа листа стали меньше. */
+.dnd-exhaustion {
+  gap: 3px;
+  align-items: center;
+}
+.dnd-exhaustion-dead {
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.dnd-exhaustion-note {
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}

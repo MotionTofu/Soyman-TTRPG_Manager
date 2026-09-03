@@ -129,6 +129,7 @@ export function emptyDndCharacter(): DndCharacterData {
     hitDiceUsed: {},
     deathSaveSuccesses: 0,
     deathSaveFailures: 0,
+    exhaustion: 0,
     concentration: "",
     attacks: [],
     equipmentSections: [{ name: "Общее", items: [] }],
@@ -170,6 +171,7 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   // undefined поверх умолчания, и дорожка костей падает на первом же чтении.
   if (!merged.hitDiceUsed || typeof merged.hitDiceUsed !== "object") merged.hitDiceUsed = {};
   if (typeof merged.concentration !== "string") merged.concentration = "";
+  merged.exhaustion = Math.min(6, Math.max(0, Number(merged.exhaustion) || 0));
 
   if (!Array.isArray(merged.classes) || merged.classes.length === 0) {
     const legacy = typeof r.classAndLevel === "string" ? r.classAndLevel : "";
@@ -2940,7 +2942,8 @@ interface AttackRow {
 function weaponAttackRows(
   sections: DndEquipmentSection[],
   abilities: DndCharacterData["abilities"],
-  profBonus: number
+  profBonus: number,
+  exhaustionPenalty = 0
 ): AttackRow[] {
   const str = abilityModifier(abilities.str);
   const dex = abilityModifier(abilities.dex);
@@ -2967,7 +2970,13 @@ function weaponAttackRows(
       const damage = [damageWithMod, i.weaponProperties, i.weaponMastery && `Мастерство: ${i.weaponMastery}`]
         .filter(Boolean)
         .join(" · ");
-      return { name: i.name, bonus: formatModifier(mod + profBonus), damage, range, timing: "action" as const };
+      return {
+        name: i.name,
+        bonus: formatModifier(mod + profBonus - exhaustionPenalty),
+        damage,
+        range,
+        timing: "action" as const,
+      };
     });
 }
 
@@ -3151,6 +3160,7 @@ function DndSkillsView({
   proficiencies,
   onQuickUpdate,
   highlight,
+  exhaustionPenalty = 0,
 }: {
   abilities: DndCharacterData["abilities"];
   proficiencyBonus: string;
@@ -3161,6 +3171,8 @@ function DndSkillsView({
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
   /** Ключ строки, на которую увёл поиск (см. DndSheetSearch). */
   highlight?: string | null;
+  /** Штраф истощения: −2 за уровень к любому броску к20 (5.5). */
+  exhaustionPenalty?: number;
 }) {
   const profBonus = parseBonus(proficiencyBonus);
   const rows = useMemo(() => {
@@ -3202,7 +3214,7 @@ function DndSkillsView({
               <span className="dnd-save-name">
                 {skill} <span className="muted">({abilityLabel})</span>
               </span>
-              <span className="dnd-save-value">{computeSkillValue(mod, level, profBonus)}</span>
+              <span className="dnd-save-value">{computeSkillValue(mod, level, profBonus, exhaustionPenalty)}</span>
             </div>
           );
         })}
@@ -4141,6 +4153,9 @@ function DndRestModal({
         back > 0 ? `
 
 Костей хитов вернётся: ${Math.min(back, spentDice)} из ${spentDice} потраченных.` : "",
+        value.exhaustion > 0 ? `
+
+Истощение: ${value.exhaustion} → ${value.exhaustion - 1}.` : "",
         neverNames.length > 0 ? `
 
 Не восстановится: ${neverNames.join(", ")}.` : "",
@@ -4158,6 +4173,8 @@ function DndRestModal({
       deathSaveSuccesses: 0,
       deathSaveFailures: 0,
       concentration: "",
+      // 5.5: длинный отдых снимает один уровень истощения, а не всё сразу.
+      exhaustion: Math.max(0, value.exhaustion - 1),
     });
     onClose();
   }
@@ -4379,12 +4396,20 @@ export function DndCharacterView({
   const spellAbilityKey = characterSpellcastingAbility(value.classes);
   const spellAbilityMod = spellAbilityKey ? abilityModifier(value.abilities[spellAbilityKey]) : 0;
   const spellProfBonus = parseBonus(value.proficiencyBonus);
-  const spellAttackBonus = spellAbilityMod + spellProfBonus + parseBonus(value.spellAttackMisc);
+  const spellAttackBonus =
+    spellAbilityMod + spellProfBonus + parseBonus(value.spellAttackMisc) - value.exhaustion * 2;
   const spellDc = 8 + spellAbilityMod + spellProfBonus + parseBonus(value.spellDcMisc);
   const perceptionProf = value.skillProfs["Внимание/восприятие"] ?? 0;
   const passivePerception =
-    10 + abilityModifier(value.abilities.wis) + parseBonus(value.proficiencyBonus) * perceptionProf;
+    10 +
+    abilityModifier(value.abilities.wis) +
+    parseBonus(value.proficiencyBonus) * perceptionProf -
+    value.exhaustion * 2;
   const pools = hitDicePools(value.hitDice, value.hitDiceUsed);
+  // 5.5: каждый уровень истощения — −2 к любому броску к20. Штраф уходит
+  // в значения навыков, спасбросков, бонусы атак и пассивное восприятие, но
+  // НЕ в КЗ и не в сложность заклинаний: это не броски к20.
+  const exhaustionPenalty = value.exhaustion * 2;
   // Спасброски от смерти появляются сами, когда становятся нужны. «Хитов нет»
   // — это ноль или меньше: урон уводит текущие хиты в минус (нижняя граница —
   // Этап 2), и лист обязан показать дорожки и в этом случае. Пустое поле
@@ -4612,6 +4637,23 @@ export function DndCharacterView({
                 </div>
               </div>
             )}
+            {/* Истощение — там же, где хиты: оно меняет каждый бросок к20 и
+                скорость, и знать о нём надо не реже, чем о хитах. Дорожка на
+                шесть, шестой уровень — смерть, о чём сказано прямо. */}
+            {(value.exhaustion > 0 || onQuickUpdate) && (
+              <div>
+                <div className="sb-label">Истощение</div>
+                <div className="stack dnd-exhaustion">
+                  <PipTrack
+                    value={value.exhaustion}
+                    max={6}
+                    size={12}
+                    onChange={onQuickUpdate ? (n) => onQuickUpdate({ exhaustion: n }) : undefined}
+                  />
+                  {value.exhaustion >= 6 && <span className="dnd-exhaustion-dead">смерть</span>}
+                </div>
+              </div>
+            )}
             {/* Концентрация — там, куда игрок и так смотрит каждый ход.
                 Ставится из окна заклинания, снимается кликом и длинным отдыхом. */}
             {(value.concentration || onQuickUpdate) && (
@@ -4690,6 +4732,14 @@ export function DndCharacterView({
           </div>
 
           <div className="sb-vitals-caption">
+            {/* Пометка причины: без неё упавшие навыки выглядят как поломка
+                листа, а не как истощение. */}
+            {value.exhaustion > 0 && (
+              <span className="dnd-exhaustion-note">
+                Истощение {value.exhaustion}: −{exhaustionPenalty} ко всем броскам к20, −{value.exhaustion * 5} фт
+                скорости
+              </span>
+            )}
             <span>
               <span className="sb-prop-label">Пасс. восприятие</span> {passivePerception}
             </span>
@@ -4722,6 +4772,7 @@ export function DndCharacterView({
             />
           ) : (
             <AbilitySavesSkillsView
+              exhaustionPenalty={exhaustionPenalty}
               abilities={value.abilities}
               proficiencyBonus={value.proficiencyBonus}
               savingThrowProfs={value.savingThrowProfs}
@@ -4786,7 +4837,12 @@ export function DndCharacterView({
                 // видов, черт и вручную вписанные атаки. Раньше она звалась
                 // «Бой» и знала только про первые три.
                 const allRows = [
-                  ...weaponAttackRows(value.equipmentSections, value.abilities, parseBonus(value.proficiencyBonus)),
+                  ...weaponAttackRows(
+                    value.equipmentSections,
+                    value.abilities,
+                    parseBonus(value.proficiencyBonus),
+                    exhaustionPenalty
+                  ),
                   ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc),
                   ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc),
                   ...manualAttackRows(value.attacks),
@@ -4965,6 +5021,7 @@ export function DndCharacterView({
 
           {tab === "Навыки" && (
             <DndSkillsView
+              exhaustionPenalty={exhaustionPenalty}
               highlight={highlight}
               abilities={value.abilities}
               proficiencyBonus={value.proficiencyBonus}
