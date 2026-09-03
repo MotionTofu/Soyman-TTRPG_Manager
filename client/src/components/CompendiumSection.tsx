@@ -1182,20 +1182,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     ? groupByCategory(sortForDisplay(filteredTopLevel), "rarity", MAGIC_ITEM_RARITIES, sortDir)
     : null;
 
-  // 6 категорий справочника — группировка mechanic_group по MECHANICS_CATEGORIES.
-  const mechanicsByCategory = useMemo(() => {
-    if (!isMechanicsSection) return null;
-    const map = new Map<string, CompendiumEntry[]>();
-    for (const c of MECHANICS_CATEGORIES) map.set(c.key, []);
-    const sorted = sortForDisplay(topLevel);
-    for (const e of sorted) {
-      const cat = mechanicsCategoryForGroupName(e.name) ?? "mechanics";
-      if (map.has(cat)) map.get(cat)!.push(e);
-      else map.get("mechanics")!.push(e);
-    }
-    return map;
-  }, [isMechanicsSection, topLevel, sortForDisplay]);
-
   // Избранное — отдельный раздел для помеченных звёздочкой записей (пока ни одной — раздела нет).
   const favouriteEntries = useMemo(() => {
     if (!isMechanicsSection) return [] as CompendiumEntry[];
@@ -1217,7 +1203,17 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       }
       return map;
     })();
-    const blocks = MECHANICS_CATEGORIES.map((cat) => [cat.label, nonFavouriteByCategory.get(cat.key) ?? []] as [string, CompendiumEntry[]]).filter(([, list]) => list.length > 0);
+    // Счётчики для кнопок фильтра считаются по тем же спискам, что и блоки,
+    // иначе «Магические эффекты · 6» показывало бы шесть, а раскрывалось пять
+    // (избранные уходят из категорий наверх, в свой блок).
+    const categoryCounts = MECHANICS_CATEGORIES
+      .map((cat) => [cat, (nonFavouriteByCategory.get(cat.key) ?? []).length] as const)
+      .filter(([, n]) => n > 0);
+    const allBlocks = MECHANICS_CATEGORIES.map((cat) => [cat.label, nonFavouriteByCategory.get(cat.key) ?? []] as [string, CompendiumEntry[]]).filter(([, list]) => list.length > 0);
+    const activeCategoryLabel = mechanicsCategoryFilter
+      ? MECHANICS_CATEGORIES.find((c) => c.key === mechanicsCategoryFilter)?.label
+      : null;
+    const blocks = activeCategoryLabel ? allBlocks.filter(([label]) => label === activeCategoryLabel) : allBlocks;
     return (
       <div className="stack">
           <div className="card stack">
@@ -1251,6 +1247,31 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                 {selectedIds.size > 0 ? `Выбрано: ${selectedIds.size}` : ""}
               </span>
             </div>
+            {/* Отбор по категории. Справочник D&D 5.5 — под шесть сотен записей,
+                и без него до нужного списка приходится листать все блоки.
+                Повторный клик по активной кнопке снимает отбор. */}
+            {categoryCounts.length > 1 && (
+              <div className="row sort-toggle" style={{ gap: 4, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className={mechanicsCategoryFilter === "" ? "active-sort" : ""}
+                  onClick={() => setMechanicsCategoryFilter("")}
+                >
+                  Все · {nonFavouriteTopLevel.length}
+                </button>
+                {categoryCounts.map(([cat, count]) => (
+                  <button
+                    key={cat.key}
+                    type="button"
+                    className={mechanicsCategoryFilter === cat.key ? "active-sort" : ""}
+                    onClick={() => setMechanicsCategoryFilter((prev) => (prev === cat.key ? "" : cat.key))}
+                    title={cat.label}
+                  >
+                    {cat.label} · {count}
+                  </button>
+                ))}
+              </div>
+            )}
           {topLevel.length === 0 && searchQuery.trim() && <p className="muted">Ничего не найдено по «{searchQuery.trim()}».</p>}
           {topLevel.length === 0 && !searchQuery.trim() && (
             <EmptyState title="Справочник пуст" hint="Заведите списки — типы существ, школы магии, свойства оружия и другие — чтобы пикера классов и заклинаний заработали." action={<button className="primary" onClick={() => addEntry(null, rootKind)}>+ Добавить {kindLabel(rootKind).toLowerCase()}</button>} />
@@ -1447,62 +1468,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             <NavIcon name="close" />
           </button>
         )}
-        {isMechanicsSection && topLevel.length > 0 && (
-          <>
-            <label className="row" style={{ gap: 6, cursor: "pointer", marginLeft: 4 }}>
-              <input
-                type="checkbox"
-                checked={selectedIds.size === entries.filter((e) => e.kind === "mechanic_item").length && entries.filter((e) => e.kind === "mechanic_item").length > 0}
-                onChange={(e) => {
-                  if (e.target.checked) setSelectedIds(new Set(entries.filter((en) => en.kind === "mechanic_item").map((en) => en.id)));
-                  else setSelectedIds(new Set());
-                }}
-              />
-              Выбрать всё
-            </label>
-            <button type="button" onClick={handlePrint} disabled={selectedIds.size === 0} title="Печать выбранных">
-              <NavIcon name="download" /> Печать
-            </button>
-            <button type="button" className="primary" onClick={handleShowToPlayers} disabled={selectedIds.size === 0} title="Показать игрокам карточкой">
-              <NavIcon name="eye" /> Показать игрокам
-            </button>
-            {selectedIds.size > 0 && (
-              <button type="button" onClick={() => setSelectedIds(new Set())}>Сбросить</button>
-            )}
-          </>
-        )}
-        {isMechanicsSection && (
-          <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", marginLeft: "auto" }}>
-            {selectedIds.size > 0 ? `Выбрано: ${selectedIds.size}` : ""}
-          </span>
-        )}
       </div>
-      {isMechanicsSection && topLevel.length > 0 && mechanicsByCategory && (
-        <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className={mechanicsCategoryFilter === "" ? "active-sort" : ""}
-            onClick={() => setMechanicsCategoryFilter("")}
-          >
-            Все · {topLevel.length}
-          </button>
-          {MECHANICS_CATEGORIES.map((cat) => {
-            const count = mechanicsByCategory.get(cat.key)?.length ?? 0;
-            if (count === 0) return null;
-            return (
-              <button
-                key={cat.key}
-                type="button"
-                className={mechanicsCategoryFilter === cat.key ? "active-sort" : ""}
-                onClick={() => setMechanicsCategoryFilter((prev) => (prev === cat.key ? "" : cat.key))}
-                title={cat.label}
-              >
-                {cat.label} · {count}
-              </button>
-            );
-          })}
-        </div>
-      )}
       {isMagicItemSection && (
         <div className="row" style={{ flexWrap: "wrap" }}>
           <select value={filterItemType} onChange={(e) => setFilterItemType(e.target.value)}>
@@ -1728,29 +1694,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                   <EntryNode entry={e} depth={0} {...nodeProps} />
                 </SortableRow>
               ))
-          : isMechanicsSection && mechanicsByCategory
-          ? (() => {
-              const catsToShow = mechanicsCategoryFilter
-                ? MECHANICS_CATEGORIES.filter((c) => c.key === mechanicsCategoryFilter)
-                : MECHANICS_CATEGORIES;
-              const blocks = catsToShow
-                .map((cat) => [cat.label, mechanicsByCategory.get(cat.key) ?? []] as [string, CompendiumEntry[]])
-                .filter(([, list]) => list.length > 0);
-              if (blocks.length === 0) return <p className="muted">В этой категории пока пусто.</p>;
-              return blocks.map(([label, list]) => (
-                <details key={label} className="comp-category" open={!!mechanicsCategoryFilter || !!searchQuery.trim()}>
-                  <summary className="comp-level-label chevron-summary">
-                    <NavIcon name="chevron" className="chevron-icon" />
-                    {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
-                  </summary>
-                  {list.map((e) => (
-                    <SortableRow key={e.id} entry={e} group={list} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}>
-                      <EntryNode entry={e} depth={0} {...nodeProps} />
-                    </SortableRow>
-                  ))}
-                </details>
-              ));
-            })()
           : categoryGroups
           ? groupByCategory(sortForDisplay(isEquipmentSection ? filteredTopLevel : topLevel), "category", categoryGroups, sortDir).map(([cat, list]) => (
               <details key={cat} className="comp-category">
