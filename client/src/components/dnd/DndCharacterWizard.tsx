@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
-import type { CompendiumEntry, DndAbilityScores, DndFeature } from "../../types";
+import type { CompendiumEntry, DndAbilityScores } from "../../types";
 import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
+import { featuresFromEntries } from "./dndFeatures";
 import {
   ABILITY_LABELS,
   abilityModifier,
@@ -35,12 +36,6 @@ function rollAbilityScore(): number {
   const rolls = Array.from({ length: 4 }, () => 1 + Math.floor(Math.random() * 6));
   rolls.sort((a, b) => a - b);
   return rolls[1] + rolls[2] + rolls[3];
-}
-
-function featuresFromEntries(entries: CompendiumEntry[], sourceParentId: number, level: number): DndFeature[] {
-  return entries
-    .filter((e) => (e.level ?? 0) <= level)
-    .map((e) => ({ name: e.name, description: e.description, sourceParentId, level: e.level ?? undefined }));
 }
 
 interface Props {

@@ -64,7 +64,7 @@ export function LitMChallengeEdit({
       </label>
       <label className="row">
         Мощь (Might)
-        <PipTrack value={value.might} max={5} onChange={(n) => onChange({ ...value, might: n })} />
+        <PipTrack value={value.might} max={5} onChange={(n) => onChange({ ...value, might: n })} label="Мощь" />
       </label>
       <label>
         Теги и статусы (по одному на строку)

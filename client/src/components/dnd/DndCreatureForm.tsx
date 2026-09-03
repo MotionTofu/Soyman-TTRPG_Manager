@@ -766,7 +766,7 @@ function CreatureSpellLevelSection({
         <span>{label}</span>
         {level > 0 && (
           <span onClick={(e) => e.stopPropagation()} className="row" style={{ gap: 10 }}>
-            <PipTrack value={slots} max={9} onChange={setSlots} />
+            <PipTrack value={slots} max={9} onChange={setSlots} label={`Ячейки, ${label}`} />
           </span>
         )}
       </summary>

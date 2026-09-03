@@ -5524,15 +5524,25 @@ input.litm-theme-title {
 }
 /* SbFeatureGroup: each feature is a click-to-open row (opens its
    description in a popup, see .dnd-spell-modal) instead of an inline
-   <details> — same spirit as .dnd-spell-name-link for spells. */
-.dnd-feature-row {
+   <details> — same spirit as .dnd-spell-name-link for spells.
+   Отдельный класс от .dnd-feature-row: тот раскладывает строку правки
+   (поле имени + описание колонкой), а этот — читаемую строку-ссылку.
+   Раньше обе роли звались одинаково и получали объединение стилей. */
+.dnd-feature-row-link {
+  display: block;
+  width: calc(100% + 12px); /* компенсирует margin: 0 -6px ниже */
+  text-align: left;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
   font-weight: 600;
   padding: 3px 6px;
   margin: 0 -6px;
   border-radius: var(--card-radius);
 }
-.dnd-feature-row:hover {
+.dnd-feature-row-link:hover {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
 .dnd-spell-meta {
@@ -5540,10 +5550,21 @@ input.litm-theme-title {
   font-size: calc(var(--fs, 15px) * 0.87);
   font-weight: 400;
 }
+/* Кнопка, а не span: название заклинания открывает описание, и до этого
+   его нельзя было ни взять табом, ни нажать с клавиатуры. Сбрасывается
+   всё, что браузер навязывает button; размер шрифта задаёт .dnd-spell-name. */
 .dnd-spell-name-link {
   cursor: pointer;
   text-decoration: underline dotted;
   text-underline-offset: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-family: inherit;
+  font-weight: inherit;
+  color: inherit;
 }
 .dnd-spell-description {
   font-size: calc(var(--fs, 15px) * 0.87);

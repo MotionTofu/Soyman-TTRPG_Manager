@@ -597,8 +597,16 @@
 .dnd-equipment-quick-row:hover {
   background: color-mix(in oklab, var(--sb-paper) 90%, var(--sb-ink));
 }
+/* Тоже кнопка — открывает описание предмета. */
 .dnd-equipment-name-link {
   cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
 }
 .dnd-equip-toggle {
   flex: 0 0 auto;
@@ -632,6 +640,24 @@
 .dnd-attacks-table td {
   padding: 4px 8px;
   vertical-align: top;
+}
+/* Строка кликабельна мышью; имя внутри неё — кнопка, чтобы описание
+   открывалось и с клавиатуры. До этого .is-clickable не имела стиля
+   вовсе — щёлкать было можно, а понять это по виду нельзя. */
+.dnd-attacks-table tr.is-clickable {
+  cursor: pointer;
+}
+.dnd-attack-name-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }
 .dnd-equipment-add-btn {
   margin-top: 4px;

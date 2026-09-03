@@ -84,6 +84,8 @@ import { Modal } from "../Modal";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
+import { useEvent, useLatest } from "../../hooks/useEvent";
+import { featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TIMING_KEY_TO_LABEL } from "./dndFeatures";
 import { saveDndPrefs } from "../../dndPrefs";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
@@ -406,30 +408,6 @@ function upsertClassNotesBlock(notes: string, className: string, block: string):
   return cleaned ? `${cleaned}\n\n${block}` : block;
 }
 
-// Converts class/subclass/species feature entries into DndFeature rows,
-// tagged with sourceParentId so a later pick can find-and-replace just
-// these (requirement: features stay in sync with the picked class/species).
-// maxLevel filters to features unlocked at or below the class's current
-// level; omit it (species has no level) to include everything.
-function featuresFromEntries(entries: CompendiumEntry[], parentId: number, maxLevel?: number): DndFeature[] {
-  return entries
-    .filter((e) => maxLevel == null || (e.level ?? 0) <= maxLevel)
-    .sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || a.position - b.position)
-    .map((e) => ({
-      name: e.name,
-      description: e.description,
-      entryId: e.id,
-      sourceParentId: parentId,
-      level: e.level,
-      // Снимаем то же, что и у заклинаний: без времени накладывания умение не
-      // попадёт во вкладку «Действия», а без эффектов там нечего показать.
-      ...spellTimingFromData(e.data),
-      checks: (e.data.checks as DndCheck[] | undefined) ?? [],
-      effects: (e.data.effects as DndEffect[] | undefined) ?? [],
-      cost: e.data.cost as DndCost | undefined,
-    }));
-}
-
 // Removes any auto-filled features tagged with the given source id(s),
 // keeping hand-added features (sourceParentId is unset) and features from
 // other sources (other classes, in a multiclass character) untouched.
@@ -620,7 +598,7 @@ function DndProficienciesView({
           <span key={i} className="dnd-proficiency-chip">
             {p.name}
             {onChange && (
-              <button type="button" className="comp-mini" onClick={() => remove(i)} title="Убрать">
+              <button type="button" className="comp-mini" onClick={() => remove(i)} title="Убрать" aria-label="Убрать владение">
                 <NavIcon name="close" />
               </button>
             )}
@@ -735,47 +713,6 @@ function spellSchoolName(raw: unknown): string | undefined {
   return typeof raw === "string" ? raw : undefined;
 }
 
-const TIMING_LABEL_TO_KEY: Record<string, DndActionTiming> = {
-  "Действие": "action",
-  "Бонусное действие": "bonus",
-  "Реакция": "reaction",
-  "Иное": "other",
-};
-export const TIMING_KEY_TO_LABEL: Record<DndActionTiming, string> = {
-  action: "Действие",
-  bonus: "Бонусное действие",
-  reaction: "Реакция",
-  other: "Иное",
-};
-
-// Best-effort classification for spells that predate casting_timing (only
-// the free-text casting_time field exists) — matched by keyword so old
-// compendium content still buckets sensibly into the new Бой tab sections
-// instead of silently disappearing.
-function inferTimingFromLegacyText(text: string): { timing: DndActionTiming; other?: string } {
-  const t = text.toLowerCase();
-  if (t.includes("бонус")) return { timing: "bonus" };
-  if (t.includes("реакц")) return { timing: "reaction" };
-  if (t.includes("действ")) return { timing: "action" };
-  return { timing: "other", other: text };
-}
-
-function spellTimingFromData(data: Record<string, unknown>): { castingTiming?: DndActionTiming; castingTimingOther?: string } {
-  const label = typeof data.casting_timing === "string" ? data.casting_timing : "";
-  if (label && TIMING_LABEL_TO_KEY[label]) {
-    return {
-      castingTiming: TIMING_LABEL_TO_KEY[label],
-      castingTimingOther: typeof data.casting_timing_other === "string" ? data.casting_timing_other : undefined,
-    };
-  }
-  const legacy = typeof data.casting_time === "string" ? data.casting_time : "";
-  if (legacy) {
-    const inferred = inferTimingFromLegacyText(legacy);
-    return { castingTiming: inferred.timing, castingTimingOther: inferred.other };
-  }
-  return {};
-}
-
 // Display label for a spell's casting timing — prefers the new structured
 // field, falls back to the legacy free-text castingTime for rows added
 // before this existed and never re-fetched.
@@ -838,7 +775,7 @@ const AttackListEdit = memo(function AttackListEdit({
                   </option>
                 ))}
               </select>
-              <button type="button" className="comp-mini" onClick={() => remove(i)}>
+              <button type="button" className="comp-mini" onClick={() => remove(i)} aria-label="Убрать строку">
                 <NavIcon name="close" />
               </button>
             </div>
@@ -1266,11 +1203,11 @@ function DndSpellLevelSection({
             className="row"
             style={{ gap: 10 }}
           >
-            <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={edit ? onSlotsChange : undefined} />
+            <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={edit ? onSlotsChange : undefined} label={`Ячейки, ${label}`} />
             {!edit && onUsedChange && slots > 0 && (
               <span className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
                 исп.
-                <PipTrack value={used ?? 0} max={slots} onChange={onUsedChange} size={13} />
+                <PipTrack value={used ?? 0} max={slots} onChange={onUsedChange} size={13} label={`Потрачено ячеек, ${label}`} />
               </span>
             )}
           </span>
@@ -1293,30 +1230,51 @@ function DndSpellLevelSection({
               <div
                 className={`comp-row dnd-spell-row${s.prepared === 2 ? " is-prepared" : ""}${s.prepared === 1 ? " is-prepared-once" : ""}`}
               >
-                <span
-                  className={`comp-name dnd-spell-name${s.entryId ? " dnd-spell-name-link" : ""}`}
-                  onClick={s.entryId ? () => toggleDescription(realIndex, s.entryId) : undefined}
-                >
-                  {s.name}
-                </span>
+                {s.entryId ? (
+                  <button
+                    type="button"
+                    className="comp-name dnd-spell-name dnd-spell-name-link"
+                    aria-label={`${s.name} — открыть описание`}
+                    onClick={() => toggleDescription(realIndex, s.entryId!)}
+                  >
+                    {s.name}
+                  </button>
+                ) : (
+                  <span className="comp-name dnd-spell-name">{s.name}</span>
+                )}
                 <SpellMetaLine s={s} />
                 {edit ? (
                   <span className="comp-actions dnd-spell-actions">
+                    {/* Звёздочка ходит по кругу «не подготовлено → подготовлено
+                        → всегда подготовлено», поэтому не aria-pressed (у него
+                        два состояния, а тут три) — состояние называется прямо
+                        в подписи. */}
                     <button
                       type="button"
                       className="comp-mini"
                       title={SPELL_PREPARED_TITLES[s.prepared]}
+                      aria-label={`${s.name}: ${SPELL_PREPARED_TITLES[s.prepared]} — сменить`}
                       onClick={() => togglePrepared(realIndex)}
                     >
                       <NavIcon name="star" filled={s.prepared !== 0} />
                     </button>
-                    <button type="button" className="comp-mini danger" onClick={() => remove(realIndex)}>
+                    <button
+                      type="button"
+                      className="comp-mini danger"
+                      aria-label={`Убрать «${s.name}» из списка`}
+                      onClick={() => remove(realIndex)}
+                    >
                       <NavIcon name="close" />
                     </button>
                   </span>
                 ) : (
                   s.prepared > 0 && (
-                    <span className="dnd-prepared-badge" title={SPELL_PREPARED_TITLES[s.prepared]}>
+                    <span
+                      className="dnd-prepared-badge"
+                      title={SPELL_PREPARED_TITLES[s.prepared]}
+                      aria-label={SPELL_PREPARED_TITLES[s.prepared]}
+                      role="img"
+                    >
                       <NavIcon name="star" filled />
                     </span>
                   )
@@ -1333,7 +1291,7 @@ function DndSpellLevelSection({
             <div className="stack dnd-spell-modal">
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <h3 style={{ margin: 0 }}>{spells[expandedIndex].name}</h3>
-                <button type="button" className="comp-mini" onClick={() => setExpandedIndex(null)}>
+                <button type="button" className="comp-mini" onClick={() => setExpandedIndex(null)} aria-label="Свернуть описание">
                   <NavIcon name="close" />
                 </button>
               </div>
@@ -1516,6 +1474,16 @@ const DndClassesEdit = memo(function DndClassesEdit({
   // type a fresh number) without every keystroke snapping back to "1" —
   // that only happens once, on blur, if the field was left empty.
   const [levelText, setLevelText] = useState<Record<number, string>>({});
+  // Уровень, который у этой строки уже запрошен, но ещё не вернулся пропом.
+  // Уровень — controlled-значение сверху, и несколько щелчков «+» в одном
+  // такте видят один и тот же `classes[i].level`: пять щелчков давали 2
+  // вместо 6. Считаем от последнего запрошенного, а на приходе нового
+  // `classes` (то есть после коммита) память сбрасываем — дальше
+  // авторитетен проп.
+  const pendingLevels = useRef<Record<number, number>>({});
+  useEffect(() => {
+    pendingLevels.current = {};
+  }, [classes]);
 
   function update(i: number, patch: Partial<DndClassEntry>) {
     const next = classes.slice();
@@ -1529,11 +1497,15 @@ const DndClassesEdit = memo(function DndClassesEdit({
       delete next[i];
       return next;
     });
+    pendingLevels.current[i] = n;
     update(i, { level: n });
     onLevelChange(i, n);
   }
   function stepLevel(i: number, delta: number) {
-    const n = Math.min(20, Math.max(1, classes[i].level + delta));
+    const base = pendingLevels.current[i] ?? classes[i].level;
+    const n = Math.min(20, Math.max(1, base + delta));
+    if (n === base) return;
+    pendingLevels.current[i] = n;
     update(i, { level: n });
     onLevelChange(i, n);
   }
@@ -1636,6 +1608,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
               type="button"
               className="comp-mini"
               title="Убрать класс"
+              aria-label="Убрать класс"
               onClick={async () => {
                 const ok = await confirm({
                   title: "Убрать класс?",
@@ -1698,6 +1671,8 @@ const EquipmentItemRow = memo(function EquipmentItemRow({
         type="button"
         className={`comp-mini dnd-equip-toggle${item.equipped ? " is-equipped" : ""}`}
         title={item.equipped ? "Надето" : "Не надето"}
+        aria-label={`${item.name || "Предмет"}: надето`}
+        aria-pressed={!!item.equipped}
         onClick={onToggleEquipped}
       >
         {item.equipped ? "●" : "○"}
@@ -1706,7 +1681,7 @@ const EquipmentItemRow = memo(function EquipmentItemRow({
       <input placeholder="Кол-во" value={item.qty} onChange={(e) => onChangeQty(e.target.value)} style={{ flex: 1 }} />
       <input placeholder="Вес" value={item.weight} onChange={(e) => onChangeWeight(e.target.value)} style={{ flex: 1 }} />
       <input placeholder="Заметка" value={item.notes} onChange={(e) => onChangeNotes(e.target.value)} style={{ flex: 2 }} />
-      <button type="button" className="comp-mini" onClick={onRemove}>
+      <button type="button" className="comp-mini" onClick={onRemove} aria-label="Удалить предмет">
         <NavIcon name="close" />
       </button>
     </div>
@@ -1739,23 +1714,22 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
   onSectionDragLeave: () => void;
   onSectionDrop: (e: DragEvent<HTMLDivElement>) => void;
 }) {
-  const itemsRef = useRef(section.items);
-  itemsRef.current = section.items;
-  const onItemsChangeRef = useRef(onItemsChange);
-  onItemsChangeRef.current = onItemsChange;
   const [confirmDialog, confirm] = useConfirm();
 
-  const updateItem = useCallback((ii: number, patch: Partial<DndEquipmentItem>) => {
-    const next = itemsRef.current.slice();
+  const updateItem = useEvent((ii: number, patch: Partial<DndEquipmentItem>) => {
+    const next = section.items.slice();
     next[ii] = { ...next[ii], ...patch };
-    onItemsChangeRef.current(next);
-  }, []);
-  const removeItem = useCallback(async (ii: number) => {
-    const name = itemsRef.current[ii]?.name || "предмет";
+    onItemsChange(next);
+  });
+  // Удаление вынесено во второй `useEvent`: после `await` замыкание держит
+  // список на момент открытия диалога, а его нужно взять на момент ответа.
+  const dropItemAt = useEvent((ii: number) => onItemsChange(section.items.filter((_, idx) => idx !== ii)));
+  const removeItem = useEvent(async (ii: number) => {
+    const name = section.items[ii]?.name || "предмет";
     const ok = await confirm({ title: "Удалить предмет?", message: `Удалить «${name}»?`, confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    onItemsChangeRef.current(itemsRef.current.filter((_, idx) => idx !== ii));
-  }, [confirm]);
+    dropItemAt(ii);
+  });
   function addItem() {
     onItemsChange([...section.items, { name: "", qty: "", weight: "", notes: "" }]);
   }
@@ -1846,62 +1820,57 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
   onChange: (v: DndEquipmentSection[]) => void;
 }) {
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
-  const sectionsRef = useRef(sections);
-  sectionsRef.current = sections;
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   const [confirmDialog, confirm] = useConfirm();
 
   function addSection() {
     onChange([...sections, { name: "Новый раздел", items: [] }]);
   }
-  const updateSectionName = useCallback((si: number, name: string) => {
-    const next = sectionsRef.current.slice();
+  const updateSectionName = useEvent((si: number, name: string) => {
+    const next = sections.slice();
     next[si] = { ...next[si], name };
-    onChangeRef.current(next);
-  }, []);
-  const removeSection = useCallback(async (si: number) => {
-    const name = sectionsRef.current[si]?.name || "раздел";
+    onChange(next);
+  });
+  // Как и с предметами: список берётся заново после ответа на диалог.
+  const dropSectionAt = useEvent((si: number) => onChange(sections.filter((_, idx) => idx !== si)));
+  const removeSection = useEvent(async (si: number) => {
+    const name = sections[si]?.name || "раздел";
     const ok = await confirm({ title: "Удалить раздел?", message: `Удалить «${name}» и все предметы в нём?`, confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    onChangeRef.current(sectionsRef.current.filter((_, idx) => idx !== si));
-  }, [confirm]);
-  const setSectionItems = useCallback((si: number, items: DndEquipmentItem[]) => {
-    const next = sectionsRef.current.slice();
+    dropSectionAt(si);
+  });
+  const setSectionItems = useEvent((si: number, items: DndEquipmentItem[]) => {
+    const next = sections.slice();
     next[si] = { ...next[si], items };
-    onChangeRef.current(next);
-  }, []);
-  const moveItem = useCallback((fromSi: number, fromIi: number, toSi: number) => {
+    onChange(next);
+  });
+  const moveItem = useEvent((fromSi: number, fromIi: number, toSi: number) => {
     if (fromSi === toSi) return;
-    const next = sectionsRef.current.map((s) => ({ ...s, items: s.items.slice() }));
+    const next = sections.map((s) => ({ ...s, items: s.items.slice() }));
     const [item] = next[fromSi].items.splice(fromIi, 1);
     next[toSi].items.push(item);
-    onChangeRef.current(next);
-  }, []);
-  const handleDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>, si: number) => {
-      e.preventDefault();
-      setDragOverSection(null);
-      const movePayload = e.dataTransfer.getData(EQUIPMENT_DRAG_MIME);
-      if (movePayload) {
-        try {
-          const { sectionIndex, itemIndex } = JSON.parse(movePayload);
-          moveItem(sectionIndex, itemIndex, si);
-        } catch {}
-        return;
-      }
-      const result = readSearchDrop(e);
-      if (!result) return;
-      const suffix = result.kind === "spell" ? " (свиток)" : "";
-      const next = sectionsRef.current.map((s, idx) =>
-        idx === si
-          ? { ...s, items: [...s.items, { name: `${result.title}${suffix}`, qty: "", weight: "", notes: "" }] }
-          : s
-      );
-      onChangeRef.current(next);
-    },
-    [moveItem]
-  );
+    onChange(next);
+  });
+  const handleDrop = useEvent((e: DragEvent<HTMLDivElement>, si: number) => {
+    e.preventDefault();
+    setDragOverSection(null);
+    const movePayload = e.dataTransfer.getData(EQUIPMENT_DRAG_MIME);
+    if (movePayload) {
+      try {
+        const { sectionIndex, itemIndex } = JSON.parse(movePayload);
+        moveItem(sectionIndex, itemIndex, si);
+      } catch {}
+      return;
+    }
+    const result = readSearchDrop(e);
+    if (!result) return;
+    const suffix = result.kind === "spell" ? " (свиток)" : "";
+    const next = sections.map((s, idx) =>
+      idx === si
+        ? { ...s, items: [...s.items, { name: `${result.title}${suffix}`, qty: "", weight: "", notes: "" }] }
+        : s
+    );
+    onChange(next);
+  });
 
   const nameChangeCallbacks = useMemo(
     () => sections.map((_, si) => (v: string) => updateSectionName(si, v)),
@@ -2324,21 +2293,34 @@ function DndEquipmentQuickView({
                       type="button"
                       className={`comp-mini dnd-equip-toggle${item.equipped ? " is-equipped" : ""}`}
                       title={item.equipped ? "Надето" : "Не надето"}
+                      aria-label={`${item.name || "Предмет"}: надето`}
+                      aria-pressed={!!item.equipped}
                       onClick={() => toggleEquipped(si, ii)}
                     >
                       {item.equipped ? "●" : "○"}
                     </button>
-                    <span
-                      className={item.entryId ? "dnd-equipment-name-link" : undefined}
-                      onClick={item.entryId ? () => toggleDescription(si, ii, item.entryId) : undefined}
-                      style={{ flex: 1 }}
-                    >
-                      {item.name}
-                      {item.qty && ` ×${item.qty}`}
-                      {item.weight && ` (${item.weight})`}
-                      {item.notes && ` — ${item.notes}`}
-                    </span>
-                    <button type="button" className="comp-mini" title="Редактировать" onClick={() => startEdit(si, ii)}>
+                    {item.entryId ? (
+                      <button
+                        type="button"
+                        className="dnd-equipment-name-link"
+                        aria-label={`${item.name} — открыть описание`}
+                        onClick={() => toggleDescription(si, ii, item.entryId!)}
+                        style={{ flex: 1 }}
+                      >
+                        {item.name}
+                        {item.qty && ` ×${item.qty}`}
+                        {item.weight && ` (${item.weight})`}
+                        {item.notes && ` — ${item.notes}`}
+                      </button>
+                    ) : (
+                      <span style={{ flex: 1 }}>
+                        {item.name}
+                        {item.qty && ` ×${item.qty}`}
+                        {item.weight && ` (${item.weight})`}
+                        {item.notes && ` — ${item.notes}`}
+                      </span>
+                    )}
+                    <button type="button" className="comp-mini" title="Редактировать" aria-label="Редактировать предмет" onClick={() => startEdit(si, ii)}>
                       <NavIcon name="edit" />
                     </button>
                   </div>
@@ -2444,20 +2426,21 @@ function useDndOrigin(
   const [conditionOptions, setConditionOptions] = useState<DndMechanicsOption[]>([]);
   const [senseOptions, setSenseOptions] = useState<DndMechanicsOption[]>([]);
 
-  // Kept in sync every render (cheap) so the field-setter callbacks below
-  // can have a permanently stable identity (empty deps) while still always
-  // acting on the latest value/onChange — required for React.memo on the
-  // heavy child sections (FeatureListEdit ×4, DndEquipmentEdit, DndSpellsEdit,
+  // Kept in sync every commit so the field-setter callbacks below can have a
+  // permanently stable identity (empty deps) while still always acting on the
+  // latest value/onChange — required for React.memo on the heavy child
+  // sections (FeatureListEdit ×4, DndEquipmentEdit, DndSpellsEdit,
   // DndProficienciesEdit) to actually skip re-rendering them when an
   // unrelated field on the sheet changes. Without this, a fresh inline
   // arrow function as `onChange` on every render would defeat memo just as
   // much as a fresh `value` object would.
-  const valueRef = useRef(value);
-  valueRef.current = value;
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const hierarchyRef = useRef(hierarchy);
-  hierarchyRef.current = hierarchy;
+  //
+  // Именно `useLatest`, а не присваивание в теле компонента: сеттеры ниже
+  // читают реф после `await`, а запись во время рендера отдаёт им значение
+  // прохода, который React мог выбросить.
+  const valueRef = useLatest(value);
+  const onChangeRef = useLatest(onChange);
+  const hierarchyRef = useLatest(hierarchy);
   // Все пикеры ниже ходят в сеть, а потом пишут в лист. Раньше побеждал тот,
   // чей запрос доехал последним, а не тот, который нажали последним: щёлкнув
   // уровень 1→5 подряд, можно было получить набор особенностей от третьего
@@ -3096,7 +3079,27 @@ function AttacksTable({
               className={r.source && onOpen ? "is-clickable" : undefined}
               onClick={r.source && onOpen ? () => onOpen(r) : undefined}
             >
-              <td data-label="Название">{r.name}</td>
+              {/* Кнопка внутри ячейки, а не `role="button"` на `<tr>`: роль
+                  на строке ломает разметку таблицы для скринридера, а без
+                  неё описание нельзя было открыть с клавиатуры вовсе.
+                  Щелчок мышью по всей строке при этом сохраняется. */}
+              <td data-label="Название">
+                {r.source && onOpen ? (
+                  <button
+                    type="button"
+                    className="dnd-attack-name-link"
+                    aria-label={`${r.name} — открыть описание`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(r);
+                    }}
+                  >
+                    {r.name}
+                  </button>
+                ) : (
+                  r.name
+                )}
+              </td>
               {r.description !== undefined ? (
                 <td colSpan={3} className="muted">
                   <MentionText text={r.description} />
@@ -3375,7 +3378,7 @@ function DndCardModal({
       <div className="stack dnd-spell-modal">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h3 style={{ margin: 0 }}>{title}</h3>
-          <button type="button" className="comp-mini" onClick={onClose}>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
             <NavIcon name="close" />
           </button>
         </div>
@@ -3537,10 +3540,16 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
     <details className="cs-list" open>
       <summary className="sb-section">{title}</summary>
       {values.map((f, i) => (
-        <div key={i} className="dnd-feature-row" onClick={() => setOpenIndex(i)}>
+        <button
+          key={i}
+          type="button"
+          className="dnd-feature-row-link"
+          aria-label={`${f.name || "Без названия"} — открыть описание`}
+          onClick={() => setOpenIndex(i)}
+        >
           {f.name || "Без названия"}
           {f.level ? <span className="muted"> (ур. {f.level})</span> : null}
-        </div>
+        </button>
       ))}
       {openIndex !== null && (
         <Modal onClose={() => setOpenIndex(null)}>
@@ -3550,7 +3559,7 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
                 {values[openIndex].name || "Без названия"}
                 {values[openIndex].level ? <span className="muted"> (ур. {values[openIndex].level})</span> : null}
               </h3>
-              <button type="button" className="comp-mini" onClick={() => setOpenIndex(null)}>
+              <button type="button" className="comp-mini" onClick={() => setOpenIndex(null)} aria-label="Закрыть">
                 <NavIcon name="close" />
               </button>
             </div>
@@ -3622,6 +3631,50 @@ function DndCharacterViewMini({ value }: { value: DndCharacterData }) {
 
 // Click-to-edit HP box — the one vitals field that changes almost every
 // combat round, so it gets its own tiny local edit state instead of
+// Значение виталов, по которому щёлкают, чтобы его поправить. Кнопка, а не
+// `div` с `onClick`: щелчком мыши работало и так, но с клавиатуры значение не
+// бралось табом вовсе, а скринридер читал его как обычный текст, не называя
+// нажимаемым. Когда править нечем (нет `onQuickUpdate` — например, у чужого
+// листа), это просто значение, и в фокус ему не нужно.
+function SbQuickValue({
+  onClick,
+  title,
+  ariaLabel,
+  ariaPressed,
+  className,
+  children,
+}: {
+  onClick?: () => void;
+  title?: string;
+  ariaLabel: string;
+  // Для значений-переключателей (вдохновение): скринридер должен называть не
+  // только кнопку, но и её текущее состояние.
+  ariaPressed?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const cls = className ? `sb-value ${className}` : "sb-value";
+  if (!onClick) {
+    return (
+      <div className={cls} title={title}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={`${cls} sb-value-button`}
+      title={title}
+      aria-label={ariaLabel}
+      aria-pressed={ariaPressed}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 // requiring the full DndCharacterEdit form for a single number. Always
 // rendered (even when both fields are still unset — shows "— / —") so a
 // fresh character always has a place to tap and fill these in, instead of
@@ -3694,14 +3747,16 @@ function HpQuickBox({
           />
         </span>
       ) : (
-        <div
-          className="sb-value"
-          style={onQuickUpdate ? { cursor: "pointer" } : undefined}
+        <SbQuickValue
           onClick={onQuickUpdate ? openEditor : undefined}
+          ariaLabel="Хиты — изменить"
         >
           {value.hitPointsCurrent || "—"} / {value.hitPointMax || "—"}
-          {value.hitPointsTemp ? ` (+${value.hitPointsTemp})` : ""}
-        </div>
+          {/* Именно по числу, а не по «строка не пустая»: и урон, и длинный
+              отдых записывают сюда строку "0", а она истинна — после первого
+              же попадания лист навсегда показывал «(+0)». */}
+          {Number(value.hitPointsTemp) > 0 ? ` (+${value.hitPointsTemp})` : ""}
+        </SbQuickValue>
       )}
       {modalOpen && onQuickUpdate && (
         <HpEditModal value={value} onQuickUpdate={onQuickUpdate} onClose={() => setModalOpen(false)} />
@@ -3890,9 +3945,8 @@ function TextQuickBox({
           onKeyDown={(e) => e.key === "Enter" && commit()}
         />
       ) : (
-        <div
-          className="sb-value"
-          style={onQuickUpdate ? { cursor: "pointer" } : undefined}
+        <SbQuickValue
+          ariaLabel={`${label} — изменить`}
           onClick={
             onQuickUpdate
               ? () => {
@@ -3903,7 +3957,7 @@ function TextQuickBox({
           }
         >
           {value || "—"}
-        </div>
+        </SbQuickValue>
       )}
     </div>
   );
@@ -3943,10 +3997,9 @@ function AcQuickBox({
           title="Доп. бонус к КЗ (не из инвентаря)"
         />
       ) : (
-        <div
-          className="sb-value"
-          style={onQuickUpdate ? { cursor: "pointer" } : undefined}
+        <SbQuickValue
           title={onQuickUpdate ? "Нажмите, чтобы задать доп. бонус к КЗ" : undefined}
+          ariaLabel="Класс защиты — задать дополнительный бонус"
           onClick={
             onQuickUpdate
               ? () => {
@@ -3957,7 +4010,7 @@ function AcQuickBox({
           }
         >
           {computed}
-        </div>
+        </SbQuickValue>
       )}
     </div>
   );
@@ -3973,6 +4026,7 @@ function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () =
       type="button"
       className="comp-mini dnd-tab-edit-toggle"
       title={editing ? "Сохранить" : "Редактировать"}
+      aria-label={editing ? "Сохранить" : "Редактировать"}
       onClick={onToggle}
     >
       <NavIcon name={editing ? "check" : "edit"} />
@@ -4033,6 +4087,7 @@ function DndResourcesView({
             </div>
             <PipTrack
               value={used}
+              label={`Потрачено, ${r.label}`}
               max={max}
               onChange={
                 onQuickUpdate ? (v) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: v } }) : undefined
@@ -4156,7 +4211,7 @@ function DndRestModal({
       <div className="stack dnd-spell-modal">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h3 style={{ margin: 0 }}>Отдых</h3>
-          <button type="button" className="comp-mini" onClick={onClose}>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
             <NavIcon name="close" />
           </button>
         </div>
@@ -4203,6 +4258,10 @@ export function DndCharacterView({
   headerExtra,
 }: {
   value: DndCharacterData;
+  // Только для окна предпросмотра сущности (EntityPreviewModal): там лист
+  // показывается мельком, поверх другой страницы, и полный лист туда не
+  // помещается. Видом статблока (`kind`) это больше не управляется — краткого
+  // чарника в списке статблоков нет, см. StatblockList.
   compact?: boolean;
   // Кнопки владельца карточки (сохранение, удаление) — в собственной плашке
   // листа. Внешней обёртки-аккордеона у листа больше нет: она давала вторую
@@ -4443,6 +4502,7 @@ export function DndCharacterView({
                   type="button"
                   className="comp-mini"
                   title={editingOrigin ? "Готово" : "Правка происхождения"}
+                  aria-label={editingOrigin ? "Готово" : "Правка происхождения"}
                   onClick={() => setEditingOrigin((v) => !v)}
                 >
                   <NavIcon name={editingOrigin ? "check" : "edit"} />
@@ -4615,6 +4675,7 @@ export function DndCharacterView({
                       <span className="dnd-hitdice-die">{pool.die}</span>
                       <PipTrack
                         value={pool.used}
+                        label={`Потрачено костей хитов ${pool.die}`}
                         max={pool.total}
                         size={12}
                         onChange={
@@ -4637,6 +4698,7 @@ export function DndCharacterView({
                 <div className="stack dnd-exhaustion">
                   <PipTrack
                     value={value.exhaustion}
+                    label="Истощение"
                     max={6}
                     size={12}
                     onChange={onQuickUpdate ? (n) => onQuickUpdate({ exhaustion: n }) : undefined}
@@ -4650,25 +4712,14 @@ export function DndCharacterView({
             {(value.concentration || onQuickUpdate) && (
               <div>
                 <div className="sb-label">Концентрация</div>
-                <div
-                  className={`sb-value dnd-concentration${value.concentration ? " is-on" : ""}`}
-                  role={onQuickUpdate ? "button" : undefined}
-                  tabIndex={onQuickUpdate ? 0 : undefined}
+                <SbQuickValue
+                  className={`dnd-concentration${value.concentration ? " is-on" : ""}`}
                   title={value.concentration ? "Снять концентрацию" : undefined}
+                  ariaLabel={`Концентрация: ${value.concentration || "нет"} — снять`}
                   onClick={onQuickUpdate && value.concentration ? () => onQuickUpdate({ concentration: "" }) : undefined}
-                  onKeyDown={
-                    onQuickUpdate && value.concentration
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onQuickUpdate({ concentration: "" });
-                          }
-                        }
-                      : undefined
-                  }
                 >
                   {value.concentration || "—"}
-                </div>
+                </SbQuickValue>
               </div>
             )}
             {atZeroHp && (
@@ -4679,6 +4730,7 @@ export function DndCharacterView({
                     +
                     <PipTrack
                       value={value.deathSaveSuccesses}
+                      label="Успехи спасбросков от смерти"
                       max={3}
                       size={12}
                       onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
@@ -4688,6 +4740,7 @@ export function DndCharacterView({
                     −
                     <PipTrack
                       value={value.deathSaveFailures}
+                      label="Провалы спасбросков от смерти"
                       max={3}
                       size={12}
                       onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveFailures: v }) : undefined}
@@ -4699,25 +4752,14 @@ export function DndCharacterView({
             {(value.inspiration || onQuickUpdate) && (
               <div>
                 <div className="sb-label">Вдохновение</div>
-                <div
-                  className="sb-value sb-inspiration"
-                  role={onQuickUpdate ? "button" : undefined}
-                  tabIndex={onQuickUpdate ? 0 : undefined}
-                  aria-pressed={onQuickUpdate ? value.inspiration : undefined}
+                <SbQuickValue
+                  className="sb-inspiration"
+                  ariaLabel="Вдохновение"
+                  ariaPressed={value.inspiration}
                   onClick={onQuickUpdate ? () => onQuickUpdate({ inspiration: !value.inspiration }) : undefined}
-                  onKeyDown={
-                    onQuickUpdate
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onQuickUpdate({ inspiration: !value.inspiration });
-                          }
-                        }
-                      : undefined
-                  }
                 >
                   {value.inspiration ? <NavIcon name="star" filled /> : "—"}
-                </div>
+                </SbQuickValue>
               </div>
             )}
           </div>
@@ -4974,6 +5016,7 @@ export function DndCharacterView({
                     исп.
                     <PipTrack
                       value={Math.min(value.pactSlotsUsed ?? 0, computedSlots.pact.count)}
+                      label="Потрачено ячеек договора"
                       max={computedSlots.pact.count}
                       onChange={onQuickUpdate ? (v) => onQuickUpdate({ pactSlotsUsed: v }) : undefined}
                       size={13}
@@ -5066,6 +5109,7 @@ export function DndCharacterView({
                   <span className="sb-prop-label">Настроено предметов</span>{" "}
                   <PipTrack
                     value={value.attunementCount}
+                    label="Настроено предметов"
                     max={3}
                     onChange={onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined}
                   />

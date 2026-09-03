@@ -764,7 +764,9 @@ function StatblockCard({
   // dnd_creature only: whether the statblock's own header/body is expanded.
   // Replaces the generic <details> accordion for this format — see below.
   const [collapsed, setCollapsed] = useState(!editMode);
-  const [kind] = useState(statblock.kind);
+  // Прямо из пропа, а не `useState(statblock.kind)`: замороженная копия
+  // означала, что смена вида в базе не доезжает до уже открытой карточки.
+  const kind = statblock.kind;
   // dnd_creature only: portrait shown in the statblock's own sb-top-avatar
   // slot (separate from whatever avatar the owning being/character has).
   const [avatarUrl, setAvatarUrl] = useState(statblock.avatar_image_url);
@@ -1123,10 +1125,13 @@ function StatblockCard({
                 onQuickUpdate={quickSaveZip}
               />
             )}
+            {/* Краткого вида у чарника нет: единственный краткий вид в
+                приложении — карточка на «Шпаргалках» (гриллинг 2026-09-03).
+                Записи, заведённые когда-то с kind="short", показываются
+                полным листом. */}
             {statblock.format === "dnd_character" && dndValue && (
               <DndCharacterView
                 value={dndValue as DndCharacterData}
-                compact={kind === "short"}
                 onQuickUpdate={quickSaveDnd}
               />
             )}
