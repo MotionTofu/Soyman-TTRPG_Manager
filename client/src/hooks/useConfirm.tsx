@@ -7,6 +7,14 @@ interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /**
+   * Сообщение, а не вопрос: одна кнопка, отказываться не от чего.
+   *
+   * Итог загрузки приключения («обновлено 3, добавлено 1, копия в архиве») и
+   * сообщение об ошибке — это отчёт. Вторая кнопка рядом с ним читается как
+   * выбор, которого нет.
+   */
+  hideCancel?: boolean;
 }
 
 export function useConfirm() {
@@ -36,7 +44,9 @@ export function useConfirm() {
         {pending.opts.title && <h3 style={{ margin: 0 }}>{pending.opts.title}</h3>}
         <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{pending.opts.message}</p>
         <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={() => onClose(false)}>{pending.opts.cancelLabel ?? "Отмена"}</button>
+          {!pending.opts.hideCancel && (
+            <button onClick={() => onClose(false)}>{pending.opts.cancelLabel ?? "Отмена"}</button>
+          )}
           <button className={pending.opts.danger ? "danger" : "primary"} onClick={() => onClose(true)}>
             {pending.opts.confirmLabel ?? "Подтвердить"}
           </button>

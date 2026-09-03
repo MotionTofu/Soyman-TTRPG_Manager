@@ -1,10 +1,23 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, getAuthToken } from "../api/client";
 import { chapterWord, sceneWord } from "../sceneKinds";
 import { AdventureWizard } from "./AdventureWizard";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
+import { Modal } from "./Modal";
+import { downloadJson } from "../downloadJson";
 import type { StoryArc } from "../types";
+
+interface ImportReply {
+  conflict?: boolean;
+  name?: string;
+  error?: string;
+  mode?: string;
+  arc_id?: number;
+  added_scenes?: number;
+  updated_scenes?: number;
+  kept_local_scenes?: number;
+}
 import { NavIcon } from "./NavIcons";
 import { useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useLongPress } from "../hooks/useLongPress";
@@ -30,6 +43,13 @@ export function AdventuresTab({
   const [wizardOpen, setWizardOpen] = useState(false);
   const [dragId, setDragId] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; arc: StoryArc } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Картинки книги весят больше всего остального вместе взятого, и раскладывать
+  // их по хранилищу Мастер не обязан. Галочка стоит рядом с кнопкой, а не
+  // выскакивает диалогом: спрашивать на каждой загрузке — лишний шаг.
+  const [withImages, setWithImages] = useState(true);
+  const [clash, setClash] = useState<{ name: string; data: unknown } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
   function refresh() {
     api.get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`).then(setArcs);
@@ -54,6 +74,87 @@ export function AdventuresTab({
     if (!name?.trim() || name.trim() === arc.name) return;
     await api.put(`/story/arcs/${arc.id}`, { name: name.trim() });
     refresh();
+  }
+
+  async function exportArc(arc: StoryArc) {
+    const data = await api.get(`/story/arcs/${arc.id}/export`);
+    downloadJson(data, `adventure-${arc.name}.json`);
+  }
+
+  // Отправка файла идёт мимо `api.post` по двум причинам: нужен код ответа
+  // (409 «имя занято» — это вопрос Мастеру, а не ошибка), и нужен свой срок
+  // ожидания — книга с картинками весит сотни мегабайт и в десять секунд
+  // общего таймаута не укладывается.
+  //
+  // `mode` на первой попытке не задан: сервер сам решает, есть ли совпадение.
+  async function send(data: unknown, mode?: "new" | "replace" | "merge") {
+    const q = new URLSearchParams({ setting_id: String(settingId) });
+    if (!withImages) q.set("images", "0");
+    if (mode) q.set("mode", mode);
+    const token = getAuthToken();
+    const res = await fetch(`/api/story/import?${q}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(data),
+    });
+    const body = (await res.json().catch(() => ({}))) as ImportReply;
+    if (res.status === 409 && body.conflict) return { conflict: true as const, name: body.name ?? "" };
+    if (!res.ok) throw new Error(body.error || `${res.status}`);
+    return { ...body, conflict: false as const };
+  }
+
+  async function importFile(file: File) {
+    setBusy("Загружаю…");
+    try {
+      const data = JSON.parse(await file.text());
+      const r = await send(data);
+      if (r.conflict) {
+        setClash({ name: r.name, data });
+        return;
+      }
+      refresh();
+    } catch (e) {
+      await confirm({
+        title: "Не удалось загрузить",
+        message: e instanceof Error ? e.message : String(e),
+        confirmLabel: "Понятно",
+        hideCancel: true,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resolveClash(mode: "new" | "replace" | "merge") {
+    if (!clash) return;
+    const data = clash.data;
+    setClash(null);
+    setBusy("Загружаю…");
+    try {
+      const r = await send(data, mode);
+      refresh();
+      if (mode === "merge" && !r.conflict) {
+        await confirm({
+          title: "Слияние завершено",
+          message:
+            `Сцен обновлено: ${r.updated_scenes ?? 0}\n` +
+            `Сцен добавлено: ${r.added_scenes ?? 0}\n` +
+            `Ваших сцен осталось нетронутыми: ${r.kept_local_scenes ?? 0}\n\n` +
+            "Копия приключения до слияния лежит в архиве.",
+          confirmLabel: "Понятно",
+          hideCancel: true,
+        });
+      }
+    } catch (e) {
+      await confirm({
+        title: "Не удалось загрузить",
+        message: e instanceof Error ? e.message : String(e),
+        confirmLabel: "Понятно",
+        hideCancel: true,
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   // Один общий обработчик на весь список: строка отдаёт своё приключение
@@ -85,6 +186,7 @@ export function AdventuresTab({
   const menuItems: ContextMenuItem[] = menu
     ? [
         { label: "Открыть", onClick: () => navigate(`/adventures/${menu.arc.id}${campaignId ? `?campaign=${campaignId}` : ""}`) },
+        { label: "Выгрузить в файл", onClick: () => void exportArc(menu.arc) },
         ...(editable
           ? [
               { label: "Переименовать", onClick: () => rename(menu.arc) },
@@ -99,10 +201,28 @@ export function AdventuresTab({
       {confirmDialog}
       {promptDialog}
       {!campaignId && (
-        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button className="primary" onClick={() => setWizardOpen(true)}>
             + Приключение
           </button>
+          <button onClick={() => fileRef.current?.click()} disabled={busy != null}>
+            {busy ?? "Загрузить приключение"}
+          </button>
+          <label className="row" style={{ gap: 4, alignItems: "center" }} title="Снимите, если файл тяжёлый, а картинки не нужны">
+            <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} />
+            <span className="muted">с изображениями</span>
+          </label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void importFile(f);
+            }}
+          />
         </div>
       )}
 
@@ -147,6 +267,30 @@ export function AdventuresTab({
         ))}
         {adventures.length === 0 && <p className="muted">Приключений пока нет.</p>}
       </div>
+
+      {clash && (
+        <Modal onClose={() => setClash(null)}>
+          <h3>Такое приключение уже есть</h3>
+          <p style={{ maxWidth: "52ch" }}>
+            В сеттинге уже лежит «{clash.name}». Что сделать с тем, что в файле?
+          </p>
+          <div className="stack" style={{ gap: 8 }}>
+            <button className="primary" onClick={() => resolveClash("new")}>
+              Создать новое
+              <span className="muted"> — ляжет рядом, ничего не тронет</span>
+            </button>
+            <button onClick={() => resolveClash("replace")}>
+              Заменить
+              <span className="muted"> — старое уйдёт в архив, оттуда можно вернуть</span>
+            </button>
+            <button onClick={() => resolveClash("merge")}>
+              Слить
+              <span className="muted"> — тексты из файла перезапишут ваши; перед этим сделаем копию в архив</span>
+            </button>
+            <button onClick={() => setClash(null)}>Отмена</button>
+          </div>
+        </Modal>
+      )}
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} title={menu.arc.name} items={menuItems} onClose={() => setMenu(null)} />

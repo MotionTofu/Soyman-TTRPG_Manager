@@ -13,6 +13,7 @@ import { NavIcon } from "../components/NavIcons";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { addToBag } from "../bag";
 import { useConfirm, usePrompt } from "../hooks/useConfirm";
+import { downloadJson } from "../downloadJson";
 import { useLongPress } from "../hooks/useLongPress";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 
@@ -107,6 +108,15 @@ export function AdventureDetailPage() {
           </div>
         </div>
         <div className="entity-header-actions">
+          <button
+            onClick={async () => {
+              const data = await api.get(`/story/arcs/${arcId}/export`);
+              downloadJson(data, `adventure-${arc.name}.json`);
+            }}
+            title="Сохранить приключение в файл — со сценами, вехами, тайнами и схемой"
+          >
+            Выгрузить в файл
+          </button>
           {arc.is_default !== 1 && (
             <>
               <button

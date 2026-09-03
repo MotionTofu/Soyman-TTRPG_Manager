@@ -1351,6 +1351,41 @@ storyRouter.put("/scenes/:id", (req, res) => {
 // Shared between the standalone adventure export endpoint and the setting
 // export (which bundles all adventures for a setting).
 
+// Ключи внутри `adventure-export/1` строятся из имён: «сцена X лежит в главе
+// Y» записывается ключом, а не локальным id, — иначе на чужом устройстве это
+// была бы ссылка на чужую сцену.
+//
+// Отсюда два требования, которых прежняя версия не выполняла.
+//
+// Кириллица. `[^a-z0-9]` вычищал русские буквы целиком, и КАЖДАЯ глава книги
+// получала ключ `chp.unnamed`. При загрузке все сцены сваливались в ту главу,
+// что записалась в карту последней, а переходы и вехи указывали на случайную
+// сцену. Для русского приключения — то есть для любого здешнего — формат не
+// работал вовсе. `\p{L}` берёт буквы любого алфавита.
+//
+// Одинаковые имена. Две «Встречи в таверне» дают один ключ; вторая затирала
+// первую в карте. Счётчик добавляет `_2`, `_3` — и выгрузка, и загрузка идут
+// по спискам в одном порядке, поэтому нумерация совпадает.
+function exportSlug(name: unknown): string {
+  return (
+    String(name ?? "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 60) || "unnamed"
+  );
+}
+
+function makeKeyer(prefix: string): (name: unknown) => string {
+  const used = new Map<string, number>();
+  return (name: unknown) => {
+    const base = `${prefix}.${exportSlug(name)}`;
+    const n = (used.get(base) ?? 0) + 1;
+    used.set(base, n);
+    return n === 1 ? base : `${base}_${n}`;
+  };
+}
+
 export function buildAdventureExportData(arcId: number | string): Record<string, unknown> | null {
   const arc = db.prepare("SELECT * FROM story_arcs WHERE id = ? AND parent_id IS NULL").get(arcId) as Record<string, unknown> | undefined;
   if (!arc) return null;
@@ -1428,15 +1463,13 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
   const canvasThreads = board ? db.prepare("SELECT * FROM canvas_threads WHERE board_id = ?").all(board.id) as Record<string, unknown>[] : [];
 
   // Slugify + key maps
-  function slugify(s: string): string {
-    return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60) || "unnamed";
-  }
-
   const arcKeyMap = new Map<number, string>();
-  arcKeyMap.set(Number(arcId), `adv.${slugify(arc.name as string)}`);
-  for (const ch of chapters) arcKeyMap.set(ch.id as number, `chp.${slugify(ch.name as string)}`);
+  arcKeyMap.set(Number(arcId), `adv.${exportSlug(arc.name)}`);
+  const chapterKey = makeKeyer("chp");
+  for (const ch of chapters) arcKeyMap.set(ch.id as number, chapterKey(ch.name));
   const sceneKeyMap = new Map<number, string>();
-  for (const s of scenes) sceneKeyMap.set(s.id as number, `scn.${slugify(s.name as string)}`);
+  const sceneKey = makeKeyer("scn");
+  for (const s of scenes) sceneKeyMap.set(s.id as number, sceneKey(s.name));
 
   // Index maps
   const checksByScene = new Map<number, Record<string, unknown>[]>();
@@ -1618,9 +1651,12 @@ export async function importAdventureExport(
   const secrets = (data.secrets ?? []) as Record<string, unknown>[];
   const arcTransitions = (data.arc_transitions ?? []) as Record<string, unknown>[];
 
-  function slugify(s: string): string {
-    return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60) || "unnamed";
-  }
+  // Ключи считаются ОДИН раз и в том же порядке, что при выгрузке: счётчик
+  // одинаковых имён иначе выдаст другие номера на втором проходе.
+  const chapterKey = makeKeyer("chp");
+  const chapterKeys = chapters.map((ch) => chapterKey(ch.name));
+  const sceneKey = makeKeyer("scn");
+  const sceneKeys = scenes.map((sc) => sceneKey(sc.name));
 
   const insertArc = db.prepare(
     `INSERT INTO story_arcs (setting_id, parent_id, name, kind, description, hook, recommended_level, player_count, duration, source, tags, thumbnail_image_path, position)
@@ -1671,7 +1707,7 @@ export async function importAdventureExport(
         ch.description ?? "", "", "", "", "", "", "",
         null, i
       );
-      chapterIdMap.set(`chp.${slugify(ch.name as string)}`, Number(r.lastInsertRowid));
+      chapterIdMap.set(chapterKeys[i], Number(r.lastInsertRowid));
     }
 
     // 3. Create scenes
@@ -1686,14 +1722,13 @@ export async function importAdventureExport(
         s.entry_condition ?? "", s.outcomes ?? "",
         s.hidden_from_players ?? 1, s.position ?? i
       );
-      const key = `scn.${slugify(s.name as string)}`;
-      sceneIdMap.set(key, Number(r.lastInsertRowid));
+      sceneIdMap.set(sceneKeys[i], Number(r.lastInsertRowid));
     }
 
     // 4. Create checks and outcomes
-    for (const s of scenes) {
-      const sceneKey = `scn.${slugify(s.name as string)}`;
-      const sceneId = sceneIdMap.get(sceneKey);
+    for (let si = 0; si < scenes.length; si++) {
+      const s = scenes[si];
+      const sceneId = sceneIdMap.get(sceneKeys[si]);
       if (!sceneId) continue;
       const checks = (s.checks ?? []) as Record<string, unknown>[];
       for (let ci = 0; ci < checks.length; ci++) {
@@ -1709,9 +1744,9 @@ export async function importAdventureExport(
     }
 
     // 5. Create rewards
-    for (const s of scenes) {
-      const sceneKey = `scn.${slugify(s.name as string)}`;
-      const sceneId = sceneIdMap.get(sceneKey);
+    for (let si = 0; si < scenes.length; si++) {
+      const s = scenes[si];
+      const sceneId = sceneIdMap.get(sceneKeys[si]);
       const rewards = (s.rewards ?? []) as Record<string, unknown>[];
       for (let ri = 0; ri < rewards.length; ri++) {
         const r = rewards[ri];
@@ -1720,9 +1755,9 @@ export async function importAdventureExport(
     }
 
     // 6. Create scene transitions
-    for (const s of scenes) {
-      const fromKey = `scn.${slugify(s.name as string)}`;
-      const fromId = sceneIdMap.get(fromKey);
+    for (let si = 0; si < scenes.length; si++) {
+      const s = scenes[si];
+      const fromId = sceneIdMap.get(sceneKeys[si]);
       if (!fromId) continue;
       const transitions = (s.transitions ?? []) as Record<string, unknown>[];
       for (let ti = 0; ti < transitions.length; ti++) {
@@ -1884,12 +1919,6 @@ export interface MergeSummary {
   kept_local_scenes: number;
 }
 
-// Тот же ключ, что строит выгрузка (`slugify` внутри importAdventureExport):
-// слияние ищет совпадения по нему, значит считать его надо ровно так же.
-function slugifyKey(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60) || "unnamed";
-}
-
 function mergeAdventureExport(
   settingId: number,
   targetArcId: number,
@@ -1910,15 +1939,22 @@ function mergeAdventureExport(
     const localChapters = db
       .prepare("SELECT id, name FROM story_arcs WHERE parent_id = ? AND archived_at IS NULL AND campaign_id IS NULL")
       .all(targetArcId) as { id: number; name: string }[];
-    // Ключ файла (`chp.<slug>`) — id главы на этом устройстве.
+    // Сопоставление идёт по ИМЕНИ, а не по ключу файла: ключ несёт ещё и
+    // номер повтора, зависящий от порядка в файле, а местная глава про этот
+    // порядок ничего не знает.
+    const chapterByName = new Map<string, number>();
+    for (const c of localChapters) chapterByName.set(exportSlug(c.name), c.id);
+    // Ключ файла (`chp.…`) — id главы здесь: сцены в файле называют главу
+    // именно ключом.
     const chapterByKey = new Map<string, number>();
-    for (const c of localChapters) chapterByKey.set(`chp.${slugifyKey(c.name)}`, c.id);
+    const chapterKey = makeKeyer("chp");
 
     let nextChapterPos = localChapters.length;
     for (const ch of chapters) {
-      const key = `chp.${slugifyKey(String(ch.name ?? ""))}`;
-      const existing = chapterByKey.get(key);
+      const key = chapterKey(ch.name);
+      const existing = chapterByName.get(exportSlug(ch.name));
       if (existing != null) {
+        chapterByKey.set(key, existing);
         if (ch.description != null) {
           db.prepare("UPDATE story_arcs SET description = ? WHERE id = ?").run(ch.description, existing);
         }
@@ -1931,10 +1967,11 @@ function mergeAdventureExport(
         )
         .run(settingId, targetArcId, ch.name, ch.description ?? "", nextChapterPos++);
       chapterByKey.set(key, Number(r.lastInsertRowid));
+      chapterByName.set(exportSlug(ch.name), Number(r.lastInsertRowid));
       summary.added_chapters++;
     }
 
-    const arcIds = [targetArcId, ...chapterByKey.values()];
+    const arcIds = [targetArcId, ...new Set(chapterByName.values())];
     const placeholders = arcIds.map(() => "?").join(",");
     const localScenes = db
       .prepare(
@@ -1943,14 +1980,14 @@ function mergeAdventureExport(
       )
       .all(...arcIds) as { id: number; arc_id: number; name: string }[];
     const sceneByKey = new Map<string, number>();
-    for (const sc of localScenes) sceneByKey.set(`${sc.arc_id}|${slugifyKey(sc.name)}`, sc.id);
+    for (const sc of localScenes) sceneByKey.set(`${sc.arc_id}|${exportSlug(sc.name)}`, sc.id);
 
     const touched = new Set<number>();
     for (let i = 0; i < scenes.length; i++) {
       const sc = scenes[i];
       const chapterKey = sc.chapter as string | undefined;
       const arcId = (chapterKey && chapterByKey.get(chapterKey)) || targetArcId;
-      const key = `${arcId}|${slugifyKey(String(sc.name ?? ""))}`;
+      const key = `${arcId}|${exportSlug(sc.name)}`;
       const existing = sceneByKey.get(key);
       if (existing != null) {
         const sets = MERGE_SCENE_FIELDS.filter((f) => sc[f] != null);
@@ -2076,7 +2113,13 @@ storyRouter.post("/import", async (req, res) => {
     if (!arcId) return res.status(400).json({ error: "Это не файл приключения" });
     return res
       .status(201)
-      .json({ mode: clash && mode === "replace" ? "replace" : "new", arc_id: arcId, replaced_arc_id: clash?.id ?? null });
+      .json({
+        mode: clash && mode === "replace" ? "replace" : "new",
+        arc_id: arcId,
+        // Названо тем, что случилось: при «Создать новое» ничего не заменено,
+        // даже если совпадение по имени было.
+        replaced_arc_id: clash && mode === "replace" ? clash.id : null,
+      });
   } catch (e) {
     return res.status(400).json({ error: e instanceof Error ? e.message : "Не удалось загрузить приключение" });
   }
