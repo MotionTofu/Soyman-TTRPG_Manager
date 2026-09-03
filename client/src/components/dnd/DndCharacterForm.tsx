@@ -2948,10 +2948,23 @@ function weaponAttackRows(
     .flatMap((s) => s.items)
     .filter((i) => i.equipped && i.weaponDamage)
     .map((i) => {
-      const finesse = (i.weaponProperties ?? "").includes("Фехтовальное");
-      const mod = finesse ? Math.max(str, dex) : i.weaponAttackRanged && !i.weaponAttackMelee ? dex : str;
+      // Свойства оружия приходят строкой из компендиума, поэтому признаки
+      // ищутся без учёта регистра: «Фехтовальное» и «фехтовальное» — одно и
+      // то же, а раньше вторая форма молча меняла характеристику атаки.
+      const props = (i.weaponProperties ?? "").toLowerCase();
+      const finesse = props.includes("фехтовальн");
+      const thrown = props.includes("метательн");
+      // Метательное ближнее оружие бросают Силой, если оно не фехтовальное —
+      // то есть выбор характеристики тот же, что и в ближнем бою.
+      const rangedOnly = !!i.weaponAttackRanged && !i.weaponAttackMelee && !thrown;
+      const mod = finesse ? Math.max(str, dex) : rangedOnly ? dex : str;
       const range = i.weaponAttackMelee && i.weaponAttackRanged ? "Ближний/Дальний" : i.weaponAttackRanged ? "Дальний" : "Ближний";
-      const damage = [i.weaponDamage, i.weaponProperties, i.weaponMastery && `Мастерство: ${i.weaponMastery}`]
+      // Урон печатался как есть — «1к8» без модификатора, который игрок
+      // прибавлял в уме каждый бросок. Теперь формула полная: «1к8 +3».
+      const damageWithMod = i.weaponDamage
+        ? `${i.weaponDamage}${mod !== 0 ? ` ${formatModifier(mod)}` : ""}`
+        : "";
+      const damage = [damageWithMod, i.weaponProperties, i.weaponMastery && `Мастерство: ${i.weaponMastery}`]
         .filter(Boolean)
         .join(" · ");
       return { name: i.name, bonus: formatModifier(mod + profBonus), damage, range, timing: "action" as const };
@@ -3762,7 +3775,14 @@ function HpEditModal({
     const curNow = Number(value.hitPointsCurrent) || 0;
     const fromTemp = Math.min(n, Math.max(0, tempNow));
     const rest = n - fromTemp;
-    const patch = { hitPointsTemp: String(tempNow - fromTemp), hitPointsCurrent: String(curNow - rest) };
+    // Хиты не уходят в минус: по правилам они останавливаются на нуле, а
+    // «-7 хитов» на листе — это ещё и потерянный признак того, что персонаж
+    // при смерти. Мгновенная смерть от превышения максимума за одно
+    // попадание — решение стола, лист её не объявляет.
+    const patch = {
+      hitPointsTemp: String(tempNow - fromTemp),
+      hitPointsCurrent: String(Math.max(0, curNow - rest)),
+    };
     onQuickUpdate(patch);
     setDraft((d) => ({ ...d, ...patch }));
     // Урон по концентрирующемуся требует спасброска Телосложения, СЛ 10 или
@@ -3778,7 +3798,14 @@ function HpEditModal({
     const curNow = Number(value.hitPointsCurrent) || 0;
     const cap = (Number(value.hitPointMax) || 0) + (Number(value.hitPointMaxTemp) || 0);
     const healed = cap > 0 ? Math.min(curNow + n, cap) : curNow + n;
-    onQuickUpdate({ hitPointsCurrent: String(healed) });
+    // Любое лечение с нуля поднимает на ноги: накопленные спасброски от
+    // смерти сбрасываются, иначе они переживут исцеление и убьют персонажа
+    // в следующем бою.
+    const revived = curNow <= 0 && healed > 0;
+    onQuickUpdate({
+      hitPointsCurrent: String(healed),
+      ...(revived ? { deathSaveSuccesses: 0, deathSaveFailures: 0 } : {}),
+    });
     setDraft((d) => ({ ...d, hitPointsCurrent: String(healed) }));
     setAmount("");
   }

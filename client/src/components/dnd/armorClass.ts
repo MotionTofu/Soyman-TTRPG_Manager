@@ -22,7 +22,16 @@ export function computeArmorClass(dexMod: number, sections: DndEquipmentSection[
     if (maxDex === "") dexBonus = dexMod;
     else {
       const cap = parseInt(maxDex, 10);
-      dexBonus = Number.isFinite(cap) ? Math.min(dexMod, cap) : dexMod;
+      // «0» — тяжёлый доспех: Ловкость не применяется вовсе, ни плюсом, ни
+      // минусом. Прежний Math.min(dexMod, 0) при Лов 8 давал −1 к КЗ, то есть
+      // наказывал за то, что по правилам не считается.
+      //
+      // Ненулевой предел — средний доспех: он ограничивает только бонус.
+      // Отрицательный модификатор в нём применяется как есть, поэтому здесь
+      // нижней границы нет.
+      if (!Number.isFinite(cap)) dexBonus = dexMod;
+      else if (cap === 0) dexBonus = 0;
+      else dexBonus = Math.min(dexMod, cap);
     }
   } else {
     base = 10;
