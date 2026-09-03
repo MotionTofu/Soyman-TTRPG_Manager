@@ -31,6 +31,7 @@ import {
   emptySavingThrowProfs,
   formatModifier,
 } from "./AbilityScores";
+import { resolveSkillOriginal, skillByOriginal } from "./skillCatalog";
 import {
   loadDndEquipmentEntries,
   loadDndMechanicsGroup,
@@ -269,7 +270,18 @@ export function normalizeDndCreature(raw: unknown): DndCreatureData {
   merged.saveAdvantageConditions = Array.isArray(merged.saveAdvantageConditions) ? merged.saveAdvantageConditions : [];
 
   merged.savingThrowProfs = { ...emptySavingThrowProfs(), ...((r.savingThrowProfs as object) ?? {}) };
-  merged.skillProfs = typeof r.skillProfs === "object" && r.skillProfs ? (r.skillProfs as Record<string, boolean>) : {};
+  // Ключ у существа остаётся именем навыка (в отличие от листа персонажа, где
+  // он стал английским `original`), но само имя могло смениться: «Магия» →
+  // «Арканная магия», «Анализ» → «Анализ/расследование» (гриллинг 2026-09-04).
+  // Сводим через каталог, иначе отметка остаётся в данных и пропадает с глаз.
+  const rawCreatureSkills =
+    typeof r.skillProfs === "object" && r.skillProfs ? (r.skillProfs as Record<string, boolean>) : {};
+  merged.skillProfs = {};
+  for (const [rawName, on] of Object.entries(rawCreatureSkills)) {
+    const original = resolveSkillOriginal(rawName);
+    const name = original ? skillByOriginal(original)?.name ?? rawName : rawName;
+    merged.skillProfs[name] = merged.skillProfs[name] || !!on;
+  }
 
   // Импортированные записи бестиария несут владения списками полных русских
   // названий (`savingThrowProficiencies: ["Ловкость", "Мудрость"]`,
@@ -290,10 +302,12 @@ export function normalizeDndCreature(raw: unknown): DndCreatureData {
   if (legacySkillProfs && Object.keys(merged.skillProfs).length === 0) {
     // Навыки в импорте написаны в своём регистре («Внимание/Восприятие»
     // против «Внимание/восприятие» в справочнике), поэтому сверяем без него.
-    const byLower = new Map(ALL_SKILLS.map((skill) => [skill.toLowerCase(), skill]));
+    // Через каталог: он знает не только регистр, но и другие написания —
+    // «Восприятие», «Аркана», «Обращение с животными» и прочие переводы.
     for (const raw of legacySkillProfs) {
       if (typeof raw !== "string") continue;
-      const skill = byLower.get(raw.trim().toLowerCase());
+      const original = resolveSkillOriginal(raw);
+      const skill = original ? skillByOriginal(original)?.name : undefined;
       if (skill) merged.skillProfs[skill] = true;
     }
   }

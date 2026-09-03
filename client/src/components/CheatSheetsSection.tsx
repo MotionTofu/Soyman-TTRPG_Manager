@@ -2,7 +2,8 @@ import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api/client";
 import { resolveEntityLabel } from "../api/resolveEntity";
-import { abilityModifier, parseBonus, SKILLS_BY_ABILITY } from "./dnd/AbilityScores";
+import { abilityModifier, parseBonus } from "./dnd/AbilityScores";
+import { SKILL_CATALOG } from "./dnd/skillCatalog";
 import { computeArmorClass } from "./dnd/armorClass";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -137,11 +138,18 @@ async function loadCharacterCards(campaignId: number): Promise<CharacterCardData
       const ac = computeArmorClass(dexMod, data.equipmentSections, parseBonus(data.manualAcBonus));
       const profBonus = parseBonus(data.proficiencyBonus);
       const wisMod = abilityModifier(data.abilities.wis);
-      const perceptionLevel = data.skillProfs["Внимание/восприятие"] ?? 0;
+      // Ключ владения — английский `original` (см. dnd/skillCatalog.ts).
+      // Шпаргалка читает сохранённый JSON напрямую, мимо
+      // `normalizeDndCharacter`, поэтому сводит имя сама: лист, ещё не
+      // пересохранённый после перехода на новый ключ, иначе показал бы
+      // пассивное восприятие без учёта владения.
+      const perceptionLevel =
+        data.skillProfs["Perception"] ?? data.skillProfs["Внимание/восприятие"] ?? 0;
       const passivePerception = 10 + wisMod + profBonus * perceptionLevel;
       const { className, subclassName } = classAndSubclassSummary(data.classes);
-      const allSkills = Object.values(SKILLS_BY_ABILITY).flat();
-      const skills = allSkills.filter((s) => (data.skillProfs[s] ?? 0) > 0);
+      const skills = SKILL_CATALOG.filter(
+        (def) => (data.skillProfs[def.original] ?? data.skillProfs[def.name] ?? 0) > 0
+      ).map((def) => def.name);
       return {
         id: c.id,
         name: data.characterName || c.character_name,

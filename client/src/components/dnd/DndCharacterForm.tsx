@@ -43,7 +43,8 @@ import {
   SKILL_TITLES,
 } from "./AbilitySavesSkills";
 import { skillSourceClass, skillSourceWord } from "./skillSource";
-import { resolveSkillOriginal, SKILL_CATALOG, skillByOriginal } from "./skillCatalog";
+import { resolveSkillOriginal } from "./skillCatalog";
+import { useDndSkills, type DndSkills, type SkillRow } from "./useDndSkills";
 import { loadDndPrefs } from "../../dndPrefs";
 import {
   loadDndBackgroundOptions,
@@ -496,7 +497,10 @@ const EMPTY_GRANTS: SourceGrants = {
 
 // Поля не пересекаются: у класса — спасброски и инструменты, у предыстории —
 // навыки, инструмент и черта происхождения. Поэтому разбор один на оба.
-function grantsFromEntry(entry: CompendiumEntry | undefined): SourceGrants {
+function grantsFromEntry(
+  entry: CompendiumEntry | undefined,
+  resolve: (raw: string) => string | null
+): SourceGrants {
   if (!entry) return EMPTY_GRANTS;
   const data = entry.data;
   const toolPicks = Array.isArray(data.tool_profs)
@@ -508,7 +512,12 @@ function grantsFromEntry(entry: CompendiumEntry | undefined): SourceGrants {
     savingThrows: parseAbilityNames(data.saving_throws),
     toolIds: toolPicks.map((t) => t.id).filter((id) => typeof id === "number"),
     toolNames: [...toolPicks.map((t) => t.name).filter(Boolean), ...bgTool],
-    skills: Array.isArray(data.skills) ? (data.skills as string[]) : [],
+    // Сразу ключами: дальше по цепочке (revokeGrants, pickBackground) навык
+    // сверяется с `skillProfs`, а там теперь английский `original`. Имя, не
+    // сведённое ни к чему, остаётся как есть — потерять его хуже.
+    skills: (Array.isArray(data.skills) ? (data.skills as string[]) : [])
+      .filter((s) => typeof s === "string" && s.trim())
+      .map((s) => resolve(s) ?? s.trim()),
     featNames: originFeat?.name ? [originFeat.name] : [],
   };
 }
@@ -560,11 +569,14 @@ function revokeGrants(
 }
 
 // Записи всех источников, кроме уходящего: по ним решается, что оставить.
-async function loadGrants(ids: (number | null | undefined)[]): Promise<SourceGrants[]> {
+async function loadGrants(
+  ids: (number | null | undefined)[],
+  resolve: (raw: string) => string | null
+): Promise<SourceGrants[]> {
   const real = ids.filter((id): id is number => typeof id === "number");
   if (real.length === 0) return [];
   await ensureEntries(real);
-  return real.map((id) => grantsFromEntry(getCachedEntry(id)));
+  return real.map((id) => grantsFromEntry(getCachedEntry(id), resolve));
 }
 
 function classAndLevelSummary(classes: DndClassEntry[]): string {
@@ -2511,6 +2523,9 @@ function useDndOrigin(
   const valueRef = useLatest(value);
   const onChangeRef = useLatest(onChange);
   const hierarchyRef = useLatest(hierarchy);
+  // Сведение имён навыков: встроенные алиасы плюс те, что мастер добавил в
+  // справочник. Через реф — сеттеры ниже читают его после `await`.
+  const skillsRef = useLatest(useDndSkills(value.systemId));
   // Все пикеры ниже ходят в сеть, а потом пишут в лист. Раньше побеждал тот,
   // чей запрос доехал последним, а не тот, который нажали последним: щёлкнув
   // уровень 1→5 подряд, можно было получить набор особенностей от третьего
@@ -2563,11 +2578,11 @@ function useDndOrigin(
       let classFeatures = removeFeaturesBySource(value.classFeatures, oldClass?.classId, oldClass?.subclassId);
       // Уходящий класс забирает свои спасброски и инструменты — но только те,
       // которых не даёт ни один из оставшихся источников.
-      const revoked = mergeGrants(await loadGrants([oldClass?.classId, oldClass?.subclassId]));
+      const revoked = mergeGrants(await loadGrants([oldClass?.classId, oldClass?.subclassId], skillsRef.current.resolve));
       const kept = await loadGrants([
         ...value.classes.filter((_, idx) => idx !== i).flatMap((c) => [c.classId, c.subclassId]),
         value.backgroundId,
-      ]);
+      ], skillsRef.current.resolve);
       const cleared = revokeGrants(value, revoked, kept);
       let savingThrowProfs = cleared.savingThrowProfs;
       let proficiencies = cleared.proficiencies;
@@ -2589,9 +2604,15 @@ function useDndOrigin(
           notes = upsertClassNotesBlock(notes, opt.name, buildClassNotesBlock(opt.name, entry.data));
           nextClasses[i] = {
             ...nextClasses[i],
-            skillChoiceOptions: Array.isArray(entry.data.skill_choice_options)
+            // Ключами: из 103 имён в `skill_choice_options` классов по базе
+            // владельца 19 не совпадали с листом, и подсветка «от класса» у
+            // этих навыков просто не загоралась.
+            skillChoiceOptions: (Array.isArray(entry.data.skill_choice_options)
               ? (entry.data.skill_choice_options as string[])
-              : [],
+              : []
+            )
+              .filter((s) => typeof s === "string" && s.trim())
+              .map((s) => skillsRef.current.resolve(s) ?? s.trim()),
             skillChoiceCount: typeof entry.data.skill_choice_count === "number" ? entry.data.skill_choice_count : 0,
             spellcastingAbility:
               typeof entry.data.spellcasting_ability === "string" ? entry.data.spellcasting_ability : "",
@@ -2732,11 +2753,11 @@ function useDndOrigin(
       const classFeatures = removeFeaturesBySource(value.classFeatures, removed?.classId, removed?.subclassId);
       const nextClasses = value.classes.filter((_, idx) => idx !== i);
       // Убранный класс забирает спасброски и инструменты с собой.
-      const revoked = mergeGrants(await loadGrants([removed?.classId, removed?.subclassId]));
+      const revoked = mergeGrants(await loadGrants([removed?.classId, removed?.subclassId], skillsRef.current.resolve));
       const kept = await loadGrants([
         ...nextClasses.flatMap((c) => [c.classId, c.subclassId]),
         value.backgroundId,
-      ]);
+      ], skillsRef.current.resolve);
       const cleared = revokeGrants(value, revoked, kept);
       const nextValue = {
         ...valueRef.current,
@@ -2895,14 +2916,14 @@ function useDndOrigin(
     // Прежняя предыстория забирает своё: навыки, инструмент и черту
     // происхождения. Раньше не снималось ничего — три смены предыстории
     // оставляли три черты и все накопленные навыки.
-    const previous = mergeGrants(await loadGrants([value.backgroundId]));
+    const previous = mergeGrants(await loadGrants([value.backgroundId], skillsRef.current.resolve));
     const revoked: SourceGrants = {
       ...previous,
       // backgroundSkillNames — то, что реально было применено к листу;
       // запись компендиума могла с тех пор измениться.
       skills: [...new Set([...previous.skills, ...value.backgroundSkillNames])],
     };
-    const kept = await loadGrants(value.classes.flatMap((c) => [c.classId, c.subclassId]));
+    const kept = await loadGrants(value.classes.flatMap((c) => [c.classId, c.subclassId]), skillsRef.current.resolve);
     const cleared = revokeGrants(value, revoked, kept);
     const base: DndCharacterData = { ...value, ...cleared };
 
@@ -2910,11 +2931,20 @@ function useDndOrigin(
     if (id) {
       try {
         const entry = await api.get<CompendiumEntry>(`/systems/entries/${id}`);
-        const grantedSkills = Array.isArray(entry.data.skills) ? (entry.data.skills as string[]) : [];
+        // Ключами, а не именами. Здесь и жил дефект: владение ставилось
+        // только `if (s in nextSkillProfs)`, то есть если имя из компендиума
+        // дословно совпало с именем в листе. По базе владельца из 72 выдач
+        // так молча терялись 15 — «Расследование», «Внимательность»,
+        // «Аркана» и прочие написания того же навыка.
+        const grantedSkills = (Array.isArray(entry.data.skills) ? (entry.data.skills as string[]) : [])
+          .filter((s) => typeof s === "string" && s.trim())
+          .map((s) => skillsRef.current.resolve(s) ?? s.trim());
         patch.backgroundSkillNames = grantedSkills;
         if (grantedSkills.length > 0) {
           const nextSkillProfs = { ...base.skillProfs };
-          for (const s of grantedSkills) if (s in nextSkillProfs && !nextSkillProfs[s]) nextSkillProfs[s] = 1;
+          // Ставим владение и тому навыку, которого в листе ещё нет: иначе
+          // навык, заведённый мастером, предысторией не выдавался бы.
+          for (const s of grantedSkills) if (!nextSkillProfs[s]) nextSkillProfs[s] = 1;
           patch.skillProfs = nextSkillProfs;
         }
         const tools = typeof entry.data.tools === "string" ? entry.data.tools : "";
@@ -3233,6 +3263,7 @@ function DndSkillsView({
   classSkillPool: pool,
   backgroundSkillNames,
   proficiencies,
+  skills,
   onQuickUpdate,
   highlight,
   exhaustionPenalty = 0,
@@ -3243,6 +3274,8 @@ function DndSkillsView({
   classSkillPool: string[];
   backgroundSkillNames: string[];
   proficiencies: DndProficiencyEntry[];
+  /** Встроенный каталог навыков, уточнённый справочником (useDndSkills). */
+  skills: DndSkills;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
   /** Ключ строки, на которую увёл поиск (см. DndSheetSearch). */
   highlight?: string | null;
@@ -3251,22 +3284,51 @@ function DndSkillsView({
 }) {
   const profBonus = parseBonus(proficiencyBonus);
   const rows = useMemo(() => {
-    const all: { skill: string; abilityKey: DndAbilityKey; abilityLabel: string }[] = [];
-    for (const { key, label } of ABILITY_LABELS) {
-      for (const skill of SKILLS_BY_ABILITY[key]) all.push({ skill, abilityKey: key, abilityLabel: label });
+    // Порядок — по характеристикам, как мастер ищет строку глазами; навык,
+    // заведённый мастером, встроенного порядка не знает и идёт в конец своей
+    // группы, а без характеристики — в самый конец (гриллинг 2026-09-04).
+    const byAbility = new Map<DndAbilityKey, typeof skills.rows>();
+    const tail: typeof skills.rows = [];
+    for (const row of skills.rows) {
+      if (!row.ability) {
+        tail.push(row);
+        continue;
+      }
+      const list = byAbility.get(row.ability) ?? [];
+      list.push(row);
+      byAbility.set(row.ability, list);
     }
+    const all: { row: SkillRow; abilityLabel: string }[] = [];
+    for (const { key, label } of ABILITY_LABELS) {
+      for (const row of byAbility.get(key) ?? []) all.push({ row, abilityLabel: label });
+    }
+    for (const row of tail) all.push({ row, abilityLabel: "—" });
     const prefs = loadDndPrefs();
     if (prefs.skillSortMode === "alphabet") {
-      return [...all].sort((a, b) => a.skill.localeCompare(b.skill, "ru"));
+      return [...all].sort((a, b) => a.row.name.localeCompare(b.row.name, "ru"));
     }
     return all;
-  }, []);
+  }, [skills.rows]);
+
+  // Владения, которые лист сохранил, но свести не смог — например навык из
+  // чужого модуля. Раньше такие просто не показывались: строки с таким именем
+  // в списке нет, и владение исчезало с глаз, оставаясь в данных.
+  const unresolved = useMemo(() => {
+    const known = new Set(skills.rows.map((r) => r.original));
+    return Object.entries(skillProfs)
+      .filter(([key, level]) => (level ?? 0) > 0 && !known.has(key))
+      .map(([key, level]) => ({ key, level: level as DndSkillProfLevel }));
+  }, [skillProfs, skills.rows]);
 
   return (
     <div className="stack">
       <div className="dnd-save-skill-col dnd-skills-tab">
-        {rows.map(({ skill, abilityKey, abilityLabel }) => {
-          const mod = abilityModifier(abilities[abilityKey]);
+        {rows.map(({ row, abilityLabel }) => {
+          const skill = row.original;
+          // Без характеристики (навык мастера, у которого её не задали)
+          // модификатор считается только от бонуса мастерства: врать числом
+          // хуже, чем показать меньшее.
+          const mod = row.ability ? abilityModifier(abilities[row.ability]) : 0;
           const level = skillProfs[skill] ?? 0;
           return (
             <div
@@ -3277,6 +3339,7 @@ function DndSkillsView({
                 type="button"
                 className="dnd-save-dot-btn"
                 title={SKILL_TITLES[level]}
+                aria-label={`${row.name}: ${SKILL_TITLES[level]} — сменить`}
                 disabled={!onQuickUpdate}
                 onClick={() =>
                   onQuickUpdate?.({
@@ -3287,7 +3350,7 @@ function DndSkillsView({
                 {SKILL_DOTS[level]}
               </button>
               <span className="dnd-save-name">
-                {skill} <span className="muted">({abilityLabel})</span>
+                {row.name} <span className="muted">({abilityLabel})</span>
                 {/* Видно только на печати: там заливка источника гаснет. */}
                 {skillSourceWord(skill, pool, backgroundSkillNames) && (
                   <span className="dnd-skill-source-word">
@@ -3300,6 +3363,37 @@ function DndSkillsView({
           );
         })}
       </div>
+      {unresolved.length > 0 && (
+        <div className="dnd-save-skill-col dnd-skills-unresolved">
+          <div className="sb-label">Нет в справочнике</div>
+          {unresolved.map(({ key, level }) => (
+            <div
+              key={key}
+              className={`dnd-save-row${level > 0 ? " is-proficient" : ""}${level === 2 ? " is-expertise" : ""}`}
+            >
+              <button
+                type="button"
+                className="dnd-save-dot-btn"
+                title={SKILL_TITLES[level]}
+                aria-label={`${key}: ${SKILL_TITLES[level]} — сменить`}
+                disabled={!onQuickUpdate}
+                onClick={() =>
+                  onQuickUpdate?.({
+                    skillProfs: { ...skillProfs, [key]: ((level + 1) % 3) as DndSkillProfLevel },
+                  })
+                }
+              >
+                {SKILL_DOTS[level]}
+              </button>
+              <span className="dnd-save-name">{key}</span>
+            </div>
+          ))}
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+            Владение сохранено, но такого навыка в справочнике системы нет. Свести
+            имена — Системы → D&D 5.5 → Справочник → Навыки.
+          </span>
+        </div>
+      )}
       <DndProficienciesView
         value={proficiencies}
         onChange={onQuickUpdate ? (v) => onQuickUpdate({ proficiencies: v }) : undefined}
@@ -4395,6 +4489,9 @@ export function DndCharacterView({
   // Живые данные компендиума для всех заклинаний и умений листа — одной
   // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
   const getEntry = useCompendiumEntries(sheetEntryIds(value));
+  // Навыки: встроенный каталог, уточнённый справочником системы. Без
+  // справочника лист полон — имена берутся встроенные.
+  const skills = useDndSkills(value.systemId);
   const systemIdForSlots = value.systemId;
   // Per-section edit toggles for "Особенности" (only "Особые умения" is
   // user-authored — species/class/feats are inherited compendium content and
@@ -4560,7 +4657,7 @@ export function DndCharacterView({
   const spellAttackBonus =
     spellAbilityMod + spellProfBonus + parseBonus(value.spellAttackMisc) - value.exhaustion * 2;
   const spellDc = 8 + spellAbilityMod + spellProfBonus + parseBonus(value.spellDcMisc);
-  const perceptionProf = value.skillProfs["Внимание/восприятие"] ?? 0;
+  const perceptionProf = value.skillProfs["Perception"] ?? 0;
   const passivePerception =
     10 +
     abilityModifier(value.abilities.wis) +
@@ -5202,6 +5299,7 @@ export function DndCharacterView({
               classSkillPool={classSkillPool(value.classes)}
               backgroundSkillNames={value.backgroundSkillNames}
               proficiencies={value.proficiencies}
+              skills={skills}
               onQuickUpdate={onQuickUpdate}
             />
           )}

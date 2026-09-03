@@ -137,25 +137,54 @@ const STAT_LABELS: Record<string, string> = {
   cha: "Харизма",
 };
 
+// Русские имена — только для человекочитаемой сводки импорта. В данные листа
+// они больше не попадают: ключом владения стал английский `original`
+// (см. db/dndSkillNames.ts). Прежние имена здесь были ещё и не теми, что
+// показывает лист («Расследование» против «Анализ/расследование»,
+// «Восприятие» против «Внимание/восприятие»), из-за чего каждый импорт из
+// Long Story Short молча терял два самых ходовых владения.
 const SKILL_LABELS: Record<string, string> = {
   acrobatics: "Акробатика",
   "animal handling": "Уход за животными",
-  arcana: "Магия",
+  arcana: "Арканная магия",
   athletics: "Атлетика",
   deception: "Обман",
   history: "История",
   insight: "Проницательность",
   intimidation: "Запугивание",
-  investigation: "Расследование",
+  investigation: "Анализ/расследование",
   medicine: "Медицина",
   nature: "Природа",
-  perception: "Восприятие",
+  perception: "Внимание/восприятие",
   performance: "Выступление",
   persuasion: "Убеждение",
   religion: "Религия",
   "sleight of hand": "Ловкость рук",
   stealth: "Скрытность",
   survival: "Выживание",
+};
+
+// Ключ владения в `skillProfs` листа. LSS зовёт навыки теми же английскими
+// именами, только строчными, — отсюда и соответствие один в один.
+const SKILL_KEYS: Record<string, string> = {
+  acrobatics: "Acrobatics",
+  "animal handling": "Animal Handling",
+  arcana: "Arcana",
+  athletics: "Athletics",
+  deception: "Deception",
+  history: "History",
+  insight: "Insight",
+  intimidation: "Intimidation",
+  investigation: "Investigation",
+  medicine: "Medicine",
+  nature: "Nature",
+  perception: "Perception",
+  performance: "Performance",
+  persuasion: "Persuasion",
+  religion: "Religion",
+  "sleight of hand": "Sleight of Hand",
+  stealth: "Stealth",
+  survival: "Survival",
 };
 
 export interface LssImportWarnings {
@@ -385,11 +414,14 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     const rec = s as Record<string, unknown> | undefined;
     if (!rec || !isProfTrue(rec.isProf)) continue;
     const rawName = typeof rec.name === "string" ? rec.name : "";
-    const label = SKILL_LABELS[rawName] ?? rawName;
-    if (!label) continue;
+    // Ключом, а не именем: имя лист бы не узнал, и владение осталось бы в
+    // данных невидимым. Незнакомое имя сохраняем как есть — лист покажет его
+    // строкой «нет в справочнике», а не потеряет.
+    const key = SKILL_KEYS[rawName] ?? rawName;
+    if (!key) continue;
     const lvl = typeof rec.level === "number" && (rec.level === 2 || rec.level === 1) ? rec.level : 1;
     const expertise = rec.isExpertise === true || rec.expertise === true || isProfTrue(rec.expertise);
-    skillProfs[label] = expertise ? 2 : lvl;
+    skillProfs[key] = expertise ? 2 : lvl;
   }
 
   const attacks = weapons

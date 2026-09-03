@@ -3,6 +3,7 @@ import { api } from "../../api/client";
 import type { CompendiumEntry, DndAbilityScores } from "../../types";
 import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
 import { featuresFromEntries } from "./dndFeatures";
+import { useDndSkills } from "./useDndSkills";
 import {
   ABILITY_LABELS,
   abilityModifier,
@@ -96,6 +97,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   });
   const [rolledPool, setRolledPool] = useState<number[]>(STANDARD_ARRAY);
   const [chosenSkills, setChosenSkills] = useState<string[]>([]);
+  // Имена навыков и их сведение к ключам — из справочника, как на листе.
+  const skills = useDndSkills(systemId);
 
   useEffect(() => {
     let alive = true;
@@ -208,13 +211,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
 
   const classOption = hierarchy.classes.find((c) => c.id === classId);
   const subclassOptions = classId ? hierarchy.subclassesByClass[classId] ?? [] : [];
-  const skillChoiceOptions: string[] = Array.isArray(classEntry?.data.skill_choice_options)
-    ? (classEntry!.data.skill_choice_options as string[])
-    : [];
+  // Ключами (английский `original`), а не именами из компендиума: в
+  // `skillProfs` листа теперь ключ, и визард, выдающий имя, оставлял бы
+  // персонажу владение, которого на листе не видно (гриллинг 2026-09-04).
+  const toKeys = (raw: unknown): string[] =>
+    (Array.isArray(raw) ? (raw as unknown[]) : [])
+      .filter((s): s is string => typeof s === "string" && !!s.trim())
+      .map((s) => skills.resolve(s) ?? s.trim());
+  const skillChoiceOptions: string[] = toKeys(classEntry?.data.skill_choice_options);
   const skillChoiceCount = typeof classEntry?.data.skill_choice_count === "number" ? classEntry!.data.skill_choice_count : 0;
-  const backgroundSkills: string[] = Array.isArray(backgroundEntry?.data.skills)
-    ? (backgroundEntry!.data.skills as string[])
-    : [];
+  const backgroundSkills: string[] = toKeys(backgroundEntry?.data.skills);
 
   function toggleSkill(name: string) {
     setChosenSkills((prev) =>
@@ -546,10 +552,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 Выберите {skillChoiceCount} из списка класса ({chosenSkills.length}/{skillChoiceCount})
               </span>
               <div className="stack" style={{ gap: 4 }}>
+                {/* В списке ключ, на экране — имя из справочника. */}
                 {skillChoiceOptions.map((s) => (
                   <label key={s} className="row">
                     <input type="checkbox" checked={chosenSkills.includes(s)} onChange={() => toggleSkill(s)} />
-                    {s}
+                    {skills.nameOf(s)}
                   </label>
                 ))}
               </div>

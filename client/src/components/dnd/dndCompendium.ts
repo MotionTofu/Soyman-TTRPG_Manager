@@ -227,3 +227,41 @@ export async function loadDndEquipmentEntries(systemId: number, opts?: LoadOpts)
   }
   return results;
 }
+
+export interface DndSkillEntry {
+  id: number;
+  /** Имя, как его показывает справочник. */
+  name: string;
+  /** Английское имя — ключ владения в листе. Пусто у записей до миграции. */
+  nameOriginal: string;
+  /** Другие написания: переводы, старые имена, опечатки, сведённые мастером. */
+  aliases: string[];
+  /** Русское имя характеристики из `data.ability`, если мастер её задал. */
+  ability: string;
+}
+
+// Навыки из группы «Навыки» Справочника. Лист держит свой встроенный список
+// (`skillCatalog.ts`) и без справочника работает, но имена и алиасы, когда
+// справочник есть, берутся отсюда: второй список имён — это ровно та
+// первопричина, из-за которой владения терялись (гриллинг 2026-09-04).
+export async function loadDndSkillEntries(systemId: number, opts?: LoadOpts): Promise<DndSkillEntry[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
+  const mechSection = sections.find((s) => s.kind === "mechanics");
+  if (!mechSection) return [];
+  const entries = await get<CompendiumEntry[]>(
+    `/systems/${systemId}/entries?section_id=${mechSection.id}`,
+    opts
+  );
+  const group = entries.find((e) => e.parent_id === null && e.name === "Навыки");
+  if (!group) return [];
+  return entries
+    .filter((e) => e.parent_id === group.id)
+    .sort((a, b) => a.position - b.position)
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      nameOriginal: e.name_original ?? "",
+      aliases: Array.isArray(e.aliases) ? e.aliases : [],
+      ability: typeof e.data.ability === "string" ? e.data.ability : "",
+    }));
+}
