@@ -207,13 +207,13 @@ export function columnsAtLevel(
   progression: ClassProgression | undefined,
   level: number,
   role: ProgressionRole
-): { key: string; label: string; value: string }[] {
+): { key: string; label: string; value: string; recharge: ProgressionRecharge }[] {
   if (!progression) return [];
   const row = progressionRowForLevel(progression, level);
   if (!row) return [];
   return progression.columns
     .filter((c) => c.role === role)
-    .map((c) => ({ key: c.key, label: c.label, value: (row[c.key] ?? "").trim() }))
+    .map((c) => ({ key: c.key, label: c.label, value: (row[c.key] ?? "").trim(), recharge: columnRecharge(c) }))
     .filter((r) => r.value && r.value !== "-" && r.value !== "—");
 }
 

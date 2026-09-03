@@ -79,7 +79,7 @@ import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
 import { computeArmorClass } from "./armorClass";
-import { allResources, applicableStats, type ClassResourceSource } from "./dndResources";
+import { allResources, applicableStats, type ClassResourceSource, type DndResourceDef } from "./dndResources";
 import { Modal } from "../Modal";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -126,8 +126,10 @@ export function emptyDndCharacter(): DndCharacterData {
     hitPointsTemp: "",
     hitPointMaxTemp: "",
     hitDice: "",
+    hitDiceUsed: {},
     deathSaveSuccesses: 0,
     deathSaveFailures: 0,
+    concentration: "",
     attacks: [],
     equipmentSections: [{ name: "Общее", items: [] }],
     attunementCount: 0,
@@ -164,6 +166,10 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   if (!raw || typeof raw !== "object") return base;
   const r = raw as Record<string, unknown>;
   const merged: DndCharacterData = { ...base, ...(r as Partial<DndCharacterData>) };
+  // Листы, сохранённые до появления полей, приходят без них — а спред кладёт
+  // undefined поверх умолчания, и дорожка костей падает на первом же чтении.
+  if (!merged.hitDiceUsed || typeof merged.hitDiceUsed !== "object") merged.hitDiceUsed = {};
+  if (typeof merged.concentration !== "string") merged.concentration = "";
 
   if (!Array.isArray(merged.classes) || merged.classes.length === 0) {
     const legacy = typeof r.classAndLevel === "string" ? r.classAndLevel : "";
@@ -286,6 +292,59 @@ function hitDieNumber(hitDie: string): number {
 
 // "Воин 3 к10 + Волшебник 4 к6" style summary, used both to auto-fill the
 // hit dice field (requirement 8) and for the header/meta line.
+// Пулы костей хитов по кубам. При мультиклассе они независимы (5к10 + 3к6):
+// тратятся по отдельности, и подпись куба игроку нужна перед тратой — иначе
+// он не знает, что именно бросает.
+interface HitDicePool {
+  die: string; // «к10»
+  total: number;
+  used: number;
+}
+
+// Разбирается сохранённая строка костей («5к10 + 3к6»), а не кэш иерархии
+// классов: кэш наполняется только когда открыта панель правки происхождения,
+// а дорожки нужны на листе, который просто читают.
+function hitDicePools(hitDice: string, used: Record<string, number>): HitDicePool[] {
+  const byDie = new Map<string, number>();
+  for (const part of (hitDice || "").split("+")) {
+    const m = /^\s*(\d+)\s*[ккдkd]\s*(\d+)\s*$/i.exec(part);
+    if (!m) continue;
+    const count = Number(m[1]);
+    if (!count) continue;
+    const die = "к" + m[2];
+    byDie.set(die, (byDie.get(die) ?? 0) + count);
+  }
+  return [...byDie.entries()].map(([die, total]) => ({
+    die,
+    total,
+    used: Math.min(Math.max(used[die] ?? 0, 0), total),
+  }));
+}
+
+// Длинный отдых возвращает половину общего числа костей, минимум одну
+// (PHB 2024). Считается от всего запаса, а не по каждому пулу отдельно, и
+// возвращается сначала тем пулам, где потрачено больше.
+function restoreHitDiceOnLongRest(pools: HitDicePool[]): Record<string, number> {
+  const total = pools.reduce((n, p) => n + p.total, 0);
+  let back = Math.max(1, Math.floor(total / 2));
+  const next: Record<string, number> = {};
+  for (const p of pools) next[p.die] = p.used;
+  const order = [...pools].sort((a, b) => b.used - a.used);
+  let moved = true;
+  while (back > 0 && moved) {
+    moved = false;
+    for (const p of order) {
+      if (back <= 0) break;
+      if (next[p.die] > 0) {
+        next[p.die] -= 1;
+        back -= 1;
+        moved = true;
+      }
+    }
+  }
+  return next;
+}
+
 function computeHitDice(classes: DndClassEntry[]): string {
   return classes
     .filter((c) => c.level > 0)
@@ -3846,30 +3905,82 @@ function DndResourcesView({
 // own comments mention resetting on one.
 function DndRestModal({
   value,
+  resources,
+  pools,
   onQuickUpdate,
   onClose,
 }: {
   value: DndCharacterData;
+  resources: DndResourceDef[];
+  pools: HitDicePool[];
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
   onClose: () => void;
 }) {
-  function longRest() {
-    if (!confirm("Провести длинный отдых? Слоты заклинаний, очки ресурсов и хиты будут восстановлены.")) return;
-    const resetResourceUsed: Record<string, number> = {};
-    for (const key of Object.keys(value.resourceUsed)) resetResourceUsed[key] = 0;
+  const [confirmDialog, confirm] = useConfirm();
+  const shortNames = resources.filter((r) => r.recharge === "short").map((r) => r.label);
+  const longNames = resources.filter((r) => r.recharge === "long").map((r) => r.label);
+  const neverNames = resources.filter((r) => r.recharge === "none").map((r) => r.label);
+  const spentDice = pools.reduce((n, p) => n + p.used, 0);
+  const totalDice = pools.reduce((n, p) => n + p.total, 0);
+
+  function resetResources(which: "short" | "long"): Record<string, number> {
+    const next = { ...value.resourceUsed };
+    for (const r of resources) {
+      // Короткий отдых чинит только своё; длинный — и своё, и короткое.
+      // «Не восстанавливается отдыхом» не трогает ни один: раньше длинный
+      // обнулял вообще все пулы подряд, включая заряды предметов.
+      if (r.recharge === "none") continue;
+      if (which === "long" || r.recharge === "short") next[r.key] = 0;
+    }
+    return next;
+  }
+
+  async function shortRest() {
+    const ok = await confirm({
+      title: "Короткий отдых?",
+      message: [
+        shortNames.length > 0
+          ? `Восстановятся ячейки договора магии и ресурсы: ${shortNames.join(", ")}.`
+          : "Восстановятся ячейки договора магии. Ресурсов короткого отдыха у этого персонажа нет.",
+        "Кости хитов тратятся вручную дорожкой в виталах: сколько потратили, столько и вылечили.",
+      ].join("\n\n"),
+      confirmLabel: "Отдохнуть",
+    });
+    if (!ok) return;
+    onQuickUpdate({ pactSlotsUsed: 0, resourceUsed: resetResources("short") });
+    onClose();
+  }
+
+  async function longRest() {
+    const back = pools.length > 0 ? Math.max(1, Math.floor(totalDice / 2)) : 0;
+    const ok = await confirm({
+      title: "Длинный отдых?",
+      message: [
+        "Хиты до максимума, спасброски от смерти сброшены, концентрация снята, все ячейки заклинаний восстановлены.",
+        back > 0 ? `
+
+Костей хитов вернётся: ${Math.min(back, spentDice)} из ${spentDice} потраченных.` : "",
+        neverNames.length > 0 ? `
+
+Не восстановится: ${neverNames.join(", ")}.` : "",
+      ].join(""),
+      confirmLabel: "Отдохнуть",
+    });
+    if (!ok) return;
     onQuickUpdate({
       spellSlotsUsed: value.spellSlotsUsed.map(() => 0),
-      // Договор магии восстанавливается и на коротком отдыхе, но короткий
-      // отдых здесь чисто справочный, так что сбрасываем хотя бы тут.
       pactSlotsUsed: 0,
-      resourceUsed: resetResourceUsed,
+      resourceUsed: resetResources("long"),
+      hitDiceUsed: restoreHitDiceOnLongRest(pools),
       hitPointsCurrent: value.hitPointMax,
       hitPointsTemp: "0",
       deathSaveSuccesses: 0,
       deathSaveFailures: 0,
+      concentration: "",
     });
     onClose();
   }
+
   return (
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal">
@@ -3879,32 +3990,37 @@ function DndRestModal({
             <NavIcon name="close" />
           </button>
         </div>
+
         <div className="stack" style={{ gap: 4 }}>
           <strong>Короткий отдых</strong>
-          {value.hitDice ? (
+          <p className="muted" style={{ margin: 0 }}>
+            {shortNames.length > 0
+              ? `Восстановит: ячейки договора магии, ${shortNames.join(", ")}.`
+              : "Восстановит ячейки договора магии. Ресурсов короткого отдыха у этого персонажа нет."}
+          </p>
+          {pools.length > 0 && (
             <p className="muted" style={{ margin: 0 }}>
-              Доступные кости хитов: {value.hitDice}. Потратьте их, чтобы восстановить хиты — трекер расхода костей
-              хитов на этом листе не ведётся, отмечайте расход самостоятельно.
-            </p>
-          ) : (
-            <p className="muted" style={{ margin: 0 }}>
-              Кость хитов не указана в чарнике.
+              Кости хитов тратятся дорожкой в виталах — потрачено {spentDice} из {totalDice}.
             </p>
           )}
+          <button type="button" onClick={shortRest} style={{ alignSelf: "flex-start" }}>
+            Провести короткий отдых
+          </button>
         </div>
+
         <div className="stack" style={{ gap: 4 }}>
           <strong>Длинный отдых</strong>
           <p className="muted" style={{ margin: 0 }}>
-            {/* Перечислять ресурсы поимённо больше не выходит: их состав
-                теперь зависит от таблиц развития, а диалог отдыха о записях
-                компендиума ничего не знает. Сбрасываются всё равно все. */}
-            Восстановит хиты до максимума, сбросит спасброски от смерти, все слоты заклинаний и
-            ресурсы классов.
+            Восстановит хиты, снимет спасброски от смерти и концентрацию, вернёт все ячейки
+            {longNames.length + shortNames.length > 0 ? " и ресурсы классов" : ""}
+            {pools.length > 0 ? `, вернёт половину костей хитов (${Math.max(1, Math.floor(totalDice / 2))})` : ""}.
+            {neverNames.length > 0 && ` Не восстановится: ${neverNames.join(", ")}.`}
           </p>
           <button type="button" className="primary" onClick={longRest} style={{ alignSelf: "flex-start" }}>
             Провести длинный отдых
           </button>
         </div>
+        {confirmDialog}
       </div>
     </Modal>
   );
@@ -4086,6 +4202,7 @@ export function DndCharacterView({
   const perceptionProf = value.skillProfs["Внимание/восприятие"] ?? 0;
   const passivePerception =
     10 + abilityModifier(value.abilities.wis) + parseBonus(value.proficiencyBonus) * perceptionProf;
+  const pools = hitDicePools(value.hitDice, value.hitDiceUsed);
   // Спасброски от смерти появляются сами, когда становятся нужны. «Хитов нет»
   // — это ноль или меньше: урон уводит текущие хиты в минус (нижняя граница —
   // Этап 2), и лист обязан показать дорожки и в этом случае. Пустое поле
@@ -4244,6 +4361,8 @@ export function DndCharacterView({
         {restOpen && (
           <DndRestModal
             value={value}
+            resources={allResources(resourceSources, value.abilities)}
+            pools={pools}
             onQuickUpdate={onQuickUpdate!}
             onClose={() => setRestOpen(false)}
           />
@@ -4265,10 +4384,55 @@ export function DndCharacterView({
                 <div className="sb-value">{value.speed || formatSpeed(value.speeds)}</div>
               </div>
             )}
-            {value.hitDice && (
+            {/* Дорожка на каждый пул, подписанная кубом: при мультиклассе они
+                независимы и тратятся по отдельности. Приложение не бросает
+                кубик — показывает формулу, лечение игрок вписывает сам. */}
+            {pools.length > 0 && (
               <div>
-                <div className="sb-label">Кость хитов</div>
-                <div className="sb-value">{value.hitDice}</div>
+                <div className="sb-label">Кости хитов</div>
+                <div className="stack dnd-hitdice-pools">
+                  {pools.map((pool) => (
+                    <span key={pool.die} className="row dnd-hitdice-pool">
+                      <span className="dnd-hitdice-die">{pool.die}</span>
+                      <PipTrack
+                        value={pool.used}
+                        max={pool.total}
+                        size={12}
+                        onChange={
+                          onQuickUpdate
+                            ? (n) => onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: n } })
+                            : undefined
+                        }
+                      />
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Концентрация — там, куда игрок и так смотрит каждый ход.
+                Ставится из окна заклинания, снимается кликом и длинным отдыхом. */}
+            {(value.concentration || onQuickUpdate) && (
+              <div>
+                <div className="sb-label">Концентрация</div>
+                <div
+                  className={`sb-value dnd-concentration${value.concentration ? " is-on" : ""}`}
+                  role={onQuickUpdate ? "button" : undefined}
+                  tabIndex={onQuickUpdate ? 0 : undefined}
+                  title={value.concentration ? "Снять концентрацию" : undefined}
+                  onClick={onQuickUpdate && value.concentration ? () => onQuickUpdate({ concentration: "" }) : undefined}
+                  onKeyDown={
+                    onQuickUpdate && value.concentration
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onQuickUpdate({ concentration: "" });
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  {value.concentration || "—"}
+                </div>
               </div>
             )}
             {atZeroHp && (

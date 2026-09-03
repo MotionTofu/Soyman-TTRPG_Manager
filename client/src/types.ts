@@ -397,7 +397,9 @@ export type StatblockFormat =
   | "litm_character"
   | "litm_challenge"
   | "dnd_character"
-  | "dnd_creature";
+  | "dnd_creature"
+  | "zip_character"
+  | "zip_creature";
 
 export interface ZipFeature {
   entryId: number | null;
@@ -676,8 +678,16 @@ export interface DndCharacterData {
   // doesn't require editing the character's real max HP.
   hitPointMaxTemp: string;
   hitDice: string;
+  // Израсходованные кости хитов по пулам: ключ — сам куб («к10»), значение —
+  // сколько потрачено. При мультиклассе пулы независимы (5к10 + 3к6), одной
+  // дорожкой они не описываются. Тратятся на коротком отдыхе ради лечения,
+  // половина возвращается на длинном.
+  hitDiceUsed: Record<string, number>;
   deathSaveSuccesses: number;
   deathSaveFailures: number;
+  // Заклинание, на котором персонаж сейчас концентрируется («» — ни на чём).
+  // Одно на весь лист: по правилам вторая концентрация снимает первую.
+  concentration: string;
 
   attacks: DndManualAttack[];
   equipmentSections: DndEquipmentSection[];
