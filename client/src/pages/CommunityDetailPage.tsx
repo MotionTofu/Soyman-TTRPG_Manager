@@ -23,6 +23,7 @@ import { TagChips } from "../components/TagChips";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import type { DateRecurrence, SearchResult, SettingCommunityDetail, SettingLocation } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 
 const TABS = [
   "Досье",
@@ -39,6 +40,7 @@ export function CommunityDetailPage() {
   const { id } = useParams();
   const communityId = Number(id);
   const navigate = useNavigate();
+  const { deleteWithUndo } = useUndoDelete();
 
   const [community, setCommunity] = useState<SettingCommunityDetail | null>(null);
   const [locations, setLocations] = useState<SettingLocation[]>([]);
@@ -112,7 +114,11 @@ export function CommunityDetailPage() {
   async function archiveCommunity() {
     if (!community) return;
     if (!confirm("Отправить сообщество (и все вложенные) в архив?")) return;
-    await api.del(`/setting-communities/${communityId}`);
+    await deleteWithUndo({
+      entityName: community.name,
+      deleteFn: () => api.del(`/setting-communities/${communityId}`),
+      restoreFn: () => api.put(`/setting-communities/${communityId}/restore`),
+    });
     navigate(
       community.parent_id
         ? `/communities/${community.parent_id}`

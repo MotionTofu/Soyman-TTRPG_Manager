@@ -66,7 +66,7 @@ export function CharacterDetailPage() {
   const calendar = useSettingCalendar(character?.campaign_setting_id);
   const avatarCrop = useImageCrop("square", handleAvatarChange);
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
-  const { toast: undoToast, deleteWithUndo, dismiss: dismissUndo } = useUndoDelete();
+  const { deleteWithUndo } = useUndoDelete();
 
   function refresh(signal?: AbortSignal) {
     setLoadError(null);
@@ -518,15 +518,6 @@ export function CharacterDetailPage() {
           />
         )}
       </div>
-      {undoToast && (
-        <div className="archive-toast" role="status" aria-live="polite">
-          <span className="archive-toast__msg">{undoToast.msg}</span>
-          <div className="archive-toast__actions">
-            <button className="archive-toast__undo" onClick={() => { const cb = undoToast.onUndo; cb(); }}>Отменить</button>
-            <button className="archive-toast__close" onClick={dismissUndo} aria-label="Закрыть">×</button>
-          </div>
-        </div>
-      )}
       {pendingDateDeleteId != null && (() => { const d = (character.important_dates ?? []).find(x => x.id === pendingDateDeleteId); return (
         <ConfirmModal
           title="Удалить дату?"

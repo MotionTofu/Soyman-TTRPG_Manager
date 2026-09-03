@@ -6,6 +6,7 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EntityPreviewContent } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
 import type { Artifact, SettingLocation, SettingBeing, SettingCommunity } from "../types";
 
@@ -404,6 +405,7 @@ export function ArtifactTileGrid({
   const [ctx, setCtx] = useState<{ x: number; y: number; artifact: Artifact } | null>(null);
   const navigate = useNavigate();
   const [confirmDialog, confirm] = useConfirm();
+  const { deleteWithUndo } = useUndoDelete();
 
   const groups = useMemo(
     () => groupArtifacts(artifacts, grouping, dir),
@@ -419,7 +421,14 @@ export function ArtifactTileGrid({
   async function handleDelete(artifact: Artifact) {
     const ok = await confirm({ message: `Отправить «${artifact.name}» в архив?`, confirmLabel: "Архивировать", danger: true });
     if (!ok) return;
-    await api.del(`/artifacts/${artifact.id}`);
+    await deleteWithUndo({
+      entityName: artifact.name,
+      deleteFn: () => api.del(`/artifacts/${artifact.id}`),
+      restoreFn: async () => {
+        await api.put(`/artifacts/${artifact.id}/restore`);
+        onRefresh?.();
+      },
+    });
     onRefresh?.();
   }
 

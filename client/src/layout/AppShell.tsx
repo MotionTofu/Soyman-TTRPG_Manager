@@ -16,6 +16,7 @@ import { SoundBarExtras, SoundSetEmpty } from "../sound/SoundBarExtras";
 import { useNearestSessionCockpitId } from "../nearestSessionCockpit";
 import { openSecondWindow, openExternalLink } from "../electronApi";
 import { UnloadTargetsProvider } from "../unloadTargets";
+import { UndoDeleteProvider } from "../hooks/useUndoDelete";
 import { brandLogo } from "../brandLogo";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
@@ -589,6 +590,10 @@ export function AppShell() {
     {/* Провайдер обнимает и страницу, и панель поиска с мешком: зоны приёма
         живут на странице, а кнопка «Выгрузить» — в мешке. */}
     <UnloadTargetsProvider>
+    {/* Тост «Отменить» живёт здесь, а не на странице: удаление сессии,
+        кампании или персонажа уводит с неё, и тост, нарисованный самой
+        страницей, уходил вместе с ней. */}
+    <UndoDeleteProvider>
     <div className={`app-shell${isLivePult ? " app-shell-live" : ""}`}>
       <div className="mobile-topbar">
         <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню" aria-expanded={navOpen} aria-controls="app-nav">
@@ -761,6 +766,7 @@ export function AppShell() {
         />
       )}
     </div>
+    </UndoDeleteProvider>
     </UnloadTargetsProvider>
     </SoundEngineProvider>
   );

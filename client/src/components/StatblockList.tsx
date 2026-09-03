@@ -149,7 +149,7 @@ export function StatblockList({
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
   const [activeStatblockId, setActiveId] = useState<number | null>(null);
   const [confirmDialog, confirm] = useConfirm();
-  const { toast: undoToast, deleteWithUndo, dismiss: dismissUndo } = useUndoDelete();
+  const { deleteWithUndo } = useUndoDelete();
 
   const litmFormat: StatblockFormat = ownerType === "character" ? "litm_character" : "litm_challenge";
   const dndFormat: StatblockFormat = ownerType === "character" ? "dnd_character" : "dnd_creature";
@@ -424,19 +424,6 @@ export function StatblockList({
   return (
     <div className="stack">
       {confirmDialog}
-      {undoToast && (
-        <div className="archive-toast" role="status" aria-live="polite">
-          <span className="archive-toast__msg">{undoToast.msg}</span>
-          <div className="archive-toast__actions">
-            <button className="archive-toast__undo" onClick={() => undoToast.onUndo()}>
-              Отменить
-            </button>
-            <button className="archive-toast__close" onClick={dismissUndo} aria-label="Закрыть">
-              ×
-            </button>
-          </div>
-        </div>
-      )}
       {isEmpty && showLssImport && (
         <EmptyState
           icon="skullDie"

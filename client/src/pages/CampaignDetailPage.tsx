@@ -120,7 +120,7 @@ export function CampaignDetailPage() {
   );
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
-  const { toast: undoToast, deleteWithUndo } = useUndoDelete();
+  const { deleteWithUndo } = useUndoDelete();
   // Третий вид рядом с сеткой и списком: сетка показывает месяц, список —
   // порядок, ось — расстояния и «сколько у них осталось».
   const [worldView, setWorldView] = useState<WorldView>(() => {
@@ -530,7 +530,7 @@ export function CampaignDetailPage() {
     await deleteWithUndo({
       entityName: name,
       deleteFn: () => api.del(`/campaigns/${campaignId}`),
-      restoreFn: () => api.del(`/campaigns/${campaignId}`),
+      restoreFn: () => api.put(`/campaigns/${campaignId}/restore`),
     });
     navigate("/campaigns");
   }

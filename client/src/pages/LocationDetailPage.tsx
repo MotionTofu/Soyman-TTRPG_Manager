@@ -23,6 +23,7 @@ import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { NavIcon } from "../components/NavIcons";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useConfirm } from "../hooks/useConfirm";
 import { BEING_CATEGORIES } from "../beingCategories";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -94,6 +95,7 @@ export function LocationDetailPage() {
   const abortRef = useRef<AbortController | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmDialog, confirm] = useConfirm();
+  const { deleteWithUndo } = useUndoDelete();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const calendar = useSettingCalendar(location?.setting_id);
   const avatarCrop = useImageCrop("square", handleAvatarChange);
@@ -374,7 +376,11 @@ export function LocationDetailPage() {
     });
     if (!ok) return;
     try {
-      await api.del(`/setting-locations/${locationId}`);
+      await deleteWithUndo({
+        entityName: location.name,
+        deleteFn: () => api.del(`/setting-locations/${locationId}`),
+        restoreFn: () => api.put(`/setting-locations/${locationId}/restore`),
+      });
       navigate(
         location.parent_id ? `/locations/${location.parent_id}` : `/settings/${location.setting_id}`
       );

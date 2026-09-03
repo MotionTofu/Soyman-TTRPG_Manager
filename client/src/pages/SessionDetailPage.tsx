@@ -93,7 +93,7 @@ export function SessionDetailPage() {
   // Открывают одно приключение — то, по которому сегодня играют.
   const [openSecretGroups, setOpenSecretGroups] = useState<string[]>([]);
   const calendar = useSettingCalendar(campaign?.setting_id);
-  const { toast: undoToast, deleteWithUndo } = useUndoDelete();
+  const { deleteWithUndo } = useUndoDelete();
 
   const refresh = useCallback(() => {
     let cancelled = false;
@@ -383,7 +383,7 @@ export function SessionDetailPage() {
     await deleteWithUndo({
       entityName: `Сессия ${date}`,
       deleteFn: () => api.del(`/sessions/${sessionId}`),
-      restoreFn: () => api.del(`/sessions/${sessionId}`),
+      restoreFn: () => api.put(`/sessions/${sessionId}/restore`),
     });
     navigate(`/campaigns/${session.campaign_id}`);
   }
@@ -1270,15 +1270,6 @@ export function SessionDetailPage() {
           onChange={refresh}
           settingId={campaign?.setting_id ?? null}
         />
-      )}
-      {undoToast && (
-        <div className="archive-toast" role="status" aria-live="polite">
-          <span className="archive-toast__msg">{undoToast.msg}</span>
-          <div className="archive-toast__actions">
-            <button className="archive-toast__undo" onClick={() => { const cb = undoToast.onUndo; cb(); }}>Отменить</button>
-            <button className="archive-toast__close" onClick={() => {}} aria-label="Закрыть">×</button>
-          </div>
-        </div>
       )}
     </div>
   );

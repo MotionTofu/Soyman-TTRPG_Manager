@@ -74,7 +74,7 @@ export function CharacterJournal({
   const [draftTag, setDraftTag] = useState<WorldExplorationTag>("");
   const [saving, setSaving] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
-  const { toast: undoToast, deleteWithUndo } = useUndoDelete();
+  const { deleteWithUndo } = useUndoDelete();
   const acRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -355,16 +355,6 @@ export function CharacterJournal({
         </div>
       ))}
 
-      {undoToast && (
-        <div className="archive-toast" role="status" aria-live="polite">
-          <span className="archive-toast__msg">{undoToast.msg}</span>
-          <div className="archive-toast__actions">
-            <button className="archive-toast__undo" onClick={() => undoToast.onUndo()}>
-              Отменить
-            </button>
-          </div>
-        </div>
-      )}
       {confirmDialog}
     </div>
   );

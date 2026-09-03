@@ -14,6 +14,7 @@ import { GalleryTab } from "../components/GalleryTab";
 import { ChapterList } from "../components/ChapterList";
 import { useTabState } from "../hooks/useTabState";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
@@ -32,6 +33,7 @@ export function ArtifactDetailPage() {
   const artifactId = Number(id);
   const navigate = useNavigate();
   const [confirmDialog, confirm] = useConfirm();
+  const { deleteWithUndo } = useUndoDelete();
   const [alertDialog, showAlert] = useAlert();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -153,7 +155,11 @@ export function ArtifactDetailPage() {
     const ok = await confirm({ message: "Отправить артефакт в архив?", confirmLabel: "Архивировать", danger: true });
     if (!ok) return;
     try {
-      await api.del(`/artifacts/${artifactId}`);
+      await deleteWithUndo({
+        entityName: artifact.name,
+        deleteFn: () => api.del(`/artifacts/${artifactId}`),
+        restoreFn: () => api.put(`/artifacts/${artifactId}/restore`),
+      });
       navigate(`/settings/${artifact.setting_id}`);
     } catch (e) {
       showAlert(String(e instanceof Error ? e.message : e));

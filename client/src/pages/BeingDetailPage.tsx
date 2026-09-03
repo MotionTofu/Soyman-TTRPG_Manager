@@ -29,6 +29,7 @@ import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "../components/NavIcons";
 import { EmptyState } from "../components/EmptyState";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CompendiumLink,
   Campaign,
@@ -98,6 +99,7 @@ export function BeingDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
+  const { deleteWithUndo } = useUndoDelete();
   const [alertDialog, showAlert] = useAlert();
   const [dossierQuery, setDossierQuery] = useState("");
   const [neighbourIds, setNeighbourIds] = useState<{ prev: number | null; next: number | null }>({ prev: null, next: null });
@@ -332,7 +334,11 @@ export function BeingDetailPage() {
     });
     if (!ok) return;
     try {
-      await api.del(`/setting-beings/${beingId}`);
+      await deleteWithUndo({
+        entityName: being.name,
+        deleteFn: () => api.del(`/setting-beings/${beingId}`),
+        restoreFn: () => api.put(`/setting-beings/${beingId}/restore`),
+      });
       navigate(`/settings/${being.setting_id}`);
     } catch (e) {
       showAlert(String(e instanceof Error ? e.message : e));

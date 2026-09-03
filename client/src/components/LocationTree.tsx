@@ -8,6 +8,7 @@ import { EntityWizard } from "./entityWizard/EntityWizard";
 import { EmptyState } from "./EmptyState";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import { useConfirm, useAlert } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { addToBag } from "../bag";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { buildMentionToken } from "../mentions";
@@ -29,12 +30,12 @@ export function LocationTree({ settingId }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<string>("");
   const [sortMode, setSortMode] = useState<"name" | "kind">("name");
-  const [lastArchived, setLastArchived] = useState<{ id: number; name: string } | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [mapFilter, setMapFilter] = useState<"" | "with" | "without">("");
   const [descFilter, setDescFilter] = useState<"" | "with" | "without">("");
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
+  const { deleteWithUndo } = useUndoDelete();
   const treeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -220,17 +221,6 @@ export function LocationTree({ settingId }: Props) {
     });
   }
 
-  async function handleRestoreLastArchived() {
-    if (!lastArchived) return;
-    try {
-      await api.put(`/setting-locations/${lastArchived.id}/restore`);
-      setLastArchived(null);
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
-  }
-
   async function handleDropRoot(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     if (draggedId == null) return;
@@ -372,26 +362,6 @@ export function LocationTree({ settingId }: Props) {
               Показать долги
             </button>
           )}
-        </div>
-      )}
-      {lastArchived && (
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--accent)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Архивировано «{lastArchived.name}» — можно отменить.</span>
-          <span className="row">
-            <button className="primary" onClick={handleRestoreLastArchived}>
-              Восстановить
-            </button>
-            <button onClick={() => setLastArchived(null)}>✕</button>
-          </span>
         </div>
       )}
       {loadError && (
@@ -549,7 +519,6 @@ export function LocationTree({ settingId }: Props) {
               byParentAll={byParentAll}
               onChange={() => refresh()}
               onWizardParent={setWizardParentId}
-              onArchived={(id, name) => setLastArchived({ id, name })}
               draggedId={draggedId}
               setDraggedId={setDraggedId}
               isDescendant={isDescendant}
@@ -625,7 +594,6 @@ export function LocationNode({
   byParentAll,
   onChange,
   onWizardParent,
-  onArchived,
   draggedId,
   setDraggedId,
   isDescendant,
@@ -636,7 +604,6 @@ export function LocationNode({
   byParentAll?: Map<number | null, SettingLocation[]>;
   onChange: () => void;
   onWizardParent?: (id: number) => void;
-  onArchived?: (id: number, name: string) => void;
   draggedId?: number | null;
   setDraggedId?: (id: number | null) => void;
   isDescendant?: (ancestorId: number, maybeDescendantId: number) => boolean;
@@ -719,6 +686,7 @@ export function LocationNode({
 
   const [confirmDialogNode, confirmNode] = useConfirm();
   const [alertDialogNode, showAlert] = useAlert();
+  const { deleteWithUndo } = useUndoDelete();
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
   function startEdit(e?: React.MouseEvent) {
@@ -780,12 +748,18 @@ export function LocationNode({
     });
     if (!ok) return;
     try {
-      await api.del(`/setting-locations/${location.id}`);
+      await deleteWithUndo({
+        entityName: location.name,
+        deleteFn: () => api.del(`/setting-locations/${location.id}`),
+        restoreFn: async () => {
+          await api.put(`/setting-locations/${location.id}/restore`);
+          onChange();
+        },
+      });
     } catch (e) {
       showAlert(String(e instanceof Error ? e.message : e));
       return;
     }
-    onArchived?.(location.id, location.name);
     onChange();
   }
 
@@ -1045,7 +1019,6 @@ export function LocationNode({
               byParentAll={byParentAll}
               onChange={onChange}
               onWizardParent={onWizardParent}
-              onArchived={onArchived}
               draggedId={draggedId}
               setDraggedId={setDraggedId}
               isDescendant={isDescendant}
