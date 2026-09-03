@@ -2924,6 +2924,12 @@ interface AttackRow {
   range: string;
   description?: string;
   timing: DndActionTiming;
+  // Откуда строка пришла — чтобы клик открыл её карточку, а окно знало, что
+  // именно тратить. У оружия и вручную вписанных атак источника нет: тратить
+  // им нечего, а описание ручной атаки и так стоит в строке.
+  source?:
+    | { kind: "spell"; spell: DndSpellEntry; level: number }
+    | { kind: "feature"; feature: DndFeature };
 }
 
 // Equipped weapons show up as attack rows automatically — no need to
@@ -2980,9 +2986,13 @@ function combatSpellRows(
   spellAttackBonus: number,
   spellDc: number
 ): AttackRow[] {
-  const preparedCantrips = cantrips.filter((s) => s.prepared > 0);
-  const prepared = spellsByLevel.flat().filter((s) => s.prepared > 0);
-  return [...preparedCantrips, ...prepared]
+  // Круг нужен строке: по нему окно знает, какую ячейку тратить.
+  const withLevel: { spell: DndSpellEntry; level: number }[] = [
+    ...cantrips.filter((s) => s.prepared > 0).map((spell) => ({ spell, level: 0 })),
+    ...spellsByLevel.flatMap((lvl, i) => lvl.filter((s) => s.prepared > 0).map((spell) => ({ spell, level: i + 1 }))),
+  ];
+  return withLevel
+    .map(({ spell, level }) => ({ ...spell, __level: level }) as DndSpellEntry & { __level: number })
     .filter((s) => {
       // Раньше здесь стоял фильтр по полю `category`, которое заполнялось
       // у меньшинства записей и потому прятало большую часть книги. Теперь
@@ -3002,6 +3012,7 @@ function combatSpellRows(
         damage: structured ? effectsLabel(s.effects ?? []) : s.damage || s.healing || "—",
         range: s.range || "—",
         timing,
+        source: { kind: "spell", spell: s, level: s.__level },
       };
     });
 }
@@ -3029,6 +3040,7 @@ function featureActionRows(
         .filter(Boolean)
         .join(", ") || "—",
       timing: f.castingTiming as DndActionTiming,
+      source: { kind: "feature", feature: f },
     }));
 }
 
@@ -3057,7 +3069,18 @@ function equippedWeaponSummaries(sections: DndEquipmentSection[]): DndFeature[] 
     });
 }
 
-function AttacksTable({ title, rows }: { title: string; rows: AttackRow[] }) {
+function AttacksTable({
+  title,
+  rows,
+  onOpen,
+}: {
+  title: string;
+  rows: AttackRow[];
+  // Строка со источником кликабельна: раньше вкладка показывала имя,
+  // бонус и урон, а прочитать, что способность делает, было нельзя — только
+  // уйти на другую вкладку и искать её там заново.
+  onOpen?: (row: AttackRow) => void;
+}) {
   if (rows.length === 0) return null;
   return (
     <div className="cs-list">
@@ -3074,7 +3097,11 @@ function AttacksTable({ title, rows }: { title: string; rows: AttackRow[] }) {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i}>
+            <tr
+              key={i}
+              className={r.source && onOpen ? "is-clickable" : undefined}
+              onClick={r.source && onOpen ? () => onOpen(r) : undefined}
+            >
               <td data-label="Название">{r.name}</td>
               {r.description !== undefined ? (
                 <td colSpan={3} className="muted">
@@ -3255,6 +3282,140 @@ function collectSheetHits(
   return hits;
 }
 
+// Карточка предмета листа — одна на поиск и на вкладку «Действия», чтобы у
+// заклинания было ровно одно окно, откуда бы его ни открыли.
+// Кнопка «Потратить» в карточке действия — только там, где источник траты
+// однозначен: у заклинания это ячейка его круга (а если её нет — ближайшая
+// доступная выше, повышение круга штатный приём 5.5), у умения — пул,
+// заданный в его стоимости. Где источник неоднозначен, кнопки нет.
+function SpendAction({
+  row,
+  value,
+  slots,
+  resources,
+  onQuickUpdate,
+  onDone,
+}: {
+  row: AttackRow;
+  value: DndCharacterData;
+  slots: number[];
+  resources: DndResourceDef[];
+  onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
+  onDone: () => void;
+}) {
+  if (row.source?.kind === "spell") {
+    const level = row.source.level;
+    if (level === 0) return <span className="muted">Заговор — тратить нечего.</span>;
+    // Ищем ближайший круг с непотраченной ячейкой, начиная со своего.
+    let use = -1;
+    for (let i = level - 1; i < slots.length; i++) {
+      if ((slots[i] ?? 0) > (value.spellSlotsUsed[i] ?? 0)) {
+        use = i;
+        break;
+      }
+    }
+    if (use < 0) return <span className="muted">Свободных ячеек {level} круга и выше нет.</span>;
+    return (
+      <button
+        type="button"
+        className="primary"
+        style={{ alignSelf: "flex-start" }}
+        onClick={() => {
+          const next = value.spellSlotsUsed.slice();
+          next[use] = (next[use] ?? 0) + 1;
+          onQuickUpdate({ spellSlotsUsed: next });
+          onDone();
+        }}
+      >
+        Потратить ячейку {use + 1} круга
+      </button>
+    );
+  }
+  const cost = row.source?.kind === "feature" ? row.source.feature.cost : undefined;
+  if (!cost || cost.kind !== "resource" || !cost.resourceKey) return null;
+  const res = resources.find((r) => r.key === cost.resourceKey);
+  if (!res) return null;
+  const bonus = value.resourceBonus[res.key] ?? 0;
+  const max = res.max + bonus;
+  const used = value.resourceUsed[res.key] ?? 0;
+  const amount = cost.amount && cost.amount > 0 ? cost.amount : 1;
+  if (used + amount > max) return <span className="muted">«{res.label}» — не осталось.</span>;
+  return (
+    <button
+      type="button"
+      className="primary"
+      style={{ alignSelf: "flex-start" }}
+      onClick={() => {
+        onQuickUpdate({ resourceUsed: { ...value.resourceUsed, [res.key]: used + amount } });
+        onDone();
+      }}
+    >
+      Потратить: {res.label}
+      {amount > 1 ? ` ×${amount}` : ""}
+    </button>
+  );
+}
+
+function DndCardModal({
+  title,
+  spell,
+  feature,
+  getEntry,
+  extra,
+  onClose,
+}: {
+  title: string;
+  spell?: DndSpellEntry | null;
+  feature?: DndFeature | null;
+  getEntry: (id: number | null | undefined) => CompendiumEntry | undefined;
+  /** Действие в подвале окна — например «Потратить ячейку». */
+  extra?: ReactNode;
+  onClose: () => void;
+}) {
+  const entry = spell?.entryId ? getEntry(spell.entryId) : undefined;
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-spell-modal">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>{title}</h3>
+          <button type="button" className="comp-mini" onClick={onClose}>
+            <NavIcon name="close" />
+          </button>
+        </div>
+        {spell && entry && (() => {
+          const d = buildSpellDetail(entry);
+          const fields: [string, ReactNode][] = (
+            [
+              ["Школа", d.school],
+              ["Время накладывания", d.castingTime],
+              ["Дистанция", d.range],
+              ["Компоненты", d.componentsText],
+              ["Длительность", d.duration],
+            ] as [string, ReactNode][]
+          ).filter(([, v]) => !!v);
+          return (
+            <>
+              {fields.length > 0 && (
+                <div className="comp-fields">
+                  {fields.map(([label, v]) => (
+                    <div key={label} className="muted">
+                      <strong>{label}:</strong> {v}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <MentionText text={d.description} />
+            </>
+          );
+        })()}
+        {spell && !entry && <span className="muted">Описание берётся из компендиума — запись не найдена.</span>}
+        {feature && <MentionText text={feature.description} />}
+        {extra}
+      </div>
+    </Modal>
+  );
+}
+
 function DndSheetSearch({
   hits,
   onGo,
@@ -3267,19 +3428,13 @@ function DndSheetSearch({
   const [query, setQuery] = useState("");
   const [openCard, setOpenCard] = useState<SheetSearchHit | null>(null);
   const q = query.trim().toLowerCase();
-  const found = q
-    ? hits.filter((h) => h.name.toLowerCase().includes(q)).slice(0, 12)
-    : [];
+  const found = q ? hits.filter((h) => h.name.toLowerCase().includes(q)).slice(0, 12) : [];
 
   function pick(hit: SheetSearchHit) {
     setQuery("");
     if (hit.card) setOpenCard(hit);
     onGo(hit);
   }
-
-  const spell = openCard?.card?.kind === "spell" ? openCard.card.spell : null;
-  const feature = openCard?.card?.kind === "feature" ? openCard.card.feature : null;
-  const detail = spell?.entryId ? getEntry(spell.entryId) : undefined;
 
   return (
     <div className="dnd-sheet-search">
@@ -3299,7 +3454,15 @@ function DndSheetSearch({
             <div className="dnd-sheet-search-empty muted">Ничего не нашлось</div>
           ) : (
             found.map((h) => (
-              <button key={h.key} type="button" className="dnd-sheet-search-hit" onMouseDown={(e) => { e.preventDefault(); pick(h); }}>
+              <button
+                key={h.key}
+                type="button"
+                className="dnd-sheet-search-hit"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(h);
+                }}
+              >
                 <span className="dnd-sheet-search-name">{h.name}</span>
                 <span className="dnd-sheet-search-where">
                   {h.tab}
@@ -3310,45 +3473,14 @@ function DndSheetSearch({
           )}
         </div>
       )}
-      {openCard && (spell || feature) && (
-        <Modal onClose={() => setOpenCard(null)}>
-          <div className="stack dnd-spell-modal">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <h3 style={{ margin: 0 }}>{openCard.name}</h3>
-              <button type="button" className="comp-mini" onClick={() => setOpenCard(null)}>
-                <NavIcon name="close" />
-              </button>
-            </div>
-            {spell && detail && (() => {
-              const d = buildSpellDetail(detail);
-              const fields: [string, ReactNode][] = (
-                [
-                  ["Школа", d.school],
-                  ["Время накладывания", d.castingTime],
-                  ["Дистанция", d.range],
-                  ["Компоненты", d.componentsText],
-                  ["Длительность", d.duration],
-                ] as [string, ReactNode][]
-              ).filter(([, v]) => !!v);
-              return (
-                <>
-                  {fields.length > 0 && (
-                    <div className="comp-fields">
-                      {fields.map(([label, v]) => (
-                        <div key={label} className="muted">
-                          <strong>{label}:</strong> {v}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <MentionText text={d.description} />
-                </>
-              );
-            })()}
-            {spell && !detail && <span className="muted">Описание берётся из компендиума — запись не найдена.</span>}
-            {feature && <MentionText text={feature.description} />}
-          </div>
-        </Modal>
+      {openCard?.card && (
+        <DndCardModal
+          title={openCard.name}
+          spell={openCard.card.kind === "spell" ? openCard.card.spell : null}
+          feature={openCard.card.kind === "feature" ? openCard.card.feature : null}
+          getEntry={getEntry}
+          onClose={() => setOpenCard(null)}
+        />
       )}
     </div>
   );
@@ -3591,6 +3723,7 @@ function HpEditModal({
   onClose: () => void;
 }) {
   const [amount, setAmount] = useState("");
+  const [concentrationDc, setConcentrationDc] = useState<number | null>(null);
   // Черновик четырёх полей. Раньше каждое из них звало onQuickUpdate прямо из
   // onChange — то есть на каждое нажатие клавиши пересобирался весь чарник и
   // уходил PUT: набрать «15» стоило двух запросов, а промежуточное пустое
@@ -3632,6 +3765,11 @@ function HpEditModal({
     const patch = { hitPointsTemp: String(tempNow - fromTemp), hitPointsCurrent: String(curNow - rest) };
     onQuickUpdate(patch);
     setDraft((d) => ({ ...d, ...patch }));
+    // Урон по концентрирующемуся требует спасброска Телосложения, СЛ 10 или
+    // половина урона — что больше. Лист считает СЛ, но не решает за игрока:
+    // спасбросок чаще проходит, чем нет, и снимать концентрацию самому было
+    // бы враньём.
+    if (value.concentration) setConcentrationDc(Math.max(10, Math.floor(n / 2)));
     setAmount("");
   }
   function applyHeal() {
@@ -3682,6 +3820,22 @@ function HpEditModal({
             Урон
           </button>
         </div>
+        {concentrationDc !== null && value.concentration && (
+          <div className="sb-entry dnd-concentration-check">
+            <span className="sb-prop-label">Концентрация</span> «{value.concentration}» — спасбросок Телосложения,
+            СЛ {concentrationDc}.{" "}
+            <button
+              type="button"
+              className="comp-mini"
+              onClick={() => {
+                onQuickUpdate({ concentration: "" });
+                setConcentrationDc(null);
+              }}
+            >
+              Сорвалась
+            </button>
+          </div>
+        )}
         <button type="button" onClick={onClose} style={{ alignSelf: "flex-end" }}>
           Готово
         </button>
@@ -4088,6 +4242,7 @@ export function DndCharacterView({
   // (навык, свободно вписанный предмет, владение). Гаснет по следующему
   // касанию листа.
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [openAction, setOpenAction] = useState<AttackRow | null>(null);
   const [restOpen, setRestOpen] = useState(false);
   // Происхождение правится карандашом в самой шапке — там, где класс, вид и
   // предыстория и написаны (гриллинг 2026-09-03). Клик по значению остаётся
@@ -4259,6 +4414,27 @@ export function DndCharacterView({
             </span>
           </div>
         </div>
+        {openAction?.source && (
+          <DndCardModal
+            title={openAction.name}
+            spell={openAction.source.kind === "spell" ? openAction.source.spell : null}
+            feature={openAction.source.kind === "feature" ? openAction.source.feature : null}
+            getEntry={getEntry}
+            onClose={() => setOpenAction(null)}
+            extra={
+              onQuickUpdate ? (
+                <SpendAction
+                  row={openAction}
+                  value={value}
+                  slots={shownSlotPips}
+                  resources={allResources(resourceSources, value.abilities)}
+                  onQuickUpdate={onQuickUpdate}
+                  onDone={() => setOpenAction(null)}
+                />
+              ) : undefined
+            }
+          />
+        )}
         {editingOrigin && onQuickUpdate && (
           <div className="sb-origin-edit stack">
             <div className="row">
@@ -4591,10 +4767,10 @@ export function DndCharacterView({
                 const byTiming = (t: DndActionTiming) => allRows.filter((r) => r.timing === t);
                 return (
                   <>
-                    <AttacksTable title="Действия" rows={byTiming("action")} />
-                    <AttacksTable title="Бонусные действия" rows={byTiming("bonus")} />
-                    <AttacksTable title="Реакции" rows={byTiming("reaction")} />
-                    <AttacksTable title="Особое" rows={byTiming("other")} />
+                    <AttacksTable title="Действия" rows={byTiming("action")} onOpen={setOpenAction} />
+                    <AttacksTable title="Бонусные действия" rows={byTiming("bonus")} onOpen={setOpenAction} />
+                    <AttacksTable title="Реакции" rows={byTiming("reaction")} onOpen={setOpenAction} />
+                    <AttacksTable title="Особое" rows={byTiming("other")} onOpen={setOpenAction} />
                   </>
                 );
               })()}

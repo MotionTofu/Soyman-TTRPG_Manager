@@ -1203,3 +1203,10 @@ summary.sb-section {
   outline: var(--card-border-width, 1px) solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Подсказка спасброска концентрации в модалке хитов: лист считает СЛ, но
+   не решает за игрока — поэтому это строка с кнопкой, а не автоматика. */
+.dnd-concentration-check {
+  border: var(--card-border-width, 1px) solid var(--accent);
+  padding: 6px 8px;
+}
