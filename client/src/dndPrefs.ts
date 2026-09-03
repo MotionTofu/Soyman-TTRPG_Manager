@@ -23,10 +23,19 @@ export const DND_ABILITY_PRIMARY_OPTIONS: { key: DndAbilityPrimary; label: strin
 interface DndPrefs {
   skillSortMode: DndSkillSortMode;
   abilityPrimary: DndAbilityPrimary;
+  // Показывать во вкладке «Заклинания» только подготовленное. В отличие от
+  // двух настроек выше, эта переключается не во «Внешнем виде», а прямо у
+  // списка заклинаний: утром её выключают, чтобы подготовиться, в бою
+  // включают, чтобы не листать книгу. Хранится здесь только чтобы пережить
+  // перезагрузку — за столом переключать её заново каждый раз незачем.
+  spellsPreparedOnly: boolean;
 }
 
 const DEFAULTS: DndPrefs = {
   skillSortMode: "ability",
+  // По умолчанию видно всё: на свежем листе звёздочки не расставлены, и
+  // включённый фильтр показал бы пустоту вместо книги заклинаний.
+  spellsPreparedOnly: false,
   // По умолчанию модификатор: в 5.5 бросают им, а само значение нужно для
   // переноски и захвата — то есть заметно реже.
   abilityPrimary: "mod",
@@ -44,6 +53,7 @@ export function loadDndPrefs(): DndPrefs {
       const out: DndPrefs = { ...DEFAULTS };
       if (parsed.skillSortMode === "ability" || parsed.skillSortMode === "alphabet") out.skillSortMode = parsed.skillSortMode;
       if (parsed.abilityPrimary === "mod" || parsed.abilityPrimary === "score") out.abilityPrimary = parsed.abilityPrimary;
+      if (typeof parsed.spellsPreparedOnly === "boolean") out.spellsPreparedOnly = parsed.spellsPreparedOnly;
       return out;
     }
   } catch {

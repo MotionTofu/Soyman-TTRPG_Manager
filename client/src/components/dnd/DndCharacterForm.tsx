@@ -83,6 +83,8 @@ import { allResources, applicableStats, type ClassResourceSource } from "./dndRe
 import { Modal } from "../Modal";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { useDndPrefs } from "../../hooks/useDndPrefs";
+import { saveDndPrefs } from "../../dndPrefs";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { findDndSystemId, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { NavIcon } from "../NavIcons";
@@ -1085,6 +1087,7 @@ function DndSpellLevelSection({
   onSpellsChange,
   used,
   onUsedChange,
+  preparedOnly,
 }: {
   level: number;
   systemId: number | null;
@@ -1098,6 +1101,7 @@ function DndSpellLevelSection({
   // (the max, only editable via onSlotsChange in edit mode).
   used?: number;
   onUsedChange?: (v: number) => void;
+  preparedOnly?: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -1160,7 +1164,12 @@ function DndSpellLevelSection({
   const filtered = query.trim()
     ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
     : options;
-  const sorted = edit ? spells : sortSpells(spells);
+  const ordered = edit ? spells : sortSpells(spells);
+  // В режиме правки фильтр не применяется: подготовить нельзя то, чего не
+  // видно. Круг при этом не прячется целиком даже когда всё скрыто — в его
+  // заголовке живут ячейки, и они нужны независимо от подготовки.
+  const sorted = preparedOnly && !edit ? ordered.filter((sp) => sp.prepared > 0) : ordered;
+  const hiddenCount = ordered.length - sorted.length;
   const label = level === 0 ? "Заговоры" : `${level} круг`;
 
   return (
@@ -1197,7 +1206,9 @@ function DndSpellLevelSection({
         onDragLeave={edit ? () => setDragOver(false) : undefined}
         onDrop={edit ? handleDrop : undefined}
       >
-        {sorted.length === 0 && <span className="muted">Пусто</span>}
+        {sorted.length === 0 && (
+          <span className="muted">{hiddenCount > 0 ? "Ничего не подготовлено" : "Пусто"}</span>
+        )}
         {sorted.map((s) => {
           const realIndex = spells.indexOf(s);
           return (
@@ -1237,6 +1248,9 @@ function DndSpellLevelSection({
             </div>
           );
         })}
+        {hiddenCount > 0 && sorted.length > 0 && (
+          <span className="muted dnd-spell-hidden-note">Скрыто неподготовленных: {hiddenCount}</span>
+        )}
         {expandedIndex !== null && spells[expandedIndex]?.entryId && (
           <Modal onClose={() => setExpandedIndex(null)}>
             <div className="stack dnd-spell-modal">
@@ -1336,6 +1350,7 @@ function DndSpellsView({
   onCantripsChange,
   onSlotsChange,
   onSpellsChange,
+  preparedOnly,
 }: {
   cantrips: DndSpellEntry[];
   spellSlotLevels: number;
@@ -1352,6 +1367,7 @@ function DndSpellsView({
   onCantripsChange?: (v: DndSpellEntry[]) => void;
   onSlotsChange?: (level0idx: number, v: number) => void;
   onSpellsChange?: (level0idx: number, v: DndSpellEntry[]) => void;
+  preparedOnly?: boolean;
 }) {
   const activeLevels = Array.from({ length: spellSlotLevels }, (_, i) => i).filter(
     (i) => edit || spellSlotPips[i] > 0 || spellsByLevel[i].length > 0
@@ -1366,6 +1382,7 @@ function DndSpellsView({
           slots={0}
           spells={cantrips}
           edit={!!edit}
+          preparedOnly={preparedOnly}
           showSlots={false}
           onSlotsChange={() => {}}
           onSpellsChange={edit && onCantripsChange ? onCantripsChange : () => {}}
@@ -1381,6 +1398,7 @@ function DndSpellsView({
           used={spellSlotsUsed?.[i]}
           onUsedChange={onUsedChange ? (v) => onUsedChange(i, v) : undefined}
           edit={!!edit}
+          preparedOnly={preparedOnly}
           showSlots
           onSlotsChange={edit && onSlotsChange ? (v) => onSlotsChange(i, v) : () => {}}
           onSpellsChange={edit && onSpellsChange ? (v) => onSpellsChange(i, v) : () => {}}
@@ -3946,6 +3964,7 @@ export function DndCharacterView({
   // whole-card editMode.
   const [editingInventory, setEditingInventory] = useState(false);
   const [editingSpells, setEditingSpells] = useState(false);
+  const prefs = useDndPrefs();
   const [editingTraits, setEditingTraits] = useState(false);
   const [editingAbilities, setEditingAbilities] = useState(false);
   const [editingActions, setEditingActions] = useState(false);
@@ -4473,6 +4492,24 @@ export function DndCharacterView({
                   )}
                 </>
               )}
+              {/* Тумблер живёт у самих заклинаний, а не во «Внешнем виде»:
+                  утром его выключают, чтобы подготовиться, в бою включают,
+                  чтобы не листать книгу. Скрытое всегда посчитано вслух —
+                  иначе через сессию это выглядит как пропажа заклинаний. */}
+              <div className="row sb-entry dnd-prepared-filter">
+                <button
+                  type="button"
+                  className="comp-mini"
+                  aria-pressed={prefs.spellsPreparedOnly}
+                  onClick={() => saveDndPrefs({ ...prefs, spellsPreparedOnly: !prefs.spellsPreparedOnly })}
+                >
+                  <NavIcon name="star" filled={prefs.spellsPreparedOnly} />{" "}
+                  {prefs.spellsPreparedOnly ? "Только подготовленные" : "Показаны все"}
+                </button>
+                {prefs.spellsPreparedOnly && editingSpells && (
+                  <span className="muted">в правке показаны все — подготовить можно только видимое</span>
+                )}
+              </div>
               {computedSlots.basis !== "none" && (
                 <div className="row sb-entry" style={{ gap: 8, flexWrap: "wrap" }}>
                   <span className="muted">
@@ -4520,6 +4557,7 @@ export function DndCharacterView({
                 </div>
               )}
               <DndSpellsView
+                preparedOnly={prefs.spellsPreparedOnly}
                 cantrips={liveCantrips}
                 spellSlotLevels={shownSlotLevels}
                 spellSlotPips={shownSlotPips}

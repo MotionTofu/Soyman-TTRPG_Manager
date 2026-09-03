@@ -1158,3 +1158,18 @@ summary.sb-section {
   outline: var(--card-border-width, 1px) solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Тумблер «только подготовленные» и счётчик скрытого — у самих заклинаний. */
+.dnd-prepared-filter {
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.dnd-prepared-filter .muted {
+  font-size: var(--fs-meta);
+}
+.dnd-spell-hidden-note {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--fs-meta);
+}
