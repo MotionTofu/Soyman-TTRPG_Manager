@@ -735,7 +735,7 @@ export function BeingDetailPage() {
             links={being.compendium_links}
             onChange={refresh}
           />
-          <StatblockList ownerType="being" ownerId={beingId} ownerName={being.name} settingId={being.setting_id} />
+          <StatblockList ownerType="being" ownerId={beingId} ownerName={being.name} settingId={being.setting_id} soleOnPage />
           <EditableTextCard
             title="Описание"
             help="Короткая сводка — тоже используется как краткое описание в раскрываемых карточках (Обитатели, Представители)."

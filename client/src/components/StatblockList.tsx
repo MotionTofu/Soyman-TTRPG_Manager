@@ -93,6 +93,11 @@ interface Props {
   ownerCreatureAC?: string;
   ownerCreatureHP?: string;
   ownerCreatureSpeed?: string;
+  // Список на странице один (страница сущности), а не один из многих
+  // (бестиарий). Только тогда лист персонажа держит активную вкладку в
+  // адресе: общий параметр на несколько листов им конфликтует
+  // (гриллинг 2026-09-03).
+  soleOnPage?: boolean;
 }
 
 export function StatblockList({
@@ -108,6 +113,7 @@ export function StatblockList({
   ownerCreatureAC,
   ownerCreatureHP,
   ownerCreatureSpeed,
+  soleOnPage,
 }: Props) {
   const [statblocks, setStatblocks] = useState<Statblock[]>([]);
   const [templates, setTemplates] = useState<Resource[]>([]);
@@ -473,6 +479,7 @@ export function StatblockList({
           onRemove={removeStatblock}
           campaignId={campaignId}
           settingId={settingId}
+          soleOnPage={soleOnPage}
         />
       ))}
 
@@ -684,6 +691,7 @@ function StatblockCard({
   onRemove,
   campaignId,
   settingId,
+  soleOnPage,
 }: {
   statblock: Statblock;
   ownerType: "character" | "being" | "compendium_entry";
@@ -692,6 +700,7 @@ function StatblockCard({
   onRemove: (id: number) => void;
   campaignId?: number;
   settingId?: number;
+  soleOnPage?: boolean;
 }) {
   const isLitm = statblock.format === "litm_character" || statblock.format === "litm_challenge";
   const isDnd = statblock.format === "dnd_character" || statblock.format === "dnd_creature";
@@ -1002,6 +1011,7 @@ function StatblockCard({
       <DndCharacterView
         value={dndValue as DndCharacterData}
         onQuickUpdate={quickSaveDnd}
+        syncTabToUrl={soleOnPage}
         headerExtra={
           <>
             {saveIndicator}
@@ -1125,16 +1135,9 @@ function StatblockCard({
                 onQuickUpdate={quickSaveZip}
               />
             )}
-            {/* Краткого вида у чарника нет: единственный краткий вид в
-                приложении — карточка на «Шпаргалках» (гриллинг 2026-09-03).
-                Записи, заведённые когда-то с kind="short", показываются
-                полным листом. */}
-            {statblock.format === "dnd_character" && dndValue && (
-              <DndCharacterView
-                value={dndValue as DndCharacterData}
-                onQuickUpdate={quickSaveDnd}
-              />
-            )}
+            {/* Ветки чарника здесь нет: `dnd_character` с разобранным
+                значением возвращается выше собственной плашкой, до этой
+                обёртки-аккордеона, — сюда он не доходит. */}
             {!isLitm && !isDnd && !isZip && (
               <div style={{ whiteSpace: "pre-wrap" }}>
                 {statblock.content ? <MentionText text={statblock.content} /> : <span className="muted">Пусто</span>}

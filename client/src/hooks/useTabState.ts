@@ -7,17 +7,21 @@ export function useTabState<T extends string>(
   fallback: T,
   // Прежние имена переименованных вкладок: сохранённая ссылка на «Заметки по
   // ведению» должна открывать «Заметки», а не падать на вкладку по умолчанию.
-  aliases?: Readonly<Record<string, string>>
+  aliases?: Readonly<Record<string, string>>,
+  // Имя параметра. По умолчанию `tab` — вкладки самой страницы. Лист
+  // персонажа живёт внутри страницы, у которой свои вкладки, и делить с ней
+  // один параметр не может: нужен свой (`sheet`).
+  param = "tab"
 ): [T, (t: T) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
-  const raw = searchParams.get("tab");
+  const raw = searchParams.get(param);
   const tabParam = raw && aliases?.[raw] ? aliases[raw] : raw;
   const tab = (tabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as T) : fallback;
 
   function selectTab(t: T) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      next.set("tab", t);
+      next.set(param, t);
       return next;
     });
   }

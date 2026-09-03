@@ -89,6 +89,7 @@ import { featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TI
 import { saveDndPrefs } from "../../dndPrefs";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
+import { useTabState } from "../../hooks/useTabState";
 import { NavIcon } from "../NavIcons";
 
 const SPELL_LEVELS = 9;
@@ -4331,6 +4332,7 @@ export function DndCharacterView({
   compact,
   onQuickUpdate,
   headerExtra,
+  syncTabToUrl,
 }: {
   value: DndCharacterData;
   // Только для окна предпросмотра сущности (EntityPreviewModal): там лист
@@ -4347,12 +4349,19 @@ export function DndCharacterView({
   // save immediately without entering the full DndCharacterEdit form —
   // mirrors LitMCharacterView's onQuickUpdate for tag edits.
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+  // Держать активную вкладку в адресе (?sheet=). Включает вызывающая
+  // сторона, и только когда лист на странице один: в бестиарии листов
+  // несколько, и один параметр на всех им конфликтует (гриллинг 2026-09-03).
+  // Параметр свой, не `tab`: у страницы, внутри которой живёт лист, вкладки
+  // свои, и делить один параметр с ней нельзя.
+  syncTabToUrl?: boolean;
 }) {
-  // Hook must run unconditionally (before the compact early-return) per the
-  // Rules of Hooks — each DndCharacterView instance keeps its own tab state
-  // locally (not URL-synced) since a page can render several statblocks at
-  // once (e.g. a bestiary list), which would collide on a shared query param.
-  const [tab, setTab] = useState<DndViewTab>("Действия");
+  // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
+  // да и незачем: неиспользуемый просто держит своё состояние вхолостую.
+  const [localTab, setLocalTab] = useState<DndViewTab>("Действия");
+  const [urlTab, setUrlTab] = useTabState<DndViewTab>(DND_VIEW_TABS, "Действия", undefined, "sheet");
+  const tab = syncTabToUrl ? urlTab : localTab;
+  const setTab = syncTabToUrl ? setUrlTab : setLocalTab;
   // Живые данные компендиума для всех заклинаний и умений листа — одной
   // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
   const getEntry = useCompendiumEntries(sheetEntryIds(value));
