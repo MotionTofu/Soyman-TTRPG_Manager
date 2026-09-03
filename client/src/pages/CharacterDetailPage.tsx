@@ -10,6 +10,7 @@ import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { useUndoDelete } from "../hooks/useUndoDelete";
+import { useAlert } from "../hooks/useConfirm";
 import { formatImportantDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
@@ -44,6 +45,7 @@ export function CharacterDetailPage() {
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [alertDialog, showAlert] = useAlert();
   const [notFound, setNotFound] = useState(false);
   const [tab, selectTab] = useTabState(TAB_KEYS, "statblock");
   const [editingName, setEditingName] = useState(false);
@@ -196,11 +198,18 @@ export function CharacterDetailPage() {
     if (!character) return;
     setShowArchiveConfirm(false);
     const name = character.character_name || "Без имени";
-    await deleteWithUndo({
-      entityName: name,
-      deleteFn: () => api.del(`/characters/${characterId}`),
-      restoreFn: () => api.put(`/characters/${characterId}/restore`),
-    });
+    // Без catch падение уходило в никуда: `navigate` не срабатывал, тоста
+    // не было, и мастер оставался на прежней странице без объяснения.
+    try {
+      await deleteWithUndo({
+        entityName: name,
+        deleteFn: () => api.del(`/characters/${characterId}`),
+        restoreFn: () => api.put(`/characters/${characterId}/restore`),
+      });
+    } catch (e) {
+      showAlert(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     navigate(`/campaigns/${character.campaign_id}`);
   }
 
@@ -541,6 +550,7 @@ export function CharacterDetailPage() {
           onConfirm={archiveCharacter}
         />
       )}
+      {alertDialog}
     </div>
   );
 }

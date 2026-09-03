@@ -2,7 +2,13 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 
 interface UndoToast {
   msg: string;
-  onUndo: () => void;
+  onUndo: () => Promise<void>;
+  // Восстановление идёт в сеть, и оно может не получиться. Раньше тост
+  // закрывался до вызова `restoreFn`, и упавшее восстановление выглядело
+  // ровно как удавшееся: мастер уходил с уверенностью, что сущность
+  // вернулась, а она оставалась в архиве.
+  busy?: boolean;
+  error?: string | null;
 }
 
 interface UndoDeleteApi {
@@ -46,20 +52,43 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     [dismiss]
   );
 
+  // Восстановление ждёт ответа сервера, и тост живёт до него: восьмисекундный
+  // таймер снимается на время попытки, чтобы тост не исчез посреди неё.
+  // Тост берётся аргументом, а не читается из функционального сеттера:
+  // updater у `setState` выполняется отложенно, и попытка вытащить оттуда
+  // `onUndo` срабатывала только на первом нажатии — на втором очередь была
+  // не пуста, колбэк не доставался, и тост навсегда застревал на
+  // «Возвращаю…». Поймано живой проверкой, а не рассуждением.
+  const runUndo = useCallback(async (t: UndoToast) => {
+    if (t.busy) return;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    setToast({ ...t, busy: true, error: null });
+    try {
+      await t.onUndo();
+      setToast(null);
+    } catch (e) {
+      const message = e instanceof Error && e.message ? e.message : "неизвестная ошибка";
+      setToast({ ...t, busy: false, error: message });
+    }
+  }, []);
+
   const api = useMemo(() => ({ deleteWithUndo, dismiss }), [deleteWithUndo, dismiss]);
 
   return (
     <UndoDeleteContext.Provider value={api}>
       {children}
       {toast && (
-        <div className="archive-toast" role="status" aria-live="polite">
-          <span className="archive-toast__msg">{toast.msg}</span>
+        <div
+          className={`archive-toast${toast.error ? " archive-toast--error" : ""}`}
+          role={toast.error ? "alert" : "status"}
+          aria-live={toast.error ? "assertive" : "polite"}
+        >
+          <span className="archive-toast__msg">
+            {toast.error ? `Не удалось вернуть: ${toast.error}` : toast.msg}
+          </span>
           <div className="archive-toast__actions">
-            <button
-              className="archive-toast__undo"
-              onClick={() => { const cb = toast.onUndo; dismiss(); cb(); }}
-            >
-              Отменить
+            <button className="archive-toast__undo" onClick={() => runUndo(toast)} disabled={toast.busy}>
+              {toast.busy ? "Возвращаю…" : toast.error ? "Ещё раз" : "Отменить"}
             </button>
             <button className="archive-toast__close" onClick={dismiss} aria-label="Закрыть">
               ×

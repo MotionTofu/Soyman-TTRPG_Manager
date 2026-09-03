@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useQueuedSave } from "../hooks/useQueuedSave";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { useConfirm } from "../hooks/useConfirm";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { NavIcon } from "./NavIcons";
 import { EmptyState } from "./EmptyState";
 import { Modal } from "./Modal";
@@ -155,6 +155,7 @@ export function StatblockList({
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
   const [activeStatblockId, setActiveId] = useState<number | null>(null);
   const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
   const { deleteWithUndo } = useUndoDelete();
 
   const litmFormat: StatblockFormat = ownerType === "character" ? "litm_character" : "litm_challenge";
@@ -294,17 +295,23 @@ export function StatblockList({
       danger: true,
     });
     if (!ok) return;
-    await deleteWithUndo({
-      entityName: name,
-      deleteFn: async () => {
-        await api.del(`/statblocks/${id}`);
-        refresh();
-      },
-      restoreFn: async () => {
-        await api.put(`/statblocks/${id}/restore`);
-        refresh();
-      },
-    });
+    // Без catch упавшее удаление молчит: тоста нет, статблок на месте —
+    // мастер решает, что кнопка не сработала, и жмёт ещё раз.
+    try {
+      await deleteWithUndo({
+        entityName: name,
+        deleteFn: async () => {
+          await api.del(`/statblocks/${id}`);
+          refresh();
+        },
+        restoreFn: async () => {
+          await api.put(`/statblocks/${id}/restore`);
+          refresh();
+        },
+      });
+    } catch (e) {
+      showAlert(`Не удалось удалить «${name}»: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   async function importFile(file: File | null, inputEl?: HTMLInputElement | null) {
@@ -430,6 +437,7 @@ export function StatblockList({
   return (
     <div className="stack">
       {confirmDialog}
+      {alertDialog}
       {isEmpty && showLssImport && (
         <EmptyState
           icon="skullDie"
@@ -1044,6 +1052,7 @@ function StatblockCard({
             type="button"
             className="comp-mini"
             title="Редактировать"
+            aria-label={`Редактировать: ${summaryTitle || FORMAT_LABELS[statblock.format]}`}
             onClick={(e) => {
               e.preventDefault();
               setEditMode((v) => !v);
@@ -1052,9 +1061,13 @@ function StatblockCard({
           >
             <NavIcon name="edit" />
           </button>
+          {/* Обе кнопки — только иконка: без подписи скринридер читал их как
+              «кнопка», а «удалить» здесь ещё и без title. */}
           <button
             type="button"
             className="comp-mini"
+            title="Удалить"
+            aria-label={`Удалить: ${summaryTitle || FORMAT_LABELS[statblock.format]}`}
             onClick={(e) => {
               e.preventDefault();
               onRemove(statblock.id);

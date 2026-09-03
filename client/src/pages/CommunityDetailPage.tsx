@@ -24,7 +24,7 @@ import { loadThumbnailStyles } from "../thumbnailStyles";
 import type { DateRecurrence, SearchResult, SettingCommunityDetail, SettingLocation } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { useConfirm } from "../hooks/useConfirm";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
 
 const TABS = [
   "Досье",
@@ -39,6 +39,7 @@ const TABS = [
 
 export function CommunityDetailPage() {
   const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
   const { id } = useParams();
   const communityId = Number(id);
   const navigate = useNavigate();
@@ -117,11 +118,17 @@ export function CommunityDetailPage() {
     if (!community) return;
     if (!(await confirm({ message: "Отправить сообщество (и все вложенные) в архив?", confirmLabel: "Архивировать", danger: true })))
       return;
-    await deleteWithUndo({
-      entityName: community.name,
-      deleteFn: () => api.del(`/setting-communities/${communityId}`),
-      restoreFn: () => api.put(`/setting-communities/${communityId}/restore`),
-    });
+    // Без catch падение молчало, а `navigate` ниже не срабатывал.
+    try {
+      await deleteWithUndo({
+        entityName: community.name,
+        deleteFn: () => api.del(`/setting-communities/${communityId}`),
+        restoreFn: () => api.put(`/setting-communities/${communityId}/restore`),
+      });
+    } catch (e) {
+      showAlert(`Не удалось архивировать «${community.name}»: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     navigate(
       community.parent_id
         ? `/communities/${community.parent_id}`
@@ -204,6 +211,7 @@ export function CommunityDetailPage() {
   return (
     <div className="stack">
       {confirmDialog}
+      {alertDialog}
       <Breadcrumbs
         items={[
           {

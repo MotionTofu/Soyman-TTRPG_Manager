@@ -15,6 +15,7 @@ import { MentionText } from "../components/mentions/MentionText";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
 import { useUndoDelete } from "../hooks/useUndoDelete";
+import { useAlert } from "../hooks/useConfirm";
 import { elapsedDays, formatInworldDate, formatInworldRange } from "../inworldCalendar";
 import { loadHideFinance } from "../financePrivacy";
 import type {
@@ -94,6 +95,7 @@ export function SessionDetailPage() {
   const [openSecretGroups, setOpenSecretGroups] = useState<string[]>([]);
   const calendar = useSettingCalendar(campaign?.setting_id);
   const { deleteWithUndo } = useUndoDelete();
+  const [alertDialog, showAlert] = useAlert();
 
   const refresh = useCallback(() => {
     let cancelled = false;
@@ -380,11 +382,17 @@ export function SessionDetailPage() {
   async function archiveSession() {
     if (!session) return;
     const date = session.date || "Без даты";
-    await deleteWithUndo({
-      entityName: `Сессия ${date}`,
-      deleteFn: () => api.del(`/sessions/${sessionId}`),
-      restoreFn: () => api.put(`/sessions/${sessionId}/restore`),
-    });
+    // Без catch падение молчало, а `navigate` ниже не срабатывал.
+    try {
+      await deleteWithUndo({
+        entityName: `Сессия ${date}`,
+        deleteFn: () => api.del(`/sessions/${sessionId}`),
+        restoreFn: () => api.put(`/sessions/${sessionId}/restore`),
+      });
+    } catch (e) {
+      showAlert(`Не удалось архивировать сессию: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     navigate(`/campaigns/${session.campaign_id}`);
   }
 
@@ -541,6 +549,7 @@ export function SessionDetailPage() {
 
   return (
     <div className="stack session-profile">
+      {alertDialog}
       <div className="sp-nav">
         <button className="sp-nav__btn" disabled={!prevSession} title={prevSession ? `${sessionLabel(prevSession)} — ${prevSession.date}` : "Это первая сессия кампании"} onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}>
           ← {prevSession ? (prevSession.title || `№${prevSession.session_number ?? ""} · ${prevSession.date}`) : "Пред. сессия"}

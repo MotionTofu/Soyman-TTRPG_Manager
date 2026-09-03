@@ -527,11 +527,18 @@ export function CampaignDetailPage() {
     const ok = await confirm({ title: "Архивировать кампанию?", message: "Отправить кампанию в архив? Она пропадёт из основных разделов.", confirmLabel: "Архивировать", danger: true });
     if (!ok) return;
     const name = campaign?.name || "Без названия";
-    await deleteWithUndo({
-      entityName: name,
-      deleteFn: () => api.del(`/campaigns/${campaignId}`),
-      restoreFn: () => api.put(`/campaigns/${campaignId}/restore`),
-    });
+    // Без catch падение уходило в никуда, а `navigate` ниже не срабатывал —
+    // мастер оставался на странице кампании без единого объяснения.
+    try {
+      await deleteWithUndo({
+        entityName: name,
+        deleteFn: () => api.del(`/campaigns/${campaignId}`),
+        restoreFn: () => api.put(`/campaigns/${campaignId}/restore`),
+      });
+    } catch (e) {
+      showAlert(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     navigate("/campaigns");
   }
 

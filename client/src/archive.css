@@ -235,6 +235,16 @@
   line-height: 1;
   padding: 0 4px;
 }
+/* Восстановление не удалось — тост остаётся и говорит об этом. Раньше он
+   закрывался до вызова restoreFn, и провал был неотличим от успеха. */
+.archive-toast--error {
+  border-color: var(--danger, #a65b5b);
+  border-width: 2px;
+}
+.archive-toast__undo:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 
 @media (max-width: 760px) {
   .archive-toolbar__search { flex: 1 1 100%; }
