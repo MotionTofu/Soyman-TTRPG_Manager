@@ -18,6 +18,16 @@ interface UndoDeleteApi {
     restoreFn: () => Promise<void>;
     ms?: number;
   }) => Promise<void>;
+  /**
+   * Предложить отмену для уже случившегося удаления.
+   *
+   * Нужно там, где само удаление идёт не одним вызовом: в галерее между
+   * нажатием и удалением встают два диалога выбора («в архив» или
+   * «навсегда»), и после «навсегда» отменять нечего — тост показывать нельзя.
+   * Заворачивать такой путь в `deleteWithUndo` пришлось бы пустым `deleteFn`,
+   * то есть враньём в имени.
+   */
+  offerUndo: (opts: { entityName: string; restoreFn: () => Promise<void>; ms?: number }) => void;
   dismiss: () => void;
 }
 
@@ -41,15 +51,22 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     setToast(null);
   }, []);
 
-  const deleteWithUndo = useCallback<UndoDeleteApi["deleteWithUndo"]>(
-    async (opts) => {
-      await opts.deleteFn();
+  const offerUndo = useCallback<UndoDeleteApi["offerUndo"]>(
+    (opts) => {
       dismiss();
       const msg = `«${opts.entityName}» удалено`;
       setToast({ msg, onUndo: opts.restoreFn });
       timerRef.current = window.setTimeout(() => setToast((t) => (t?.msg === msg ? null : t)), opts.ms ?? 8000);
     },
     [dismiss]
+  );
+
+  const deleteWithUndo = useCallback<UndoDeleteApi["deleteWithUndo"]>(
+    async (opts) => {
+      await opts.deleteFn();
+      offerUndo(opts);
+    },
+    [offerUndo]
   );
 
   // Восстановление ждёт ответа сервера, и тост живёт до него: восьмисекундный
@@ -72,7 +89,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const api = useMemo(() => ({ deleteWithUndo, dismiss }), [deleteWithUndo, dismiss]);
+  const api = useMemo(() => ({ deleteWithUndo, offerUndo, dismiss }), [deleteWithUndo, offerUndo, dismiss]);
 
   return (
     <UndoDeleteContext.Provider value={api}>

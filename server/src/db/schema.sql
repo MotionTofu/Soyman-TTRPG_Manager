@@ -1346,6 +1346,24 @@ CREATE TABLE IF NOT EXISTS archived_files (
   archived_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Отмена удаления картинки галереи. Живёт ровно столько, сколько висит тост:
+-- строка `gallery_images` при удалении исчезает, и восстановить её потом
+-- нечем — ни позиции, ни подписи, ни владельца в `archived_files` нет.
+-- Отдельная таблица, а не мягкое удаление у самой картинки: `gallery_images`
+-- читают шесть мест (галерея, раздел игрока, выгрузка сеттинга, сироты,
+-- диагностика), и добавлять им всем фильтр ради восьми секунд отмены —
+-- несоразмерно.
+CREATE TABLE IF NOT EXISTS gallery_image_undo (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  archived_file_id INTEGER NOT NULL,
+  owner_type TEXT NOT NULL,
+  owner_id INTEGER NOT NULL,
+  image_path TEXT NOT NULL,
+  caption TEXT DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Импорт книги приключений (docs/adventure-import/format.md). Батч — один
 -- залитый файл; key_map_json хранит соответствие «ключ модели → тип:id», чтобы
 -- второй файл той же книги видел ключи первого, а откат знал, что удалять.

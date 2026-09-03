@@ -67,14 +67,24 @@ export async function storeDeduped(buffer: Buffer, targetPath: string): Promise<
 // should ask the user "удалить навсегда" vs "отправить в архив" and re-call
 // with an explicit choice; anything else (file already gone, or other links
 // still exist) is safe to just report done.
-export type RemoveResult = { needsChoice: true } | { done: true };
+//
+// `archivedFileId` возвращается, когда файл действительно уехал в `_Archive`:
+// по нему потом находят, что нести обратно (отмена удаления в галерее).
+export type RemoveResult = { needsChoice: true } | { done: true; archivedFileId?: number };
 
 export function removeOrArchive(
   filePath: string,
   choice: "forever" | "archive" | undefined,
   ownerType: string,
   ownerId: number,
-  displayName: string
+  displayName: string,
+  // Файл, у которого остались другие жёсткие ссылки, по умолчанию просто
+  // отвязывается: байты живы у соседа, спрашивать не о чем. Но вернуть такую
+  // картинку потом нечем — второй путь к тем же байтам нигде не записан.
+  // Вызывающий, который обещает отмену, просит унести файл в `_Archive`:
+  // `rename` сохраняет inode, поэтому соседняя ссылка не страдает, а места
+  // не прибавляется — это та же самая копия под другим именем.
+  archiveShared = false
 ): RemoveResult {
   // Хард-перила как в deleteVaultFolder: путь обязан лежать внутри vault.
   // *_image_path пишут только наши upload-роуты, но битая/подменённая
@@ -95,15 +105,14 @@ export function removeOrArchive(
   const isLastLink = fs.statSync(abs).nlink <= 1;
   if (isLastLink && !choice) return { needsChoice: true };
 
-  if (isLastLink && choice === "archive") {
-    archiveFile(abs, ownerType, ownerId, displayName);
-  } else {
-    fs.unlinkSync(abs);
+  if (choice === "archive" || (!isLastLink && archiveShared)) {
+    return { done: true, archivedFileId: archiveFile(abs, ownerType, ownerId, displayName) };
   }
+  fs.unlinkSync(abs);
   return { done: true };
 }
 
-function archiveFile(filePath: string, ownerType: string, ownerId: number, displayName: string): void {
+export function archiveFile(filePath: string, ownerType: string, ownerId: number, displayName: string): number {
   const archiveDirAbs = vaultAbs(ensureSubfolder(VAULT_ROOT, "_Archive"));
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);
@@ -113,8 +122,11 @@ function archiveFile(filePath: string, ownerType: string, ownerId: number, displ
   }
   const size = fs.statSync(filePath).size;
   fs.renameSync(filePath, target);
-  db.prepare(
-    `INSERT INTO archived_files (original_owner_type, original_owner_id, original_name, archive_path, size)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(ownerType, ownerId, displayName, vaultRel(target), size);
+  const info = db
+    .prepare(
+      `INSERT INTO archived_files (original_owner_type, original_owner_id, original_name, archive_path, size)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(ownerType, ownerId, displayName, vaultRel(target), size);
+  return Number(info.lastInsertRowid);
 }

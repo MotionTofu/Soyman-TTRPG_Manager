@@ -6,6 +6,7 @@ import type { GalleryImage } from "../types";
 import { ImageLightbox } from "./ImageLightbox";
 import { EmptyState } from "./EmptyState";
 import { useConfirm } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { ContextMenu } from "./ContextMenu";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import { EntityImageSlot } from "./EntityImageSlot";
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }: Props) {
+  const { offerUndo } = useUndoDelete();
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -114,7 +116,12 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
   }
 
   // Удаление без блокирующего native confirm — 409 обрабатывается модалками (C-P0-7)
-  async function deleteWithChoice(path: string): Promise<boolean> {
+  //
+  // Возвращает `null`, если Мастер передумал в диалоге, и `undoId` — номер
+  // записи отмены, когда файл уехал в `_Archive` и его есть чем вернуть. После
+  // «удалить навсегда» отменять нечего, и сервер номера не даёт: тост в этом
+  // случае не показывается, иначе он обещал бы невозможное.
+  async function deleteWithChoice(path: string): Promise<{ undoId: number | null } | null> {
     const BASE = "/api";
     const token = getAuthToken();
     const doDelete = (mode?: "forever" | "archive") =>
@@ -139,7 +146,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
           confirmLabel: "Удалить навсегда",
           danger: true,
         });
-        if (!forever) return false;
+        if (!forever) return null;
         res = await doDelete("forever");
       }
     }
@@ -149,21 +156,39 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
       try { const p = JSON.parse(text); if (p?.error) msg = p.error; } catch {}
       throw new Error(msg || `${res.status}`);
     }
-    return true;
+    let undoId: number | null = null;
+    try {
+      const body = (await res.json()) as { undo_id?: number };
+      if (typeof body?.undo_id === "number") undoId = body.undo_id;
+    } catch {
+      // Пустой ответ — просто нечего отменять.
+    }
+    return { undoId };
   }
 
   async function removeImage(id: number) {
     const ok = await confirm({ title: "Удалить изображение?", message: "Изображение будет удалено из галереи.", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
+    const image = images.find((i) => i.id === id);
+    let outcome: { undoId: number | null } | null;
     try {
-      const deleted = await deleteWithChoice(`/gallery/${id}`);
-      if (!deleted) return;
+      outcome = await deleteWithChoice(`/gallery/${id}`);
+      if (!outcome) return;
     } catch (e: any) {
       setError(e?.message ?? "Ошибка удаления");
       return;
     }
     setLightboxIndex(null);
     refresh();
+    const undoId = outcome.undoId;
+    if (undoId == null) return;
+    offerUndo({
+      entityName: image?.caption?.trim() || "Изображение",
+      restoreFn: async () => {
+        await api.put(`/gallery/undo/${undoId}`, {});
+        refresh();
+      },
+    });
   }
 
   async function saveCaption(id: number, caption: string) {

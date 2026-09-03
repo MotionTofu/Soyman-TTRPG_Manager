@@ -9,6 +9,7 @@ import { db } from "../db/db";
 import { ensureSubfolder, toFileUrl } from "../services/filesystem";
 import { resizeImageBuffer } from "../services/imageResize";
 import { storeDeduped, removeOrArchive } from "../services/vaultDedup";
+import { vaultAbs, vaultRel, VAULT_ROOT } from "../services/filesystem";
 import { ensureCharacterFolder } from "./characters";
 import type { AuthedRequest } from "../services/auth";
 
@@ -168,8 +169,10 @@ galleryRouter.put("/:id", (req, res) => {
 // in the "удалить навсегда / отправить в архив" dialog triggered by a 409.
 galleryRouter.delete("/:id", (req, res) => {
   const { mode } = req.query as { mode?: "forever" | "archive" };
-  const row = db.prepare("SELECT image_path, caption FROM gallery_images WHERE id = ?").get(req.params.id) as
-    | { image_path: string; caption: string }
+  const row = db
+    .prepare("SELECT owner_type, owner_id, image_path, caption, position FROM gallery_images WHERE id = ?")
+    .get(req.params.id) as
+    | { owner_type: string; owner_id: number; image_path: string; caption: string; position: number }
     | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
 
@@ -178,10 +181,72 @@ galleryRouter.delete("/:id", (req, res) => {
     mode,
     "gallery_image",
     Number(req.params.id),
-    row.caption || path.basename(row.image_path)
+    row.caption || path.basename(row.image_path),
+    // «Навсегда» Мастер выбрал сам, и уносить файл в архив после этого значило
+    // бы не выполнить прямую просьбу. Во всех остальных случаях файл уезжает в
+    // `_Archive`, откуда его достаёт отмена.
+    mode !== "forever"
   );
   if ("needsChoice" in result) return res.status(409).json({ needsChoice: true });
 
   db.prepare("DELETE FROM gallery_images WHERE id = ?").run(req.params.id);
-  res.json({ ok: true });
+
+  // Отмена возможна ровно тогда, когда файл уцелел. Просроченные записи
+  // подчищаются здесь же: отдельного расписания ради восьмисекундного тоста
+  // заводить не за чем.
+  db.prepare("DELETE FROM gallery_image_undo WHERE created_at < datetime('now', '-1 day')").run();
+  if (result.archivedFileId == null) return res.json({ ok: true });
+  const undo = db
+    .prepare(
+      `INSERT INTO gallery_image_undo (archived_file_id, owner_type, owner_id, image_path, caption, position)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(result.archivedFileId, row.owner_type, row.owner_id, row.image_path, row.caption ?? "", row.position);
+  res.json({ ok: true, undo_id: Number(undo.lastInsertRowid) });
+});
+
+// Отмена удаления: файл возвращается из `_Archive` на своё прежнее место, а
+// строка галереи создаётся заново — с той же подписью и той же позицией, чтобы
+// картинка встала обратно в ряд, а не в конец.
+//
+// Путь берётся из записи отмены, которую писал сервер, а не из тела запроса, и
+// всё равно проверяется на принадлежность хранилищу: у страницы галереи нет
+// причин уметь называть произвольный путь на диске.
+galleryRouter.put("/undo/:undoId", (req, res) => {
+  const undo = db.prepare("SELECT * FROM gallery_image_undo WHERE id = ?").get(req.params.undoId) as
+    | { id: number; archived_file_id: number; owner_type: string; owner_id: number; image_path: string; caption: string; position: number }
+    | undefined;
+  if (!undo) return res.status(404).json({ error: "Отменить уже нечего" });
+  const archived = db.prepare("SELECT archive_path FROM archived_files WHERE id = ?").get(undo.archived_file_id) as
+    | { archive_path: string }
+    | undefined;
+  if (!archived) return res.status(410).json({ error: "Файл уже убран из архива" });
+
+  const from = path.resolve(vaultAbs(archived.archive_path));
+  const to = path.resolve(vaultAbs(undo.image_path));
+  const root = path.resolve(VAULT_ROOT);
+  if (!from.startsWith(root + path.sep) || !to.startsWith(root + path.sep)) {
+    return res.status(400).json({ error: "путь вне хранилища" });
+  }
+  if (!fs.existsSync(from)) return res.status(410).json({ error: "Файл не найден в архиве" });
+
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  // Место могли занять новой картинкой, пока висел тост. Тогда возвращаем файл
+  // рядом, под свободным именем, — затирать чужую загрузку нельзя.
+  let target = to;
+  if (fs.existsSync(target)) {
+    const ext = path.extname(to);
+    const base = path.basename(to, ext);
+    for (let n = 2; fs.existsSync(target); n++) target = path.join(path.dirname(to), `${base}-${n}${ext}`);
+  }
+  fs.renameSync(from, target);
+
+  const info = db
+    .prepare(
+      "INSERT INTO gallery_images (owner_type, owner_id, image_path, caption, position) VALUES (?, ?, ?, ?, ?)"
+    )
+    .run(undo.owner_type, undo.owner_id, vaultRel(target), undo.caption ?? "", undo.position);
+  db.prepare("DELETE FROM archived_files WHERE id = ?").run(undo.archived_file_id);
+  db.prepare("DELETE FROM gallery_image_undo WHERE id = ?").run(undo.id);
+  res.json(withUrl(db.prepare("SELECT * FROM gallery_images WHERE id = ?").get(info.lastInsertRowid) as { image_path: string }));
 });

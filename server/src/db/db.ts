@@ -1062,6 +1062,19 @@ export function openDatabase(dbDir: string): Database.Database {
     )`);
   }
 
+  if (!tableExists(database, "gallery_image_undo")) {
+    database.exec(`CREATE TABLE gallery_image_undo (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      archived_file_id INTEGER NOT NULL,
+      owner_type TEXT NOT NULL,
+      owner_id INTEGER NOT NULL,
+      image_path TEXT NOT NULL,
+      caption TEXT DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+
   if (!columnExists(database, "players", "thumbnail_image_path")) {
     database.exec("ALTER TABLE players ADD COLUMN thumbnail_image_path TEXT");
   }
