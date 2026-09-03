@@ -412,7 +412,10 @@ export function Timeline({
         <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
           {ZOOMS.map((z, i) => (
             <button
-              key={z.key}
+              // Ключ по метке, а не по `key`: «День» и «3 дня» — разные
+              // ступени с одной и той же точностью `day`, и React считал их
+              // одной кнопкой.
+              key={z.label}
               className={i === Math.round(zoom) ? "active-sort" : ""}
               onClick={() => zoomTo(i)}
             >
