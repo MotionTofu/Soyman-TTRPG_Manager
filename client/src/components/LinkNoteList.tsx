@@ -4,6 +4,7 @@ import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { LinkNote } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   linkId: number;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function LinkNoteList({ linkId, entityType, entityId }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [notes, setNotes] = useState<LinkNote[]>([]);
 
   function refresh() {
@@ -26,13 +28,15 @@ export function LinkNoteList({ linkId, entityType, entityId }: Props) {
   }
 
   async function removeNote(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить заметку о связи?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/link-notes/${id}`);
     refresh();
   }
 
   return (
     <div className="stack">
+      {confirmDialog}
       {notes.map((n) => (
         <NoteCard
           key={n.id}

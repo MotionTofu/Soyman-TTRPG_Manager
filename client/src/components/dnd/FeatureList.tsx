@@ -5,6 +5,7 @@ import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { api } from "../../api/client";
 import { NavIcon } from "../NavIcons";
+import { useConfirm } from "../../hooks/useConfirm";
 
 function readSearchDrop(e: DragEvent): SearchResult | null {
   const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
@@ -62,6 +63,7 @@ export const FeatureListEdit = memo(function FeatureListEdit({
   onChange: (v: DndFeature[]) => void;
   headerColorClass?: string;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const valuesRef = useRef(values);
   valuesRef.current = values;
   const onChangeRef = useRef(onChange);
@@ -72,10 +74,15 @@ export const FeatureListEdit = memo(function FeatureListEdit({
     next[i] = { ...next[i], ...patch };
     onChangeRef.current(next);
   }, []);
-  const remove = useCallback((i: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const remove = useCallback(async (i: number) => {
+    const name = valuesRef.current[i]?.name?.trim();
+    if (!(await confirm({
+      message: name ? `Удалить «${name}»?` : "Удалить эту запись?",
+      confirmLabel: "Удалить",
+      danger: true,
+    }))) return;
     onChangeRef.current(valuesRef.current.filter((_, idx) => idx !== i));
-  }, []);
+  }, [confirm]);
   function add() {
     onChange([...values, { name: "", description: "" }]);
   }
@@ -95,6 +102,7 @@ export const FeatureListEdit = memo(function FeatureListEdit({
 
   return (
     <div className="dnd-feature-section">
+      {confirmDialog}
       <div className={`dnd-feature-header ${headerColorClass ?? ""}`}>{title}</div>
       <div className="stack">
         {values.map((f, i) => (
@@ -138,6 +146,7 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
   headerColorClass?: string;
   allowSearchDrop?: boolean;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -148,10 +157,15 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
   valuesRef.current = values;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const remove = useCallback((i: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const remove = useCallback(async (i: number) => {
+    const name = valuesRef.current[i]?.name?.trim();
+    if (!(await confirm({
+      message: name ? `Удалить «${name}»?` : "Удалить эту запись?",
+      confirmLabel: "Удалить",
+      danger: true,
+    }))) return;
     onChangeRef.current(valuesRef.current.filter((_, idx) => idx !== i));
-  }, []);
+  }, [confirm]);
 
   const removeCallbacks = useMemo(() => values.map((_, i) => () => remove(i)), [values.length, remove]);
   const toggleCallbacks = useMemo(
@@ -194,6 +208,7 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
       onDragLeave={allowSearchDrop ? () => setDragOver(false) : undefined}
       onDrop={allowSearchDrop ? handleDrop : undefined}
     >
+      {confirmDialog}
       <div className={`dnd-feature-header ${headerColorClass ?? ""}`}>{title}</div>
       <div className="stack" style={{ gap: 4 }}>
         {values.map((f, i) => (

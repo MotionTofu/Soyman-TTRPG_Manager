@@ -108,7 +108,10 @@ export function ModulesTab() {
     const message = materialized
       ? `Отправить «${mod.name}» в Архив? Данные сохранятся — восстановить или удалить навсегда можно на странице «Архив».`
       : `Убрать импортированный модуль «${mod.name}» из списка? Он не был включён, данные нигде не созданы.`;
-    if (!confirm({ title: materialized ? "Отправить в Архив?" : "Убрать модуль?", message, confirmLabel: materialized ? "Отправить" : "Убрать", cancelLabel: "Отмена", danger: materialized })) return;
+    // Без `await` этот вызов возвращал Promise — всегда истинный, поэтому
+    // модуль удалялся, что бы Мастер ни ответил, а диалог висел уже поверх
+    // свершившегося факта.
+    if (!(await confirm({ title: materialized ? "Отправить в Архив?" : "Убрать модуль?", message, confirmLabel: materialized ? "Отправить" : "Убрать", cancelLabel: "Отмена", danger: materialized }))) return;
     await api.del(`/modules/${mod.id}`);
     refresh();
   }

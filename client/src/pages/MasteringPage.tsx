@@ -8,6 +8,7 @@ import { EmptyState } from "../components/EmptyState";
 import { SectionBackground } from "../components/SectionBackground";
 import type { MasteringNote, MasteringSection, System } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { useConfirm } from "../hooks/useConfirm";
 
 const CATEGORIES: { key: MasteringNote["category"]; label: string }[] = [
   { key: "prep", label: "Подготовка" },
@@ -64,6 +65,7 @@ function highlightParts(text: string, q: string) {
 type SortMode = "date" | "az";
 
 export function MasteringPage() {
+  const [confirmDialog, confirm] = useConfirm();
   const [category, setCategory] = useState<MasteringNote["category"]>("prep");
   const [notes, setNotes] = useState<MasteringNote[]>([]);
   const [sections, setSections] = useState<MasteringSection[]>([]);
@@ -152,7 +154,8 @@ export function MasteringPage() {
   }
 
   async function archiveNote(id: number) {
-    if (!confirm("Отправить заметку в архив?")) return;
+    if (!(await confirm({ message: "Отправить заметку в архив?", confirmLabel: "Архивировать", danger: true })))
+      return;
     await api.del(`/mastering/${id}`);
     refreshNotes();
   }
@@ -214,6 +217,7 @@ export function MasteringPage() {
 
   return (
     <div className="stack" style={{ gap: 10, position: "relative" }}>
+      {confirmDialog}
       <SectionBackground />
       <SectionHeading section="mastering" compact>
         Мастерение

@@ -9,11 +9,13 @@ import { LinkDropZone } from "../components/LinkDropZone";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatEventDate } from "../inworldCalendar";
 import type { SettingCalendarEvent } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 // Профиль события хроники. Строка хроники показывает только дату и краткое
 // описание — всё остальное (развёрнутый текст, последствия, участники) живёт
 // здесь.
 export function EventDetailPage() {
+  const [confirmDialog, confirm] = useConfirm();
   const { id } = useParams();
   const eventId = Number(id);
   const navigate = useNavigate();
@@ -37,7 +39,8 @@ export function EventDetailPage() {
 
   async function deleteEvent() {
     if (!event) return;
-    if (!confirm("Удалить событие из хроники?")) return;
+    if (!(await confirm({ message: "Удалить событие из хроники?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/settings/calendar-events/${eventId}`);
     navigate(chronicleUrl);
   }
@@ -46,6 +49,7 @@ export function EventDetailPage() {
 
   return (
     <div className="stack">
+      {confirmDialog}
       <Breadcrumbs
         items={[
           { label: "Сеттинги", to: "/settings" },

@@ -4,6 +4,7 @@ import { emptyChallenge, LitMChallengeEdit, LitMChallengeView } from "./litm/Lit
 import { emptyCreature, normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { MentionText } from "./mentions/MentionText";
 import type { DndCreatureData, LitMChallengeData, Resource, StatblockFormat } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 const TEMPLATE_TYPE = "statblock_template";
 const TEMPLATE_FORMAT_LABELS: Record<StatblockFormat, string> = {
@@ -27,6 +28,7 @@ interface Props {
 // SystemDetailPage ("Шаблоны" tab, systemId set) — same create+list UI,
 // just scoped to a different system_id filter.
 export function TemplatesTab({ systemId }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [resources, setResources] = useState<Resource[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [templateName, setTemplateName] = useState("");
@@ -110,7 +112,8 @@ export function TemplatesTab({ systemId }: Props) {
   }
 
   async function archiveResource(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить шаблон?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/resources/${id}`);
     if (editingId === id) resetForm();
     refresh();
@@ -118,6 +121,7 @@ export function TemplatesTab({ systemId }: Props) {
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="card stack">
         <div className="row">
           <input

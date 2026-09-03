@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
+import { useConfirm } from "../hooks/useConfirm";
 
 // Расстановка ссылок в текстах — шагами, по одному типу цели за раз.
 //
@@ -66,6 +67,7 @@ export function CrossLinksWizard({
   ownerId: number;
   help: string;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [steps, setSteps] = useState<Step[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [stepKey, setStepKey] = useState("");
@@ -139,7 +141,8 @@ export function CrossLinksWizard({
   }
 
   async function strip() {
-    if (!confirm("Снять все расставленные ссылки в текстах? Подписи останутся.")) return;
+    if (!(await confirm({ message: "Снять все расставленные ссылки в текстах? Подписи останутся.", confirmLabel: "Снять", danger: true })))
+      return;
     setBusy("strip");
     try {
       const r = await api.del<{ removed: number }>(
@@ -156,6 +159,7 @@ export function CrossLinksWizard({
 
   return (
     <details className="card res-group">
+      {confirmDialog}
       <summary className="res-group__band">
         <span className="res-group__title">Автолинковка упоминаний</span> <span className="badge tag" style={{ marginLeft: 8, fontSize: "var(--fs-micro)" }}>beta</span>
       </summary>

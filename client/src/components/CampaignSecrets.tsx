@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { MentionText } from "./mentions/MentionText";
 import type { CampaignGrouped, StorySecret } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 export const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
@@ -114,6 +115,7 @@ const SecretGroup = memo(function SecretGroup({
   onChange: () => void;
   onRevealed: (id: number, revealed: boolean) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const toggle = useCallback(
     (s: StorySecret, revealed: boolean) => {
       onRevealed(s.id, revealed);
@@ -124,7 +126,8 @@ const SecretGroup = memo(function SecretGroup({
 
   const remove = useCallback(
     async (s: StorySecret) => {
-      if (!confirm(`Удалить «${s.title}»?`)) return;
+      if (!(await confirm({ message: `Удалить «${s.title}»?`, confirmLabel: "Удалить", danger: true })))
+        return;
       await api.del(`/story/secrets/${s.id}`);
       onChange();
     },
@@ -135,6 +138,7 @@ const SecretGroup = memo(function SecretGroup({
 
   return (
     <details className="card res-group">
+      {confirmDialog}
       <summary className="res-group__band">
         <span className="res-group__title">{title}</span>
         <span className="res-group__count">раскрыто {revealed} из {items.length}</span>

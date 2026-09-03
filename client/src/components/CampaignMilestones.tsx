@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { MentionText } from "./mentions/MentionText";
 import type { CampaignGrouped, StoryMilestone } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 // Раздел «Вехи» кампании: ключевые точки сюжета, разложенные по приключениям,
 // плюс собственные вехи кампании. Тексты вех приключения принадлежат сеттингу
@@ -107,6 +108,7 @@ const MilestoneGroup = memo(function MilestoneGroup({
   onChange: () => void;
   onAchieved: (id: number, achieved: boolean) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const toggle = useCallback(
     (m: StoryMilestone, achieved: boolean) => {
       onAchieved(m.id, achieved);
@@ -117,7 +119,8 @@ const MilestoneGroup = memo(function MilestoneGroup({
 
   const remove = useCallback(
     async (m: StoryMilestone) => {
-      if (!confirm(`Удалить веху «${m.title}»?`)) return;
+      if (!(await confirm({ message: `Удалить веху «${m.title}»?`, confirmLabel: "Удалить", danger: true })))
+        return;
       await api.del(`/story/milestones/${m.id}`);
       onChange();
     },
@@ -128,6 +131,7 @@ const MilestoneGroup = memo(function MilestoneGroup({
 
   return (
     <details className="card res-group">
+      {confirmDialog}
       <summary className="res-group__band">
         <span className="res-group__title">{title}</span>
         <span className="res-group__count">{achieved} из {items.length}</span>

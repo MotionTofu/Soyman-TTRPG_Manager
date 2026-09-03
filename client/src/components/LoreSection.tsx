@@ -6,6 +6,7 @@ import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { LinkNoteList } from "./LinkNoteList";
 import { DETAIL_ROUTES } from "../entityTypes";
 import type { SearchResult } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface GenericLink {
   id: number;
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export function LoreSection({ entityType, entityId, title, section, acceptTypes, placeholder }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [dragOver, setDragOver] = useState(false);
 
@@ -78,13 +80,15 @@ export function LoreSection({ entityType, entityId, title, section, acceptTypes,
   }
 
   async function remove(relationId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Убрать эту связь?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/entity-relations/${relationId}`);
     load();
   }
 
   return (
     <details className="card">
+      {confirmDialog}
       <summary>
         {title} ({entries.length})
       </summary>

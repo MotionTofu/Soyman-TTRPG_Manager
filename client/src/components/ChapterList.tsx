@@ -6,6 +6,7 @@ import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { NavIcon } from "./NavIcons";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface ChapterLike {
   id: number;
@@ -67,6 +68,7 @@ export function ChapterList<T extends ChapterLike>({
   emptyState,
   listTitle,
 }: Props<T>) {
+  const [confirmDialog, confirm] = useConfirm();
   const label = addLabel ?? (allowImage ? "предмет" : "главу");
   const [sortCampaignId, setSortCampaignId] = useState<number | "">("");
 
@@ -91,13 +93,15 @@ export function ChapterList<T extends ChapterLike>({
   }
 
   async function removeChapter(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить главу вместе с её текстом?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`${apiBase}/chapters/${id}`);
     onChange();
   }
 
   return (
     <div className="stack">
+      {confirmDialog}
       {listTitle && (
         <h3>
           {listTitle}

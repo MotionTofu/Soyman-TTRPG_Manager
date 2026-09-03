@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
+import { useConfirm } from "../hooks/useConfirm";
 
 // Вкладка «Изображения» профиля записи компендиума — бестиария и транспорта.
 // Собрана из двух подразделов, потому что у записи две разные картинки и
@@ -115,6 +116,7 @@ function EntryImageSlot({
   deleteUrl: string;
   onDone: () => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [busy, setBusy] = useState(false);
 
   async function upload(file: File) {
@@ -132,7 +134,8 @@ function EntryImageSlot({
   const crop = useImageCrop("square", upload);
 
   async function remove() {
-    if (!confirm("Убрать изображение? Файл уйдёт в архив хранилища.")) return;
+    if (!(await confirm({ message: "Убрать изображение? Файл уйдёт в архив хранилища.", confirmLabel: "Убрать", danger: true })))
+      return;
     setBusy(true);
     try {
       await api.del(deleteUrl);
@@ -144,6 +147,7 @@ function EntryImageSlot({
 
   return (
     <div className="stack entity-image-slot">
+      {confirmDialog}
       <strong>{title}</strong>
       <label className={`entity-image-frame${busy ? " uploading" : ""}`} title={IMAGE_HINT}>
         {url ? (

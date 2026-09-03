@@ -24,6 +24,7 @@ import { loadThumbnailStyles } from "../thumbnailStyles";
 import type { DateRecurrence, SearchResult, SettingCommunityDetail, SettingLocation } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { useUndoDelete } from "../hooks/useUndoDelete";
+import { useConfirm } from "../hooks/useConfirm";
 
 const TABS = [
   "Досье",
@@ -37,6 +38,7 @@ const TABS = [
 ] as const;
 
 export function CommunityDetailPage() {
+  const [confirmDialog, confirm] = useConfirm();
   const { id } = useParams();
   const communityId = Number(id);
   const navigate = useNavigate();
@@ -113,7 +115,8 @@ export function CommunityDetailPage() {
 
   async function archiveCommunity() {
     if (!community) return;
-    if (!confirm("Отправить сообщество (и все вложенные) в архив?")) return;
+    if (!(await confirm({ message: "Отправить сообщество (и все вложенные) в архив?", confirmLabel: "Архивировать", danger: true })))
+      return;
     await deleteWithUndo({
       entityName: community.name,
       deleteFn: () => api.del(`/setting-communities/${communityId}`),
@@ -192,13 +195,15 @@ export function CommunityDetailPage() {
   }
 
   async function removeImportantDate(dateId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить эту важную дату?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/setting-communities/important-dates/${dateId}`);
     refresh();
   }
 
   return (
     <div className="stack">
+      {confirmDialog}
       <Breadcrumbs
         items={[
           {

@@ -4,6 +4,7 @@ import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { SettingEntry } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   settingId: number;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [entries, setEntries] = useState<SettingEntry[]>([]);
 
   function refresh() {
@@ -33,13 +35,15 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
   }
 
   async function removeEntry(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить запись?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/setting-entries/${id}`);
     refresh();
   }
 
   return (
     <div className="stack">
+      {confirmDialog}
       {entries.map((e) => (
         <EntryCard key={e.id} entry={e} settingId={settingId} onChange={refresh} onRemove={removeEntry} />
       ))}

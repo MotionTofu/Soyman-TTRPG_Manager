@@ -45,7 +45,7 @@ import {
 import { EMPTY_MECHANICS_OPTIONS, loadMechanicsOptions, type MechanicsOptions } from "../compendiumMechanics";
 import { ALL_SKILLS } from "./dnd/AbilityScores";
 import type { CompendiumEntry, SearchResult, SystemSection } from "../types";
-import { useAlert } from "../hooks/useConfirm";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "./EmptyState";
 import { useCurrentUser } from "../api/currentUser";
 
@@ -449,6 +449,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const { user } = useCurrentUser();
   const sortKey = `compendium-sort-${user?.id ?? "anon"}-${section.id}`;
   const [alertDialog, showAlert] = useAlert();
+  const [confirmDialog, confirm] = useConfirm();
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const raw = localStorage.getItem(`compendium-sort-${user?.id ?? "anon"}-${section.id}`);
     const stored = raw?.split(":")[0] as SortMode | null;
@@ -1056,7 +1057,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     let msg = `Удалить «${entry.name}»?`;
     if (kids.length > 0) msg = `Удалить «${entry.name}» и все вложенные записи (${kids.length})?`;
     if (usages > 0) msg += `\n\nВнимание: на эту запись ссылаются ещё ${usages} записей (пикеры сломаются).`;
-    if (!confirm(msg)) return;
+    if (!(await confirm({ message: msg, confirmLabel: "Удалить", danger: true }))) return;
     await api.del(`/systems/entries/${entry.id}`);
     refresh();
   }
@@ -1328,6 +1329,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                 collect(id).forEach((did) => n.delete(did));
                 return n; })} />}
         {alertDialog}
+        {confirmDialog}
       </div>
     );
   }
@@ -1817,6 +1819,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         </button>
       )}
       {alertDialog}
+      {confirmDialog}
     </div>
   );
 }
@@ -3253,6 +3256,7 @@ function GrantedSpellsPicker({
   levelLabel: string;
 }) {
   const [dragOver, setDragOver] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -3264,8 +3268,13 @@ function GrantedSpellsPicker({
     onChange([...spells, { id: result.id, name: result.title, grantLevel: 1 }]);
   }
 
-  function remove(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function remove(id: number) {
+    const name = spells.find((s) => s.id === id)?.name;
+    if (!(await confirm({
+      message: name ? `Убрать «${name}» из обретаемых заклинаний?` : "Убрать это заклинание?",
+      confirmLabel: "Убрать",
+      danger: true,
+    }))) return;
     onChange(spells.filter((s) => s.id !== id));
   }
 
@@ -3275,6 +3284,7 @@ function GrantedSpellsPicker({
 
   return (
     <div>
+      {confirmDialog}
       <div className="muted" style={{ marginBottom: 2 }}>
         Обретаемые заклинания
       </div>

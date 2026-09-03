@@ -10,6 +10,7 @@ import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { useConfirm } from "../hooks/useConfirm";
 
 // «Действующие лица» и «Награды» убраны с профиля: список действующих лиц
 // собирался из связей сцен и информационной пользы не нёс, а награды книги без
@@ -28,6 +29,7 @@ const SECRET_KINDS = [
 // layer and milestones/secrets/scenes additionally carry that campaign's
 // progress.
 export function AdventureDetailPage() {
+  const [confirmDialog, confirm] = useConfirm();
   const { id } = useParams();
   const arcId = Number(id);
   const navigate = useNavigate();
@@ -58,7 +60,8 @@ export function AdventureDetailPage() {
   }
 
   async function archive() {
-    if (!confirm("Отправить приключение в архив вместе с главами и сценами?")) return;
+    if (!(await confirm({ message: "Отправить приключение в архив вместе с главами и сценами?", confirmLabel: "Архивировать", danger: true })))
+      return;
     await api.del(`/story/arcs/${arcId}`);
     navigate(`/settings/${arc?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
   }
@@ -66,6 +69,7 @@ export function AdventureDetailPage() {
 
   return (
     <div className="stack">
+      {confirmDialog}
       <Breadcrumbs
         items={[
           { label: setting?.name ?? "Сеттинг", to: `/settings/${arc.setting_id}` },
@@ -228,6 +232,7 @@ function ChaptersAndScenes({
   campaignId: number | null;
   onChange: () => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [chapterName, setChapterName] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [dragId, setDragId] = useState<number | null>(null);
@@ -319,7 +324,8 @@ function ChaptersAndScenes({
   }
 
   async function archiveScene(scene: StoryScene) {
-    if (!confirm(`Отправить сцену «${scene.name}» в архив?`)) return;
+    if (!(await confirm({ message: `Отправить сцену «${scene.name}» в архив?`, confirmLabel: "Архивировать", danger: true })))
+      return;
     await api.del(`/story/scenes/${scene.id}`);
     onChange();
   }
@@ -407,6 +413,7 @@ function ChaptersAndScenes({
 
   return (
     <div className="stack">
+      {confirmDialog}
       <span className="muted">
         Сцены перетаскиваются внутри главы, главы двигаются стрелками и сворачиваются.
       </span>
@@ -435,7 +442,8 @@ function ChaptersAndScenes({
                 <button
                   className="danger"
                   onClick={async () => {
-                    if (!confirm(`Отправить главу «${c.name}» в архив вместе со сценами?`)) return;
+                    if (!(await confirm({ message: `Отправить главу «${c.name}» в архив вместе со сценами?`, confirmLabel: "Архивировать", danger: true })))
+                      return;
                     await api.del(`/story/arcs/${c.id}`);
                     onChange();
                   }}

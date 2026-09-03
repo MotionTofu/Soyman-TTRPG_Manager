@@ -11,6 +11,7 @@ import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
 import type { Setting, StoryScene, StorySceneDetail } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import "../session.css";
+import { useConfirm } from "../hooks/useConfirm";
 
 // Stable references — SectionDropZone is memoized and would re-render on
 // every parent render if these were inline literals.
@@ -24,6 +25,7 @@ const LOOT_TYPES = ["artifact", "resource", "compendium_entry"];
 // through the copy-on-write layer, so the first change swaps the page over to
 // this campaign's own copy and leaves the setting's version alone.
 export function SceneDetailPage() {
+  const [confirmDialog, confirm] = useConfirm();
   const { id } = useParams();
   const sceneId = Number(id);
   const navigate = useNavigate();
@@ -110,7 +112,8 @@ export function SceneDetailPage() {
   }
 
   async function revert() {
-    if (!confirm("Вернуть сцену к оригиналу из сеттинга? Правки этой кампании пропадут.")) return;
+    if (!(await confirm({ message: "Вернуть сцену к оригиналу из сеттинга? Правки этой кампании пропадут.", confirmLabel: "Вернуть", danger: true })))
+      return;
     await api.post(`/story/scenes/${sceneId}/revert`, { campaign_id: campaignId });
     navigate(`/scenes/${scene?.source_scene_id ?? sceneId}?campaign=${campaignId}`, {
       replace: true,
@@ -124,7 +127,8 @@ export function SceneDetailPage() {
   }
 
   async function archiveScene() {
-    if (!confirm("Отправить сцену в архив?")) return;
+    if (!(await confirm({ message: "Отправить сцену в архив?", confirmLabel: "Архивировать", danger: true })))
+      return;
     await api.del(`/story/scenes/${sceneId}`);
     if (campaignId) navigate(`/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}`);
     else navigate(`/settings/${scene?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
@@ -132,6 +136,7 @@ export function SceneDetailPage() {
 
   return (
     <div className="stack scene-detail">
+      {confirmDialog}
       {/* Из кампании крошки ведут обратно в её раздел «Главы и сцены», а не
            в сеттинг: мастер пришёл сюда оттуда и туда же возвращается. */}
       <Breadcrumbs

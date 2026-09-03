@@ -5,6 +5,7 @@ import { chapterWord, sceneWord } from "../sceneKinds";
 import { AdventureWizard } from "./AdventureWizard";
 import type { StoryArc } from "../types";
 import { NavIcon } from "./NavIcons";
+import { useConfirm } from "../hooks/useConfirm";
 
 // "Приключения" — the index of a setting's prepared story blocks. Everything
 // inside one (chapters, scenes, milestones, secrets) lives on the adventure's
@@ -18,6 +19,7 @@ export function AdventuresTab({
   settingId: number;
   campaignId?: number;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [arcs, setArcs] = useState<StoryArc[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [dragId, setDragId] = useState<number | null>(null);
@@ -29,7 +31,8 @@ export function AdventuresTab({
   useEffect(refresh, [settingId]);
 
   async function archive(arc: StoryArc) {
-    if (!confirm(`Отправить «${arc.name}» в архив вместе с главами и сценами?`)) return;
+    if (!(await confirm({ message: `Отправить «${arc.name}» в архив вместе с главами и сценами?`, confirmLabel: "Архивировать", danger: true })))
+      return;
     await api.del(`/story/arcs/${arc.id}`);
     refresh();
   }
@@ -52,6 +55,7 @@ export function AdventuresTab({
 
   return (
     <div className="stack">
+      {confirmDialog}
       {!campaignId && (
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <button className="primary" onClick={() => setWizardOpen(true)}>

@@ -13,6 +13,7 @@ import { SectionHeading } from "../components/SectionHeading";
 import { CREATABLE_BEING_CATEGORIES } from "../beingCategories";
 import { entryWord } from "../sceneKinds";
 import type { Setting } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Problem {
   path: string;
@@ -95,6 +96,7 @@ function countsLine(counts: Record<string, number>): string {
 }
 
 export function ImportAdventurePage() {
+  const [confirmDialog, confirm] = useConfirm();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const settingParam = params.get("setting");
@@ -290,7 +292,8 @@ export function ImportAdventurePage() {
   }
 
   async function rollback(batchId: number) {
-    if (!confirm("Откатить импорт? Всё, что он создал, будет удалено.")) return;
+    if (!(await confirm({ message: "Откатить импорт? Всё, что он создал, будет удалено.", confirmLabel: "Откатить", danger: true })))
+      return;
     await api.del(`/import/batches/${batchId}`);
     if (result?.batch_id === batchId) setResult(null);
     loadBatches();
@@ -301,6 +304,7 @@ export function ImportAdventurePage() {
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="row" style={{ justifyContent: "space-between" }}>
         <SectionHeading section="settings">Импорт приключения</SectionHeading>
         {setting && <Link to={`/settings/${setting.id}`}>← {setting.name}</Link>}

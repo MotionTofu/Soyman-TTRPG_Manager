@@ -7,6 +7,7 @@ import { syncMentionLinks } from "../mentions";
 import { EmptyState } from "./EmptyState";
 import { chapterWord, sceneWord } from "../sceneKinds";
 import type { StoryArc } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 // Обзорные тексты приключений кампании: по подблоку на приключение, внутри —
 // «Сводка», «Логлайн» и «Завязка». Всё свёрнуто: у книжной кампании таких
@@ -41,6 +42,7 @@ export function CampaignAdventuresCard({
   settingId: number | null;
   onCount?: (n: number) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [adventures, setAdventures] = useState<StoryArc[]>([]);
   const [available, setAvailable] = useState<StoryArc[]>([]);
   const [adding, setAdding] = useState(false);
@@ -79,7 +81,8 @@ export function CampaignAdventuresCard({
     const warning = arc.has_campaign_edits
       ? `\n\nУ кампании есть свои правки и отметки по этому приключению — они сохранятся и вернутся, если привязать его снова.`
       : "";
-    if (!confirm(`Убрать «${arc.name}» из кампании?${warning}`)) return;
+    if (!(await confirm({ message: `Убрать «${arc.name}» из кампании?${warning}`, confirmLabel: "Убрать", danger: true })))
+      return;
     await api.del(`/story/campaign-adventures?campaign_id=${campaignId}&arc_id=${arc.id}`);
     refresh();
   }
@@ -94,6 +97,7 @@ export function CampaignAdventuresCard({
 
   return (
     <div className="stack">
+      {confirmDialog}
       <p className="muted">
         Приключения этой кампании. Тексты правятся прямо здесь: правка создаёт версию для кампании,
         оригинал в сеттинге не меняется.
@@ -160,6 +164,7 @@ function AdventureBlock({
   onChange: () => void;
   onDetach: (arc: StoryArc) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState<Draft>({});
 
@@ -185,7 +190,8 @@ function AdventureBlock({
   }
 
   async function revert() {
-    if (!confirm("Вернуть тексты приключения такими, какие они в сеттинге?")) return;
+    if (!(await confirm({ message: "Вернуть тексты приключения такими, какие они в сеттинге?", confirmLabel: "Вернуть", danger: true })))
+      return;
     await api.post(`/story/arcs/${arc.id}/revert`, { campaign_id: campaignId });
     setEditMode(false);
     onChange();
@@ -198,6 +204,7 @@ function AdventureBlock({
 
   return (
     <details className="card">
+      {confirmDialog}
       <summary style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <strong className="entry-title" style={{ fontSize: "var(--fs-h3)", fontWeight: 600 }}>{arc.name}</strong>
         {arc.is_override && <span className="badge tag">правка кампании</span>}

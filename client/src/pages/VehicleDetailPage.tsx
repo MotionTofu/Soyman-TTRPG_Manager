@@ -11,6 +11,7 @@ import { useTabState } from "../hooks/useTabState";
 import { api } from "../api/client";
 import { KIND_DEFS, extractEnglishName } from "../compendium";
 import type { CompendiumEntry, System } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 // «Изображения» — перед «Упоминаниями», как на странице существа: служебные
 // обратные ссылки везде замыкают ряд.
@@ -29,6 +30,7 @@ export function VehicleDetailPage({
   system: System | null;
   onChange: () => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const entryId = entry.id;
   const navigate = useNavigate();
   const [tab, selectTab] = useTabState(TABS, "Досье", { Статблок: "Статблоки" });
@@ -94,7 +96,8 @@ export function VehicleDetailPage({
   }
 
   async function deletePost(post: CompendiumEntry) {
-    if (!confirm(`Удалить пост экипажа «${post.name}»?`)) return;
+    if (!(await confirm({ message: `Удалить пост экипажа «${post.name}»?`, confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/systems/entries/${post.id}`);
     setPosts((prev) => prev.filter((e) => e.id !== post.id));
   }
@@ -105,13 +108,15 @@ export function VehicleDetailPage({
       posts.length > 0
         ? `Удалить судно «${entry.name}» и все посты экипажа (${posts.length})?`
         : `Удалить судно «${entry.name}»?`;
-    if (!confirm(msg)) return;
+    if (!(await confirm({ message: msg, confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/systems/entries/${entryId}`);
     navigate(`/systems/${entry.system_id}`);
   }
 
   return (
     <div className="stack">
+      {confirmDialog}
       <Breadcrumbs
         items={[
           { label: "Системы", to: "/systems" },

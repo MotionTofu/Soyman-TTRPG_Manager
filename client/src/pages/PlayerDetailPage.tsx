@@ -13,8 +13,10 @@ import type { Campaign, PlayerDetail, PlayerGroup, UnpaidSession } from "../type
 import { NavIcon } from "../components/NavIcons";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { loadHideFinance } from "../financePrivacy";
+import { useConfirm } from "../hooks/useConfirm";
 
 export function PlayerDetailPage() {
+  const [confirmDialog, confirm] = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useCurrentUser();
@@ -132,7 +134,8 @@ export function PlayerDetailPage() {
   }
 
   async function removeCharacter(characterId: number) {
-    if (!confirm("Отправить персонажа в архив?")) return;
+    if (!(await confirm({ message: "Отправить персонажа в архив?", confirmLabel: "Архивировать", danger: true })))
+      return;
     await api.del(`/characters/${characterId}`);
     refresh();
   }
@@ -158,6 +161,7 @@ export function PlayerDetailPage() {
 
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+      {confirmDialog}
       <Breadcrumbs items={[{ label: "Игроки", to: "/players" }, { label: player.name }]} />
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
         <div className="row" style={{ alignItems: "flex-start" }}>

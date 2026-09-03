@@ -4,6 +4,7 @@ import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { CampaignEntry } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   campaignId: number;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, defaultSettingId }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [entries, setEntries] = useState<CampaignEntry[]>([]);
 
   function refresh() {
@@ -36,7 +38,8 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
   }
 
   async function removeEntry(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить запись?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/campaign-entries/${id}`);
     refresh();
   }
@@ -44,6 +47,7 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
   const isPostProduction = category === "post_production";
   return (
     <div className="stack">
+      {confirmDialog}
       {entries.map((e) => (
         <EntryCard
           key={e.id}

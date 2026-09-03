@@ -13,6 +13,7 @@ import {
   loadLitmThemeKits,
 } from "./litmCompendium";
 import { TropePickerModal } from "./TropePickerModal";
+import { useConfirm } from "../../hooks/useConfirm";
 
 async function applyGroupTheme(campaignId: number | undefined, theme: LitMThemeCard) {
   if (!campaignId) return;
@@ -205,6 +206,7 @@ export function LitMCharacterEdit({
   onChange: (v: LitMCharacterData) => void;
   campaignId?: number;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   // A keystroke in any one field used to replace the whole LitMCharacterData
   // object and hand every child (4 theme cards, story themes, fellowship
   // theme, backpack) a brand-new `value`/`onChange` prop, defeating
@@ -267,8 +269,9 @@ const [showTropePicker, setShowTropePicker] = useState(false);
     themes[i] = patch;
     onChangeRef.current({ ...valueRef.current, themes });
   }, []);
-  const removeTheme = useCallback((i: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const removeTheme = useCallback(async (i: number) => {
+    if (!(await confirm({ message: "Удалить эту тему?", confirmLabel: "Удалить", danger: true })))
+      return;
     onChangeRef.current({
       ...valueRef.current,
       themes: valueRef.current.themes.filter((_, idx) => idx !== i),
@@ -295,8 +298,9 @@ const [showTropePicker, setShowTropePicker] = useState(false);
     storyThemes[i] = patch;
     onChangeRef.current({ ...valueRef.current, storyThemes });
   }, []);
-  const removeStoryTheme = useCallback((i: number) => {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  const removeStoryTheme = useCallback(async (i: number) => {
+    if (!(await confirm({ message: "Удалить эту сюжетную тему?", confirmLabel: "Удалить", danger: true })))
+      return;
     onChangeRef.current({
       ...valueRef.current,
       storyThemes: valueRef.current.storyThemes.filter((_, idx) => idx !== i),
@@ -321,6 +325,7 @@ const [showTropePicker, setShowTropePicker] = useState(false);
 
   return (
     <div className="stack litm-character-form">
+      {confirmDialog}
       <label>
         Обещание (Promise)
         <input value={value.promise} onChange={(e) => setPromise(e.target.value)} />

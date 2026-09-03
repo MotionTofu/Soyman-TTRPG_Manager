@@ -4,6 +4,7 @@ import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { CampaignEntry } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   campaignId: number;
@@ -18,6 +19,7 @@ function sortTasks(tasks: CampaignEntry[]) {
 }
 
 export function TaskTracker({ campaignId, defaultSettingId }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [tasks, setTasks] = useState<CampaignEntry[]>([]);
 
   function refresh() {
@@ -38,13 +40,15 @@ export function TaskTracker({ campaignId, defaultSettingId }: Props) {
   }
 
   async function removeTask(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить задачу?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/campaign-entries/${id}`);
     refresh();
   }
 
   return (
     <div className="stack">
+      {confirmDialog}
       {tasks.map((t) => (
         <TaskCard
           key={t.id}

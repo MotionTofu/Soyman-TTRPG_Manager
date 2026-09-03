@@ -6,6 +6,7 @@ import { api } from "../../api/client";
 import type { CompendiumEntry } from "../../types";
 import { TreasurePickerModal } from "./TreasurePickerModal";
 import { MagicWayPickerModal } from "./MagicWayPickerModal";
+import { useConfirm } from "../../hooks/useConfirm";
 
 const POWER_LABELS: Record<LitMPower, string> = {
   "": "",
@@ -159,6 +160,7 @@ function ImprovementsEdit({
   items: LitMThemeCard["specialImprovements"];
   onChange: (items: LitMThemeCard["specialImprovements"]) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   function update(i: number, patch: { text: string; active: boolean }) {
     const list = items.slice();
     list[i] = patch;
@@ -167,12 +169,18 @@ function ImprovementsEdit({
   function add() {
     onChange([...items, { text: "", active: true }]);
   }
-  function remove(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function remove(i: number) {
+    const text = items[i]?.text?.trim();
+    if (!(await confirm({
+      message: text ? `Удалить «${text}»?` : "Удалить эту строку?",
+      confirmLabel: "Удалить",
+      danger: true,
+    }))) return;
     onChange(items.filter((_, idx) => idx !== i));
   }
   return (
     <div className="stack" style={{ gap: 4 }}>
+      {confirmDialog}
       <span className="muted">Особые улучшения темы</span>
       <ul className="litm-improvements">
         {items.map((imp, i) => (

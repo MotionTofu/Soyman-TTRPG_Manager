@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import type { LegacyWorldExplorationEntry, Player, WorldExplorationKind } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 const KIND_TABS: { kind: WorldExplorationKind; label: string; addLabel: string; extraLabel: string | null }[] = [
   { kind: "being", label: "Существа", addLabel: "+ Добавить существо", extraLabel: "Место обитания" },
@@ -22,6 +23,7 @@ interface Props {
 // же строки принадлежат игрокам как личные путевые заметки, и мастеру не
 // показываются вовсе: components/player/CharacterJournal.tsx.
 export function WorldExplorationTab({ campaignId }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [kind, setKind] = useState<WorldExplorationKind>("being");
   const [entries, setEntries] = useState<LegacyWorldExplorationEntry[]>([]);
   const [selfPlayerId, setSelfPlayerId] = useState<number | null>(null);
@@ -51,7 +53,8 @@ export function WorldExplorationTab({ campaignId }: Props) {
   }
 
   async function removeEntry(id: number) {
-    if (!confirm("Удалить запись?")) return;
+    if (!(await confirm({ message: "Удалить запись?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`/world-exploration-entries/${id}`);
     setEntries((prev) => prev.filter((e) => e.id !== id));
     if (expandedId === id) setExpandedId(null);
@@ -61,6 +64,7 @@ export function WorldExplorationTab({ campaignId }: Props) {
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="tabs">
         {KIND_TABS.map((t) => (
           <button key={t.kind} className={kind === t.kind ? "active" : ""} onClick={() => setKind(t.kind)}>

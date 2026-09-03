@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { GmReminder } from "../types";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   targetType: "player" | "campaign";
@@ -11,6 +12,7 @@ interface Props {
 // entirely GM-controlled here: deleting it removes it for everyone, that's
 // the only dismiss mechanism (see gm_reminders in schema.sql).
 export function RemindersWidget({ targetType, targetId }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [reminders, setReminders] = useState<GmReminder[]>([]);
   const [draft, setDraft] = useState("");
   const basePath = targetType === "player" ? `/players/${targetId}/reminders` : `/campaigns/${targetId}/reminders`;
@@ -28,13 +30,15 @@ export function RemindersWidget({ targetType, targetId }: Props) {
   }
 
   async function remove(reminderId: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Удалить напоминание?", confirmLabel: "Удалить", danger: true })))
+      return;
     await api.del(`${basePath}/${reminderId}`);
     refresh();
   }
 
   return (
     <div className="card stack">
+      {confirmDialog}
       {reminders.length === 0 ? (
         <div className="card" style={{ padding: "12px" }}>
           <p className="muted" style={{ margin: 0 }}>Нет активных напоминаний — напишите первое, оно появится у игроков на&nbsp;Главной.</p>

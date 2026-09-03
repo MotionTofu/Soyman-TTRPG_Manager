@@ -799,13 +799,19 @@ const AttackListEdit = memo(function AttackListEdit({
   values: DndManualAttack[];
   onChange: (v: DndManualAttack[]) => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   function update(i: number, patch: Partial<DndManualAttack>) {
     const next = values.slice();
     next[i] = { ...next[i], ...patch };
     onChange(next);
   }
-  function remove(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function remove(i: number) {
+    const name = values[i]?.name?.trim();
+    if (!(await confirm({
+      message: name ? `Удалить атаку «${name}»?` : "Удалить эту атаку?",
+      confirmLabel: "Удалить",
+      danger: true,
+    }))) return;
     onChange(values.filter((_, idx) => idx !== i));
   }
   function add() {
@@ -813,6 +819,7 @@ const AttackListEdit = memo(function AttackListEdit({
   }
   return (
     <div className="dnd-feature-section">
+      {confirmDialog}
       <div className="dnd-feature-header dnd-header-actions">Атаки</div>
       <div className="stack">
         {values.map((a, i) => (
@@ -1170,6 +1177,7 @@ function DndSpellLevelSection({
   const [options, setOptions] = useState<DndSpellOption[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [details, setDetails] = useState<Record<number, SpellDetail>>({});
+  const [confirmDialog, confirm] = useConfirm();
 
   useEffect(() => {
     if (!adding || !systemId) return;
@@ -1212,8 +1220,13 @@ function DndSpellLevelSection({
     next[i] = { ...next[i], prepared: ((next[i].prepared + 1) % 3) as DndSpellPreparedState };
     onSpellsChange(next);
   }
-  function remove(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function remove(i: number) {
+    const name = spells[i]?.name?.trim();
+    if (!(await confirm({
+      message: name ? `Убрать «${name}» из списка заклинаний?` : "Убрать это заклинание?",
+      confirmLabel: "Убрать",
+      danger: true,
+    }))) return;
     onSpellsChange(spells.filter((_, idx) => idx !== i));
   }
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -1237,6 +1250,7 @@ function DndSpellLevelSection({
 
   return (
     <details className="dnd-spell-level-card">
+      {confirmDialog}
       <summary className="row dnd-spell-level-summary" style={{ justifyContent: "space-between" }}>
         <span>{label}</span>
         {showSlots && (

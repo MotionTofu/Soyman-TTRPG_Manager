@@ -37,7 +37,7 @@ import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { useSoundEngineOptional } from "../sound/engine";
-import { useAlert } from "../hooks/useConfirm";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
 import "../canvas.css";
 import {
   NODE_COLORS,
@@ -1787,6 +1787,7 @@ function BoardTile({
   onOpen: () => void;
   onChanged: () => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const title = board.name || "Без имени";
@@ -1800,7 +1801,8 @@ function BoardTile({
   async function archive() {
     // Подтверждение называет доску и её объём, но не пугает необратимостью:
     // «Удалить» здесь означает «в архив», откуда доска возвращается целиком.
-    if (!confirm(`Убрать доску «${title}» в архив? На ней ${count}. Вернуть можно в разделе «Архив».`)) return;
+    if (!(await confirm({ message: `Убрать доску «${title}» в архив? На ней ${count}. Вернуть можно в разделе «Архив».`, confirmLabel: "Архивировать", danger: true })))
+      return;
     await api.del(`/canvas/free-boards/${board.scope_id}`);
     onChanged();
   }
@@ -1830,6 +1832,7 @@ function BoardTile({
         setMenu({ x: e.clientX, y: e.clientY });
       }}
     >
+      {confirmDialog}
       {renaming === null ? (
         <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
           <button
@@ -5966,6 +5969,7 @@ function AdventureProperties({
   nodes: Node<CanvasNodeData>[];
   onChanged: () => void;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   const node = nodes.find((n) => n.id === `adventure:${arcId}`);
   const data = node?.data as AdventureNodeData | undefined;
   const map = board?.campaign_map;
@@ -5973,6 +5977,7 @@ function AdventureProperties({
 
   return (
     <PropsPanel label="Приключение">
+      {confirmDialog}
       <div className="canvas-props__fields">
         <div className="canvas-props__field">
           <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)" }}>{data.name}</span>
@@ -5995,7 +6000,8 @@ function AdventureProperties({
             )}
             <button
               onClick={async () => {
-                if (!confirm(`Вернуть версию сеттинга для «${data.name}»? Правки, сделанные в кампании, пропадут.`)) return;
+                if (!(await confirm({ message: `Вернуть версию сеттинга для «${data.name}»? Правки, сделанные в кампании, пропадут.`, confirmLabel: "Вернуть", danger: true })))
+                  return;
                 await api.del(`/story/arcs/${arcId}/campaign-override?campaign_id=${map.id}`);
                 onChanged();
               }}
@@ -6014,7 +6020,8 @@ function AdventureProperties({
             {map.own_transitions && (
               <button
                 onClick={async () => {
-                  if (!confirm("Вернуть связи сеттинга? Связи, заведённые в кампании, пропадут.")) return;
+                  if (!(await confirm({ message: "Вернуть связи сеттинга? Связи, заведённые в кампании, пропадут.", confirmLabel: "Вернуть", danger: true })))
+                    return;
                   await api.del(`/story/campaigns/${map.id}/arc-transitions`);
                   onChanged();
                 }}
@@ -6033,7 +6040,8 @@ function AdventureProperties({
             <button
               className="danger"
               onClick={async () => {
-                if (!confirm(`Убрать «${data.name}» из кампании? Приключение и весь прогресс по нему останутся — уйдёт только его участие в этой кампании.`)) return;
+                if (!(await confirm({ message: `Убрать «${data.name}» из кампании? Приключение и весь прогресс по нему останутся — уйдёт только его участие в этой кампании.`, confirmLabel: "Убрать", danger: true })))
+                  return;
                 await api.del(`/story/campaign-adventures?campaign_id=${map.id}&arc_id=${arcId}`);
                 onChanged();
               }}

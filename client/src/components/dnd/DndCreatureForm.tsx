@@ -40,6 +40,7 @@ import {
   type DndSpellOption,
 } from "./dndCompendium";
 import { MECHANICS_CREATURE_TYPE_GROUP, MECHANICS_ALIGNMENT_GROUP } from "../../compendium";
+import { useConfirm } from "../../hooks/useConfirm";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import type { DndAbilityPrimary } from "../../dndPrefs";
 import { effectsLabel, type DndCheck, type DndEffect } from "./effects";
@@ -448,6 +449,7 @@ export function SensesEditor({
   options: DndMechanicsOption[];
 }) {
   const [pick, setPick] = useState("");
+  const [confirmDialog, confirm] = useConfirm();
   function add() {
     if (!pick || value.some((s) => s.name === pick)) return;
     onChange([...value, { name: pick, distance: pick === "Тёмное зрение" ? "60" : "" }]);
@@ -455,6 +457,7 @@ export function SensesEditor({
   }
   return (
     <div className="stack" style={{ gap: 4 }}>
+      {confirmDialog}
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         {value.map((s) => (
           <span key={s.name} className="row" style={{ gap: 4 }}>
@@ -469,8 +472,8 @@ export function SensesEditor({
             <button
               type="button"
               className="comp-mini"
-              onClick={() => {
-                if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+              onClick={async () => {
+                if (!(await confirm({ message: `Убрать чувство «${s.name}»?`, confirmLabel: "Убрать", danger: true }))) return;
                 onChange(value.filter((v) => v.name !== s.name));
               }}
             >
@@ -714,6 +717,7 @@ function CreatureSpellLevelSection({
   abilities: DndAbilityScores;
 }) {
   const [adding, setAdding] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<DndSpellOption[]>([]);
 
@@ -743,8 +747,13 @@ function CreatureSpellLevelSection({
     const idx = value.spells.indexOf(entry);
     onChange({ ...value, spells: value.spells.map((s, i) => (i === idx ? { ...s, ...patch } : s)) });
   }
-  function removeSpell(entry: DndCreatureSpell) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function removeSpell(entry: DndCreatureSpell) {
+    const name = entry.name?.trim();
+    if (!(await confirm({
+      message: name ? `Убрать «${name}» из заклинаний существа?` : "Убрать это заклинание?",
+      confirmLabel: "Убрать",
+      danger: true,
+    }))) return;
     onChange({ ...value, spells: value.spells.filter((s) => s !== entry) });
   }
 
@@ -752,6 +761,7 @@ function CreatureSpellLevelSection({
 
   return (
     <details className="dnd-spell-level-card" open>
+      {confirmDialog}
       <summary className="row dnd-spell-level-summary" style={{ justifyContent: "space-between" }}>
         <span>{label}</span>
         {level > 0 && (
@@ -946,11 +956,17 @@ export function ActionListEdit<T extends DndCreatureAction>({
   abilities: DndAbilityScores;
   proficiencyBonus: number | null;
 }) {
+  const [confirmDialog, confirm] = useConfirm();
   function update(i: number, patch: Partial<DndCreatureAction> & { cost?: number }) {
     onChange(values.map((a, idx) => (idx === i ? ({ ...a, ...patch } as T) : a)));
   }
-  function remove(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function remove(i: number) {
+    const name = values[i]?.name?.trim();
+    if (!(await confirm({
+      message: name ? `Удалить действие «${name}»?` : "Удалить это действие?",
+      confirmLabel: "Удалить",
+      danger: true,
+    }))) return;
     onChange(values.filter((_, idx) => idx !== i));
   }
   function add() {
@@ -965,6 +981,7 @@ export function ActionListEdit<T extends DndCreatureAction>({
   }
   return (
     <div className="stack">
+      {confirmDialog}
       <div className={`dnd-feature-header ${headerColorClass ?? ""}`}>{title}</div>
       {values.map((a, i) => (
         <div key={i} className="stack dnd-card" style={{ gap: 6 }}>
@@ -1213,6 +1230,7 @@ export function EquipmentEditor({
   systemId: number | null;
 }) {
   const [addMode, setAddMode] = useState<"compendium" | "bag" | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<CompendiumEntry[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -1226,8 +1244,13 @@ export function EquipmentEditor({
   function update(i: number, patch: Partial<DndCreatureEquipmentItem>) {
     onChange(value.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
-  function remove(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function remove(i: number) {
+    const name = value[i]?.name?.trim();
+    if (!(await confirm({
+      message: name ? `Убрать «${name}» из снаряжения?` : "Убрать эту вещь?",
+      confirmLabel: "Убрать",
+      danger: true,
+    }))) return;
     onChange(value.filter((_, idx) => idx !== i));
   }
   function append(item: DndCreatureEquipmentItem) {
@@ -1258,6 +1281,7 @@ export function EquipmentEditor({
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
+      {confirmDialog}
       <div className="dnd-feature-header">Снаряжение</div>
       {value.map((item, i) => (
         <div key={i} className="row" style={{ gap: 6, flexWrap: "wrap" }}>
@@ -1323,6 +1347,7 @@ export function EquipmentEditor({
 
 export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChange: (v: DndCreatureLoot) => void }) {
   const [rolled, setRolled] = useState<Record<number, number>>({});
+  const [confirmDialog, confirm] = useConfirm();
 
   function addItem() {
     onChange({ ...value, items: [...value.items, { name: "", qty: "" }] });
@@ -1330,8 +1355,13 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
   function updateItem(i: number, patch: Partial<{ name: string; qty: string }>) {
     onChange({ ...value, items: value.items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)) });
   }
-  function removeItem(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function removeItem(i: number) {
+    const name = value.items[i]?.name?.trim();
+    if (!(await confirm({
+      message: name ? `Убрать «${name}» из добычи?` : "Убрать эту вещь из добычи?",
+      confirmLabel: "Убрать",
+      danger: true,
+    }))) return;
     onChange({ ...value, items: value.items.filter((_, idx) => idx !== i) });
   }
   function addCurrency() {
@@ -1340,8 +1370,13 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
   function updateCurrency(i: number, patch: Partial<{ label: string; formula: string }>) {
     onChange({ ...value, currency: value.currency.map((c, idx) => (idx === i ? { ...c, ...patch } : c)) });
   }
-  function removeCurrency(i: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+  async function removeCurrency(i: number) {
+    const label = value.currency[i]?.label?.trim();
+    if (!(await confirm({
+      message: label ? `Убрать «${label}» из добычи?` : "Убрать эту строку монет?",
+      confirmLabel: "Убрать",
+      danger: true,
+    }))) return;
     onChange({ ...value, currency: value.currency.filter((_, idx) => idx !== i) });
   }
   function roll(i: number) {
@@ -1351,6 +1386,7 @@ export function LootEditor({ value, onChange }: { value: DndCreatureLoot; onChan
 
   return (
     <div className="stack">
+      {confirmDialog}
       <div className="dnd-feature-header">Лут</div>
       <div className="stack" style={{ gap: 4 }}>
         <span className="sb-prop-label">Предметы</span>

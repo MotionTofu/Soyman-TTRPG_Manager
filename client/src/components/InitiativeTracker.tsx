@@ -10,6 +10,7 @@ import { rollDiceFormula } from "./dnd/diceRoll";
 import { findDndSystemId, loadDndMechanicsGroup } from "./dnd/dndCompendium";
 import { fetchCreatureCard } from "./CreatureCard";
 import { loadUseEpithets, INITIATIVE_EPITHETS } from "../initiativeTrackerPrefs";
+import { useConfirm } from "../hooks/useConfirm";
 import type {
   InitiativeKind,
   DndCharacterData,
@@ -77,6 +78,7 @@ interface Props {
 }
 
 export function InitiativeTracker({ sessionId }: Props) {
+  const [confirmDialog, confirm] = useConfirm();
   const [entries, setEntries] = useState<InitiativeEntry[]>([]);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -228,7 +230,8 @@ export function InitiativeTracker({ sessionId }: Props) {
   }
 
   async function remove(id: number) {
-    if (!confirm("Вы уверены, что хотите удалить ЭТО?")) return;
+    if (!(await confirm({ message: "Убрать участника из очереди хода?", confirmLabel: "Убрать", danger: true })))
+      return;
     await api.del(`/initiative-entries/${id}`);
     load();
   }
@@ -403,6 +406,7 @@ export function InitiativeTracker({ sessionId }: Props) {
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
+      {confirmDialog}
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <strong>Трекер инициативы</strong>
         {entries.length > 0 && (
