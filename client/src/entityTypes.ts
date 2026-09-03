@@ -16,6 +16,11 @@ export const ENTITY_TYPES: { key: string; label: string }[] = [
   { key: "scene", label: "Сцены" },
   { key: "session", label: "Сессии" },
   { key: "compendium_entry", label: "Компендиум" },
+  // Событие хроники ищется наравне с остальным: «написанное Мастером должно
+  // находиться». Своя страница у него есть (`/events/:id`), поэтому фишка
+  // фильтра нужна — панель поиска шлёт `types=` всегда, и без ключа в этом
+  // списке события отсеивались бы на сервере.
+  { key: "setting_event", label: "События хроники" },
 ];
 
 export const ENTITY_TYPE_LABELS: Record<string, string> = Object.fromEntries(
@@ -39,8 +44,6 @@ export const ENTITY_TYPE_SINGULAR: Record<string, string> = {
   scene: "Сцена",
   session: "Сессия",
   compendium_entry: "Запись компендиума",
-  // Событие хроники — не в ENTITY_TYPES выше: своего раздела и поиска у него
-  // нет, но связи с ним показываются наравне с остальными.
   setting_event: "Событие",
 };
 

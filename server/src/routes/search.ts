@@ -494,6 +494,198 @@ searchRouter.get("/", (req, res) => {
     });
   }
 
+  // --- Спутники сущностей ---------------------------------------------
+  //
+  // Важные даты, подписи картинок, статблоки и заметки на связях лежат в
+  // своих таблицах, но своей страницы не имеют: находиться они должны как та
+  // сущность, на которой написаны. Поэтому результат идёт с типом владельца,
+  // а `wantsType` проверяется по нему же — фильтры в панели поиска остаются
+  // честными.
+  //
+  // `push` оставляет первое попадание на пару «тип+id»: если существо уже
+  // нашлось по имени, его подпись не затрётся обрывком подписи к картинке.
+  //
+  // Имена таблиц берутся из этого списка, а не из запроса, — как в
+  // `ARCHIVE_TABLES`, чтобы подстановка в `${}` оставалась безопасной.
+  const SATELLITE_OWNERS: { type: string; table: string; nameCol: string }[] = [
+    { type: "being", table: "setting_beings", nameCol: "name" },
+    { type: "community", table: "setting_communities", nameCol: "name" },
+    { type: "location", table: "setting_locations", nameCol: "name" },
+    { type: "character", table: "characters", nameCol: "character_name" },
+    { type: "artifact", table: "artifacts", nameCol: "name" },
+  ];
+
+  const pushOwnerHits = (
+    owner: { type: string; table: string; nameCol: string },
+    label: string,
+    sql: string,
+    params: unknown[]
+  ) => {
+    const rows = db.prepare(sql).all(...(params as [])) as { id: number; name: string; blob: string }[];
+    rows.forEach((r) =>
+      push({ type: owner.type, id: r.id, title: r.name, subtitle: `${label} · ${snippet(r.blob, q)}` })
+    );
+  };
+
+  for (const owner of SATELLITE_OWNERS) {
+    if (!wantsType(owner.type)) continue;
+
+    // Важные даты: заводятся у существа, сообщества, локации и персонажа.
+    if (owner.type !== "artifact") {
+      pushOwnerHits(
+        owner,
+        "Важная дата",
+        `SELECT o.id, o.${owner.nameCol} as name, (d.title || ' ' || d.description) as blob
+           FROM important_dates d JOIN ${owner.table} o ON o.id = d.owner_id
+          WHERE d.owner_type = ? AND lower_u(d.title || ' ' || d.description) LIKE ?
+            AND o.archived_at IS NULL`,
+        [owner.type, like]
+      );
+    }
+
+    // Подписи к картинкам галереи. Подпись — единственное место, где Мастер
+    // пишет словами, что на изображении; без неё картинка не находится ничем.
+    pushOwnerHits(
+      owner,
+      "Подпись к изображению",
+      `SELECT o.id, o.${owner.nameCol} as name, g.caption as blob
+         FROM gallery_images g JOIN ${owner.table} o ON o.id = g.owner_id
+        WHERE g.owner_type = ? AND lower_u(g.caption) LIKE ? AND o.archived_at IS NULL`,
+      [owner.type, like]
+    );
+
+    // Заметки на связях: пишутся на исходном конце связи, там и ищутся.
+    pushOwnerHits(
+      owner,
+      "Заметка на связи",
+      `SELECT o.id, o.${owner.nameCol} as name, (n.title || ' ' || n.content) as blob
+         FROM link_notes n
+         JOIN generic_links l ON l.id = n.link_id
+         JOIN ${owner.table} o ON o.id = l.from_id
+        WHERE l.from_type = ? AND lower_u(n.title || ' ' || n.content) LIKE ?
+          AND o.archived_at IS NULL`,
+      [owner.type, like]
+    );
+
+    // Статблоки есть только у существа и персонажа.
+    if (owner.type === "being" || owner.type === "character") {
+      // Поле `content` у нетекстовых форматов — это JSON целиком, и обрывок
+      // из него в подписи читается как мусор. Поэтому для них показывается
+      // только пометка, а фрагмент берётся из заметки Мастера.
+      const rows = db
+        .prepare(
+          `SELECT o.id, o.${owner.nameCol} as name, sb.format, sb.kind, sb.note, sb.content
+             FROM statblocks sb JOIN ${owner.table} o ON o.id = sb.owner_id
+            WHERE sb.owner_type = ? AND (lower_u(sb.note) LIKE ? OR lower_u(sb.content) LIKE ?)
+              AND o.archived_at IS NULL`
+        )
+        .all(owner.type, like, like) as {
+        id: number;
+        name: string;
+        format: string;
+        kind: string;
+        note: string;
+        content: string;
+      }[];
+      rows.forEach((r) => {
+        const inNote = r.note && r.note.toLowerCase().includes(qLower);
+        const readable = r.format === "text" || inNote;
+        push({
+          type: owner.type,
+          id: r.id,
+          title: r.name,
+          subtitle: readable
+            ? `Статблок · ${snippet(inNote ? r.note : r.content, q)}`
+            : "Статблок",
+        });
+      });
+    }
+  }
+
+  // Картинки раздела «Для игроков» принадлежат кампании: своей страницы у
+  // раздела нет, открывается он вкладкой кампании.
+  if (wantsType("campaign")) {
+    const sectionImages = db
+      .prepare(
+        `SELECT c.id, c.name, g.caption as blob
+           FROM gallery_images g
+           JOIN campaign_player_sections ps ON ps.id = g.owner_id
+           JOIN campaigns c ON c.id = ps.campaign_id
+          WHERE g.owner_type = 'campaign_player_section' AND lower_u(g.caption) LIKE ?
+            AND c.archived_at IS NULL`
+      )
+      .all(like) as { id: number; name: string; blob: string }[];
+    sectionImages.forEach((r) =>
+      push({ type: "campaign", id: r.id, title: r.name, subtitle: `Подпись к изображению · ${snippet(r.blob, q)}` })
+    );
+
+    // Напоминания Мастера самому себе — «спросить у Лёши про долг гильдии».
+    const reminders = db
+      .prepare(
+        `SELECT c.id, c.name, r.message as blob
+           FROM gm_reminders r JOIN campaigns c ON c.id = r.target_id
+          WHERE r.target_type = 'campaign' AND lower_u(r.message) LIKE ? AND c.archived_at IS NULL`
+      )
+      .all(like) as { id: number; name: string; blob: string }[];
+    reminders.forEach((r) =>
+      push({ type: "campaign", id: r.id, title: r.name, subtitle: `Напоминание · ${snippet(r.blob, q)}` })
+    );
+
+    // Хроника кампании. Своей страницы у события кампании нет (в отличие от
+    // события сеттинга), поэтому ведём на кампанию — там вкладка хроники.
+    const events = db
+      .prepare(
+        `SELECT c.id, c.name,
+                (e.title || ' ' || e.description || ' ' || e.full_description || ' ' || e.consequences) as blob
+           FROM campaign_calendar_events e JOIN campaigns c ON c.id = e.campaign_id
+          WHERE lower_u(e.title || ' ' || e.description || ' ' || e.full_description || ' ' || e.consequences) LIKE ?
+            AND c.archived_at IS NULL`
+      )
+      .all(like) as { id: number; name: string; blob: string }[];
+    events.forEach((r) =>
+      push({ type: "campaign", id: r.id, title: r.name, subtitle: `Событие хроники · ${snippet(r.blob, q)}` })
+    );
+  }
+
+  if (wantsType("player")) {
+    const reminders = db
+      .prepare(
+        `SELECT p.id, p.name, r.message as blob
+           FROM gm_reminders r JOIN players p ON p.id = r.target_id
+          WHERE r.target_type = 'player' AND lower_u(r.message) LIKE ? AND p.archived_at IS NULL`
+      )
+      .all(like) as { id: number; name: string; blob: string }[];
+    reminders.forEach((r) =>
+      push({ type: "player", id: r.id, title: r.name, subtitle: `Напоминание · ${snippet(r.blob, q)}` })
+    );
+  }
+
+  // Событие хроники сеттинга — единственный из спутников со своей страницей
+  // (`/events/:id`), поэтому оно и результат отдельного типа, а не запись
+  // сеттинга: иначе «Битва при Красном броде» вела бы на сеттинг, и искать
+  // её пришлось бы второй раз уже глазами.
+  if (wantsType("setting_event")) {
+    const rows = db
+      .prepare(
+        `SELECT e.id, e.title, s.name as setting_name,
+                (e.description || ' ' || e.full_description || ' ' || e.consequences) as blob
+           FROM setting_calendar_events e JOIN settings s ON s.id = e.setting_id
+          WHERE (lower_u(e.title) LIKE ?
+                 OR lower_u(e.description || ' ' || e.full_description || ' ' || e.consequences) LIKE ?)
+            AND s.archived_at IS NULL`
+      )
+      .all(like, like) as { id: number; title: string; setting_name: string; blob: string }[];
+    rows.forEach((r) =>
+      push({
+        type: "setting_event",
+        id: r.id,
+        title: r.title,
+        subtitle: r.blob && r.blob.toLowerCase().includes(qLower) ? snippet(r.blob, q) : undefined,
+        context: `Сеттинг: ${r.setting_name}`,
+      })
+    );
+  }
+
   // Rank results so exact/prefix name matches surface above matches that
   // only hit deep in a description/notes blob — previously results were in
   // whatever order each type's query happened to run, so a long note
