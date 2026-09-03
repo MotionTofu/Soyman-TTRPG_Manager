@@ -31,7 +31,6 @@ import { GENRE_CATEGORIES, MAX_GENRES } from "../genreData";
 import type { SettingGenre } from "../types";
 import { LocationFilter } from "../components/LocationCascadePicker";
 import { SettingEntryList } from "../components/SettingEntryList";
-import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { SettingBeingTileGrid, SettingCommunityTileGrid } from "../components/SettingBeingTileGrid";
 import { ArtifactTileGrid } from "../components/ArtifactTileGrid";
 import { EntityWizard } from "../components/entityWizard/EntityWizard";
@@ -47,7 +46,8 @@ import { NavIcon } from "../components/NavIcons";
 import { EmptyState } from "../components/EmptyState";
 import { isSafeImageUrl, safeBackgroundImage } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import { CampaignWizard } from "../components/CampaignWizard";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 
@@ -1494,6 +1494,8 @@ function PopulationTab({ settingId }: { settingId: number }) {
 }
 
 function BeingsSection({ settingId }: { settingId: number }) {
+  const [promptDialog, promptText] = usePrompt();
+  const { deleteWithUndo } = useUndoDelete();
   const [category, setCategory] = useState<BeingCategory | "all">("all");
   const [locationFilter, setLocationFilter] = useState("");
   const [communityFilter, setCommunityFilter] = useState("");
@@ -1671,13 +1673,25 @@ function BeingsSection({ settingId }: { settingId: number }) {
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/setting-beings/${beingId}`);
+    const name = beings.find((b) => b.id === beingId)?.name ?? "Личность";
+    await deleteWithUndo({
+      entityName: name,
+      deleteFn: async () => { await api.del(`/setting-beings/${beingId}`); refresh(); },
+      restoreFn: async () => { await api.put(`/setting-beings/${beingId}/restore`); refresh(); },
+    });
+  }
+
+  async function renameBeing(being: SettingBeing) {
+    const name = await promptText({ title: "Переименовать личность", message: "Имя", defaultValue: being.name });
+    if (!name?.trim() || name.trim() === being.name) return;
+    await api.put(`/setting-beings/${being.id}`, { name: name.trim() });
     refresh();
   }
 
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       {confirmDialog}
+      {promptDialog}
       <div className="sort-toggle" role="tablist" aria-label="Категории личностей">
         {NAMED_BEING_CATEGORIES.map((c) => (
           <button
@@ -1828,7 +1842,7 @@ function BeingsSection({ settingId }: { settingId: number }) {
           }
         />
       ) : (
-        <SettingBeingTileGrid beings={beings} grouping={sort === "category" ? "category" : sort === "community" ? "community" : "alpha"} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+        <SettingBeingTileGrid beings={beings} grouping={sort === "category" ? "category" : sort === "community" ? "community" : "alpha"} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} selectedIds={selectedIds} onToggleSelect={toggleSelect} onRename={renameBeing} onArchive={(b) => deleteBeing(b.id)} />
       )}
     </div>
   );
@@ -1841,6 +1855,8 @@ function BeingsSection({ settingId }: { settingId: number }) {
 // CompendiumLinks card on the being's own page); the entry itself lives in
 // the setting and works fine with no system attached at all.
 function BestiarySection({ settingId }: { settingId: number }) {
+  const [promptDialog, promptText] = usePrompt();
+  const { deleteWithUndo } = useUndoDelete();
   const [beings, setBeings] = useState<SettingBeing[]>([]);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState(query);
@@ -1929,13 +1945,25 @@ function BestiarySection({ settingId }: { settingId: number }) {
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/setting-beings/${beingId}`);
+    const name = beings.find((b) => b.id === beingId)?.name ?? "Запись";
+    await deleteWithUndo({
+      entityName: name,
+      deleteFn: async () => { await api.del(`/setting-beings/${beingId}`); refresh(); },
+      restoreFn: async () => { await api.put(`/setting-beings/${beingId}/restore`); refresh(); },
+    });
+  }
+
+  async function renameBeing(being: SettingBeing) {
+    const name = await promptText({ title: "Переименовать запись", message: "Название", defaultValue: being.name });
+    if (!name?.trim() || name.trim() === being.name) return;
+    await api.put(`/setting-beings/${being.id}`, { name: name.trim() });
     refresh();
   }
 
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       {confirmDialog}
+      {promptDialog}
       <p className="muted" style={{ maxWidth: "none" }}>
         Бестиарий сеттинга — виды и типы существ без имени, населяющие этот мир. Именные
         персонажи живут в разделе «Личности». Запись бестиария можно связать с монстрами из
@@ -2000,13 +2028,15 @@ function BestiarySection({ settingId }: { settingId: number }) {
           }
         />
       ) : (
-        <SettingBeingTileGrid beings={beings} grouping="alpha" searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} />
+        <SettingBeingTileGrid beings={beings} grouping="alpha" searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} onRename={renameBeing} onArchive={(b) => deleteBeing(b.id)} />
       )}
     </div>
   );
 }
 
 function CommunitiesSection({ settingId }: { settingId: number }) {
+  const [promptDialog, promptText] = usePrompt();
+  const { deleteWithUndo } = useUndoDelete();
   const navigate = useNavigate();
   const [communities, setCommunities] = useState<SettingCommunity[]>([]);
   const [creating, setCreating] = useState(false);
@@ -2081,13 +2111,25 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/setting-communities/${id}`);
+    const name = communities.find((c) => c.id === id)?.name ?? "Сообщество";
+    await deleteWithUndo({
+      entityName: name,
+      deleteFn: async () => { await api.del(`/setting-communities/${id}`); refresh(); },
+      restoreFn: async () => { await api.put(`/setting-communities/${id}/restore`); refresh(); },
+    });
+  }
+
+  async function renameCommunity(community: SettingCommunity) {
+    const name = await promptText({ title: "Переименовать сообщество", message: "Название", defaultValue: community.name });
+    if (!name?.trim() || name.trim() === community.name) return;
+    await api.put(`/setting-communities/${community.id}`, { name: name.trim() });
     refresh();
   }
 
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       {confirmDialog}
+      {promptDialog}
       <p className="muted" style={{ maxWidth: "none" }}>
         Сообщества — любые объединения (народы, культуры, фракции, гильдии), к которым можно
         отнести личностей из раздела «Личности». Здесь показаны верхнеуровневые — вложенные
@@ -2159,7 +2201,7 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
           }
         />
       ) : (
-        <SettingCommunityTileGrid communities={communities} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} />
+        <SettingCommunityTileGrid communities={communities} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} onRename={renameCommunity} onArchive={(c) => deleteCommunity(c.id)} />
       )}
     </div>
   );

@@ -1,9 +1,12 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
 import { CreatureCardPreview } from "./EntityPreviewModal";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { BEING_CATEGORIES } from "../beingCategories";
+import { addToBag } from "../bag";
+import { useLongPress } from "../hooks/useLongPress";
 import type { SettingBeing, SettingCommunity } from "../types";
 
 // Tile for setting beings — visual twin of MonsterTile (system bestiary) per §1.4 band + portrait/monogram + facts + actions.
@@ -75,18 +78,28 @@ const SettingBeingTile = memo(function SettingBeingTile({
   onOpenModal,
   selected,
   onToggleSelect,
+  onMenu,
 }: {
   being: SettingBeing;
   onOpenModal: (m: { id: number; view: "card" | "statblock" }) => void;
   selected?: boolean;
   onToggleSelect?: () => void;
+  onMenu?: (being: SettingBeing, at: { clientX: number; clientY: number }) => void;
 }) {
   const comms = (being as unknown as { communities?: { id: number; name: string }[] }).communities ?? [];
   const isMulti = comms.length > 1;
   const meta = metaLine(being);
   const loc = being.locations?.[0]?.name ?? "";
+  // Долгое зажатие открывает то же меню, что правая кнопка: на планшете
+  // правой кнопки нет, а действия строки живут только здесь.
+  const longPress = useLongPress(
+    useCallback((at) => onMenu?.(being, at), [onMenu, being])
+  );
   return (
-    <article className={`monster-tile${selected ? " is-selected" : ""}`} onClick={() => onOpenModal({ id: being.id, view: "card" })} title="Открыть карточку" style={selected ? { outline: "2px solid var(--accent)", outlineOffset: -2 } : undefined}>
+    <article className={`monster-tile${selected ? " is-selected" : ""}`} onClick={() => onOpenModal({ id: being.id, view: "card" })}
+      onContextMenu={(e) => { if (!onMenu) return; e.preventDefault(); onMenu(being, { clientX: e.clientX, clientY: e.clientY }); }}
+      {...longPress}
+      title="Открыть карточку" style={selected ? { outline: "2px solid var(--accent)", outlineOffset: -2 } : undefined}>
       <header className="monster-tile__band">
         {onToggleSelect && (
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect} onClick={(e) => e.stopPropagation()} style={{ flex: "none" }} />
@@ -126,6 +139,7 @@ function BeingGroup({
   onOpenModal,
   selectedIds,
   onToggleSelect,
+  onMenu,
 }: {
   label: string;
   list: SettingBeing[];
@@ -133,6 +147,7 @@ function BeingGroup({
   onOpenModal: (m: { id: number; view: "card" | "statblock" }) => void;
   selectedIds?: Set<number>;
   onToggleSelect?: (id: number) => void;
+  onMenu?: (being: SettingBeing, at: { clientX: number; clientY: number }) => void;
 }) {
   const key = `settling-beings-group-${label}`;
   const [open, setOpen] = useState(() => localStorage.getItem(key) !== "0");
@@ -149,7 +164,7 @@ function BeingGroup({
         {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
       </summary>
       <div className="monster-grid">
-        {list.map((b) => <SettingBeingTile key={b.id} being={b} onOpenModal={onOpenModal} selected={selectedIds?.has(b.id)} onToggleSelect={onToggleSelect ? () => onToggleSelect(b.id) : undefined} />)}
+        {list.map((b) => <SettingBeingTile key={b.id} being={b} onOpenModal={onOpenModal} selected={selectedIds?.has(b.id)} onToggleSelect={onToggleSelect ? () => onToggleSelect(b.id) : undefined} onMenu={onMenu} />)}
       </div>
     </details>
   );
@@ -163,6 +178,8 @@ export const SettingBeingTileGrid = memo(function SettingBeingTileGrid({
   onCreate,
   selectedIds,
   onToggleSelect,
+  onRename,
+  onArchive,
 }: {
   beings: SettingBeing[];
   grouping: BeingGrouping;
@@ -171,13 +188,39 @@ export const SettingBeingTileGrid = memo(function SettingBeingTileGrid({
   onCreate?: () => void;
   selectedIds?: Set<number>;
   onToggleSelect?: (id: number) => void;
+  onRename?: (being: SettingBeing) => void;
+  onArchive?: (being: SettingBeing) => void;
 }) {
   const [modal, setModal] = useState<{ id: number; view: "card" | "statblock" } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; being: SettingBeing } | null>(null);
+  const navigate = useNavigate();
   const groups = useMemo(() => groupBeings(beings, grouping, dir), [beings, grouping, dir]);
+  // Один колбэк на все плитки, а не свой на каждую: плитка мемоизирована, и
+  // новая ссылка на каждый рендер сводила бы `memo` на нет.
+  const openMenu = useCallback(
+    (being: SettingBeing, at: { clientX: number; clientY: number }) =>
+      setMenu({ x: at.clientX, y: at.clientY, being }),
+    []
+  );
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        { label: "Профиль", onClick: () => navigate(`/beings/${menu.being.id}`) },
+        {
+          label: "Показать",
+          children: [
+            { label: "Карточку", onClick: () => setModal({ id: menu.being.id, view: "card" }) },
+            { label: "Статблок", onClick: () => setModal({ id: menu.being.id, view: "statblock" }) },
+          ],
+        },
+        { label: "В мешок", onClick: () => addToBag({ type: "being", id: menu.being.id, title: menu.being.name }) },
+        ...(onRename ? [{ label: "Переименовать", onClick: () => onRename(menu.being) }] : []),
+        ...(onArchive ? [{ label: "Архивировать", danger: true, onClick: () => onArchive(menu.being) }] : []),
+      ]
+    : [];
   return (
     <div className="stack" style={{ gap: 10 }}>
       {groups.map(([label, list]) => (
-        <BeingGroup key={label} label={label} list={list} forceOpen={searchActive} onOpenModal={setModal} selectedIds={selectedIds} onToggleSelect={onToggleSelect} />
+        <BeingGroup key={label} label={label} list={list} forceOpen={searchActive} onOpenModal={setModal} selectedIds={selectedIds} onToggleSelect={onToggleSelect} onMenu={openMenu} />
       ))}
       {onCreate && (
         <div className="monster-grid">
@@ -186,6 +229,7 @@ export const SettingBeingTileGrid = memo(function SettingBeingTileGrid({
           </article>
         </div>
       )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.being.name} items={menuItems} onClose={() => setMenu(null)} />}
       {modal && (
         <Modal onClose={() => setModal(null)}>
           <CreatureCardPreview type="being" id={modal.id} statblockInline autoShowStatblock={modal.view === "statblock"} onClose={() => setModal(null)} />
@@ -196,9 +240,21 @@ export const SettingBeingTileGrid = memo(function SettingBeingTileGrid({
 });
 
 // Community tile — same grid, simpler facts
-const SettingCommunityTile = memo(function SettingCommunityTile({ community }: { community: SettingCommunity }) {
+const SettingCommunityTile = memo(function SettingCommunityTile({
+  community,
+  onMenu,
+}: {
+  community: SettingCommunity;
+  onMenu?: (community: SettingCommunity, at: { clientX: number; clientY: number }) => void;
+}) {
+  const longPress = useLongPress(
+    useCallback((at) => onMenu?.(community, at), [onMenu, community])
+  );
   return (
-    <article className="monster-tile" title={community.name}>
+    <article className="monster-tile" title={community.name}
+      onContextMenu={(e) => { if (!onMenu) return; e.preventDefault(); onMenu(community, { clientX: e.clientX, clientY: e.clientY }); }}
+      {...longPress}
+    >
       <Link to={`/communities/${community.id}`} style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", flex: 1 }}>
         <header className="monster-tile__band">
           <span className="monster-tile__name">{community.name || "Без названия"}</span>
@@ -223,7 +279,22 @@ const SettingCommunityTile = memo(function SettingCommunityTile({ community }: {
   );
 });
 
-export function SettingCommunityTileGrid({ communities, searchActive, dir = "asc", onCreate }: { communities: SettingCommunity[]; searchActive: boolean; dir?: SortDir; onCreate?: () => void }) {
+export function SettingCommunityTileGrid({ communities, searchActive, dir = "asc", onCreate, onRename, onArchive }: { communities: SettingCommunity[]; searchActive: boolean; dir?: SortDir; onCreate?: () => void; onRename?: (c: SettingCommunity) => void; onArchive?: (c: SettingCommunity) => void }) {
+  const [menu, setMenu] = useState<{ x: number; y: number; community: SettingCommunity } | null>(null);
+  const navigate = useNavigate();
+  const openMenu = useCallback(
+    (community: SettingCommunity, at: { clientX: number; clientY: number }) =>
+      setMenu({ x: at.clientX, y: at.clientY, community }),
+    []
+  );
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        { label: "Профиль", onClick: () => navigate(`/communities/${menu.community.id}`) },
+        { label: "В мешок", onClick: () => addToBag({ type: "community", id: menu.community.id, title: menu.community.name }) },
+        ...(onRename ? [{ label: "Переименовать", onClick: () => onRename(menu.community) }] : []),
+        ...(onArchive ? [{ label: "Архивировать", danger: true, onClick: () => onArchive(menu.community) }] : []),
+      ]
+    : [];
   const groups = useMemo(() => {
     const map = new Map<string, SettingCommunity[]>();
     for (const c of communities) {
@@ -249,7 +320,7 @@ export function SettingCommunityTileGrid({ communities, searchActive, dir = "asc
             {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
           </summary>
           <div className="monster-grid">
-            {list.map((c) => <SettingCommunityTile key={c.id} community={c} />)}
+            {list.map((c) => <SettingCommunityTile key={c.id} community={c} onMenu={openMenu} />)}
           </div>
         </details>
       ))}
@@ -260,6 +331,7 @@ export function SettingCommunityTileGrid({ communities, searchActive, dir = "asc
           </article>
         </div>
       )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.community.name} items={menuItems} onClose={() => setMenu(null)} />}
     </div>
   );
 }
