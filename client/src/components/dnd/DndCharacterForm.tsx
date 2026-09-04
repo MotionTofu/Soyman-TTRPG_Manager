@@ -2172,7 +2172,8 @@ function DndEquipmentQuickView({
   // function boundaries) — capture a definitely-non-optional reference once
   // the guard has passed instead of re-checking `onQuickUpdate` at each call.
   if (!onQuickUpdate) return <DndEquipmentView sections={sections} />;
-  if (sections.length === 0) return null;
+  // Пустой список разделов больше не прячет блок целиком: монеты живут здесь,
+  // и у персонажа без единого предмета кошелёк всё равно есть.
   const commit = onQuickUpdate;
 
   function startEdit(si: number, ii: number) {
@@ -5217,6 +5218,9 @@ export function DndCharacterView({
   // (многоклассье без полного заклинателя) — обычному персонажу лишний
   // запрос ни к чему.
   const [fallbackProgressions, setFallbackProgressions] = useState<(ClassProgression | undefined)[]>([]);
+  // Здесь, а не рядом с местом использования: ниже по функции стоит ранний
+  // возврат для compact-вида, и хук за ним вызывался бы не в каждом рендере.
+  const [spellListOpen, setSpellListOpen] = useState(false);
   const isMobile = useIsMobile();
   // Справочники грузятся только когда панель открыта — см. флаг в useDndOrigin.
   // Справочники нужны обеим панелям правки: происхождению — иерархия классов,
@@ -5357,7 +5361,6 @@ export function DndCharacterView({
   // в свободном тексте («9 клеток, лазание 3») отнимать нечего, и он
   // остаётся примечанием под итогом.
   const speedShown = walkWithExhaustion(value.speeds, value.exhaustion, prefs.distanceUnit);
-  const [spellListOpen, setSpellListOpen] = useState(false);
   // Класс и подкласс — источники списка. Многоклассовый персонаж видит
   // объединение: заклинание из любого своего списка он взять вправе.
   const spellListSources = value.classes.flatMap((c) => [
@@ -6088,6 +6091,7 @@ export function DndCharacterView({
                   <DndEquipmentQuickView
                     sections={value.equipmentSections}
                     systemId={value.systemId}
+                    coins={value.coins}
                     onQuickUpdate={onQuickUpdate}
                   />
                 </>
