@@ -4,8 +4,10 @@ import type { CompendiumEntry, DndAbilityScores } from "../../types";
 import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
 import { featuresFromEntries } from "./dndFeatures";
 import { useDndSkills } from "./useDndSkills";
+import { grantsFromEntry } from "./dndGrants";
 import {
   ABILITY_LABELS,
+  ABILITY_NAME_TO_KEY,
   abilityModifier,
   computeProficiencyBonus,
   emptyAbilities,
@@ -16,10 +18,12 @@ import {
 import {
   findDndSystemId,
   loadDndBackgroundOptions,
+  loadDndOriginFeats,
   loadDndClassFeatures,
   loadDndClassHierarchy,
   loadDndSpeciesFeatures,
   loadDndSpeciesOptions,
+  type DndFeatOption,
   type DndBackgroundOption,
   type DndClassHierarchy,
   type DndSpeciesOption,
@@ -27,7 +31,11 @@ import {
   isAbortError,
 } from "./dndCompendium";
 
-const STEPS = ["Личность", "Класс", "Вид", "Предыстория", "Характеристики", "Навыки", "Обзор"] as const;
+// Черта происхождения стоит ПЕРЕД навыками, и это не косметика: «Одарённый»
+// добавляет к выбору три навыка, а сама черта приходит из двух мест —
+// предыстории и вида (у Человека это «Универсальность»). Спроси навыки
+// раньше — и три из них будет негде взять (решение W3, гриллинг 2026-09-04).
+const STEPS = ["Личность", "Класс", "Вид", "Предыстория", "Черта", "Характеристики", "Навыки", "Обзор"] as const;
 type Step = (typeof STEPS)[number];
 
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
@@ -85,9 +93,25 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [speciesOptions, setSpeciesOptions] = useState<DndSpeciesOption[]>([]);
   const [speciesId, setSpeciesId] = useState<number | null>(null);
 
+  const [speciesEntry, setSpeciesEntry] = useState<CompendiumEntry | null>(null);
+
   const [backgroundOptions, setBackgroundOptions] = useState<DndBackgroundOption[]>([]);
   const [backgroundId, setBackgroundId] = useState<number | null>(null);
   const [backgroundEntry, setBackgroundEntry] = useState<CompendiumEntry | null>(null);
+
+  const [originFeats, setOriginFeats] = useState<DndFeatOption[]>([]);
+  // null — черта ещё не выбиралась: тогда берётся подставленная предысторией.
+  // Значение живёт отдельно от предыстории, потому что Мастер вправе
+  // разрешить другую, а у Человека она выбирается с нуля.
+  const [featId, setFeatId] = useState<number | null>(null);
+  const [featTouched, setFeatTouched] = useState(false);
+  const [featEntry, setFeatEntry] = useState<CompendiumEntry | null>(null);
+
+  // Прибавка от предыстории: либо +2 одной и +1 другой, либо +1 каждой из
+  // трёх (решение W5).
+  const [awardMode, setAwardMode] = useState<"2+1" | "1+1+1">("2+1");
+  const [awardPrimary, setAwardPrimary] = useState<string | null>(null);
+  const [awardSecondary, setAwardSecondary] = useState<string | null>(null);
 
   const [method, setMethod] = useState<AbilityMethod>("standard");
   const [abilities, setAbilities] = useState<DndAbilityScores>(() => {
@@ -122,6 +146,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       loadDndClassHierarchy(systemId, opts).then(setHierarchy),
       loadDndSpeciesOptions(systemId, opts).then(setSpeciesOptions),
       loadDndBackgroundOptions(systemId, opts).then(setBackgroundOptions),
+      loadDndOriginFeats(systemId, opts).then(setOriginFeats),
     ]).catch((e) => {
       if (!isAbortError(e)) setLoadError(errorMessage(e));
     });
@@ -157,6 +182,23 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       });
     return () => ac.abort();
   }, [backgroundId]);
+
+  // Запись вида целиком, а не только строка списка: выдачи (навык на выбор у
+  // Человека, обретаемые заклинания) лежат в её `data`.
+  useEffect(() => {
+    if (!speciesId) {
+      setSpeciesEntry(null);
+      return;
+    }
+    const ac = new AbortController();
+    api
+      .get<CompendiumEntry>(`/systems/entries/${speciesId}`, { signal: ac.signal })
+      .then(setSpeciesEntry)
+      .catch((e) => {
+        if (!isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
+  }, [speciesId]);
 
   // Standard array/roll assignment is a permutation of a fixed pool — picking
   // a value already used elsewhere swaps the two abilities instead of
@@ -214,18 +256,121 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Ключами (английский `original`), а не именами из компендиума: в
   // `skillProfs` листа теперь ключ, и визард, выдающий имя, оставлял бы
   // персонажу владение, которого на листе не видно (гриллинг 2026-09-04).
-  const toKeys = (raw: unknown): string[] =>
-    (Array.isArray(raw) ? (raw as unknown[]) : [])
-      .filter((s): s is string => typeof s === "string" && !!s.trim())
-      .map((s) => skills.resolve(s) ?? s.trim());
-  const skillChoiceOptions: string[] = toKeys(classEntry?.data.skill_choice_options);
-  const skillChoiceCount = typeof classEntry?.data.skill_choice_count === "number" ? classEntry!.data.skill_choice_count : 0;
-  const backgroundSkills: string[] = toKeys(backgroundEntry?.data.skills);
+  // Выдачи всех источников разбираются одним читателем (dndGrants.ts): до
+  // него визард читал поля класса и предыстории вручную, а вид и черту не
+  // читал вовсе — оттого Человек не получал навыка, а «Одарённый» не
+  // добавлял трёх.
+  const resolveSkill = skills.resolve;
+  const classGrants = grantsFromEntry(classEntry ?? undefined, resolveSkill);
+  const speciesGrants = grantsFromEntry(speciesEntry ?? undefined, resolveSkill);
+  const backgroundGrants = grantsFromEntry(backgroundEntry ?? undefined, resolveSkill);
+  const featGrants = grantsFromEntry(featEntry ?? undefined, resolveSkill);
 
-  function toggleSkill(name: string) {
-    setChosenSkills((prev) =>
-      prev.includes(name) ? prev.filter((s) => s !== name) : prev.length < skillChoiceCount ? [...prev, name] : prev
-    );
+  // Черта берётся подставленной из предыстории, пока её не сменили руками.
+  // Вид, дающий выбор (Человек), подставленной черты не несёт — там пусто и
+  // выбирать надо самому.
+  const suggestedFeatId = backgroundGrants.originFeat?.id ?? null;
+  const effectiveFeatId = featTouched ? featId : featId ?? suggestedFeatId;
+  const featNeeded = !!backgroundId || speciesGrants.originFeatChoice;
+
+  useEffect(() => {
+    if (!effectiveFeatId) {
+      setFeatEntry(null);
+      return;
+    }
+    const ac = new AbortController();
+    api
+      .get<CompendiumEntry>(`/systems/entries/${effectiveFeatId}`, { signal: ac.signal })
+      .then(setFeatEntry)
+      .catch((e) => {
+        if (!isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
+  }, [effectiveFeatId]);
+
+  // Выборы навыков — по одному на источник, а не один общий: у класса свой
+  // список из книги, у Человека любой, у «Одарённого» любые три. Сложить их
+  // в одну кучу значило бы разрешить взять четыре из списка класса.
+  interface SkillChoiceGroup {
+    key: string;
+    label: string;
+    count: number;
+    options: string[];
+  }
+  const skillGroups: SkillChoiceGroup[] = [];
+  if (classGrants.skillChoice) {
+    skillGroups.push({
+      key: "class",
+      label: `Из списка класса${classOption ? ` (${classOption.name})` : ""}`,
+      count: classGrants.skillChoice.count,
+      options: classGrants.skillChoice.options,
+    });
+  }
+  if (speciesGrants.skillChoice) {
+    skillGroups.push({
+      key: "species",
+      label: `От вида${speciesEntry ? ` (${speciesEntry.name})` : ""}`,
+      count: speciesGrants.skillChoice.count,
+      options: speciesGrants.skillChoice.options,
+    });
+  }
+  if (featGrants.skillChoice) {
+    skillGroups.push({
+      key: "feat",
+      label: `От черты${featEntry ? ` (${featEntry.name})` : ""}`,
+      count: featGrants.skillChoice.count,
+      options: featGrants.skillChoice.options,
+    });
+  }
+  // Пустой список вариантов значит «любой навык», а не «ни одного»:
+  // «Одарённый» и «Умелость» Человека ничем не ограничены.
+  const allSkillKeys = skills.rows.map((r) => r.original);
+  function optionsFor(group: SkillChoiceGroup): string[] {
+    return group.options.length > 0 ? group.options : allSkillKeys;
+  }
+
+  const backgroundSkills: string[] = backgroundGrants.skills;
+  // Что уже выдано без выбора — эти навыки в выборе не показываются: взять
+  // владение дважды нельзя, а место в выборе оно бы съело.
+  const grantedSkills = new Set([...backgroundSkills, ...classGrants.skills, ...speciesGrants.skills, ...featGrants.skills]);
+
+  // Ключ выбора — «источник:навык», чтобы один навык, выбранный по двум
+  // источникам, не схлопнулся в одну отметку и не сбил счётчики.
+  function toggleSkill(groupKey: string, name: string, limit: number) {
+    const token = `${groupKey}:${name}`;
+    setChosenSkills((prev) => {
+      if (prev.includes(token)) return prev.filter((s) => s !== token);
+      const used = prev.filter((s) => s.startsWith(`${groupKey}:`)).length;
+      return used < limit ? [...prev, token] : prev;
+    });
+  }
+  const chosenIn = (groupKey: string) => chosenSkills.filter((s) => s.startsWith(`${groupKey}:`));
+  /** Выбранные навыки без пометки источника — то, что реально ляжет на лист. */
+  const chosenSkillKeys = [...new Set(chosenSkills.map((s) => s.slice(s.indexOf(":") + 1)))];
+
+  // Прибавка от предыстории. Три характеристики предлагает сама предыстория
+  // (`abilities`), а как их разложить — выбор игрока.
+  const awardOptions = backgroundGrants.abilityOptions;
+  const abilityAward: Partial<Record<keyof DndAbilityScores, number>> = {};
+  if (awardOptions.length > 0) {
+    if (awardMode === "1+1+1") {
+      for (const name of awardOptions) {
+        const key = ABILITY_NAME_TO_KEY[name];
+        if (key) abilityAward[key] = (abilityAward[key] ?? 0) + 1;
+      }
+    } else {
+      const primary = awardPrimary ?? awardOptions[0];
+      const secondary = awardSecondary ?? awardOptions.find((a) => a !== primary) ?? null;
+      const pk = ABILITY_NAME_TO_KEY[primary];
+      if (pk) abilityAward[pk] = (abilityAward[pk] ?? 0) + 2;
+      const sk = secondary ? ABILITY_NAME_TO_KEY[secondary] : null;
+      if (sk) abilityAward[sk] = (abilityAward[sk] ?? 0) + 1;
+    }
+  }
+  const awardedAbilities: DndAbilityScores = { ...abilities };
+  for (const [k, v] of Object.entries(abilityAward)) {
+    const key = k as keyof DndAbilityScores;
+    awardedAbilities[key] = abilities[key] + (v ?? 0);
   }
 
   async function finish() {
@@ -235,7 +380,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     character.systemId = systemId;
     character.characterName = characterName;
     character.playerName = playerName;
-    character.abilities = abilities;
+    character.abilities = awardedAbilities;
 
     if (classId && classOption) {
       const subclassOpt = subclassOptions.find((s) => s.id === subclassId);
@@ -246,8 +391,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           subclassId: subclassId,
           subclassName: subclassOpt?.name ?? "",
           level,
-          skillChoiceOptions,
-          skillChoiceCount,
+          skillChoiceOptions: classGrants.skillChoice?.options ?? [],
+          skillChoiceCount: classGrants.skillChoice?.count ?? 0,
           spellcastingAbility:
             typeof classEntry?.data.spellcasting_ability === "string" ? (classEntry!.data.spellcasting_ability as string) : "",
         },
@@ -303,25 +448,34 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         const entry = await api.get<CompendiumEntry>(`/systems/entries/${backgroundId}`);
         const tools = typeof entry.data.tools === "string" ? entry.data.tools : "";
         if (tools) character.proficiencies = [...character.proficiencies, { entryId: null, name: tools, abilityKey: null }];
-        const originFeat = entry.data.origin_feat as { id: number; name: string } | undefined;
-        if (originFeat) {
-          let description = "";
-          try {
-            const featEntry = await api.get<CompendiumEntry>(`/systems/entries/${originFeat.id}`);
-            description = featEntry.description || "";
-          } catch {
-            /* feat entry missing — leave description blank */
-          }
-          character.feats = [...character.feats, { name: originFeat.name, description }];
-        }
       } catch {
         /* background has no compendium entry (freehand) — nothing to fill */
       }
     }
 
+    // Черта — та, что выбрана на своём шаге, а не жёстко предысторийная:
+    // Мастер мог разрешить другую, а у Человека она выбирается с нуля.
+    if (effectiveFeatId) {
+      const chosenFeat =
+        originFeats.find((f) => f.id === effectiveFeatId) ??
+        (featEntry ? { id: featEntry.id, name: featEntry.name } : null);
+      if (chosenFeat) {
+        character.feats = [...character.feats, { name: chosenFeat.name, description: featEntry?.description ?? "" }];
+      }
+      // Владения от черты («Музыкант», «Ремесленник») — строкой: конкретные
+      // инструменты игрок выбирает сам, а приложение за него не решает.
+      if (featGrants.toolChoice) {
+        const { count, group } = featGrants.toolChoice;
+        character.proficiencies = [
+          ...character.proficiencies,
+          { entryId: null, name: `${group} — выбрать ${count}`, abilityKey: null },
+        ];
+      }
+    }
+
     character.skillProfs = { ...character.skillProfs };
-    for (const s of chosenSkills) character.skillProfs[s] = 1;
-    for (const s of backgroundSkills) character.skillProfs[s] = 1;
+    for (const s of chosenSkillKeys) character.skillProfs[s] = 1;
+    for (const s of grantedSkills) character.skillProfs[s] = 1;
 
     // Same resync edit mode runs after picking a species/subclass/level —
     // without it, a fresh character's subclass-granted spells (e.g. an
@@ -359,6 +513,77 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       setSaving(false);
     }
     onDone();
+  }
+
+  // Что принесло создание, по источникам. Считается на обзоре, но собирается
+  // здесь, чтобы разметка осталась разметкой.
+  const overviewSources: { label: string; lines: string[] }[] = [];
+  {
+    const named = (keys: string[]) => keys.map((k) => skills.nameOf(k));
+    const classLines: string[] = [];
+    if (classOption) {
+      classLines.push(`${classOption.name} ${level}`);
+      const sub = subclassOptions.find((x) => x.id === subclassId);
+      if (sub) classLines.push(sub.name);
+      if (classGrants.savingThrows.length > 0) {
+        classLines.push(
+          `спасброски: ${classGrants.savingThrows.map((k) => ABILITY_LABELS.find((a) => a.key === k)?.label ?? k).join(", ")}`
+        );
+      }
+      if (classGrants.toolNames.length > 0) classLines.push(`владения: ${classGrants.toolNames.join(", ")}`);
+      const classPicked = named(chosenIn("class").map((t) => t.slice(t.indexOf(":") + 1)));
+      if (classPicked.length > 0) classLines.push(`навыки: ${classPicked.join(", ")}`);
+      if (classGrants.spells.length > 0) {
+        classLines.push(
+          `заклинания: ${classGrants.spells.map((sp) => sp.name + (sp.outsideLimit ? " (вне лимита)" : "")).join(", ")}`
+        );
+      }
+    }
+    overviewSources.push({ label: "Класс", lines: classLines });
+
+    const speciesLines: string[] = [];
+    const speciesOpt = speciesOptions.find((x) => x.id === speciesId);
+    if (speciesOpt) {
+      speciesLines.push(speciesOpt.name);
+      const picked = named(chosenIn("species").map((t) => t.slice(t.indexOf(":") + 1)));
+      if (picked.length > 0) speciesLines.push(`навыки: ${picked.join(", ")}`);
+      if (speciesGrants.originFeatChoice) speciesLines.push("черта происхождения на выбор");
+      if (speciesGrants.spells.length > 0) {
+        speciesLines.push(`заклинания: ${speciesGrants.spells.map((sp) => sp.name).join(", ")}`);
+      }
+      if (speciesOpt.walkSpeed) speciesLines.push(`скорость ${speciesOpt.walkSpeed} фт.`);
+    }
+    overviewSources.push({ label: "Вид", lines: speciesLines });
+
+    const bgLines: string[] = [];
+    const bgOpt = backgroundOptions.find((x) => x.id === backgroundId);
+    if (bgOpt) {
+      bgLines.push(bgOpt.name);
+      if (backgroundGrants.skills.length > 0) bgLines.push(`навыки: ${named(backgroundGrants.skills).join(", ")}`);
+      if (backgroundGrants.toolNames.length > 0) bgLines.push(`владения: ${backgroundGrants.toolNames.join(", ")}`);
+      const award = ABILITY_LABELS.filter(({ key }) => awardedAbilities[key] !== abilities[key])
+        .map(({ key, label }) => `${label} +${awardedAbilities[key] - abilities[key]}`)
+        .join(", ");
+      if (award) bgLines.push(`характеристики: ${award}`);
+    }
+    overviewSources.push({ label: "Предыстория", lines: bgLines });
+
+    const featLines: string[] = [];
+    if (featEntry) {
+      featLines.push(featEntry.name);
+      const picked = named(chosenIn("feat").map((t) => t.slice(t.indexOf(":") + 1)));
+      if (picked.length > 0) featLines.push(`навыки: ${picked.join(", ")}`);
+      if (featGrants.toolChoice) featLines.push(`владения: ${featGrants.toolChoice.group} — выбрать ${featGrants.toolChoice.count}`);
+      if (featGrants.resources.length > 0) featLines.push(`ресурсы: ${featGrants.resources.map((r) => r.label).join(", ")}`);
+      if (featGrants.spellChoices.length > 0) {
+        featLines.push(
+          `заклинания на выбор: ${featGrants.spellChoices
+            .map((c) => (c.level === 0 ? `${c.count} заговора` : `${c.count} ${c.level} круга`))
+            .join(", ")}`
+        );
+      }
+    }
+    overviewSources.push({ label: "Черта происхождения", lines: featLines });
   }
 
   const stepIndex = STEPS.indexOf(step);
@@ -476,6 +701,52 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         </div>
       )}
 
+      {step === "Черта" && (
+        <div className="stack">
+          {!featNeeded ? (
+            <span className="muted">Черта происхождения приходит от предыстории или вида — выберите их на прошлых шагах.</span>
+          ) : (
+            <>
+              <span className="muted">
+                {suggestedFeatId
+                  ? "Предыстория предлагает эту черту. Согласиться — просто идите дальше; Мастер может разрешить другую."
+                  : "Вид даёт выбрать черту происхождения самому."}
+              </span>
+              <select
+                value={effectiveFeatId ?? ""}
+                onChange={(e) => {
+                  setFeatTouched(true);
+                  setFeatId(e.target.value ? Number(e.target.value) : null);
+                }}
+              >
+                <option value="">— черта —</option>
+                {originFeats.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              {featTouched && suggestedFeatId && effectiveFeatId !== suggestedFeatId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeatTouched(false);
+                    setFeatId(null);
+                  }}
+                >
+                  Вернуть черту предыстории
+                </button>
+              )}
+              {featEntry?.description && (
+                <div className="muted" style={{ whiteSpace: "pre-wrap", maxHeight: 220, overflowY: "auto" }}>
+                  {featEntry.description}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {step === "Характеристики" && (
         <div className="stack">
           <div className="row">
@@ -541,31 +812,94 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               </div>
             ))}
           </div>
+
+          {awardOptions.length > 0 && (
+            <div className="stack" style={{ gap: 4 }}>
+              <span className="muted">Прибавка от предыстории: {awardOptions.join(", ")}</span>
+              <div className="row" role="group" aria-label="Как распределить прибавку">
+                <label className="row">
+                  <input type="radio" name="dnd-award-mode" checked={awardMode === "2+1"} onChange={() => setAwardMode("2+1")} />
+                  +2 и +1
+                </label>
+                <label className="row">
+                  <input type="radio" name="dnd-award-mode" checked={awardMode === "1+1+1"} onChange={() => setAwardMode("1+1+1")} />
+                  +1 каждой
+                </label>
+              </div>
+              {awardMode === "2+1" && (
+                <div className="row">
+                  <label className="row">
+                    +2
+                    <select value={awardPrimary ?? awardOptions[0]} onChange={(e) => setAwardPrimary(e.target.value)}>
+                      {awardOptions.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="row">
+                    +1
+                    <select
+                      value={awardSecondary ?? awardOptions.find((a) => a !== (awardPrimary ?? awardOptions[0])) ?? ""}
+                      onChange={(e) => setAwardSecondary(e.target.value)}
+                    >
+                      {awardOptions
+                        .filter((a) => a !== (awardPrimary ?? awardOptions[0]))
+                        .map((a) => (
+                          <option key={a} value={a}>
+                            {a}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+              <span className="muted">
+                Итог:{" "}
+                {ABILITY_LABELS.filter(({ key }) => awardedAbilities[key] !== abilities[key])
+                  .map(({ key, label }) => `${label} ${abilities[key]} → ${awardedAbilities[key]}`)
+                  .join(" · ") || "—"}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
       {step === "Навыки" && (
         <div className="stack">
-          {skillChoiceOptions.length > 0 ? (
-            <>
-              <span className="muted">
-                Выберите {skillChoiceCount} из списка класса ({chosenSkills.length}/{skillChoiceCount})
-              </span>
-              <div className="stack" style={{ gap: 4 }}>
-                {/* В списке ключ, на экране — имя из справочника. */}
-                {skillChoiceOptions.map((s) => (
-                  <label key={s} className="row">
-                    <input type="checkbox" checked={chosenSkills.includes(s)} onChange={() => toggleSkill(s)} />
-                    {skills.nameOf(s)}
-                  </label>
-                ))}
-              </div>
-            </>
-          ) : (
-            <span className="muted">У выбранного класса нет владений навыками на выбор (или класс не выбран).</span>
+          {skillGroups.length === 0 && (
+            <span className="muted">Ни класс, ни вид, ни черта не дают навыков на выбор.</span>
           )}
-          {backgroundSkills.length > 0 && (
-            <span className="muted">От предыстории автоматически: {backgroundSkills.join(", ")}</span>
+          {skillGroups.map((group) => {
+            const picked = chosenIn(group.key);
+            return (
+              <div key={group.key} className="stack" style={{ gap: 4 }}>
+                <span className="muted">
+                  {group.label}: выберите {group.count} ({picked.length}/{group.count})
+                </span>
+                <div className="stack" style={{ gap: 4 }}>
+                  {/* В списке ключ, на экране — имя из справочника. */}
+                  {optionsFor(group)
+                    .filter((key) => !grantedSkills.has(key))
+                    .map((key) => (
+                      <label key={key} className="row">
+                        <input
+                          type="checkbox"
+                          checked={chosenSkills.includes(`${group.key}:${key}`)}
+                          onChange={() => toggleSkill(group.key, key, group.count)}
+                        />
+                        {skills.nameOf(key)}
+                      </label>
+                    ))}
+                </div>
+              </div>
+            );
+          })}
+          {[...grantedSkills].length > 0 && (
+            <span className="muted">
+              Уже выдано без выбора: {[...grantedSkills].map((k) => skills.nameOf(k)).join(", ")}
+            </span>
           )}
         </div>
       )}
@@ -576,21 +910,34 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             <strong>{characterName || "Без имени"}</strong>
             {playerName && <span className="muted"> — {playerName}</span>}
           </div>
-          <div className="muted">
-            {classOption?.name ?? "—"} {level} · {speciesOptions.find((s) => s.id === speciesId)?.name ?? "—"} ·{" "}
-            {backgroundOptions.find((b) => b.id === backgroundId)?.name ?? "—"}
-          </div>
           <div className="dnd-abilities-row">
             {ABILITY_LABELS.map(({ key, label }) => (
               <div key={key} className="dnd-ability-box">
                 <span className="dnd-ability-label">{label}</span>
-                <span className="dnd-ability-score">{abilities[key]}</span>
-                <span className="dnd-ability-mod">{formatModifier(abilityModifier(abilities[key]))}</span>
+                <span className="dnd-ability-score">{awardedAbilities[key]}</span>
+                <span className="dnd-ability-mod">{formatModifier(abilityModifier(awardedAbilities[key]))}</span>
               </div>
             ))}
           </div>
+
+          {/* Разбивка по источнику, а не общий список: в плоском перечне не
+              видно, что чего-то НЕ пришло, а пустая строка «Вид: ничего»
+              видна сразу (решение W4). */}
+          <div className="stack" style={{ gap: 6 }}>
+            {overviewSources.map((src) => (
+              <div key={src.label}>
+                <strong>{src.label}:</strong>{" "}
+                {src.lines.length > 0 ? (
+                  <span>{src.lines.join(" · ")}</span>
+                ) : (
+                  <span className="muted">ничего</span>
+                )}
+              </div>
+            ))}
+          </div>
+
           <span className="muted">
-            Снаряжение и заклинания добавляются после создания, в обычном режиме редактирования персонажа.
+            Снаряжение добавляется после создания, в обычном режиме редактирования персонажа.
           </span>
         </div>
       )}

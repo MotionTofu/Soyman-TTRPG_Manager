@@ -58,6 +58,14 @@ export interface DndSubclassOption {
   id: number;
   name: string;
 }
+// Порядок в выпадающих списках — по алфавиту, а не по `position` (решение
+// W1, гриллинг 2026-09-04). В визарде и в форме класс ищут глазами по букве;
+// книжный порядок остаётся в самом Справочнике, где позиция несёт смысл —
+// главы, уровни, порядок изложения.
+export function byNameRu<T extends { name: string }>(a: T, b: T): number {
+  return a.name.localeCompare(b.name, "ru");
+}
+
 export interface DndClassHierarchy {
   classes: DndClassOption[];
   subclassesByClass: Record<number, DndSubclassOption[]>;
@@ -70,19 +78,19 @@ export async function loadDndClassHierarchy(systemId: number, opts?: LoadOpts): 
   const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${classSection.id}`, opts);
   const classes = entries
     .filter((e) => e.kind === "class" && e.parent_id === null)
-    .sort((a, b) => a.position - b.position)
     .map((e) => ({
       id: e.id,
       name: e.name,
       hitDie: String(e.data.hit_die ?? ""),
       subclassLevel: Number(e.data.subclass_level) || 0,
-    }));
+    }))
+    .sort(byNameRu);
   const subclassesByClass: Record<number, DndSubclassOption[]> = {};
   for (const c of classes) {
     subclassesByClass[c.id] = entries
       .filter((e) => e.kind === "subclass" && e.parent_id === c.id)
-      .sort((a, b) => a.position - b.position)
-      .map((e) => ({ id: e.id, name: e.name }));
+      .map((e) => ({ id: e.id, name: e.name }))
+      .sort(byNameRu);
   }
   return { classes, subclassesByClass };
 }
@@ -137,7 +145,27 @@ export async function loadDndSpeciesOptions(systemId: number, opts?: LoadOpts): 
       });
     }
   }
-  return results;
+  return results.sort(byNameRu);
+}
+
+export interface DndFeatOption {
+  id: number;
+  name: string;
+}
+
+/** Черты происхождения — те, что визард предлагает на шаге выбора черты.
+ *  Отбираются по полю `category`, оно заполнено у всех 129 черт. */
+export async function loadDndOriginFeats(systemId: number, opts?: LoadOpts): Promise<DndFeatOption[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
+  const featSections = sections.filter((s) => s.kind === "feat");
+  const lists = await Promise.all(
+    featSections.map((s) => get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${s.id}`, opts))
+  );
+  return lists
+    .flat()
+    .filter((e) => e.kind === "feat" && e.data.category === "Черта происхождения")
+    .map((e) => ({ id: e.id, name: e.name }))
+    .sort(byNameRu);
 }
 
 export interface DndBackgroundOption {
@@ -155,7 +183,7 @@ export async function loadDndBackgroundOptions(systemId: number, opts?: LoadOpts
       if (e.kind === "background") results.push({ id: e.id, name: e.name });
     }
   }
-  return results;
+  return results.sort(byNameRu);
 }
 
 export interface DndSpellOption {
