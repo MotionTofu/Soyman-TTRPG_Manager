@@ -3,9 +3,29 @@ const path = require("path");
 const http = require("http");
 const fs = require("fs");
 const { autoUpdater } = require("electron-updater");
+const { setupLogging, getLogFile } = require("./logger");
 
 const PORT = 4732;
 const isPackaged = app.isPackaged;
+
+// Одно приложение — один экземпляр. Порт у сервера фиксированный, поэтому
+// второй запуск неизбежно упирался в занятый порт; до 2026-09-05 это значило
+// ещё одну тройку процессов в диспетчере и никакого окна. Теперь повторный
+// щелчок по ярлыку поднимает уже открытое окно — а именно этим Мастер и
+// отвечает на «оно не открылось».
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  // Дальше по файлу идут регистрации обработчиков и старт сервера: после
+  // app.quit() они всё равно выполнились бы до выхода, а сервер успел бы
+  // подраться за порт с уже работающим экземпляром.
+  process.exit(0);
+}
+app.on("second-instance", () => {
+  const [win] = BrowserWindow.getAllWindows();
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
 
 // Point the server at per-user data folders instead of the developer's
 // hardcoded paths, so each installed copy keeps its own campaigns/vault.
@@ -14,6 +34,25 @@ const isPackaged = app.isPackaged;
 // (and CONFIG_DIR, set below, is where that registry itself lives; it must
 // stay put even when the user switches which storage is active).
 const userData = app.getPath("userData");
+
+// Раньше всего остального: до сюда ещё ничего не печатало и не падало, а
+// начиная отсюда любой console.* и любая авария попадут в файл. См.
+// electron/logger.js — там же и причина, по которой журнал вообще заведён.
+setupLogging(userData);
+console.log(`--- запуск ${app.getVersion()}, packaged=${isPackaged} ---`);
+
+// Перехватчики нужны ради журнала, а не ради спасения: без них Node в свежих
+// версиях гасит процесс на необработанном отказе промиса — молча, если
+// консоли нет. Приложение при этом НЕ закрываем: упавший обработчик IPC не
+// повод выкидывать Мастера из идущей сессии. Провал старта — другое дело, он
+// разбирается отдельно, в createWindow.
+process.on("uncaughtException", (err) => {
+  console.error("[main] необработанное исключение:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[main] необработанный отказ промиса:", reason);
+});
+
 process.env.CONFIG_DIR = path.join(userData, "config");
 process.env.DB_DIR = path.join(userData, "data");
 process.env.VAULT_ROOT = path.join(userData, "RPG-Vault");
@@ -119,7 +158,14 @@ function rewriteVaultPaths(dbFile, oldVaultRoot, newVaultRoot) {
   }
 }
 
-function waitForServer(url, attempt = 0) {
+// Сколько терпим молчащий сервер. Считаем по времени, а не по числу попыток:
+// раньше стояло «80 попыток», и сколько это секунд, из кода прочитать было
+// нельзя (выходило около пятидесяти). Двух минут хватает на перестройку базы
+// после обновления на медленном диске — а именно этот случай и опасен, потому
+// что там сервер жив и работу доделает.
+const SERVER_TIMEOUT_MS = 120_000;
+
+function waitForServer(url, deadline = Date.now() + SERVER_TIMEOUT_MS, attempt = 0) {
   return new Promise((resolve, reject) => {
     http
       .get(url, (res) => {
@@ -127,10 +173,14 @@ function waitForServer(url, attempt = 0) {
         resolve();
       })
       .on("error", () => {
-        if (attempt > 80) return reject(new Error("Server did not start in time"));
+        if (Date.now() >= deadline) {
+          return reject(
+            new Error(`Сервер не ответил за ${Math.round(SERVER_TIMEOUT_MS / 1000)} с`)
+          );
+        }
         // 3.4 — экспоненциальный бэкофф вместо ровных 150мс: быстрее на быстром диске, терпеливее на медленном
         const delay = Math.min(800, Math.round(120 * Math.pow(1.18, attempt)));
-        setTimeout(() => waitForServer(url, attempt + 1).then(resolve, reject), delay);
+        setTimeout(() => waitForServer(url, deadline, attempt + 1).then(resolve, reject), delay);
       });
   });
 }
@@ -365,28 +415,92 @@ function openWindowFromFocused() {
   spawnWindow(url.pathname + url.search, focused);
 }
 
+// Текст аварии, который показывается на экране ошибки (error.html просит его
+// через ipc). Хранится здесь, а не передаётся в окно параметром, чтобы не
+// склеивать текст ошибки с URL.
+let startupErrorText = "";
+
+ipcMain.handle("startup-error-details", () => startupErrorText);
+ipcMain.on("startup-error-open-log", () => {
+  const file = getLogFile();
+  if (file) shell.openPath(file);
+});
+ipcMain.on("startup-error-open-data", () => shell.openPath(userData));
+ipcMain.on("startup-error-close", () => app.quit());
+
+// Приложение не смогло стартовать. До 2026-09-05 это состояние выглядело как
+// полное отсутствие реакции: окна нет, ошибки нет, процессы висят в
+// диспетчере — потому что createWindow асинхронна, её отказ никто не ловил, а
+// без единого окна Electron не выходит (window-all-closed не срабатывает).
+//
+// Теперь на месте молчания — окно с внятным текстом. И раз окно существует,
+// обычное его закрытие само доводит приложение до выхода: висеть без единого
+// окна больше не с чего.
+function showStartupFailure(err, loadingWin) {
+  startupErrorText = err && err.stack ? err.stack : String(err);
+  console.error("[main] не удалось запустить приложение:", err);
+
+  // Заставка создана без рамки и без preload — для экрана с кнопками не
+  // годится ни то, ни другое, поэтому её окно уступает место новому. Для
+  // Мастера это выглядит как смена содержимого: заставка исчезает, ошибка
+  // появляется по центру.
+  if (loadingWin && !loadingWin.isDestroyed()) loadingWin.destroy();
+
+  const win = new BrowserWindow({
+    width: 560, height: 470, backgroundColor: "#e8e4da", show: false,
+    title: "SoyMan_ttrpg", icon: APP_ICON,
+    webPreferences: { sandbox: true, preload: path.join(__dirname, "errorPreload.js") },
+  });
+
+  win.setMenu(null);
+  win.center();
+  win.loadFile(path.join(__dirname, "error.html"));
+  win.once("ready-to-show", () => win.show());
+}
+
 async function createWindow() {
-  seedIfNeeded();
-  process.env.APP_VERSION = app.getVersion();
-  require(serverEntry);
   // 3.4 — показываем спиннер пока сервер поднимается, вместо белого экрана
   let loadingWin = null;
-  const loadingTimer = setTimeout(() => {
-    loadingWin = new BrowserWindow({
-      width: 360, height: 180, resizable: false, frame: false, transparent: false,
-      backgroundColor: "#e8e4da", show: true, alwaysOnTop: true, center: true,
-      webPreferences: { sandbox: true },
-    });
-    // Разметка вынесена в electron/splash.html: строкой data:-URL её нельзя
-    // было ни прочитать, ни поправить. В сборку файл попадает по build.files.
-    loadingWin.loadFile(path.join(__dirname, "splash.html"));
-  }, 400);
+  let loadingTimer = null;
   try {
-    await waitForServer(`http://127.0.0.1:${PORT}/api/health`);
-  } finally {
+    seedIfNeeded();
+    process.env.APP_VERSION = app.getVersion();
+
+    // Сюда приходят синхронные аварии старта сервера — открытие базы,
+    // миграции. Именно так упал релиз 2026.9.3.
+    const server = require(serverEntry);
+
+    loadingTimer = setTimeout(() => {
+      loadingWin = new BrowserWindow({
+        width: 360, height: 180, resizable: false, frame: false, transparent: false,
+        backgroundColor: "#e8e4da", show: true, alwaysOnTop: true, center: true,
+        webPreferences: { sandbox: true },
+      });
+      // Разметка вынесена в electron/splash.html: строкой data:-URL её нельзя
+      // было ни прочитать, ни поправить. В сборку файл попадает по build.files.
+      loadingWin.loadFile(path.join(__dirname, "splash.html"));
+    }, 400);
+
+    // Ждём то, что случится раньше. serverReady (server/src/index.ts) даёт
+    // мгновенный и точный ответ в обе стороны, но знает только про listen;
+    // опрос /api/health переживёт случай «слушает, но не отвечает». Ни один
+    // из двух сигналов по отдельности не покрывает оба.
+    const healthWait = waitForServer(`http://127.0.0.1:${PORT}/api/health`);
+    // Проигравший в гонке продолжает работать и может отказать позже (опрос —
+    // по таймауту, serverReady — если порт занят). Некому ловить такой отказ,
+    // и он всплыл бы как unhandledRejection уже после успешного старта.
+    healthWait.catch(() => {});
+    const ready = server && server.serverReady ? server.serverReady : new Promise(() => {});
+    ready.catch(() => {});
+
+    await Promise.race([ready, healthWait]);
+  } catch (err) {
     clearTimeout(loadingTimer);
-    if (loadingWin && !loadingWin.isDestroyed()) loadingWin.close();
+    return showStartupFailure(err, loadingWin);
   }
+
+  clearTimeout(loadingTimer);
+  if (loadingWin && !loadingWin.isDestroyed()) loadingWin.close();
 
   createMenu();
 

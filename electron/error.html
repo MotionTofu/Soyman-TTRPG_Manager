@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>SoyMan — не удалось запустить</title>
+    <!--
+      Экран аварийного старта. Показывается, когда сервер не поднялся: раньше
+      в этом случае не появлялось вообще ничего — ни окна, ни ошибки, а
+      процессы оставались висеть в диспетчере (2026-09-05).
+
+      Это то же окно, что и заставка, только перерисованное: заставка уже на
+      экране, и превратить её в экран ошибки честнее, чем закрыть и показать
+      системный showErrorBox с текстом вроде "SqliteError: no such column".
+      Мастеру нужно знать, что делать, а не что случилось; текст ошибки —
+      ниже и мелким, для того, кто будет разбираться.
+
+      Цвета числами по той же причине, что и в splash.html: клиент не
+      стартовал, тему выбрать некому.
+    -->
+    <style>
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: #e8e4da;
+        color: #241e18;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 26px 30px;
+        box-sizing: border-box;
+        user-select: none;
+      }
+      h1 {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 650;
+        text-align: center;
+      }
+      .hint {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        text-align: center;
+        max-width: 460px;
+        opacity: 0.8;
+      }
+      pre {
+        margin: 0;
+        width: 100%;
+        max-width: 520px;
+        max-height: 150px;
+        overflow: auto;
+        box-sizing: border-box;
+        padding: 9px 11px;
+        border: 1px solid #241e1833;
+        border-radius: 6px;
+        background: #f5ead3;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 11px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+        /* Единственное место на экране, где текст нужно выделять мышью. */
+        user-select: text;
+      }
+      .row { display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; }
+      button {
+        font: inherit;
+        font-size: 13px;
+        padding: 7px 15px;
+        border-radius: 6px;
+        border: 1px solid #241e1855;
+        background: #f5ead3;
+        color: inherit;
+        cursor: pointer;
+      }
+      button:hover { background: #efe0c4; }
+      /* «Открыть журнал» — первая и выделенная: она ведёт туда, где ответ. */
+      button.primary { background: #7aaa43; border-color: #241e1888; color: #17210c; }
+      button.primary:hover { background: #6c9a3a; }
+    </style>
+  </head>
+  <body>
+    <svg width="52" height="56" viewBox="16 0 70 74" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="SoyMan озадачен">
+      <defs>
+        <pattern id="ht" width="3" height="3" patternUnits="userSpaceOnUse">
+          <circle cx="1.2" cy="1.2" r="0.85" fill="#241e18" opacity="0.22" />
+        </pattern>
+      </defs>
+      <!-- росток поник -->
+      <path d="M51 18 C51 12 51.5 9 53 6.5" stroke="#241e18" stroke-width="2.4" stroke-linecap="round" />
+      <path d="M53 8 C49 4.5 44.5 5 43.5 7.5 C46 10 50.5 10.5 53 8 Z" fill="#7aaa43" stroke="#241e18" stroke-width="1.8" stroke-linejoin="round" />
+      <!-- куб -->
+      <path d="M22 22 L32 14 L80 14 L70 22 Z" fill="#e0cfaa" stroke="#241e18" stroke-width="2" stroke-linejoin="round" />
+      <path d="M70 22 L80 14 L80 58 L70 66 Z" fill="#e0cfaa" stroke="#241e18" stroke-width="2" stroke-linejoin="round" />
+      <path d="M70 22 L80 14 L80 58 L70 66 Z" fill="url(#ht)" stroke="none" />
+      <path d="M22 22 L70 22 L70 66 L22 66 Z" fill="#f5ead3" stroke="#241e18" stroke-width="2" stroke-linejoin="round" />
+      <circle cx="30" cy="29" r="1.5" fill="#e0cfaa" />
+      <circle cx="63" cy="31" r="1.1" fill="#e0cfaa" />
+      <!-- лицо: брови домиком, рот скобкой вниз -->
+      <path d="M33 30 L42 33" stroke="#241e18" stroke-width="2.2" stroke-linecap="round" />
+      <path d="M59 30 L50 33" stroke="#241e18" stroke-width="2.2" stroke-linecap="round" />
+      <circle cx="37.5" cy="41" r="2.6" fill="#241e18" />
+      <circle cx="54.5" cy="41" r="2.6" fill="#241e18" />
+      <path d="M41 54 Q46 50 51 54" stroke="#241e18" stroke-width="2.4" stroke-linecap="round" fill="none" />
+    </svg>
+
+    <h1>Не удалось запустить хранилище</h1>
+    <p class="hint">
+      Перезапустите приложение. Если не помогло — пришлите файл журнала автору,
+      по нему видно, что именно случилось.
+    </p>
+    <pre id="details"></pre>
+    <div class="row">
+      <button class="primary" id="log">Открыть журнал</button>
+      <button id="data">Открыть папку с данными</button>
+      <button id="close">Закрыть</button>
+    </div>
+
+    <script src="./error.js"></script>
+  </body>
+</html>

@@ -51,6 +51,16 @@
       @media (prefers-reduced-motion: reduce) {
         .dots span { animation: none; opacity: 1; }
       }
+      /* Появляется на двадцатой секунде — см. splash.js. Ждать молча дольше
+         этого неотличимо от зависания, а перестройка базы после обновления
+         столько идёт законно. */
+      .slow {
+        font-size: 11px;
+        line-height: 1.5;
+        text-align: center;
+        opacity: 0.65;
+        max-width: 300px;
+      }
     </style>
   </head>
   <body>
@@ -82,6 +92,10 @@
       <ellipse cx="63.5" cy="50" rx="3.6" ry="2.4" fill="#9b3a3a" opacity="0.32" />
       <path d="M41 52 Q46 55 51 52" stroke="#241e18" stroke-width="2.4" stroke-linecap="round" fill="none" />
     </svg>
-    <div class="cap">Запускаем хранилище<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
+    <div class="cap" id="cap">Запускаем хранилище<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
+    <div class="slow" id="slow" hidden>
+      Первый запуск после обновления — идёт перестройка базы.<br />Это бывает долго.
+    </div>
+    <script src="./splash.js"></script>
   </body>
 </html>

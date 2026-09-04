@@ -410,6 +410,32 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 const PORT = process.env.PORT || 3001;
 const httpServer = createServer(app);
 initRealtime(httpServer);
-httpServer.listen(PORT, () => {
-  console.log(`RPG manager server listening on http://localhost:${PORT}`);
+
+// Electron (electron/main.js) грузит этот файл через require и ждёт именно
+// serverReady, а не только опроса /api/health. Причина: без него любая
+// поломка сервера выглядела одинаково — молчащий порт и минута ожидания. С
+// промисом отказ приходит мгновенно и с настоящей причиной.
+//
+// Без обработчика "error" сбой listen (занятый порт — а он у приложения
+// фиксированный) поднимался бы необработанным событием и валил главный
+// процесс без единого следа.
+export const serverReady: Promise<void> = new Promise((resolve, reject) => {
+  httpServer.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      reject(new Error(`Порт ${PORT} уже занят — вероятно, приложение уже запущено`));
+    } else {
+      reject(err);
+    }
+  });
+  httpServer.listen(PORT, () => {
+    console.log(`RPG manager server listening on http://localhost:${PORT}`);
+    resolve();
+  });
+});
+
+// Промис ждут не всегда (сервер умеет работать и сам по себе, вне Electron):
+// без этого его отказ стал бы unhandled rejection и в свежих Node уронил бы
+// процесс молча. Причину печатаем — дальше её подхватит журнал.
+serverReady.catch((err) => {
+  console.error("[server] не удалось начать слушать порт:", err);
 });

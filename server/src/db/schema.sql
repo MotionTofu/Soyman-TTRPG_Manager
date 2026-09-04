@@ -1259,7 +1259,10 @@ CREATE TABLE IF NOT EXISTS world_exploration_entries (
   archived_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_campaign ON world_exploration_entries(campaign_id, kind);
-CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_character ON world_exploration_entries(character_id);
+-- Индекс по character_id создаётся не здесь, а миграцией в db.ts: CREATE TABLE
+-- IF NOT EXISTS не добавляет колонку в уже существующую таблицу, и на базе,
+-- заведённой до 2026-09-02, этот CREATE INDEX падал бы "no such column:
+-- character_id" — то есть весь exec(schema) обрывался бы до всех ALTER'ов.
 
 -- Послание Мастера. Показывается адресату: target_type='player' — только
 -- этому игроку, 'campaign' — всем в кампании, 'character' — на обороте карты

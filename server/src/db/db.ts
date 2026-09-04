@@ -3005,6 +3005,10 @@ export function openDatabase(dbDir: string): Database.Database {
                  AND ch.campaign_id = e.campaign_id
                  AND ch.archived_at IS NULL) = 1
     `);
+  }
+  // Вне условия выше: на новой базе колонка приходит из schema.sql, миграция
+  // не срабатывает, а индекс всё равно нужен.
+  if (columnExists(database, "world_exploration_entries", "character_id")) {
     database.exec(
       "CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_character ON world_exploration_entries(character_id)"
     );
