@@ -82,6 +82,7 @@ import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
 import { computeArmorClass } from "./armorClass";
+import { EMPTY_GRANTS, grantsFromEntry, mergeGrants, type SourceGrants } from "./dndGrants";
 import { allResources, applicableStats, type ClassResourceSource, type DndResourceDef } from "./dndResources";
 import { Modal } from "../Modal";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -480,59 +481,6 @@ function removeFeaturesBySource(features: DndFeature[], ...sourceParentIds: (num
 // Волшебник, побывавший Воином, навсегда сохранял владение спасбросками Силы
 // и Телосложения. Ниже — общий разбор «что дал этот источник», чтобы при
 // смене снять ровно это и ровно тогда, когда того же не даёт никто другой.
-interface SourceGrants {
-  savingThrows: DndAbilityKey[];
-  toolIds: number[];
-  toolNames: string[];
-  skills: string[];
-  featNames: string[];
-}
-
-const EMPTY_GRANTS: SourceGrants = {
-  savingThrows: [],
-  toolIds: [],
-  toolNames: [],
-  skills: [],
-  featNames: [],
-};
-
-// Поля не пересекаются: у класса — спасброски и инструменты, у предыстории —
-// навыки, инструмент и черта происхождения. Поэтому разбор один на оба.
-function grantsFromEntry(
-  entry: CompendiumEntry | undefined,
-  resolve: (raw: string) => string | null
-): SourceGrants {
-  if (!entry) return EMPTY_GRANTS;
-  const data = entry.data;
-  const toolPicks = Array.isArray(data.tool_profs)
-    ? (data.tool_profs as { id: number; name: string }[])
-    : [];
-  const bgTool = typeof data.tools === "string" && data.tools ? [data.tools] : [];
-  const originFeat = data.origin_feat as { id: number; name: string } | undefined;
-  return {
-    savingThrows: parseAbilityNames(data.saving_throws),
-    toolIds: toolPicks.map((t) => t.id).filter((id) => typeof id === "number"),
-    toolNames: [...toolPicks.map((t) => t.name).filter(Boolean), ...bgTool],
-    // Сразу ключами: дальше по цепочке (revokeGrants, pickBackground) навык
-    // сверяется с `skillProfs`, а там теперь английский `original`. Имя, не
-    // сведённое ни к чему, остаётся как есть — потерять его хуже.
-    skills: (Array.isArray(data.skills) ? (data.skills as string[]) : [])
-      .filter((s) => typeof s === "string" && s.trim())
-      .map((s) => resolve(s) ?? s.trim()),
-    featNames: originFeat?.name ? [originFeat.name] : [],
-  };
-}
-
-function mergeGrants(list: SourceGrants[]): SourceGrants {
-  return {
-    savingThrows: list.flatMap((g) => g.savingThrows),
-    toolIds: list.flatMap((g) => g.toolIds),
-    toolNames: list.flatMap((g) => g.toolNames),
-    skills: list.flatMap((g) => g.skills),
-    featNames: list.flatMap((g) => g.featNames),
-  };
-}
-
 /**
  * Снимает то, что давал ушедший источник, оставляя всё, что подтверждает
  * хоть один из оставшихся (`kept`) — иначе у мультикласса смена одного класса

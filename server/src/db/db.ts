@@ -7,6 +7,7 @@ import { entryImageFolder, systemFolder, vaultAbs } from "../services/filesystem
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
 import { migrateDndSkillNames } from "./dndSkillNames";
 import { migrateDndGrantedSpells } from "./dndGrantedSpells";
+import { migrateDndOriginGrants } from "./dndOriginGrants";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -2712,6 +2713,7 @@ export function openDatabase(dbDir: string): Database.Database {
   // один раз и только по пустым полям (см. dndSkillNames.ts).
   migrateDndSkillNames(database);
   migrateDndGrantedSpells(database);
+  migrateDndOriginGrants(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
