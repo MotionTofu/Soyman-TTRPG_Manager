@@ -6,6 +6,7 @@ import type {
   DndAbilityKey,
   DndActionTiming,
   DndCharacterData,
+  DndCreatureSpeed,
   DndClassEntry,
   DndEquipmentItem,
   DndEquipmentSection,
@@ -45,7 +46,7 @@ import {
 import { skillSourceClass, skillSourceWord } from "./skillSource";
 import { resolveSkillOriginal } from "./skillCatalog";
 import { useDndSkills, type DndSkills, type SkillRow } from "./useDndSkills";
-import { loadDndPrefs } from "../../dndPrefs";
+import { formatDistance, loadDndPrefs, saveDndPrefs, type DndDistanceUnit } from "../../dndPrefs";
 import {
   loadDndBackgroundOptions,
   loadDndClassFeatures,
@@ -90,7 +91,6 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
 import { featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TIMING_KEY_TO_LABEL } from "./dndFeatures";
-import { saveDndPrefs } from "../../dndPrefs";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { useTabState } from "../../hooks/useTabState";
@@ -3704,8 +3704,32 @@ function DndSheetSearch({
   );
 }
 
+/**
+ * Скорость с учётом истощения: 5.5 отнимает 5 футов за каждый уровень.
+ *
+ * Отнимается только от ходьбы — полёт, плавание и лазание правило не
+ * трогает. Ниже нуля не опускаемся: «−5 футов» на листе выглядело бы как
+ * ошибка ввода, а правило означает «не двигается».
+ */
+function walkWithExhaustion(
+  speeds: DndCreatureSpeed,
+  exhaustion: number,
+  unit: DndDistanceUnit
+): { text: string; original: string } {
+  const penalty = Math.max(0, exhaustion) * 5;
+  if (penalty === 0 || speeds.walk === null) {
+    return { text: formatSpeed(speeds, unit), original: "" };
+  }
+  const reduced = Math.max(0, speeds.walk - penalty);
+  return {
+    text: formatSpeed({ ...speeds, walk: reduced }, unit),
+    original: formatDistance(speeds.walk, unit),
+  };
+}
+
 function DndTraitsView({ value }: { value: DndCharacterData }) {
-  const speeds = formatSpeed(value.speeds);
+  const prefs = useDndPrefs();
+  const speeds = formatSpeed(value.speeds, prefs.distanceUnit);
   const senses = value.sensesList
     .map((sn) => [sn.name, sn.distance].filter(Boolean).join(" "))
     .filter(Boolean)
@@ -4703,6 +4727,10 @@ export function DndCharacterView({
   // в значения навыков, спасбросков, бонусы атак и пассивное восприятие, но
   // НЕ в КЗ и не в сложность заклинаний: это не броски к20.
   const exhaustionPenalty = value.exhaustion * 2;
+  // И −5 футов скорости за уровень. Считается только от структурной ходьбы:
+  // в свободном тексте («9 клеток, лазание 3») отнимать нечего, и он
+  // остаётся примечанием под итогом.
+  const speedShown = walkWithExhaustion(value.speeds, value.exhaustion, prefs.distanceUnit);
   // Считается на каждый рендер намеренно: подписка на кэш уже перерисовывает
   // лист при любой смене его состояния, включая появление и снятие неудач.
   const entriesFailed = hasFailedEntries() && sheetEntryIds(value).some((id) => typeof id === "number");
@@ -4917,10 +4945,22 @@ export function DndCharacterView({
             <AcQuickBox computed={computedAc} manualBonus={value.manualAcBonus} onQuickUpdate={onQuickUpdate} />
             <HpQuickBox value={value} onQuickUpdate={onQuickUpdate} />
             <TextQuickBox label="Инициатива" value={value.initiative} field="initiative" onQuickUpdate={onQuickUpdate} />
-            {(value.speed || formatSpeed(value.speeds)) && (
+            {(value.speed || speedShown.text) && (
               <div>
                 <div className="sb-label">Скорость</div>
-                <div className="sb-value">{value.speed || formatSpeed(value.speeds)}</div>
+                <div className="sb-value">
+                  {speedShown.text || value.speed}
+                  {/* Исходное — зачёркнутым рядом: за столом надо видеть и
+                      сколько осталось, и от чего отняли. */}
+                  {speedShown.original && (
+                    <span className="dnd-speed-was" title={`Истощение ${value.exhaustion}: −${value.exhaustion * 5} фт.`}>
+                      {speedShown.original}
+                    </span>
+                  )}
+                </div>
+                {speedShown.text && value.speed && (
+                  <div className="muted dnd-speed-note">{value.speed}</div>
+                )}
               </div>
             )}
             {/* Дорожка на каждый пул, подписанная кубом: при мультиклассе они

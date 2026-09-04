@@ -20,6 +20,31 @@ export const DND_ABILITY_PRIMARY_OPTIONS: { key: DndAbilityPrimary; label: strin
   { key: "score", label: "Значение (16)" },
 ];
 
+// В чём показывать расстояния. За столом с полем считают клетками, без поля
+// — футами; в книге написаны футы, и лист их и хранит. Настройка только про
+// показ: хранимое значение не трогается, иначе перевод накапливал бы ошибку
+// при каждом переключении.
+export type DndDistanceUnit = "feet" | "cells";
+
+export const DND_DISTANCE_UNIT_OPTIONS: { key: DndDistanceUnit; label: string }[] = [
+  { key: "feet", label: "Футы (30 фт.)" },
+  { key: "cells", label: "Клетки (6 кл.)" },
+];
+
+/** Клетка — 5 футов. Делится нацело почти всегда; остаток показывается
+ *  дробью с половиной, потому что 2,5 фута — это половина клетки, а не
+ *  «примерно клетка». */
+export const FEET_PER_CELL = 5;
+
+/** Расстояние в выбранной единице. Половина клетки показывается дробью:
+ *  «2,5 фута» — это половина клетки, а не «примерно клетка». */
+export function formatDistance(feet: number, unit: DndDistanceUnit): string {
+  if (unit !== "cells") return `${feet} фт.`;
+  const cells = feet / FEET_PER_CELL;
+  const rounded = Math.round(cells * 2) / 2;
+  return `${String(rounded).replace(".", ",")} кл.`;
+}
+
 interface DndPrefs {
   skillSortMode: DndSkillSortMode;
   abilityPrimary: DndAbilityPrimary;
@@ -29,6 +54,7 @@ interface DndPrefs {
   // включают, чтобы не листать книгу. Хранится здесь только чтобы пережить
   // перезагрузку — за столом переключать её заново каждый раз незачем.
   spellsPreparedOnly: boolean;
+  distanceUnit: DndDistanceUnit;
 }
 
 const DEFAULTS: DndPrefs = {
@@ -39,6 +65,8 @@ const DEFAULTS: DndPrefs = {
   // По умолчанию модификатор: в 5.5 бросают им, а само значение нужно для
   // переноски и захвата — то есть заметно реже.
   abilityPrimary: "mod",
+  // По умолчанию футы: так написано в книге и так лежит в листах.
+  distanceUnit: "feet",
 };
 
 const STORAGE_KEY = "rpgManagerDndPrefs";
@@ -54,6 +82,7 @@ export function loadDndPrefs(): DndPrefs {
       if (parsed.skillSortMode === "ability" || parsed.skillSortMode === "alphabet") out.skillSortMode = parsed.skillSortMode;
       if (parsed.abilityPrimary === "mod" || parsed.abilityPrimary === "score") out.abilityPrimary = parsed.abilityPrimary;
       if (typeof parsed.spellsPreparedOnly === "boolean") out.spellsPreparedOnly = parsed.spellsPreparedOnly;
+      if (parsed.distanceUnit === "feet" || parsed.distanceUnit === "cells") out.distanceUnit = parsed.distanceUnit;
       return out;
     }
   } catch {

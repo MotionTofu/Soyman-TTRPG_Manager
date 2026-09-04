@@ -26,8 +26,9 @@ import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
 import { loadPultFinishAction, savePultFinishAction, type PultFinishAction } from "../pultPrefs";
 import {
-  DND_ABILITY_PRIMARY_OPTIONS, DND_SKILL_SORT_OPTIONS, loadDndPrefs, saveDndPrefs,
-  type DndAbilityPrimary, type DndSkillSortMode,
+  DND_ABILITY_PRIMARY_OPTIONS, DND_DISTANCE_UNIT_OPTIONS, DND_SKILL_SORT_OPTIONS,
+  loadDndPrefs, saveDndPrefs,
+  type DndAbilityPrimary, type DndDistanceUnit, type DndSkillSortMode,
 } from "../dndPrefs";
 
 function loadSectionOpen(key: string, fallback: boolean): boolean {
@@ -129,6 +130,11 @@ export function StoragesSettingsPage() {
   }
   function changeDndSkillSort(mode: DndSkillSortMode) {
     const next = { ...dndPrefs, skillSortMode: mode };
+    setDndPrefs(next);
+    saveDndPrefs(next);
+  }
+  function changeDndDistanceUnit(unit: DndDistanceUnit) {
+    const next = { ...dndPrefs, distanceUnit: unit };
     setDndPrefs(next);
     saveDndPrefs(next);
   }
@@ -795,6 +801,16 @@ export function StoragesSettingsPage() {
                   </label>
                 ))}
               </div>
+              <div className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Расстояния</div>
+              <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
+                {DND_DISTANCE_UNIT_OPTIONS.map((opt) => (
+                  <label key={opt.key} className="row" style={{ gap: 6 }}>
+                    <input type="radio" name="dnd-distance-unit" checked={dndPrefs.distanceUnit === opt.key} onChange={() => changeDndDistanceUnit(opt.key as DndDistanceUnit)} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              <span className="muted" style={{ maxWidth: "62ch" }}>Только показ: в листах скорость хранится в футах, как в книге.</span>
             </div>
           </details>
 

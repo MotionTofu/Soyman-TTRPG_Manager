@@ -1047,6 +1047,17 @@ summary.sb-section {
 }
 /* Отказ при сохранении из формы: форма остаётся открытой, набранное на
    месте, а причина написана рядом с кнопкой. */
+/* Скорость до истощения — рядом с итогом и зачёркнутая: видно и сколько
+   осталось, и от чего отняли. */
+.dnd-speed-was {
+  margin-left: 6px;
+  color: var(--muted);
+  text-decoration: line-through;
+  font-size: var(--fs-meta);
+}
+.dnd-speed-note {
+  font-size: var(--fs-meta);
+}
 .sb-save-error {
   margin: 0;
   color: var(--accent);

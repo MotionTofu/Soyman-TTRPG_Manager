@@ -55,6 +55,7 @@ import { PipTrack } from "../litm/PipTrack";
 import { api } from "../../api/client";
 import { NavIcon } from "../NavIcons";
 import { CHALLENGE_RATINGS, CREATURE_SIZES as COMPENDIUM_CREATURE_SIZES, normaliseCr } from "../../compendium";
+import { formatDistance, type DndDistanceUnit } from "../../dndPrefs";
 
 export const CREATURE_SIZES = COMPENDIUM_CREATURE_SIZES;
 export const DIE_SIZES = [4, 6, 8, 10, 12] as const;
@@ -1466,13 +1467,17 @@ function formatAction(a: DndCreatureAction): string {
   return parts.join(", ");
 }
 
-export function formatSpeed(speed: DndCreatureSpeed): string {
+// Единица показа приходит снаружи: она общая на всё приложение (настройка
+// «Настройки → Системы → ДнД 5.5»), а хранится скорость всегда в футах —
+// так она написана в книге, и перевод туда-обратно накапливал бы ошибку.
+export function formatSpeed(speed: DndCreatureSpeed, unit: DndDistanceUnit = "feet"): string {
+  const d = (feet: number) => formatDistance(feet, unit);
   const parts: string[] = [];
-  if (speed.walk !== null) parts.push(`${speed.walk} фт.`);
-  if (speed.fly !== null) parts.push(`полёт ${speed.fly} фт.${speed.hover ? " (парит)" : ""}`);
-  if (speed.swim !== null) parts.push(`плавание ${speed.swim} фт.`);
-  if (speed.climb !== null) parts.push(`лазание ${speed.climb} фт.`);
-  if (speed.burrow !== null) parts.push(`копание ${speed.burrow} фт.`);
+  if (speed.walk !== null) parts.push(d(speed.walk));
+  if (speed.fly !== null) parts.push(`полёт ${d(speed.fly)}${speed.hover ? " (парит)" : ""}`);
+  if (speed.swim !== null) parts.push(`плавание ${d(speed.swim)}`);
+  if (speed.climb !== null) parts.push(`лазание ${d(speed.climb)}`);
+  if (speed.burrow !== null) parts.push(`копание ${d(speed.burrow)}`);
   if (speed.note) parts.push(speed.note);
   return parts.join(", ");
 }
@@ -2461,7 +2466,7 @@ export function DndCreatureView({
                     </span>
                   </div>
                   <div className="sbc__rows">
-                    <SbcRow label="Скорость">{formatSpeed(value.speed) || "—"}</SbcRow>
+                    <SbcRow label="Скорость">{formatSpeed(value.speed, prefs.distanceUnit) || "—"}</SbcRow>
                     <SbcRow label="Инициатива">
                       {value.initiativeBonus !== null ? formatModifier(value.initiativeBonus) : "—"}
                     </SbcRow>

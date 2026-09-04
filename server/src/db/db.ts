@@ -8,6 +8,7 @@ import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migra
 import { migrateDndSkillNames } from "./dndSkillNames";
 import { migrateDndGrantedSpells } from "./dndGrantedSpells";
 import { migrateDndOriginGrants } from "./dndOriginGrants";
+import { migrateDndSpeedStructure } from "./dndSpeedStructure";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -2714,6 +2715,7 @@ export function openDatabase(dbDir: string): Database.Database {
   migrateDndSkillNames(database);
   migrateDndGrantedSpells(database);
   migrateDndOriginGrants(database);
+  migrateDndSpeedStructure(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
