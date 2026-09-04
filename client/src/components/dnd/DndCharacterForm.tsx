@@ -6,6 +6,7 @@ import type {
   DndAbilityKey,
   DndActionTiming,
   DndCharacterData,
+  DndCoins,
   DndCreatureSpeed,
   DndReplicaItem,
   Statblock,
@@ -76,12 +77,7 @@ import {
   type DndEffect,
 } from "./effects";
 import { useCompendiumEntries } from "./useCompendiumEntries";
-import {
-  EMPTY_EQUIPMENT_ITEM,
-  fetchEquipmentMeta,
-  startingSetsFrom,
-  type StartingSet,
-} from "./dndEquipment";
+import { EMPTY_EQUIPMENT_ITEM, fetchEquipmentMeta } from "./dndEquipment";
 import { ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
 import { cantripsAtLevel, preparedAtLevel, type ClassProgression } from "./progression";
@@ -1255,6 +1251,11 @@ function DndSpellLevelSection({
     next[i] = { ...next[i], prepared: ((next[i].prepared + 1) % 3) as DndSpellPreparedState };
     onSpellsChange(next);
   }
+  function toggleOutsideLimit(i: number) {
+    const next = spells.slice();
+    next[i] = { ...next[i], outsideLimit: !next[i].outsideLimit };
+    onSpellsChange(next);
+  }
   async function remove(i: number) {
     const name = spells[i]?.name?.trim();
     if (!(await confirm({
@@ -1336,9 +1337,13 @@ function DndSpellLevelSection({
                     onClick={() => toggleDescription(realIndex, s.entryId!)}
                   >
                     {s.name}
+                    {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
                   </button>
                 ) : (
-                  <span className="comp-name dnd-spell-name">{s.name}</span>
+                  <span className="comp-name dnd-spell-name">
+                    {s.name}
+                    {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
+                  </span>
                 )}
                 <SpellMetaLine s={s} />
                 {edit ? (
@@ -1355,6 +1360,21 @@ function DndSpellLevelSection({
                       onClick={() => togglePrepared(realIndex)}
                     >
                       <NavIcon name="star" filled={s.prepared !== 0} />
+                    </button>
+                    {/* «Вне лимита» ставится и руками: выдач в D&D много —
+                        предмет, черта, благословение Мастера, — и все они
+                        приходят по-своему. Пометка от источника (вид, класс,
+                        подкласс) приезжает сама, эта галочка — для всего
+                        остального. */}
+                    <button
+                      type="button"
+                      className="comp-mini"
+                      title="Не в счёт подготовленных"
+                      aria-pressed={!!s.outsideLimit}
+                      aria-label={`${s.name}: не в счёт подготовленных`}
+                      onClick={() => toggleOutsideLimit(realIndex)}
+                    >
+                      ∞
                     </button>
                     <button
                       type="button"
@@ -2107,17 +2127,27 @@ function EquipmentInlineForm({
 // снаряжения (data.equipment_a_items / equipment_b_items). Пока набор не
 // размечен ссылками, здесь пусто — текстовое описание набора живёт в
 // компендиуме и переносится вручную, как и раньше.
+// Порядок и подписи монет — от медной к платиновой. Электрум стоит между
+// серебром и золотом, как в книге, хотя пользуются им редко.
+const COIN_FIELDS = [
+  { key: "cp", label: "ММ", title: "Медные монеты" },
+  { key: "sp", label: "СМ", title: "Серебряные монеты" },
+  { key: "ep", label: "ЭМ", title: "Электрумовые монеты" },
+  { key: "gp", label: "ЗМ", title: "Золотые монеты" },
+  { key: "pp", label: "ПМ", title: "Платиновые монеты" },
+] as const satisfies readonly { key: keyof DndCoins; label: string; title: string }[];
+
+const EMPTY_COINS: DndCoins = { cp: "", sp: "", ep: "", gp: "", pp: "" };
+
 function DndEquipmentQuickView({
   sections,
   systemId,
-  startingSets,
   coins,
   onQuickUpdate,
 }: {
   sections: DndEquipmentSection[];
   systemId: number | null;
-  startingSets?: StartingSet[];
-  coins?: import("../../types").DndCoins;
+  coins?: DndCoins;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
@@ -2180,46 +2210,6 @@ function DndEquipmentQuickView({
     if (addingSection == null || !draft.name.trim()) return;
     appendItem(addingSection, draft);
   }
-  // Кладёт весь набор в первую секцию инвентаря одним нажатием. Мета
-  // (урон, КЗ) снимается так же, как при добавлении вручную, поэтому
-  // надетый доспех из набора сразу участвует в расчёте КЗ. S-02: батч
-  // запрос, S-08: gold → coins.gp, S-20: ищет «Общее» а не idx 0.
-  async function takeStartingSet(set: StartingSet) {
-    const metas = await Promise.all(set.items.map((it) => fetchEquipmentMeta(it.entryId)));
-    const added: DndEquipmentItem[] = [
-      ...set.items.map((item, idx) => ({
-        name: item.name,
-        qty: item.qty > 1 ? String(item.qty) : "",
-        weight: "",
-        notes: "",
-        entryId: item.entryId,
-        ...metas[idx],
-      })),
-      // Выборные позиции — строкой с пометкой: в наборе они есть, а какие
-      // именно, решает игрок. Молча выкинуть их значит выдать неполный набор.
-      ...set.manual.map((text) => ({
-        ...EMPTY_EQUIPMENT_ITEM,
-        name: text,
-        notes: "выбрать самому",
-      })),
-    ];
-    const targetIdx = (() => {
-      const found = sections.findIndex((s) => s.name.trim().toLowerCase() === "общее");
-      return found >= 0 ? found : 0;
-    })();
-    const nextSections = sections.map((sec, idx) => (idx !== targetIdx ? sec : { ...sec, items: [...sec.items, ...added] }));
-    const patch: Partial<DndCharacterData> = { equipmentSections: nextSections };
-    if (set.gold?.trim()) {
-      const cur = coins ?? { cp: "", sp: "", ep: "", gp: "", pp: "" };
-      const add = Number.parseInt(set.gold.trim(), 10);
-      if (Number.isFinite(add) && add !== 0) {
-        const curGp = Number.parseInt(cur.gp || "0", 10) || 0;
-        patch.coins = { ...cur, gp: String(curGp + add) };
-      }
-    }
-    commit(patch);
-  }
-
   // «Принять» — снять пометку; больше ничего не меняется: предмет уже здесь.
   function acceptItem(si: number, ii: number) {
     commit({
@@ -2321,26 +2311,28 @@ function DndEquipmentQuickView({
         <span>Предметов: {summary.totalItems}</span>
         {summary.equipped > 0 && <><span>·</span><span>Надето: {summary.equipped}</span></>}
         {summary.hasWeight && <><span>·</span><span>Вес: {summary.totalWeight.toFixed(1).replace(/\.0$/, "")}</span></>}
-        {coins && (["cp","sp","ep","gp","pp"] as const).some((k) => (coins as unknown as Record<string,string>)[k]?.trim()) && (
-          <>
-            <span>·</span>
-            <span>
-              {([
-                ["cp","ММ"],["sp","СМ"],["ep","ЭМ"],["gp","ЗМ"],["pp","ПМ"]] as const).filter(([k]) => (coins as unknown as Record<string,string>)[k]?.trim()).map(([k,l]) => `${(coins as unknown as Record<string,string>)[k]} ${l}`).join(" · ")}
-            </span>
-          </>
-        )}
       </div>
-      {(startingSets ?? []).length > 0 && (
-        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-          {(startingSets ?? []).map((set) => (
-            <button key={set.label} type="button" className="comp-mini" onClick={() => takeStartingSet(set)}>
-              взять: {set.label}
-              {set.gold && ` (+${set.gold} ЗМ)`}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Монеты правятся прямо здесь. Раньше они только показывались, и то
+          лишь когда были непустыми: вписать добычу после боя было негде,
+          хотя это ровно то, что за столом делают чаще всего остального в
+          этой вкладке. Порядок — от медной к платиновой, как в кошельке. */}
+      <div className="row dnd-coins">
+        {COIN_FIELDS.map(({ key, label, title }) => (
+          <label key={key} className="dnd-coin" title={title}>
+            <input
+              inputMode="numeric"
+              value={coins?.[key] ?? ""}
+              aria-label={title}
+              onChange={(e) =>
+                commit({
+                  coins: { ...(coins ?? EMPTY_COINS), [key]: e.target.value.replace(/[^\d-]/g, "") },
+                })
+              }
+            />
+            <span className="muted">{label}</span>
+          </label>
+        ))}
+      </div>
       {sections.map((section, si) => (
         <div
           key={si}
@@ -5284,10 +5276,6 @@ export function DndCharacterView({
     };
   })();
   // Стартовые наборы: у каждого класса персонажа и у предыстории.
-  const startingSets = [
-    ...value.classes.flatMap((c) => startingSetsFrom(getEntry(c.classId), c.className)),
-    ...startingSetsFrom(getEntry(value.backgroundId), value.backgroundName || "Предыстория"),
-  ];
   const resourceSources: ClassResourceSource[] = value.classes.map((c) => ({
     entry: c,
     progression: getEntry(c.classId)?.data.progression as ClassProgression | undefined,
@@ -6100,7 +6088,6 @@ export function DndCharacterView({
                   <DndEquipmentQuickView
                     sections={value.equipmentSections}
                     systemId={value.systemId}
-                    startingSets={startingSets}
                     onQuickUpdate={onQuickUpdate}
                   />
                 </>

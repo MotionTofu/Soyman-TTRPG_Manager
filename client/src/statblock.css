@@ -1047,6 +1047,36 @@ summary.sb-section {
 }
 /* Отказ при сохранении из формы: форма остаётся открытой, набранное на
    месте, а причина написана рядом с кнопкой. */
+/* «Вне лимита» у заклинания — знак бесконечности рядом с названием.
+   Приписка словами занимала бы полстроки у каждой выдачи вида и класса. */
+.dnd-outside-mark {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+/* Монеты: пять узких полей в строку, подпись под каждым. За столом их
+   правят чаще всего, поэтому они на виду и всегда, а не только когда
+   непустые. */
+.dnd-coins {
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 8px;
+}
+.dnd-coin {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dnd-coin input {
+  width: 56px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+.dnd-coin span {
+  font-size: var(--fs-meta);
+}
+
 /* Переданное, но не принятое: пометка и точка на вкладке. */
 .dnd-pending-mark {
   font-size: var(--fs-meta);
