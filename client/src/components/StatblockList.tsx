@@ -1131,6 +1131,8 @@ function StatblockCard({
         value={dndValue as DndCharacterData}
         onQuickUpdate={quickSaveDnd}
         syncTabToUrl={soleOnPage}
+        campaignId={campaignId}
+        ownerCharacterId={statblock.owner_type === "character" ? statblock.owner_id : null}
         headerExtra={
           <>
             {saveIndicator}

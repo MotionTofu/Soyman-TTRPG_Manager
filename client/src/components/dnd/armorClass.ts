@@ -36,7 +36,10 @@ export function computeArmorClass(dexMod: number, sections: DndEquipmentSection[
   let base: number;
   let dexBonus: number;
   if (armor) {
-    base = parseInt(armor.ac ?? "", 10) || 0;
+    // Магическая прибавка «Доспех +1» лежит на той же строке, что и сам
+    // доспех (решение R3): второй строки инвентаря у него нет, поэтому и
+    // прибавлять её надо здесь, а не искать отдельный предмет.
+    base = (parseInt(armor.ac ?? "", 10) || 0) + (armor.magicBonus ?? 0);
     const maxDex = (armor.maxDexBonus ?? "").trim();
     if (!dexApplies(armor)) {
       // Тяжёлый доспех: Ловкость не применяется вовсе, ни плюсом, ни минусом.
@@ -64,7 +67,7 @@ export function computeArmorClass(dexMod: number, sections: DndEquipmentSection[
   // складываются, берётся лучший.
   const shieldBonus = equipped
     .filter((i) => isShield(i.armorType))
-    .reduce((best, i) => Math.max(best, parseInt(i.ac ?? "", 10) || 0), 0);
+    .reduce((best, i) => Math.max(best, (parseInt(i.ac ?? "", 10) || 0) + (i.magicBonus ?? 0)), 0);
 
   const flatBonus = equipped.reduce((sum, i) => sum + (parseInt(i.acBonus ?? "", 10) || 0), 0);
 

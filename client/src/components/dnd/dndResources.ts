@@ -1,6 +1,12 @@
 import type { DndAbilityScores, DndClassEntry } from "../../types";
 import { abilityModifier } from "./AbilityScores";
-import { resourcesAtLevel, statsAtLevel, type ClassProgression, type ProgressionRecharge } from "./progression";
+import {
+  columnsAtLevel,
+  resourcesAtLevel,
+  statsAtLevel,
+  type ClassProgression,
+  type ProgressionRecharge,
+} from "./progression";
 
 // Вкладка «Ресурсы»: пулы, которые персонаж тратит, и показатели, которые
 // просто растут по уровням.
@@ -32,9 +38,17 @@ export interface DndStatDef {
   className: string;
 }
 
+/** Строка таблицы схем реплик у записи класса (решение R1). */
+export interface ReplicateScheme {
+  entryId: number;
+  minLevel: number;
+}
+
 export interface ClassResourceSource {
   entry: DndClassEntry;
   progression?: ClassProgression;
+  /** Схемы реплик, если класс их даёт (Артефактор). */
+  replicateSchemes?: ReplicateScheme[];
 }
 
 // Ключ должен пережить переименование колонки и не столкнуться с колонкой
@@ -63,6 +77,39 @@ export function applicableResources(sources: ClassResourceSource[]): DndResource
         className: entry.className,
       });
     }
+  }
+  return out;
+}
+
+/** Пределы реплик на текущем уровне класса: сколько схем можно знать и
+ *  сколько предметов держать созданными. Обе колонки живут в таблице
+ *  развития со своими ролями — искать их по названию в коде не нужно. */
+export interface ReplicaLimits {
+  classId: number | null;
+  className: string;
+  level: number;
+  schemes: number;
+  items: number;
+  available: ReplicateScheme[];
+}
+
+export function replicaLimits(sources: ClassResourceSource[]): ReplicaLimits[] {
+  const out: ReplicaLimits[] = [];
+  for (const { entry, progression, replicateSchemes } of sources) {
+    if (!replicateSchemes || replicateSchemes.length === 0 || entry.level <= 0) continue;
+    const schemes = toNumber(columnsAtLevel(progression, entry.level, "replica_schemes")[0]?.value ?? "");
+    const items = toNumber(columnsAtLevel(progression, entry.level, "replica_items")[0]?.value ?? "");
+    // Схема доступна, когда уровень класса дорос до её порога.
+    const available = replicateSchemes.filter((s) => s.minLevel <= entry.level);
+    if (schemes <= 0 && items <= 0) continue;
+    out.push({
+      classId: entry.classId,
+      className: entry.className,
+      level: entry.level,
+      schemes,
+      items,
+      available,
+    });
   }
   return out;
 }

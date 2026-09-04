@@ -7,6 +7,9 @@ import type {
   DndActionTiming,
   DndCharacterData,
   DndCreatureSpeed,
+  DndReplicaItem,
+  Statblock,
+  DndReplicaScheme,
   DndClassEntry,
   DndEquipmentItem,
   DndEquipmentSection,
@@ -75,7 +78,6 @@ import {
 import { useCompendiumEntries } from "./useCompendiumEntries";
 import {
   EMPTY_EQUIPMENT_ITEM,
-  clearEquipmentMetaCache,
   fetchEquipmentMeta,
   startingSetsFrom,
   type StartingSet,
@@ -91,7 +93,15 @@ import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
 import { computeArmorClass } from "./armorClass";
 import { EMPTY_GRANTS, grantsFromEntry, mergeGrants, type SourceGrants } from "./dndGrants";
-import { allResources, applicableStats, type ClassResourceSource, type DndResourceDef } from "./dndResources";
+import {
+  allResources,
+  applicableStats,
+  replicaLimits,
+  type ClassResourceSource,
+  type DndResourceDef,
+  type ReplicaLimits,
+  type ReplicateScheme,
+} from "./dndResources";
 import { Modal } from "../Modal";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -170,6 +180,8 @@ export function emptyDndCharacter(): DndCharacterData {
     manualAcBonus: "",
     resourceUsed: {},
     resourceBonus: {},
+    replicaSchemes: [],
+    replicaItems: [],
   };
 }
 
@@ -293,6 +305,8 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   merged.hitPointMaxTemp = typeof merged.hitPointMaxTemp === "string" ? merged.hitPointMaxTemp : "";
   merged.resourceUsed = merged.resourceUsed && typeof merged.resourceUsed === "object" ? merged.resourceUsed : {};
   merged.resourceBonus = merged.resourceBonus && typeof merged.resourceBonus === "object" ? merged.resourceBonus : {};
+  merged.replicaSchemes = Array.isArray(merged.replicaSchemes) ? merged.replicaSchemes : [];
+  merged.replicaItems = Array.isArray(merged.replicaItems) ? merged.replicaItems : [];
   // Монеты — отдельное поле (S-08). Старые листы его не имели — дефолт пустые строки.
   const rawCoins = r.coins as Record<string, unknown> | undefined;
   if (rawCoins && typeof rawCoins === "object") {
@@ -860,6 +874,7 @@ function equipmentTagsLine(item: DndEquipmentItem): string {
     }
   }
   if (item.acBonus) parts.push(`+${item.acBonus} КЗ`);
+  if (item.magical) parts.push("магический");
   if (item.weaponDamage) {
     const type = item.weaponAttackMelee && item.weaponAttackRanged ? "Ближняя/дальняя атака" : item.weaponAttackRanged ? "Дальняя атака" : "Ближняя атака";
     parts.push(type, item.weaponDamage);
@@ -2205,6 +2220,24 @@ function DndEquipmentQuickView({
     commit(patch);
   }
 
+  // «Принять» — снять пометку; больше ничего не меняется: предмет уже здесь.
+  function acceptItem(si: number, ii: number) {
+    commit({
+      equipmentSections: sections.map((sec, idx) =>
+        idx !== si
+          ? sec
+          : {
+              ...sec,
+              items: sec.items.map((it, jj) => {
+                if (jj !== ii) return it;
+                const { pendingFrom: _dropped, ...rest } = it;
+                return rest;
+              }),
+            }
+      ),
+    });
+  }
+
   async function addFromCompendium(si: number, entry: CompendiumEntry) {
     const meta = await fetchEquipmentMeta(entry.id);
     appendItem(si, { name: entry.name, qty: "", weight: "", notes: "", ...meta });
@@ -2365,6 +2398,20 @@ function DndEquipmentQuickView({
                         {item.weight && ` (${item.weight})`}
                         {item.notes && ` — ${item.notes}`}
                       </span>
+                    )}
+                    {/* Переданное чужой репликой: пока не принято, строка
+                        стоит с пометкой и двумя кнопками — это и есть всё
+                        «уведомление», которого в приложении нет (R2/W8). */}
+                    {item.pendingFrom && (
+                      <>
+                        <span className="dnd-pending-mark">не принято</span>
+                        <button type="button" className="comp-mini" onClick={() => acceptItem(si, ii)}>
+                          Принять
+                        </button>
+                        <button type="button" className="comp-mini" onClick={() => removeItem(si, ii)}>
+                          Вернуть
+                        </button>
+                      </>
                     )}
                     <button type="button" className="comp-mini" title="Редактировать" aria-label="Редактировать предмет" onClick={() => startEdit(si, ii)}>
                       <NavIcon name="edit" />
@@ -4344,22 +4391,515 @@ function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () =
 // dndResources.ts for the PHB 2024 formulas). Max is always computed from
 // classes/abilities + the small per-resource "доп. бонус" field (external
 // sources — items, feats); only the bonus and used-count are ever stored.
+/**
+ * Реплики Артефактора: известные схемы и созданное по ним.
+ *
+ * Правило класса устроено в два шага, и блок повторяет их буквально. Сперва
+ * выбираются **схемы** — что вообще умеешь делать; их число растёт по
+ * таблице развития («Известные схемы»). Потом по схеме **создаётся
+ * предмет**, и таких одновременно можно держать столько, сколько написано в
+ * колонке «Магические предметы».
+ *
+ * Пределы показываются числом «N из M», но не запирают (решение R4): у
+ * Мастера за столом бывает причина разрешить лишнее, а приложение, которое
+ * молча отказывает, вынуждает вести учёт на бумаге рядом.
+ *
+ * Созданный предмет ложится и сюда счётчиком, и строкой в инвентарь — там
+ * его ищут. Строка помнит свою реплику (`replicaId`), поэтому исчезает
+ * вместе с ней.
+ */
+function DndReplicaBlock({
+  limits,
+  value,
+  systemId,
+  campaignId,
+  ownerCharacterId,
+  onQuickUpdate,
+}: {
+  limits: ReplicaLimits;
+  value: DndCharacterData;
+  systemId: number | null;
+  campaignId?: number | null;
+  ownerCharacterId?: number | null;
+  onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [baseFor, setBaseFor] = useState<DndReplicaScheme | null>(null);
+  const [giving, setGiving] = useState<DndReplicaItem | null>(null);
+  const [given, setGiven] = useState("");
+
+  const schemes = (value.replicaSchemes ?? []).filter((s) => s.classId === limits.classId);
+  const items = (value.replicaItems ?? []).filter((i) => i.classId === limits.classId);
+  const overSchemes = schemes.length > limits.schemes;
+  const overItems = items.length > limits.items;
+
+  function setSchemes(next: DndReplicaScheme[]) {
+    const others = (value.replicaSchemes ?? []).filter((s) => s.classId !== limits.classId);
+    onQuickUpdate?.({ replicaSchemes: [...others, ...next] });
+  }
+
+  // «Оружие +1» и «Доспех +1» — не предмет, а прибавка: чем именно она
+  // станет, решает игрок, поэтому у таких схем спрашивается базовый предмет
+  // (решение R3). Признак — прибавка в названии схемы.
+  function needsBase(scheme: DndReplicaScheme): boolean {
+    return /\+\s*\d/.test(scheme.name);
+  }
+
+  function createItem(
+    scheme: DndReplicaScheme,
+    base?: { name: string; entryId: number | null; meta: Partial<DndEquipmentItem> }
+  ) {
+    if (!onQuickUpdate) return;
+    const id = `replica-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const bonusMatch = /\+\s*(\d)/.exec(scheme.name);
+    const bonus = bonusMatch ? Number(bonusMatch[1]) : 0;
+    const item: DndReplicaItem = {
+      id,
+      schemeEntryId: scheme.entryId,
+      name: scheme.name,
+      classId: limits.classId,
+      baseName: base?.name,
+      baseEntryId: base?.entryId ?? null,
+    };
+    // Одна строка инвентаря, а не две: базовый предмет со своими КЗ и уроном
+    // плюс прибавка и пометка «магический».
+    const row: DndEquipmentItem = base
+      ? {
+          ...EMPTY_EQUIPMENT_ITEM,
+          ...base.meta,
+          name: bonus ? `${base.name} +${bonus}` : base.name,
+          entryId: base.entryId,
+          magical: true,
+          magicBonus: bonus || undefined,
+          notes: `реплика: ${scheme.name}`,
+          replicaId: id,
+        }
+      : {
+          ...EMPTY_EQUIPMENT_ITEM,
+          name: scheme.name,
+          entryId: scheme.entryId,
+          magical: true,
+          notes: "реплика",
+          replicaId: id,
+        };
+    const sections = value.equipmentSections.length > 0 ? value.equipmentSections : [{ name: "Общее", items: [] }];
+    onQuickUpdate({
+      replicaItems: [...(value.replicaItems ?? []), item],
+      equipmentSections: sections.map((sec, i) => (i === 0 ? { ...sec, items: [...sec.items, row] } : sec)),
+    });
+  }
+
+  function removeItem(item: DndReplicaItem) {
+    if (!onQuickUpdate) return;
+    onQuickUpdate({
+      replicaItems: (value.replicaItems ?? []).filter((i) => i.id !== item.id),
+      equipmentSections: value.equipmentSections.map((sec) => ({
+        ...sec,
+        items: sec.items.filter((row) => row.replicaId !== item.id),
+      })),
+    });
+  }
+
+  return (
+    <div className="sb-entry stack" style={{ gap: 6 }}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <span className="sb-prop-label">Известные схемы</span>
+        <span className="row" style={{ gap: 8, alignItems: "center" }}>
+          <span className={overSchemes ? "dnd-limit-over" : "muted"}>
+            {schemes.length} из {limits.schemes}
+          </span>
+          {onQuickUpdate && (
+            <button type="button" className="comp-mini" onClick={() => setPickerOpen(true)}>
+              Выбрать
+            </button>
+          )}
+        </span>
+      </div>
+      {schemes.length === 0 ? (
+        <span className="muted">Схемы не выбраны — нажмите «Выбрать».</span>
+      ) : (
+        <ul className="dnd-replica-list">
+          {schemes.map((scheme) => (
+            <li key={scheme.entryId} className="row dnd-replica-row">
+              <span style={{ flex: "1 1 12ch", minWidth: 0 }}>{scheme.name}</span>
+              {onQuickUpdate && (
+                <button
+                  type="button"
+                  className="comp-mini"
+                  onClick={() => (needsBase(scheme) ? setBaseFor(scheme) : createItem(scheme))}
+                >
+                  Создать
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <span className="sb-prop-label">Магические предметы</span>
+        <span className={overItems ? "dnd-limit-over" : "muted"}>
+          {items.length} из {limits.items}
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <span className="muted">Ничего не создано.</span>
+      ) : (
+        <ul className="dnd-replica-list">
+          {items.map((item) => (
+            <li key={item.id} className="row dnd-replica-row">
+              <span style={{ flex: "1 1 12ch", minWidth: 0 }}>
+                {item.baseName ? `${item.baseName} — ${item.name}` : item.name}
+              </span>
+              {onQuickUpdate && (
+                <>
+                  <button type="button" className="comp-mini" onClick={() => setGiving(item)}>
+                    Передать
+                  </button>
+                  <button type="button" className="comp-mini" onClick={() => removeItem(item)}>
+                    Убрать
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {pickerOpen && (
+        <DndReplicaSchemePicker
+          limits={limits}
+          chosen={schemes}
+          onClose={() => setPickerOpen(false)}
+          onChange={setSchemes}
+        />
+      )}
+      {given && <span className="muted">{given}</span>}
+      {giving && (
+        <DndReplicaHandover
+          item={giving}
+          campaignId={campaignId}
+          ownerCharacterId={ownerCharacterId}
+          giverName={value.characterName || "Артефактор"}
+          onClose={() => setGiving(null)}
+          onDone={() => {
+            setGiven(`Передано: ${giving.baseName ? `${giving.baseName} — ` : ""}${giving.name}`);
+            setGiving(null);
+          }}
+        />
+      )}
+      {baseFor && (
+        <DndReplicaBasePicker
+          scheme={baseFor}
+          systemId={systemId}
+          onClose={() => setBaseFor(null)}
+          onPick={(base) => {
+            createItem(baseFor, base);
+            setBaseFor(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Передать созданный предмет участнику кампании (решение R2/W8).
+ *
+ * Системы уведомлений в приложении нет вовсе — ни таблицы, ни экрана, — и
+ * заводить её ради одной кнопки значит построить половину мессенджера.
+ * Поэтому «уведомление» здесь и есть сама строка в инвентаре получателя:
+ * она приходит с пометкой «не принято» и двумя кнопками, а на вкладке
+ * «Инвентарь» появляется точка. Полноценные уведомления — отдельной задачей.
+ *
+ * Пишется чужой лист патчем одного поля (`contentPatch`), а не снимком: у
+ * получателя лист может быть открыт в этот самый момент, и снимок стёр бы
+ * его правку.
+ */
+function DndReplicaHandover({
+  item,
+  campaignId,
+  ownerCharacterId,
+  giverName,
+  onDone,
+  onClose,
+}: {
+  item: DndReplicaItem;
+  campaignId?: number | null;
+  ownerCharacterId?: number | null;
+  giverName: string;
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [targets, setTargets] = useState<{ id: number; character_name: string; player_name: string }[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!campaignId) {
+      setTargets([]);
+      return;
+    }
+    api
+      .get<{ id: number; character_name: string; player_name: string }[]>(`/characters?campaign_id=${campaignId}`)
+      .then((list) => setTargets(list.filter((c) => c.id !== ownerCharacterId)))
+      .catch(() => setTargets([]));
+  }, [campaignId, ownerCharacterId]);
+
+  async function give(target: { id: number; character_name: string }) {
+    setBusy(true);
+    setError("");
+    try {
+      const sheets = await api.get<Statblock[]>(`/statblocks?owner_type=character&owner_id=${target.id}`);
+      const sheet = sheets.find((s) => s.format === "dnd_character");
+      if (!sheet) {
+        setError(`У «${target.character_name}» нет чарника D&D — передать некуда.`);
+        return;
+      }
+      const data = JSON.parse(sheet.content || "{}") as DndCharacterData;
+      const sections =
+        Array.isArray(data.equipmentSections) && data.equipmentSections.length > 0
+          ? data.equipmentSections
+          : [{ name: "Общее", items: [] }];
+      const row: DndEquipmentItem = {
+        ...EMPTY_EQUIPMENT_ITEM,
+        name: item.baseName ? `${item.baseName} — ${item.name}` : item.name,
+        entryId: item.baseEntryId ?? item.schemeEntryId,
+        magical: true,
+        notes: `реплика от «${giverName}»`,
+        pendingFrom: giverName,
+      };
+      await api.put(`/statblocks/${sheet.id}`, {
+        contentPatch: {
+          equipmentSections: sections.map((sec, i) => (i === 0 ? { ...sec, items: [...sec.items, row] } : sec)),
+        },
+      });
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-replica-modal">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>Передать: {item.baseName ? `${item.baseName} — ${item.name}` : item.name}</h3>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          Предмет ляжет получателю в инвентарь строкой «не принято» — принять или вернуть он решит
+          сам. У вас предмет останется в счёте созданных: исчезает он вместе с репликой, а не с
+          передачей.
+        </div>
+        {error && <p className="sb-save-error">{error}</p>}
+        {targets === null && <p className="muted">Загрузка…</p>}
+        {targets !== null && targets.length === 0 && (
+          <p className="muted">
+            {campaignId ? "В кампании больше никого нет." : "Персонаж не в кампании — передавать некому."}
+          </p>
+        )}
+        {(targets ?? []).map((t) => (
+          <div key={t.id} className="row dnd-replica-row">
+            <span style={{ flex: "1 1 12ch", minWidth: 0 }}>
+              {t.character_name}
+              {t.player_name && <span className="muted"> · {t.player_name}</span>}
+            </span>
+            <button type="button" className="comp-mini" disabled={busy} onClick={() => void give(t)}>
+              Передать
+            </button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/** Выбор схем: список доступных на текущем уровне, с поиском. */
+function DndReplicaSchemePicker({
+  limits,
+  chosen,
+  onChange,
+  onClose,
+}: {
+  limits: ReplicaLimits;
+  chosen: DndReplicaScheme[];
+  onChange: (next: DndReplicaScheme[]) => void;
+  onClose: () => void;
+}) {
+  const [entries, setEntries] = useState<Map<number, CompendiumEntry> | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    ensureEntries(limits.available.map((s) => s.entryId))
+      .then(() => {
+        if (!alive) return;
+        const map = new Map<number, CompendiumEntry>();
+        for (const s of limits.available) {
+          const e = getCachedEntry(s.entryId);
+          if (e) map.set(s.entryId, e);
+        }
+        setEntries(map);
+      })
+      .catch(() => alive && setEntries(new Map()));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limits.classId, limits.level]);
+
+  const q = query.trim().toLowerCase();
+  const rows = (entries ? limits.available : [])
+    .map((s) => ({ scheme: s, entry: entries!.get(s.entryId) }))
+    .filter((r) => r.entry && (!q || r.entry.name.toLowerCase().includes(q)))
+    .sort(
+      (a, b) => a.scheme.minLevel - b.scheme.minLevel || a.entry!.name.localeCompare(b.entry!.name, "ru")
+    );
+
+  function toggle(entryId: number, name: string) {
+    const has = chosen.some((c) => c.entryId === entryId);
+    onChange(
+      has ? chosen.filter((c) => c.entryId !== entryId) : [...chosen, { entryId, name, classId: limits.classId }]
+    );
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-replica-modal">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>Схемы реплик</h3>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          {limits.className} {limits.level} · выбрано {chosen.length} из {limits.schemes} · доступно{" "}
+          {limits.available.length}
+        </div>
+        <input placeholder="Поиск по названию" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {entries === null && <p className="muted">Загрузка…</p>}
+        {entries !== null && rows.length === 0 && <p className="muted">Ничего не нашлось.</p>}
+        {rows.map(({ scheme, entry }) => (
+          <label key={scheme.entryId} className="row dnd-replica-row">
+            <input
+              type="checkbox"
+              checked={chosen.some((c) => c.entryId === scheme.entryId)}
+              onChange={() => toggle(scheme.entryId, entry!.name)}
+            />
+            <span style={{ flex: "1 1 12ch", minWidth: 0 }}>{entry!.name}</span>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+              с {scheme.minLevel} ур.
+            </span>
+          </label>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/** Какое именно оружие (доспех, щит) стало «+1» — решение R3. */
+function DndReplicaBasePicker({
+  scheme,
+  systemId,
+  onPick,
+  onClose,
+}: {
+  scheme: DndReplicaScheme;
+  systemId: number | null;
+  onPick: (base: { name: string; entryId: number | null; meta: Partial<DndEquipmentItem> }) => void;
+  onClose: () => void;
+}) {
+  const [options, setOptions] = useState<CompendiumEntry[] | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!systemId) {
+      setOptions([]);
+      return;
+    }
+    loadDndEquipmentEntries(systemId)
+      .then(setOptions)
+      .catch(() => setOptions([]));
+  }, [systemId]);
+
+  // Отбор по тому же слову, что стоит в названии схемы: «Оружие +1» — оружие,
+  // «Доспех +1» — доспехи, «Щит +1» — щиты.
+  const wanted = /доспех/i.test(scheme.name) ? "armor" : /щит/i.test(scheme.name) ? "shield" : "weapon";
+  const q = query.trim().toLowerCase();
+  const rows = (options ?? []).filter((e) => {
+    const armorType = typeof e.data.armor_type === "string" ? e.data.armor_type : "";
+    const isShield = armorType.trim().toLowerCase().startsWith("щит");
+    const kind = isShield ? "shield" : armorType ? "armor" : e.data.damage ? "weapon" : "";
+    if (kind !== wanted) return false;
+    return !q || e.name.toLowerCase().includes(q);
+  });
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-replica-modal">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>{scheme.name}: что именно?</h3>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          Прибавка ложится на базовый предмет — в инвентаре появится одна строка, помеченная
+          магической.
+        </div>
+        <input placeholder="Поиск" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {options === null && <p className="muted">Загрузка…</p>}
+        {options !== null && rows.length === 0 && <p className="muted">Ничего не нашлось.</p>}
+        {rows.map((entry) => (
+          <div key={entry.id} className="row dnd-replica-row">
+            <span style={{ flex: "1 1 12ch", minWidth: 0 }}>{entry.name}</span>
+            <button
+              type="button"
+              className="comp-mini"
+              onClick={async () => {
+                const meta = await fetchEquipmentMeta(entry.id).catch(() => ({}));
+                onPick({ name: entry.name, entryId: entry.id, meta });
+              }}
+            >
+              Выбрать
+            </button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 function DndResourcesView({
   sources,
   abilities,
   resourceUsed,
   resourceBonus,
+  value,
+  systemId,
+  campaignId,
+  ownerCharacterId,
   onQuickUpdate,
 }: {
   sources: ClassResourceSource[];
   abilities: DndCharacterData["abilities"];
   resourceUsed: Record<string, number>;
   resourceBonus: Record<string, number>;
+  value: DndCharacterData;
+  systemId: number | null;
+  campaignId?: number | null;
+  ownerCharacterId?: number | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const resources = allResources(sources, abilities);
   const stats = applicableStats(sources);
-  if (resources.length === 0 && stats.length === 0)
+  const replicas = replicaLimits(sources);
+  if (resources.length === 0 && stats.length === 0 && replicas.length === 0)
     return <p className="muted">Нет доступных ресурсов для текущих классов.</p>;
   // Класс подписываем только у многоклассовых персонажей: у одноклассового
   // это шум, а «Проведение божественности» бывает и у Жреца, и у Паладина
@@ -4402,6 +4942,17 @@ function DndResourcesView({
           </div>
         );
       })}
+      {replicas.map((limits) => (
+        <DndReplicaBlock
+          key={`${limits.classId}`}
+          limits={limits}
+          value={value}
+          systemId={systemId}
+          campaignId={campaignId}
+          ownerCharacterId={ownerCharacterId}
+          onQuickUpdate={onQuickUpdate}
+        />
+      ))}
       {stats.length > 0 && (
         <div className="sb-entry">
           {/* Показатели по уровню — тратить нечего, поэтому без дорожек. */}
@@ -4563,6 +5114,8 @@ export function DndCharacterView({
   onQuickUpdate,
   headerExtra,
   syncTabToUrl,
+  campaignId,
+  ownerCharacterId,
 }: {
   value: DndCharacterData;
   // Только для окна предпросмотра сущности (EntityPreviewModal): там лист
@@ -4585,6 +5138,10 @@ export function DndCharacterView({
   // Параметр свой, не `tab`: у страницы, внутри которой живёт лист, вкладки
   // свои, и делить один параметр с ней нельзя.
   syncTabToUrl?: boolean;
+  // Кампания и сам персонаж — чтобы было кому передать созданную реплику
+  // (решение R2/W8). Без них кнопка «Передать» просто скажет, что некому.
+  campaignId?: number | null;
+  ownerCharacterId?: number | null;
 }) {
   // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
   // да и незачем: неиспользуемый просто держит своё состояние вхолостую.
@@ -4599,6 +5156,10 @@ export function DndCharacterView({
   // справочника лист полон — имена берутся встроенные.
   const skills = useDndSkills(value.systemId);
   const systemIdForSlots = value.systemId;
+  const pendingItems = value.equipmentSections.reduce(
+    (sum, sec) => sum + sec.items.filter((i) => i.pendingFrom).length,
+    0
+  );
   // Per-section edit toggles for "Особенности" (only "Особые умения" is
   // user-authored — species/class/feats are inherited compendium content and
   // stay read-only) and "Досье" — separate from StatblockList's whole-card
@@ -4730,6 +5291,9 @@ export function DndCharacterView({
   const resourceSources: ClassResourceSource[] = value.classes.map((c) => ({
     entry: c,
     progression: getEntry(c.classId)?.data.progression as ClassProgression | undefined,
+    // Схемы реплик лежат у записи класса (решение R1) — сюда попадают,
+    // потому что вкладка «Ресурсы» и есть место, где ими пользуются.
+    replicateSchemes: (getEntry(c.classId)?.data.replicate_schemes as ReplicateScheme[] | undefined) ?? [],
   }));
   // Ручная правка выигрывает всегда: у самодельного класса таблицы может не
   // быть вовсе, и обнулять ему ячейки расчётом нельзя.
@@ -5269,6 +5833,10 @@ export function DndCharacterView({
               {DND_VIEW_TABS.map((t) => (
                 <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
                   {t}
+                  {/* Точка у «Инвентаря»: кто-то передал предмет, а системы
+                      уведомлений в приложении нет — иначе о переданном
+                      узнают, только заглянув во вкладку. */}
+                  {t === "Инвентарь" && pendingItems > 0 && <span className="dnd-tab-dot" aria-label="есть непринятое" />}
                 </button>
               ))}
             </div>
@@ -5559,6 +6127,10 @@ export function DndCharacterView({
               abilities={value.abilities}
               resourceUsed={value.resourceUsed}
               resourceBonus={value.resourceBonus}
+              value={value}
+              systemId={value.systemId}
+              campaignId={campaignId}
+              ownerCharacterId={ownerCharacterId}
               onQuickUpdate={onQuickUpdate}
             />
           )}

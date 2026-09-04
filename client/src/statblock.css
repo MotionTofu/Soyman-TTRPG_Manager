@@ -1047,6 +1047,39 @@ summary.sb-section {
 }
 /* Отказ при сохранении из формы: форма остаётся открытой, набранное на
    месте, а причина написана рядом с кнопкой. */
+/* Переданное, но не принятое: пометка и точка на вкладке. */
+.dnd-pending-mark {
+  font-size: var(--fs-meta);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.dnd-tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+/* Реплики Артефактора: список схем и созданного. */
+.dnd-replica-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dnd-replica-row {
+  gap: 8px;
+  align-items: center;
+  padding: 2px 0;
+}
+.dnd-replica-modal {
+  max-height: min(78vh, 720px);
+  overflow-y: auto;
+  min-width: min(92vw, 440px);
+}
+
 /* Список доступных заклинаний: длинный, поэтому скроллится внутри модалки,
    а не растит её на весь экран. */
 .dnd-spell-list-modal {

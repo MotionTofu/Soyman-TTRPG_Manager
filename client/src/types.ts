@@ -750,6 +750,9 @@ export interface DndCharacterData {
   // bonus; only current-used and the external bonus are ever stored.
   resourceUsed: Record<string, number>;
   resourceBonus: Record<string, number>;
+  /** Реплики Артефактора: известные схемы и созданное по ним. */
+  replicaSchemes?: DndReplicaScheme[];
+  replicaItems?: DndReplicaItem[];
 }
 
 export interface DndEquipmentItem {
@@ -780,6 +783,44 @@ export interface DndEquipmentItem {
   weaponAttackRanged?: boolean;
   weaponProperties?: string;
   weaponMastery?: string;
+  /** Предмет магический — своя пометка в списке. Ставится репликой
+   *  Артефактора и вручную. */
+  magical?: boolean;
+  /** Прибавка к КЗ/атаке и урону от магии предмета: «Оружие +1» и «Доспех
+   *  +1» не заводят второй строки инвентаря, а ложатся сюда поверх базового
+   *  предмета (решение R3). */
+  magicBonus?: number;
+  /** Реплика Артефактора, создавшая эту строку: по ней строка убирается
+   *  вместе с исчезновением реплики. */
+  replicaId?: string;
+  /** Предмет передан другим персонажем и ещё не принят (решение R2/W8).
+   *  Системы уведомлений в приложении нет, поэтому «уведомление» — это сама
+   *  строка в инвентаре с пометкой и двумя кнопками. */
+  pendingFrom?: string;
+}
+
+/** Схема реплики, известная Артефактору (решение W7): хранится у листа, а не
+ *  считается по уровню — какие именно четыре из 161 он знает, решает игрок. */
+export interface DndReplicaScheme {
+  /** Запись магического предмета в справочнике. */
+  entryId: number;
+  name: string;
+  /** Класс, чьё умение дало схему — у мультикласса их может быть несколько. */
+  classId: number | null;
+}
+
+/** Созданный по схеме предмет. Живёт счётчиком во вкладке «Ресурсы» и
+ *  строкой в инвентаре. */
+export interface DndReplicaItem {
+  /** Свой id: инвентарная строка ссылается на него, а не на схему —
+   *  одну и ту же схему можно создать дважды. */
+  id: string;
+  schemeEntryId: number;
+  name: string;
+  classId: number | null;
+  /** Для «Оружие +1» и «Доспех +1» — базовый предмет, к которому прибавка. */
+  baseName?: string;
+  baseEntryId?: number | null;
 }
 
 export interface DndCoins {

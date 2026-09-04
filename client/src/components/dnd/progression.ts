@@ -37,6 +37,12 @@ export type ProgressionRole =
   // складывать их с обычными нельзя.
   | "pact_slots"
   | "pact_level"
+  // Реплики Артефактора: сколько схем он знает и сколько предметов держит
+  // созданными. Отдельными ролями, а не «показателем по уровню», потому что
+  // это не число для чтения, а предел, с которым лист работает: по одной
+  // колонке выбираются схемы, по другой считается созданное.
+  | "replica_schemes"
+  | "replica_items"
   // Расходуемый пул: Ярость, Очки чародейства, Проведение божественности.
   // Получает дорожку «израсходовано» на листе.
   | "resource"
@@ -97,6 +103,8 @@ export const PROGRESSION_ROLE_LABELS: Record<ProgressionRole, string> = {
   pact_level: "Договор магии: круг ячеек",
   resource: "Расходуемый ресурс",
   stat: "Показатель по уровню",
+  replica_schemes: "Реплики: известные схемы",
+  replica_items: "Реплики: созданные предметы",
 };
 
 export const PROGRESSION_ROLE_ORDER: ProgressionRole[] = [
@@ -108,6 +116,8 @@ export const PROGRESSION_ROLE_ORDER: ProgressionRole[] = [
   "prepared",
   "resource",
   "stat",
+  "replica_schemes",
+  "replica_items",
   "slots_packed",
   "pact_slots",
   "pact_level",
@@ -242,6 +252,8 @@ const ROLE_BY_HEADER: [RegExp, ProgressionRole][] = [
   [/^(классовые\s+)?умени|^особенности/i, "features"],
   [/^заговор/i, "cantrips"],
   [/^(подготовл|известн).*заклинани/i, "prepared"],
+  [/^известные\s+схемы/i, "replica_schemes"],
+  [/^магические\s+предметы/i, "replica_items"],
 ];
 
 function normalizeHeader(raw: string): string {

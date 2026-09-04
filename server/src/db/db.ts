@@ -11,6 +11,7 @@ import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndSpeedStructure } from "./dndSpeedStructure";
 import { migrateDndSheetRefs } from "./dndSheetRefs";
 import { migrateDndStartingSets } from "./dndStartingSets";
+import { migrateDndReplicaSchemes } from "./dndReplicaSchemes";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -2720,6 +2721,7 @@ export function openDatabase(dbDir: string): Database.Database {
   migrateDndSpeedStructure(database);
   migrateDndSheetRefs(database);
   migrateDndStartingSets(database);
+  migrateDndReplicaSchemes(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
