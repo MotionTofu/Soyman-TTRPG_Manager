@@ -243,7 +243,7 @@ export function ModulesTab() {
               </button>
             </div>
             {catalogError && <div className="backup-info error">{catalogError}</div>}
-            {catalog && catalog.length === 0 && <EmptyState icon="barcode" title="Каталог пуст" hint="Попробуйте обновить каталог из GitHub." />}
+            {catalog && catalog.length === 0 && <EmptyState kind="search" title="Каталог пуст" hint="Попробуйте обновить каталог из GitHub." />}
             {catalog && catalog.length > 0 && (
               <div className="stack">
                 {catalog.map((entry) => (
@@ -282,7 +282,7 @@ export function ModulesTab() {
         <div className="res-group__body" style={{ padding: 12 }}>
           <div className="stack">
             {systemModules.map(renderRow)}
-            {systemModules.length === 0 && <EmptyState icon="barcode" title="Систем пока нет" hint="Добавьте модуль из файла или установите из каталога." />}
+            {systemModules.length === 0 && <EmptyState title="Систем пока нет" hint="Добавьте модуль из файла или установите из каталога." />}
           </div>
         </div>
       </details>
@@ -295,7 +295,7 @@ export function ModulesTab() {
         <div className="res-group__body" style={{ padding: 12 }}>
           <div className="stack">
             {settingModules.map(renderRow)}
-            {settingModules.length === 0 && <EmptyState icon="barcode" title="Сеттингов пока нет" hint="Добавьте модуль из файла или установите из каталога." />}
+            {settingModules.length === 0 && <EmptyState title="Сеттингов пока нет" hint="Добавьте модуль из файла или установите из каталога." />}
           </div>
         </div>
       </details>

@@ -2327,8 +2327,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
       )}
       {loading && <p className="muted">Загрузка…</p>}
       {loadError && (
-        <EmptyState
-          icon="skullDie"
+        <EmptyState kind="error"
           title="Ошибка загрузки"
           hint={loadError}
           action={<button onClick={() => refresh()}>Повторить</button>}
@@ -2336,7 +2335,6 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
       )}
       {!loading && !loadError && filtered.length === 0 && artifacts.length === 0 && (
         <EmptyState
-          icon="fantasySwords"
           title="Сокровищница пуста"
           hint="Особые предметы сеттинга, имеющие значение для приключений"
           action={

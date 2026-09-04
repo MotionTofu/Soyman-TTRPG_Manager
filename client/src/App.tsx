@@ -8,6 +8,7 @@ import { CrossWindowSyncBanner } from "./components/CrossWindowSyncBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useCurrentUser } from "./api/currentUser";
 import { EmptyState } from "./components/EmptyState";
+import { Loading } from "./components/Loading";
 import { Link } from "react-router-dom";
 import { MentionPreviewRoot } from "./components/mentions/MentionPreviewRoot";
 
@@ -89,47 +90,46 @@ function HomeRoute() {
 }
 function CampaignsRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <Loading full />;
   return user?.role === "player" ? <PlayerCampaignsListPage /> : <CampaignsListPage />;
 }
 function CampaignDetailRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <Loading full />;
   return user?.role === "player" ? <PlayerCampaignPage /> : <CampaignDetailPage />;
 }
 function SettingsRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <Loading full />;
   return user?.role === "player" ? <PlayerSettingsListPage /> : <SettingsListPage />;
 }
 // Импорт книги приключений — инструмент мастера: игроку тут делать нечего.
 function ImportRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <Loading full />;
   return user?.role === "player" ? <Navigate to="/" replace /> : <ImportAdventurePage />;
 }
 // Импорт книги правил — тоже мастерский инструмент: он правит компендиум системы.
 function ImportSystemRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <Loading full />;
   return user?.role === "player" ? <Navigate to="/" replace /> : <ImportSystemPage />;
 }
 function SettingDetailRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <Loading full />;
   return user?.role === "player" ? <PlayerSettingPage /> : <SettingDetailPage />;
 }
 function LibraryRoute() {
   const { user, loading } = useCurrentUser();
-  if (loading) return <p className="muted" style={{ padding: 24 }}>Загрузка…</p>;
+  if (loading) return <Loading full />;
   return user?.role === "player" ? <PlayerLibraryPage /> : <LibraryPage />;
 }
 
 function NotFoundPage() {
   return (
     <div style={{ padding: 24 }}>
-      <EmptyState
-        icon="barcode"
+      <EmptyState kind="error"
         title="Страница не найдена"
         hint="Такого адреса нет — возможно, ссылка устарела."
         action={<Link to="/" className="primary" style={{ display: "inline-block", padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>На Главную</Link>}
@@ -147,14 +147,7 @@ function App() {
         <CrossWindowSyncBanner />
         <MentionPreviewRoot />
         <ErrorBoundary>
-          <Suspense fallback={
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", padding: 48 }}>
-              <div className="muted" style={{ textAlign: "center" }}>
-                <div style={{ width: 24, height: 24, border: "2px solid var(--line)", borderTopColor: "var(--ink)", borderRadius: "50%", animation: "spin .6s linear infinite", margin: "0 auto 12px" }} />
-                Загрузка…
-              </div>
-            </div>
-          }>
+          <Suspense fallback={<Loading full />}>
           <Routes>
             {/* Outside <AppShell> on purpose — a popped-out panel window
                 (see sessionLivePanels.tsx) has no room to spare for the

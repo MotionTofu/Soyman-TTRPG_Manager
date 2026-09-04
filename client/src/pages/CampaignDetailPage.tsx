@@ -786,8 +786,7 @@ export function CampaignDetailPage() {
 
                     {sessions.length === 0 ? (
                       <EmptyState
-                        icon="skullDie"
-                        title="ХРОНИКА ПОКА ПУСТА"
+                        title="Хроника пока пуста"
                         hint="Запланируйте первую игру — здесь появится лента сыгранных сессий."
                         action={
                           <button className="primary" onClick={() => setCreatingDate(toLocalDateKey(new Date()))}>
@@ -1017,7 +1016,7 @@ export function CampaignDetailPage() {
                         </div>
                       );
                     })}
-                    {calendarEvents.length === 0 && <EmptyState icon="issueStamp" title="ХРОНИКА ПУСТА" hint="Первое событие задаёт летоисчисление мира" action={<button className="primary" onClick={() => openCreateEventModal(timelineNow?.year ?? 1, timelineNow?.month ?? 1, timelineNow?.day ?? 1)}>+ Создать событие</button>} />}
+                    {calendarEvents.length === 0 && <EmptyState title="Хроника пуста" hint="Первое событие задаёт летоисчисление мира" action={<button className="primary" onClick={() => openCreateEventModal(timelineNow?.year ?? 1, timelineNow?.month ?? 1, timelineNow?.day ?? 1)}>+ Создать событие</button>} />}
                   </div>
                 </div>
               </details>
@@ -1512,8 +1511,7 @@ function PlayersAndCharactersTab({
       </div>
       {roster.length === 0 ? (
         <EmptyState
-          icon="skullDie"
-          title="КОМАНДА ЕЩЁ НЕ СОБРАНА"
+          title="Команда ещё не собрана"
           hint="Добавьте первого игрока — его персонажи появятся здесь же, на карточке."
           action={available.length > 0 ? <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
         />
@@ -2468,8 +2466,7 @@ function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: Cam
           </Link>
         ) : (
           <EmptyState
-            icon="skullDie"
-            title="СЕССИЙ НЕ ЗАПЛАНИРОВАНО"
+            title="Сессий не запланировано"
             hint="Время наметить следующую игру — здесь появится ближайшая сессия."
             action={<button className="primary" onClick={() => onSchedule?.()}>Запланировать сессию</button>}
           />

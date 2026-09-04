@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api/client";
 import { NavIcon } from "./NavIcons";
+import { SoyManResponsive } from "./SoyMan";
 import { CampaignWizard } from "./CampaignWizard";
 import { PlayerCreationModal } from "./PlayerCreationModal";
 import { SystemOnboardingModal } from "./SystemOnboardingModal";
@@ -143,7 +144,11 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], ses
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {/* §1.4 шапка-инверсия */}
-      <div style={{ background: "var(--surface)", color: "var(--on-surface)", padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ background: "var(--surface)", color: "var(--on-surface)", padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", gap: 12, alignItems: "flex-start" }}>
+        {/* Маскот здоровается ровно один раз — на пустой Главной. Дальше по
+            приложению его нет: за столом он мешает (CLAUDE.md). */}
+        <SoyManResponsive state="idle" size="md" decorative />
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 auto", minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", lineHeight: 0.96, textTransform: "uppercase", letterSpacing: "-0.01em", color: "var(--on-surface)" }}>Твоя первая легенда</span>
           <button
@@ -155,6 +160,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], ses
           >×</button>
         </div>
         <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.10em", color: "var(--on-surface-muted)" }}>Пять шагов до первой сессии — идём по порядку</span>
+        </div>
       </div>
 
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12, background: "var(--paper-2)", backgroundImage: "var(--card-body-texture)" }}>

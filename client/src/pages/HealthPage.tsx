@@ -381,7 +381,7 @@ export function HealthPage() {
     return (
       <div className="stack health-page">
         <SectionHeading section="health">Здоровье</SectionHeading>
-        <EmptyState icon="barcode" title="Только для мастера" hint="Этот раздел меняет базу и файлы — доступен только мастеру. Игрок видит его только как гость." />
+        <EmptyState kind="search" title="Только для мастера" hint="Этот раздел меняет базу и файлы — доступен только мастеру. Игрок видит его только как гость." />
       </div>
     );
   }

@@ -578,9 +578,9 @@ export function StoragesSettingsPage() {
             ))}
             {filtered.length === 0 && (
               storages.length === 0 ? (
-                <EmptyState icon="barcode" title="Хранилищ нет" hint="Создайте первое — укажите название и путь к папке." />
+                <EmptyState title="Хранилищ нет" hint="Создайте первое — укажите название и путь к папке." />
               ) : (
-                <EmptyState icon="barcode" title="Ничего не найдено" hint={`По «${q}» ничего нет.`} action={<button onClick={() => setQ("")}>Сбросить поиск</button>} />
+                <EmptyState kind="search" title="Ничего не найдено" hint={`По «${q}» ничего нет.`} action={<button onClick={() => setQ("")}>Сбросить поиск</button>} />
               )
             )}
           </div>

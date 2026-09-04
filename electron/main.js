@@ -377,7 +377,9 @@ async function createWindow() {
       backgroundColor: "#e8e4da", show: true, alwaysOnTop: true, center: true,
       webPreferences: { sandbox: true },
     });
-    loadingWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#e8e4da;color:#1c1c1c;font-family:sans-serif;flex-direction:column;gap:12px"><div style="width:28px;height:28px;border:2px solid #2a2a2a;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase">Запускаем хранилище…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></body>`)}`);
+    // Разметка вынесена в electron/splash.html: строкой data:-URL её нельзя
+    // было ни прочитать, ни поправить. В сборку файл попадает по build.files.
+    loadingWin.loadFile(path.join(__dirname, "splash.html"));
   }, 400);
   try {
     await waitForServer(`http://127.0.0.1:${PORT}/api/health`);

@@ -928,8 +928,7 @@ export function BeingDetailPage() {
             })}
             {being.locations.length === 0 && (
               <EmptyState
-                icon="anarchyStar"
-                title="МЕСТ ПОКА НЕТ"
+                title="Пока нигде не встречали"
                 hint="Перетащите локацию из поиска, выберите из списка или из мешка — существо появится на карте."
               />
             )}
@@ -1001,8 +1000,7 @@ export function BeingDetailPage() {
             ))}
             {being.important_dates.length === 0 && (
               <EmptyState
-                icon="issueStamp"
-                title="ДАТ ПОКА НЕТ"
+                title="Биография пока пуста"
                 hint="Добавьте день рождения, годовщину или ритуал — попадёт в календарь сеттинга и кампаний."
               />
             )}

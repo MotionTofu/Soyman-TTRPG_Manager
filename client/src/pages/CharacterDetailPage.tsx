@@ -157,7 +157,7 @@ export function CharacterDetailPage() {
   if (notFound) {
     return (
       <div className="stack" style={{ padding: 24 }}>
-        <EmptyState icon="barcode" title="Персонаж не найден" hint="Возможно, он был архивирован или ссылка устарела." action={<Link to="/campaigns" className="primary" style={{ display: "inline-block", padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>К кампаниям</Link>} />
+        <EmptyState kind="error" title="Персонаж не найден" hint="Возможно, он был архивирован или ссылка устарела." action={<Link to="/campaigns" className="primary" style={{ display: "inline-block", padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>К кампаниям</Link>} />
       </div>
     );
   }
@@ -507,7 +507,7 @@ export function CharacterDetailPage() {
                     </div>
                   ))}
                   {(character.important_dates ?? []).length === 0 && (
-                    <EmptyState icon="barcode" title="Важных дат пока нет" hint="Добавьте день рождения, годовщину или дедлайн — попадёт в календарь кампании." />
+                    <EmptyState title="Важных дат пока нет" hint="Добавьте день рождения, годовщину или дедлайн — попадёт в календарь кампании." />
                   )}
                 </div>
               </div>
@@ -712,7 +712,7 @@ function CharacterInventoryTab({
           <ChapterList ownerId={characterId} ownerType="character" apiBase="/characters" section="inventory" chapters={invChapters} onChange={onRefresh} allowImage />
         </>
       ) : (
-        <EmptyState icon="splatter" title="Имущества пока нет" hint="Заведите чарник D&D и заполните «Инвентарь» или добавьте первую запись прозы." />
+        <EmptyState title="Имущества пока нет" hint="Заведите чарник D&D и заполните «Инвентарь» или добавьте первую запись прозы." />
       )}
     </div>
   );

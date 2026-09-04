@@ -150,8 +150,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
       )}
       {!loading && !error && sections.length === 0 && (
         <EmptyState
-          icon="skullDie"
-          title="ПОДРАЗДЕЛОВ НЕТ"
+          title="Игрокам пока нечего открыть"
           hint="Создайте первый — статьи или галерею — и откройте игрокам глазом «Кому видно»."
           action={
             <button className="primary" onClick={() => nameInputRef.current?.focus()}>
@@ -417,8 +416,7 @@ function ArticlesList({
       )}
       {!loading && !error && articles.length === 0 && (
         <EmptyState
-          icon="skullDie"
-          title="СТАТЕЙ НЕТ"
+          title="Чистый лист"
           hint="Добавьте первую статью — она откроется сразу в режиме редактирования."
           action={
             <button className="primary" onClick={addArticle} disabled={saving}>

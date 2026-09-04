@@ -69,8 +69,7 @@ export function CampaignChaptersScenes({
   if (tree.length === 0) {
     return (
       <EmptyState
-        icon="issueStamp"
-        title="ГЛАВЫ ЕЩЁ НЕ ПРИВЯЗАНЫ"
+        title="Главы ещё не привязаны"
         hint="Привяжите приключение в разделе «Обзор → Приключения» — его главы и сцены станут планом кампании."
         action={<Link to={`/campaigns/${campaignId}`}><button className="primary">К приключениям →</button></Link>}
       />

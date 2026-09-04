@@ -476,7 +476,7 @@ export function LocationTree({ settingId }: Props) {
             </Link>
           ))}
           {flatList.length === 0 && (
-            <EmptyState
+            <EmptyState kind="search"
               title="Ничего не найдено"
               hint={`По запросу «${(debouncedQuery || kindFilter || mapFilter || descFilter).trim()}» локаций нет.`}
               action={

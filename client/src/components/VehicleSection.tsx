@@ -250,16 +250,14 @@ export function VehicleSection({ systemId, section }: Props) {
           </div>
         )}
         {topLevel.length === 0 && (
-          <EmptyState
-            icon="issueStamp"
+          <EmptyState kind={searchQuery.trim() ? "search" : "primary"}
             title={searchQuery.trim() ? `Ничего по «${searchQuery.trim()}»` : "Транспорт пуст"}
             hint={searchQuery.trim() ? "Попробуйте другой запрос." : "Добавьте первое судно — оно появится здесь плитками."}
             action={<button className="primary" onClick={addVehicle}>+ Добавить транспорт</button>}
           />
         )}
         {topLevel.length > 0 && filteredTopLevel.length === 0 && (
-          <EmptyState
-            icon="barcode"
+          <EmptyState kind="search"
             title="Ничего не нашлось"
             hint="Попробуйте сбросить фильтры или поискать иначе."
             action={<button onClick={resetVehicleFilters}>Сбросить фильтры</button>}

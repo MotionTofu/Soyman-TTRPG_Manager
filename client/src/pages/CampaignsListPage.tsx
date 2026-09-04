@@ -169,8 +169,7 @@ export function CampaignsListPage() {
       )}
 
       {!loading && !loadError && filtered.length === 0 && campaigns.length > 0 && (
-        <EmptyState
-          icon="barcode"
+        <EmptyState kind="search"
           title="Ничего не найдено"
           hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет кампаний в этой группе."}
           action={
@@ -184,7 +183,6 @@ export function CampaignsListPage() {
 
       {!loading && !loadError && campaigns.length === 0 && (
         <EmptyState
-          icon="skullDie"
           title="Пока тихо"
           hint="Ни одной кампании ещё нет — начните первую."
           action={

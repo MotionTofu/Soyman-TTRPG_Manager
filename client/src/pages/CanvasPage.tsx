@@ -29,6 +29,7 @@ import { SCENE_KINDS, SCENE_KIND_LABELS, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { EmptyState } from "../components/EmptyState";
+import { Loading } from "../components/Loading";
 import { createPortal } from "react-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { CreatureCardLoader } from "../components/CreatureCard";
@@ -5470,17 +5471,17 @@ export function CanvasPage() {
       )}
 
       {freeId ? (
-        !board ? <EmptyState title="Загрузка…" hint="Фриформ-доска" /> : boardSurface
+        !board ? <Loading full label="Фриформ-доска…" /> : boardSurface
       ) : campaignMapId ? (
         // Карта кампании (блок D4) — тот же холст, но отвечает на вопрос «где
         // мы сейчас»: узлы покрашены прохождением, а состав — приключения
         // кампании, а не всего сеттинга.
-        !board ? <EmptyState title="Загрузка…" hint="Карта кампании" /> : boardSurface
+        !board ? <Loading full label="Карта кампании…" /> : boardSurface
       ) : settingMapId ? (
         // Схема сеттинга (блок D3) — второй взгляд на тот же сеттинг, а не
         // обязательный шаг на пути к сценам, каким он был до Q17. Список
         // остаётся дорогой по умолчанию, сюда приходят переключателем.
-        !board ? <EmptyState title="Загрузка…" hint="Схема сеттинга" /> : boardSurface
+        !board ? <Loading full label="Схема сеттинга…" /> : boardSurface
       ) : !arcId ? (
         // Один экран вместо двух (Q21): свои доски и приключения, сгруппированные
         // по сеттингу. Схема сеттинга рядом, переключателем «Список / Схема».
@@ -5636,7 +5637,7 @@ export function CanvasPage() {
           )}
         </div>
       ) : !board ? (
-        <EmptyState
+        <EmptyState kind="search"
           title="Историю видно только целиком"
           hint="Сцены приключения лягут схемой: что за чем идёт и где развилки."
         />

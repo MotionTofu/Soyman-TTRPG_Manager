@@ -195,8 +195,7 @@ export function InvitationsPage() {
             </div>
           ) : entries.length === 0 ? (
             !loadError && (
-              <EmptyState
-                icon="barcode"
+              <EmptyState kind="error"
                 title="Адрес не найден"
                 hint="Проверьте, что ПК подключён к Wi-Fi/Ethernet в той же сети, что и игроки. VPN и Docker могут скрывать реальный адрес."
                 action={

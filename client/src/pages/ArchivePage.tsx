@@ -492,8 +492,7 @@ export function ArchivePage() {
         <>
           {items.length === 0 ? (
             <EmptyState
-              icon="barcode"
-              title="АРХИВ ПУСТ"
+              title="В архиве чисто"
               hint="Архивированные сущности появятся здесь — они не видны в основных разделах, но вернутся одной кнопкой «Восстановить»."
             />
           ) : (
@@ -631,8 +630,7 @@ export function ArchivePage() {
           )}
           {files.length === 0 ? (
             <EmptyState
-              icon="barcode"
-              title="ФАЙЛОВ В АРХИВЕ НЕТ"
+              title="В файловом архиве чисто"
               hint="Сюда попадают только файлы, у которых вы выбрали «отправить в архив» при удалении последней копии."
             />
           ) : filteredFiles.length === 0 ? (

@@ -238,8 +238,7 @@ export function SystemsListPage() {
       )}
 
       {!loading && !loadError && filteredSystems.length === 0 && systems.length > 0 && (
-        <EmptyState
-          icon="barcode"
+        <EmptyState kind="search"
           title="Ничего не найдено"
           hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет систем в этой группе."}
           action={
@@ -253,7 +252,6 @@ export function SystemsListPage() {
 
       {!loading && !loadError && systems.length === 0 && (
         <EmptyState
-          icon="issueStamp"
           title="Правил ещё нет"
           hint="Ни одной системы не заведено — добавьте первую."
           action={

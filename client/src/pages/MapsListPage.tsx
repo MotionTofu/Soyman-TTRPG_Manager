@@ -405,8 +405,7 @@ export function MapsListPage() {
       )}
 
       {!loading && !loadError && maps.length > 0 && filtered.length === 0 && (
-        <EmptyState
-          icon="barcode"
+        <EmptyState kind="search"
           title="Ничего не найдено"
           hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Под фильтры ничего не попало."}
           action={
@@ -426,7 +425,6 @@ export function MapsListPage() {
 
       {!loading && !loadError && maps.length === 0 && (
         <EmptyState
-          icon="issueStamp"
           title="Мир не начерчен"
           hint={
             canEdit

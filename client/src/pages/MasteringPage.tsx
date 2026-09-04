@@ -385,8 +385,7 @@ export function MasteringPage() {
       )}
 
       {filteredNotes.length === 0 ? (
-        <EmptyState
-          icon="barcode"
+        <EmptyState kind={query || activeFilters ? "search" : "primary"}
           title={
             query || activeFilters
               ? "Ничего не найдено"

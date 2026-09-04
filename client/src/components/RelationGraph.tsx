@@ -881,7 +881,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   );
 
   const graphBody = data.nodes.length === 0 ? (
-    <EmptyState icon="anarchyStar" title="СХЕМЫ ПОКА НЕТ"
+    <EmptyState title="Схема ещё не проявилась"
       hint={emptyMessage ?? "Добавьте связи между существами, фракциями и местами — граф проявится сам."}
       action={<Link to="/settings" className="primary" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>К сеттингам</Link>}
     />

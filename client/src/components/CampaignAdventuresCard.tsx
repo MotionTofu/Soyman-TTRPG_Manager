@@ -108,8 +108,7 @@ export function CampaignAdventuresCard({
       ))}
       {adventures.length === 0 && !adding && (
         <EmptyState
-          icon="issueStamp"
-          title="ПРИКЛЮЧЕНИЙ ЕЩЁ НЕТ"
+          title="Приключений ещё нет"
           hint="Привяжите первое из сеттинга — его главы и сцены станут планом кампании. Правка здесь создаст версию для кампании."
           action={<button className="primary" onClick={openAdd}>+ Привязать приключение</button>}
         />

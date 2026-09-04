@@ -327,8 +327,7 @@ export function CharacterJournal({
 
       {visible.length === 0 && (
         <EmptyState
-          icon="skullDie"
-          title="ЗАМЕТОК ПОКА НЕТ"
+          title="Дневник ещё не начат"
           hint={
             query.trim() || tagFilter !== "all"
               ? "По этому запросу записей нет — снимите фильтр."

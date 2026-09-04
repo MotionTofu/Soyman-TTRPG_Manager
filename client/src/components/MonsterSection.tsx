@@ -309,16 +309,14 @@ export function MonsterSection({ systemId, section }: Props) {
           </div>
         )}
         {topLevel.length === 0 && (
-          <EmptyState
-            icon="issueStamp"
+          <EmptyState kind={searchQuery.trim() ? "search" : "primary"}
             title={searchQuery.trim() ? `Ничего по «${searchQuery.trim()}»` : "Бестиарий пуст"}
             hint={searchQuery.trim() ? "Попробуйте другой запрос." : "Добавьте первое существо — оно появится здесь плитками."}
             action={<button className="primary" onClick={addMonster}>+ Добавить существо</button>}
           />
         )}
         {topLevel.length > 0 && filteredTopLevel.length === 0 && (
-          <EmptyState
-            icon="barcode"
+          <EmptyState kind="search"
             title="Ничего не нашлось"
             hint="Попробуйте сбросить фильтры или поискать иначе."
             action={<button onClick={resetMonsterFilters}>Сбросить фильтры</button>}

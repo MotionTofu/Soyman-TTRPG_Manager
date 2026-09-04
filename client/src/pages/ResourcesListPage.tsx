@@ -247,8 +247,7 @@ export function ResourcesListPage() {
           )}
 
           {groups.length === 0 && (
-            <EmptyState
-              icon="barcode"
+            <EmptyState kind={query || campaignFilter || settingFilter ? "search" : "primary"}
               title="Полки пусты"
               hint={
                 query || campaignFilter || settingFilter

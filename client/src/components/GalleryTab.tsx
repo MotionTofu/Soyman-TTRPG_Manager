@@ -311,7 +311,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
         </div>
       )}
       {!loading && images.length === 0 && !error && (
-        <EmptyState icon="skullDie" title="ГАЛЕРЕЯ ПУСТА" hint={IMAGE_HINT} action={<label className="primary" style={{ padding: "6px 12px", border: "1px solid var(--primary-bg)", cursor: "pointer" }}>Выбрать файлы<input type="file" accept={IMAGE_ACCEPT} multiple style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)" }} tabIndex={-1} aria-hidden="true" onChange={(e) => uploadFiles(e.target.files, e.target as HTMLInputElement)} /></label>} />
+        <EmptyState title="Галерея пуста" hint={IMAGE_HINT} action={<label className="primary" style={{ padding: "6px 12px", border: "1px solid var(--primary-bg)", cursor: "pointer" }}>Выбрать файлы<input type="file" accept={IMAGE_ACCEPT} multiple style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)" }} tabIndex={-1} aria-hidden="true" onChange={(e) => uploadFiles(e.target.files, e.target as HTMLInputElement)} /></label>} />
       )}
       {uploadProgress && (
         <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }} aria-live="polite">

@@ -352,8 +352,7 @@ export function SettingPlayerContentTab({ settingId, campaigns }: Props) {
       {!campaignId ? (
         campaigns.length === 0 ? (
           <EmptyState
-            icon="issueStamp"
-            title="КАМПАНИЙ НЕТ"
+            title="Сеттинг ещё не в игре"
             hint="Привяжите кампанию к сеттингу, чтобы настроить видимость контента для игроков."
           />
         ) : (

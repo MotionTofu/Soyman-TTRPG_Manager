@@ -249,8 +249,7 @@ export function PlayersListPage() {
       )}
 
       {!loading && !loadError && filteredPlayers.length === 0 && players.length > 0 && (
-        <EmptyState
-          icon="barcode"
+        <EmptyState kind="search"
           title="Ничего не найдено"
           hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
           action={
@@ -264,7 +263,6 @@ export function PlayersListPage() {
 
       {!loading && !loadError && players.length === 0 && (
         <EmptyState
-          icon="splatter"
           title="Стол пустует"
           hint="Ни одного игрока ещё не заведено — добавьте первого."
           action={

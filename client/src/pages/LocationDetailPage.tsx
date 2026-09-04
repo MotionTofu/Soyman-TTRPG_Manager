@@ -591,7 +591,6 @@ export function LocationDetailPage() {
             <EmptyState
               title="Статьи помогают описать локацию"
               hint="Запишите подробности, которые не влезают в основное описание — история, тайны, заметки мастера."
-              icon="issueStamp"
               action={
                 <button
                   className="primary"
@@ -729,7 +728,6 @@ export function LocationDetailPage() {
             ))}
             {(childByParent.get(locationId)?.length ?? 0) === 0 && archivedChildren.length === 0 && (
               <EmptyState
-                icon="fantasySwords"
                 title="Вложенных локаций пока нет"
                 hint="Под-территории: комнаты в здании, районы города, области страны."
                 action={
@@ -885,7 +883,7 @@ export function LocationDetailPage() {
               }
             />
           ) : filteredCount === 0 ? (
-            <EmptyState
+            <EmptyState kind="search"
               title="Ничего не найдено"
               hint={`По запросу «${(debouncedQuery || categoryFilter).trim()}» обитателей нет.`}
               action={

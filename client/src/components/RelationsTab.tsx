@@ -636,7 +636,6 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
               {fOut.length === 0 ? (
                 outgoing.length === 0 ? (
                   <EmptyState
-                    icon="fantasySwords"
                     title="Связей пока нет"
                     hint={`Укажите, как ${entityName} относится к другим — союз, долг, страх, торговля.`}
                     action={
@@ -673,7 +672,6 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
               {fIn.length === 0 ? (
                 incoming.length === 0 ? (
                   <EmptyState
-                    icon="anarchyStar"
                     title="Никто пока не указал отношение"
                     hint={`Когда другие сущности укажут отношение к ${entityName}, оно появится здесь.`}
                   />

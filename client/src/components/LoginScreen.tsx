@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { setAuthToken } from "../api/client";
 import { brandLogo } from "../brandLogo";
 import { ParticleField } from "./ParticleField";
+import { SoyManResponsive } from "./SoyMan";
+import { Loading } from "./Loading";
 import { setCachedUser } from "../api/currentUser";
 
 // Shown whenever there's no valid token (see LoginGate.tsx) — auth is always
@@ -68,7 +70,8 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
         <ParticleField count={8} className="header-particles" />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
           <img src={brandLogo} alt="SoyMan" style={{ width: 180, maxWidth: "60vw", opacity: 0.9 }} />
-          <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", letterSpacing: "0.06em" }}>Загрузка…</span>
+          {/* Баннер и маскот уживаются: баннер — леттеринг, маскот — лицо (гайд §28). */}
+          <Loading />
         </div>
       </div>
     );
@@ -77,6 +80,10 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--paper)", backgroundImage: "var(--page-texture)", position: "relative", overflow: "hidden", padding: 16 }}>
       <ParticleField count={8} className="header-particles" />
+      {/* Маскот встречает над карточкой, а не внутри неё: в шапке уже есть
+          баннер и заголовок, и третий предмет туда не влезает. */}
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, width: "100%" }}>
+      <SoyManResponsive state="idle" size="lg" decorative />
       <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 440, width: "100%", padding: 0, overflow: "hidden", position: "relative", zIndex: 1 }}>
         {/* Шапка-инверсия §1.4 */}
         <div style={{ background: "var(--surface)", color: "var(--on-surface)", padding: "14px 20px", borderBottom: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -172,6 +179,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
           </div>
         </div>
       </form>
+      </div>
     </div>
   );
 }

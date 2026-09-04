@@ -247,8 +247,7 @@ export function SettingsListPage() {
       )}
 
       {!loading && !loadError && filteredSettings.length === 0 && settings.length > 0 && (
-        <EmptyState
-          icon="barcode"
+        <EmptyState kind="search"
           title="Ничего не найдено"
           hint={q.trim() ? `По «${q.trim()}» ничего нет.` : genreFilter ? `Нет сеттингов с жанром «${genreFilter}».` : activeTab !== null ? "В этой группе пока пусто — добавьте сеттинг." : "Ничего не найдено."}
           action={
@@ -273,7 +272,6 @@ export function SettingsListPage() {
 
       {!loading && !loadError && settings.length === 0 && (
         <EmptyState
-          icon="anarchyStar"
           title="Мир не начерчен"
           hint="Ни одного сеттинга ещё нет — создайте первый."
           action={

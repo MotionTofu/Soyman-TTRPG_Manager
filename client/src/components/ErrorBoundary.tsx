@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { SoyMan } from "./SoyMan";
 
 interface Props {
   children: ReactNode;
@@ -26,7 +27,9 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div style={{ padding: 32, maxWidth: 600, margin: "0 auto" }}>
-          <h2 style={{ marginBottom: 12 }}>Что-то пошло не так</h2>
+          {/* decorative: заголовок ниже говорит то же самое. */}
+          <SoyMan state="error" size="md" decorative />
+          <h2 style={{ marginBottom: 12, marginTop: 12 }}>Что-то пошло не так</h2>
           <p className="muted" style={{ marginBottom: 16 }}>
             Произошла ошибка при отрисовке. Попробуйте перезагрузить страницу.
           </p>

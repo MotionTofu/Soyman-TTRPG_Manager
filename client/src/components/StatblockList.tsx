@@ -491,7 +491,6 @@ export function StatblockList({
       {alertDialog}
       {isEmpty && showLssImport && (
         <EmptyState
-          icon="skullDie"
           title="Чарника нет"
           hint="Заполните лист на Long Story Short (next.dnd.su) и закиньте сюда JSON — получите полноценный статблок за один клик, или создайте чарник вручную."
           action={

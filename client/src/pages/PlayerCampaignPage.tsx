@@ -568,8 +568,7 @@ export function PlayerCampaignPage() {
 
           {nothingVisible && (
             <EmptyState
-              icon="issueStamp"
-              title="МАСТЕР ПОКА МОЛЧИТ"
+              title="Мастер пока молчит"
               hint="Мастер пока ничего не открыл игрокам в этой кампании — попросите его поделиться лором."
             />
           )}
@@ -693,8 +692,7 @@ export function PlayerCampaignPage() {
         <div className="stack">
           {party.length === 0 && (
             <EmptyState
-              icon="splatter"
-              title="ГРУППА ПОКА ОДНА"
+              title="Группа пока одна"
               hint="Кроме вас, в кампании пока нет других персонажей."
             />
           )}

@@ -94,7 +94,6 @@ export function LibraryPage() {
           ))}
           {campaigns.length === 0 && (
             <EmptyState
-              icon="fantasySwords"
               title="Ни одной кампании"
               hint="История, игроки и расписание живут здесь."
               action={<button className="primary" onClick={() => navigate("/campaigns")}>Завести кампанию</button>}
@@ -122,7 +121,6 @@ export function LibraryPage() {
           })}
           {settings.length === 0 && (
             <EmptyState
-              icon="cosmicOrbit"
               title="Ни одного мира"
               hint="География, население и хроника — всё оттуда."
               action={<button className="primary" onClick={() => navigate("/settings")}>Создать сеттинг</button>}
@@ -146,7 +144,6 @@ export function LibraryPage() {
           ))}
           {systems.length === 0 && (
             <EmptyState
-              icon="skullDie"
               title="Ни одной системы"
               hint="Правила, по которым считаются статблоки."
               action={<button className="primary" onClick={() => navigate("/systems")}>Добавить систему</button>}
