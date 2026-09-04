@@ -1,4 +1,4 @@
-// Parses a character sheet exported from Long Story Short (next.dnd.su sheet
+// Parses a character sheet exported from Long Story Short (longstoryshort.app sheet
 // builder). Their export nests a JSON-encoded string ("data") containing the
 // actual sheet, with long-form text fields stored as ProseMirror documents
 // rather than plain strings — most of this file is about flattening those
@@ -283,7 +283,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
   const infoBackground = getValue(info, "background");
   const infoAlignment = getValue(info, "alignment");
   if (!infoRace && !infoClass && !infoBackground && !name) {
-    warn("info", "Поля расы/класса/предыстории пусты — проверьте, что экспорт с next.dnd.su не обрезан.");
+    warn("info", "Поля расы/класса/предыстории пусты — проверьте, что экспорт с longstoryshort.app не обрезан.");
   }
 
   const headerParts = [

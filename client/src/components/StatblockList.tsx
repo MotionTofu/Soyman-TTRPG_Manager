@@ -383,7 +383,7 @@ export function StatblockList({
       try {
         JSON.parse(json);
       } catch {
-        throw new Error("Файл не похож на JSON — убедитесь, что это экспорт с next.dnd.su (Long Story Short)");
+        throw new Error("Файл не похож на JSON — убедитесь, что это экспорт с longstoryshort.app (Long Story Short)");
       }
       // Preview first — no DB write yet
       const previewRes = await api.post<{
@@ -421,7 +421,7 @@ export function StatblockList({
       } else if (msg.toLowerCase().includes("character")) {
         setImportError(msg);
       } else {
-        setImportError(msg || "Не удалось разобрать файл. Убедитесь, что это экспорт персонажа с Long Story Short (next.dnd.su).");
+        setImportError(msg || "Не удалось разобрать файл. Убедитесь, что это экспорт персонажа с Long Story Short (longstoryshort.app).");
       }
       if (targetInput) targetInput.value = "";
     } finally {
@@ -492,11 +492,20 @@ export function StatblockList({
       {isEmpty && showLssImport && (
         <EmptyState
           title="Чарника нет"
-          hint="Заполните лист на Long Story Short (next.dnd.su) и закиньте сюда JSON — получите полноценный статблок за один клик, или создайте чарник вручную."
+          /* Главная дорога — свой визард: он спрашивает класс, вид,
+             предысторию и черту по порядку и сам раскладывает выдачи. Импорт
+             из Long Story Short стоит рядом второй кнопкой — он нужен тем, у
+             кого лист уже заполнен там, а не как основной способ завести
+             персонажа. Раньше кнопка импорта была единственной и выглядела
+             как единственный способ вообще. */
+          hint="Создайте чарник в визарде — он проведёт по шагам и сам разложит всё, что дают класс, вид, предыстория и черта. Если лист уже заполнен на Long Story Short — перенесите его JSON."
           action={
-            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-              <label className="primary" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--primary-bg)", background: "var(--primary-bg)", color: "var(--primary-text)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                <NavIcon name="upload" /> {importing ? "Импортирую…" : "Выбрать JSON (LSS)"}
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+              <button className="primary" onClick={() => setShowDndWizard(true)}>
+                Создать чарник
+              </button>
+              <label className="comp-mini" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <NavIcon name="upload" /> {importing ? "Импортирую…" : "Перенести из Long Story Short"}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -505,8 +514,8 @@ export function StatblockList({
                   onChange={(e) => importFile(e.target.files?.[0] ?? null, e.target as HTMLInputElement)}
                 />
               </label>
-              <a href="https://next.dnd.su" target="_blank" rel="noreferrer" className="muted" style={{ fontSize: "var(--fs-meta)", textDecoration: "underline" }}>
-                next.dnd.su ↗
+              <a href="https://longstoryshort.app/" target="_blank" rel="noreferrer" className="muted" style={{ fontSize: "var(--fs-meta)", textDecoration: "underline" }}>
+                longstoryshort.app ↗
               </a>
             </div>
           }
@@ -554,7 +563,7 @@ export function StatblockList({
               <NavIcon name="upload" /> Импорт из Long Story Short
             </span>
             <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-              JSON с <a href="https://next.dnd.su" target="_blank" rel="noreferrer">next.dnd.su</a> — перетащите файл сюда или
+              JSON с <a href="https://longstoryshort.app/" target="_blank" rel="noreferrer">longstoryshort.app</a> — перетащите файл сюда или
             </span>
           </div>
           <label
