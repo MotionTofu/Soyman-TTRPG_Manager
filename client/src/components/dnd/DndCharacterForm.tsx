@@ -73,6 +73,13 @@ import {
   type DndEffect,
 } from "./effects";
 import { useCompendiumEntries } from "./useCompendiumEntries";
+import {
+  EMPTY_EQUIPMENT_ITEM,
+  clearEquipmentMetaCache,
+  fetchEquipmentMeta,
+  startingSetsFrom,
+  type StartingSet,
+} from "./dndEquipment";
 import { ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
 import { cantripsAtLevel, preparedAtLevel, type ClassProgression } from "./progression";
@@ -830,46 +837,6 @@ function spellSnapshotFromEntry(entry: CompendiumEntry): DndSpellSnapshot {
     healing: typeof entry.data.healing === "string" ? entry.data.healing : undefined,
     upcast: typeof entry.data.upcast === "string" ? entry.data.upcast : undefined,
   };
-}
-
-// Snapshots an equipment/magic_item compendium entry's armor/АС fields at
-// add time — computeArmorClass() then reads these cached fields without a
-// live lookup. Заклинания от снапшота отказались (см. resolveSpell), но у
-// снаряжения он пока остаётся: КЗ считается вне рендера, где кэша нет.
-const equipmentMetaCache = new Map<number, Partial<DndEquipmentItem>>();
-export function clearEquipmentMetaCache(entryId?: number): void {
-  if (entryId != null) equipmentMetaCache.delete(entryId);
-  else equipmentMetaCache.clear();
-}
-async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipmentItem>> {
-  if (equipmentMetaCache.has(entryId)) return equipmentMetaCache.get(entryId)!;
-  try {
-    const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
-    const weaponProperties = Array.isArray(entry.data.weapon_properties)
-      ? (entry.data.weapon_properties as { name: string }[]).map((p) => p.name).join(", ")
-      : undefined;
-    const weaponMastery =
-      entry.data.weapon_mastery && typeof entry.data.weapon_mastery === "object"
-        ? (entry.data.weapon_mastery as { name?: string }).name
-        : undefined;
-    const meta: Partial<DndEquipmentItem> = {
-      entryId,
-      armorType: typeof entry.data.armor_type === "string" ? entry.data.armor_type : undefined,
-      ac: typeof entry.data.ac === "string" ? entry.data.ac : undefined,
-      maxDexBonus: typeof entry.data.max_dex_bonus === "string" ? entry.data.max_dex_bonus : undefined,
-      dexBonus: typeof entry.data.dex_bonus === "boolean" ? entry.data.dex_bonus : undefined,
-      acBonus: typeof entry.data.ac_bonus === "string" ? entry.data.ac_bonus : undefined,
-      weaponDamage: typeof entry.data.damage === "string" && entry.data.damage ? entry.data.damage : undefined,
-      weaponAttackMelee: !!entry.data.attack_melee,
-      weaponAttackRanged: !!entry.data.attack_ranged,
-      weaponProperties: weaponProperties || undefined,
-      weaponMastery: weaponMastery || undefined,
-    };
-    equipmentMetaCache.set(entryId, meta);
-    return meta;
-  } catch {
-    return { entryId };
-  }
 }
 
 // Renders the cached armor/weapon fields (snapshotted by fetchEquipmentMeta)
@@ -2039,7 +2006,6 @@ function DndEquipmentView({ sections }: { sections: DndEquipmentSection[] }) {
   );
 }
 
-const EMPTY_EQUIPMENT_ITEM: DndEquipmentItem = { name: "", qty: "", weight: "", notes: "" };
 
 function isValidQty(v: string): boolean {
   if (!v.trim()) return true;
@@ -2126,24 +2092,6 @@ function EquipmentInlineForm({
 // снаряжения (data.equipment_a_items / equipment_b_items). Пока набор не
 // размечен ссылками, здесь пусто — текстовое описание набора живёт в
 // компендиуме и переносится вручную, как и раньше.
-interface StartingSet {
-  label: string;
-  gold: string;
-  items: { entryId: number; name: string; qty: number }[];
-}
-
-function startingSetsFrom(entry: CompendiumEntry | undefined, ownerLabel: string): StartingSet[] {
-  if (!entry) return [];
-  const sets: StartingSet[] = [];
-  for (const slot of ["a", "b"] as const) {
-    const items = (entry.data[`equipment_${slot}_items`] as StartingSet["items"] | undefined) ?? [];
-    const gold = (entry.data[`equipment_${slot}_gold`] as string | undefined) ?? "";
-    if (items.length === 0 && !gold) continue;
-    sets.push({ label: `${ownerLabel} — набор ${slot.toUpperCase()}`, gold, items });
-  }
-  return sets;
-}
-
 function DndEquipmentQuickView({
   sections,
   systemId,
@@ -2223,14 +2171,23 @@ function DndEquipmentQuickView({
   // запрос, S-08: gold → coins.gp, S-20: ищет «Общее» а не idx 0.
   async function takeStartingSet(set: StartingSet) {
     const metas = await Promise.all(set.items.map((it) => fetchEquipmentMeta(it.entryId)));
-    const added: DndEquipmentItem[] = set.items.map((item, idx) => ({
-      name: item.name,
-      qty: item.qty > 1 ? String(item.qty) : "",
-      weight: "",
-      notes: "",
-      entryId: item.entryId,
-      ...metas[idx],
-    }));
+    const added: DndEquipmentItem[] = [
+      ...set.items.map((item, idx) => ({
+        name: item.name,
+        qty: item.qty > 1 ? String(item.qty) : "",
+        weight: "",
+        notes: "",
+        entryId: item.entryId,
+        ...metas[idx],
+      })),
+      // Выборные позиции — строкой с пометкой: в наборе они есть, а какие
+      // именно, решает игрок. Молча выкинуть их значит выдать неполный набор.
+      ...set.manual.map((text) => ({
+        ...EMPTY_EQUIPMENT_ITEM,
+        name: text,
+        notes: "выбрать самому",
+      })),
+    ];
     const targetIdx = (() => {
       const found = sections.findIndex((s) => s.name.trim().toLowerCase() === "общее");
       return found >= 0 ? found : 0;

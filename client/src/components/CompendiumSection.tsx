@@ -1005,7 +1005,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       invalidateMechanicsCache(systemId);
     } catch {}
     try {
-      const { clearEquipmentMetaCache } = await import("./dnd/DndCharacterForm");
+      const { clearEquipmentMetaCache } = await import("./dnd/dndEquipment");
       if (original?.kind === "equipment" || original?.kind === "magic_item" || original?.kind === "mechanic_item") {
         if (original) clearEquipmentMetaCache(original.id);
         else clearEquipmentMetaCache();

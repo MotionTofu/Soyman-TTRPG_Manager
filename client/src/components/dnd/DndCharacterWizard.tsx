@@ -2,6 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { CompendiumEntry, DndAbilityScores } from "../../types";
 import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
+import {
+  EMPTY_EQUIPMENT_ITEM,
+  fetchEquipmentMeta,
+  startingSetsFrom,
+  type StartingSet,
+} from "./dndEquipment";
 import { featuresFromEntries } from "./dndFeatures";
 import { useDndSkills } from "./useDndSkills";
 import { grantsFromEntry } from "./dndGrants";
@@ -35,7 +41,20 @@ import {
 // добавляет к выбору три навыка, а сама черта приходит из двух мест —
 // предыстории и вида (у Человека это «Универсальность»). Спроси навыки
 // раньше — и три из них будет негде взять (решение W3, гриллинг 2026-09-04).
-const STEPS = ["Личность", "Класс", "Вид", "Предыстория", "Черта", "Характеристики", "Навыки", "Обзор"] as const;
+// Снаряжение — предпоследним шагом: набор зависит и от класса, и от
+// предыстории, а до сих пор его приходилось брать вручную уже после
+// создания, кнопкой во вкладке «Инвентарь» (решение Q5).
+const STEPS = [
+  "Личность",
+  "Класс",
+  "Вид",
+  "Предыстория",
+  "Черта",
+  "Характеристики",
+  "Навыки",
+  "Снаряжение",
+  "Обзор",
+] as const;
 type Step = (typeof STEPS)[number];
 
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
@@ -112,6 +131,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [awardMode, setAwardMode] = useState<"2+1" | "1+1+1">("2+1");
   const [awardPrimary, setAwardPrimary] = useState<string | null>(null);
   const [awardSecondary, setAwardSecondary] = useState<string | null>(null);
+
+  // Наборы берутся по умолчанию: персонаж без снаряжения — это почти всегда
+  // забытый шаг, а не решение. Отказаться можно галочкой.
+  const [takenSets, setTakenSets] = useState<Record<string, boolean>>({});
 
   const [method, setMethod] = useState<AbilityMethod>("standard");
   const [abilities, setAbilities] = useState<DndAbilityScores>(() => {
@@ -261,6 +284,14 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // читал вовсе — оттого Человек не получал навыка, а «Одарённый» не
   // добавлял трёх.
   const resolveSkill = skills.resolve;
+  // Наборы класса и предыстории. Набор «B» — только золото, и это верно по
+  // правилам: он и есть «возьми деньгами».
+  const startingSets: StartingSet[] = [
+    ...startingSetsFrom(classEntry ?? undefined, classOption?.name ?? "Класс"),
+    ...startingSetsFrom(backgroundEntry ?? undefined, backgroundEntry?.name ?? "Предыстория"),
+  ];
+  const setTaken = (label: string) => takenSets[label] ?? label.endsWith("набор A");
+
   const classGrants = grantsFromEntry(classEntry ?? undefined, resolveSkill);
   const speciesGrants = grantsFromEntry(speciesEntry ?? undefined, resolveSkill);
   const backgroundGrants = grantsFromEntry(backgroundEntry ?? undefined, resolveSkill);
@@ -476,6 +507,44 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     character.skillProfs = { ...character.skillProfs };
     for (const s of chosenSkillKeys) character.skillProfs[s] = 1;
     for (const s of grantedSkills) character.skillProfs[s] = 1;
+
+    // Стартовые наборы. Метаданные предмета (вес, КЗ, свойства) тянутся из
+    // справочника здесь же: лист их не пересчитывает, а хранит снимком, как
+    // и при добавлении предмета руками.
+    const takenSets2 = startingSets.filter((s) => setTaken(s.label));
+    if (takenSets2.length > 0) {
+      const addedItems: typeof character.equipmentSections[number]["items"] = [];
+      let goldToAdd = 0;
+      for (const set of takenSets2) {
+        const metas = await Promise.all(set.items.map((it) => fetchEquipmentMeta(it.entryId).catch(() => ({}))));
+        set.items.forEach((item, idx) => {
+          addedItems.push({
+            ...EMPTY_EQUIPMENT_ITEM,
+            name: item.name,
+            qty: item.qty > 1 ? String(item.qty) : "",
+            entryId: item.entryId,
+            ...metas[idx],
+          });
+        });
+        // Выборные позиции кладутся строкой: выбрать за игрока приложение не
+        // вправе, а потерять их из набора тем более.
+        for (const text of set.manual) {
+          addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, name: text, notes: "выбрать самому" });
+        }
+        const gold = Number.parseInt((set.gold ?? "").trim(), 10);
+        if (Number.isFinite(gold)) goldToAdd += gold;
+      }
+      if (addedItems.length > 0) {
+        const sections = character.equipmentSections.length > 0 ? character.equipmentSections : [{ name: "Общее", items: [] }];
+        character.equipmentSections = sections.map((sec, i) =>
+          i === 0 ? { ...sec, items: [...sec.items, ...addedItems] } : sec
+        );
+      }
+      if (goldToAdd !== 0) {
+        const curGp = Number.parseInt(character.coins.gp || "0", 10) || 0;
+        character.coins = { ...character.coins, gp: String(curGp + goldToAdd) };
+      }
+    }
 
     // Same resync edit mode runs after picking a species/subclass/level —
     // without it, a fresh character's subclass-granted spells (e.g. an
@@ -904,6 +973,47 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         </div>
       )}
 
+      {step === "Снаряжение" && (
+        <div className="stack">
+          {startingSets.length === 0 ? (
+            <span className="muted">
+              У выбранных класса и предыстории набора в справочнике нет — снаряжение добавите
+              вручную во вкладке «Инвентарь».
+            </span>
+          ) : (
+            startingSets.map((set) => (
+              <label key={set.label} className="row" style={{ alignItems: "flex-start", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={setTaken(set.label)}
+                  onChange={(e) => setTakenSets({ ...takenSets, [set.label]: e.target.checked })}
+                />
+                <span className="stack" style={{ gap: 2 }}>
+                  <strong>
+                    {set.label}
+                    {set.gold && ` — ${set.gold} ЗМ`}
+                  </strong>
+                  {set.items.length > 0 && (
+                    <span className="muted">
+                      {set.items.map((i) => (i.qty > 1 ? `${i.name} ×${i.qty}` : i.name)).join(", ")}
+                    </span>
+                  )}
+                  {set.manual.map((text) => (
+                    <span key={text} className="muted">
+                      {text} — выбрать самому
+                    </span>
+                  ))}
+                </span>
+              </label>
+            ))
+          )}
+          <span className="muted">
+            Наборы «A» и «B» — это «взять снаряжением» или «взять деньгами»; брать оба правила не
+            предполагают, но приложение не мешает — Мастер вправе разрешить.
+          </span>
+        </div>
+      )}
+
       {step === "Обзор" && (
         <div className="stack">
           <div>
@@ -936,9 +1046,18 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             ))}
           </div>
 
-          <span className="muted">
-            Снаряжение добавляется после создания, в обычном режиме редактирования персонажа.
-          </span>
+          {(() => {
+            const taken = startingSets.filter((s) => setTaken(s.label));
+            return taken.length === 0 ? (
+              <div>
+                <strong>Снаряжение:</strong> <span className="muted">не берётся</span>
+              </div>
+            ) : (
+              <div>
+                <strong>Снаряжение:</strong> {taken.map((s) => s.label).join(" · ")}
+              </div>
+            );
+          })()}
         </div>
       )}
 
