@@ -812,6 +812,10 @@ export interface DndSpellEntry {
   // different species/subclass can find-and-replace just its own granted
   // spells without touching hand-added ones (mirrors DndFeature.sourceParentId).
   sourceParentId?: number | null;
+  // «Не в счёт лимита»: «Починка» Артефактора, заклинания подкласса и выбор
+  // «Посвящённого в магию» не занимают мест среди заговоров и подготовленных
+  // (см. счётчик в разделе заклинаний и dndGrants.ts).
+  outsideLimit?: boolean;
   // Snapshotted from the compendium entry when added, so the row can show
   // "школа | время накладывания | компоненты | концентрация | ритуал"
   // without re-fetching on every render.

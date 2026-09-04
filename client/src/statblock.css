@@ -1186,6 +1186,12 @@ summary.sb-section {
 .dnd-prepared-filter .muted {
   font-size: var(--fs-meta);
 }
+/* Перебор лимита — не ошибка ввода: Мастер мог разрешить лишнее. Поэтому
+   цвет предупреждения, а не запрет. */
+.dnd-limit-over {
+  font-size: var(--fs-meta);
+  color: var(--danger, #b3261e);
+}
 .dnd-spell-hidden-note {
   display: block;
   margin-top: 4px;

@@ -74,7 +74,7 @@ import {
 import { useCompendiumEntries } from "./useCompendiumEntries";
 import { ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
-import type { ClassProgression } from "./progression";
+import { cantripsAtLevel, preparedAtLevel, type ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
 import { PipTrack } from "../litm/PipTrack";
 import { MentionTextarea } from "../mentions/MentionTextarea";
@@ -911,6 +911,8 @@ interface GrantedSpellDef {
   /** Английское имя заклинания — запасной ключ, когда `id` не сходится. */
   original: string;
   grantLevel: number;
+  /** «Не в счёт лимита» — «Починка» Артефактора и заклинания подкласса. */
+  outsideLimit: boolean;
 }
 
 // Имена в списке приезжают из импорта в виде «Лечащее слово [Healing Word]»,
@@ -922,8 +924,17 @@ function splitGrantedName(raw: string): { name: string; original: string } {
 
 function parseGrantedSpellDefs(entry: CompendiumEntry): GrantedSpellDef[] {
   const raw = Array.isArray(entry.data.granted_spells)
-    ? (entry.data.granted_spells as { id: number; name: string; grantLevel?: number; original?: string }[])
+    ? (entry.data.granted_spells as {
+        id: number;
+        name: string;
+        grantLevel?: number;
+        original?: string;
+        outsideLimit?: boolean;
+      }[])
     : [];
+  // Заклинания подкласса по правилам 5.5 всегда подготовлены и не занимают
+  // мест среди подготовленных, поэтому «вне лимита» здесь — умолчание, а не
+  // исключение; снять его можно только явным `outsideLimit: false`.
   return raw.map((s) => {
     const split = splitGrantedName(s.name);
     return {
@@ -931,6 +942,7 @@ function parseGrantedSpellDefs(entry: CompendiumEntry): GrantedSpellDef[] {
       name: split.name,
       original: (s.original ?? "").trim() || split.original,
       grantLevel: typeof s.grantLevel === "number" && s.grantLevel > 0 ? s.grantLevel : 1,
+      outsideLimit: s.outsideLimit !== false,
     };
   });
 }
@@ -978,7 +990,14 @@ async function fetchGrantedSpells(
     if (!full) continue;
     results.push({
       level: full.level ?? 0,
-      entry: { entryId: full.id, name: full.name, prepared: 2, sourceParentId, ...spellSnapshotFromEntry(full) },
+      entry: {
+        entryId: full.id,
+        name: full.name,
+        prepared: 2,
+        sourceParentId,
+        outsideLimit: g.outsideLimit,
+        ...spellSnapshotFromEntry(full),
+      },
     });
   }
   return results;
@@ -1048,6 +1067,10 @@ export async function recomputeGrantedSpells(
   const totalLevel = totalCharacterLevel(value.classes);
   if (value.raceId) await grantFrom(value.raceId, totalLevel);
   for (const c of value.classes) {
+    // Класс участвует в переборе наравне с подклассом: «Починку» Артефактор
+    // знает сам, а не через подкласс, и до этого она не приходила никак —
+    // сколько её ни вписывай в запись класса, перебор до неё не доходил.
+    if (c.classId != null) await grantFrom(c.classId, c.level || 0);
     if (c.subclassId != null) await grantFrom(c.subclassId, c.level || 0);
   }
 
@@ -4574,6 +4597,33 @@ export function DndCharacterView({
   const liveCantrips = value.cantrips.map((s) => resolveSpell(s, getEntry));
   const liveSpellsByLevel = value.spellsByLevel.map((lvl) => lvl.map((s) => resolveSpell(s, getEntry)));
   const computedSlots = computeSpellSlots(slotSources, fallbackProgressions);
+  // Сколько заговоров и подготовленных положено — по таблице каждого класса,
+  // при многоклассье суммой. Не в счёт идут заклинания «вне лимита»: и по
+  // правилам 5.5, и по разметке справочника выдача вида, класса и подкласса
+  // всегда подготовлена и мест не занимает.
+  const spellLimits = (() => {
+    let cantrips: number | null = null;
+    let prepared: number | null = null;
+    for (const src of slotSources) {
+      const c = cantripsAtLevel(src.progression, src.level);
+      if (c != null) cantrips = (cantrips ?? 0) + c;
+      const p = preparedAtLevel(src.progression, src.level);
+      if (p != null) prepared = (prepared ?? 0) + p;
+    }
+    const counts = (list: DndSpellEntry[]) => list.filter((sp) => !sp.outsideLimit).length;
+    return {
+      cantrips,
+      prepared,
+      cantripsUsed: counts(liveCantrips),
+      preparedUsed: liveSpellsByLevel.reduce(
+        (sum, lvl) => sum + lvl.filter((sp) => !sp.outsideLimit && sp.prepared > 0).length,
+        0
+      ),
+      outside:
+        liveCantrips.filter((sp) => sp.outsideLimit).length +
+        liveSpellsByLevel.reduce((sum, lvl) => sum + lvl.filter((sp) => sp.outsideLimit).length, 0),
+    };
+  })();
   // Стартовые наборы: у каждого класса персонажа и у предыстории.
   const startingSets = [
     ...value.classes.flatMap((c) => startingSetsFrom(getEntry(c.classId), c.className)),
@@ -5187,6 +5237,23 @@ export function DndCharacterView({
                   <span className="muted">в правке показаны все — подготовить можно только видимое</span>
                 )}
               </div>
+              {(spellLimits.cantrips != null || spellLimits.prepared != null) && (
+                <div className="row sb-entry" style={{ gap: 10, flexWrap: "wrap" }}>
+                  {spellLimits.cantrips != null && (
+                    <span className={spellLimits.cantripsUsed > spellLimits.cantrips ? "dnd-limit-over" : "muted"}>
+                      Заговоры {spellLimits.cantripsUsed} из {spellLimits.cantrips}
+                    </span>
+                  )}
+                  {spellLimits.prepared != null && (
+                    <span className={spellLimits.preparedUsed > spellLimits.prepared ? "dnd-limit-over" : "muted"}>
+                      Подготовлено {spellLimits.preparedUsed} из {spellLimits.prepared}
+                    </span>
+                  )}
+                  {spellLimits.outside > 0 && (
+                    <span className="muted">вне лимита {spellLimits.outside}</span>
+                  )}
+                </div>
+              )}
               {computedSlots.basis !== "none" && (
                 <div className="row sb-entry" style={{ gap: 8, flexWrap: "wrap" }}>
                   <span className="muted">
