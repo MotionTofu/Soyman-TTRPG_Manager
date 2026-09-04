@@ -761,6 +761,9 @@ export interface DndEquipmentItem {
   armorType?: string;
   ac?: string;
   maxDexBonus?: string;
+  // Тяжёлый доспех размечен в компендиуме не пределом, а флагом
+  // `dex_bonus: false` — без него Латы давали 18 + Ловкость.
+  dexBonus?: boolean;
   acBonus?: string;
   // Same idea, for weapons — set only when the compendium entry has a
   // damage value, so an equipped item can be told apart from armor/plain

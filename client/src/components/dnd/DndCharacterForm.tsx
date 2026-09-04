@@ -908,6 +908,7 @@ async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipment
       armorType: typeof entry.data.armor_type === "string" ? entry.data.armor_type : undefined,
       ac: typeof entry.data.ac === "string" ? entry.data.ac : undefined,
       maxDexBonus: typeof entry.data.max_dex_bonus === "string" ? entry.data.max_dex_bonus : undefined,
+      dexBonus: typeof entry.data.dex_bonus === "boolean" ? entry.data.dex_bonus : undefined,
       acBonus: typeof entry.data.ac_bonus === "string" ? entry.data.ac_bonus : undefined,
       weaponDamage: typeof entry.data.damage === "string" && entry.data.damage ? entry.data.damage : undefined,
       weaponAttackMelee: !!entry.data.attack_melee,
@@ -930,8 +931,17 @@ function equipmentTagsLine(item: DndEquipmentItem): string {
   const parts: string[] = [];
   if (item.armorType) {
     parts.push(item.armorType);
-    if (item.ac) parts.push(`КЗ ${item.ac}`);
-    if (item.maxDexBonus) parts.push(`Макс. бонус Лов ${item.maxDexBonus}`);
+    // У щита в поле `ac` лежит не базовое значение, а прибавка — подписываем
+    // её плюсом, чтобы строка не читалась как «КЗ 2».
+    const shield = item.armorType.trim().toLowerCase().startsWith("щит");
+    if (item.ac) parts.push(shield ? `+${item.ac} КЗ` : `КЗ ${item.ac}`);
+    if (!shield) {
+      // У щита `dex_bonus: false` значит «щит сам Ловкость не добавляет», а не
+      // «Ловкость не считается» — подпись только для доспехов.
+      if (item.maxDexBonus) parts.push(`Макс. бонус Лов ${item.maxDexBonus}`);
+      else if (item.dexBonus === false || item.armorType.trim().toLowerCase().startsWith("тяж"))
+        parts.push("Ловкость не применяется");
+    }
   }
   if (item.acBonus) parts.push(`+${item.acBonus} КЗ`);
   if (item.weaponDamage) {
@@ -1106,6 +1116,37 @@ interface SpellDetail {
   duration?: string;
   componentsText?: ReactNode;
   description: string;
+}
+
+// Раскрытое описание заклинания — под строкой списка, тем же блоком, что и
+// у предмета инвентаря. Раньше было модалкой; она закрывала лист целиком,
+// и чтобы сравнить два заклинания, приходилось открывать и закрывать её
+// дважды (решение владельца 2026-09-04).
+function SpellDescription({ detail }: { detail: SpellDetail | undefined }) {
+  if (!detail) return <div className="dnd-spell-description muted">Загрузка…</div>;
+  const fields: [string, ReactNode][] = (
+    [
+      ["Школа", detail.school],
+      ["Время накладывания", detail.castingTime],
+      ["Дистанция", detail.range],
+      ["Компоненты", detail.componentsText],
+      ["Длительность", detail.duration],
+    ] as [string, ReactNode][]
+  ).filter(([, v]) => !!v);
+  return (
+    <div className="dnd-spell-description">
+      {fields.length > 0 && (
+        <div className="comp-fields">
+          {fields.map(([label, value]) => (
+            <div key={label} className="muted">
+              <strong>{label}:</strong> {value}
+            </div>
+          ))}
+        </div>
+      )}
+      <MentionText text={detail.description} />
+    </div>
+  );
 }
 
 function buildSpellDetail(entry: CompendiumEntry): SpellDetail {
@@ -1297,7 +1338,7 @@ function DndSpellLevelSection({
                   <button
                     type="button"
                     className="comp-name dnd-spell-name dnd-spell-name-link"
-                    aria-label={`${s.name} — открыть описание`}
+                    aria-expanded={expandedIndex === realIndex}
                     onClick={() => toggleDescription(realIndex, s.entryId!)}
                   >
                     {s.name}
@@ -1343,49 +1384,14 @@ function DndSpellLevelSection({
                   )
                 )}
               </div>
+              {expandedIndex === realIndex && s.entryId && (
+                <SpellDescription detail={details[s.entryId]} />
+              )}
             </div>
           );
         })}
         {hiddenCount > 0 && sorted.length > 0 && (
           <span className="muted dnd-spell-hidden-note">Скрыто неподготовленных: {hiddenCount}</span>
-        )}
-        {expandedIndex !== null && spells[expandedIndex]?.entryId && (
-          <Modal onClose={() => setExpandedIndex(null)}>
-            <div className="stack dnd-spell-modal">
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <h3 style={{ margin: 0 }}>{spells[expandedIndex].name}</h3>
-                <button type="button" className="comp-mini" onClick={() => setExpandedIndex(null)} aria-label="Свернуть описание">
-                  <NavIcon name="close" />
-                </button>
-              </div>
-              {(() => {
-                const entryId = spells[expandedIndex].entryId as number;
-                const d = details[entryId];
-                if (!d) return <span className="muted">Загрузка…</span>;
-                const fields: [string, ReactNode][] = [
-                  ["Школа", d.school],
-                  ["Время накладывания", d.castingTime],
-                  ["Дистанция", d.range],
-                  ["Компоненты", d.componentsText],
-                  ["Длительность", d.duration],
-                ].filter(([, v]) => !!v) as [string, ReactNode][];
-                return (
-                  <>
-                    {fields.length > 0 && (
-                      <div className="comp-fields">
-                        {fields.map(([label, value]) => (
-                          <div key={label} className="muted">
-                            <strong>{label}:</strong> {value}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <MentionText text={d.description} />
-                  </>
-                );
-              })()}
-            </div>
-          </Modal>
         )}
         {edit && (
           <div>
@@ -3730,43 +3736,33 @@ function DndTraitsView({ value }: { value: DndCharacterData }) {
 }
 
 function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[] }) {
-  // Same popup-on-click treatment as spells (DndSpellLevelSection) — a
-  // feature's full text opens in a modal instead of expanding inline, so a
-  // long description doesn't push everything else on the tab down/off-screen
-  // on a phone.
+  // Описание раскрывается прямо под строкой, а не модалкой (решение владельца
+  // 2026-09-04). Модалка перекрывала лист целиком и требовала закрытия, чтобы
+  // сверить особенность с соседней; за столом это лишний шаг. Открыта всегда
+  // одна — иначе список уезжает с экрана.
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   if (values.length === 0) return null;
   return (
     <details className="cs-list" open>
       <summary className="sb-section">{title}</summary>
       {values.map((f, i) => (
-        <button
-          key={i}
-          type="button"
-          className="dnd-feature-row-link"
-          aria-label={`${f.name || "Без названия"} — открыть описание`}
-          onClick={() => setOpenIndex(i)}
-        >
-          {f.name || "Без названия"}
-          {f.level ? <span className="muted"> (ур. {f.level})</span> : null}
-        </button>
-      ))}
-      {openIndex !== null && (
-        <Modal onClose={() => setOpenIndex(null)}>
-          <div className="stack dnd-spell-modal">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <h3 style={{ margin: 0 }}>
-                {values[openIndex].name || "Без названия"}
-                {values[openIndex].level ? <span className="muted"> (ур. {values[openIndex].level})</span> : null}
-              </h3>
-              <button type="button" className="comp-mini" onClick={() => setOpenIndex(null)} aria-label="Закрыть">
-                <NavIcon name="close" />
-              </button>
+        <div key={i}>
+          <button
+            type="button"
+            className={`dnd-feature-row-link${openIndex === i ? " is-open" : ""}`}
+            aria-expanded={openIndex === i}
+            onClick={() => setOpenIndex(openIndex === i ? null : i)}
+          >
+            {f.name || "Без названия"}
+            {f.level ? <span className="muted"> (ур. {f.level})</span> : null}
+          </button>
+          {openIndex === i && (
+            <div className="dnd-spell-description">
+              <MentionText text={f.description} />
             </div>
-            <MentionText text={values[openIndex].description} />
-          </div>
-        </Modal>
-      )}
+          )}
+        </div>
+      ))}
     </details>
   );
 }

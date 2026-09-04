@@ -74,10 +74,16 @@
      давали три толщины на одном экране. */
   border: var(--card-border-width, 1px) solid var(--border);
   border-radius: var(--radius-card);
-  overflow: hidden;
+  /* Здесь стояло `overflow: hidden` — оно скругляло заливку шапки, но заодно
+     срезало всё, что вылезает за карточку: выпадающие списки поиска
+     заклинаний, снаряжения и стартовых наборов открывались вниз и просто
+     исчезали за границей листа. Скругление теперь на самой шапке, а карточка
+     ничего не режет. */
   color: var(--ink);
 }
 .sb-head {
+  border-radius: calc(var(--radius-card) - var(--card-border-width, 1px))
+    calc(var(--radius-card) - var(--card-border-width, 1px)) 0 0;
   background: var(--head-bg);
   color: var(--head-ink);
   border-bottom: var(--head-rule);
