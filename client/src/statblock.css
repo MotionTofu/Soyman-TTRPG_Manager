@@ -1045,6 +1045,13 @@ summary.sb-section {
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
+/* Отказ при сохранении из формы: форма остаётся открытой, набранное на
+   месте, а причина написана рядом с кнопкой. */
+.sb-save-error {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+}
 .sb-save-status.is-saving {
   color: var(--muted);
 }

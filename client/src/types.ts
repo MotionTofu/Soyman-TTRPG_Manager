@@ -487,6 +487,10 @@ export interface Statblock {
   avatar_image_path: string | null;
   avatar_image_url: string | null;
   created_at: string;
+  /** Версия строки: страховка для сохранения снимком целиком (см.
+   *  server/src/db/statblockContent.ts). Быстрые правки идут патчем и на неё
+   *  не смотрят. Пусто у статблоков, записанных до появления колонки. */
+  updated_at?: string | null;
 }
 
 export type LitMPower = "" | "origin" | "adventure" | "greatness" | "variable";

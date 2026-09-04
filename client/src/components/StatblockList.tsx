@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useQueuedSave } from "../hooks/useQueuedSave";
+import { topLevelPatch } from "./statblockPatch";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { NavIcon } from "./NavIcons";
@@ -713,6 +714,9 @@ function StatblockCard({
   const isLitm = statblock.format === "litm_character" || statblock.format === "litm_challenge";
   const isDnd = statblock.format === "dnd_character" || statblock.format === "dnd_creature";
   const isZip = statblock.format === "zip_character" || statblock.format === "zip_creature";
+  // Патч применим только там, где content — это JSON: у обычного текста
+  // полей нет, и делить его не на что.
+  const isJsonFormat = isLitm || isDnd || isZip;
 
   function parseLitm(raw: string): LitMCharacterData | LitMChallengeData {
     let parsed: unknown;
@@ -773,6 +777,10 @@ function StatblockCard({
   });
   const [content, setContent] = useState(statblock.content);
   const [note, setNote] = useState(statblock.note);
+  // Отказ сервера при сохранении из формы — чаще всего «изменён в другом
+  // окне». Раньше `await api.put(...)` без catch давал unhandled rejection,
+  // а форма закрывалась как ни в чём не бывало.
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Mirrors the <details> element's own open/closed state — native <summary>
   // clicks toggle the DOM directly (uncontrolled), so this needs an onToggle
   // handler to stay in sync rather than being driven only by editMode. Used
@@ -788,12 +796,23 @@ function StatblockCard({
   // slot (separate from whatever avatar the owning being/character has).
   const [avatarUrl, setAvatarUrl] = useState(statblock.avatar_image_url);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  // Что лежит на сервере — точка отсчёта для патча. Обновляется только по
+  // факту записи (и при приёме чужого обновления ниже), а не при каждой
+  // правке: иначе следующая правка сравнивалась бы сама с собой.
+  const savedRef = useRef(statblock.content);
   const queue = useQueuedSave(
     useCallback(
       async (json: string) => {
-        await api.put(`/statblocks/${statblock.id}`, { content: json });
+        // Патч изменённых полей вместо снимка целиком: правка соседнего поля
+        // из другого окна больше не пропадает. Разобрать не вышло (или формат
+        // не JSON) — уходит снимок, как раньше.
+        const patch = isJsonFormat ? topLevelPatch(savedRef.current, json) : null;
+        const body = patch ? { contentPatch: patch } : { content: json };
+        if (patch && Object.keys(patch).length === 0) return;
+        await api.put(`/statblocks/${statblock.id}`, body);
+        savedRef.current = json;
       },
-      [statblock.id]
+      [statblock.id, isJsonFormat]
     )
   );
 
@@ -824,6 +843,7 @@ function StatblockCard({
   useEffect(() => {
     if (statblock.content === content) return;
     if (editMode || queue.hasPending()) return;
+    savedRef.current = statblock.content;
     setContent(statblock.content);
     if (isLitm) setLitmValue(parseLitm(statblock.content));
     if (isDnd) setDndValue(parseDnd(statblock.content));
@@ -832,7 +852,25 @@ function StatblockCard({
   }, [statblock.content]);
 
   async function save() {
-    await api.put(`/statblocks/${statblock.id}`, { content, note });
+    // Снимок целиком уходит только отсюда — из полной формы правки, где в
+    // поле лежит набранный текст. Версия страхует именно этот путь: если
+    // статблок успели изменить в другом окне, сервер отвечает 409, форма
+    // остаётся открытой и набранное никуда не девается.
+    try {
+      await api.put(`/statblocks/${statblock.id}`, {
+        content,
+        note,
+        baseUpdatedAt: statblock.updated_at ?? null,
+      });
+    } catch (e) {
+      setSaveError(
+        (e as { message?: string })?.message ||
+          "Не удалось сохранить — попробуйте ещё раз"
+      );
+      return;
+    }
+    setSaveError(null);
+    savedRef.current = content;
     // [[type:id|Label]] mention tokens survive JSON-encoding as plain
     // substrings, so this diffs correctly for LitM (JSON) content too.
     syncMentionLinks(statblock.owner_type, statblock.owner_id, statblock.content, content);
@@ -949,6 +987,7 @@ function StatblockCard({
           <div className="row" style={{ gap: 8 }}>
             {editMode ? <><button className="primary" onClick={save}>Сохранить</button><button onClick={() => setEditMode(false)}>Отмена</button></> : <button onClick={() => setEditMode(true)}>Редактировать</button>}
           </div>
+          {saveError && <p className="sb-save-error">{saveError}</p>}
         </div>
       </div>
     ) : null;
@@ -1129,6 +1168,7 @@ function StatblockCard({
               </button>
               <button onClick={() => setEditMode(false)}>Отмена</button>
             </div>
+            {saveError && <p className="sb-save-error">{saveError}</p>}
           </>
         ) : (
           <>

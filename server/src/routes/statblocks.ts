@@ -8,6 +8,7 @@ import { syncCreatureDataFromStatblock } from "../services/monsterSummary";
 import { beingFolder, ensureSubfolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { removeOrArchive } from "../services/vaultDedup";
 import { ensureCharacterFolder } from "./characters";
+import { mergeContentPatch } from "../db/statblockContent";
 
 export const statblocksRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -205,7 +206,8 @@ statblocksRouter.post("/", (req, res) => {
     return res.status(400).json({ error: "owner_type and owner_id are required" });
   const info = db
     .prepare(
-      "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES (?, ?, ?, ?, ?, ?)"
+      `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))`
     )
     .run(owner_type, owner_id, kind ?? "full", format ?? "text", content ?? "", note ?? "");
   const row = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(info.lastInsertRowid) as {
@@ -227,20 +229,45 @@ statblocksRouter.post("/", (req, res) => {
 const JSON_FORMATS = new Set(["litm_character", "litm_challenge", "dnd_character", "dnd_creature", "zip_character", "zip_creature"]);
 
 statblocksRouter.put("/:id", (req, res) => {
-  const { kind, content, note, theme, density } = req.body as {
+  const { kind, content, note, theme, density, contentPatch, baseUpdatedAt } = req.body as {
     kind?: string;
     content?: string;
     note?: string;
     theme?: string;
     density?: string;
+    contentPatch?: Record<string, unknown>;
+    baseUpdatedAt?: string | null;
   };
   // Раньше UPDATE по несуществующему id молча ничего не менял, а ответом
   // уходил 200 с пустым телом — клиент считал, что сохранил. Статблок, снесённый
   // на другом устройстве, съедал правку без единого следа.
-  const existing = db.prepare("SELECT id, format FROM statblocks WHERE id = ?").get(req.params.id) as
-    | { id: number; format: string }
+  const existing = db
+    .prepare("SELECT id, format, content, updated_at FROM statblocks WHERE id = ?")
+    .get(req.params.id) as
+    | { id: number; format: string; content: string; updated_at: string | null }
     | undefined;
   if (!existing) return res.status(404).json({ error: "Статблок не найден — возможно, он удалён" });
+  // Снимок целиком принимается только поверх той версии, которую отправитель
+  // видел. Патчу проверка не нужна: он не трогает чужих полей.
+  if (
+    typeof content === "string" &&
+    typeof baseUpdatedAt === "string" &&
+    existing.updated_at &&
+    existing.updated_at !== baseUpdatedAt
+  ) {
+    return res.status(409).json({
+      error: "Статблок изменён в другом окне — откройте его заново, чтобы не потерять чужую правку",
+      updated_at: existing.updated_at,
+    });
+  }
+  if (contentPatch !== undefined) {
+    if (contentPatch === null || typeof contentPatch !== "object" || Array.isArray(contentPatch)) {
+      return res.status(400).json({ error: "contentPatch должен быть объектом" });
+    }
+    if (!JSON_FORMATS.has(existing.format)) {
+      return res.status(400).json({ error: "contentPatch применим только к JSON-форматам" });
+    }
+  }
   // Битый JSON в content означает, что лист откроется пустым (normalize*
   // разбирает `{}` вместо данных) — то есть тихая потеря чарника. Дешевле
   // отказать здесь, чем разбирать потом.
@@ -251,12 +278,17 @@ statblocksRouter.put("/:id", (req, res) => {
       return res.status(400).json({ error: "content не разбирается как JSON" });
     }
   }
+  const nextContent =
+    contentPatch !== undefined
+      ? mergeContentPatch(existing.content ?? "", contentPatch)
+      : (content ?? null);
   db.prepare(
     `UPDATE statblocks SET
        kind = COALESCE(?, kind), content = COALESCE(?, content), note = COALESCE(?, note),
-       theme = COALESCE(?, theme), density = COALESCE(?, density)
+       theme = COALESCE(?, theme), density = COALESCE(?, density),
+       updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
      WHERE id = ?`
-  ).run(kind ?? null, content ?? null, note ?? null, theme ?? null, density ?? null, req.params.id);
+  ).run(kind ?? null, nextContent, note ?? null, theme ?? null, density ?? null, req.params.id);
   const updated = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(req.params.id) as
     | {
         owner_type: string;

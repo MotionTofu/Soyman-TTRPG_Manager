@@ -3097,6 +3097,20 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec(`CREATE INDEX idx_map_bindings_target ON map_bindings(target_type, target_id)`);
   }
 
+  // Версия статблока. Быстрые правки уходят патчем изменённых полей, и одна
+  // правка больше не затирает другую сама по себе; версия — страховка для
+  // полного сохранения из формы: с ней PUT со снимком целиком видит, что
+  // статблок успели изменить в другом окне, и отвечает 409 вместо тихой
+  // перезаписи. Значение проставляется руками в каждом UPDATE: триггеров в
+  // этой базе нет ни у одной таблицы, и заводить их ради одной колонки
+  // значит спрятать запись туда, где её никто не ищет.
+  if (!columnExists(database, "statblocks", "updated_at")) {
+    database.exec("ALTER TABLE statblocks ADD COLUMN updated_at TEXT");
+    database.exec(
+      "UPDATE statblocks SET updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE updated_at IS NULL"
+    );
+  }
+
   compactIfBloated(database);
   return database;
 }

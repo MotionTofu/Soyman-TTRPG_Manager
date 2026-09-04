@@ -631,8 +631,11 @@ function CharacterInventoryTab({
         if (!exists) nextSections = [...nextSections, { name: migrateTarget.trim() || "Общее", items }];
         else nextSections = data.equipmentSections.map((sec, i) => (i === idx ? { ...sec, items: [...sec.items, ...items] } : sec));
       }
-      const next = { ...data, equipmentSections: nextSections.length ? nextSections : [{ name: "Общее", items }] };
-      await api.put(`/statblocks/${dnd.id}`, { content: JSON.stringify(next) });
+      const nextSectionList = nextSections.length ? nextSections : [{ name: "Общее", items }];
+      // Патчем, а не снимком: перенос трогает только разделы снаряжения, и
+      // остальной чарник (в том числе правки, сделанные из другого окна,
+      // пока шёл перенос) остаётся нетронутым.
+      await api.put(`/statblocks/${dnd.id}`, { contentPatch: { equipmentSections: nextSectionList } });
       onRefresh();
       api.get<Statblock[]>(`/statblocks?owner_type=character&owner_id=${characterId}`).then(setStatblocks);
     } finally {

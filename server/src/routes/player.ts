@@ -10,6 +10,7 @@ import {
 } from "../services/filesystem";
 import { unpaidSessionsForPlayer } from "../services/finance";
 import { broadcastCharacterUpdate } from "../services/realtime";
+import { mergeContentPatch } from "../db/statblockContent";
 
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
 const upload = multer({
@@ -308,10 +309,31 @@ playerRouter.put("/statblocks/:id", (req: AuthedRequest, res) => {
   if (!requireOwnCharacter(req.user!.playerId!, statblock.owner_id)) {
     return res.status(404).json({ error: "not found" });
   }
-  const { content, theme, density } = req.body as { content?: string; theme?: string; density?: string };
+  const { content, theme, density, contentPatch } = req.body as {
+    content?: string;
+    theme?: string;
+    density?: string;
+    contentPatch?: Record<string, unknown>;
+  };
+  // Тот же патч изменённых полей, что и у мастерского маршрута: именно здесь
+  // столкновение и живёт — игрок правит хиты со своего телефона, пока Мастер
+  // держит тот же лист открытым, и снимок целиком стирал бы чужую правку.
+  if (
+    contentPatch !== undefined &&
+    (contentPatch === null || typeof contentPatch !== "object" || Array.isArray(contentPatch))
+  ) {
+    return res.status(400).json({ error: "contentPatch должен быть объектом" });
+  }
+  const stored = db.prepare("SELECT content FROM statblocks WHERE id = ?").get(req.params.id) as
+    | { content: string }
+    | undefined;
+  const nextContent =
+    contentPatch !== undefined
+      ? mergeContentPatch(stored?.content ?? "", contentPatch)
+      : (content ?? null);
   db.prepare(
-    "UPDATE statblocks SET content = COALESCE(?, content), theme = COALESCE(?, theme), density = COALESCE(?, density) WHERE id = ?"
-  ).run(content ?? null, theme ?? null, density ?? null, req.params.id);
+    "UPDATE statblocks SET content = COALESCE(?, content), theme = COALESCE(?, theme), density = COALESCE(?, density), updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?"
+  ).run(nextContent, theme ?? null, density ?? null, req.params.id);
   broadcastCharacterUpdate(statblock.owner_id);
   res.json(db.prepare("SELECT * FROM statblocks WHERE id = ?").get(req.params.id));
 });
