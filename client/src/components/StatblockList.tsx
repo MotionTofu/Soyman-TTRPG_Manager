@@ -101,6 +101,17 @@ interface Props {
   soleOnPage?: boolean;
 }
 
+// «2026-09-04 08:12:33» из SQLite — в человеческое «4 сентября». Строка
+// приходит без часового пояса и трактуется как местное время: сервер и
+// приложение живут на одной машине.
+const trashDateFormat = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
+
+function formatArchivedAt(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const d = new Date(raw.replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? raw : `удалён ${trashDateFormat.format(d)}`;
+}
+
 export function StatblockList({
   ownerType,
   ownerId,
@@ -117,6 +128,10 @@ export function StatblockList({
   soleOnPage,
 }: Props) {
   const [statblocks, setStatblocks] = useState<Statblock[]>([]);
+  // Удалённые статблоки владельца. До сих пор удалённый чарник исчезал
+  // навсегда: вернуть его можно было только тостом «Отменить», жившим восемь
+  // секунд, а дальше он молча лежал в базе вместе с портретом на диске.
+  const [archived, setArchived] = useState<Statblock[]>([]);
   const [templates, setTemplates] = useState<Resource[]>([]);
   const [adding, setAdding] = useState(false);
   const [format, setFormat] = useState<StatblockFormat>("text");
@@ -166,8 +181,43 @@ export function StatblockList({
     api
       .get<Statblock[]>(`/statblocks?owner_type=${ownerType}&owner_id=${ownerId}`)
       .then(setStatblocks);
+    // Корзина тянется тем же запросом, только с флагом: держать её отдельным
+    // состоянием и обновлять по своему поводу значит однажды показать
+    // восстановленный статблок и в списке, и в корзине разом.
+    api
+      .get<Statblock[]>(`/statblocks?owner_type=${ownerType}&owner_id=${ownerId}&archived=1`)
+      .then(setArchived)
+      .catch(() => setArchived([]));
   }
   useEffect(refresh, [ownerType, ownerId]);
+
+  // Восстановление и окончательное удаление — поштучно. Массового «очистить
+  // корзину» нет намеренно: удалять навсегда несколько чарников одним нажатием
+  // — ровно тот промах, из-за которого мягкое удаление и появилось.
+  async function restoreArchived(sb: Statblock) {
+    try {
+      await api.put(`/statblocks/${sb.id}/restore`);
+      refresh();
+    } catch (e) {
+      showAlert(`Не удалось восстановить: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  async function purgeArchived(sb: Statblock) {
+    const name = statblockTitle(sb);
+    const ok = await confirm({
+      title: "Удалить навсегда?",
+      message: `«${name}» будет стёрт без возможности вернуть. Портрет статблока уйдёт в _Archive хранилища.`,
+      confirmLabel: "Удалить навсегда",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/statblocks/${sb.id}/forever`);
+      refresh();
+    } catch (e) {
+      showAlert(`Не удалось удалить «${name}»: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   // Live sync — a statblock save from player-app (or another open GM
   // instance) pushes here via RealtimeListener's "character-updated" event.
@@ -637,6 +687,29 @@ export function StatblockList({
         <button onClick={() => setAdding(true)} style={{ alignSelf: "flex-start" }}>
           + Добавить {ownerType === "character" ? "чарник" : "статблок"}
         </button>
+      )}
+
+      {/* Корзина показывается, только когда в ней что-то есть, и свёрнута:
+          за столом она не нужна ни разу, а нужна она в тот единственный день,
+          когда «я снёс чарник неделю назад». */}
+      {archived.length > 0 && (
+        <details className="sb-trash">
+          <summary>Удалённые: {archived.length}</summary>
+          <div className="stack" style={{ gap: 6, padding: "8px 0 0" }}>
+            {archived.map((sb) => (
+              <div key={sb.id} className="row sb-trash__row">
+                <span className="sb-trash__name">{statblockTitle(sb)}</span>
+                <span className="muted sb-trash__when">{formatArchivedAt(sb.archived_at)}</span>
+                <button type="button" className="comp-mini" onClick={() => void restoreArchived(sb)}>
+                  Восстановить
+                </button>
+                <button type="button" className="comp-mini danger" onClick={() => void purgeArchived(sb)}>
+                  Удалить навсегда
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {showDndWizard && ownerType === "character" && (

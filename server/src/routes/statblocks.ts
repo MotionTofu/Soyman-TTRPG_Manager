@@ -182,12 +182,23 @@ statblocksRouter.post("/import", (req, res) => {
 });
 
 statblocksRouter.get("/", (req, res) => {
-  const { owner_type, owner_id } = req.query as { owner_type?: string; owner_id?: string };
+  const { owner_type, owner_id, archived } = req.query as {
+    owner_type?: string;
+    owner_id?: string;
+    archived?: string;
+  };
   if (!owner_type || !owner_id)
     return res.status(400).json({ error: "owner_type and owner_id are required" });
+  // `archived=1` — корзина статблоков владельца. Удалённый статблок до сих
+  // пор становился невидимым навсегда: вернуть его можно было только через
+  // тост «Отменить», живший восемь секунд, а после этого он просто лежал в
+  // базе, и места на диске занятого портретом никто не возвращал.
+  const onlyArchived = archived === "1" || archived === "true";
   const rows = db
     .prepare(
-      "SELECT * FROM statblocks WHERE owner_type = ? AND owner_id = ? AND archived_at IS NULL ORDER BY created_at"
+      `SELECT * FROM statblocks
+        WHERE owner_type = ? AND owner_id = ? AND archived_at IS ${onlyArchived ? "NOT NULL" : "NULL"}
+        ORDER BY ${onlyArchived ? "archived_at DESC" : "created_at"}`
     )
     .all(owner_type, owner_id) as { avatar_image_path: string | null }[];
   res.json(rows.map(withAvatarUrl));
@@ -375,6 +386,41 @@ statblocksRouter.delete("/:id", (req, res) => {
     syncEntrySummaryAfterCreatureChange(statblock);
   })();
 
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  res.json({ ok: true });
+});
+
+// Окончательное удаление — поштучно и только из корзины владельца.
+// Автоочистки по сроку нет намеренно: чарник — это часы работы, и «через
+// месяц сотрётся само» означает, что однажды сотрётся то, что было нужно.
+// Портрет уходит той же дорогой, что и любая удалённая картинка хранилища:
+// в `_Archive`, а не мимо корзины.
+statblocksRouter.delete("/:id/forever", (req, res) => {
+  const statblock = db
+    .prepare("SELECT id, owner_type, owner_id, avatar_image_path, archived_at FROM statblocks WHERE id = ?")
+    .get(req.params.id) as
+    | {
+        id: number;
+        owner_type: string;
+        owner_id: number;
+        avatar_image_path: string | null;
+        archived_at: string | null;
+      }
+    | undefined;
+  if (!statblock) return res.status(404).json({ error: "not found" });
+  if (statblock.archived_at == null) {
+    return res.status(400).json({ error: "можно удалить навсегда только удалённый статблок" });
+  }
+  if (statblock.avatar_image_path) {
+    removeOrArchive(
+      statblock.avatar_image_path,
+      "archive",
+      "statblock",
+      statblock.id,
+      `Портрет статблока ${statblock.id}`
+    );
+  }
+  db.prepare("DELETE FROM statblocks WHERE id = ?").run(statblock.id);
   if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
   res.json({ ok: true });
 });

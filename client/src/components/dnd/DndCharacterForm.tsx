@@ -3727,6 +3727,123 @@ function walkWithExhaustion(
   };
 }
 
+/**
+ * «Список доступных заклинаний» — всё, что доступно классу и подклассу
+ * персонажа, с возможностью взять оттуда в лист.
+ *
+ * Зачем отдельно от поиска в круге. Поиск по кругу отвечает на вопрос «как
+ * называется это заклинание», а Мастеру и игроку нужен обратный: «что я
+ * вообще могу взять». Раньше на него отвечала книга, а не приложение —
+ * в справочнике 392 заклинания, и какие из них твои, там не написано.
+ *
+ * Отбор идёт по полю `classes` самой записи заклинания: ссылок 1324 и все
+ * живые (в отличие от `granted_spells`, где не работала ни одна). Подкласс
+ * учитывается наравне с классом — у Картографа 11 заклинаний сверх 80
+ * артефакторских.
+ */
+function DndClassSpellListModal({
+  systemId,
+  sources,
+  cantrips,
+  spellsByLevel,
+  onAdd,
+  onClose,
+}: {
+  systemId: number | null;
+  /** Класс и подкласс персонажа: по их id и отбираются заклинания. */
+  sources: { id: number; name: string }[];
+  cantrips: DndSpellEntry[];
+  spellsByLevel: DndSpellEntry[][];
+  onAdd: (level: number, entry: CompendiumEntry) => void;
+  onClose: () => void;
+}) {
+  const [all, setAll] = useState<CompendiumEntry[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!systemId) {
+      setAll([]);
+      return;
+    }
+    const ac = new AbortController();
+    loadDndSpellIndex(systemId, { signal: ac.signal })
+      .then(setAll)
+      .catch((e) => {
+        if ((e as Error)?.name !== "AbortError") setFailed(true);
+      });
+    return () => ac.abort();
+  }, [systemId]);
+
+  const sourceIds = new Set(sources.map((s) => s.id));
+  // Уже в листе — по entryId: показывать «взять» у того, что уже взято,
+  // значит собирать двойники руками пользователя.
+  const owned = new Set(
+    [...cantrips, ...spellsByLevel.flat()].map((s) => s.entryId).filter((id): id is number => typeof id === "number")
+  );
+
+  const q = query.trim().toLowerCase();
+  const matching = (all ?? []).filter((e) => {
+    const refs = Array.isArray(e.data?.classes) ? (e.data.classes as { id?: number }[]) : [];
+    if (!refs.some((r) => typeof r.id === "number" && sourceIds.has(r.id))) return false;
+    return !q || e.name.toLowerCase().includes(q);
+  });
+  const byLevel = new Map<number, CompendiumEntry[]>();
+  for (const e of matching) {
+    const lvl = e.level ?? 0;
+    if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+    byLevel.get(lvl)!.push(e);
+  }
+  const levels = [...byLevel.keys()].sort((a, b) => a - b);
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-spell-list-modal">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>Доступные заклинания</h3>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          {sources.map((s) => s.name).join(" · ") || "Класс не выбран"}
+        </div>
+        <input
+          placeholder="Поиск по названию"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {failed && <p className="muted">Не удалось загрузить справочник заклинаний.</p>}
+        {!failed && all === null && <p className="muted">Загрузка…</p>}
+        {all !== null && levels.length === 0 && (
+          <p className="muted">
+            {sources.length === 0
+              ? "Сначала выберите класс — список строится по нему."
+              : "Ничего не нашлось: у класса нет заклинаний в справочнике либо не подходит поиск."}
+          </p>
+        )}
+        {levels.map((lvl) => (
+          <div key={lvl} className="stack" style={{ gap: 4 }}>
+            <div className="sb-prop-label">{lvl === 0 ? "Заговоры" : `${lvl} круг`}</div>
+            {byLevel.get(lvl)!.map((e) => (
+              <div key={e.id} className="row dnd-spell-list-row">
+                <span style={{ flex: "1 1 12ch", minWidth: 0 }}>{e.name}</span>
+                {owned.has(e.id) ? (
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>уже в листе</span>
+                ) : (
+                  <button type="button" className="comp-mini" onClick={() => onAdd(lvl, e)}>
+                    Взять
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 function DndTraitsView({ value }: { value: DndCharacterData }) {
   const prefs = useDndPrefs();
   const speeds = formatSpeed(value.speeds, prefs.distanceUnit);
@@ -4731,6 +4848,13 @@ export function DndCharacterView({
   // в свободном тексте («9 клеток, лазание 3») отнимать нечего, и он
   // остаётся примечанием под итогом.
   const speedShown = walkWithExhaustion(value.speeds, value.exhaustion, prefs.distanceUnit);
+  const [spellListOpen, setSpellListOpen] = useState(false);
+  // Класс и подкласс — источники списка. Многоклассовый персонаж видит
+  // объединение: заклинание из любого своего списка он взять вправе.
+  const spellListSources = value.classes.flatMap((c) => [
+    ...(c.classId != null ? [{ id: c.classId, name: c.className || "Класс" }] : []),
+    ...(c.subclassId != null ? [{ id: c.subclassId, name: c.subclassName || "Подкласс" }] : []),
+  ]);
   // Считается на каждый рендер намеренно: подписка на кэш уже перерисовывает
   // лист при любой смене его состояния, включая появление и снятие неудач.
   const entriesFailed = hasFailedEntries() && sheetEntryIds(value).some((id) => typeof id === "number");
@@ -4810,6 +4934,35 @@ export function DndCharacterView({
                 />
               ) : undefined
             }
+          />
+        )}
+        {spellListOpen && (
+          <DndClassSpellListModal
+            systemId={value.systemId}
+            sources={spellListSources}
+            cantrips={value.cantrips}
+            spellsByLevel={value.spellsByLevel}
+            onClose={() => setSpellListOpen(false)}
+            onAdd={(level, entry) => {
+              if (!onQuickUpdate) return;
+              // Берётся неподготовленным: взять в книгу и подготовить на день
+              // — разные действия, и приложение не вправе решать второе за
+              // игрока. Снапшот не пишем — его подставит resolveSpell из
+              // кэша справочника, как и у заклинаний, добавленных поиском.
+              const added: DndSpellEntry = { entryId: entry.id, name: entry.name, prepared: 0 };
+              if (level <= 0) {
+                onQuickUpdate({ cantrips: [...value.cantrips, added] });
+                return;
+              }
+              if (level > SPELL_LEVELS) return;
+              const next = value.spellsByLevel.map((lvl, i) => (i === level - 1 ? [...lvl, added] : lvl));
+              onQuickUpdate({
+                spellsByLevel: next,
+                // Круг, которого лист ещё не показывал, иначе взятое просто
+                // не появится на экране.
+                spellSlotLevels: Math.max(value.spellSlotLevels, level),
+              });
+            }}
           />
         )}
         {editingOrigin && onQuickUpdate && (
@@ -5277,6 +5430,13 @@ export function DndCharacterView({
                   <span className="muted">в правке показаны все — подготовить можно только видимое</span>
                 )}
               </div>
+              {onQuickUpdate && (
+                <div className="row sb-entry">
+                  <button type="button" className="comp-mini" onClick={() => setSpellListOpen(true)}>
+                    Список доступных заклинаний
+                  </button>
+                </div>
+              )}
               {(spellLimits.cantrips != null || spellLimits.prepared != null) && (
                 <div className="row sb-entry" style={{ gap: 10, flexWrap: "wrap" }}>
                   {spellLimits.cantrips != null && (

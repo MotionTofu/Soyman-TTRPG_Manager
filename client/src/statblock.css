@@ -1047,6 +1047,41 @@ summary.sb-section {
 }
 /* Отказ при сохранении из формы: форма остаётся открытой, набранное на
    месте, а причина написана рядом с кнопкой. */
+/* Список доступных заклинаний: длинный, поэтому скроллится внутри модалки,
+   а не растит её на весь экран. */
+.dnd-spell-list-modal {
+  max-height: min(78vh, 720px);
+  overflow-y: auto;
+  min-width: min(92vw, 420px);
+}
+.dnd-spell-list-row {
+  gap: 8px;
+  align-items: center;
+}
+
+/* Корзина статблоков: свёрнута, неброская — нужна раз в полгода, а место
+   занимает на каждом листе. */
+.sb-trash > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sb-trash__row {
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sb-trash__name {
+  flex: 1 1 12ch;
+  min-width: 0;
+}
+.sb-trash__when {
+  font-size: var(--fs-meta);
+}
+
 /* Скорость до истощения — рядом с итогом и зачёркнутая: видно и сколько
    осталось, и от чего отняли. */
 .dnd-speed-was {

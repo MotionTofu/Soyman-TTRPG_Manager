@@ -487,6 +487,9 @@ export interface Statblock {
   avatar_image_path: string | null;
   avatar_image_url: string | null;
   created_at: string;
+  /** Когда статблок удалён (мягко). Приходит только из корзины —
+   *  `GET /statblocks?...&archived=1`; в обычном списке таких строк нет. */
+  archived_at?: string | null;
   /** Версия строки: страховка для сохранения снимком целиком (см.
    *  server/src/db/statblockContent.ts). Быстрые правки идут патчем и на неё
    *  не смотрят. Пусто у статблоков, записанных до появления колонки. */

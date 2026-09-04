@@ -9,6 +9,7 @@ import { migrateDndSkillNames } from "./dndSkillNames";
 import { migrateDndGrantedSpells } from "./dndGrantedSpells";
 import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndSpeedStructure } from "./dndSpeedStructure";
+import { migrateDndSheetRefs } from "./dndSheetRefs";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -2716,6 +2717,7 @@ export function openDatabase(dbDir: string): Database.Database {
   migrateDndGrantedSpells(database);
   migrateDndOriginGrants(database);
   migrateDndSpeedStructure(database);
+  migrateDndSheetRefs(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");
