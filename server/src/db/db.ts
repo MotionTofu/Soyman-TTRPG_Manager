@@ -6,6 +6,7 @@ import path from "path";
 import { entryImageFolder, systemFolder, vaultAbs } from "../services/filesystem";
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
 import { migrateDndSkillNames } from "./dndSkillNames";
+import { migrateDndGrantedSpells } from "./dndGrantedSpells";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -2710,6 +2711,7 @@ export function openDatabase(dbDir: string): Database.Database {
   // Навыки D&D 5.5: оригинальные имена, характеристики и алиасы переводов —
   // один раз и только по пустым полям (см. dndSkillNames.ts).
   migrateDndSkillNames(database);
+  migrateDndGrantedSpells(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");

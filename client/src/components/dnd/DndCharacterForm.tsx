@@ -55,6 +55,7 @@ import {
   loadDndSpeciesFeatures,
   loadDndSpeciesOptions,
   loadDndSpellsByLevel,
+  loadDndSpellIndex,
   type DndBackgroundOption,
   type DndClassHierarchy,
   type DndSpeciesOption,
@@ -959,38 +960,78 @@ function equipmentTagsLine(item: DndEquipmentItem): string {
 interface GrantedSpellDef {
   id: number;
   name: string;
+  /** Английское имя заклинания — запасной ключ, когда `id` не сходится. */
+  original: string;
   grantLevel: number;
+}
+
+// Имена в списке приезжают из импорта в виде «Лечащее слово [Healing Word]»,
+// поэтому оригинал достаётся прямо из имени, даже когда отдельного поля нет.
+function splitGrantedName(raw: string): { name: string; original: string } {
+  const m = /^(.*?)\s*\[(.+)\]\s*$/.exec(raw ?? "");
+  return m ? { name: m[1].trim(), original: m[2].trim() } : { name: (raw ?? "").trim(), original: "" };
 }
 
 function parseGrantedSpellDefs(entry: CompendiumEntry): GrantedSpellDef[] {
   const raw = Array.isArray(entry.data.granted_spells)
-    ? (entry.data.granted_spells as { id: number; name: string; grantLevel?: number }[])
+    ? (entry.data.granted_spells as { id: number; name: string; grantLevel?: number; original?: string }[])
     : [];
-  return raw.map((s) => ({
-    id: s.id,
-    name: s.name,
-    grantLevel: typeof s.grantLevel === "number" && s.grantLevel > 0 ? s.grantLevel : 1,
-  }));
+  return raw.map((s) => {
+    const split = splitGrantedName(s.name);
+    return {
+      id: s.id,
+      name: split.name,
+      original: (s.original ?? "").trim() || split.original,
+      grantLevel: typeof s.grantLevel === "number" && s.grantLevel > 0 ? s.grantLevel : 1,
+    };
+  });
 }
 
 // Resolves granted-spell picks to full spell entries (for circle/level + the
 // same meta snapshot other spells carry), tagged with sourceParentId +
 // always-prepared, ready to slot into cantrips or spellsByLevel[level-1].
+//
+// `id` — быстрый путь, но не единственный: он не переживает переустановку
+// модуля справочника (в базе владельца все 288 ссылок вели в пустоту, и
+// подкласс молча не приносил ни одного заклинания). Когда id промахнулся,
+// ссылка сводится по `name_original`, как и владения навыками. Индекс
+// заклинаний тянется лениво — только если промах случился.
 async function fetchGrantedSpells(
   grantedSpells: GrantedSpellDef[],
-  sourceParentId: number
+  sourceParentId: number,
+  systemId: number | null
 ): Promise<{ level: number; entry: DndSpellEntry }[]> {
   const results: { level: number; entry: DndSpellEntry }[] = [];
-  for (const g of grantedSpells) {
-    try {
-      const full = await api.get<CompendiumEntry>(`/systems/entries/${g.id}`);
-      results.push({
-        level: full.level ?? 0,
-        entry: { entryId: g.id, name: g.name, prepared: 2, sourceParentId, ...spellSnapshotFromEntry(full) },
-      });
-    } catch {
-      /* spell entry missing — skip */
+  let index: Map<string, CompendiumEntry> | null = null;
+
+  async function byName(g: GrantedSpellDef): Promise<CompendiumEntry | undefined> {
+    if (!systemId) return undefined;
+    if (!index) {
+      index = new Map();
+      for (const e of await loadDndSpellIndex(systemId)) {
+        if (e.name_original) index.set(e.name_original.trim().toLowerCase(), e);
+        const key = e.name.trim().toLowerCase();
+        if (!index.has(key)) index.set(key, e);
+      }
     }
+    return (
+      (g.original ? index.get(g.original.toLowerCase()) : undefined) ?? index.get(g.name.toLowerCase())
+    );
+  }
+
+  for (const g of grantedSpells) {
+    let full: CompendiumEntry | undefined;
+    try {
+      full = await api.get<CompendiumEntry>(`/systems/entries/${g.id}`);
+    } catch {
+      full = undefined;
+    }
+    if (!full || full.kind !== "spell") full = await byName(g);
+    if (!full) continue;
+    results.push({
+      level: full.level ?? 0,
+      entry: { entryId: full.id, name: full.name, prepared: 2, sourceParentId, ...spellSnapshotFromEntry(full) },
+    });
   }
   return results;
 }
@@ -1036,7 +1077,7 @@ function addGrantedSpells(
 // down (grants above the new level disappear) uniformly. Called after any
 // change to raceId, a class's subclassId, or a class's level.
 export async function recomputeGrantedSpells(
-  value: Pick<DndCharacterData, "raceId" | "classes" | "cantrips" | "spellsByLevel" | "spellSlotLevels">
+  value: Pick<DndCharacterData, "raceId" | "classes" | "cantrips" | "spellsByLevel" | "spellSlotLevels" | "systemId">
 ): Promise<{ cantrips: DndSpellEntry[]; spellsByLevel: DndSpellEntry[][]; spellSlotLevels: number }> {
   let { cantrips, spellsByLevel } = stripGrantedSpells(value.cantrips, value.spellsByLevel);
   let spellSlotLevels = value.spellSlotLevels;
@@ -1046,7 +1087,7 @@ export async function recomputeGrantedSpells(
       const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
       const eligible = parseGrantedSpellDefs(entry).filter((d) => d.grantLevel <= characterLevel);
       if (eligible.length === 0) return;
-      const granted = await fetchGrantedSpells(eligible, entryId);
+      const granted = await fetchGrantedSpells(eligible, entryId, value.systemId);
       ({ cantrips, spellsByLevel, spellSlotLevels } = addGrantedSpells(
         { cantrips, spellsByLevel, spellSlotLevels },
         granted

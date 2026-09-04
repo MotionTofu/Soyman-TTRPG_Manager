@@ -178,6 +178,19 @@ export async function loadDndSpellsByLevel(systemId: number, level: number, opts
   return results;
 }
 
+// Все заклинания системы разом. Нужны там, где ссылка на заклинание пришла
+// битой: «Обретаемые заклинания» вида и подкласса хранят `id`, а он не
+// переживает переустановку модуля — в базе владельца все 288 ссылок вели в
+// пустоту. Ключом в таком случае служит `name_original`, как и у навыков.
+export async function loadDndSpellIndex(systemId: number, opts?: LoadOpts): Promise<CompendiumEntry[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
+  const spellSections = sections.filter((s) => s.kind === "spell");
+  const lists = await Promise.all(
+    spellSections.map((s) => get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${s.id}`, opts))
+  );
+  return lists.flat().filter((e) => e.kind === "spell");
+}
+
 // Таблицы развития всех классов системы. Нужны в одном узком случае: когда
 // персонаж многоклассовый и среди его классов нет ни одного полного
 // заклинателя (Паладин/Следопыт) — таблицу многоклассья тогда неоткуда взять,
