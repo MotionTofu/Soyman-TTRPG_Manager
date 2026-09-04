@@ -5,6 +5,8 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
 import { ResourcesSection } from "../components/ResourcesSection";
 import { LocationTree } from "../components/LocationTree";
+import { LocationRootGraph } from "../components/LocationRootGraph";
+import { LocationMiller } from "../components/LocationMiller";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { SettingCalendarEditor } from "../components/SettingCalendarEditor";
 import { SettingCalendarSettings } from "../components/SettingCalendarSettings";
@@ -1430,10 +1432,52 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
   );
 }
 
+type GeographyView = "columns" | "list" | "tree";
+
 function GeographyTab({ settingId }: { settingId: number }) {
+  const [view, setView] = useState<GeographyView>(() => {
+    try {
+      const v = localStorage.getItem(`geography-view-${settingId}`);
+      // Старые ключи: tree(дерево)→list(список), root(корень)→tree(дерево).
+      if (v === "list" || v === "tree" || v === "columns") return v;
+      if (v === "root") return "tree";
+      return "columns";
+    } catch {
+      return "columns";
+    }
+  });
+  function pick(next: GeographyView) {
+    setView(next);
+    try {
+      localStorage.setItem(`geography-view-${settingId}`, next);
+    } catch {
+      /* ignore */
+    }
+  }
+  const tab = (id: GeographyView, label: React.ReactNode) => (
+    <button
+      role="tab"
+      aria-selected={view === id}
+      className={view === id ? "active" : ""}
+      onClick={() => pick(id)}
+    >
+      {label}
+    </button>
+  );
   return (
-    <div className="card stack geography-tree">
-      <LocationTree settingId={settingId} />
+    <div className="stack">
+      <div className="tabs" role="tablist" aria-label="Режим просмотра географии">
+        {tab("columns", "Колонки")}
+        {tab("list", "Список")}
+        {tab("tree", <>Дерево <span className="badge tag">beta</span></>)}
+      </div>
+      {view === "columns" && <LocationMiller key={`m-${settingId}`} settingId={settingId} />}
+      {view === "list" && (
+        <div className="card stack geography-tree">
+          <LocationTree settingId={settingId} />
+        </div>
+      )}
+      {view === "tree" && <LocationRootGraph key={settingId} settingId={settingId} />}
     </div>
   );
 }

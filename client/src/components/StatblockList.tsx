@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { useQueuedSave } from "../hooks/useQueuedSave";
 import { topLevelPatch } from "./statblockPatch";
 import { useUndoDelete } from "../hooks/useUndoDelete";
@@ -31,6 +33,7 @@ import {
 import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { CreatureCardLoader } from "./CreatureCard";
 import { emptyDndCharacter, normalizeDndCharacter, DndCharacterView } from "./dnd/DndCharacterForm";
+import { classAndLevelSummary } from "./dnd/dndSummary";
 import { findDndSystemId } from "./dnd/dndCompendium";
 import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
 import { DndCharacterWizard } from "./dnd/DndCharacterWizard";
@@ -85,6 +88,8 @@ interface Props {
   // in by the detail pages, which already have this data loaded.
   ownerName?: string;
   ownerPlayerName?: string;
+  /** Портрет владельца — он же лицо первой карты листа (гриллинг 2026-09-04). */
+  ownerPortraitUrl?: string | null;
   // Bestiary-only (ownerType === "compendium_entry"): pre-fills a new
   // dnd_creature statblock's Размер/Тип/КО/КД/Хиты/Скорость from the profile fields set on the
   // compendium monster entry itself, so they don't have to be typed twice.
@@ -99,6 +104,17 @@ interface Props {
   // адресе: общий параметр на несколько листов им конфликтует
   // (гриллинг 2026-09-03).
   soleOnPage?: boolean;
+  /**
+   * Телефон: чарник не рисуется здесь, а открывается по этой ссылке на весь
+   * экран — в разделе остаётся плашка (гриллинг 2026-09-04). На десктопе
+   * проп игнорируется: там места хватает и лист живёт в странице.
+   */
+  sheetHref?: string;
+  /**
+   * Страница чарника: только сам лист, без визарда, импорта, корзины и
+   * кнопки добавления. Всё это осталось на профиле — там его и заполняют.
+   */
+  sheetOnly?: boolean;
 }
 
 // «2026-09-04 08:12:33» из SQLite — в человеческое «4 сентября». Строка
@@ -119,6 +135,7 @@ export function StatblockList({
   settingId,
   ownerName,
   ownerPlayerName,
+  ownerPortraitUrl,
   ownerCreatureType,
   ownerCreatureSize,
   ownerCreatureCR,
@@ -126,6 +143,8 @@ export function StatblockList({
   ownerCreatureHP,
   ownerCreatureSpeed,
   soleOnPage,
+  sheetHref,
+  sheetOnly,
 }: Props) {
   const [statblocks, setStatblocks] = useState<Statblock[]>([]);
   // Удалённые статблоки владельца. До сих пор удалённый чарник исчезал
@@ -485,6 +504,50 @@ export function StatblockList({
   const shownStatblocks =
     statblocks.length > 1 ? statblocks.filter((sb) => sb.id === activeId) : statblocks;
 
+  const cards = shownStatblocks.map((sb) => (
+    <StatblockCard
+      key={sb.id}
+      statblock={sb}
+      ownerType={ownerType}
+      ownerId={ownerId}
+      onChange={refresh}
+      onRemove={removeStatblock}
+      campaignId={campaignId}
+      settingId={settingId}
+      soleOnPage={soleOnPage}
+      ownerPortraitUrl={ownerPortraitUrl}
+      sheetHref={sheetHref}
+      hideRemove={sheetOnly}
+    />
+  ));
+
+  // Страница чарника: лист и переключатель между листами, если их несколько.
+  // Визард, импорт, корзина и «добавить» остались на профиле — заполняют
+  // лист там, а здесь по нему играют.
+  if (sheetOnly) {
+    return (
+      <div className="stack">
+        {confirmDialog}
+        {alertDialog}
+        {statblocks.length > 1 && (
+          <div className="tabs sb-switcher">
+            {statblocks.map((sb) => (
+              <button
+                key={sb.id}
+                type="button"
+                className={sb.id === activeId ? "active" : ""}
+                onClick={() => setActiveId(sb.id)}
+              >
+                {statblockTitle(sb)}
+              </button>
+            ))}
+          </div>
+        )}
+        {cards}
+      </div>
+    );
+  }
+
   return (
     <div className="stack">
       {confirmDialog}
@@ -536,19 +599,7 @@ export function StatblockList({
           ))}
         </div>
       )}
-      {shownStatblocks.map((sb) => (
-        <StatblockCard
-          key={sb.id}
-          statblock={sb}
-          ownerType={ownerType}
-          ownerId={ownerId}
-          onChange={refresh}
-          onRemove={removeStatblock}
-          campaignId={campaignId}
-          settingId={settingId}
-          soleOnPage={soleOnPage}
-        />
-      ))}
+      {cards}
 
       {showLssImport && !isEmpty && (
         <div
@@ -782,6 +833,9 @@ function StatblockCard({
   campaignId,
   settingId,
   soleOnPage,
+  ownerPortraitUrl,
+  sheetHref,
+  hideRemove,
 }: {
   statblock: Statblock;
   ownerType: "character" | "being" | "compendium_entry";
@@ -791,7 +845,14 @@ function StatblockCard({
   campaignId?: number;
   settingId?: number;
   soleOnPage?: boolean;
+  /** Портрет владельца — лицо первой карты листа. */
+  ownerPortraitUrl?: string | null;
+  /** Телефон: вместо листа — плашка со ссылкой сюда. */
+  sheetHref?: string;
+  /** Страница чарника: удаление живёт в профиле, у плашки. */
+  hideRemove?: boolean;
 }) {
+  const isMobile = useIsMobile();
   const isLitm = statblock.format === "litm_character" || statblock.format === "litm_challenge";
   const isDnd = statblock.format === "dnd_character" || statblock.format === "dnd_creature";
   const isZip = statblock.format === "zip_character" || statblock.format === "zip_creature";
@@ -1135,9 +1196,41 @@ function StatblockCard({
   // аккордеоном, а свёрнутый чарник за столом бесполезен: аккордеон нужен
   // списку, а не листу. Правка идёт по секциям внутри вида (гриллинг 2026-09-03).
   if (statblock.format === "dnd_character" && dndValue) {
+    // Телефон: лист сюда не помещается — он оказывался внутри чужой
+    // прокрутки, под крошками, шапкой профиля и рядом вкладок, и «весь
+    // экран» у карты был не весь. В разделе остаётся плашка, лист
+    // открывается своим маршрутом (гриллинг 2026-09-04).
+    if (sheetHref && isMobile) {
+      const sheet = dndValue as DndCharacterData;
+      const classLine = [sheet.raceName, classAndLevelSummary(sheet.classes)].filter(Boolean).join(" · ");
+      return (
+        <div className="sheet-plate">
+          <Link className="sheet-plate-open" to={sheetHref}>
+            <span className="sheet-plate-name">{sheet.characterName || "Без имени"}</span>
+            {classLine && <span className="sheet-plate-sub">{classLine}</span>}
+          </Link>
+          {/* Своя мишень внутри общей: плашка целиком — «открыть», а
+              удаление не должно срабатывать по промаху. */}
+          <button
+            type="button"
+            className="comp-mini sheet-plate-remove"
+            title="Удалить чарник"
+            aria-label={`Удалить чарник: ${sheet.characterName || "Без имени"}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRemove(statblock.id);
+            }}
+          >
+            <NavIcon name="delete" />
+          </button>
+        </div>
+      );
+    }
     return (
       <DndCharacterView
         value={dndValue as DndCharacterData}
+        portraitUrl={ownerPortraitUrl}
         onQuickUpdate={quickSaveDnd}
         syncTabToUrl={soleOnPage}
         campaignId={campaignId}
@@ -1145,9 +1238,14 @@ function StatblockCard({
         headerExtra={
           <>
             {saveIndicator}
-            <button type="button" className="comp-mini" title="Удалить чарник" onClick={() => onRemove(statblock.id)}>
-              <NavIcon name="delete" />
-            </button>
+            {/* На своей странице чарника кнопки удаления нет намеренно:
+                удалять лист с того экрана, где по нему играют, — ждать беды.
+                Она осталась у плашки в профиле (гриллинг 2026-09-04). */}
+            {!hideRemove && (
+              <button type="button" className="comp-mini" title="Удалить чарник" onClick={() => onRemove(statblock.id)}>
+                <NavIcon name="delete" />
+              </button>
+            )}
           </>
         }
       />

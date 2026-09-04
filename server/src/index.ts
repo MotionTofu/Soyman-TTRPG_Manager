@@ -129,15 +129,38 @@ app.use(helmet({
 }));
 app.use(hpp());
 
+// Адрес хоста Мастера в локальной сети. Игроки подключаются к нему по wifi
+// с телефонов — это основной сценарий приложения, а не «хостинг»: страница
+// открыта с 192.168.x.x, и браузер на любом POST (в том числе на вход)
+// шлёт Origin даже при том же хосте. Без этой проверки вход с телефона
+// падал «Failed to fetch»: CORS отбивал запрос ещё до маршрута.
+//
+// Разрешаются только частные диапазоны. Чужой сайт из интернета так к
+// серверу не пролезет: у него origin публичный, и он останется отвергнутым.
+function isPrivateHost(host: string): boolean {
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true;
+  if (host.endsWith(".local")) return true; // mDNS-имя хоста в домашней сети
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 10 || a === 127) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 169 && b === 254) return true; // APIPA, если DHCP не дал адрес
+    return false;
+  }
+  // IPv6: [::1], unique-local (fc00::/7) и link-local (fe80::/10).
+  const v6 = host.replace(/^\[|\]$/g, "").toLowerCase();
+  if (v6.includes(":")) return /^(fc|fd|fe8|fe9|fea|feb)/.test(v6) || v6 === "::1";
+  return false;
+}
+
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // same-origin, curl, native app
       try {
-        const host = new URL(origin).hostname;
-        if (host === "localhost" || host === "127.0.0.1") {
-          return cb(null, true);
-        }
+        if (isPrivateHost(new URL(origin).hostname)) return cb(null, true);
       } catch {
         /* malformed Origin — fall through to the allowlist check below */
       }
@@ -165,12 +188,25 @@ app.use((req, res, next) => {
 app.use(attachUser);
 
 // Rate-limit auth — brute-force on /setup and /login must not be free.
+//
+// Считаются ТОЛЬКО неверные пароли (401), а не все обращения к /api/auth.
+// Иначе бюджет тратила обычная работа: экран входа спрашивает
+// /auth/status при каждой загрузке (в dev — дважды, StrictMode), клиент
+// зовёт /auth/me, страница игрока — /auth/players, а выдача логина — POST
+// /auth/players. Десяти запросов на 15 минут хватало на пару перезагрузок
+// страницы, после чего телефон получал «слишком много попыток» ещё до того,
+// как игрок нажал «Войти».
+//
+// 409 «логин занят» и 400 «заполните поля» подбором не являются и в счёт
+// тоже не идут: это опечатки Мастера в форме выдачи доступа.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 20,
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req, res) => res.statusCode !== 401,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "слишком много попыток, попробуйте позже" },
+  message: { error: "слишком много попыток входа, попробуйте позже" },
 });
 
 // П2.1: в БД пути хранятся ОТНОСИТЕЛЬНО корня хранилища, но наружу — клиенту —

@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { DndDie } from "./DndDie";
 import type { DndAbilityKey, DndAbilityScores, DndSkillProfLevel } from "../../types";
 import { ABILITY_LABELS, abilityModifier, formatModifier, parseBonus } from "./AbilityScores";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
@@ -106,14 +107,18 @@ export const AbilitySavesSkillsEdit = memo(function AbilitySavesSkillsEdit({
   );
 });
 
-// Plain rectangular tile (same .dnd-ability-box frame the edit view uses) —
-// an earlier version showed this as two overlapping d20 dice you'd flip
-// between, but at a glance it read as a jumbled pile rather than a score, so
-// it's back to a flat box. The flip behavior itself stayed: click toggles
-// between showing the ability score+modifier and its saving throw, without
-// eating a separate row/column for the save. Toggle state is per-ability and
-// local to this view (not persisted — it's just "which face am I looking at
-// right now", not character data).
+// Число внутри силуэта кости — приём дизайн-системы §6.5, взятый с макета
+// карты персонажа (гриллинг 2026-09-04).
+//
+// Кость рисуется здесь, а не берётся из общего components/Dice.tsx: тот
+// компонент владелец забраковал дважды. Разница не в идее, а в отделке —
+// внутренние рёбра и точки по углам превращали ряд характеристик в груду.
+// Здесь силуэт голый, число моноширинное, а владение спасброском показано
+// цветом класса на верхних рёбрах, а не галочкой сбоку.
+//
+// Пропорция — правильный шестиугольник: при высоте 53 полуширина равна
+// R·√3/2, то есть 46 в ширину. Кость, растянутая под ширину колонки,
+// перестаёт читаться как та же форма, что на карте.
 function AbilityBox({
   label,
   score,
@@ -121,6 +126,7 @@ function AbilityBox({
   save,
   isSaveProficient,
   primary,
+  accentColor,
 }: {
   label: string;
   score: number;
@@ -131,30 +137,30 @@ function AbilityBox({
   // (dndPrefs), общая со статблоком существа: «+3» здесь при «16» там было бы
   // расхождением, а не гибкостью.
   primary: DndAbilityPrimary;
+  // Цвет класса. Владение спасброском красится им, а не «акцентом» темы: на
+  // монохромном «Соевом нуаре» акцент равен чернилам, и владение было бы
+  // неотличимо от обычной кости.
+  accentColor?: string;
 }) {
+  // Переворот прежний: клик показывает спасбросок вместо значения, не отнимая
+  // под него отдельную строку. Состояние своё у каждой характеристики и живёт
+  // только в этом виде: это «какой стороной смотрю сейчас», а не данные.
   const [showSave, setShowSave] = useState(false);
   return (
-    <div className="dnd-ability-col">
-      <div
-        className="dnd-ability-box dnd-ability-box-clickable"
-        onClick={() => setShowSave((v) => !v)}
-        title="Клик — переключить характеристику/спасбросок"
-      >
-        <span className="dnd-ability-label">{label}</span>
-        {showSave ? (
-          <>
-            <span className={`dnd-ability-score${isSaveProficient ? " is-proficient" : ""}`}>{save}</span>
-            <span className="dnd-ability-label">спас</span>
-          </>
-        ) : (
-          <>
-            <span className="dnd-ability-score">
-              {primary === "score" ? score : formatModifier(mod)}
-            </span>
-            <span className="dnd-ability-mod">{primary === "score" ? formatModifier(mod) : score}</span>
-          </>
-        )}
-      </div>
+    <div
+      className={`dnd-ability-col dnd-ability-die${isSaveProficient ? " is-save-prof" : ""}`}
+      onClick={() => setShowSave((v) => !v)}
+      title="Клик — переключить характеристику/спасбросок"
+    >
+      <DndDie size="sm" edge={isSaveProficient} accentColor={accentColor}>
+        <span className="dnd-die-value">
+          {showSave ? save : primary === "score" ? score : formatModifier(mod)}
+        </span>
+        <span className="dnd-die-sub">
+          {showSave ? "спас" : primary === "score" ? formatModifier(mod) : score}
+        </span>
+      </DndDie>
+      <span className="dnd-ability-label">{label}</span>
     </div>
   );
 }
@@ -164,7 +170,8 @@ export function AbilitySavesSkillsView({
   proficiencyBonus,
   savingThrowProfs,
   exhaustionPenalty = 0,
-}: CommonProps & { exhaustionPenalty?: number }) {
+  accentColor,
+}: CommonProps & { exhaustionPenalty?: number; accentColor?: string }) {
   const profBonus = parseBonus(proficiencyBonus);
   const prefs = useDndPrefs();
 
@@ -173,7 +180,7 @@ export function AbilitySavesSkillsView({
       <div className="sb-section" style={{ margin: 0 }}>
         Характеристики и спасброски
       </div>
-      <div className="dnd-abilities-row">
+      <div className="dnd-abilities-row dnd-abilities-row-dice">
         {ABILITY_LABELS.map(({ key, label }) => {
           const mod = abilityModifier(abilities[key]);
           return (
@@ -185,6 +192,7 @@ export function AbilitySavesSkillsView({
               save={computed(mod, savingThrowProfs[key] ? 1 : 0, profBonus, exhaustionPenalty)}
               isSaveProficient={savingThrowProfs[key]}
               primary={prefs.abilityPrimary}
+              accentColor={accentColor}
             />
           );
         })}

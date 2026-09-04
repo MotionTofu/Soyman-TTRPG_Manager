@@ -28,6 +28,9 @@ export interface DiceProps {
 }
 
 // d20 -> hexagon with internal facet lines, d8 -> diamond, d6 -> square with
+// ВАЖНО: шестиугольник правильный — при высоте 94 (y 3..97) полуширина равна
+// R·√3/2 = 40.7, то есть x от 9.3 до 90.7. Раньше стояло 7..93: кость была на
+// 5% шире правильной и рядом с триадой читалась как другая фигура.
 // a dot in each corner. All drawn on a shared 0..100 viewBox so they can
 // share sizing/positioning CSS.
 function DiceShape({ kind }: { kind: DiceKind }) {
@@ -48,8 +51,8 @@ function DiceShape({ kind }: { kind: DiceKind }) {
     default:
       return (
         <>
-          <polygon className="dice-shape-outline" points="50,3 93,26.5 93,73.5 50,97 7,73.5 7,26.5" />
-          <path className="dice-shape-facet" d="M50,3 L50,97 M7,26.5 L93,73.5 M93,26.5 L7,73.5" />
+          <polygon className="dice-shape-outline" points="50,3 90.7,26.5 90.7,73.5 50,97 9.3,73.5 9.3,26.5" />
+          <path className="dice-shape-facet" d="M50,3 L50,97 M9.3,26.5 L90.7,73.5 M90.7,26.5 L9.3,73.5" />
         </>
       );
   }

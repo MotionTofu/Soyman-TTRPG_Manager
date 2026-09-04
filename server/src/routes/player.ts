@@ -269,6 +269,50 @@ playerRouter.get("/characters/:id", (req: AuthedRequest, res) => {
   res.json({ ...character, campaign_name: campaignName, chapters, statblocks });
 });
 
+// Входящие персонажа — то, что лежит на обороте его карты (гриллинг
+// 2026-09-04). Три источника в одном списке: личные послания этому
+// персонажу, послания игроку и объявления всей кампании. Кампанийные видны
+// с любой карты игрока, личные — только со своей.
+playerRouter.get("/characters/:id/inbox", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const character = requireOwnCharacter(playerId, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  const campaignIds = myCampaignIds(playerId);
+  // Кампания у персонажа одна, и объявления берём только из неё: чужие
+  // кампании того же игрока к этой карте отношения не имеют.
+  const campaignId = campaignIds.includes(character.campaign_id as number) ? character.campaign_id : null;
+  const params: (string | number)[] = [character.id, playerId];
+  let clause = "(target_type = 'character' AND target_id = ?) OR (target_type = 'player' AND target_id = ?)";
+  if (campaignId != null) {
+    clause += " OR (target_type = 'campaign' AND target_id = ?)";
+    params.push(campaignId as number);
+  }
+  res.json(
+    db
+      .prepare(`SELECT * FROM gm_reminders WHERE ${clause} ORDER BY read_at IS NOT NULL, created_at DESC`)
+      .all(...params)
+  );
+});
+
+// Прочтение ставит адресат, а не Мастер. Кампанийное объявление помечает
+// прочитанным первый же его прочитавший — оно общее, и заводить ради него
+// таблицу «кто прочитал» значит строить половину мессенджера ради строки,
+// которую и так видят все.
+playerRouter.post("/reminders/:id/read", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const row = db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(req.params.id) as
+    | { id: number; target_type: string; target_id: number }
+    | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  const mine =
+    (row.target_type === "player" && row.target_id === playerId) ||
+    (row.target_type === "campaign" && myCampaignIds(playerId).includes(row.target_id)) ||
+    (row.target_type === "character" && !!requireOwnCharacter(playerId, String(row.target_id)));
+  if (!mine) return res.status(404).json({ error: "not found" });
+  db.prepare("UPDATE gm_reminders SET read_at = datetime('now') WHERE id = ? AND read_at IS NULL").run(row.id);
+  res.json(db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(row.id));
+});
+
 // Own out-of-character notes — a free-form chapter section distinct from the
 // GM-authored backstory/arc ones (see character_chapters.section).
 playerRouter.post("/characters/:id/notes", (req: AuthedRequest, res) => {

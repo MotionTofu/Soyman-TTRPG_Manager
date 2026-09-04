@@ -40,6 +40,7 @@ export type NavIconName =
   | "download"
   | "die"
   | "arrowRight"
+  | "arrowLeft"
   | "plus"
   | "minus"
   | "star"
@@ -349,6 +350,12 @@ const PATHS: Record<NavIconName, ReactNode> = {
     <>
       <path d="M4.5 12h14" />
       <path d="M13 6.5 19 12l-6 5.5" />
+    </>
+  ),
+  arrowLeft: (
+    <>
+      <path d="M19.5 12h-14" />
+      <path d="M11 6.5 5 12l6 5.5" />
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,

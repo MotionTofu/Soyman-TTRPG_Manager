@@ -1261,16 +1261,21 @@ CREATE TABLE IF NOT EXISTS world_exploration_entries (
 CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_campaign ON world_exploration_entries(campaign_id, kind);
 CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_character ON world_exploration_entries(character_id);
 
--- GM-authored reminder/message shown on a player's Главная in player-app.
--- target_type='player': visible only to that one player. target_type=
--- 'campaign': broadcast to every player in that campaign. Lifecycle is
--- entirely GM-controlled (no per-player dismiss/ack) — deleting the row
--- here removes it for everyone, which is the only way it goes away.
+-- Послание Мастера. Показывается адресату: target_type='player' — только
+-- этому игроку, 'campaign' — всем в кампании, 'character' — на обороте карты
+-- одного персонажа (гриллинг 2026-09-04, Q17). Персонаж — не то же самое, что
+-- игрок: у игрока их бывает несколько, а «твой амулет теплеет» адресовано
+-- одному из них.
+--
+-- read_at ставит сам адресат (Q18): прочитанное уходит с оборота, а Мастер
+-- видит, что дошло, не спрашивая вслух — вопрос вслух и есть провал секрета.
+-- Удаление по-прежнему за Мастером: прочтение прячет, но не уничтожает.
 CREATE TABLE IF NOT EXISTS gm_reminders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  target_type TEXT NOT NULL, -- player | campaign
+  target_type TEXT NOT NULL, -- player | campaign | character
   target_id INTEGER NOT NULL,
   message TEXT NOT NULL,
+  read_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_gm_reminders_target ON gm_reminders(target_type, target_id);

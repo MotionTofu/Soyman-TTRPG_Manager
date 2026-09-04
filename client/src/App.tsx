@@ -43,6 +43,7 @@ const SystemDetailPage = lazy(() => import("./pages/SystemDetailPage").then((m) 
 const ResourcesListPage = lazy(() => import("./pages/ResourcesListPage").then((m) => ({ default: m.ResourcesListPage })));
 const MasteringPage = lazy(() => import("./pages/MasteringPage").then((m) => ({ default: m.MasteringPage })));
 const CharacterDetailPage = lazy(() => import("./pages/CharacterDetailPage").then((m) => ({ default: m.CharacterDetailPage })));
+const CharacterSheetPage = lazy(() => import("./pages/CharacterSheetPage").then((m) => ({ default: m.CharacterSheetPage })));
 const ArchivePage = lazy(() => import("./pages/ArchivePage").then((m) => ({ default: m.ArchivePage })));
 const LocationDetailPage = lazy(() => import("./pages/LocationDetailPage").then((m) => ({ default: m.LocationDetailPage })));
 const BeingDetailPage = lazy(() => import("./pages/BeingDetailPage").then((m) => ({ default: m.BeingDetailPage })));
@@ -181,6 +182,7 @@ function App() {
               <Route path="/resources" element={<ResourcesListPage />} />
               <Route path="/mastering" element={<MasteringPage />} />
               <Route path="/characters/:id" element={<CharacterDetailPage />} />
+              <Route path="/characters/:id/sheet" element={<CharacterSheetPage />} />
               <Route path="/locations/:id" element={<LocationDetailPage />} />
               <Route path="/beings/:id" element={<BeingDetailPage />} />
               <Route path="/scenes/:id" element={<SceneDetailPage />} />

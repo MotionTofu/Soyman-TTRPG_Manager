@@ -714,7 +714,12 @@ export function AppShell() {
         </nav>
       )}
       <main className={`app-content${userLoading ? "" : isPlayer ? "" : " has-player"}`}>
-        {!userLoading && !/^\/sessions\/\d+\/live\/panel\/\w+/.test(pathname) && (
+        {/* Крошки не рисуются на полноэкранном чарнике: у него своя полоса
+            с «назад» и именем, а вторая шапка сверху и есть та самая рамка
+            в рамке, ради ухода от которой лист съехал на свой маршрут. */}
+        {!userLoading &&
+          !/^\/sessions\/\d+\/live\/panel\/\w+/.test(pathname) &&
+          !/^\/characters\/\d+\/sheet$/.test(pathname) && (
           <div style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
             <Breadcrumbs items={buildCrumbs(pathname)} />
             {!isPlayer && activeStorageName && (

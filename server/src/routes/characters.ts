@@ -151,6 +151,35 @@ charactersRouter.delete("/important-dates/:dateId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Послания персонажу — они приходят на оборот его карты (гриллинг
+// 2026-09-04). Адресат именно персонаж, а не игрок: у игрока их бывает
+// несколько, и «твой амулет теплеет» принадлежит одному из них. Мастер
+// пишет и удаляет, прочтение ставит сам игрок (см. player.ts).
+charactersRouter.get("/:id/reminders", (req, res) => {
+  const rows = db
+    .prepare(
+      "SELECT * FROM gm_reminders WHERE target_type = 'character' AND target_id = ? ORDER BY created_at DESC"
+    )
+    .all(req.params.id);
+  res.json(rows);
+});
+
+charactersRouter.post("/:id/reminders", (req, res) => {
+  const { message } = req.body as { message?: string };
+  if (!message || !message.trim()) return res.status(400).json({ error: "message is required" });
+  const info = db
+    .prepare("INSERT INTO gm_reminders (target_type, target_id, message) VALUES ('character', ?, ?)")
+    .run(req.params.id, message.trim());
+  res.status(201).json(db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(info.lastInsertRowid));
+});
+
+charactersRouter.delete("/:id/reminders/:reminderId", (req, res) => {
+  db.prepare(
+    "DELETE FROM gm_reminders WHERE id = ? AND target_type = 'character' AND target_id = ?"
+  ).run(req.params.reminderId, req.params.id);
+  res.json({ ok: true });
+});
+
 charactersRouter.post("/:id/chapters", (req, res) => {
   const { section, title, content } = req.body as {
     section: string;

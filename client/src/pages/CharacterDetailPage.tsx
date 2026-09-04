@@ -386,7 +386,9 @@ export function CharacterDetailPage() {
             campaignId={character.campaign_id ?? undefined}
             ownerName={character.character_name}
             ownerPlayerName={character.player_name}
+            ownerPortraitUrl={character.avatar_image_url}
             soleOnPage
+            sheetHref={`/characters/${characterId}/sheet`}
           />
         )}
 

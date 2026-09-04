@@ -1437,6 +1437,14 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec(`CREATE INDEX idx_gm_reminders_target ON gm_reminders(target_type, target_id)`);
   }
 
+  // Пометка прочтения у посланий (2026-09-04). Нужна не для порядка, а
+  // Мастеру за столом: отправив секрет, он хочет знать, дошло ли, не
+  // спрашивая вслух. Существующие напоминания остаются непрочитанными —
+  // это их честное состояние, ack у них никогда не было.
+  if (tableExists(database, "gm_reminders") && !columnExists(database, "gm_reminders", "read_at")) {
+    database.exec("ALTER TABLE gm_reminders ADD COLUMN read_at TEXT");
+  }
+
   // Права администратора — единственное, что закрыто отдельно от роли: смена
   // роли у чужих учёток. Сама роль при этом остаётся 'gm', то есть обычный
   // мастерский доступ у такого аккаунта тоже есть.

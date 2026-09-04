@@ -1153,9 +1153,6 @@ summary.sb-section {
   text-decoration: line-through;
   font-size: var(--fs-meta);
 }
-.dnd-speed-note {
-  font-size: var(--fs-meta);
-}
 .sb-save-error {
   margin: 0;
   color: var(--accent);

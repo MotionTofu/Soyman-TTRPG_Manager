@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { DragEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
@@ -31,6 +31,7 @@ export function LocationTree({ settingId }: Props) {
   const [kindFilter, setKindFilter] = useState<string>("");
   const [sortMode, setSortMode] = useState<"name" | "kind">("name");
   const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mapFilter, setMapFilter] = useState<"" | "with" | "without">("");
   const [descFilter, setDescFilter] = useState<"" | "with" | "without">("");
   const [confirmDialog, confirm] = useConfirm();
@@ -153,23 +154,6 @@ export function LocationTree({ settingId }: Props) {
       for (const child of byParentAll.get(cur.id) ?? []) queue.push({ id: child.id, d: cur.d + 1 });
     }
     return { total: locations.length, withoutDesc, withoutMap, maxDepth };
-  })();
-
-  const minimapItems = (() => {
-    const out: Array<{ id: number; name: string; depth: number; hasMap: boolean }> = [];
-    const stack: Array<{ id: number; depth: number }> = roots.map((r) => ({ id: r.id, depth: 0 })).reverse();
-    const visited = new Set<number>();
-    while (stack.length) {
-      const cur = stack.pop()!;
-      if (visited.has(cur.id)) continue;
-      visited.add(cur.id);
-      const loc = byIdAll.get(cur.id);
-      if (!loc) continue;
-      out.push({ id: loc.id, name: loc.name, depth: cur.depth, hasMap: !!(loc.map_image_path || loc.map_image_url) });
-      const kids = (byParentAll.get(cur.id) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, "ru", { numeric: true }));
-      for (let i = kids.length - 1; i >= 0; i--) stack.push({ id: kids[i].id, depth: cur.depth + 1 });
-    }
-    return out;
   })();
 
   function breadcrumb(loc: SettingLocation): string {
@@ -400,8 +384,8 @@ export function LocationTree({ settingId }: Props) {
           }}
         />
       )}
-      <div className="row" style={{ alignItems: "flex-start", gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="row" style={{ alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 420px", minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="row" style={{ alignItems: "center" }}>
             <input
               placeholder="Поиск по названию, типу, алиасам…"
@@ -523,6 +507,8 @@ export function LocationTree({ settingId }: Props) {
               setDraggedId={setDraggedId}
               isDescendant={isDescendant}
               highlightQuery={debouncedQuery}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
             />
           ))}
           {roots.length === 0 && !loading && !loadError && (
@@ -544,47 +530,155 @@ export function LocationTree({ settingId }: Props) {
           </div>
         )}
         </div>
-        {minimapItems.length > 10 && (
-          <div
-            style={{
-              position: "sticky",
-              top: 12,
-              width: 80,
-              maxHeight: "60vh",
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-              padding: 4,
-              border: "1px solid var(--line)",
-              background: "var(--paper-2)",
-              flexShrink: 0,
-            }}
-            title="Мини-карта иерархии — клик скроллит к узлу"
-          >
-            {minimapItems.map((it) => (
-              <div
-                key={it.id}
-                onClick={() => {
-                  const el = treeRef.current?.querySelector(`details[data-location-id="${it.id}"]`) as HTMLElement | null;
-                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  if (el && !(el as HTMLDetailsElement).open) (el as HTMLDetailsElement).open = true;
-                }}
-                title={it.name}
-                style={{
-                  height: 6,
-                  marginLeft: it.depth * 6,
-                  background: it.hasMap ? "var(--status-held)" : "var(--muted)",
-                  opacity: it.hasMap ? 1 : 0.55,
-                  borderRadius: 1,
-                  cursor: "pointer",
-                }}
-              />
-            ))}
-          </div>
-        )}
+        <LocationSideCard
+          locationId={selectedId}
+          byParentAll={byParentAll}
+          onOpenWizard={setWizardParentId}
+        />
       </div>
     </div>
+  );
+}
+
+interface LocationDetailLite {
+  id: number;
+  name: string;
+  kind: string | null;
+  description: string | null;
+  thumbnail_image_url?: string | null;
+  avatar_image_url?: string | null;
+  inhabitant_beings: { id: number }[];
+  nested_inhabitant_beings: { id: number }[];
+  inhabitant_communities: { id: number }[];
+  chapters: { id: number }[];
+}
+
+/** Правая карточка Списка: тамбнейл, имя, счётчики с учётом вложенности. */
+function LocationSideCard({
+  locationId,
+  byParentAll,
+  onOpenWizard,
+}: {
+  locationId: number | null;
+  byParentAll: Map<number | null, SettingLocation[]>;
+  onOpenWizard: (id: number) => void;
+}) {
+  const [detail, setDetail] = useState<LocationDetailLite | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (locationId == null) return;
+    const controller = new AbortController();
+    setLoading(true);
+    api
+      .get<LocationDetailLite>(`/setting-locations/${locationId}?nested=1`, {
+        signal: controller.signal,
+      })
+      .then((d) => {
+        if (controller.signal.aborted) return;
+        setDetail(d);
+        setLoadError(null);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setLoadError(String(e instanceof Error ? e.message : e));
+        setLoading(false);
+      });
+    return () => controller.abort();
+  }, [locationId]);
+
+  const descCount = useMemo(() => {
+    if (locationId == null) return 0;
+    let n = 0;
+    const stack = (byParentAll.get(locationId) ?? []).map((l) => l.id);
+    const seen = new Set<number>([locationId]);
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      n += 1;
+      for (const k of byParentAll.get(id) ?? []) stack.push(k.id);
+    }
+    return n;
+  }, [locationId, byParentAll]);
+
+  // Протухший detail от прошлого выбора не показываем — только свой.
+  const shown = detail && detail.id === locationId ? detail : null;
+  const thumb = shown
+    ? (shown.thumbnail_image_url || shown.avatar_image_url || null)
+    : null;
+  const safeThumb = thumb && isSafeImageUrl(thumb) ? thumb : null;
+  const population =
+    (shown?.inhabitant_beings.length ?? 0) + (shown?.nested_inhabitant_beings.length ?? 0);
+
+  return (
+    <aside
+      className="card stack location-sidecard"
+      aria-label="Карточка локации"
+      aria-busy={loading}
+    >
+      {locationId == null && (
+        <EmptyState kind="search"
+          title="Нет выбранной"
+          hint="Кликните по локации в списке — справа появится карточка."
+        />
+      )}
+      {locationId != null && loading && !shown && (
+        <>
+          <div className="search-skeleton-pulse" style={{ height: 140 }} />
+          <div className="search-skeleton-pulse" style={{ height: 20 }} />
+          <div className="search-skeleton-pulse" style={{ height: 60 }} />
+        </>
+      )}
+      {locationId != null && loadError && !shown && (
+        <p className="muted">
+          Не удалось загрузить: {loadError}
+        </p>
+      )}
+      {shown && (
+        <>
+          {safeThumb ? (
+            <img
+              src={safeThumb}
+              alt=""
+              className="location-sidecard__thumb"
+            />
+          ) : (
+            <div className="location-sidecard__nothumb muted">Без изображения</div>
+          )}
+          <div className="location-sidecard__head">
+            <strong className="location-sidecard__name">{shown.name}</strong>
+            {shown.kind && <span className="geography-kind"> · {shown.kind}</span>}
+          </div>
+          <dl className="location-sidecard__stats">
+            <div>
+              <dt>Вложенных</dt>
+              <dd>{descCount}</dd>
+            </div>
+            <div>
+              <dt>Население</dt>
+              <dd>{loading ? "…" : population}</dd>
+            </div>
+            <div>
+              <dt>Сообществ</dt>
+              <dd>{loading ? "…" : shown.inhabitant_communities.length}</dd>
+            </div>
+            <div>
+              <dt>Статей</dt>
+              <dd>{loading ? "…" : shown.chapters.length}</dd>
+            </div>
+          </dl>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <Link to={`/locations/${shown.id}`} className="primary" style={{ padding: "6px 12px", border: "1px solid var(--primary-bg)" }}>
+              Открыть →
+            </Link>
+            <button onClick={() => onOpenWizard(shown.id)}>+ Вложенная</button>
+          </div>
+        </>
+      )}
+    </aside>
   );
 }
 
@@ -598,6 +692,8 @@ export function LocationNode({
   setDraggedId,
   isDescendant,
   highlightQuery,
+  selectedId,
+  onSelect,
 }: {
   location: SettingLocation;
   byParent: Map<number | null, SettingLocation[]>;
@@ -608,6 +704,8 @@ export function LocationNode({
   setDraggedId?: (id: number | null) => void;
   isDescendant?: (ancestorId: number, maybeDescendantId: number) => boolean;
   highlightQuery?: string;
+  selectedId?: number | null;
+  onSelect?: (id: number) => void;
 }) {
   const [addingChild, setAddingChild] = useState(false);
   const [childName, setChildName] = useState("");
@@ -833,7 +931,8 @@ export function LocationNode({
       <details ref={detailsRef} className="card" draggable onDragStart={handleDragStart} onDragEnd={handleDragEnd} data-location-id={location.id}>
         <summary
           tabIndex={0}
-          className={`geography-node-header${dragOver ? " drag-over" : ""}`}
+          className={`geography-node-header${dragOver ? " drag-over" : ""}${selectedId === location.id ? " is-selected" : ""}`}
+          onClick={() => onSelect?.(location.id)}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -1026,6 +1125,8 @@ export function LocationNode({
               setDraggedId={setDraggedId}
               isDescendant={isDescendant}
               highlightQuery={highlightQuery}
+              selectedId={selectedId}
+              onSelect={onSelect}
             />
           ))}
         </div>

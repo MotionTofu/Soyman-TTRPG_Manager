@@ -872,3 +872,542 @@
   font-size: calc(var(--fs, 15px) * 0.87);
   width: 130px;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Колода карт (гриллинг 2026-09-04)                                       */
+/* ---------------------------------------------------------------------- */
+
+/* Рамка карты. Бока тонкие и цветные — цвет класса; верх и низ обычные, они
+   несут содержимое. Каждые лишние 12 px рамки по бокам стоят 24 px ширины
+   строки, поэтому кромка узкая, а орнамент живёт в углах, а не по периметру
+   (дизайн-система §6.2: радиусов нет, теней нет). */
+.dnd-card-frame {
+  border-left: 5px solid var(--line);
+  border-right: 5px solid var(--line);
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+/* Полоска названий колоды: одна на телефон и на десктоп. Прокручивается
+   вбок, а не переносится на вторую строку — перенос менял высоту листа при
+   переключении карты, и содержимое прыгало под пальцем. */
+.dnd-deck-strip {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  margin: 0 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.dnd-deck-strip::-webkit-scrollbar {
+  display: none;
+}
+.dnd-deck-strip button {
+  flex: none;
+  position: relative;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 6px 0;
+  margin-bottom: -1px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dnd-deck-strip button.active {
+  color: var(--ink);
+  font-weight: 600;
+  /* Цвет подчёркивания приходит инлайном — он свой у каждого класса. */
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+}
+.dnd-deck-strip button:hover {
+  color: var(--ink);
+}
+
+/* Первая карта: тот же стек, что и раньше был шапкой, — но теперь у неё
+   есть верх и низ, и между блоками нужен воздух карты, а не вкладки. */
+.dnd-card-face {
+  gap: 12px;
+}
+
+/* Разворот колоды веером — миниатюры всех карт во весь экран. Сетка в две
+   колонки на телефоне: восемь карт умещаются без прокрутки, а прокрутка
+   внутри разворота свела бы на нет весь смысл жеста. */
+.dnd-deck-fan {
+  /* Ширину задаёт модалка, а не разворот: min-width по vw не знает про её
+     собственные поля и выпихивал вторую колонку за край экрана. */
+  width: 100%;
+  max-width: 520px;
+  min-width: min(62vw, 420px);
+  box-sizing: border-box;
+  gap: 12px;
+}
+.dnd-deck-fan-head {
+  justify-content: space-between;
+  align-items: baseline;
+}
+.dnd-deck-fan-head h3 {
+  margin: 0;
+}
+.dnd-deck-fan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.dnd-deck-fan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  text-align: left;
+  min-height: 84px;
+  padding: 10px;
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-left-width: 4px;
+  border-right-width: 4px;
+  border-radius: 0;
+  cursor: pointer;
+}
+.dnd-deck-fan-card.is-current {
+  /* Цвет приходит инлайном — он свой у каждого класса. */
+  color: var(--paper);
+}
+.dnd-deck-fan-card.is-current .dnd-deck-fan-meta {
+  color: inherit;
+  opacity: 0.85;
+}
+.dnd-deck-fan-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.dnd-deck-fan-meta {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+/* Портрет на первой карте. Высота фиксированная, а не по пропорции карты:
+   у карты в приложении высота растёт по содержимому, и «половина карты»
+   ничего не значит — половина чего, если «Снаряжение» вдвое длиннее? */
+.dnd-card-portrait-zone {
+  position: relative;
+  height: 260px;
+  margin: -10px -10px 0;
+}
+.dnd-card-portrait {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+.dnd-card-portrait > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.88) contrast(1.04);
+}
+/* То же зерно, что у бумаги листа: без него фотография выпадает из зина
+   отдельным глянцевым пятном (дизайн-система §5.1). */
+.dnd-card-portrait-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.22) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: multiply;
+  opacity: 0.38;
+}
+/* Уход в бумагу — не в ноль, а до силы отражения (7%), чтобы на стыке не
+   было шва. */
+.dnd-card-portrait-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 46%,
+    rgba(232, 228, 218, 0.55) 72%,
+    var(--paper) 100%
+  );
+  opacity: 0.93;
+}
+/* Отражённый двойник — нижняя половина фигурной карты. Живёт внутри
+   портретного блока, а не под ним: иначе его высота зависела бы от того,
+   сколько строк на карте, и отражение «съезжало» бы при каждой правке. */
+.dnd-card-portrait-ghost {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 260px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.07;
+  transform: scale(-1, -1);
+}
+.dnd-card-portrait-ghost > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Ghost вылезает за портрет — карте нужен свой контекст наложения, иначе он
+   ляжет поверх соседних блоков листа. */
+.dnd-card-face {
+  position: relative;
+  isolation: isolate;
+}
+/* Под содержимое уходят сами изображения, а не зона целиком: картуш живёт
+   внутри зоны, и стекинг-контекст с z-index:-1 утащил бы имя под карту. */
+.dnd-card-portrait,
+.dnd-card-portrait-ghost {
+  z-index: -1;
+}
+
+/* Картуш — имя у нижнего края портретной половины (макет 2026-09-04). */
+.dnd-card-cartouche {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 12px 8px;
+}
+.dnd-card-cartouche-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 0.96;
+  /* Тень бумагой, а не чернилами: имя стоит на месте, где портрет уже
+     растворился, и подсветка снизу отделяет его от остатков картинки. */
+  text-shadow: 0 1px 0 var(--paper);
+}
+.dnd-card-cartouche-class {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  min-width: 0;
+}
+.dnd-card-level {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  padding: 1px 7px;
+  flex: none;
+}
+.dnd-card-cartouche-classline,
+.dnd-card-cartouche-origin {
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: var(--label-transform);
+  color: var(--label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Вид и предыстория у нас длиннее макетных: в них едет и английское имя из
+   компендиума («Человек [Human]»). Строке разрешено сложиться надвое —
+   обрезанное «Бонус масте…» не говорит ничего. */
+.dnd-card-cartouche-origin {
+  margin-top: 3px;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+/* Жетон вдохновения — угол карты, а не ячейка в сетке виталов. Круг здесь
+   законен: дизайн-система (§6.2) оставляет скругления аватарам и жетонам. */
+.dnd-inspiration-token {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.dnd-inspiration-token:disabled {
+  cursor: default;
+}
+/* Поверх портрета жетон нужен светлым: фотография под ним какая угодно. */
+.dnd-inspiration-token.on-portrait {
+  border-color: rgba(232, 228, 218, 0.75);
+  background: rgba(28, 28, 28, 0.4);
+  color: var(--on-surface);
+}
+/* Цвет заливки приходит инлайном — он свой у каждого класса. */
+.dnd-inspiration-token.is-on {
+  color: var(--paper);
+}
+
+/* ---- Кость: число внутри силуэта (§6.5, макет карты 2026-09-04). Общая для
+   триады и ряда характеристик — components/dnd/DndDie.tsx. Силуэт голый: ни
+   внутренних рёбер, ни точек по углам, из-за которых прошлая попытка
+   читалась грудой. ---- */
+.dnd-die {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.dnd-die-sm {
+  max-width: 56px;
+  aspect-ratio: 46 / 53;
+}
+.dnd-die-lg {
+  max-width: 74px;
+  aspect-ratio: 60 / 69;
+}
+.dnd-die svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.dnd-die-outline {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.dnd-die-lg .dnd-die-outline {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+/* Владение спасброском — верхние рёбра кости в цвете класса, а не галочка
+   сбоку. Цвет приходит инлайном: он свой у каждого класса. */
+.dnd-die-edge {
+  fill: none;
+  stroke-width: 3.5;
+  vector-effect: non-scaling-stroke;
+}
+.dnd-die.is-save-prof .dnd-die-outline,
+.dnd-ability-die.is-save-prof .dnd-die-outline {
+  stroke: var(--ink);
+  stroke-width: 2.5;
+}
+.dnd-die-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+}
+.dnd-die-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: 1;
+}
+.dnd-die-lg .dnd-die-value {
+  font-size: var(--fs-h2);
+}
+.dnd-die-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  line-height: 1.1;
+}
+/* Залитая кость (хиты) — текст на цвете класса. */
+.dnd-die.is-filled .dnd-die-value,
+.dnd-die.is-filled .dnd-die-sub {
+  color: var(--paper);
+}
+
+/* Ряд характеристик: колонка кликается целиком — переворот на спасбросок
+   остался прежним жестом, просто цель стала крупнее. */
+.dnd-ability-die {
+  cursor: pointer;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Шесть костей всегда в один ряд. auto-fit по minmax(56px) переносил шестую
+   на вторую строку — а «пять и одна» читается как поломка вёрстки, а не как
+   набор характеристик. Правило только для вида: в правке в плитке живёт поле
+   ввода, и ей ширина нужнее. */
+.dnd-abilities-row-dice {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+  justify-items: center;
+}
+
+/* ---- Ряд из четырёх костей: КЗ, хиты, пассивное восприятие, скорость.
+   Отдельно от .sb-vitals: там ячейки переносятся по мере надобности, а этот
+   ряд должен остаться рядом при любой ширине — четыре кости в строку и есть
+   тот «взгляд на лист», ради которого карта затевалась. ---- */
+.dnd-triad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  text-align: center;
+  border: var(--card-border-width, 1px) solid var(--line);
+  margin-bottom: 6px;
+}
+.dnd-triad > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  min-width: 0;
+}
+.dnd-triad > div + div {
+  border-left: var(--card-border-width, 1px) solid var(--line);
+}
+/* Подпись — под костью, как на макете. Порядком, а не перестановкой в
+   разметке: кость с подписью собирают три разных компонента (КЗ и хиты ещё
+   и с правкой внутри), и менять её у каждого значило бы переставлять
+   подпись в местах, где она стоит сверху по делу. Заодно решается прежняя
+   беда: двухстрочная «Пасс. воспр.» больше не сдвигает свою кость вниз —
+   кости идут первыми и стоят на одной линии. */
+.dnd-triad .sb-label {
+  order: 2;
+}
+/* Кость не растягивается на всю колонку: правильный шестиугольник живёт
+   только в своей пропорции, а колонки на широком экране шире кости. */
+.dnd-triad .dnd-die {
+  margin: 0 auto;
+}
+.dnd-triad .sb-value-button {
+  display: block;
+  width: 100%;
+}
+/* Подпись под рядом — прочие способы передвижения и старая свободная строка
+   скорости. Кость отвечает только на «сколько я прохожу». */
+.dnd-triad-note {
+  margin: -2px 0 6px;
+  font-size: var(--fs-meta);
+  text-align: center;
+}
+
+/* ---- Плашка чарника в профиле (телефон) и сам чарник на своём маршруте.
+   Гриллинг 2026-09-04: на телефоне лист внутри профиля оказывался в чужой
+   прокрутке, под крошками, шапкой профиля и рядом вкладок. ---- */
+.sheet-plate {
+  display: flex;
+  align-items: stretch;
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+}
+.sheet-plate-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+.sheet-plate-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  line-height: 1.1;
+}
+/* Вид, класс с подклассом и уровень — второй строкой: в одну строку с
+   именем это обрезается ровно на подклассе, то есть на самом различающем
+   куске. */
+.sheet-plate-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.sheet-plate-remove {
+  align-self: center;
+  margin-right: 8px;
+}
+
+/* Страница чарника. Панели приложения скрыты (body.sheet-fullscreen), сверху
+   своя узкая полоса: «назад», имя. Кнопки удаления здесь нет намеренно —
+   удалять лист с экрана, где по нему играют, значит ждать беды. */
+.sheet-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sheet-page-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  background: var(--paper-2);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+}
+.sheet-page-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.sheet-fullscreen .mobile-topbar,
+body.sheet-fullscreen .mobile-bottom-nav,
+body.sheet-fullscreen .mini-player-bar {
+  display: none !important;
+}
+body.sheet-fullscreen .app-content {
+  padding: 0 10px 10px;
+}
+
+/* Живой ряд — инициатива, концентрация, истощение: то, что меняется в бою.
+   Плашками в строку, как на макете, а не ячейками общей сетки: концентрация
+   при включении заливается, и в сетке она двигала соседей. */
+.dnd-live-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  margin-bottom: 6px;
+}
+.dnd-live-row > div {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 5px 7px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  text-align: center;
+}
+.dnd-live-row .sb-value,
+.dnd-live-row .sb-value-button {
+  font-size: var(--fs-meta);
+}
