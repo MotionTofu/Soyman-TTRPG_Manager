@@ -291,6 +291,18 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     ...startingSetsFrom(backgroundEntry ?? undefined, backgroundEntry?.name ?? "Предыстория"),
   ];
   const setTaken = (label: string) => takenSets[label] ?? label.endsWith("набор A");
+  // Класс или предыстория выбраны, а их запись ещё не приехала — набора
+  // просто ещё нет, и это не то же самое, что «набора нет в справочнике».
+  const setsStillLoading = (!!classId && !classEntry) || (!!backgroundId && !backgroundEntry);
+  const takenSummary = startingSets
+    .filter((s) => setTaken(s.label))
+    .reduce(
+      (acc, s) => ({
+        items: acc.items + s.items.length + s.manual.length,
+        gold: acc.gold + (Number.parseInt((s.gold ?? "").trim(), 10) || 0),
+      }),
+      { items: 0, gold: 0 }
+    );
 
   const classGrants = grantsFromEntry(classEntry ?? undefined, resolveSkill);
   const speciesGrants = grantsFromEntry(speciesEntry ?? undefined, resolveSkill);
@@ -975,12 +987,22 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
 
       {step === "Снаряжение" && (
         <div className="stack">
-          {startingSets.length === 0 ? (
+          {/* Три разных «ничего» вместо одного. Раньше строка была одна — «в
+              справочнике набора нет», — и она же показывалась, когда запись
+              класса просто ещё не догрузилась. Персонаж в этом случае
+              создавался без снаряжения и без золота, и понять, почему, было
+              неоткуда. */}
+          {startingSets.length === 0 && setsStillLoading && (
+            <span className="muted">Справочник ещё грузится — подождите секунду.</span>
+          )}
+          {startingSets.length === 0 && !setsStillLoading && (
             <span className="muted">
-              У выбранных класса и предыстории набора в справочнике нет — снаряжение добавите
-              вручную во вкладке «Инвентарь».
+              {classId || backgroundId
+                ? "У выбранных класса и предыстории набора в справочнике нет — снаряжение добавите вручную во вкладке «Инвентарь»."
+                : "Класс и предыстория не выбраны — набор брать неоткуда."}
             </span>
-          ) : (
+          )}
+          {startingSets.length > 0 && (
             startingSets.map((set) => (
               <label key={set.label} className="row" style={{ alignItems: "flex-start", gap: 8 }}>
                 <input
@@ -1006,6 +1028,15 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 </span>
               </label>
             ))
+          )}
+          {/* Итог прямо здесь: сколько предметов и сколько золота ляжет на
+              лист. Проверить это после создания дороже, чем увидеть до. */}
+          {startingSets.length > 0 && (
+            <span>
+              <strong>Итого:</strong> {takenSummary.items} предметов
+              {takenSummary.gold > 0 && `, ${takenSummary.gold} ЗМ`}
+              {takenSummary.items === 0 && takenSummary.gold === 0 && " — ничего не отмечено"}
+            </span>
           )}
           <span className="muted">
             Наборы «A» и «B» — это «взять снаряжением» или «взять деньгами»; брать оба правила не
@@ -1054,7 +1085,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               </div>
             ) : (
               <div>
-                <strong>Снаряжение:</strong> {taken.map((s) => s.label).join(" · ")}
+                <strong>Снаряжение:</strong> {taken.map((s) => s.label).join(" · ")} ·{" "}
+                {takenSummary.items} предметов
+                {takenSummary.gold > 0 && ` · ${takenSummary.gold} ЗМ`}
               </div>
             );
           })()}
