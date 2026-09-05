@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; background: #e8e4da; color: #1c1c1c; }
+    a { color: #c2410c; } a:hover { color: #92310a; }
+    .lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .grp { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #63625f; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid rgba(28,28,28,.18); min-height: 44px; box-sizing: border-box; }
+    .box { width: 22px; height: 22px; border: 2px solid #1c1c1c; flex: none; display: flex; align-items: center; justify-content: center; }
+    .chip { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; padding: 5px 9px; border: 1.5px solid rgba(28,28,28,.4); color: #63625f; white-space: nowrap; }
+    .chip-on { background: #1c1c1c; border-color: #1c1c1c; color: #e8e4da; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #e8e4da; background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 3px 3px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
+
+  <!-- шапка полноэкранного подборщика -->
+  <div style="flex: none; padding: 16px 16px 12px; border-bottom: 2px solid #1c1c1c">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
+      <div>
+        <div style="font-family: 'Cormorant SC', serif; font-weight: 700; font-size: 26px; line-height: 1">Взять заклинания</div>
+        <div class="lbl" style="color: #63625f; margin-top: 5px">Ларион · Чародей 5 · известно 6 из 7</div>
+      </div>
+      <svg viewBox="0 0 22 22" style="width: 22px; height: 22px; flex: none; margin-top: 4px"><path d="M3 3 L19 19 M19 3 L3 19" stroke="#1c1c1c" stroke-width="2"/></svg>
+    </div>
+
+    <!-- поиск есть, но он не первый: первым идёт выкладка -->
+    <div style="margin-top: 12px; border-bottom: 2px solid rgba(28,28,28,.35); padding: 4px 0 6px; display: flex; align-items: center; gap: 8px">
+      <svg viewBox="0 0 20 20" style="width: 15px; height: 15px; flex: none"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="#63625f" stroke-width="1.8"/><path d="M12.8 12.8 L17 17" stroke="#63625f" stroke-width="1.8"/></svg>
+      <div class="lbl" style="color: #63625f">Искать, если уже знаете название</div>
+    </div>
+
+    <div style="display: flex; gap: 6px; margin-top: 12px; overflow: hidden">
+      <div class="chip chip-on">Мой класс</div>
+      <div class="chip chip-on">Мой круг</div>
+      <div class="chip">1 круг</div>
+      <div class="chip">2 круг</div>
+      <div class="chip">Все</div>
+    </div>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; overflow: hidden">
+
+    <div style="display: flex; align-items: center; gap: 8px; padding: 14px 16px 7px">
+      <div class="grp">Часто берут на пятом уровне</div>
+      <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+    </div>
+
+    <div class="row" style="background: #e0dcd2">
+      <div class="box" style="background: #c2410c; border-color: #c2410c">
+        <svg viewBox="0 0 18 18" style="width: 14px; height: 14px"><path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" stroke-width="2.6"/></svg>
+      </div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Огненный шар</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Воплощение · действие · 150 фт</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">3 круг</div>
+    </div>
+
+    <div class="row" style="background: #e0dcd2">
+      <div class="box" style="background: #c2410c; border-color: #c2410c">
+        <svg viewBox="0 0 18 18" style="width: 14px; height: 14px"><path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" stroke-width="2.6"/></svg>
+      </div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Магическая стрела</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Воплощение · действие · 120 фт</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">1 круг</div>
+    </div>
+
+    <div class="row">
+      <div class="box"></div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Щит</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Ограждение · реакция · +5 КЗ</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">1 круг</div>
+    </div>
+
+    <div class="row" style="background: #e0dcd2">
+      <div class="box" style="background: #c2410c; border-color: #c2410c">
+        <svg viewBox="0 0 18 18" style="width: 14px; height: 14px"><path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" stroke-width="2.6"/></svg>
+      </div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Туманный шаг</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Ограждение · бонусное · 30 фт</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">2 круг</div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; padding: 16px 16px 7px">
+      <div class="grp">Первый и второй круг · остальное</div>
+      <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+    </div>
+
+    <div class="row">
+      <div class="box"></div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Волшебная рука</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Вызов · действие · 30 фт</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">1 круг</div>
+    </div>
+
+    <div class="row" style="background: #e0dcd2">
+      <div class="box" style="background: #c2410c; border-color: #c2410c">
+        <svg viewBox="0 0 18 18" style="width: 14px; height: 14px"><path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" stroke-width="2.6"/></svg>
+      </div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Обнаружение магии</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Прорицание · ритуал · концентрация</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">1 круг</div>
+    </div>
+
+    <div class="row">
+      <div class="box"></div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Доспехи мага</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Ограждение · действие · 8 часов</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">1 круг</div>
+    </div>
+
+    <div class="row">
+      <div class="box"></div>
+      <div style="flex: 1 1 auto; min-width: 0">
+        <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Сон</div>
+        <div class="lbl" style="color: #63625f; margin-top: 2px">Очарование · действие · 90 фт</div>
+      </div>
+      <div class="num" style="font-size: 12px; color: #42413f; flex: none">1 круг</div>
+    </div>
+  </div>
+
+  <!-- пачка: отметил пять — добавил одним нажатием -->
+  <div style="flex: none; border-top: 2px solid #1c1c1c; background: #e8e4da; padding: 12px 16px 16px; display: flex; align-items: center; gap: 12px">
+    <div class="lbl" style="color: #63625f; flex: 1 1 auto">Отмечено <span class="num" style="font-size: 14px; color: #1c1c1c; font-weight: 700">5</span></div>
+    <div class="lbl" style="border: 1.5px solid rgba(28,28,28,.4); color: #63625f; padding: 11px 14px">Снять</div>
+    <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 11px 18px; font-weight: 500">Добавить 5</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

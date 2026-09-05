@@ -8,6 +8,9 @@ interface Props {
   // accidental click outside would discard unsaved input (e.g. the @-mention
   // "create new entity" flow), forcing the user through an explicit button.
   closeOnBackdropClick?: boolean;
+  // Подбор пачкой с телефона (этап 6): широкое окно вместо 420px —
+  // спискам нужно место, а мишеням ширина.
+  wide?: boolean;
 }
 
 // Rendered via a portal into <body> so the modal never ends up nested inside
@@ -15,7 +18,7 @@ interface Props {
 // otherwise forward any click inside the modal (like a mouseup after
 // dragging in an image cropper) to that input, silently reopening the file
 // picker.
-export function Modal({ onClose, children, closeOnBackdropClick = true }: Props) {
+export function Modal({ onClose, children, closeOnBackdropClick = true, wide }: Props) {
   // A "click" only means the mousedown AND mouseup landed on the same
   // element. Selecting text inside the modal and dragging past its edge
   // before releasing ends the drag over the backdrop — the browser then
@@ -87,7 +90,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true }: Props)
         mouseDownOnBackdrop.current = false;
       }}
     >
-      <div className="modal" ref={modalRef} role="dialog" aria-modal="true" tabIndex={-1}>
+      <div className={wide ? "modal modal-wide" : "modal"} ref={modalRef} role="dialog" aria-modal="true" tabIndex={-1}>
         {children}
       </div>
     </div>,

@@ -11,6 +11,8 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useAlert } from "../hooks/useConfirm";
+import { useCurrentUser } from "../api/currentUser";
+import { RemindersWidget } from "../components/RemindersWidget";
 import { formatImportantDate } from "../inworldCalendar";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
@@ -48,6 +50,7 @@ export function CharacterDetailPage() {
   const [alertDialog, showAlert] = useAlert();
   const [notFound, setNotFound] = useState(false);
   const [tab, selectTab] = useTabState(TAB_KEYS, "statblock");
+  const { user } = useCurrentUser();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [shortNameDraft, setShortNameDraft] = useState("");
@@ -380,16 +383,29 @@ export function CharacterDetailPage() {
 
       <div className="stack">
         {tab === "statblock" && (
-          <StatblockList
-            ownerType="character"
-            ownerId={characterId}
-            campaignId={character.campaign_id ?? undefined}
-            ownerName={character.character_name}
-            ownerPlayerName={character.player_name}
-            ownerPortraitUrl={character.avatar_image_url}
-            soleOnPage
-            sheetHref={`/characters/${characterId}/sheet`}
-          />
+          <>
+            {/* Послания персонажу пишет Мастер отсюда — из карточки, открытой
+                из профиля игрока (этап 4). Игроку виджет не показывается:
+                прочтение ставит адресат на обороте карты, а не Мастер.
+                Послание приходит на оборот карты персонажа, а не на Главную. */}
+            {user?.role !== "player" && (
+              <div className="card stack">
+                <div className="player-section-header">Послания персонажу — придут на оборот его карты</div>
+                <RemindersWidget targetType="character" targetId={characterId} />
+              </div>
+            )}
+            <StatblockList
+              ownerType="character"
+              ownerId={characterId}
+              campaignId={character.campaign_id ?? undefined}
+              ownerName={character.character_name}
+              ownerPlayerName={character.player_name}
+              ownerPortraitUrl={character.avatar_image_url}
+              soleOnPage
+              sheetHref={`/characters/${characterId}/sheet`}
+              onPortraitRefresh={() => refresh()}
+            />
+          </>
         )}
 
         {tab === "about" && (

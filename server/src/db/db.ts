@@ -1445,6 +1445,32 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec("ALTER TABLE gm_reminders ADD COLUMN read_at TEXT");
   }
 
+  // Передачи вещей между персонажами игроков (этап 4б): оффер → принять /
+  // отклонить → вернуть / сделать своим, деньги — мгновенно. Игрок не пишет
+  // в чужой лист напрямую, поэтому посредником выступает сервер: он же
+  // кладёт locked-строки в оба листа и рассылает обновления. Имена обеих
+  // сторон хранятся рядом с id (правило «имя рядом с id»).
+  if (!tableExists(database, "character_transfers")) {
+    database.exec(`CREATE TABLE character_transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      sender_name TEXT NOT NULL DEFAULT '',
+      recipient_character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      recipient_name TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL DEFAULT 'item',
+      item_name TEXT NOT NULL DEFAULT '',
+      item_json TEXT NOT NULL DEFAULT '{}',
+      qty INTEGER NOT NULL DEFAULT 1,
+      coins_json TEXT NOT NULL DEFAULT '{}',
+      state TEXT NOT NULL DEFAULT 'offered',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(
+      `CREATE INDEX idx_character_transfers_parties ON character_transfers(sender_character_id, recipient_character_id, state)`
+    );
+  }
+
   // Права администратора — единственное, что закрыто отдельно от роли: смена
   // роли у чужих учёток. Сама роль при этом остаётся 'gm', то есть обычный
   // мастерский доступ у такого аккаунта тоже есть.

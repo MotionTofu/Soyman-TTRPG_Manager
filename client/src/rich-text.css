@@ -22,6 +22,15 @@
   overflow-y: auto;
   z-index: 20;
 }
+/* Подсказки над полем. Нужно там, где поле стоит у нижнего края
+   содержимого: в снаряжении лист длинный, ввод оказывается внизу экрана, и
+   список уходил за его границу целиком. */
+.mention-dropdown.is-above {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
 .mention-dropdown-item {
   padding: 6px 10px;
   cursor: pointer;

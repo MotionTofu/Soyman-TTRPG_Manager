@@ -386,10 +386,11 @@ export interface PlayerDetail extends Player {
 
 export interface GmReminder {
   id: number;
-  target_type: "player" | "campaign";
+  target_type: "player" | "campaign" | "character";
   target_id: number;
   message: string;
   created_at: string;
+  read_at?: string | null;
 }
 
 export type StatblockFormat =
@@ -829,6 +830,13 @@ export interface DndEquipmentItem {
    *  Системы уведомлений в приложении нет, поэтому «уведомление» — это сама
    *  строка в инвентаре с пометкой и двумя кнопками. */
   pendingFrom?: string;
+  /** Этап 4б: вещь отдана, но ещё не своя. transferOut — моя строка серая
+   *  («передано → имя»): снята с носки, из расчётов исключена. transferIn —
+   *  чужая строка у меня зелёная («принято ← имя») или фиолетовая, если вещь
+   *  создана умением («создал имя»): ею пользуются как своей. Имя рядом с id —
+   *  по правилу ссылок: id персонажа переживёт всё, а читается имя. */
+  transferOut?: { id: number; toCharacterId: number; toName: string; qty: number };
+  transferIn?: { id: number; fromCharacterId: number; fromName: string; kind: "item" | "replica" };
 }
 
 /** Схема реплики, известная Артефактору (решение W7): хранится у листа, а не
@@ -1078,6 +1086,9 @@ export interface DndCreatureData {
   equipment: DndCreatureEquipmentItem[];
   loot: DndCreatureLoot;
   notes: string;
+  // Точка фокуса портрета — как у персонажа (этап 9): кадрирование узкой
+  // зоны перетаскиванием. Живёт в статблоке, а не в записи существа.
+  portraitFocus?: { x: number; y: number };
 }
 
 // «Перенесена» была четвёртым статусом при старом «переносе», который

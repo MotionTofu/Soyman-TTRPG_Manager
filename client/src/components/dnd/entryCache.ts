@@ -25,6 +25,19 @@ const inflight = new Map<number, Promise<void>>();
 // не долбят сеть на каждый рендер, а показать и повторить можно осознанно.
 const failed = new Set<number>();
 
+// Мёртвые ссылки (этап 8): сервер ответил, но этих id в ответе нет — запись
+// удалили из компендиума уже после того, как её вписали в лист. В отличие от
+// сетевой неудачи это окончательно: повторный запрос не воскресит, поэтому
+// повторять не надо (исключены из missing ниже), а показать надо — сводкой
+// внизу листа. Лимит 900 — см. ensureEntries.
+const dead = new Set<number>();
+
+/** Id, которых сервер не вернул (этап 8). Кэш общий на сессию — вызывающий
+ *  сам пересекает со своим списком запрошенных. */
+export function deadEntryIds(): number[] {
+  return [...dead];
+}
+
 const listeners = new Set<() => void>();
 
 export function subscribeEntryCache(fn: () => void): () => void {
@@ -56,7 +69,7 @@ export function retryFailedEntries(): void {
 }
 
 export async function ensureEntries(ids: (number | null | undefined)[]): Promise<void> {
-  const missing = [...new Set(ids.filter((id): id is number => typeof id === "number" && !cache.has(id) && !failed.has(id)))];
+  const missing = [...new Set(ids.filter((id): id is number => typeof id === "number" && !cache.has(id) && !failed.has(id) && !dead.has(id)))];
   const toFetch = missing.filter((id) => !inflight.has(id));
   const waits = missing.filter((id) => inflight.has(id)).map((id) => inflight.get(id)!);
 
@@ -65,6 +78,15 @@ export async function ensureEntries(ids: (number | null | undefined)[]): Promise
       .get<CompendiumEntry[]>(`/systems/entries/batch?ids=${toFetch.join(",")}`)
       .then((entries) => {
         for (const e of entries) cache.set(e.id, e);
+        // Сервер молча обрезает запрос на 900 id (лимит переменных SQLite):
+        // при обрезке мёртвых не отмечаем вовсе, иначе получится ложная
+        // тревога по записям, которых просто не спросили.
+        if (toFetch.length <= 900) {
+          const found = new Set(entries.map((e) => e.id));
+          for (const id of toFetch) {
+            if (!found.has(id)) dead.add(id);
+          }
+        }
         notify();
       })
       .catch(() => {
@@ -88,11 +110,14 @@ export function invalidateEntry(id: number): void {
   cache.delete(id);
   // Снимаем и пометку неудачи: правка в компендиуме — повод сходить заново.
   failed.delete(id);
+  // И мёртвость: запись могли пересоздать — пусть лист проверит снова.
+  dead.delete(id);
   notify();
 }
 
 export function invalidateAllEntries(): void {
   cache.clear();
   failed.clear();
+  dead.clear();
   notify();
 }

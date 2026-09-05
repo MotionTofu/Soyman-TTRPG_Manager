@@ -43,6 +43,7 @@ import {
 import { MECHANICS_CREATURE_TYPE_GROUP, MECHANICS_ALIGNMENT_GROUP } from "../../compendium";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
+import { useFrameDrag } from "./portraitFrame";
 import type { DndAbilityPrimary } from "../../dndPrefs";
 import { effectsLabel, type DndCheck, type DndEffect } from "./effects";
 import { FeatureListEdit } from "./FeatureList";
@@ -382,6 +383,13 @@ export function normalizeDndCreature(raw: unknown): DndCreatureData {
     items: Array.isArray(legacyLoot?.items) ? legacyLoot!.items : [],
     currency: Array.isArray(legacyLoot?.currency) ? legacyLoot!.currency : [],
   };
+  // Точка фокуса портрета (этап 9): та же нормализация, что у персонажа —
+  // доли с зажимом в [0, 1], мусор превращается в отсутствие.
+  const focus = merged.portraitFocus as { x?: unknown; y?: unknown } | undefined;
+  merged.portraitFocus =
+    focus && typeof focus.x === "number" && typeof focus.y === "number"
+      ? { x: Math.min(1, Math.max(0, focus.x)), y: Math.min(1, Math.max(0, focus.y)) }
+      : undefined;
 
   return merged;
 }
@@ -1853,6 +1861,11 @@ export function DndCreatureView({
   }, [!!onQuickUpdate]);
 
   const patch = (p: Partial<DndCreatureData>) => onQuickUpdate?.(p);
+  // Кадрирование портрета перетаскиванием (этап 9): там, где карточка
+  // правится (есть onQuickUpdate). Черновик в полёте, коммит по отпусканию.
+  const frame = useFrameDrag(!!onQuickUpdate, value.portraitFocus, (f) => patch({ portraitFocus: f }));
+  const canFrame = !!onQuickUpdate;
+  const portraitPosition = `${frame.shown.x * 100}% ${frame.shown.y * 100}%`;
   function toggleSkill(skill: string) {
     patch({ skillProfs: { ...value.skillProfs, [skill]: !value.skillProfs[skill] } });
   }
@@ -1920,15 +1933,36 @@ export function DndCreatureView({
 
   function portrait(className: string) {
     const inner = avatarUrl ? (
-      <img src={avatarUrl} alt="" />
+      <img src={avatarUrl} alt="" style={{ objectPosition: portraitPosition }} />
     ) : (
       <span className="sbc__portrait-empty">+</span>
     );
     if (!onAvatarUpload) {
-      return avatarUrl ? <span className={className}>{inner}</span> : null;
+      return avatarUrl ? (
+        <span
+          className={`${className}${canFrame ? " is-framing" : ""}${frame.dragging ? " is-dragging" : ""}`}
+          title={canFrame ? "Тяните, чтобы кадрировать" : undefined}
+          onPointerDown={frame.handlers.onPointerDown}
+          onPointerMove={frame.handlers.onPointerMove}
+          onPointerUp={frame.handlers.onPointerUp}
+          onPointerCancel={frame.handlers.onPointerCancel}
+          onClickCapture={frame.handlers.onClickCapture}
+        >
+          {inner}
+        </span>
+      ) : null;
     }
     return (
-      <label className={className} title="Изображение существа" onClick={(e) => e.stopPropagation()}>
+      <label
+        className={`${className}${canFrame ? " is-framing" : ""}${frame.dragging ? " is-dragging" : ""}`}
+        title={canFrame ? "Тяните, чтобы кадрировать; клик — сменить изображение" : "Изображение существа"}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={frame.handlers.onPointerDown}
+        onPointerMove={frame.handlers.onPointerMove}
+        onPointerUp={frame.handlers.onPointerUp}
+        onPointerCancel={frame.handlers.onPointerCancel}
+        onClickCapture={frame.handlers.onClickCapture}
+      >
         {inner}
         <span className="sbc__portrait-hint">{avatarUploading ? "Загрузка…" : avatarUrl ? "Изменить" : "Добавить"}</span>
         <input

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { getCachedUser } from "../api/currentUser";
 import { Modal } from "./Modal";
 import { MentionText } from "./mentions/MentionText";
 import { DndCreatureView, normalizeDndCreature } from "./dnd/DndCreatureForm";
@@ -61,13 +62,23 @@ const PROFILE_PATH: Record<string, string> = {
   compendium_entry: "/compendium",
 };
 
-export function fetchCreatureCard(
+export async function fetchCreatureCard(
   type: string,
   id: number,
   statblockId?: number
 ): Promise<CreatureCardPayload> {
   const q = statblockId ? `?statblock_id=${statblockId}` : "";
-  return api.get<CreatureCardPayload>(`/creature-card/${type}/${id}${q}`);
+  try {
+    return await api.get<CreatureCardPayload>(`/creature-card/${type}/${id}${q}`);
+  } catch (e) {
+    // Жетон спутника открывает ту же карточку и у игрока, а мастерский
+    // /creature-card ему закрыт. Существа сеттинга (being) игроку не отдаём
+    // и здесь: игроцкий роут существует только для записей бестиария.
+    if (type === "compendium_entry" && getCachedUser()?.role === "player") {
+      return api.get<CreatureCardPayload>(`/player/creature-card/compendium_entry/${id}${q}`);
+    }
+    throw e;
+  }
 }
 
 // Скорость показывается, только если набор отличается от «ходьба 30» — и

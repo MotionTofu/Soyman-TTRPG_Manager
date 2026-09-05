@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useCurrentUser } from "../api/currentUser";
 import type { SearchResult } from "../types";
 
 // Compact search-and-pick control for choosing a compendium entry of one kind.
@@ -12,16 +13,29 @@ export function CompendiumEntryPicker({
   kind,
   placeholder,
   selectedLabel,
+  dropUp,
 }: {
   value: SearchResult | null;
   onChange: (entry: SearchResult | null) => void;
   kind: string;
   placeholder: string;
   selectedLabel: string;
+  /**
+   * Раскрывать список вверх. Нужно там, где поле стоит у нижнего края
+   * содержимого — на карте персонажа подсказки уходили за экран, и выбрать
+   * из них было нечего.
+   */
+  dropUp?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
+  // Мастерский /search игроку закрыт — у него свой /player/search (тот же
+  // приём, что в SearchPanel). Игроцкий роут ищет по системам кампаний игрока
+  // и не умеет фильтр kind — отбираем нужный вид здесь: kind у мастерского
+  // ответа, subtitle у игроцкого (там лежит тот же kind записи).
+  const { user } = useCurrentUser();
+  const isPlayer = user?.role === "player";
 
   useEffect(() => {
     if (!query.trim()) {
@@ -29,14 +43,20 @@ export function CompendiumEntryPicker({
       return;
     }
     const timer = setTimeout(() => {
+      const url = isPlayer
+        ? `/player/search?q=${encodeURIComponent(query.trim())}`
+        : `/search?q=${encodeURIComponent(query.trim())}&types=compendium_entry&kind=${kind}`;
       api
-        .get<SearchResult[]>(
-          `/search?q=${encodeURIComponent(query.trim())}&types=compendium_entry&kind=${kind}`
+        .get<SearchResult[]>(url)
+        .then((rows) =>
+          setResults(
+            isPlayer ? rows.filter((r) => r.type === "compendium_entry" && (r.kind ?? r.subtitle) === kind) : rows
+          )
         )
-        .then(setResults);
+        .catch(() => setResults([]));
     }, 200);
     return () => clearTimeout(timer);
-  }, [query, kind]);
+  }, [query, kind, isPlayer]);
 
   if (value) {
     return (
@@ -68,7 +88,7 @@ export function CompendiumEntryPicker({
           className="card stack"
           style={{
             position: "absolute",
-            top: "100%",
+            ...(dropUp ? { bottom: "100%" } : { top: "100%" }),
             left: 0,
             zIndex: 10,
             minWidth: 220,

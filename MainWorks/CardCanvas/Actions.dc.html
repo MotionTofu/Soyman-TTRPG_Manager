@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; background: #e8e4da; color: #1c1c1c; }
+    a { color: #c2410c; } a:hover { color: #92310a; }
+    .lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .grp { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #63625f; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #e8e4da; background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 3px 3px; display: flex; flex-direction: column; padding: 10px 8px 10px; box-sizing: border-box">
+
+  <div style="display: flex; gap: 14px; align-items: flex-end; height: 26px; overflow: hidden; flex: none; padding: 0 2px">
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Карта</div>
+    <div class="lbl" style="color: #1c1c1c; font-weight: 600; padding-bottom: 4px; border-bottom: 2px solid #c2410c; white-space: nowrap">Действия</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Магия</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Снаряжение</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Навыки</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Особен</div>
+  </div>
+
+  <div style="position: relative; width: 374px; flex: 1 1 auto; min-height: 0; margin-top: 10px; background: #e8e4da; border-left: 5px solid #c2410c; border-right: 5px solid #c2410c; border-top: 2px solid #1c1c1c; border-bottom: 2px solid #1c1c1c; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
+
+    <!-- ЛЕНТА ПУЛА: всплыла, потому что на этой карте есть строка, которая её тратит -->
+    <div style="flex: none; background: #1c1c1c; color: #e8e4da; padding: 9px 12px; display: flex; align-items: center; gap: 9px">
+      <div class="lbl" style="letter-spacing: .14em; flex: none">Очки чародейства</div>
+      <div style="display: flex; gap: 4px; flex: none">
+        <svg viewBox="0 0 20 20" style="width: 18px; height: 18px"><rect x="2" y="2" width="16" height="16" fill="#c2410c" stroke="#c2410c" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 20 20" style="width: 18px; height: 18px"><rect x="2" y="2" width="16" height="16" fill="#c2410c" stroke="#c2410c" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 20 20" style="width: 18px; height: 18px"><rect x="2" y="2" width="16" height="16" fill="#c2410c" stroke="#c2410c" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 20 20" style="width: 18px; height: 18px"><rect x="2" y="2" width="16" height="16" fill="none" stroke="rgba(232,228,218,.55)" stroke-width="2"/></svg>
+        <svg viewBox="0 0 20 20" style="width: 18px; height: 18px"><rect x="2" y="2" width="16" height="16" fill="none" stroke="rgba(232,228,218,.55)" stroke-width="2"/></svg>
+      </div>
+      <div class="num" style="font-size: 12px; color: #a3a099; flex: 1 1 auto">3 из 5</div>
+      <div class="lbl" style="color: #a3a099; flex: none">Долгий отдых</div>
+    </div>
+
+    <div style="flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column">
+
+      <!-- поиск по листу — виден всегда, главный жест на телефоне -->
+      <div style="flex: none; padding: 10px 12px 0; display: flex; align-items: center; gap: 8px">
+        <div style="flex: 1 1 auto; border-bottom: 2px solid #1c1c1c; padding: 4px 0 5px; display: flex; align-items: center; gap: 7px">
+          <svg viewBox="0 0 20 20" style="width: 15px; height: 15px; flex: none"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="#1c1c1c" stroke-width="1.8"/><path d="M12.8 12.8 L17 17" stroke="#1c1c1c" stroke-width="1.8"/></svg>
+          <div class="lbl" style="color: #63625f">Найти на листе</div>
+        </div>
+        <div class="lbl" style="border: 1.5px solid rgba(28,28,28,.4); color: #63625f; padding: 5px 8px; flex: none">Правка</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px; flex: none">
+        <div class="grp">Действие</div>
+        <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; padding: 0 12px; flex: none">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Огненный шар</div>
+            <div class="lbl" style="color: #63625f; margin-top: 2px">3 круг · сфера 20 фт · 150 фт</div>
+          </div>
+          <div style="text-align: right; flex: none">
+            <div class="num" style="font-size: 13px; font-weight: 700; line-height: 1">Слж 15</div>
+            <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">8к6 огонь</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Огненный снаряд</div>
+            <div class="lbl" style="color: #63625f; margin-top: 2px">Заговор · 120 фт</div>
+          </div>
+          <div style="text-align: right; flex: none">
+            <div class="num" style="font-size: 17px; font-weight: 700; line-height: 1">+7</div>
+            <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">2к10 огонь</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Обжигающий луч</div>
+            <div class="lbl" style="color: #63625f; margin-top: 2px">2 круг · три луча · 120 фт</div>
+          </div>
+          <div style="text-align: right; flex: none">
+            <div class="num" style="font-size: 17px; font-weight: 700; line-height: 1">+7</div>
+            <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">3 × 2к6</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px; flex: none">
+        <div class="grp">Бонусное действие</div>
+        <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; padding: 0 12px; flex: none">
+        <!-- строка, из-за которой лента очков и всплыла -->
+        <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(28,28,28,.2); background: #e0dcd2; margin: 0 -12px; padding: 9px 12px; border-left: 3px solid #c2410c">
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Ускоренное заклинание</div>
+            <div class="lbl" style="color: #63625f; margin-top: 2px">Метамагия · заговор бонусным действием</div>
+          </div>
+          <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 4px 7px; flex: none">−2 очка</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(28,28,28,.2); background: #e0dcd2; margin: 0 -12px; padding: 9px 12px; border-left: 3px solid #c2410c">
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Усиленное заклинание</div>
+            <div class="lbl" style="color: #63625f; margin-top: 2px">Метамагия · перебросить до 5 костей урона</div>
+          </div>
+          <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 4px 7px; flex: none">−1 очко</div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px; flex: none">
+        <div class="grp">Реакция</div>
+        <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; padding: 0 12px; flex: none">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Щит</div>
+            <div class="lbl" style="color: #63625f; margin-top: 2px">1 круг · когда по тебе попадают</div>
+          </div>
+          <div class="num" style="font-size: 15px; font-weight: 700; flex: none">+5 КЗ</div>
+        </div>
+      </div>
+
+      <!-- предупреждение о мёртвых ссылках: внизу листа, а не значками по строкам -->
+      <div style="margin: auto 12px 0; flex: none; border-top: 1.5px solid rgba(28,28,28,.28); padding: 9px 0 10px; display: flex; align-items: center; gap: 9px">
+        <svg viewBox="0 0 20 20" style="width: 17px; height: 17px; flex: none"><path d="M10 2 L19 18 L1 18 Z" fill="none" stroke="#63625f" stroke-width="1.6"/><path d="M10 8 L10 13" stroke="#63625f" stroke-width="1.8"/><circle cx="10" cy="15.5" r="1" fill="#63625f"/></svg>
+        <div class="lbl" style="color: #63625f; flex: 1 1 auto; letter-spacing: .1em">2 ссылки на справочник потеряны</div>
+        <div class="lbl" style="border: 1.5px solid rgba(28,28,28,.4); color: #63625f; padding: 4px 8px; flex: none">Показать</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

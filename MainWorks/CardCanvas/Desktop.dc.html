@@ -1,0 +1,337 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; background: #e8e4da; color: #1c1c1c; }
+    a { color: #c2410c; } a:hover { color: #92310a; }
+    .lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .grp { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #63625f; }
+    .navitem { font-family: 'Oswald', system-ui, sans-serif; font-size: 12px; letter-spacing: .10em; text-transform: uppercase; color: #a3a099; padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
+    .navitem-on { background: #c2410c; color: #e8e4da; }
+    .arow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2); }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 900px; background: #e8e4da; background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 3px 3px; display: flex; box-sizing: border-box; overflow: hidden">
+
+  <!-- САЙДБАР приложения, 256 (§6.1) -->
+  <div style="width: 256px; flex: none; background: #1c1c1c; color: #e8e4da; display: flex; flex-direction: column; padding: 20px 0">
+    <div style="padding: 0 16px 20px">
+      <div style="display: inline-block; background: #e8e4da; color: #1c1c1c; padding: 5px 10px; transform: rotate(-1.5deg); font-family: 'Cormorant SC', serif; font-weight: 700; font-size: 20px; line-height: 1">SoyMan</div>
+    </div>
+    <div class="navitem">Главная</div>
+    <div class="navitem">Кампании</div>
+    <div class="navitem navitem-on">Персонажи</div>
+    <div class="navitem">Сеттинги</div>
+    <div class="navitem">Системы</div>
+    <div class="navitem">Сессии</div>
+    <div style="margin-top: auto; padding: 16px; border-top: 1px solid rgba(232,228,218,.22); display: flex; align-items: center; gap: 10px">
+      <div style="width: 34px; height: 34px; border-radius: 50%; border: 2px solid #e8e4da; flex: none"></div>
+      <div>
+        <div style="font-size: 13px; font-weight: 600">Игорь</div>
+        <div class="lbl" style="color: #a3a099; margin-top: 2px">Мастер</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ОСНОВНОЕ ПОЛЕ -->
+  <div style="flex: 1 1 auto; min-width: 0; padding: 28px 32px; display: flex; flex-direction: column; gap: 18px">
+
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; flex: none">
+      <div>
+        <div class="lbl" style="color: #63625f">Кампания «Колокола Предела» · Ольга</div>
+        <div style="font-family: 'Cormorant SC', serif; font-weight: 700; font-size: 34px; line-height: 1.05; margin-top: 4px">Ларион Головня</div>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <div class="lbl" style="border: 1.5px solid rgba(28,28,28,.4); color: #63625f; padding: 10px 14px">Правка</div>
+        <div class="lbl" style="background: #1c1c1c; color: #e8e4da; padding: 10px 14px">Короткий отдых</div>
+        <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 10px 14px">Длинный отдых</div>
+      </div>
+    </div>
+
+    <div style="flex: 1 1 auto; min-height: 0; display: flex; gap: 24px">
+
+      <!-- КАРТА СЛЕВА, в натуральную величину — не растянутая -->
+      <div style="position: relative; width: 374px; height: 665px; flex: none; background: #e8e4da; border-left: 5px solid #c2410c; border-right: 5px solid #c2410c; border-top: 2px solid #1c1c1c; border-bottom: 2px solid #1c1c1c; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
+        <!-- ВДОХНОВЕНИЕ: жетон-звезда, всегда на одном месте; нажимается, чтобы потратить -->
+        <div style="position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; border-radius: 50%; background: rgba(28,28,28,.35); border: 2px solid rgba(232,228,218,.7); z-index: 2; display: flex; align-items: center; justify-content: center" title="Вдохновение">
+          <svg viewBox="0 0 44 42" style="width: 30px; height: 29px; display: block"><path d="M22 4 L26.6 16.4 L39.6 17 L29.4 25 L32.8 37.6 L22 30.4 L11.2 37.6 L14.6 25 L4.4 17 L17.4 16.4 Z" fill="none" stroke="#e8e4da" stroke-width="2" opacity=".85"/></svg>
+        </div>
+
+        <!-- СЛОЙ 1 — портрет владеет верхней половиной и гаснет к середине до уровня двойника -->
+        <div style="position: absolute; left: 0; right: 0; top: 0; height: 50%; overflow: hidden; z-index: 0; background: #1c1c1c">
+          <img src="portrait.jpg" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; display: block; filter: saturate(.88) contrast(1.04)">
+          <div style="position: absolute; inset: 0; background-image: radial-gradient(rgba(0,0,0,.22) 1px, transparent 1px); background-size: 3px 3px; mix-blend-mode: multiply; opacity: .38; pointer-events: none"></div>
+          <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(232,228,218,0) 52%, rgba(232,228,218,.5) 68%, rgba(232,228,218,.88) 80%, rgba(232,228,218,.93) 100%); pointer-events: none"></div>
+        </div>
+
+        <!-- СЛОЙ 2 — фигурная карта: тот же портрет, отражённый по обеим осям, той же силы -->
+        <div style="position: absolute; left: 0; right: 0; top: 50%; bottom: 0; overflow: hidden; z-index: 0; pointer-events: none">
+          <img src="portrait.jpg" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; display: block; transform: scale(-1, -1); opacity: .07">
+        </div>
+
+        <div style="position: relative; z-index: 1; flex: none; height: 300px; display: flex; align-items: flex-end">
+          <div style="width: 100%; padding: 0 12px 8px; box-sizing: border-box">
+            <div style="font-family: 'Cormorant SC', serif; font-weight: 700; font-size: 30px; line-height: .96; text-shadow: 0 1px 0 #e8e4da">Ларион Головня</div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px">
+              <div class="num" style="font-size: 16px; font-weight: 700; color: #e8e4da; background: #c2410c; padding: 1px 7px">5</div>
+              <div class="lbl" style="color: #42413f">Чародей · Дикая магия</div>
+            </div>
+            <div class="lbl" style="color: #63625f; margin-top: 3px">Человек · Шарлатан · Бонус мастерства <span class="num" style="font-size: 11px; color: #1c1c1c; font-weight: 700">+3</span></div>
+          </div>
+        </div>
+
+        <div style="position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 12px 0; flex: none">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px">
+            <div style="position: relative; width: 60px; height: 69px">
+              <svg viewBox="0 0 60 69" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M30 2 L58.2 18.25 L58.2 50.75 L30 67 L1.8 50.75 L1.8 18.25 Z" fill="none" stroke="#1c1c1c" stroke-width="2"/></svg>
+              <div class="num" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700">13</div>
+            </div>
+            <div class="lbl" style="color: #63625f">Класс брони</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px">
+            <div style="position: relative; width: 60px; height: 69px">
+              <svg viewBox="0 0 60 69" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M30 2 L58.2 18.25 L58.2 50.75 L30 67 L1.8 50.75 L1.8 18.25 Z" fill="#c2410c" stroke="#c2410c" stroke-width="2"/></svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #e8e4da">
+                <div class="num" style="font-size: 24px; font-weight: 700; line-height: 1">29</div>
+                <div class="num" style="font-size: 10px; opacity: .85; line-height: 1">из 38</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px">
+              <div style="width: 20px; height: 20px; border: 1.5px solid #1c1c1c; display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1">−</div>
+              <div class="lbl" style="color: #63625f">Хиты</div>
+              <div style="width: 20px; height: 20px; border: 1.5px solid #1c1c1c; display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1">+</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px">
+            <div style="position: relative; width: 60px; height: 69px">
+              <svg viewBox="0 0 60 69" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M30 2 L58.2 18.25 L58.2 50.75 L30 67 L1.8 50.75 L1.8 18.25 Z" fill="none" stroke="#1c1c1c" stroke-width="2"/></svg>
+              <div class="num" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700">10</div>
+            </div>
+            <div class="lbl" style="color: #63625f">Пасс. воспр.</div>
+          </div>
+        </div>
+
+        <div style="position: relative; z-index: 1; display: flex; gap: 6px; padding: 9px 12px 0; flex: none">
+          <div class="lbl" style="flex: 1 1 auto; border: 1.5px solid rgba(28,28,28,.3); color: #63625f; padding: 5px 7px; display: flex; align-items: center; justify-content: center">Состояний нет</div>
+          <div class="lbl" style="flex: 1 1 auto; border: 1.5px solid #1c1c1c; background: #1c1c1c; color: #e8e4da; padding: 5px 7px; display: flex; align-items: center; justify-content: center">Концентрация</div>
+          <div class="lbl" style="flex: 0 0 auto; border: 1.5px solid rgba(28,28,28,.3); color: #63625f; padding: 5px 7px; display: flex; align-items: center; gap: 5px">Истощение <span class="num" style="font-size: 12px; color: #1c1c1c">0</span></div>
+        </div>
+
+        <div style="position: relative; z-index: 1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; padding: 10px 12px 0; flex: none">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <div style="position: relative; width: 100%; height: 53px">
+              <svg viewBox="0 0 46 53" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M23 2 L44.2 14.25 L44.2 38.75 L23 51 L1.8 38.75 L1.8 14.25 Z" fill="none" stroke="rgba(28,28,28,.42)" stroke-width="1.5"/></svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><div class="num" style="font-size: 16px; font-weight: 700; line-height: 1">−1</div><div class="num" style="font-size: 9px; color: #63625f; line-height: 1.2">8</div></div>
+            </div>
+            <div class="lbl" style="color: #63625f; font-size: 9px">Сил</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <div style="position: relative; width: 100%; height: 53px">
+              <svg viewBox="0 0 46 53" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M23 2 L44.2 14.25 L44.2 38.75 L23 51 L1.8 38.75 L1.8 14.25 Z" fill="none" stroke="rgba(28,28,28,.42)" stroke-width="1.5"/></svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><div class="num" style="font-size: 16px; font-weight: 700; line-height: 1">+2</div><div class="num" style="font-size: 9px; color: #63625f; line-height: 1.2">14</div></div>
+            </div>
+            <div class="lbl" style="color: #63625f; font-size: 9px">Лов</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <div style="position: relative; width: 100%; height: 53px">
+              <svg viewBox="0 0 46 53" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M23 2 L44.2 14.25 L44.2 38.75 L23 51 L1.8 38.75 L1.8 14.25 Z" fill="none" stroke="#1c1c1c" stroke-width="2.5"/><path d="M23 2 L44.2 14.25 L44.2 38.75" fill="none" stroke="#c2410c" stroke-width="3.5"/></svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><div class="num" style="font-size: 16px; font-weight: 700; line-height: 1">+2</div><div class="num" style="font-size: 9px; color: #63625f; line-height: 1.2">14</div></div>
+            </div>
+            <div class="lbl" style="color: #63625f; font-size: 9px">Тел</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <div style="position: relative; width: 100%; height: 53px">
+              <svg viewBox="0 0 46 53" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M23 2 L44.2 14.25 L44.2 38.75 L23 51 L1.8 38.75 L1.8 14.25 Z" fill="none" stroke="rgba(28,28,28,.42)" stroke-width="1.5"/></svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><div class="num" style="font-size: 16px; font-weight: 700; line-height: 1">+1</div><div class="num" style="font-size: 9px; color: #63625f; line-height: 1.2">12</div></div>
+            </div>
+            <div class="lbl" style="color: #63625f; font-size: 9px">Инт</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <div style="position: relative; width: 100%; height: 53px">
+              <svg viewBox="0 0 46 53" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M23 2 L44.2 14.25 L44.2 38.75 L23 51 L1.8 38.75 L1.8 14.25 Z" fill="none" stroke="rgba(28,28,28,.42)" stroke-width="1.5"/></svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><div class="num" style="font-size: 16px; font-weight: 700; line-height: 1">+0</div><div class="num" style="font-size: 9px; color: #63625f; line-height: 1.2">10</div></div>
+            </div>
+            <div class="lbl" style="color: #63625f; font-size: 9px">Мдр</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <div style="position: relative; width: 100%; height: 53px">
+              <svg viewBox="0 0 46 53" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M23 2 L44.2 14.25 L44.2 38.75 L23 51 L1.8 38.75 L1.8 14.25 Z" fill="none" stroke="#1c1c1c" stroke-width="2.5"/><path d="M23 2 L44.2 14.25 L44.2 38.75" fill="none" stroke="#c2410c" stroke-width="3.5"/></svg>
+              <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><div class="num" style="font-size: 16px; font-weight: 700; line-height: 1">+4</div><div class="num" style="font-size: 9px; color: #63625f; line-height: 1.2">18</div></div>
+            </div>
+            <div class="lbl" style="color: #63625f; font-size: 9px">Хар</div>
+          </div>
+        </div>
+
+        <div style="position: relative; z-index: 1; display: flex; flex-direction: column; gap: 5px; padding: 10px 12px 0; flex: none">
+          <div style="display: flex; align-items: center; gap: 9px; border-left: 3px solid #c2410c; padding: 4px 0 4px 8px; background: #e0dcd2">
+            <div style="flex: 1 1 auto; min-width: 0">
+              <div style="font-size: 13px; font-weight: 600; line-height: 1.15">Огненный шар</div>
+              <div class="lbl" style="color: #63625f; margin-top: 1px">3 круг · сфера 20 фт</div>
+            </div>
+            <div class="num" style="font-size: 12px; color: #42413f">Слж 15</div>
+            <div class="num" style="font-size: 12px; color: #42413f">8к6</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; border-left: 3px solid #c2410c; padding: 4px 0 4px 8px; background: #e0dcd2">
+            <div style="flex: 1 1 auto; min-width: 0">
+              <div style="font-size: 13px; font-weight: 600; line-height: 1.15">Огненный снаряд</div>
+              <div class="lbl" style="color: #63625f; margin-top: 1px">Заговор · 120 фт</div>
+            </div>
+            <div class="num" style="font-size: 15px; font-weight: 700">+7</div>
+            <div class="num" style="font-size: 12px; color: #42413f">2к10</div>
+          </div>
+        </div>
+
+        <div style="position: relative; z-index: 1; margin-top: auto; flex: none; border-top: 1.5px solid rgba(28,28,28,.28); display: flex; align-items: center; gap: 9px; padding: 7px 52px 8px 12px">
+          <div style="width: 38px; height: 38px; border-radius: 50%; border: 2px solid #1c1c1c; background: #ddd8cc; position: relative; overflow: hidden; flex: none">
+            <svg viewBox="0 0 38 38" style="position: absolute; inset: 0; width: 100%; height: 100%"><path d="M10 14 C10 8 14 5 19 5 C24 5 28 8 28 14 L28 24 C28 30 24 33 19 33 C14 33 10 30 10 24 Z" fill="#1c1c1c"/><circle cx="15" cy="16" r="3.4" fill="#e8e4da"/><circle cx="23" cy="16" r="3.4" fill="#e8e4da"/><circle cx="15" cy="16" r="1.4" fill="#1c1c1c"/><circle cx="23" cy="16" r="1.4" fill="#1c1c1c"/><path d="M19 20 L16 24 L22 24 Z" fill="#c2410c"/></svg>
+          </div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 12px; font-weight: 600; line-height: 1.1">Уголёк</div>
+            <div class="lbl" style="color: #63625f">Сова-фамильяр · КЗ 11 · 1 хит</div>
+          </div>
+                  </div>
+
+        <div style="position: absolute; right: 0; bottom: 0; width: 46px; height: 46px; z-index: 2">
+          <svg viewBox="0 0 46 46" style="width: 100%; height: 100%; display: block">
+            <path d="M46 0 L46 46 L0 46 Z" fill="#c2410c"/>
+            <path d="M30 40 L42 40 L42 31" fill="none" stroke="#e8e4da" stroke-width="2"/>
+            <path d="M30 40 L42 31" stroke="#e8e4da" stroke-width="2"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- СОДЕРЖИМОЕ РАЗДЕЛА СПРАВА, в две колонки -->
+      <div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+
+        <div style="display: flex; gap: 22px; align-items: flex-end; border-bottom: 2px solid #1c1c1c; padding-bottom: 8px; flex: none">
+          <div class="lbl" style="color: #63625f">Карта</div>
+          <div class="lbl" style="color: #1c1c1c; font-weight: 600; position: relative; padding-bottom: 8px; margin-bottom: -10px; border-bottom: 3px solid #c2410c">Действия</div>
+          <div class="lbl" style="color: #63625f">Магия</div>
+          <div class="lbl" style="color: #63625f; display: flex; align-items: center; gap: 6px">Снаряжение <span style="width: 7px; height: 7px; background: #c2410c; display: inline-block"></span></div>
+          <div class="lbl" style="color: #63625f">Навыки</div>
+          <div class="lbl" style="color: #63625f">Особенности</div>
+          <div class="lbl" style="color: #63625f">Досье</div>
+          <div style="flex: 1 1 auto"></div>
+          <div class="lbl" style="color: #63625f">Ресурсы</div>
+        </div>
+
+        <div style="flex: none; background: #1c1c1c; color: #e8e4da; padding: 10px 14px; display: flex; align-items: center; gap: 12px">
+          <div class="lbl" style="letter-spacing: .16em; flex: none">Очки чародейства</div>
+          <div style="display: flex; gap: 5px; flex: none">
+            <svg viewBox="0 0 20 20" style="width: 20px; height: 20px"><rect x="2" y="2" width="16" height="16" fill="#c2410c" stroke="#c2410c" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="#e8e4da"/></svg>
+            <svg viewBox="0 0 20 20" style="width: 20px; height: 20px"><rect x="2" y="2" width="16" height="16" fill="#c2410c" stroke="#c2410c" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="#e8e4da"/></svg>
+            <svg viewBox="0 0 20 20" style="width: 20px; height: 20px"><rect x="2" y="2" width="16" height="16" fill="#c2410c" stroke="#c2410c" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="#e8e4da"/></svg>
+            <svg viewBox="0 0 20 20" style="width: 20px; height: 20px"><rect x="2" y="2" width="16" height="16" fill="none" stroke="rgba(232,228,218,.55)" stroke-width="2"/></svg>
+            <svg viewBox="0 0 20 20" style="width: 20px; height: 20px"><rect x="2" y="2" width="16" height="16" fill="none" stroke="rgba(232,228,218,.55)" stroke-width="2"/></svg>
+          </div>
+          <div class="num" style="font-size: 12px; color: #a3a099">3 из 5</div>
+          <div style="flex: 1 1 auto"></div>
+          <div class="lbl" style="color: #a3a099">Восстанавливаются на долгом отдыхе</div>
+        </div>
+
+        <div style="flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-content: start">
+
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 4px">
+              <div class="grp">Действие</div>
+              <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+            </div>
+            <div class="arow">
+              <div style="flex: 1 1 auto; min-width: 0">
+                <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Огненный шар</div>
+                <div class="lbl" style="color: #63625f; margin-top: 2px">3 круг · сфера 20 фт · 150 фт</div>
+              </div>
+              <div style="text-align: right; flex: none">
+                <div class="num" style="font-size: 14px; font-weight: 700; line-height: 1">Слж 15</div>
+                <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">8к6 огонь</div>
+              </div>
+            </div>
+            <div class="arow">
+              <div style="flex: 1 1 auto; min-width: 0">
+                <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Огненный снаряд</div>
+                <div class="lbl" style="color: #63625f; margin-top: 2px">Заговор · 120 фт</div>
+              </div>
+              <div style="text-align: right; flex: none">
+                <div class="num" style="font-size: 17px; font-weight: 700; line-height: 1">+7</div>
+                <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">2к10 огонь</div>
+              </div>
+            </div>
+            <div class="arow">
+              <div style="flex: 1 1 auto; min-width: 0">
+                <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Обжигающий луч</div>
+                <div class="lbl" style="color: #63625f; margin-top: 2px">2 круг · три луча · 120 фт</div>
+              </div>
+              <div style="text-align: right; flex: none">
+                <div class="num" style="font-size: 17px; font-weight: 700; line-height: 1">+7</div>
+                <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">3 × 2к6</div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; padding: 20px 0 4px">
+              <div class="grp">Реакция</div>
+              <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+            </div>
+            <div class="arow">
+              <div style="flex: 1 1 auto; min-width: 0">
+                <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Щит</div>
+                <div class="lbl" style="color: #63625f; margin-top: 2px">1 круг · когда по тебе попадают</div>
+              </div>
+              <div class="num" style="font-size: 15px; font-weight: 700; flex: none">+5 КЗ</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 4px">
+              <div class="grp">Бонусное действие</div>
+              <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+            </div>
+            <div class="arow" style="background: #e0dcd2; border-left: 3px solid #c2410c; padding-left: 9px">
+              <div style="flex: 1 1 auto; min-width: 0">
+                <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Ускоренное заклинание</div>
+                <div class="lbl" style="color: #63625f; margin-top: 2px">Метамагия · заговор бонусным действием</div>
+              </div>
+              <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 4px 7px; flex: none">−2 очка</div>
+            </div>
+            <div class="arow" style="background: #e0dcd2; border-left: 3px solid #c2410c; padding-left: 9px">
+              <div style="flex: 1 1 auto; min-width: 0">
+                <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Усиленное заклинание</div>
+                <div class="lbl" style="color: #63625f; margin-top: 2px">Метамагия · перебросить до 5 костей урона</div>
+              </div>
+              <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 4px 7px; flex: none">−1 очко</div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; padding: 20px 0 4px">
+              <div class="grp">Вручную вписанное</div>
+              <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+            </div>
+            <div class="arow">
+              <div style="flex: 1 1 auto; min-width: 0">
+                <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Перстень пепла</div>
+                <div class="lbl" style="color: #63625f; margin-top: 2px">Вписано вручную · 1 раз в день</div>
+              </div>
+              <div class="num" style="font-size: 13px; font-weight: 700; flex: none">3к6</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex: none; border-top: 1.5px solid rgba(28,28,28,.28); padding-top: 10px; display: flex; align-items: center; gap: 10px">
+          <svg viewBox="0 0 20 20" style="width: 17px; height: 17px; flex: none"><path d="M10 2 L19 18 L1 18 Z" fill="none" stroke="#63625f" stroke-width="1.6"/><path d="M10 8 L10 13" stroke="#63625f" stroke-width="1.8"/><circle cx="10" cy="15.5" r="1" fill="#63625f"/></svg>
+          <div class="lbl" style="color: #63625f; flex: 1 1 auto; letter-spacing: .1em">2 ссылки на справочник потеряны — считаемое по ним молчит</div>
+          <div class="lbl" style="border: 1.5px solid rgba(28,28,28,.4); color: #63625f; padding: 6px 10px; flex: none">Показать</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

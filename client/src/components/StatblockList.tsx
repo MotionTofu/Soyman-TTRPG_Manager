@@ -115,6 +115,12 @@ interface Props {
    * кнопки добавления. Всё это осталось на профиле — там его и заполняют.
    */
   sheetOnly?: boolean;
+  // Жест «назад» с первой карты (свайп вправо, решение владельца 2026-09-06).
+  // Задаёт полноэкранная страница чарника; встроенному листу возвращаться
+  // некуда, и без пропса жест молчит.
+  onSheetBack?: () => void;
+  // Портрет протух (подпись URL живёт 60 секунд): перезагрузить владельца.
+  onPortraitRefresh?: () => void;
 }
 
 // «2026-09-04 08:12:33» из SQLite — в человеческое «4 сентября». Строка
@@ -145,6 +151,8 @@ export function StatblockList({
   soleOnPage,
   sheetHref,
   sheetOnly,
+  onSheetBack,
+  onPortraitRefresh,
 }: Props) {
   const [statblocks, setStatblocks] = useState<Statblock[]>([]);
   // Удалённые статблоки владельца. До сих пор удалённый чарник исчезал
@@ -189,6 +197,22 @@ export function StatblockList({
   const [showLitmWizard, setShowLitmWizard] = useState(false);
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
   const [activeStatblockId, setActiveId] = useState<number | null>(null);
+  const isMobileSheet = useIsMobile();
+  // Создание чарника с таббара (только десктоп, решение владельца 2026-09-06):
+  // undefined — нет, null — выбор системы, number — визард с этой системой.
+  const [creatingSystem, setCreatingSystem] = useState<number | null | undefined>(undefined);
+  const [createSystems, setCreateSystems] = useState<{ id: number; name: string }[]>([]);
+  const [createSystemId, setCreateSystemId] = useState("");
+  function startSheetCreate() {
+    setCreateSystemId("");
+    setCreatingSystem(null);
+    if (createSystems.length === 0) {
+      api
+        .get<{ id: number; name: string }[]>("/systems")
+        .then(setCreateSystems)
+        .catch(() => {});
+    }
+  }
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
   const { deleteWithUndo } = useUndoDelete();
@@ -517,7 +541,8 @@ export function StatblockList({
       soleOnPage={soleOnPage}
       ownerPortraitUrl={ownerPortraitUrl}
       sheetHref={sheetHref}
-      hideRemove={sheetOnly}
+      onSheetBack={onSheetBack}
+      onPortraitRefresh={onPortraitRefresh}
     />
   ));
 
@@ -529,7 +554,10 @@ export function StatblockList({
       <div className="stack">
         {confirmDialog}
         {alertDialog}
-        {statblocks.length > 1 && (
+        {/* Десктоп: чарники всегда в таббаре, создание — табом [+]
+            (решение владельца 2026-09-06). На телефоне как было: табы только
+            при нескольких, создание — на профиле. */}
+        {(!isMobileSheet || statblocks.length > 1) && (
           <div className="tabs sb-switcher">
             {statblocks.map((sb) => (
               <button
@@ -541,9 +569,56 @@ export function StatblockList({
                 {statblockTitle(sb)}
               </button>
             ))}
+            {!isMobileSheet && ownerType === "character" && (
+              <button type="button" title="Новый чарник" aria-label="Новый чарник" onClick={startSheetCreate}>
+                +
+              </button>
+            )}
           </div>
         )}
-        {cards}
+        {creatingSystem !== undefined ? (
+          creatingSystem === null ? (
+            <div className="card stack">
+              <strong>Новый чарник — какой системы?</strong>
+              <div className="row" style={{ gap: 8 }}>
+                <select value={createSystemId} onChange={(e) => setCreateSystemId(e.target.value)}>
+                  <option value="">Выбрать систему…</option>
+                  {createSystems.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!createSystemId}
+                  onClick={() => setCreatingSystem(Number(createSystemId))}
+                >
+                  Далее
+                </button>
+                <button type="button" onClick={() => setCreatingSystem(undefined)}>
+                  Отмена
+                </button>
+              </div>
+            </div>
+          ) : (
+            <DndCharacterWizard
+              ownerType="character"
+              ownerId={ownerId}
+              ownerName={ownerName}
+              ownerPlayerName={ownerPlayerName}
+              initialSystemId={creatingSystem}
+              onCancel={() => setCreatingSystem(undefined)}
+              onDone={() => {
+                setCreatingSystem(undefined);
+                refresh();
+              }}
+            />
+          )
+        ) : (
+          cards
+        )}
       </div>
     );
   }
@@ -835,7 +910,8 @@ function StatblockCard({
   soleOnPage,
   ownerPortraitUrl,
   sheetHref,
-  hideRemove,
+  onSheetBack,
+  onPortraitRefresh,
 }: {
   statblock: Statblock;
   ownerType: "character" | "being" | "compendium_entry";
@@ -849,8 +925,10 @@ function StatblockCard({
   ownerPortraitUrl?: string | null;
   /** Телефон: вместо листа — плашка со ссылкой сюда. */
   sheetHref?: string;
-  /** Страница чарника: удаление живёт в профиле, у плашки. */
-  hideRemove?: boolean;
+  /** Жест «назад» с первой карты — задаёт полноэкранная страница чарника. */
+  onSheetBack?: () => void;
+  /** Портрет протух: перезагрузить владельца, чтобы приехал свежий URL. */
+  onPortraitRefresh?: () => void;
 }) {
   const isMobile = useIsMobile();
   const isLitm = statblock.format === "litm_character" || statblock.format === "litm_challenge";
@@ -1209,6 +1287,17 @@ function StatblockCard({
             <span className="sheet-plate-name">{sheet.characterName || "Без имени"}</span>
             {classLine && <span className="sheet-plate-sub">{classLine}</span>}
           </Link>
+          {/* Карандаш открывает тот же лист сразу в правке: на самой карте
+              органов правки больше нет — за столом её читают, а заполняют
+              отсюда, из профиля (правки владельца 2026-09-04). */}
+          <Link
+            className="comp-mini sheet-plate-edit"
+            to={`${sheetHref}?edit=1`}
+            title="Править чарник"
+            aria-label={`Править чарник: ${sheet.characterName || "Без имени"}`}
+          >
+            <NavIcon name="edit" />
+          </Link>
           {/* Своя мишень внутри общей: плашка целиком — «открыть», а
               удаление не должно срабатывать по промаху. */}
           <button
@@ -1235,19 +1324,8 @@ function StatblockCard({
         syncTabToUrl={soleOnPage}
         campaignId={campaignId}
         ownerCharacterId={statblock.owner_type === "character" ? statblock.owner_id : null}
-        headerExtra={
-          <>
-            {saveIndicator}
-            {/* На своей странице чарника кнопки удаления нет намеренно:
-                удалять лист с того экрана, где по нему играют, — ждать беды.
-                Она осталась у плашки в профиле (гриллинг 2026-09-04). */}
-            {!hideRemove && (
-              <button type="button" className="comp-mini" title="Удалить чарник" onClick={() => onRemove(statblock.id)}>
-                <NavIcon name="delete" />
-              </button>
-            )}
-          </>
-        }
+        onSheetBack={onSheetBack}
+        onPortraitRefresh={onPortraitRefresh}
       />
     );
   }

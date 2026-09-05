@@ -25,6 +25,9 @@ function resultLink(r: SearchResult): string | null {
 
 interface Props {
   horizontal?: boolean;
+  // Панель живёт в слоте AppShell и сама не знает, открыта ли она оверлеем:
+  // по любому уходу в новый раздел просим родителя закрыться.
+  onNavigate?: () => void;
 }
 
 const LIVE_SESSION_PATH = /^\/sessions\/(\d+)\/live$/;
@@ -35,7 +38,7 @@ const LIVE_SESSION_PATH = /^\/sessions\/(\d+)\/live$/;
 // одним лишь именем, которое ты уже прочёл в строке, обещает больше, чем даёт.
 const CARD_TYPES = ["being", "character", "location", "artifact", "resource", "compendium_entry"];
 
-export function SearchPanel({ horizontal }: Props = {}) {
+export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
   const location = useLocation();
   const liveMatch = location.pathname.match(LIVE_SESSION_PATH);
   const { user } = useCurrentUser();
@@ -267,7 +270,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
                     </button>
                   )}
                   {link && (
-                    <Link to={link} title="Перейти" className="search-result-goto">
+                    <Link to={link} title="Перейти" className="search-result-goto" onClick={onNavigate}>
                       <NavIcon name="arrowRight" />
                     </Link>
                   )}
@@ -299,7 +302,7 @@ export function SearchPanel({ horizontal }: Props = {}) {
         <strong>Закреплённые страницы</strong>
         {pins.map((p) => (
           <div key={p.path} className="search-pin-row row" style={{ justifyContent: "space-between" }}>
-            <Link to={p.path} title={p.label}>
+            <Link to={p.path} title={p.label} onClick={onNavigate}>
               {p.label}
             </Link>
             <button

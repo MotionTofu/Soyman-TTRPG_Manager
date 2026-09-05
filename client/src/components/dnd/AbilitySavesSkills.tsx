@@ -177,9 +177,9 @@ export function AbilitySavesSkillsView({
 
   return (
     <div className="dnd-abilities-block">
-      <div className="sb-section" style={{ margin: 0 }}>
-        Характеристики и спасброски
-      </div>
+      {/* Заголовка нет: шесть костей с подписями СИЛ…ХАР не нуждаются в
+          объяснении, а строка занимала высоту на самой тесной карте.
+          В правке он остаётся — там рядом счётчик оставшихся навыков. */}
       <div className="dnd-abilities-row dnd-abilities-row-dice">
         {ABILITY_LABELS.map(({ key, label }) => {
           const mod = abilityModifier(abilities[key]);

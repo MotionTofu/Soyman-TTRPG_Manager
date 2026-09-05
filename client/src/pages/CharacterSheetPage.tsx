@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { StatblockList } from "../components/StatblockList";
-import { NavIcon } from "../components/NavIcons";
 import type { Character } from "../types";
 
 /**
@@ -39,6 +38,15 @@ export function CharacterSheetPage() {
     };
   }, [characterId]);
 
+  // Подпись URL портрета живёт 60 секунд: протухшую картинку лист прячет сам
+  // и зовёт сюда за свежей ссылкой (см. onPortraitRefresh в DndCharacterView).
+  function refreshPortrait() {
+    api
+      .get<Character>(`/characters/${characterId}`)
+      .then(setCharacter)
+      .catch(() => {});
+  }
+
   // Панели приложения прячутся на время: чарник занимает весь экран, у него
   // снизу свои дела (лента ресурсов, свайп между картами), а нижняя
   // навигация отъедает полосу и ловит краевые свайпы. Класс на body — тот
@@ -56,12 +64,6 @@ export function CharacterSheetPage() {
 
   return (
     <div className="sheet-page">
-      <div className="sheet-page-bar">
-        <button type="button" className="comp-mini sheet-page-back" onClick={close} aria-label="Закрыть чарник">
-          <NavIcon name="arrowLeft" />
-        </button>
-        <span className="sheet-page-title">{character?.character_name || "Чарник"}</span>
-      </div>
       {loadError ? (
         <p className="error" role="alert">
           {loadError}
@@ -76,6 +78,8 @@ export function CharacterSheetPage() {
           ownerPortraitUrl={character?.avatar_image_url}
           soleOnPage
           sheetOnly
+          onSheetBack={close}
+          onPortraitRefresh={refreshPortrait}
         />
       )}
     </div>

@@ -26,7 +26,9 @@ function dexApplies(item: { armorType?: string; dexBonus?: boolean }): boolean {
 // flat on top, plus a manual bonus for effects not captured by inventory
 // (Shield/Mage Armor spells, etc.).
 export function computeArmorClass(dexMod: number, sections: DndEquipmentSection[], manualBonus: number): number {
-  const equipped = sections.flatMap((s) => s.items).filter((i) => i.equipped);
+  // Отданная вещь (transferOut) снята с носки и из расчётов исключена: бонус
+  // от неё отправитель больше не получает (этап 4б).
+  const equipped = sections.flatMap((s) => s.items).filter((i) => i.equipped && !i.transferOut);
   // S-03: если надето несколько доспехов — берём лучший (макс КЗ), а не первый по порядку.
   const armors = equipped.filter((i) => i.armorType && i.ac && !isShield(i.armorType));
   const armor = armors.length

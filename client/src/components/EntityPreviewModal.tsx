@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { fetchEntityDetail } from "../api/resolveEntity";
+import { useCurrentUser } from "../api/currentUser";
 import { DETAIL_ROUTES } from "../entityTypes";
 import { Modal } from "./Modal";
 import { EntityTypeChip } from "./EntityTypeChip";
@@ -48,6 +49,8 @@ export function EntityPreviewContent({
   statblockInline,
   collapsed,
   onToggleCollapse,
+  playerSafe,
+  hideProfileButton,
 }: {
   type: string;
   id: number;
@@ -60,6 +63,10 @@ export function EntityPreviewContent({
   // Свёрнутость карточки в докстанции: там их несколько в одной колонке.
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  // Взгляд игрока: без секретов/тактики в рендере и без кнопки в мастерский
+  // профиль (см. CreatureCard). Секрет при этом вырезан ещё и на сервере.
+  playerSafe?: boolean;
+  hideProfileButton?: boolean;
 }) {
   if (type === "being" || type === "compendium_entry") {
     return (
@@ -71,6 +78,8 @@ export function EntityPreviewContent({
         statblockInline={statblockInline}
         collapsed={collapsed}
         onToggleCollapse={onToggleCollapse}
+        playerSafe={playerSafe}
+        hideProfileButton={hideProfileButton}
       />
     );
   }
@@ -104,11 +113,15 @@ export function CreatureCardPreview({
   autoShowStatblock,
   collapsed,
   onToggleCollapse,
+  playerSafe,
+  hideProfileButton,
 }: {
   type: string;
   id: number;
   onClose?: () => void;
   profileInNewWindow?: boolean;
+  // Модалка меншена подменяет своё содержимое статблоком вместо второй
+  // модалки поверх первой.
   statblockInline?: boolean;
   // Плитка бестиария открывает статблок отдельной кнопкой, минуя карточку.
   // Существо без статблока при этом остаётся на карточке: она и объясняет,
@@ -116,6 +129,8 @@ export function CreatureCardPreview({
   autoShowStatblock?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  playerSafe?: boolean;
+  hideProfileButton?: boolean;
 }) {
   const [shown, setShown] = useState<CreatureCardPayload | null>(null);
   useEffect(() => {
@@ -155,6 +170,8 @@ export function CreatureCardPreview({
       onShowStatblock={statblockInline ? setShown : undefined}
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
+      playerSafe={playerSafe}
+      hideProfileButton={hideProfileButton}
     />
   );
 }
@@ -323,9 +340,20 @@ function OtherEntityPreview({
 // SectionDropZone и другие места также её используют; внизу остаётся
 // "Открыть полностью →" для перехода на детальную страницу.
 export function EntityPreviewModal({ type, id, onClose }: Props) {
+  // Жетон спутника открывает эту же модалку и у игрока: без секретов
+  // и без кнопки в мастерский профиль.
+  const { user } = useCurrentUser();
+  const playerSafe = user?.role === "player";
   return (
     <Modal onClose={onClose}>
-      <EntityPreviewContent type={type} id={id} onClose={onClose} statblockInline />
+      <EntityPreviewContent
+        type={type}
+        id={id}
+        onClose={onClose}
+        statblockInline
+        playerSafe={playerSafe}
+        hideProfileButton={playerSafe}
+      />
     </Modal>
   );
 }

@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; background: #1c1c1c; color: #e8e4da; }
+    a { color: #c2410c; } a:hover { color: #7e1e14; }
+    .lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .mini { background: #e8e4da; color: #1c1c1c; border-top: 2px solid #1c1c1c; border-bottom: 2px solid #1c1c1c; border-left: 4px solid #c2410c; border-right: 4px solid #c2410c; padding: 9px 9px 8px; display: flex; flex-direction: column; gap: 5px; height: 118px; box-sizing: border-box; }
+    .mini-t { font-family: 'Oswald', system-ui, sans-serif; font-size: 12px; letter-spacing: .10em; text-transform: uppercase; font-weight: 600; }
+    .mini-m { font-size: 11px; color: #63625f; line-height: 1.3; }
+    .rule { height: 1px; background: rgba(28,28,28,.22); }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #1c1c1c; display: flex; flex-direction: column; box-sizing: border-box; position: relative; overflow: hidden">
+
+  <!-- халфтон в углу — шум, без которого система разваливается -->
+  <svg viewBox="0 0 390 200" style="position: absolute; right: 0; top: 0; width: 260px; height: 140px; opacity: .16">
+    <defs><pattern id="hd" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.6" fill="#e8e4da"/></pattern></defs>
+    <rect width="390" height="200" fill="url(#hd)"/>
+  </svg>
+
+  <div style="flex: none; padding: 18px 16px 4px; position: relative">
+    <div style="display: flex; align-items: baseline; justify-content: space-between">
+      <div style="font-family: 'Cormorant SC', serif; font-weight: 700; font-size: 27px; line-height: 1">Колода</div>
+      <div class="lbl" style="color: #a3a099">Ларион · Чародей 5</div>
+    </div>
+    <div class="lbl" style="color: #a3a099; margin-top: 6px; letter-spacing: .12em">Свайп вниз развернул колоду · тап переносит</div>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; padding: 14px 16px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: start">
+
+    <!-- текущая карта: акцентная плашка вместо бумаги -->
+    <div class="mini" style="background: #c2410c; color: #e8e4da; border-left-color: #e8e4da; border-right-color: #e8e4da; border-top-color: #e8e4da; border-bottom-color: #e8e4da">
+      <div class="mini-t">Карта</div>
+      <div class="rule" style="background: rgba(232,228,218,.35)"></div>
+      <div style="display: flex; gap: 5px; align-items: center">
+        <svg viewBox="0 0 26 24" style="width: 26px; height: 24px"><path d="M13 1 L24 7 L24 17 L13 23 L2 17 L2 7 Z" fill="none" stroke="#e8e4da" stroke-width="2"/></svg>
+        <svg viewBox="0 0 26 24" style="width: 26px; height: 24px"><path d="M13 1 L24 7 L24 17 L13 23 L2 17 L2 7 Z" fill="#e8e4da" stroke="#e8e4da" stroke-width="2"/></svg>
+        <svg viewBox="0 0 26 24" style="width: 26px; height: 24px"><path d="M13 1 L24 7 L24 17 L13 23 L2 17 L2 7 Z" fill="none" stroke="#e8e4da" stroke-width="2"/></svg>
+      </div>
+      <div class="mini-m" style="color: rgba(232,228,218,.85); margin-top: auto">КЗ 13 · 29/38 хитов · концентрация</div>
+    </div>
+
+    <div class="mini">
+      <div class="mini-t">Действия</div>
+      <div class="rule"></div>
+      <div style="display: flex; flex-direction: column; gap: 3px">
+        <div style="height: 5px; background: #1c1c1c; width: 82%"></div>
+        <div style="height: 5px; background: #1c1c1c; width: 68%"></div>
+        <div style="height: 5px; background: rgba(28,28,28,.35); width: 74%"></div>
+      </div>
+      <div class="mini-m" style="margin-top: auto">7 строк · очки 3 из 5</div>
+    </div>
+
+    <div class="mini" style="transform: rotate(-1.5deg)">
+      <div class="mini-t">Магия</div>
+      <div class="rule"></div>
+      <div style="display: flex; gap: 3px">
+        <div style="height: 14px; width: 7px; background: #1c1c1c"></div><div style="height: 14px; width: 7px; background: #1c1c1c"></div>
+        <div style="height: 14px; width: 7px; background: rgba(28,28,28,.3)"></div><div style="height: 14px; width: 7px; background: rgba(28,28,28,.3)"></div>
+        <div style="width: 6px"></div>
+        <div style="height: 14px; width: 7px; background: #1c1c1c"></div><div style="height: 14px; width: 7px; background: rgba(28,28,28,.3)"></div><div style="height: 14px; width: 7px; background: rgba(28,28,28,.3)"></div>
+      </div>
+      <div class="mini-m" style="margin-top: auto">12 заклинаний · ячейки 4 / 3 / 2</div>
+    </div>
+
+    <div class="mini">
+      <div class="mini-t" style="display: flex; align-items: center; gap: 6px">Снаряжение <span style="width: 7px; height: 7px; background: #c2410c; display: inline-block"></span></div>
+      <div class="rule"></div>
+      <div style="display: flex; flex-direction: column; gap: 3px">
+        <div style="height: 5px; background: #1c1c1c; width: 90%"></div>
+        <div style="height: 5px; background: #1c1c1c; width: 55%"></div>
+      </div>
+      <div class="mini-m" style="margin-top: auto">11 предметов · 1 не принят</div>
+    </div>
+
+    <div class="mini">
+      <div class="mini-t">Навыки</div>
+      <div class="rule"></div>
+      <div style="display: flex; flex-wrap: wrap; gap: 4px">
+        <div class="lbl" style="border: 1px solid rgba(28,28,28,.4); padding: 2px 5px; color: #42413f">Обман</div>
+        <div class="lbl" style="border: 1px solid rgba(28,28,28,.4); padding: 2px 5px; color: #42413f">Магия</div>
+      </div>
+      <div class="mini-m" style="margin-top: auto">4 владения · 1 инструмент</div>
+    </div>
+
+    <div class="mini" style="transform: rotate(1.2deg)">
+      <div class="mini-t">Особенности</div>
+      <div class="rule"></div>
+      <div style="display: flex; flex-direction: column; gap: 3px">
+        <div style="height: 5px; background: #1c1c1c; width: 72%"></div>
+        <div style="height: 5px; background: #1c1c1c; width: 86%"></div>
+        <div style="height: 5px; background: rgba(28,28,28,.35); width: 60%"></div>
+      </div>
+      <div class="mini-m" style="margin-top: auto">7 умений · 2 черты</div>
+    </div>
+
+    <div class="mini">
+      <div class="mini-t">Досье</div>
+      <div class="rule"></div>
+      <div class="mini-m" style="margin-top: auto">Характер, привязанности, заметки</div>
+    </div>
+
+    <div class="mini" style="border-left-color: rgba(28,28,28,.3); border-right-color: rgba(28,28,28,.3); background: #e0dcd2">
+      <div class="mini-t" style="color: #63625f">Ресурсы</div>
+      <div class="rule"></div>
+      <div class="mini-m" style="margin-top: auto">Кости хитов 5к6 · пулов вне боя нет</div>
+    </div>
+  </div>
+
+  <div style="flex: none; padding: 14px 16px 18px; display: flex; align-items: center; justify-content: center; gap: 10px">
+    <div style="width: 44px; height: 3px; background: rgba(232,228,218,.5)"></div>
+    <div class="lbl" style="color: #a3a099">Свайп вверх — назад к карте</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

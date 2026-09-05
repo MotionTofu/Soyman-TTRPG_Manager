@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; background: #e8e4da; color: #1c1c1c; }
+    a { color: #c2410c; } a:hover { color: #92310a; }
+    .lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .btn { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; padding: 6px 10px; border: 1.5px solid #e8e4da; color: #e8e4da; }
+    .btn-solid { background: #c2410c; border-color: #c2410c; color: #e8e4da; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #e8e4da; background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 3px 3px; display: flex; flex-direction: column; padding: 10px 8px 0; box-sizing: border-box">
+
+  <div style="display: flex; gap: 14px; align-items: flex-end; height: 26px; overflow: hidden; flex: none; padding: 0 2px">
+    <div class="lbl" style="color: #1c1c1c; font-weight: 600; padding-bottom: 4px; border-bottom: 2px solid #c2410c; white-space: nowrap">Карта · оборот</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Действия</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Магия</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Снаряжение</div>
+    <div class="lbl" style="color: #63625f; padding-bottom: 4px; white-space: nowrap">Навыки</div>
+  </div>
+
+  <!-- ОБОРОТ: инверсия — чёрная рубашка на бумаге. Глубина через инверсию, не тень. -->
+  <div style="position: relative; width: 374px; height: 665px; margin-top: 10px; flex: none; background: #1c1c1c; border-left: 5px solid #c2410c; border-right: 5px solid #c2410c; border-top: 2px solid #1c1c1c; border-bottom: 2px solid #1c1c1c; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; color: #e8e4da">
+
+    <!-- шапка рубашки -->
+    <div style="flex: none; padding: 14px 14px 12px; border-bottom: 1.5px solid rgba(232,228,218,.22); position: relative">
+      <svg viewBox="0 0 344 40" style="position: absolute; left: 14px; top: 12px; width: 344px; height: 40px; opacity: .18">
+        <g stroke="#e8e4da" stroke-width="1">
+          <path d="M0 20 L344 20"/><path d="M0 8 L344 8"/><path d="M0 32 L344 32"/>
+        </g>
+      </svg>
+      <div style="position: relative; display: flex; align-items: baseline; justify-content: space-between">
+        <div style="font-family: 'Cormorant SC', serif; font-weight: 700; font-size: 25px; line-height: 1; background: #1c1c1c; padding-right: 10px">Входящие</div>
+        <div class="lbl" style="color: #a3a099; background: #1c1c1c; padding-left: 10px">Ларион · 2 новых</div>
+      </div>
+    </div>
+
+    <div style="flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px">
+
+      <!-- 1. Личное послание Мастера, непрочитанное -->
+      <div style="border-left: 3px solid #c2410c; padding: 0 0 0 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 2px 6px">Тебе одному</div>
+          <div class="lbl" style="color: #a3a099">Сегодня, 21:14</div>
+        </div>
+        <div style="font-size: 14px; line-height: 1.42; margin-top: 7px; color: #e8e4da">Перстень теплеет каждый раз, когда ты входишь в тень колокольни. Остальные этого не замечают — и ты пока не решил, стоит ли говорить.</div>
+        <div style="display: flex; gap: 8px; margin-top: 9px">
+          <div class="btn btn-solid">Прочитано</div>
+          <div class="btn">В путевые заметки</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: rgba(232,228,218,.18); flex: none"></div>
+
+      <!-- 2. Переданный предмет — пункт 4 остатка работ -->
+      <div style="border-left: 3px solid #c2410c; padding: 0 0 0 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 2px 6px">Передан предмет</div>
+          <div class="lbl" style="color: #a3a099">Сегодня, 20:02</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px">
+          <div style="width: 40px; height: 40px; border: 1.5px solid rgba(232,228,218,.5); flex: none; display: flex; align-items: center; justify-content: center">
+            <svg viewBox="0 0 24 24" style="width: 22px; height: 22px">
+              <path d="M12 4 L12 9" stroke="#e8e4da" stroke-width="1.8" fill="none"/>
+              <path d="M6 20 C6 13 18 13 18 20 Z" fill="none" stroke="#e8e4da" stroke-width="1.8"/>
+              <circle cx="12" cy="11" r="2.4" fill="none" stroke="#e8e4da" stroke-width="1.8"/>
+            </svg>
+          </div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Амулет колокольного звона</div>
+            <div class="lbl" style="color: #a3a099; margin-top: 2px">От Ольги · требует настройки</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 9px">
+          <div class="btn btn-solid">Принять</div>
+          <div class="btn">Вернуть</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: rgba(232,228,218,.18); flex: none"></div>
+
+      <!-- 3. Объявление всей кампании, прочитанное -->
+      <div style="border-left: 3px solid rgba(232,228,218,.3); padding: 0 0 0 10px; opacity: .72">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <div class="lbl" style="border: 1px solid rgba(232,228,218,.45); color: #e8e4da; padding: 1px 6px">Объявление</div>
+          <div class="lbl" style="color: #a3a099">Вчера · прочитано</div>
+        </div>
+        <div style="font-size: 14px; line-height: 1.42; margin-top: 7px">В пятницу играем у Миши, садимся в 19:00. Кто не успевает — скажите заранее, начнём без вас с разведки.</div>
+      </div>
+
+      <div style="margin-top: auto; display: flex; align-items: center; gap: 12px; opacity: .55">
+        <div style="flex: 1 1 auto; height: 1px; background: rgba(232,228,218,.3)"></div>
+        <div class="lbl" style="color: #a3a099; white-space: nowrap">Прочитанное и старое — в архиве</div>
+        <div style="flex: 1 1 auto; height: 1px; background: rgba(232,228,218,.3)"></div>
+      </div>
+    </div>
+
+    <!-- зинный маркер: штрихкод и номер выпуска -->
+    <div style="flex: none; border-top: 1.5px solid rgba(232,228,218,.22); display: flex; align-items: center; justify-content: space-between; padding: 9px 52px 10px 14px">
+      <svg viewBox="0 0 88 20" style="width: 88px; height: 20px; opacity: .5">
+        <g fill="#e8e4da">
+          <rect x="0" y="0" width="2" height="20"/><rect x="4" y="0" width="1" height="20"/><rect x="7" y="0" width="3" height="20"/>
+          <rect x="12" y="0" width="1" height="20"/><rect x="15" y="0" width="2" height="20"/><rect x="19" y="0" width="1" height="20"/>
+          <rect x="22" y="0" width="3" height="20"/><rect x="27" y="0" width="1" height="20"/><rect x="30" y="0" width="2" height="20"/>
+          <rect x="34" y="0" width="1" height="20"/><rect x="37" y="0" width="3" height="20"/><rect x="42" y="0" width="2" height="20"/>
+          <rect x="46" y="0" width="1" height="20"/><rect x="49" y="0" width="3" height="20"/><rect x="54" y="0" width="1" height="20"/>
+          <rect x="57" y="0" width="2" height="20"/><rect x="61" y="0" width="1" height="20"/><rect x="64" y="0" width="3" height="20"/>
+          <rect x="69" y="0" width="1" height="20"/><rect x="72" y="0" width="2" height="20"/><rect x="76" y="0" width="1" height="20"/>
+          <rect x="79" y="0" width="3" height="20"/><rect x="84" y="0" width="2" height="20"/>
+        </g>
+      </svg>
+      <div class="lbl" style="color: #a3a099">Прочитанное уходит в архив</div>
+    </div>
+
+    <!-- тот же угол, теперь развёрнутый: карта перевёрнута -->
+    <div style="position: absolute; right: 0; bottom: 0; width: 46px; height: 46px; pointer-events: none">
+      <svg viewBox="0 0 46 46" style="width: 100%; height: 100%; display: block">
+        <path d="M46 0 L46 46 L0 46 Z" fill="#e8e4da"/>
+        <path d="M42 38 L30 38 L30 29" fill="none" stroke="#1c1c1c" stroke-width="2"/>
+        <path d="M42 38 L30 29" stroke="#1c1c1c" stroke-width="2"/>
+      </svg>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

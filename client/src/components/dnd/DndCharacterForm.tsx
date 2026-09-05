@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../../api/client";
 import type {
   CompendiumEntry,
@@ -80,11 +79,28 @@ import {
 } from "./effects";
 import { useCompendiumEntries } from "./useCompendiumEntries";
 import { sheetClassColor, textOnClassColor } from "./dndClassColors";
+import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
 import { DndDie } from "./DndDie";
+import { DndCardBack } from "./DndCardBack";
+import { DndTransferBox } from "./DndTransferBox";
+import {
+  fetchCharacterInbox,
+  markInboxMessageRead,
+  saveInboxMessageAsNote,
+  type CharacterInboxMessage,
+} from "./characterInbox";
+import {
+  fetchTransfers,
+  offerItemTransfer,
+  offerMoneyTransfer,
+  transferAction,
+  type CharacterTransfer,
+} from "./characterTransfers";
 import { EMPTY_EQUIPMENT_ITEM, fetchEquipmentMeta } from "./dndEquipment";
-import { ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
+import { deadEntryIds, ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
+import { deadLinkNames } from "./deadLinks";
 import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
-import { cantripsAtLevel, preparedAtLevel, type ClassProgression } from "./progression";
+import { cantripsAtLevel, preparedAtLevel, PROGRESSION_RECHARGE_LABELS, type ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
 import { PipTrack } from "../litm/PipTrack";
 import { MentionTextarea } from "../mentions/MentionTextarea";
@@ -103,6 +119,7 @@ import {
   type ReplicateScheme,
 } from "./dndResources";
 import { Modal } from "../Modal";
+import { EntityPreviewModal } from "../EntityPreviewModal";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
@@ -110,7 +127,9 @@ import { useEvent, useLatest } from "../../hooks/useEvent";
 import { featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TIMING_KEY_TO_LABEL } from "./dndFeatures";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
+import { useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
+import { CompendiumEntryPicker } from "../MonsterTemplatePicker";
 import { classAndLevelSummary } from "./dndSummary";
 import { NavIcon } from "../NavIcons";
 
@@ -340,6 +359,17 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
     merged.coins = { cp: "", sp: "", ep: "", gp: "", pp: "" };
   }
   merged.speeds = merged.speeds && typeof merged.speeds === "object" ? { ...emptySpeed(), ...merged.speeds } : emptySpeed();
+  // Визард и смена вида раньше писали скорость только строкой speed
+  // («30 фт.»), а кость читает speeds.walk — такие листы показывали «—»
+  // в кости и число подписью. Подбираем ведущее число как ходьбу, но только
+  // когда в строке нет вида скорости (та же эвристика, что у
+  // parseLegacySpeed для существ): «полёт 60 фт.» ходьбой не станет.
+  // Строку не трогаем — она остаётся данными, правит показ подпись ниже.
+  if (merged.speeds.walk == null && typeof merged.speed === "string") {
+    const num = /(\d+)/.exec(merged.speed);
+    const hasKind = /пол[её]т|летит|плавани|плывёт|лазани|копани|рыть|ходьб|fly|swim|climb|burrow|walk/i.test(merged.speed);
+    if (num && !hasKind) merged.speeds = { ...merged.speeds, walk: Number(num[1]) };
+  }
   merged.sensesList = Array.isArray(merged.sensesList) ? merged.sensesList : [];
   merged.damageResistances = Array.isArray(merged.damageResistances) ? merged.damageResistances : [];
   merged.damageImmunities = Array.isArray(merged.damageImmunities) ? merged.damageImmunities : [];
@@ -587,16 +617,8 @@ function sortSpells(spells: DndSpellEntry[]): DndSpellEntry[] {
   );
 }
 
-// Requirement 7: Класс/Подкласс/Вид/Предыстория in view mode link to their
-// compendium article when picked from a compendium (id known); freehand
-// entries with no id just render as plain text.
-function CompendiumLink({ id, children }: { id: number | null; children: ReactNode }) {
-  if (!id) return <>{children}</>;
-  return (
-    <Link className="sb-compendium-link" to={`/compendium/${id}`}>
-      {children}
-    </Link>
-  );
+function stripLatin(name: string): string {
+  return name.replace(/\s*\[[^\]]*\]/g, "").trim();
 }
 
 function readSearchDrop(e: DragEvent): SearchResult | null {
@@ -2166,20 +2188,33 @@ function DndEquipmentQuickView({
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
   const [addingSection, setAddingSection] = useState<number | null>(null);
-  const [addMode, setAddMode] = useState<"compendium" | "bag" | null>(null);
+  const [addMode, setAddMode] = useState<"bag" | null>(null);
   const [draft, setDraft] = useState<DndEquipmentItem>(EMPTY_EQUIPMENT_ITEM);
-  const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<CompendiumEntry[]>([]);
+  // Полноэкранный подбор из компендиума (этап 6): секция, для которой
+  // открыта модалка. Пачка добавляется одним сохранением (appendItems).
+  const [pickingSection, setPickingSection] = useState<number | null>(null);
   const [descOpen, setDescOpen] = useState<{ si: number; ii: number } | null>(null);
   const [descriptions, setDescriptions] = useState<Record<number, string>>({});
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
   const { items: bagItems } = useBag();
   const [confirmDialog, confirm] = useConfirm();
-
-  useEffect(() => {
-    if (addMode !== "compendium" || !systemId) return;
-    loadDndEquipmentEntries(systemId).then(setOptions);
-  }, [addMode, systemId]);
+  // Действия принятой передачи (вернуть/сделать своим) идут сервером, а не
+  // локальным commit: строки живут в двух листах, и сводит их посредник.
+  // Обновление листа после успеха приходит realtime-рассылкой сервера
+  // (broadcastCharacterUpdate) — ждать его здесь не надо, только ошибку.
+  const [transferBusy, setTransferBusy] = useState<number | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  async function transferAction(id: number, action: "return" | "claim") {
+    setTransferBusy(id);
+    setTransferError(null);
+    try {
+      await api.post(`/player/transfers/${id}/${action}`);
+    } catch (e) {
+      setTransferError(`Не вышло: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTransferBusy(null);
+    }
+  }
 
   // Nested function declarations below don't retain the `if (!onQuickUpdate)
   // return` narrowing above (TS control-flow narrowing doesn't cross
@@ -2195,12 +2230,11 @@ function DndEquipmentQuickView({
     setAddingSection(null);
     setDraft({ ...sections[si].items[ii] });
   }
-  function startAdd(si: number, mode: "compendium" | "bag" | null) {
+  function startAdd(si: number, mode: "bag" | null) {
     setAddingSection(si);
     setAddMode(mode);
     setEditing(null);
     setDraft(EMPTY_EQUIPMENT_ITEM);
-    setQuery("");
   }
   function cancel() {
     setEditing(null);
@@ -2217,6 +2251,13 @@ function DndEquipmentQuickView({
   }
   function appendItem(si: number, item: DndEquipmentItem) {
     const next = sections.map((s, idx) => (idx !== si ? s : { ...s, items: [...s.items, item] }));
+    commit({ equipmentSections: next });
+    setAddingSection(null);
+    setAddMode(null);
+  }
+  function appendItems(si: number, items: DndEquipmentItem[]) {
+    if (items.length === 0) return;
+    const next = sections.map((s, idx) => (idx !== si ? s : { ...s, items: [...s.items, ...items] }));
     commit({ equipmentSections: next });
     setAddingSection(null);
     setAddMode(null);
@@ -2243,10 +2284,6 @@ function DndEquipmentQuickView({
     });
   }
 
-  async function addFromCompendium(si: number, entry: CompendiumEntry) {
-    const meta = await fetchEquipmentMeta(entry.id);
-    appendItem(si, { name: entry.name, qty: "", weight: "", notes: "", ...meta });
-  }
   async function addFromBag(si: number, result: SearchResult) {
     if (result.type === "compendium_entry" && (result.kind === "equipment" || result.kind === "magic_item")) {
       const meta = await fetchEquipmentMeta(result.id);
@@ -2296,10 +2333,6 @@ function DndEquipmentQuickView({
     await addFromBag(si, result);
   }
 
-  const filteredOptions = query.trim()
-    ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
-    : options;
-
   // S-17: сводка веса/кол-ва/атюна над инвентарём
   const summary = (() => {
     const all = sections.flatMap((s) => s.items);
@@ -2348,6 +2381,11 @@ function DndEquipmentQuickView({
           </label>
         ))}
       </div>
+      {transferError && (
+        <p className="sb-save-error" role="status">
+          {transferError}
+        </p>
+      )}
       {sections.map((section, si) => (
         <div
           key={si}
@@ -2373,14 +2411,26 @@ function DndEquipmentQuickView({
                   />
                 </li>
               ) : (
-                <li key={ii}>
+                <li
+                  key={ii}
+                  className={
+                    item.transferOut
+                      ? "is-transfer-out"
+                      : item.transferIn
+                        ? item.transferIn.kind === "replica"
+                          ? "is-transfer-created"
+                          : "is-transfer-in"
+                        : undefined
+                  }
+                >
                   <div className="row dnd-equipment-quick-row" style={{ gap: 6 }}>
                     <button
                       type="button"
                       className={`comp-mini dnd-equip-toggle${item.equipped ? " is-equipped" : ""}`}
-                      title={item.equipped ? "Надето" : "Не надето"}
+                      title={item.transferOut ? "Передано — надеть нельзя" : item.equipped ? "Надето" : "Не надето"}
                       aria-label={`${item.name || "Предмет"}: надето`}
                       aria-pressed={!!item.equipped}
+                      disabled={!!item.transferOut}
                       onClick={() => toggleEquipped(si, ii)}
                     >
                       {item.equipped ? "●" : "○"}
@@ -2420,6 +2470,38 @@ function DndEquipmentQuickView({
                         </button>
                       </>
                     )}
+                    {/* Этап 4б: отданная строка серая («передано → имя») —
+                        только сведения; принятая зелёная («принято ← имя»)
+                        или фиолетовая («создал имя») — с кнопками вернуть /
+                        сделать своим. */}
+                    {item.transferOut && (
+                      <span className="dnd-transfer-chip">передано → {item.transferOut.toName}</span>
+                    )}
+                    {item.transferIn && (
+                      <>
+                        <span className="dnd-transfer-chip">
+                          {item.transferIn.kind === "replica"
+                            ? `создал ${item.transferIn.fromName}`
+                            : `принято ← ${item.transferIn.fromName}`}
+                        </span>
+                        <button
+                          type="button"
+                          className="comp-mini"
+                          disabled={transferBusy === item.transferIn.id}
+                          onClick={() => void transferAction(item.transferIn!.id, "return")}
+                        >
+                          Вернуть
+                        </button>
+                        <button
+                          type="button"
+                          className="comp-mini"
+                          disabled={transferBusy === item.transferIn.id}
+                          onClick={() => void transferAction(item.transferIn!.id, "claim")}
+                        >
+                          Сделать своим
+                        </button>
+                      </>
+                    )}
                     <button type="button" className="comp-mini" title="Редактировать" aria-label="Редактировать предмет" onClick={() => startEdit(si, ii)}>
                       <NavIcon name="edit" />
                     </button>
@@ -2435,35 +2517,7 @@ function DndEquipmentQuickView({
             )}
           </ul>
           {addingSection === si ? (
-            addMode === "compendium" ? (
-              <div className="dnd-spell-add">
-                <input
-                  autoFocus
-                  placeholder="Название предмета…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                {filteredOptions.length > 0 && (
-                  <div className="mention-dropdown">
-                    {filteredOptions.slice(0, 8).map((o) => (
-                      <div
-                        key={o.id}
-                        className="mention-dropdown-item"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          addFromCompendium(si, o);
-                        }}
-                      >
-                        {o.name}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <button type="button" onClick={cancel}>
-                  Отмена
-                </button>
-              </div>
-            ) : addMode === "bag" ? (
+            addMode === "bag" ? (
               <div className="stack" style={{ gap: 4 }}>
                 {bagItems.length === 0 && <span className="muted">Мешок пуст.</span>}
                 {bagItems.map((b, bi) => (
@@ -2489,7 +2543,7 @@ function DndEquipmentQuickView({
               <button type="button" className="dnd-equipment-add-btn" onClick={() => startAdd(si, null)}>
                 + Свой
               </button>
-              <button type="button" className="dnd-equipment-add-btn" onClick={() => startAdd(si, "compendium")}>
+              <button type="button" className="dnd-equipment-add-btn" onClick={() => setPickingSection(si)}>
                 + Из компендиума
               </button>
               <button type="button" className="dnd-equipment-add-btn" onClick={() => startAdd(si, "bag")}>
@@ -2499,6 +2553,33 @@ function DndEquipmentQuickView({
           )}
         </div>
       ))}
+      {pickingSection != null && (
+        <DndEquipmentPickerModal
+          systemId={systemId}
+          ownedIds={
+            new Set(
+              sections
+                .flatMap((s) => s.items.map((i) => i.entryId))
+                .filter((id): id is number => typeof id === "number")
+            )
+          }
+          onPick={(entries) => {
+            const si = pickingSection;
+            setPickingSection(null);
+            if (entries.length === 0) return;
+            // Пачка одним сохранением: мета догружается, строки ложатся разом.
+            void (async () => {
+              const items: DndEquipmentItem[] = [];
+              for (const e of entries) {
+                const meta = await fetchEquipmentMeta(e.id);
+                items.push({ name: e.name, qty: "", weight: "", notes: "", ...meta });
+              }
+              appendItems(si, items);
+            })();
+          }}
+          onClose={() => setPickingSection(null)}
+        />
+      )}
     </>
   );
 }
@@ -2917,6 +2998,12 @@ function useDndOrigin(
       raceName: opt?.name ?? "",
       raceTypeName: opt?.creatureTypeName ?? "",
       speed: opt?.walkSpeed ? `${opt.walkSpeed} фт.` : value.speed,
+      // Кость скорости читает структуру, а не строку: без этого ходьба вида
+      // уходила подписью, а в кости оставался прочерк. walkSpeed вида —
+      // строка, в структуру ложится числом.
+      speeds: opt?.walkSpeed && Number.isFinite(Number(opt.walkSpeed))
+        ? { ...value.speeds, walk: Number(opt.walkSpeed) }
+        : value.speeds,
     };
     const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
     if (seq !== opSeqRef.current) return;
@@ -2929,6 +3016,7 @@ function useDndOrigin(
       raceName: nextValue.raceName,
       raceTypeName: nextValue.raceTypeName,
       speed: nextValue.speed,
+      speeds: nextValue.speeds,
       cantrips,
       spellsByLevel,
       spellSlotLevels,
@@ -3063,7 +3151,8 @@ function weaponAttackRows(
   const dex = abilityModifier(abilities.dex);
   return sections
     .flatMap((s) => s.items)
-    .filter((i) => i.equipped && i.weaponDamage)
+    // Отданная вещь из боя исключена вместе с КЗ (этап 4б): ею не бьют.
+    .filter((i) => i.equipped && !i.transferOut && i.weaponDamage)
     .map((i) => {
       // Свойства оружия приходят строкой из компендиума, поэтому признаки
       // ищутся без учёта регистра: «Фехтовальное» и «фехтовальное» — одно и
@@ -3197,7 +3286,7 @@ function manualAttackRows(attacks: DndManualAttack[]): AttackRow[] {
 function equippedWeaponSummaries(sections: DndEquipmentSection[]): DndFeature[] {
   return sections
     .flatMap((s) => s.items)
-    .filter((i) => i.equipped && i.weaponDamage)
+    .filter((i) => i.equipped && !i.transferOut && i.weaponDamage)
     .map((i) => {
       const type = i.weaponAttackMelee && i.weaponAttackRanged ? "Ближняя/дальняя атака" : i.weaponAttackRanged ? "Дальняя атака" : "Ближняя атака";
       const parts = [type, i.weaponDamage, i.weaponProperties, i.weaponMastery && `Мастерство: ${i.weaponMastery}`].filter(Boolean);
@@ -3205,75 +3294,357 @@ function equippedWeaponSummaries(sections: DndEquipmentSection[]): DndFeature[] 
     });
 }
 
+/**
+ * Закладки первой карты — до трёх строк «Действий», вынесенных на портрет.
+ *
+ * Пока игрок ничего не закрепил, лист предлагает сам: лучшее оружие и
+ * атакующее заклинание высшего круга. Это ответ на вопрос «чем я обычно
+ * бью», который за столом задают каждый ход, — и он не должен требовать
+ * настройки: Мастер и игрок заняты игрой, а не листом. Как только игрок
+ * закрепил хоть одну строку, показывается только его выбор.
+ */
+/**
+ * Жетон спутника — ссылка на запись бестиария.
+ *
+ * Ссылка хранит и id, и имя: по id открывается статблок, а имя остаётся
+ * читаемым, если запись переехала или компендиум не загрузился (правило
+ * «глобальные ключи ссылок», гриллинг 2026-09-03). Портрет берётся из самой
+ * записи — своего у спутника нет и не заводится.
+ */
+/**
+ * Состояния персонажа — плашка на карте и выбор из компендиума системы.
+ *
+ * Список берётся из механик («Состояния»), а не из константы в коде:
+ * состояния — часть системы, и у самодельной или импортированной системы
+ * они свои. Пока список не загрузился (или его в системе нет), уже
+ * проставленные состояния всё равно показываются: они хранятся именами.
+ */
+/**
+ * Плашка живого ряда — состояния, концентрация, истощение.
+ *
+ * Кнопкой целиком, а не только числом внутри: за столом по ней попадают
+ * пальцем не глядя, и подпись «КОНЦЕНТРАЦИЯ» — такая же часть мишени, как
+ * значение. Вложить кнопку в кнопку нельзя, поэтому подпись и значение
+ * здесь — простые span'ы.
+ */
+function LiveChip({
+  label,
+  value,
+  active,
+  title,
+  ariaLabel,
+  onClick,
+}: {
+  label: string;
+  value: ReactNode;
+  active?: boolean;
+  title?: string;
+  ariaLabel: string;
+  onClick?: () => void;
+}) {
+  const cls = `dnd-live-chip${active ? " is-on" : ""}`;
+  if (!onClick) {
+    return (
+      <div className={cls} title={title}>
+        <span className="sb-label">{label}</span>
+        <span className="sb-value">{value}</span>
+      </div>
+    );
+  }
+  return (
+    <button type="button" className={cls} title={title} aria-label={ariaLabel} aria-pressed={active} onClick={onClick}>
+      <span className="sb-label">{label}</span>
+      <span className="sb-value">{value}</span>
+    </button>
+  );
+}
+
+function ConditionsBox({
+  conditions,
+  systemId,
+  onQuickUpdate,
+}: {
+  conditions: string[];
+  systemId: number | null;
+  onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<DndMechanicsOption[]>([]);
+  useEffect(() => {
+    if (!open || !systemId) return;
+    let alive = true;
+    loadDndMechanicsGroup(systemId, "Состояния").then((v) => {
+      if (alive) setOptions(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open, systemId]);
+
+  function toggle(name: string) {
+    if (!onQuickUpdate) return;
+    onQuickUpdate({
+      conditions: conditions.includes(name)
+        ? conditions.filter((c) => c !== name)
+        : [...conditions, name],
+    });
+  }
+
+  return (
+    <>
+      {/* Число, а не перечисление: три состояния подряд не влезают в плашку
+          и рвут живой ряд на две строки. Какие именно — видно в окне,
+          которое эта же плашка и открывает. */}
+      <LiveChip
+        label="Состояния"
+        value={conditions.length > 0 ? conditions.length : "нет"}
+        active={conditions.length > 0}
+        ariaLabel="Состояния — изменить"
+        onClick={onQuickUpdate ? () => setOpen(true) : undefined}
+      />
+      {open && (
+        <Modal onClose={() => setOpen(false)}>
+          <div className="stack" style={{ minWidth: 240 }}>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-display)", textTransform: "uppercase" }}>Состояния</h3>
+            {options.length === 0 && (
+              <p className="muted" style={{ margin: 0 }}>
+                В системе не нашлось раздела механик «Состояния».
+              </p>
+            )}
+            <div className="stack" style={{ gap: 2 }}>
+              {options.map((o) => (
+                <label key={o.id} className="row" style={{ gap: 6, justifyContent: "flex-start" }}>
+                  <input
+                    type="checkbox"
+                    checked={conditions.includes(o.name)}
+                    onChange={() => toggle(o.name)}
+                  />
+                  {o.name}
+                </label>
+              ))}
+              {/* Состояние, проставленное до того, как система обзавелась
+                  списком, не должно пропасть из окна — иначе снять его будет
+                  нечем. */}
+              {conditions
+                .filter((c) => !options.some((o) => o.name === c))
+                .map((c) => (
+                  <label key={c} className="row" style={{ gap: 6, justifyContent: "flex-start" }}>
+                    <input type="checkbox" checked onChange={() => toggle(c)} />
+                    {c}
+                  </label>
+                ))}
+            </div>
+            <button type="button" className="primary" onClick={() => setOpen(false)} style={{ alignSelf: "flex-end" }}>
+              Готово
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function CompanionToken({
+  companion,
+  getEntry,
+  onRemove,
+}: {
+  companion: DndCompanion;
+  getEntry: (id: number | null | undefined) => CompendiumEntry | undefined;
+  onRemove?: () => void;
+}) {
+  const entry = getEntry(companion.entryId);
+  const avatar = entry?.avatar_image_url;
+  const [open, setOpen] = useState(false);
+  const body = (
+    <>
+      <span className="dnd-companion-face">
+        {avatar ? <img src={avatar} alt="" /> : <NavIcon name="skull" />}
+      </span>
+      <span className="dnd-companion-name">{stripLatin(entry?.name || companion.name)}</span>
+    </>
+  );
+  return (
+    <span className="dnd-companion">
+      {/* Окно со статблоком, а не переход в бестиарий: за столом спрашивают
+          КЗ и хиты фамильяра посреди боя, и уход со страницы стоит потери
+          места на листе — вернуться придётся заново и не туда. */}
+      {companion.entryId ? (
+        <button type="button" className="dnd-companion-link" onClick={() => setOpen(true)}>
+          {body}
+        </button>
+      ) : (
+        <span className="dnd-companion-link">{body}</span>
+      )}
+      {open && companion.entryId && (
+        <EntityPreviewModal type="compendium_entry" id={companion.entryId} onClose={() => setOpen(false)} />
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          className="comp-mini dnd-companion-remove"
+          title="Убрать спутника"
+          aria-label={`Убрать спутника: ${companion.name}`}
+          onClick={onRemove}
+        >
+          <NavIcon name="close" />
+        </button>
+      )}
+    </span>
+  );
+}
+
+function pickBookmarks(rows: AttackRow[], pinned: DndPinnedAction[] | undefined): AttackRow[] {
+  if (pinned && pinned.length > 0) {
+    // По имени, а не по id: у оружия и ручных атак записи компендиума нет
+    // вовсе, а имя строки — то, что игрок видел, когда закреплял.
+    return pinned
+      .map((p) => rows.find((r) => r.name === p.name))
+      .filter((r): r is AttackRow => !!r)
+      .slice(0, 3);
+  }
+  // Числа, а не прочерки: строка «Сотворение заклинаний — — —» на карте
+  // занимает место закладки и не отвечает ни на один вопрос за столом.
+  const hasNumbers = (r: AttackRow) => {
+    const num = (v: string) => !!v && v !== "—";
+    return num(r.bonus) || num(r.damage);
+  };
+  const out: AttackRow[] = [];
+  const weapon = rows.find((r) => !r.source && hasNumbers(r));
+  if (weapon) out.push(weapon);
+  const spells = rows.filter((r) => r.source?.kind === "spell" && hasNumbers(r));
+  const topSpell = spells.reduce<AttackRow | null>((best, r) => {
+    const level = r.source?.kind === "spell" ? r.source.level : 0;
+    const bestLevel = best?.source?.kind === "spell" ? best.source.level : -1;
+    return level > bestLevel ? r : best;
+  }, null);
+  if (topSpell) out.push(topSpell);
+  // Третьей — первая же строка обычного действия, ещё не попавшая в список:
+  // у персонажа без оружия и без магии закладки иначе пустуют совсем.
+  const filler = rows.find((r) => r.timing === "action" && hasNumbers(r) && !out.includes(r));
+  if (filler && out.length < 3) out.push(filler);
+  return out;
+}
+
 function AttacksTable({
   title,
   rows,
   onOpen,
+  pinnedNames,
+  onPin,
+  resourceLabels,
+  color,
 }: {
   title: string;
   rows: AttackRow[];
+  /** Имена строк, вынесенных закладкой на первую карту. */
+  pinnedNames?: string[];
+  onPin?: (row: AttackRow) => void;
   // Строка со источником кликабельна: раньше вкладка показывала имя,
   // бонус и урон, а прочитать, что способность делает, было нельзя — только
   // уйти на другую вкладку и искать её там заново.
   onOpen?: (row: AttackRow) => void;
+  /** Подписи пулов по resourceKey — для бейджей цен («−2 Очки чародейства»). */
+  resourceLabels?: Record<string, string>;
+  /** Цвет класса — кромка тратящих строк, единственная краска. */
+  color?: string;
 }) {
   if (rows.length === 0) return null;
   return (
     <div className="cs-list">
       <div className="sb-section">{title}</div>
-      <div className="dnd-attacks-table-wrap">
-      <table className="dnd-attacks-table">
-        <thead>
-          <tr>
-            <th>Название</th>
-            <th>АТК/СЛ</th>
-            <th>Эффект</th>
-            <th>Дальность</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr
+      <div className="stack dnd-action-cards" style={{ gap: 0 }}>
+        {rows.map((r, i) => {
+          // Строка, из-за которой всплывает лента пулов, подсвечена и несёт
+          // цену прямо на себе (канвас Actions) — за столом видно, чем платишь,
+          // не открывая окно.
+          const cost = r.source?.kind === "feature" ? r.source.feature.cost : undefined;
+          const poolKey = cost?.kind === "resource" ? (cost.resourceKey ?? null) : null;
+          const spending = poolKey != null;
+          const amount = cost?.amount && cost.amount > 0 ? cost.amount : 1;
+          const badge =
+            spending && poolKey
+              ? `−${amount} ${resourceLabels?.[poolKey] ?? "ресурс"}`
+              : null;
+          // Вторая строка подписи: у заклинания — круг и дальность, у умения —
+          // уже собранная цена («1 за долгий отдых»), у оружия — дальность.
+          const meta =
+            r.source?.kind === "spell"
+              ? [`${r.source.level === 0 ? "Заговор" : `${r.source.level} круг`}`, r.range !== "—" ? r.range : ""]
+                  .filter(Boolean)
+                  .join(" · ")
+              : r.range !== "—" && r.range !== ""
+                ? r.range
+                : "";
+          const pinned = pinnedNames?.includes(r.name) ?? false;
+          return (
+            <div
               key={i}
-              className={r.source && onOpen ? "is-clickable" : undefined}
+              className={`dnd-action-card${spending ? " is-spending" : ""}`}
+              style={spending && color ? { borderLeftColor: color } : undefined}
+              role={r.source && onOpen ? "button" : undefined}
+              tabIndex={r.source && onOpen ? 0 : undefined}
+              aria-label={r.source && onOpen ? `${r.name} — открыть описание` : undefined}
               onClick={r.source && onOpen ? () => onOpen(r) : undefined}
+              onKeyDown={
+                r.source && onOpen
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onOpen(r);
+                      }
+                    }
+                  : undefined
+              }
             >
-              {/* Кнопка внутри ячейки, а не `role="button"` на `<tr>`: роль
-                  на строке ломает разметку таблицы для скринридера, а без
-                  неё описание нельзя было открыть с клавиатуры вовсе.
-                  Щелчок мышью по всей строке при этом сохраняется. */}
-              <td data-label="Название">
-                {r.source && onOpen ? (
-                  <button
-                    type="button"
-                    className="dnd-attack-name-link"
-                    aria-label={`${r.name} — открыть описание`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpen(r);
-                    }}
-                  >
-                    {r.name}
-                  </button>
+              <span className="dnd-action-main">
+                <span className="dnd-action-name">
+                  {/* Булавка выносит строку закладкой на первую карту. Мишень
+                      своя: щелчок по строке открывает описание, и закрепление
+                      по промаху было бы худшим из двух исходов. */}
+                  {onPin && (
+                    <button
+                      type="button"
+                      className={`comp-mini dnd-pin-toggle${pinned ? " is-on" : ""}`}
+                      title={pinned ? "Убрать с карты" : "Вынести на карту"}
+                      aria-pressed={pinned}
+                      aria-label={`${r.name} — ${pinned ? "убрать с карты" : "вынести на карту"}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPin(r);
+                      }}
+                    >
+                      <NavIcon name="navPin" />
+                    </button>
+                  )}
+                  {r.name}
+                </span>
+                {r.description !== undefined ? (
+                  <span className="muted dnd-action-meta">
+                    <MentionText text={r.description} />
+                  </span>
                 ) : (
-                  r.name
+                  meta && <span className="dnd-action-meta">{meta}</span>
                 )}
-              </td>
-              {r.description !== undefined ? (
-                <td colSpan={3} className="muted">
-                  <MentionText text={r.description} />
-                </td>
-              ) : (
-                <>
-                  <td data-label="АТК/СЛ">{r.bonus}</td>
-                  <td data-label="Эффект">{r.damage}</td>
-                  <td data-label="Дальность">{r.range}</td>
-                </>
+              </span>
+              {r.description === undefined && (
+                <span className="dnd-action-nums">
+                  <span className="dnd-action-bonus">{r.bonus}</span>
+                  {r.damage && r.damage !== "—" && <span className="dnd-action-damage">{r.damage}</span>}
+                </span>
               )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              {badge && (
+                <span
+                  className="dnd-action-cost"
+                  title={badge}
+                  style={color ? { background: color, color: textOnClassColor(color) } : undefined}
+                >
+                  {badge}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -3549,20 +3920,42 @@ function SpendAction({
       }
     }
     if (use < 0) return <span className="muted">Свободных ячеек {level} круга и выше нет.</span>;
+    // Вниз кастовать нельзя (только вверх), поэтому другие круги — тоже
+    // от своего и выше. Основная кнопка — ближайший свободный (обычный
+    // случай за столом), остальные — мелкими: выбор круга не должен стоить
+    // второго окна. Усиление от высокого круга лист пока не считает —
+    // см. «на будущее» в Charnik_dodelat.md.
+    const spend = (circle: number) => {
+      const next = value.spellSlotsUsed.slice();
+      next[circle] = (next[circle] ?? 0) + 1;
+      onQuickUpdate({ spellSlotsUsed: next });
+      onDone();
+    };
+    const others: number[] = [];
+    for (let i = level - 1; i < slots.length; i++) {
+      if (i !== use && (slots[i] ?? 0) > (value.spellSlotsUsed[i] ?? 0)) others.push(i);
+    }
     return (
-      <button
-        type="button"
-        className="primary"
-        style={{ alignSelf: "flex-start" }}
-        onClick={() => {
-          const next = value.spellSlotsUsed.slice();
-          next[use] = (next[use] ?? 0) + 1;
-          onQuickUpdate({ spellSlotsUsed: next });
-          onDone();
-        }}
-      >
-        Потратить ячейку {use + 1} круга
-      </button>
+      <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
+        <button
+          type="button"
+          className="primary"
+          style={{ alignSelf: "flex-start" }}
+          onClick={() => spend(use)}
+        >
+          Потратить ячейку {use + 1} круга
+        </button>
+        {others.length > 0 && (
+          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="muted">другой круг:</span>
+            {others.map((i) => (
+              <button key={i} type="button" className="comp-mini" onClick={() => spend(i)}>
+                {i + 1}й
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     );
   }
   const cost = row.source?.kind === "feature" ? row.source.feature.cost : undefined;
@@ -3733,8 +4126,8 @@ function walkDieParts(
   speeds: DndCreatureSpeed,
   exhaustion: number,
   unit: DndDistanceUnit
-): { value: string; sub: string; was: string } {
-  if (speeds.walk === null) return { value: "—", sub: "", was: "" };
+): { value: string; sub: string } {
+  if (speeds.walk === null) return { value: "—", sub: "" };
   const penalty = Math.max(0, exhaustion) * 5;
   const reduced = Math.max(0, speeds.walk - penalty);
   const split = (feet: number) => {
@@ -3742,8 +4135,10 @@ function walkDieParts(
     const i = text.lastIndexOf(" ");
     return i < 0 ? { value: text, sub: "" } : { value: text.slice(0, i), sub: text.slice(i + 1) };
   };
-  const now = split(reduced);
-  return { ...now, was: penalty > 0 ? split(speeds.walk).value : "" };
+  // Прежняя скорость зачёркнутым рядом больше не печатается: строка
+  // появлялась и исчезала вместе с истощением и дёргала весь ряд. Насколько
+  // отняли, говорит пометка над именем.
+  return split(reduced);
 }
 
 /**
@@ -3765,7 +4160,8 @@ function DndClassSpellListModal({
   sources,
   cantrips,
   spellsByLevel,
-  onAdd,
+  maxCircle,
+  onPick,
   onClose,
 }: {
   systemId: number | null;
@@ -3773,11 +4169,18 @@ function DndClassSpellListModal({
   sources: { id: number; name: string }[];
   cantrips: DndSpellEntry[];
   spellsByLevel: DndSpellEntry[][];
-  onAdd: (level: number, entry: CompendiumEntry) => void;
+  /** Старший доступный круг: выкладка по умолчанию — заговоры и круги не
+      выше него («что обычно берут на этом уровне», этап 6). Поиск вторым
+      эшелоном ищет по всем кругам, тумблер раскрывает выкладку целиком. */
+  maxCircle: number;
+  /** Пачка: отметить несколько и добавить разом, одним сохранением. */
+  onPick: (items: { level: number; entry: CompendiumEntry }[]) => void;
   onClose: () => void;
 }) {
   const [all, setAll] = useState<CompendiumEntry[] | null>(null);
   const [query, setQuery] = useState("");
+  const [showAllCircles, setShowAllCircles] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -3802,9 +4205,13 @@ function DndClassSpellListModal({
   );
 
   const q = query.trim().toLowerCase();
+  // Сначала фильтр класса (свой список), потом круга, поиск — последним:
+  // пустое поле показывает выкладку, а не пустой экран.
   const matching = (all ?? []).filter((e) => {
     const refs = Array.isArray(e.data?.classes) ? (e.data.classes as { id?: number }[]) : [];
     if (!refs.some((r) => typeof r.id === "number" && sourceIds.has(r.id))) return false;
+    const lvl = e.level ?? 0;
+    if (!showAllCircles && !q && lvl > Math.max(0, maxCircle)) return false;
     return !q || e.name.toLowerCase().includes(q);
   });
   const byLevel = new Map<number, CompendiumEntry[]>();
@@ -3815,8 +4222,17 @@ function DndClassSpellListModal({
   }
   const levels = [...byLevel.keys()].sort((a, b) => a - b);
 
+  function toggle(id: number) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
-    <Modal onClose={onClose}>
+    <Modal wide onClose={onClose}>
       <div className="stack dnd-spell-list-modal">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h3 style={{ margin: 0 }}>Доступные заклинания</h3>
@@ -3828,10 +4244,21 @@ function DndClassSpellListModal({
           {sources.map((s) => s.name).join(" · ") || "Класс не выбран"}
         </div>
         <input
-          placeholder="Поиск по названию"
+          placeholder="Поиск по названию — вторым эшелоном"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {!q && (
+          <button
+            type="button"
+            className="comp-mini"
+            style={{ alignSelf: "flex-start" }}
+            aria-pressed={showAllCircles}
+            onClick={() => setShowAllCircles((v) => !v)}
+          >
+            {showAllCircles ? `Только доступные (до ${Math.max(0, maxCircle)} круга)` : "Показать все круги"}
+          </button>
+        )}
         {failed && <p className="muted">Не удалось загрузить справочник заклинаний.</p>}
         {!failed && all === null && <p className="muted">Загрузка…</p>}
         {all !== null && levels.length === 0 && (
@@ -3841,23 +4268,183 @@ function DndClassSpellListModal({
               : "Ничего не нашлось: у класса нет заклинаний в справочнике либо не подходит поиск."}
           </p>
         )}
-        {levels.map((lvl) => (
-          <div key={lvl} className="stack" style={{ gap: 4 }}>
-            <div className="sb-prop-label">{lvl === 0 ? "Заговоры" : `${lvl} круг`}</div>
-            {byLevel.get(lvl)!.map((e) => (
-              <div key={e.id} className="row dnd-spell-list-row">
-                <span style={{ flex: "1 1 12ch", minWidth: 0 }}>{e.name}</span>
-                {owned.has(e.id) ? (
-                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>уже в листе</span>
-                ) : (
-                  <button type="button" className="comp-mini" onClick={() => onAdd(lvl, e)}>
-                    Взять
+        <div className="stack picker-list" style={{ gap: 8 }}>
+          {levels.map((lvl) => (
+            <div key={lvl} className="stack" style={{ gap: 4 }}>
+              <div className="sb-prop-label">{lvl === 0 ? "Заговоры" : `${lvl} круг`}</div>
+              {byLevel.get(lvl)!.map((e) => {
+                const isOwned = owned.has(e.id);
+                const isPicked = picked.has(e.id);
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    className={`dnd-picker-row${isPicked ? " is-picked" : ""}`}
+                    disabled={isOwned}
+                    aria-pressed={isPicked}
+                    onClick={() => toggle(e.id)}
+                  >
+                    <span className="dnd-picker-check" aria-hidden="true">
+                      {isPicked ? "●" : "○"}
+                    </span>
+                    <span style={{ flex: "1 1 auto", minWidth: 0, textAlign: "left" }}>{e.name}</span>
+                    {isOwned && (
+                      <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                        уже в листе
+                      </span>
+                    )}
                   </button>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="row picker-footer" style={{ gap: 8 }}>
+          <button
+            type="button"
+            className="primary"
+            disabled={picked.size === 0}
+            onClick={() => {
+              const byId = new Map((all ?? []).map((e) => [e.id, e]));
+              onPick(
+                [...picked]
+                  .map((id) => byId.get(id))
+                  .filter((e): e is CompendiumEntry => !!e)
+                  .map((e) => ({ level: e.level ?? 0, entry: e }))
+              );
+            }}
+          >
+            Добавить{picked.size > 0 ? ` (${picked.size})` : ""}
+          </button>
+          <button type="button" onClick={onClose}>
+            Отмена
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Подбор снаряжения пачкой (этап 6): та же механика, что у заклинаний, —
+ * выкладка каталогом вместо пустого поля, поиск вторым эшелоном, отметить
+ * несколько и добавить разом. Группы — по виду записи: магические предметы
+ * отдельно от обычного снаряжения.
+ */
+function DndEquipmentPickerModal({
+  systemId,
+  ownedIds,
+  onPick,
+  onClose,
+}: {
+  systemId: number | null;
+  ownedIds: ReadonlySet<number>;
+  onPick: (entries: CompendiumEntry[]) => void;
+  onClose: () => void;
+}) {
+  const [all, setAll] = useState<CompendiumEntry[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!systemId) {
+      setAll([]);
+      return;
+    }
+    let alive = true;
+    loadDndEquipmentEntries(systemId)
+      .then((rows) => {
+        if (alive) setAll(rows);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [systemId]);
+
+  const q = query.trim().toLowerCase();
+  const matching = (all ?? []).filter((e) => !q || e.name.toLowerCase().includes(q));
+  const groups = [
+    { title: "Магические предметы", entries: matching.filter((e) => e.kind === "magic_item") },
+    { title: "Снаряжение", entries: matching.filter((e) => e.kind !== "magic_item") },
+  ].filter((g) => g.entries.length > 0);
+
+  function toggle(id: number) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <Modal wide onClose={onClose}>
+      <div className="stack">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>Снаряжение из компендиума</h3>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <input
+          placeholder="Поиск по названию — вторым эшелоном"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {failed && <p className="muted">Не удалось загрузить справочник снаряжения.</p>}
+        {!failed && all === null && <p className="muted">Загрузка…</p>}
+        {all !== null && groups.length === 0 && <p className="muted">Ничего не нашлось.</p>}
+        <div className="stack picker-list" style={{ gap: 8 }}>
+          {groups.map((g) => (
+            <div key={g.title} className="stack" style={{ gap: 4 }}>
+              <div className="sb-prop-label">{g.title}</div>
+              {g.entries.map((e) => {
+                const isOwned = ownedIds.has(e.id);
+                const isPicked = picked.has(e.id);
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    className={`dnd-picker-row${isPicked ? " is-picked" : ""}`}
+                    disabled={isOwned}
+                    aria-pressed={isPicked}
+                    onClick={() => toggle(e.id)}
+                  >
+                    <span className="dnd-picker-check" aria-hidden="true">
+                      {isPicked ? "●" : "○"}
+                    </span>
+                    <span style={{ flex: "1 1 auto", minWidth: 0, textAlign: "left" }}>{e.name}</span>
+                    {isOwned && (
+                      <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                        уже в листе
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="row picker-footer" style={{ gap: 8 }}>
+          <button
+            type="button"
+            className="primary"
+            disabled={picked.size === 0}
+            onClick={() => {
+              const byId = new Map((all ?? []).map((e) => [e.id, e]));
+              onPick([...picked].map((id) => byId.get(id)).filter((e): e is CompendiumEntry => !!e));
+            }}
+          >
+            Добавить{picked.size > 0 ? ` (${picked.size})` : ""}
+          </button>
+          <button type="button" onClick={onClose}>
+            Отмена
+          </button>
+        </div>
       </div>
     </Modal>
   );
@@ -4907,6 +5494,143 @@ function DndReplicaBasePicker({
   );
 }
 
+/**
+ * Лента пулов сверху «Действий» (этап 5, вид — по канвасу Actions): чёрная
+ * плашка-инверсия. Квадратные пипсы (только здесь — общий PipTrack круглый
+ * и остаётся на «Ресурсах»), залитые — остаток («3 из 5» читается как
+ * «осталось», это боевое число), подпись речарджа. Ячейки — текстом, трата
+ * остаётся в окнах строк. Показывается только то, что тратит хоть одна
+ * строка этой карты; пусто — компоненты нет вовсе.
+ */
+function DndPoolPips({
+  max,
+  left,
+  label,
+  color,
+  onSetLeft,
+}: {
+  max: number;
+  /** Осталось — залитые квадраты. */
+  left: number;
+  label: string;
+  color: string;
+  /** Клик по i-му квадрату ставит остаток i+1 (потрачено max-i-1). */
+  onSetLeft?: (left: number) => void;
+}) {
+  return (
+    <span className="dnd-pip-squares" role="group" aria-label={label}>
+      {Array.from({ length: max }, (_, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`dnd-pip-sq${i < left ? " is-on" : ""}`}
+          style={i < left ? { background: color, borderColor: color } : undefined}
+          aria-label={`${label}: осталось ${i + 1}`}
+          aria-pressed={i < left}
+          disabled={!onSetLeft}
+          onClick={() => onSetLeft?.(i + 1)}
+        />
+      ))}
+    </span>
+  );
+}
+
+function DndActionPools({
+  actionRows,
+  resourceSources,
+  abilities,
+  resourceUsed,
+  resourceBonus,
+  shownSlotPips,
+  spellSlotsUsed,
+  pact,
+  pactUsed,
+  color,
+  onQuickUpdate,
+}: {
+  actionRows: AttackRow[];
+  resourceSources: ClassResourceSource[];
+  abilities: DndCharacterData["abilities"];
+  resourceUsed: Record<string, number>;
+  resourceBonus: Record<string, number>;
+  shownSlotPips: number[];
+  spellSlotsUsed: number[];
+  pact: { count: number; circle: number } | null;
+  pactUsed: number;
+  /** Цвет класса — заливка пипсов, единственная краска на плашке. */
+  color: string;
+  onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+}) {
+  // Боевые заклинания — строки-заклинания кругов ≥1. Заговоры ячеек не
+  // тратят, и ради них ленту не поднимаем.
+  const hasCombatSpells = actionRows.some((r) => r.source?.kind === "spell" && r.source.level > 0);
+  // Классовые пулы, задетые стоимостями строк. Ключ — тот же resourceKey,
+  // по которому окно строки ищет свой пул для кнопки «Потратить».
+  const spentKeys = new Set(
+    actionRows.flatMap((r) => {
+      const cost = r.source?.kind === "feature" ? r.source.feature.cost : undefined;
+      return cost?.kind === "resource" && cost.resourceKey ? [cost.resourceKey] : [];
+    })
+  );
+  const pools = allResources(resourceSources, abilities).filter(
+    (r) => spentKeys.has(r.key) && r.max + (resourceBonus[r.key] ?? 0) > 0
+  );
+  const slotLeft = shownSlotPips.map((max, i) => max - (spellSlotsUsed[i] ?? 0));
+  const showSlots = hasCombatSpells && shownSlotPips.some((max) => max > 0);
+  const showPact = hasCombatSpells && pact != null && pact.count > 0;
+  // Класс подписываем только многоклассовым — как на «Ресурсах».
+  const showClass = resourceSources.filter((s) => s.entry.level > 0).length > 1;
+  if (!showSlots && !showPact && pools.length === 0) return null;
+  return (
+    <div className="dnd-pool-band" role="status" aria-label="Остаток боевых ресурсов">
+      {showSlots && (
+        <span className="dnd-pool-slots">
+          <span className="dnd-pool-band-label">Ячейки</span>{" "}
+          {shownSlotPips.map((max, i) =>
+            max > 0 ? (
+              <span key={i} className="dnd-pool-slot">
+                {i + 1}й ×{Math.max(0, slotLeft[i])}
+              </span>
+            ) : null
+          )}
+        </span>
+      )}
+      {showPact && pact != null && (
+        <span className="dnd-pool-slots">
+          <span className="dnd-pool-band-label">Договор</span>{" "}
+          <span className="dnd-pool-slot">
+            {pact.circle} круг ×{Math.max(0, pact.count - pactUsed)}
+          </span>
+        </span>
+      )}
+      {pools.map((r) => {
+        const max = r.max + (resourceBonus[r.key] ?? 0);
+        const used = Math.min(resourceUsed[r.key] ?? 0, max);
+        const left = max - used;
+        return (
+          <span key={r.key} className="dnd-pool-resource">
+            <span className="dnd-pool-band-label">
+              {r.label}
+              {showClass && <span className="dnd-pool-band-muted"> · {r.className}</span>}
+            </span>
+            <DndPoolPips
+              max={max}
+              left={left}
+              label={r.label}
+              color={color}
+              onSetLeft={onQuickUpdate ? (next) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: max - next } }) : undefined}
+            />
+            <span className="dnd-pool-count">
+              {left} из {max}
+            </span>
+            <span className="dnd-pool-band-muted">{PROGRESSION_RECHARGE_LABELS[r.recharge]}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function DndResourcesView({
   sources,
   abilities,
@@ -5146,76 +5870,239 @@ function DndRestModal({
 // он же объясняет устройство листа тому, кто открыл его впервые — Мастеру,
 // заглянувшему в чужой чарник.
 function DndDeckFan({
-  value,
   current,
   color,
   pendingItems,
+  subtitle,
+  details,
   onPick,
   onClose,
 }: {
-  value: DndCharacterData;
   current: DndViewTab;
   color: string;
   pendingItems: number;
+  /** «Имя · класс уровень» в шапку (канвас DeckFan). */
+  subtitle: string;
+  /** Строки-счётчики миниатюр: каждая своей строкой, вместо декоративных
+   *  глифов. Строит родитель — у него все данные листа под рукой. */
+  details: Record<DndViewTab, string[]>;
   onPick: (tab: DndViewTab) => void;
   onClose: () => void;
 }) {
-  const spellCount = value.cantrips.length + value.spellsByLevel.reduce((n, l) => n + l.length, 0);
-  const itemCount = value.equipmentSections.reduce((n, s) => n + s.items.length, 0);
-  const profCount =
-    Object.values(value.skillProfs).filter((v) => v > 0).length + value.proficiencies.length;
-  const featureCount =
-    value.speciesFeatures.length + value.classFeatures.length + value.feats.length + value.specialAbilities.length;
-  const actionCount =
-    value.attacks.length +
-    value.classFeatures.length +
-    value.speciesFeatures.length +
-    value.equipmentSections.reduce((n, s) => n + s.items.filter((i) => i.equipped).length, 0);
-  // Подпись под каждой миниатюрой — не украшение, а причина туда пойти:
-  // «сколько там всего» отвечает на вопрос «есть ли мне туда».
-  const meta: Record<DndViewTab, string> = {
-    "Карта": `КЗ ${computeArmorClass(
-      abilityModifier(value.abilities.dex),
-      value.equipmentSections,
-      parseBonus(value.manualAcBonus)
-    )} · ${value.hitPointsCurrent || "—"}/${value.hitPointMax || "—"} хитов`,
-    "Действия": actionCount ? `${actionCount} строк` : "Пусто",
-    "Магия": spellCount ? `${spellCount} заклинаний` : "Заклинаний нет",
-    "Снаряжение": `${itemCount} предметов${pendingItems ? ` · ${pendingItems} не принято` : ""}`,
-    "Навыки": profCount ? `${profCount} владений` : "Владений нет",
-    "Особенности": featureCount ? `${featureCount} умений` : "Умений нет",
-    "Досье": "Характер, привязанности, заметки",
-    "Ресурсы": value.hitDice || "Пулов нет",
-  };
+  // Дабл-тап, открывший веер, кончается кликом по тому же пальцу — а веер
+  // уже под ним, и клик уходил в первую попавшуюся миниатюру. Первые 600мс
+  // жизни клики глотаются: это хвост открывающего жеста, а не выбор.
+  const openedAt = useRef(Date.now());
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <Modal onClose={onClose}>
-      <div className="stack dnd-deck-fan">
-        <div className="row dnd-deck-fan-head">
-          <h3>Колода</h3>
-          <span className="muted">{value.characterName || "Без имени"}</span>
+    <div
+      className="dnd-deck-fan-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Колода карт"
+      onClickCapture={(e) => {
+        if (Date.now() - openedAt.current < 600) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+    >
+      <div className="dnd-deck-fan-head">
+        <div className="dnd-deck-fan-title-row">
+          <span className="dnd-deck-fan-title">Колода</span>
+          <span className="dnd-deck-fan-sub">{subtitle}</span>
+          <button type="button" className="dnd-deck-fan-close" onClick={onClose} aria-label="Закрыть колоду">
+            <NavIcon name="close" />
+          </button>
         </div>
-        <div className="dnd-deck-fan-grid">
-          {DND_VIEW_TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`dnd-deck-fan-card${t === current ? " is-current" : ""}`}
-              style={t === current ? { background: color, borderColor: color } : { borderLeftColor: color, borderRightColor: color }}
-              onClick={() => {
-                onPick(t);
-                onClose();
-              }}
-            >
-              <span className="dnd-deck-fan-name">
-                {t}
-                {t === "Снаряжение" && pendingItems > 0 && <span className="dnd-tab-dot" aria-label="есть непринятое" />}
-              </span>
-              <span className="dnd-deck-fan-meta">{meta[t]}</span>
-            </button>
-          ))}
-        </div>
+        <div className="dnd-deck-fan-hint">Дабл-тап по портрету развернул колоду · тап переносит</div>
       </div>
-    </Modal>
+      <div className="dnd-deck-fan-grid">
+        {DND_VIEW_TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={`dnd-deck-fan-card${t === current ? " is-current" : ""}${t === "Ресурсы" ? " is-muted" : ""}`}
+            style={
+              t === current
+                ? { background: color, borderColor: "#e8e4da" }
+                : { borderLeftColor: color, borderRightColor: color }
+            }
+            onClick={() => {
+              onPick(t);
+              onClose();
+            }}
+          >
+            <span className="dnd-deck-fan-name">
+              {t}
+              {t === "Снаряжение" && pendingItems > 0 && <span className="dnd-fan-dot" aria-label="есть непринятое" />}
+            </span>
+            <span className="dnd-deck-fan-rule" aria-hidden="true" />
+            <span className="dnd-fan-lines">
+              {details[t].length > 0 ? (
+                details[t].map((line, i) => (
+                  <span key={i} className="dnd-fan-line">
+                    {line}
+                  </span>
+                ))
+              ) : (
+                <span className="dnd-fan-line is-dim">Пусто</span>
+              )}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="dnd-deck-fan-foot">
+        <span className="dnd-deck-fan-grabber" aria-hidden="true" />
+        <span className="dnd-deck-fan-hint">Тап по карте переносит</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Правка основной информации карты: имя, игрок, классы, вид, предыстория,
+ * мировоззрение, система. Поля сохраняются мгновенно (тот же onQuickUpdate,
+ * что у всего листа), поэтому кнопки «сохранить данные» здесь нет: внешний
+ * «Сохранить» лишь закрывает панель. Одна на два входа — ?edit=1 и
+ * десктопную раскрывашку в правой колонке, чтобы не разъехались.
+ */
+function DndOriginEditForm({
+  origin,
+  value,
+  onQuickUpdate,
+}: {
+  origin: ReturnType<typeof useDndOrigin>;
+  value: DndCharacterData;
+  onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
+}) {
+  // Собранным считается лист, у которого выбрана система И есть хоть один
+  // источник из компендиума: дальше смена системы оборвёт ссылки. А листа,
+  // у которого система не выбрана вовсе, замок не касается — выбрать её
+  // впервые ничего оборвать не может, наоборот, чинит (было наоборот:
+  // персонаж с классом, но без системы запирался навсегда).
+  const systemKnown = origin.systems.some((sy) => sy.id === value.systemId);
+  const hasCompendiumSources =
+    value.raceId != null || value.backgroundId != null || value.classes.some((c) => c.classId != null);
+  const isSystemLocked = value.systemId != null && systemKnown && hasCompendiumSources;
+  return (
+    <div className="sb-origin-edit stack">
+      <div className="row">
+        <label style={{ flex: 1 }}>
+          Имя персонажа
+          <input
+            value={value.characterName}
+            onChange={(e) => onQuickUpdate({ characterName: e.target.value })}
+          />
+        </label>
+        <label style={{ flex: 1 }}>
+          Игрок
+          <input value={value.playerName} onChange={(e) => onQuickUpdate({ playerName: e.target.value })} />
+        </label>
+      </div>
+
+      <DndClassesEdit
+        classes={value.classes}
+        hierarchy={origin.hierarchy}
+        onChange={origin.setClasses}
+        onPickClass={origin.pickClass}
+        onPickSubclass={origin.pickSubclass}
+        onLevelChange={origin.changeClassLevel}
+        onRemoveClass={origin.removeClass}
+        loadError={origin.loadError}
+        onRetryLoad={origin.reloadOrigin}
+      />
+
+      <div className="row">
+        <label style={{ flex: 1 }}>
+          Вид
+          {origin.species.length > 0 ? (
+            <select
+              value={value.raceId ?? ""}
+              onChange={(e) => origin.pickRace(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">Выбрать вид…</option>
+              {origin.species.map((sp) => (
+                <option key={sp.id} value={sp.id}>
+                  {sp.creatureTypeName ? `${sp.name}, ${sp.creatureTypeName}` : sp.name}
+                </option>
+              ))}
+            </select>
+          ) : origin.loadError ? (
+            <CompendiumFieldError
+              current={value.raceName}
+              error={origin.loadError}
+              onRetry={origin.reloadOrigin}
+            />
+          ) : (
+            <input value={value.raceName} onChange={(e) => onQuickUpdate({ raceName: e.target.value })} />
+          )}
+        </label>
+        <label style={{ flex: 1 }}>
+          Предыстория
+          {origin.backgrounds.length > 0 ? (
+            <select
+              value={value.backgroundId ?? ""}
+              onChange={(e) => origin.pickBackground(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">Выбрать предысторию…</option>
+              {origin.backgrounds.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          ) : origin.loadError ? (
+            <CompendiumFieldError
+              current={value.backgroundName}
+              error={origin.loadError}
+              onRetry={origin.reloadOrigin}
+            />
+          ) : (
+            <input
+              value={value.backgroundName}
+              onChange={(e) => onQuickUpdate({ backgroundName: e.target.value })}
+            />
+          )}
+        </label>
+        <label>
+          Мировоззрение
+          <input value={value.alignment} onChange={(e) => onQuickUpdate({ alignment: e.target.value })} />
+        </label>
+      </div>
+
+      {/* Система выбирается один раз: смена обрывает все ссылки на
+          компендиум — классы, вид, заклинания и умения остаются именами
+          без записей. На собранном листе поле только показывается. */}
+      {isSystemLocked ? (
+        <div className="sb-entry muted">
+          <span className="sb-prop-label">Система</span>{" "}
+          {origin.systems.find((sy) => sy.id === value.systemId)?.name ?? "не выбрана"} — менять нельзя,
+          иначе оборвутся ссылки на компендиум
+        </div>
+      ) : (
+        <label>
+          Система (для подсказок класса, вида и предыстории)
+          <select
+            value={value.systemId ?? ""}
+            onChange={(e) => onQuickUpdate({ systemId: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Не выбрана</option>
+            {origin.systems.map((sy) => (
+              <option key={sy.id} value={sy.id}>
+                {sy.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
   );
 }
 
@@ -5224,10 +6111,11 @@ export function DndCharacterView({
   portraitUrl,
   compact,
   onQuickUpdate,
-  headerExtra,
   syncTabToUrl,
   campaignId,
   ownerCharacterId,
+  onSheetBack,
+  onPortraitRefresh,
 }: {
   value: DndCharacterData;
   // Лицо первой карты. Отдельное поле под изображение заводить не пришлось —
@@ -5240,11 +6128,6 @@ export function DndCharacterView({
   // помещается. Видом статблока (`kind`) это больше не управляется — краткого
   // чарника в списке статблоков нет, см. StatblockList.
   compact?: boolean;
-  // Кнопки владельца карточки (сохранение, удаление) — в собственной плашке
-  // листа. Внешней обёртки-аккордеона у листа больше нет: она давала вторую
-  // шапку поверх этой (§1.4) и прятала лист, который за столом всегда нужен
-  // раскрытым.
-  headerExtra?: ReactNode;
   // View-mode quick edits (HP, inspiration, death saves, spell slots used)
   // save immediately without entering the full DndCharacterEdit form —
   // mirrors LitMCharacterView's onQuickUpdate for tag edits.
@@ -5259,6 +6142,13 @@ export function DndCharacterView({
   // (решение R2/W8). Без них кнопка «Передать» просто скажет, что некому.
   campaignId?: number | null;
   ownerCharacterId?: number | null;
+  // Жест «назад» с первой карты (свайп вправо, решение владельца 2026-09-06):
+  // уводит с полноэкранной страницы чарника обратно в профиль. Встроенному
+  // листу возвращаться некуда — без пропса жест молчит.
+  onSheetBack?: () => void;
+  // Портрет протух (подпись URL живёт 60 секунд): перезагрузить персонажа,
+  // чтобы приехал свежий avatar_image_url. Без пропса — просто плейсхолдер.
+  onPortraitRefresh?: () => void;
 }) {
   // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
   // да и незачем: неиспользуемый просто держит своё состояние вхолостую.
@@ -5271,17 +6161,78 @@ export function DndCharacterView({
   const setTab = syncTabToUrl ? setUrlTab : setLocalTab;
   // Живые данные компендиума для всех заклинаний и умений листа — одной
   // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
-  const getEntry = useCompendiumEntries(sheetEntryIds(value));
+  const wantedIds = sheetEntryIds(value);
+  const getEntry = useCompendiumEntries(wantedIds);
+  // Мёртвые ссылки этого листа (этап 8): запросили пачкой, сервер промолчал —
+  // запись снесли из компендиума уже после вписки. Кэш общий на сессию,
+  // поэтому пересекаем с запрошенным именно этим листом.
+  const deadIds = deadEntryIds().filter((id) => wantedIds.includes(id));
+  const deadNames = deadIds.length > 0 ? deadLinkNames(value, new Set(deadIds)) : [];
   // Цвет класса — единственная краска на карте. Боковые кромки рамки,
   // подчёркивание текущей карты в полоске, заливка хитов. При мультиклассе
   // берётся класс с наибольшим уровнем (dndClassColors.ts).
   const cardColor = sheetClassColor(value.classes, getEntry);
   const [fanOpen, setFanOpen] = useState(false);
-  // Кадрирование портрета: точка фокуса в долях, по умолчанию чуть выше
-  // центра — на портретах в полный рост лицо сидит в верхней трети, и
-  // обрезка ровно по центру промахивается по нему.
-  const portraitPosition = `${(value.portraitFocus?.x ?? 0.5) * 100}% ${(value.portraitFocus?.y ?? 0.35) * 100}%`;
-  // Свайп между соседними картами и вниз — на разворот колоды (Q29/Q33).
+  // Раскрывашка мёртвых ссылок (вид — канвас Actions): имена нужны для
+  // починки, но не каждый раз.
+  const [deadOpen, setDeadOpen] = useState(false);
+  // Раскрывашка правки в десктопной правой колонке (под оборотом).
+  const [rightEditOpen, setRightEditOpen] = useState(false);
+  // Десктопный сплит (этап 7): лицевая карта всегда стоит слева в натуральную
+  // величину, содержимое активной вкладки — справа. Тот же порог 700px, что
+  // у useIsMobile и мобильной CSS. На телефоне лицевая видна только на своей
+  // вкладке, как было.
+  const showDesktopFace = !useIsMobile();
+  // Оборот первой карты — входящие игрока (этап 4). Угол виден всегда:
+  // серый без входящих, цвета класса при непрочитанных. Мастеру игроцкий
+  // роут отвечает 404 — тогда оборот открывается с пояснением, а не
+  // пустотой: угол одинаково доступен, содержимое только владельцу.
+  // Загрузка ленивая: угол-индикатор нужен только на первой карте.
+  const [cardFlipped, setCardFlipped] = useState(false);
+  const [inbox, setInbox] = useState<CharacterInboxMessage[] | null>(null);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxError, setInboxError] = useState<string | null>(null);
+  // Сервер отказал (403 чужому токену, 404 не-владельцу): это Мастер смотрит
+  // чужой лист, а не сломанная сеть. Показываем пояснение вместо ошибки —
+  // содержимое входящих видит только владелец персонажа.
+  const [inboxDenied, setInboxDenied] = useState(false);
+  const [inboxNotice, setInboxNotice] = useState<string | null>(null);
+  const [inboxBusyId, setInboxBusyId] = useState<number | null>(null);
+  const [savedNoteIds, setSavedNoteIds] = useState<ReadonlySet<number>>(new Set());
+  const [cornerGlint, setCornerGlint] = useState(false);
+  const inboxTried = useRef(false);
+  // Протухшая подпись URL портрета: скрываем битую картинку, один раз зовём
+  // родителя за свежей ссылкой. Сбрасывается новым URL и сменой карты.
+  const [portraitStale, setPortraitStale] = useState(false);
+  const portraitRefreshCalled = useRef<string | null>(null);
+  useEffect(() => {
+    setPortraitStale(false);
+  }, [portraitUrl, tab]);
+  function handlePortraitError() {
+    setPortraitStale(true);
+    if (portraitRefreshCalled.current !== portraitUrl) {
+      portraitRefreshCalled.current = portraitUrl ?? null;
+      onPortraitRefresh?.();
+    }
+  }
+  // Данные уже приезжали: следующие тики тихие, без скелетона и ошибок.
+  const inboxReady = useRef(false);
+  const canUseInbox = ownerCharacterId != null;
+  const unreadInbox = (inbox ?? []).filter((m) => !m.read_at).length;
+  // Передачи 4б живут рядом с входящими: тот же оборот, тот же угол (плюс
+  // входящие офферы к непрочитанным), тот же опрос на открытом обороте.
+  const [transfers, setTransfers] = useState<{ incoming: CharacterTransfer[]; outgoing: CharacterTransfer[] } | null>(null);
+  const [transfersLoading, setTransfersLoading] = useState(false);
+  const [transfersError, setTransfersError] = useState<string | null>(null);
+  const [transferNotice, setTransferNotice] = useState<string | null>(null);
+  const [transferBusyId, setTransferBusyId] = useState<number | null>(null);
+  const transfersTried = useRef(false);
+  const transfersReady = useRef(false);
+  const incomingOffered = (transfers?.incoming ?? []).filter((t) => t.state === "offered").length;
+  const unreadTotal = unreadInbox + incomingOffered;
+  // Свайп между соседними картами (влево/вправо). Доминантная вертикаль
+  // глотается молча: она принадлежит прокрутке, а веер колоды теперь
+  // открывается долгим нажатием на портрет (см. ниже), не свайпом вниз.
   // Жест свободен: таблица «Атаки» на телефоне не прокручивается вбок, а
   // разбирается в стопку карточек (dnd-sheet.css). Но полоска названий, поля
   // ввода и всё, что прокручивается само, свайп перехватывать не должны —
@@ -5300,14 +6251,257 @@ export function DndCharacterView({
     const t = e.changedTouches[0];
     const dx = t.clientX - from.x;
     const dy = t.clientY - from.y;
-    if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx) * 1.5) {
-      if (dy > 0) setFanOpen(true);
+    if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx) * 1.5) return;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    // Оборот — не карта колоды: свайпы на нём ничего не переключают.
+    if (cardFlipped) return;
+    const i = DND_VIEW_TABS.indexOf(tab);
+    if (i === 0 && dx > 0) {
+      // Первая карта, жест «назад» (свайп вправо свободен: левее первой карты
+      // ничего нет). На остальных картах вправо — предыдущая карта, как было.
+      if (onSheetBack) onSheetBack();
       return;
     }
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    const i = DND_VIEW_TABS.indexOf(tab);
     const next = dx < 0 ? i + 1 : i - 1;
     if (next >= 0 && next < DND_VIEW_TABS.length) setTab(DND_VIEW_TABS[next]);
+  }
+  // Веер колоды — двойной тап по портрету (решение владельца 2026-09-06).
+  // Начинали с долгого нажатия, но оно не жилец: веер появляется под уже
+  // лежащим пальцем, и touchend тут же нажимает кнопку под ним либо тянет
+  // выделение текста из открывшегося меню. Дабл-тап свободен от этого —
+  // палец к моменту открытия уже поднят. Картуш с именем исключён: дабл-тап
+  // по тексту — выделение слова. iOS-зум по дабл-тапу гасится touch-action
+  // в CSS (dnd-sheet.css). Окно 350мс и сдвиг до 30px — обычные значения.
+  const lastPortraitTap = useRef<{ t: number; x: number; y: number } | null>(null);
+  function onPortraitTouchEnd(e: React.TouchEvent) {
+    const el = e.target as HTMLElement;
+    if (el.closest(".dnd-card-cartouche")) {
+      lastPortraitTap.current = null;
+      return;
+    }
+    // Перетаскивание кадра — не тап: веер по окончании драга не открываем.
+    if (frame.draggedRef.current) {
+      frame.draggedRef.current = false;
+      lastPortraitTap.current = null;
+      return;
+    }
+    const t = e.changedTouches[0];
+    const now = Date.now();
+    const prev = lastPortraitTap.current;
+    lastPortraitTap.current = { t: now, x: t.clientX, y: t.clientY };
+    if (prev && now - prev.t < 350 && Math.hypot(t.clientX - prev.x, t.clientY - prev.y) < 30) {
+      lastPortraitTap.current = null;
+      setFanOpen(true);
+    }
+  }
+  // Подгрузка входящих: один раз при первом показе лицевой стороны.
+  // Ошибка (включая 404 для Мастера) гасит только оборот: лицевая карта
+  // обязана работать и без входящих.
+  const refreshInbox = useCallback(() => {
+    if (ownerCharacterId == null) return;
+    const id = ownerCharacterId;
+    // Тихий тик не должен мигать «Загрузкой»: скелетон — только пока данных
+    // нет вовсе, ошибка на фоне — тоже молча, старое лучше пустоты.
+    if (!inboxReady.current) setInboxLoading(true);
+    fetchCharacterInbox(id).then(
+      (rows) => {
+        inboxReady.current = true;
+        setInbox(rows);
+        setInboxError(null);
+        setInboxDenied(false);
+        setInboxLoading(false);
+      },
+      (e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/forbidden|not found|403|404/i.test(msg)) setInboxDenied(true);
+        else if (!inboxReady.current) setInboxError(msg);
+        setInboxLoading(false);
+      }
+    );
+  }, [ownerCharacterId]);
+  useEffect(() => {
+    if (!canUseInbox || tab !== "Карта" || inbox !== null || inboxTried.current) return;
+    inboxTried.current = true;
+    refreshInbox();
+  }, [canUseInbox, tab, inbox, refreshInbox]);
+  const refreshTransfers = useCallback(() => {
+    if (ownerCharacterId == null) return;
+    const id = ownerCharacterId;
+    if (!transfersReady.current) setTransfersLoading(true);
+    fetchTransfers(id).then(
+      (rows) => {
+        transfersReady.current = true;
+        setTransfers(rows);
+        setTransfersError(null);
+        setTransfersLoading(false);
+      },
+      (e) => {
+        // Мастеру список недоступен, как и входящие: оборот объясняет, а не
+        // сыплет ошибкой. Различать нечего — quiet null вместо шума.
+        if (/forbidden|not found|403|404/i.test(e instanceof Error ? e.message : String(e))) {
+          transfersReady.current = true;
+          setTransfers({ incoming: [], outgoing: [] });
+          setTransfersError(null);
+        } else if (!transfersReady.current) {
+          setTransfersError(e instanceof Error ? e.message : String(e));
+        }
+        setTransfersLoading(false);
+      }
+    );
+  }, [ownerCharacterId]);
+  useEffect(() => {
+    if (!canUseInbox || tab !== "Карта" || transfers !== null || transfersTried.current) return;
+    transfersTried.current = true;
+    refreshTransfers();
+  }, [canUseInbox, tab, transfers, refreshTransfers]);
+  // Уход с первой карты возвращает оборот лицом: перевёрнутая карта,
+  // оставшаяся за спиной у соседней, — это потерянный жест.
+  useEffect(() => {
+    setCardFlipped(false);
+  }, [tab]);
+  // Живой оборот: пока он открыт, список дотягивается каждые 10 секунд —
+  // иначе послание, пришедшее в открытый оборот, видно только после
+  // закрытия-открытия. Только на видимой вкладке и вне полёта собственной
+  // правки (busy), чтобы тихий тик не перетирал строку под пальцем.
+  // Передачи едут тем же тиком: оффер тоже должен приходить сам.
+  useEffect(() => {
+    if (!cardFlipped || tab !== "Карта") return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || inboxBusyId != null || transferBusyId != null) return;
+      refreshInbox();
+      refreshTransfers();
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [cardFlipped, tab, inboxBusyId, transferBusyId, refreshInbox, refreshTransfers]);
+  // Действие по передаче: после успеха оба списка дотягиваются сразу, а не
+  // следующим тиком — за столом десять секунд решают.
+  async function handleTransferAction(id: number, action: "accept" | "decline" | "return" | "claim") {
+    setTransferBusyId(id);
+    setTransferNotice(null);
+    try {
+      await transferAction(id, action);
+      refreshTransfers();
+      refreshInbox();
+    } catch (e) {
+      setTransferNotice(`Не вышло: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTransferBusyId(null);
+    }
+  }
+  async function handleTransferSend(args: { recipientId: number; section: number; index: number; name: string; qty: number; kind: "item" | "replica" }) {
+    if (ownerCharacterId == null) return;
+    setTransferBusyId(-1);
+    setTransferNotice(null);
+    try {
+      await offerItemTransfer({ senderId: ownerCharacterId, ...args });
+      refreshTransfers();
+    } catch (e) {
+      setTransferNotice(`Не отправилось: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTransferBusyId(null);
+    }
+  }
+  async function handleMoneySend(args: { recipientId: number; coins: { cp: number; sp: number; ep: number; gp: number; pp: number } }) {
+    if (ownerCharacterId == null) return;
+    setTransferBusyId(-1);
+    setTransferNotice(null);
+    try {
+      await offerMoneyTransfer({ senderId: ownerCharacterId, ...args });
+      refreshTransfers();
+      refreshInbox();
+    } catch (e) {
+      setTransferNotice(`Не отправилось: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTransferBusyId(null);
+    }
+  }
+  // Оборот рисуется дважды (слева при перевороте, справа на десктопной
+  // «Карте»), но никогда разом: условия исключают друг друга. Одна функция,
+  // чтобы две копии не разъехались.
+  function renderCardBack() {
+    return (
+      <DndCardBack
+        characterName={value.characterName || "Без имени"}
+        color={cardColor}
+        messages={inbox ?? []}
+        loading={inboxLoading}
+        loadError={inboxError}
+        denied={!canUseInbox || inboxDenied}
+        notice={inboxNotice}
+        busyId={inboxBusyId}
+        savedIds={savedNoteIds}
+        onRetry={refreshInbox}
+        onRead={(id) => void handleInboxRead(id)}
+        onSave={(id) => void handleInboxSave(id)}
+        onClose={() => setCardFlipped(false)}
+      >
+        {/* Инструмент передач — только владельцу: Мастеру игроцкие роуты
+            отвечают forbidden, и вместо формы он видел бы ошибку загрузки
+            партии. Пояснение уже показывает оборот (denied). */}
+        {canUseInbox && !inboxDenied && ownerCharacterId != null && (
+          <DndTransferBox
+            color={cardColor}
+            campaignId={campaignId}
+            characterId={ownerCharacterId}
+            equipment={value.equipmentSections}
+            incoming={transfers?.incoming ?? []}
+            outgoing={transfers?.outgoing ?? []}
+            loading={transfersLoading}
+            loadError={transfersError}
+            notice={transferNotice}
+            busyId={transferBusyId}
+            onAction={(id, action) => void handleTransferAction(id, action)}
+            onSendItem={(args) => void handleTransferSend(args)}
+            onSendMoney={(args) => void handleMoneySend(args)}
+            onRetry={refreshTransfers}
+          />
+        )}
+      </DndCardBack>
+    );
+  }
+  // Блик загнутого угла раз в 30 секунд, пока есть непрочитанное и вкладка
+  // видна. При prefers-reduced-motion блика нет вовсе (спецификация карты).
+  useEffect(() => {
+    if (unreadTotal === 0) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      setCornerGlint(true);
+      window.setTimeout(() => setCornerGlint(false), 1200);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [unreadTotal]);
+  // Пометка прочтения — действием адресата, оптимистично: список уже
+  // отсортирован сервером, строка просто гаснет. Ошибка — строкой notice,
+  // не молча: иначе «нажал — ничего» читается как прочитанное.
+  async function handleInboxRead(id: number) {
+    setInboxBusyId(id);
+    setInboxNotice(null);
+    try {
+      const updated = await markInboxMessageRead(id);
+      setInbox((prev) => prev?.map((m) => (m.id === id ? updated : m)) ?? prev);
+    } catch (e) {
+      setInboxNotice(`Не отметилось: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setInboxBusyId(null);
+    }
+  }
+  // Сохранение статьёй в путевые заметки персонажа. Повторный тап по той же
+  // строке блокируется флагом savedNoteIds: серверного флага «сохранено»
+  // нет, а дубль заметки — это мусор в дневнике.
+  async function handleInboxSave(id: number) {
+    const msg = inbox?.find((m) => m.id === id);
+    if (!msg || campaignId == null || ownerCharacterId == null) return;
+    setInboxBusyId(id);
+    setInboxNotice(null);
+    try {
+      await saveInboxMessageAsNote({ campaignId, characterId: ownerCharacterId, message: msg.message });
+      setSavedNoteIds((prev) => new Set(prev).add(id));
+    } catch (e) {
+      setInboxNotice(`Не сохранилось: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setInboxBusyId(null);
+    }
   }
   // Навыки: встроенный каталог, уточнённый справочником системы. Без
   // справочника лист полон — имена берутся встроенные.
@@ -5362,22 +6556,37 @@ export function DndCharacterView({
   const [editingSpells, setEditingSpells] = useState(false);
   const prefs = useDndPrefs();
   const [editingTraits, setEditingTraits] = useState(false);
-  const [editingAbilities, setEditingAbilities] = useState(false);
+
   const [editingActions, setEditingActions] = useState(false);
   // Подсветка строки, на которую увёл поиск, — для того, у чего нет карточки
   // (навык, свободно вписанный предмет, владение). Гаснет по следующему
   // касанию листа.
   const [highlight, setHighlight] = useState<string | null>(null);
   const [openAction, setOpenAction] = useState<AttackRow | null>(null);
+  const [addingCompanion, setAddingCompanion] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
-  // Происхождение правится карандашом в самой шапке — там, где класс, вид и
-  // предыстория и написаны (гриллинг 2026-09-03). Клик по значению остаётся
-  // переходом в статью компендиума: за столом он нужен чаще смены класса.
-  const [editingOrigin, setEditingOrigin] = useState(false);
-  // Собранным считается лист, у которого выбран хоть один источник из
-  // компендиума: дальше система становится свойством листа, а не настройкой.
-  const isSystemLocked =
-    value.raceId != null || value.backgroundId != null || value.classes.some((c) => c.classId != null);
+  // Происхождение правится адресом ?edit=1 (карандаш на плашке чарника в
+  // профиле): кнопки-карандаша в шапке больше нет (решение владельца
+  // 2026-09-06). На самой карте органов правки нет — за столом лист читают.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editFromUrl = syncTabToUrl && searchParams.get("edit") === "1";
+  function leaveEdit() {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("edit");
+      return next;
+    });
+  }
+  // Кадрирование портрета перетаскиванием (этап 9): только в ?edit=1 — за
+  // столом портрет не тянут, там жест принадлежит вееру и прокрутке.
+  // Точка в долях, по умолчанию чуть выше центра: на портретах в полный
+  // рост лицо сидит в верхней трети, и обрезка ровно по центру
+  // промахивается по нему. Черновик в полёте, коммит по отпусканию.
+  const frame = useFrameDrag(!!editFromUrl && !!onQuickUpdate, value.portraitFocus, (f) =>
+    onQuickUpdate?.({ portraitFocus: f })
+  );
+  const canFrame = !!editFromUrl && !!onQuickUpdate;
+  const portraitPosition = `${frame.shown.x * 100}% ${frame.shown.y * 100}%`;
   // Запасные таблицы подгружаются лениво и только когда без них не обойтись
   // (многоклассье без полного заклинателя) — обычному персонажу лишний
   // запрос ни к чему.
@@ -5389,7 +6598,8 @@ export function DndCharacterView({
   // Справочники нужны обеим панелям правки: происхождению — иерархия классов,
   // виды и предыстории, свойствам — типы урона и состояния. Грузим, когда
   // открыта любая из них, и не грузим, пока лист просто читают.
-  const origin = useDndOrigin(value, (v) => onQuickUpdate?.(v), editingOrigin || editingTraits);
+  const originEditing = editFromUrl;
+  const origin = useDndOrigin(value, (v) => onQuickUpdate?.(v), originEditing || editingTraits);
   // Считается до раннего выхода: ниже стоят хуки, а компактная карточка
   // возвращается раньше.
   const slotSources = value.classes
@@ -5466,43 +6676,6 @@ export function DndCharacterView({
   // Индекс поиска. Порядок групп особенностей здесь и в liveFeatureGroups
   // должен совпадать — подписи результата берутся по индексу группы.
   const searchHits = collectSheetHits(value, liveCantrips, liveSpellsByLevel, liveFeatureGroups);
-  const metaChunks: ReactNode[] = [];
-  const namedClasses = value.classes.filter((c) => c.className);
-  if (namedClasses.length > 0) {
-    metaChunks.push(
-      <span key="classes">
-        {namedClasses.map((c, i) => (
-          <span key={i}>
-            <CompendiumLink id={c.classId}>{c.className}</CompendiumLink>
-            {c.subclassName && (
-              <>
-                {" "}
-                — <CompendiumLink id={c.subclassId}>{c.subclassName}</CompendiumLink>
-              </>
-            )}{" "}
-            {c.level}
-            {i < namedClasses.length - 1 && " / "}
-          </span>
-        ))}
-      </span>
-    );
-  }
-  if (value.raceName) {
-    metaChunks.push(
-      <span key="race">
-        <CompendiumLink id={value.raceId}>{value.raceName}</CompendiumLink>
-        {value.raceTypeName && `, ${value.raceTypeName}`}
-      </span>
-    );
-  }
-  if (value.backgroundName) {
-    metaChunks.push(
-      <CompendiumLink key="bg" id={value.backgroundId}>
-        {value.backgroundName}
-      </CompendiumLink>
-    );
-  }
-  if (value.alignment) metaChunks.push(<span key="align">{value.alignment}</span>);
   const spellAbilityKey = characterSpellcastingAbility(value.classes);
   const spellAbilityMod = spellAbilityKey ? abilityModifier(value.abilities[spellAbilityKey]) : 0;
   const spellProfBonus = parseBonus(value.proficiencyBonus);
@@ -5520,22 +6693,63 @@ export function DndCharacterView({
   const totalLevel = value.classes.reduce((sum, c) => sum + (c.level || 0), 0);
   const classLine = value.classes
     .filter((c) => c.className)
-    .map((c) => [c.className, c.subclassName].filter(Boolean).join(" · "))
+    .map((c) => [stripLatin(c.className), stripLatin(c.subclassName)].filter(Boolean).join(" · "))
     .join(" / ");
   const originLine = [
-    value.raceName,
-    value.backgroundName,
-    value.proficiencyBonus && `Бонус мастерства ${value.proficiencyBonus}`,
+    stripLatin(value.raceName),
+    stripLatin(value.backgroundName),
+    value.proficiencyBonus && `БМ ${value.proficiencyBonus}`,
   ]
     .filter(Boolean)
     .join(" · ");
-  // Картуш есть только там, где есть портрет и открыта первая карта.
-  const cartoucheShown = tab === "Карта" && !!portraitUrl;
+  // Истощение видно на самом портрете: каждый уровень отнимает 17% цвета,
+  // на шестом от лица остаётся чёрно-белое. Число в живом ряду называет
+  // уровень, а карта показывает состояние — за столом на неё смотрят
+  // урывками и цифру можно не заметить.
+  const portraitDrain = `${Math.min(100, value.exhaustion * 17)}%`;
   const pools = hitDicePools(value.hitDice, value.hitDiceUsed);
   // 5.5: каждый уровень истощения — −2 к любому броску к20. Штраф уходит
   // в значения навыков, спасбросков, бонусы атак и пассивное восприятие, но
   // НЕ в КЗ и не в сложность заклинаний: это не броски к20.
   const exhaustionPenalty = value.exhaustion * 2;
+
+  // Всё, что персонаж может применить, из всех источников сразу: оружие,
+  // заклинания, умения классов, видов, черт и вручную вписанные атаки.
+  // Считается здесь, а не на карте «Действия»: те же строки нужны закладкам
+  // на первой карте, а собирать их дважды значит однажды разойтись.
+  const actionRows = [
+    ...weaponAttackRows(
+      value.equipmentSections,
+      value.abilities,
+      parseBonus(value.proficiencyBonus),
+      exhaustionPenalty
+    ),
+    ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc),
+    ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc),
+    ...manualAttackRows(value.attacks),
+  ];
+  const pinnedNames = (value.pinnedActions ?? []).map((p) => p.name);
+  const bookmarkRows = pickBookmarks(actionRows, value.pinnedActions);
+  function togglePinned(row: AttackRow) {
+    if (!onQuickUpdate) return;
+    const current = value.pinnedActions ?? [];
+    const already = current.some((p) => p.name === row.name);
+    // Снятая последняя закладка возвращает лист к своему предложению — это
+    // и есть «сброс», отдельной кнопки для него не нужно.
+    if (already) {
+      onQuickUpdate({ pinnedActions: current.filter((p) => p.name !== row.name) });
+      return;
+    }
+    const entry: DndPinnedAction = {
+      entryId: row.source?.kind === "spell" ? (row.source.spell.entryId ?? null) : null,
+      name: row.name,
+      kind: row.source?.kind === "spell" ? "spell" : row.source?.kind === "feature" ? "feature" : "weapon",
+    };
+    // Четвёртая вытесняет самую старую молча: диалог «какую убрать?» посреди
+    // боя дороже, чем повторное нажатие.
+    onQuickUpdate({ pinnedActions: [...current, entry].slice(-3) });
+  }
+
   // И −5 футов скорости за уровень. Считается только от структурной ходьбы:
   // в свободном тексте («9 клеток, лазание 3») отнимать нечего, и он
   // остаётся примечанием под итогом.
@@ -5545,6 +6759,17 @@ export function DndCharacterView({
   // и спрашиваются реже. Они уходят подписью под рядом — вместе со старой
   // свободной строкой скорости, если она заполнена.
   const otherSpeeds = formatSpeed({ ...value.speeds, walk: null }, prefs.distanceUnit);
+  // Свободная строка скорости печатается, только если добавляет что-то сверх
+  // кости: «30 фт.» при walk = 30 — дубль, а не примечание. Проверка строгая
+  // (голое число равно ходьбе), чтобы «полёт 60 фт.» и прочие не гасли.
+  const legacySpeedNote = (() => {
+    const text = (value.speed || "").trim();
+    if (!text) return "";
+    const num = /(\d+)/.exec(text);
+    const hasKind = /пол[её]т|летит|плавани|плывёт|лазани|копани|рыть|ходьб|fly|swim|climb|burrow|walk/i.test(text);
+    if (num && !hasKind && value.speeds.walk != null && Number(num[1]) === value.speeds.walk) return "";
+    return text;
+  })();
   // Класс и подкласс — источники списка. Многоклассовый персонаж видит
   // объединение: заклинание из любого своего списка он взять вправе.
   const spellListSources = value.classes.flatMap((c) => [
@@ -5570,51 +6795,11 @@ export function DndCharacterView({
   return (
     <div className="sb-scope" onClickCapture={() => highlight && setHighlight(null)}>
       <div className="sb-card">
-        <div className={`sb-head${cartoucheShown ? " is-quiet" : ""}`}>
-          <div className="sb-head-row">
-            {/* Имя и происхождение уезжают в картуш на портрете, когда он
-                виден: одно и то же имя дважды на одном экране — это шапка над
-                шапкой, ровно та «рамка в рамке», от которой карту и уводили.
-                Кнопки остаются: отдых и правка нужны на всех картах. */}
-            <div>
-              {!cartoucheShown && <div className="sb-name">{value.characterName || "Без имени"}</div>}
-              {!cartoucheShown && metaChunks.length > 0 && (
-                <div className="sb-meta">
-                  {metaChunks.map((chunk, i) => (
-                    <span key={i}>
-                      {i > 0 && " · "}
-                      {chunk}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <span className="sb-head-controls">
-              {(value.playerName || value.experiencePoints) && (
-                <div className="sb-head-player">
-                  {[value.playerName, value.experiencePoints && `Опыт ${value.experiencePoints}`].filter(Boolean).join(" · ")}
-                </div>
-              )}
-              {onQuickUpdate && (
-                <button
-                  type="button"
-                  className="comp-mini"
-                  title={editingOrigin ? "Готово" : "Правка происхождения"}
-                  aria-label={editingOrigin ? "Готово" : "Правка происхождения"}
-                  onClick={() => setEditingOrigin((v) => !v)}
-                >
-                  <NavIcon name={editingOrigin ? "check" : "edit"} />
-                </button>
-              )}
-              {onQuickUpdate && (
-                <button type="button" className="comp-mini" title="Отдых" onClick={() => setRestOpen(true)}>
-                  <NavIcon name="moon" /> Отдых
-                </button>
-              )}
-              {headerExtra}
-            </span>
-          </div>
-        </div>
+        {/* Шапки над картами нет нигде: на лицевой имя стоит в картуше, отдых —
+            жетоном в углу карты, а правка уехала на плашку чарника в профиле
+            (решение владельца 2026-09-06). Верх страницы — поиск, потом
+            полоска карт. Отдых — жетоном с лицевой, происхождение правится
+            адресом ?edit=1. */}
         {openAction?.source && (
           <DndCardModal
             title={openAction.name}
@@ -5642,148 +6827,134 @@ export function DndCharacterView({
             sources={spellListSources}
             cantrips={value.cantrips}
             spellsByLevel={value.spellsByLevel}
-            onClose={() => setSpellListOpen(false)}
-            onAdd={(level, entry) => {
-              if (!onQuickUpdate) return;
-              // Берётся неподготовленным: взять в книгу и подготовить на день
+            maxCircle={shownSlotLevels}
+            onPick={(items) => {
+              if (!onQuickUpdate || items.length === 0) return;
+              // Берутся неподготовленными: взять в книгу и подготовить на день
               // — разные действия, и приложение не вправе решать второе за
               // игрока. Снапшот не пишем — его подставит resolveSpell из
               // кэша справочника, как и у заклинаний, добавленных поиском.
-              const added: DndSpellEntry = { entryId: entry.id, name: entry.name, prepared: 0 };
-              if (level <= 0) {
-                onQuickUpdate({ cantrips: [...value.cantrips, added] });
-                return;
-              }
-              if (level > SPELL_LEVELS) return;
-              const next = value.spellsByLevel.map((lvl, i) => (i === level - 1 ? [...lvl, added] : lvl));
+              // Пачка уходит одним сохранением, а не N подряд.
+              const make = (entry: CompendiumEntry): DndSpellEntry => ({
+                entryId: entry.id,
+                name: entry.name,
+                prepared: 0,
+              });
+              const newCantrips = items.filter((i) => i.level <= 0).map((i) => make(i.entry));
+              const topLevel = Math.max(0, ...items.map((i) => i.level));
+              const next = value.spellsByLevel.map((lvl, i) => [
+                ...lvl,
+                ...items.filter((it) => it.level === i + 1).map((it) => make(it.entry)),
+              ]);
               onQuickUpdate({
+                cantrips: [...value.cantrips, ...newCantrips],
                 spellsByLevel: next,
                 // Круг, которого лист ещё не показывал, иначе взятое просто
                 // не появится на экране.
-                spellSlotLevels: Math.max(value.spellSlotLevels, level),
+                spellSlotLevels: Math.max(value.spellSlotLevels, topLevel),
               });
+              setSpellListOpen(false);
             }}
+            onClose={() => setSpellListOpen(false)}
           />
         )}
-        {editingOrigin && onQuickUpdate && (
-          <div className="sb-origin-edit stack">
-            <div className="row">
-              <label style={{ flex: 1 }}>
-                Имя персонажа
-                <input
-                  value={value.characterName}
-                  onChange={(e) => onQuickUpdate({ characterName: e.target.value })}
-                />
-              </label>
-              <label style={{ flex: 1 }}>
-                Игрок
-                <input value={value.playerName} onChange={(e) => onQuickUpdate({ playerName: e.target.value })} />
-              </label>
-            </div>
-
-            <DndClassesEdit
-              classes={value.classes}
-              hierarchy={origin.hierarchy}
-              onChange={origin.setClasses}
-              onPickClass={origin.pickClass}
-              onPickSubclass={origin.pickSubclass}
-              onLevelChange={origin.changeClassLevel}
-              onRemoveClass={origin.removeClass}
-              loadError={origin.loadError}
-              onRetryLoad={origin.reloadOrigin}
-            />
-
-            <div className="row">
-              <label style={{ flex: 1 }}>
-                Вид
-                {origin.species.length > 0 ? (
-                  <select
-                    value={value.raceId ?? ""}
-                    onChange={(e) => origin.pickRace(e.target.value ? Number(e.target.value) : null)}
-                  >
-                    <option value="">Выбрать вид…</option>
-                    {origin.species.map((sp) => (
-                      <option key={sp.id} value={sp.id}>
-                        {sp.creatureTypeName ? `${sp.name}, ${sp.creatureTypeName}` : sp.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : origin.loadError ? (
-                  <CompendiumFieldError
-                    current={value.raceName}
-                    error={origin.loadError}
-                    onRetry={origin.reloadOrigin}
-                  />
-                ) : (
-                  <input value={value.raceName} onChange={(e) => onQuickUpdate({ raceName: e.target.value })} />
-                )}
-              </label>
-              <label style={{ flex: 1 }}>
-                Предыстория
-                {origin.backgrounds.length > 0 ? (
-                  <select
-                    value={value.backgroundId ?? ""}
-                    onChange={(e) => origin.pickBackground(e.target.value ? Number(e.target.value) : null)}
-                  >
-                    <option value="">Выбрать предысторию…</option>
-                    {origin.backgrounds.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : origin.loadError ? (
-                  <CompendiumFieldError
-                    current={value.backgroundName}
-                    error={origin.loadError}
-                    onRetry={origin.reloadOrigin}
-                  />
-                ) : (
-                  <input
-                    value={value.backgroundName}
-                    onChange={(e) => onQuickUpdate({ backgroundName: e.target.value })}
-                  />
-                )}
-              </label>
-              <label>
-                Мировоззрение
-                <input value={value.alignment} onChange={(e) => onQuickUpdate({ alignment: e.target.value })} />
-              </label>
-            </div>
-
-            {/* Система выбирается один раз: смена обрывает все ссылки на
-                компендиум — классы, вид, заклинания и умения остаются именами
-                без записей. На собранном листе поле только показывается. */}
-            {isSystemLocked ? (
-              <div className="sb-entry muted">
-                <span className="sb-prop-label">Система</span>{" "}
-                {origin.systems.find((sy) => sy.id === value.systemId)?.name ?? "не выбрана"} — менять нельзя,
-                иначе оборвутся ссылки на компендиум
-              </div>
-            ) : (
-              <label>
-                Система (для подсказок класса, вида и предыстории)
-                <select
-                  value={value.systemId ?? ""}
-                  onChange={(e) => onQuickUpdate({ systemId: e.target.value ? Number(e.target.value) : null })}
-                >
-                  <option value="">Не выбрана</option>
-                  {origin.systems.map((sy) => (
-                    <option key={sy.id} value={sy.id}>
-                      {sy.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
+        {originEditing && onQuickUpdate && (
+          <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} />
         )}
         {fanOpen && (
           <DndDeckFan
-            value={value}
             current={tab}
             color={cardColor}
             pendingItems={pendingItems}
+            subtitle={`${value.characterName || "Без имени"} · ${stripLatin(
+              value.classes.find((c) => c.className)?.className ?? "Без класса"
+            )} ${totalLevel}`}
+            details={(() => {
+              const plural = (n: number, one: string, few: string, many: string) =>
+                n % 10 === 1 && n % 100 !== 11
+                  ? one
+                  : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)
+                    ? few
+                    : many;
+              const short = (s: string, n: number) => {
+                const clean = s.replace(/\s+/g, " ").trim();
+                return clean.length > n ? `${clean.slice(0, n)}…` : clean;
+              };
+              const spellCount = value.cantrips.length + value.spellsByLevel.reduce((n, l) => n + l.length, 0);
+              const itemCount = value.equipmentSections.reduce((n, s) => n + s.items.length, 0);
+              const coinsTotal = (Object.values(value.coins ?? {}) as unknown[]).reduce<number>(
+                (sum, v) => sum + (parseInt(String(v ?? ""), 10) || 0),
+                0
+              );
+              const slotLeft = shownSlotPips.map((max, i) => max - (value.spellSlotsUsed[i] ?? 0));
+              const slotCircles = shownSlotPips
+                .map((max, i) => ({ max, left: Math.max(0, slotLeft[i]) }))
+                .filter((c) => c.max > 0);
+              const subclassIds = value.classes
+                .map((c) => c.subclassId)
+                .filter((id): id is number => typeof id === "number");
+              const subclassFeats = value.classFeatures.filter(
+                (f) => f.sourceParentId != null && subclassIds.includes(f.sourceParentId)
+              ).length;
+              const dossier: string[] = [];
+              for (const { key, label } of NARRATIVE_FIELDS) {
+                const text = String(value[key] ?? "").trim();
+                if (text) dossier.push(`${label}: ${short(text, 60)}`);
+              }
+              const pools = allResources(resourceSources, value.abilities).map((r) => {
+                const max = r.max + (value.resourceBonus[r.key] ?? 0);
+                return `${r.label}: ${Math.max(0, max - Math.min(value.resourceUsed[r.key] ?? 0, max))} из ${max}`;
+              });
+              if (value.hitDice) pools.push(`Кости хитов: ${value.hitDice}`);
+              const byTiming = (t: DndActionTiming) => actionRows.filter((r) => r.timing === t).length;
+              return {
+                "Карта": [
+                  `КЗ ${computedAc}`,
+                  `${value.hitPointsCurrent || "—"}/${value.hitPointMax || "—"} хитов`,
+                  ...(value.concentration ? [`концентрация: ${short(value.concentration, 30)}`] : []),
+                ],
+                "Действия": [
+                  `действий: ${byTiming("action")}`,
+                  `бонусных: ${byTiming("bonus")}`,
+                  `реакций: ${byTiming("reaction")}`,
+                  ...(byTiming("other") > 0 ? [`особых: ${byTiming("other")}`] : []),
+                ],
+                "Магия": [
+                  ...(spellAbilityKey ? [`АТК ${formatModifier(spellAttackBonus)} · СЛ ${spellDc}`] : []),
+                  ...(spellCount > 0
+                    ? [`${spellCount} ${plural(spellCount, "заклинание", "заклинания", "заклинаний")}`]
+                    : []),
+                  ...(slotCircles.length > 0 ? [`ячейки ${slotCircles.map((c) => c.left).join(" / ")}`] : []),
+                ],
+                "Снаряжение": [
+                  `${itemCount} ${plural(itemCount, "предмет", "предмета", "предметов")}`,
+                  `настроено: ${value.attunementCount ?? 0}`,
+                  `монет: ${coinsTotal}`,
+                ],
+                "Навыки": [
+                  `БМ ${value.proficiencyBonus}`,
+                  (() => {
+                    const n = Object.values(value.skillProfs).filter((v) => (v as number) > 0).length;
+                    return `${n} ${plural(n, "владение", "владения", "владений")}`;
+                  })(),
+                  (() => {
+                    const n = value.proficiencies.length;
+                    return `${n} ${plural(n, "инструмент", "инструмента", "инструментов")}`;
+                  })(),
+                ],
+                "Особенности": [
+                  ...(value.speciesFeatures.length > 0 ? [`вида: ${value.speciesFeatures.length}`] : []),
+                  ...(value.classFeatures.length - subclassFeats > 0
+                    ? [`класса: ${value.classFeatures.length - subclassFeats}`]
+                    : []),
+                  ...(subclassFeats > 0 ? [`подкласса: ${subclassFeats}`] : []),
+                  ...(value.feats.length > 0 ? [`черты: ${value.feats.length}`] : []),
+                  ...(value.specialAbilities.length > 0 ? [`иное: ${value.specialAbilities.length}`] : []),
+                ],
+                "Досье": dossier,
+                "Ресурсы": pools,
+              } as Record<DndViewTab, string[]>;
+            })()}
             onPick={setTab}
             onClose={() => setFanOpen(false)}
           />
@@ -5817,18 +6988,10 @@ export function DndCharacterView({
               </button>
             </div>
           )}
-          {/* Поиск стоит над разделами и виден всегда: на телефоне пролистать
-              девять кругов заклинаний дороже всего, и прятать вход в поиск за
-              вторым касанием — экономия площади за счёт главного жеста. */}
-          <DndSheetSearch
-            hits={searchHits}
-            getEntry={getEntry}
-            onGo={(hit) => {
-              setTab(hit.tab);
-              setHighlight(hit.highlight ?? null);
-            }}
-          />
-
+          {/* Поиск живёт внизу карт (решение владельца): верх отдан карте,
+              а поиск нужен после просмотра, не до. На лицевой его нет вовсе:
+              она и так отвечает на «кто я и чем бью», а строка ввода поверх
+              портрета читалась как часть карты. */}
           {/* Полоска названий колоды — одна на телефон и на десктоп (Q29).
               Раньше телефон получал выпадающий список, а десктоп — ряд
               кнопок: два разных языка навигации на одном листе. Полоска
@@ -5855,32 +7018,94 @@ export function DndCharacterView({
             ))}
           </div>
 
+          {/* Десктопный сплит (этап 7): лицевая/оборот слева в натуральную
+              величину, вкладка справа. На телефоне обёртка прозрачна
+              (display: contents) — поток как был. */}
+          <div className="dnd-desktop-split">
           {/* КАРТА ПЕРСОНАЖА — первая карта колоды (гриллинг 2026-09-04).
               Раньше этот блок висел несворачиваемой шапкой над всеми
               вкладками: чтобы дойти до содержимого любой из них, надо было
               пролистать характеристики и весь список навыков. Теперь это
               своя карта, и она же — то место, куда Мастер заглядывает за
               одним числом. */}
-          {tab === "Карта" && (
-            <div className="stack dnd-card-face">
+          {(tab === "Карта" || showDesktopFace) && !cardFlipped && (
+            <div
+              className="stack dnd-card-face"
+              style={{ borderLeftColor: cardColor, borderRightColor: cardColor, borderBottomColor: cardColor }}
+            >
+              {/* Полоса правки видна только когда лист открыт карандашом с
+                  плашки: «Готово» убирает параметр из адреса и возвращает
+                  карту к чтению. */}
+              {editFromUrl && onQuickUpdate && (
+                <div className="row dnd-card-editbar">
+                  <span className="sb-label">Правка карты</span>
+                  {canFrame && portraitUrl && !portraitStale && (
+                    <>
+                      <span className="muted">Тяните портрет — кадрируется</span>
+                      <button
+                        type="button"
+                        className="comp-mini"
+                        title="Вернуть кадр по умолчанию"
+                        onClick={() => onQuickUpdate({ portraitFocus: { ...DEFAULT_PORTRAIT_FOCUS } })}
+                      >
+                        Сброс кадра
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className="primary" onClick={leaveEdit}>
+                    Готово
+                  </button>
+                </div>
+              )}
               {/* Портрет владеет верхом карты и уходит в бумагу, а под ним
                   лежит он же, отражённый по обеим осям и почти невидимый, —
                   как на фигурных картах. Шва не видно, потому что верхний
                   гаснет не в ноль, а до силы нижнего. Текста поверх нет: имя
                   и класс уже стоят в шапке листа, и дублировать их значило бы
                   написать одно и то же дважды на одном экране. */}
-              {portraitUrl && (
-                <div className="dnd-card-portrait-zone">
+              {/* Двойник — сосед портретной зоны, а не её потомок: он тянется
+                  до низа карты, а зона высотой ровно с лицо. Портрет и
+                  отражение вдвоём и есть подложка карточки. */}
+              {portraitUrl && !portraitStale && (
+                <span className="dnd-card-portrait-ghost" aria-hidden="true">
+                  <img
+                    src={portraitUrl}
+                    alt=""
+                    style={{ objectPosition: portraitPosition, filter: `grayscale(${portraitDrain})` }}
+                  />
+                </span>
+              )}
+              {/* Зона рисуется и без портрета: картуш с именем — часть карты,
+                  а не подпись под фотографией, и шапки листа на этой карте
+                  больше нет. Без портрета зона схлопывается по содержимому.
+                  Двойной тап по портрету разворачивает колоду веером, а в
+                  ?edit=1 портрет тянется для кадрирования (см. useFrameDrag). */}
+              <div
+                className={`dnd-card-portrait-zone${portraitUrl ? "" : " is-empty"}${canFrame ? " is-framing" : ""}${frame.dragging ? " is-dragging" : ""}`}
+                onTouchEnd={onPortraitTouchEnd}
+                onPointerDown={frame.handlers.onPointerDown}
+                onPointerMove={frame.handlers.onPointerMove}
+                onPointerUp={frame.handlers.onPointerUp}
+                onPointerCancel={frame.handlers.onPointerCancel}
+                onClickCapture={frame.handlers.onClickCapture}
+              >
+                  {portraitUrl && !portraitStale && (
                   <div className="dnd-card-portrait">
-                    <img src={portraitUrl} alt="" style={{ objectPosition: portraitPosition }} />
+                    <img
+                      src={portraitUrl}
+                      alt=""
+                      style={{ objectPosition: portraitPosition, filter: `saturate(0.88) contrast(1.04) grayscale(${portraitDrain})` }}
+                      // Подписанные URL файлов живут 60 секунд: посидев на
+                      // другой карте дольше, возвращаемся к протухшей ссылке.
+                      // Прячем битую картинку и один раз просим свежий URL —
+                      // родитель перезагружает персонажа, ссылка приезжает
+                      // новой, стейт сбрасывается по смене portraitUrl.
+                      onError={handlePortraitError}
+                    />
                     <span className="dnd-card-portrait-grain" aria-hidden="true" />
                     <span className="dnd-card-portrait-fade" aria-hidden="true" />
                   </div>
-                  {/* Двойник — сосед портрета, а не его потомок: внутри он
-                      обрезался бы тем же overflow, который держит кадр. */}
-                  <span className="dnd-card-portrait-ghost" aria-hidden="true">
-                    <img src={portraitUrl} alt="" style={{ objectPosition: portraitPosition }} />
-                  </span>
+                  )}
                   {/* КАРТУШ — имя стоит у нижнего края портретной половины,
                       как на макете: карта должна называть персонажа сама, а
                       не полагаться на шапку листа над ней (её на этой карте
@@ -5889,6 +7114,15 @@ export function DndCharacterView({
                       мастерства — то, что спрашивают редко, но глазами
                       ищут именно здесь. */}
                   <div className="dnd-card-cartouche">
+                    {/* Пометка истощения стоит над именем, а не под костями:
+                        внизу она вклинивалась между рядами и двигала половину
+                        карты, стоило уровню измениться. */}
+                    {value.exhaustion > 0 && (
+                      <div className="dnd-card-cartouche-warning">
+                        Истощение {value.exhaustion}: −{exhaustionPenalty} ко всем броскам к20, −{value.exhaustion * 5} фт
+                        скорости
+                      </div>
+                    )}
                     <div className="dnd-card-cartouche-name">{value.characterName || "Без имени"}</div>
                     <div className="dnd-card-cartouche-class">
                       {totalLevel > 0 && (
@@ -5900,12 +7134,25 @@ export function DndCharacterView({
                     </div>
                     {originLine && <div className="dnd-card-cartouche-origin">{originLine}</div>}
                   </div>
-                </div>
-              )}
+              </div>
               {/* ВДОХНОВЕНИЕ — жетон-звезда в углу карты, а не плашка в ряду
                   (гриллинг 2026-09-04). Оно тратится ровно в тот момент, когда
                   на карту смотрят, поэтому нажимается прямо здесь; а держать
                   его в общей сетке нельзя — оно там двигало соседей. */}
+              {/* ОТДЫХ — жетон в левом углу, зеркально вдохновению: обе
+                  кнопки, которые нажимают прямо с карты, стоят по краям
+                  портрета, а не полосой над ним. */}
+              {onQuickUpdate && (
+                <button
+                  type="button"
+                  className={`dnd-rest-token${portraitUrl ? " on-portrait" : ""}`}
+                  title="Отдых"
+                  aria-label="Отдых"
+                  onClick={() => setRestOpen(true)}
+                >
+                  <NavIcon name="moon" />
+                </button>
+              )}
               {(value.inspiration || onQuickUpdate) && (
                 <button
                   type="button"
@@ -5946,145 +7193,64 @@ export function DndCharacterView({
                   {walkDie.sub && <span className="dnd-die-sub">{walkDie.sub}</span>}
                 </DndDie>
                 <div className="sb-label">Скорость</div>
-                {/* Исходное — зачёркнутым под костью: за столом надо видеть и
-                    сколько осталось, и от чего отняли. */}
-                {walkDie.was && (
-                  <span
-                    className="dnd-speed-was"
-                    title={`Истощение ${value.exhaustion}: −${value.exhaustion * 5} фт.`}
-                  >
-                    {walkDie.was}
-                  </span>
-                )}
               </div>
             </div>
-            {(otherSpeeds || value.speed) && (
-              <div className="muted dnd-triad-note">{[otherSpeeds, value.speed].filter(Boolean).join(" · ")}</div>
+            {(otherSpeeds || legacySpeedNote) && (
+              <div className="muted dnd-triad-note">{[otherSpeeds, legacySpeedNote].filter(Boolean).join(" · ")}</div>
             )}
 
             {/* Живой ряд: инициатива, концентрация, истощение — то, что
                 меняется в бою, строкой плашек, как на макете. */}
             <div className="dnd-live-row">
-              <TextQuickBox label="Инициатива" value={value.initiative} field="initiative" onQuickUpdate={onQuickUpdate} />
+              {/* СОСТОЯНИЯ — первыми в живом ряду: «отравлен» и «испуган»
+                  меняют каждый бросок, а держались до сих пор в голове
+                  Мастера. Пустая плашка не исчезает: место постоянное. */}
+              <ConditionsBox
+                conditions={value.conditions}
+                systemId={value.systemId}
+                onQuickUpdate={onQuickUpdate}
+              />
               {/* Концентрация — там, куда игрок и так смотрит каждый ход.
                   Ставится из окна заклинания, снимается кликом и длинным отдыхом. */}
-              <div>
-                <div className="sb-label">Концентрация</div>
-                <SbQuickValue
-                  className={`dnd-concentration${value.concentration ? " is-on" : ""}`}
-                  title={value.concentration ? "Снять концентрацию" : undefined}
-                  ariaLabel={`Концентрация: ${value.concentration || "нет"} — снять`}
-                  onClick={onQuickUpdate && value.concentration ? () => onQuickUpdate({ concentration: "" }) : undefined}
-                >
-                  {value.concentration || "—"}
-                </SbQuickValue>
-              </div>
-              {/* Истощение меняет каждый бросок к20 и скорость — знать о нём
-                  надо не реже, чем о хитах. Дорожка на шесть, шестой уровень —
-                  смерть, о чём сказано прямо. Место постоянное, даже когда
-                  истощения нет: переезжающая плашка читается как другая. */}
-              <div>
-                <div className="sb-label">Истощение</div>
-                <div className="stack dnd-exhaustion">
-                  <PipTrack
-                    value={value.exhaustion}
-                    label="Истощение"
-                    max={6}
-                    size={12}
-                    onChange={onQuickUpdate ? (n) => onQuickUpdate({ exhaustion: n }) : undefined}
-                  />
-                  {value.exhaustion >= 6 && <span className="dnd-exhaustion-dead">смерть</span>}
-                </div>
-              </div>
+              {/* Переключатель, а не только «снять»: концентрация бывает и от
+                  эффекта, который лист не знает, — Мастер называет её словами,
+                  а игроку надо чем-то её отметить. Поставленная из окна
+                  заклинания несёт его имя, руками — просто «есть». */}
+              <LiveChip
+                label="Концентрация"
+                value={value.concentration || "—"}
+                active={!!value.concentration}
+                title={value.concentration ? "Снять концентрацию" : "Отметить концентрацию"}
+                ariaLabel={`Концентрация: ${value.concentration || "нет"} — переключить`}
+                onClick={
+                  onQuickUpdate
+                    ? () => onQuickUpdate({ concentration: value.concentration ? "" : "есть" })
+                    : undefined
+                }
+              />
+              {/* Истощение — числом, как на макете, а не дорожкой из шести
+                  кружков: за столом называют уровень («у тебя два»), а
+                  дорожка занимала треть ряда, чтобы сказать то же самое.
+                  Клик прибавляет, седьмой — смерть, о чём сказано прямо.
+                  Место постоянное, даже когда истощения нет: переезжающая
+                  плашка читается как другая. */}
+              {/* По кругу 0…6→0: правого клика на телефоне нет, а уровень
+                  почти всегда растёт — снимает его длинный отдых сам. */}
+              <LiveChip
+                label="Истощение"
+                value={value.exhaustion >= 6 ? "смерть" : value.exhaustion}
+                active={value.exhaustion > 0}
+                title={onQuickUpdate ? "Клик — следующий уровень истощения" : undefined}
+                ariaLabel={`Истощение ${value.exhaustion} — сменить уровень`}
+                onClick={onQuickUpdate ? () => onQuickUpdate({ exhaustion: (value.exhaustion + 1) % 7 }) : undefined}
+              />
             </div>
 
-            <div className="sb-vitals">
-              {/* Дорожка на каждый пул, подписанная кубом: при мультиклассе они
-                  независимы и тратятся по отдельности. Приложение не бросает
-                  кубик — показывает формулу, лечение игрок вписывает сам. */}
-              {pools.length > 0 && (
-                <div>
-                  <div className="sb-label">Кости хитов</div>
-                  <div className="stack dnd-hitdice-pools">
-                    {pools.map((pool) => (
-                      <span key={pool.die} className="row dnd-hitdice-pool">
-                        <span className="dnd-hitdice-die">{pool.die}</span>
-                        <PipTrack
-                          value={pool.used}
-                          label={`Потрачено костей хитов ${pool.die}`}
-                          max={pool.total}
-                          size={12}
-                          onChange={
-                            onQuickUpdate
-                              ? (n) => onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: n } })
-                              : undefined
-                          }
-                        />
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {atZeroHp && (
-                <div>
-                  <div className="sb-label">Спас от смерти</div>
-                  <div className="stack sb-death-saves">
-                    <span className="row muted">
-                      +
-                      <PipTrack
-                        value={value.deathSaveSuccesses}
-                        label="Успехи спасбросков от смерти"
-                        max={3}
-                        size={12}
-                        onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
-                      />
-                    </span>
-                    <span className="row muted">
-                      −
-                      <PipTrack
-                        value={value.deathSaveFailures}
-                        label="Провалы спасбросков от смерти"
-                        max={3}
-                        size={12}
-                        onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveFailures: v }) : undefined}
-                      />
-                    </span>
-                  </div>
-                </div>
-              )}
-              {/* Вдохновения здесь больше нет: оно уехало жетоном-звездой в
-                  угол карты (гриллинг 2026-09-04). Его статус меняется чаще
-                  всего, и в общей сетке оно двигало соседей — плашка, которая
-                  переезжает, читается как другая плашка. */}
-            </div>
-  
-            <div className="sb-vitals-caption">
-              {/* Пометка причины: без неё упавшие навыки выглядят как поломка
-                  листа, а не как истощение. */}
-              {value.exhaustion > 0 && (
-                <span className="dnd-exhaustion-note">
-                  Истощение {value.exhaustion}: −{exhaustionPenalty} ко всем броскам к20, −{value.exhaustion * 5} фт
-                  скорости
-                </span>
-              )}
-              {/* Бонус мастерства стоит в картуше на портрете; здесь он
-                  печатается только когда картуша нет — на листе без портрета
-                  и на прочих картах. */}
-              {value.proficiencyBonus && !cartoucheShown && (
-                <span>
-                  <span className="sb-prop-label">Бонус мастерства</span> {value.proficiencyBonus}
-                </span>
-              )}
-            </div>
-  
-            {/* Характеристики меняются редко (повышение, предмет), но менять их
-                было негде, кроме как открыв всю форму. Карандаш меняет тот же
-                блок на редактируемый прямо на месте; значения сохраняются
-                сразу — правило «значения мгновенно» (гриллинг 2026-09-03). */}
-            {onQuickUpdate && (
-              <TabEditToggle editing={editingAbilities} onToggle={() => setEditingAbilities((v) => !v)} />
-            )}
-            {editingAbilities && onQuickUpdate ? (
+            {/* Характеристики. Карандаша над ними больше нет: он тянулся
+                полосой во всю ширину и резал карту пополам. Правка уехала на
+                плашку чарника в профиле — там ей и место, лист за столом
+                читают, а не заполняют. */}
+            {editFromUrl && onQuickUpdate ? (
               <AbilitySavesSkillsEdit
                 abilities={value.abilities}
                 proficiencyBonus={value.proficiencyBonus}
@@ -6109,11 +7275,193 @@ export function DndCharacterView({
                 backgroundSkillNames={value.backgroundSkillNames}
               />
             )}
+
+            {/* ЗАКЛАДКИ — до трёх строк «Действий» прямо на карте: ответ на
+                «чем я обычно бью», который за столом задают каждый ход.
+                Строка кликается так же, как в таблице действий, и открывает
+                то же описание. */}
+            {bookmarkRows.length > 0 && (
+              <div className="stack dnd-bookmarks">
+                {bookmarkRows.map((row) => (
+                  <button
+                    key={row.name}
+                    type="button"
+                    className="dnd-bookmark"
+                    style={{ borderLeftColor: cardColor }}
+                    onClick={row.source ? () => setOpenAction(row) : undefined}
+                    disabled={!row.source}
+                  >
+                    <span className="dnd-bookmark-main">
+                      {/* Как и в картуше: оригинал в скобках нужен поиску по
+                          книге, а на карте съедает половину строки. */}
+                      <span className="dnd-bookmark-name">{stripLatin(row.name)}</span>
+                      {/* Числа стоят под именем, а не справа от него: в одну
+                          строку на телефоне не влезают ни «5к6 Огненный
+                          (полов.) + 5к6 Излучение», ни само название — имя
+                          обрезалось до «Небесн…». Прочерки не печатаются:
+                          колонок здесь нет, ровнять нечего. */}
+                      <span className="dnd-bookmark-meta">
+                        {[row.bonus, row.damage, row.range || row.description]
+                          .filter((v) => v && v !== "—")
+                          .join(" · ")}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* ЖЕТОНЫ СПУТНИКОВ — нижняя лента карты. Каждый жетон ведёт на
+                статблок существа: за столом спрашивают КЗ фамильяра, а не
+                его имя, и лист должен уметь ответить, не заставляя искать
+                зверя в бестиарии. */}
+            {((value.companions ?? []).length > 0 || onQuickUpdate) && (
+              <div className="dnd-companions">
+                {(value.companions ?? []).map((c, i) => (
+                  <CompanionToken
+                    key={`${c.entryId ?? "manual"}-${i}`}
+                    companion={c}
+                    getEntry={getEntry}
+                    onRemove={
+                      onQuickUpdate
+                        ? () =>
+                            onQuickUpdate({
+                              companions: (value.companions ?? []).filter((_, j) => j !== i),
+                            })
+                        : undefined
+                    }
+                  />
+                ))}
+                {/* Поле поиска не стоит на карте постоянно: спутника заводят
+                    раз в кампанию, а орган управления виден каждый ход.
+                    Пока он не нужен — на его месте «+». */}
+                {onQuickUpdate &&
+                  (addingCompanion ? (
+                    <CompendiumEntryPicker
+                      value={null}
+                      kind="monster"
+                      dropUp
+                      placeholder="Спутник из бестиария…"
+                      selectedLabel="Спутник"
+                      onChange={(entry) => {
+                        if (!entry) return;
+                        onQuickUpdate({
+                          companions: [...(value.companions ?? []), { entryId: entry.id, name: entry.title }],
+                        });
+                        setAddingCompanion(false);
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="comp-mini dnd-companion-add"
+                      title="Добавить спутника"
+                      aria-label="Добавить спутника"
+                      onClick={() => setAddingCompanion(true)}
+                    >
+                      <NavIcon name="plus" />
+                    </button>
+                  ))}
+              </div>
+            )}
+              {/* Загнутый угол — индикатор «пришло послание» и (только на
+                  телефоне) жест переворота тапом. Всегда справа внизу: серый
+                  без входящих, цвета класса при непрочитанных, без текста —
+                  карту показывают соседям по столу. На десктопе оборот и так
+                  стоит в правой колонке, поэтому угол там не кликается. */}
+              {showDesktopFace ? (
+                <span
+                  className={`dnd-card-corner${unreadTotal > 0 ? " has-unread" : ""}${cornerGlint ? " glint" : ""}`}
+                  style={unreadTotal > 0 ? { background: cardColor } : undefined}
+                  role="img"
+                  aria-label={unreadTotal > 0 ? `${unreadTotal} новых входящих` : "Входящих нет"}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={`dnd-card-corner${unreadTotal > 0 ? " has-unread" : ""}${cornerGlint ? " glint" : ""}`}
+                  style={unreadTotal > 0 ? { background: cardColor } : undefined}
+                  onClick={() => {
+                    setCardFlipped(true);
+                    if (canUseInbox) {
+                      refreshInbox();
+                      refreshTransfers();
+                    }
+                  }}
+                  aria-label={
+                    unreadTotal > 0
+                      ? `Перевернуть карту: ${unreadTotal} новых входящих`
+                      : "Перевернуть карту: входящие"
+                  }
+                />
+              )}
             </div>
           )}
+          {/* Оборот первой карты — входящие игрока. Отдельная сторона, а не
+              модалка (разбор): возврат — уголком и уходом с карты. На десктопе
+              при перевороте оборот встаёт в левую колонку вместо лицевой. */}
+          {tab === "Карта" && cardFlipped && renderCardBack()}
 
+          <div className="dnd-desktop-tab">
+          {/* Десктопная правая колонка на «Карте» (этап 7): оборот + вход в
+              правку основной информации. На телефоне тут пусто — оборот
+              открывается переворотом, правка адресом с плашки профиля. */}
+          {showDesktopFace && tab === "Карта" && !cardFlipped && (
+            <div className="stack dnd-desktop-back">
+              {renderCardBack()}
+              {/* Правка основной информации — раскрывашкой под оборотом
+                  (решение владельца): поля сохраняются мгновенно, как везде
+                  на листе, «Сохранить» лишь закрывает панель. */}
+              {syncTabToUrl && onQuickUpdate && (
+                <div className="stack dnd-face-edit">
+                  <button
+                    type="button"
+                    className="dnd-face-edit-head"
+                    aria-expanded={rightEditOpen}
+                    onClick={() => setRightEditOpen((v) => !v)}
+                  >
+                    <span>Редактировать</span>
+                    <span aria-hidden="true">{rightEditOpen ? "−" : "+"}</span>
+                  </button>
+                  {rightEditOpen && (
+                    <>
+                      <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} />
+                      <button type="button" className="primary" onClick={() => setRightEditOpen(false)}>
+                        Сохранить
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {tab === "Действия" && (
             <div className="stack">
+              {/* Инициативу бросают в начале боя — там же, где выбирают, чем
+                  бить. На лицевой стороне ей места нет (гриллинг 2026-09-04:
+                  карта отвечает на «кто я и чем бью», а не на всё сразу). */}
+              <div className="dnd-live-row">
+                <TextQuickBox label="Инициатива" value={value.initiative} field="initiative" onQuickUpdate={onQuickUpdate} />
+              </div>
+              {/* Лента пулов (этап 5): только то, что тратит хоть одна строка
+                  этой карты, — ячейки, если тут есть боевые заклинания, и
+                  классовые пулы по resourceKey их стоимостей. Остальные пулы
+                  живут на «Ресурсах», постоянно все не показываем. Траты —
+                  там же, где были (окна строк и дорожки ниже); лента только
+                  показывает остаток и пересчитывается после траты. */}
+              <DndActionPools
+                actionRows={actionRows}
+                resourceSources={resourceSources}
+                abilities={value.abilities}
+                resourceUsed={value.resourceUsed}
+                resourceBonus={value.resourceBonus}
+                shownSlotPips={shownSlotPips}
+                spellSlotsUsed={value.spellSlotsUsed}
+                pact={computedSlots.pact}
+                pactUsed={value.pactSlotsUsed ?? 0}
+                color={cardColor}
+                onQuickUpdate={onQuickUpdate}
+              />
               {/* Вручную вписанные атаки (то, чего нет ни в оружии, ни в
                   заклинаниях) правились только в форме. Теперь — там же, где
                   показываются. */}
@@ -6124,28 +7472,17 @@ export function DndCharacterView({
                 <AttackListEdit values={value.attacks} onChange={(v) => onQuickUpdate({ attacks: v })} />
               )}
               {(() => {
-                // Вкладка собирает всё, что персонаж может применить, из
-                // всех источников сразу: оружие, заклинания, умения классов,
-                // видов, черт и вручную вписанные атаки. Раньше она звалась
-                // «Бой» и знала только про первые три.
-                const allRows = [
-                  ...weaponAttackRows(
-                    value.equipmentSections,
-                    value.abilities,
-                    parseBonus(value.proficiencyBonus),
-                    exhaustionPenalty
-                  ),
-                  ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc),
-                  ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc),
-                  ...manualAttackRows(value.attacks),
-                ];
-                const byTiming = (t: DndActionTiming) => allRows.filter((r) => r.timing === t);
+                const byTiming = (t: DndActionTiming) => actionRows.filter((r) => r.timing === t);
+                const poolLabels = Object.fromEntries(
+                  allResources(resourceSources, value.abilities).map((r) => [r.key, r.label])
+                );
+                const tableProps = { onOpen: setOpenAction, pinnedNames, onPin: onQuickUpdate ? togglePinned : undefined, resourceLabels: poolLabels, color: cardColor };
                 return (
                   <>
-                    <AttacksTable title="Действия" rows={byTiming("action")} onOpen={setOpenAction} />
-                    <AttacksTable title="Бонусные действия" rows={byTiming("bonus")} onOpen={setOpenAction} />
-                    <AttacksTable title="Реакции" rows={byTiming("reaction")} onOpen={setOpenAction} />
-                    <AttacksTable title="Особое" rows={byTiming("other")} onOpen={setOpenAction} />
+                    <AttacksTable title="Действия" rows={byTiming("action")} {...tableProps} />
+                    <AttacksTable title="Бонусные действия" rows={byTiming("bonus")} {...tableProps} />
+                    <AttacksTable title="Реакции" rows={byTiming("reaction")} {...tableProps} />
+                    <AttacksTable title="Особое" rows={byTiming("other")} {...tableProps} />
                   </>
                 );
               })()}
@@ -6392,6 +7729,66 @@ export function DndCharacterView({
           )}
 
           {tab === "Ресурсы" && (
+            <>
+            {/* Кости хитов и спасброски от смерти стоят здесь, а не на карте:
+                гриллинг 2026-09-04 оставил на лицевой стороне только КЗ,
+                хиты, пассивное восприятие, скорость, характеристики, живой
+                ряд, закладки и спутников. Кости хитов тратят на коротком
+                отдыхе, а не каждый ход, и их место — среди ресурсов. */}
+            {(pools.length > 0 || atZeroHp) && (
+              <div className="dnd-live-row">
+                {pools.length > 0 && (
+                  <div>
+                    <div className="sb-label">Кости хитов</div>
+                    <div className="stack dnd-hitdice-pools">
+                      {pools.map((pool) => (
+                        <span key={pool.die} className="row dnd-hitdice-pool">
+                          <span className="dnd-hitdice-die">{pool.die}</span>
+                          <PipTrack
+                            value={pool.used}
+                            label={`Потрачено костей хитов ${pool.die}`}
+                            max={pool.total}
+                            size={12}
+                            onChange={
+                              onQuickUpdate
+                                ? (n) => onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: n } })
+                                : undefined
+                            }
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {atZeroHp && (
+                  <div>
+                    <div className="sb-label">Спас от смерти</div>
+                    <div className="stack sb-death-saves">
+                      <span className="row muted">
+                        +
+                        <PipTrack
+                          value={value.deathSaveSuccesses}
+                          label="Успехи спасбросков от смерти"
+                          max={3}
+                          size={12}
+                          onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
+                        />
+                      </span>
+                      <span className="row muted">
+                        −
+                        <PipTrack
+                          value={value.deathSaveFailures}
+                          label="Провалы спасбросков от смерти"
+                          max={3}
+                          size={12}
+                          onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveFailures: v }) : undefined}
+                        />
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <DndResourcesView
               sources={resourceSources}
               abilities={value.abilities}
@@ -6403,6 +7800,7 @@ export function DndCharacterView({
               ownerCharacterId={ownerCharacterId}
               onQuickUpdate={onQuickUpdate}
             />
+            </>
           )}
 
           {tab === "Особенности" && (
@@ -6575,8 +7973,64 @@ export function DndCharacterView({
               )}
             </div>
           )}
+          {/* Низ карты: поиск и возврат в профиль (решение владельца). Поиск
+              после просмотра, а не до; возврат — тем же жестом, что свайп
+              «назад» с лицевой (onSheetBack задаёт полноэкранная страница). */}
+          {tab !== "Карта" && (
+            <div className="stack dnd-sheet-foot">
+              <DndSheetSearch
+                hits={searchHits}
+                getEntry={getEntry}
+                onGo={(hit) => {
+                  setTab(hit.tab);
+                  setHighlight(hit.highlight ?? null);
+                }}
+              />
+              {onSheetBack && (
+                <button type="button" className="dnd-sheet-back" onClick={onSheetBack}>
+                  ← Профиль персонажа
+                </button>
+              )}
+            </div>
+          )}
+          {/* Сводка мёртвых ссылок (этап 8, вид — канвас Actions): запросили
+              пачкой, сервер не вернул — записи больше нет в компендиуме
+              (снесли или переустановили модуль). Значок-треугольник и кнопка
+              «Показать»: имена нужны для починки, но не каждый раз.
+              Значками по строкам и оборотом не показываем (разбор): оборот —
+              личное игроку, а значок у каждой строки — шум. */}
+          {deadIds.length > 0 && (
+            <div className="dnd-dead-links" role="status">
+              <span className="muted" aria-hidden="true" style={{ flex: "none", display: "inline-flex" }}>
+                <NavIcon name="warning" />
+              </span>
+              <span className="sb-prop-label" style={{ flex: "1 1 auto" }}>
+                {(() => {
+                  const n = deadIds.length;
+                  const noun =
+                    n % 10 === 1 && n % 100 !== 11 ? "ссылка" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "ссылки" : "ссылок";
+                  return `${n} ${noun} на справочник ${n === 1 ? "потеряна" : "потеряны"}`;
+                })()}
+              </span>
+              <button
+                type="button"
+                className="comp-mini"
+                aria-expanded={deadOpen}
+                onClick={() => setDeadOpen((v) => !v)}
+              >
+                {deadOpen ? "Скрыть" : "Показать"}
+              </button>
+              {deadOpen && (
+                <span className="muted dnd-dead-names">
+                  {deadNames.length > 0 ? deadNames.join(" · ") : "имена не опознаны"}
+                </span>
+              )}
+            </div>
+          )}
+          </div>
         </div>
       </div>
     </div>
+  </div>
   );
 }

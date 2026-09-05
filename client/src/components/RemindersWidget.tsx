@@ -4,18 +4,30 @@ import type { GmReminder } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
-  targetType: "player" | "campaign";
+  targetType: "player" | "campaign" | "character";
   targetId: number;
 }
 
 // Напоминание — shown on the player's Главная in player-app. Lifecycle is
 // entirely GM-controlled here: deleting it removes it for everyone, that's
 // the only dismiss mechanism (see gm_reminders in schema.sql).
+// targetType = 'character' — послание персонажу: оно приходит на оборот его
+// карты (этап 4), а не на Главную. Пишется из карточки персонажа, открытой
+// из профиля игрока.
 export function RemindersWidget({ targetType, targetId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
   const [reminders, setReminders] = useState<GmReminder[]>([]);
   const [draft, setDraft] = useState("");
-  const basePath = targetType === "player" ? `/players/${targetId}/reminders` : `/campaigns/${targetId}/reminders`;
+  const basePath =
+    targetType === "player"
+      ? `/players/${targetId}/reminders`
+      : targetType === "campaign"
+        ? `/campaigns/${targetId}/reminders`
+        : `/characters/${targetId}/reminders`;
+  const emptyHint =
+    targetType === "character"
+      ? "Нет посланий — напишите первое, оно придёт на оборот карты персонажа."
+      : "Нет активных напоминаний — напишите первое, оно появится у игроков на\u00a0Главной.";
 
   function refresh() {
     api.get<GmReminder[]>(basePath).then(setReminders);
@@ -41,7 +53,7 @@ export function RemindersWidget({ targetType, targetId }: Props) {
       {confirmDialog}
       {reminders.length === 0 ? (
         <div className="card" style={{ padding: "12px" }}>
-          <p className="muted" style={{ margin: 0 }}>Нет активных напоминаний — напишите первое, оно появится у игроков на&nbsp;Главной.</p>
+          <p className="muted" style={{ margin: 0 }}>{emptyHint}</p>
         </div>
       ) : (
         reminders.map((r) => (
@@ -53,7 +65,7 @@ export function RemindersWidget({ targetType, targetId }: Props) {
       )}
       <div className="row">
         <input
-          placeholder="Новое напоминание…"
+          placeholder={targetType === "character" ? "Новое послание…" : "Новое напоминание…"}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") add(); }}

@@ -1283,6 +1283,33 @@ CREATE TABLE IF NOT EXISTS gm_reminders (
 );
 CREATE INDEX IF NOT EXISTS idx_gm_reminders_target ON gm_reminders(target_type, target_id);
 
+-- Передача вещи между персонажами игроков (этап 4б, решение владельца
+-- 2026-09-06). Машина: offered → accepted (accepted → returned | claimed),
+-- offered → declined | expired. Деньги (kind='money') мгновенные: строка
+-- сразу claimed. kinds: item — обычная вещь, replica — созданная умением
+-- (фиолетовая, «создал имя»).
+--
+-- Строка — только учёт: сами вещи живут locked-строками в листах
+-- (transferOut у отправителя, transferIn у получателя), их пишет сервер —
+-- игрок в чужой лист писать не может. item_json — слепок вещи без qty.
+-- Отказ и чек о деньгах доставляются строкой gm_reminders персонажу.
+CREATE TABLE IF NOT EXISTS character_transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sender_character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  sender_name TEXT NOT NULL DEFAULT '',
+  recipient_character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  recipient_name TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'item',
+  item_name TEXT NOT NULL DEFAULT '',
+  item_json TEXT NOT NULL DEFAULT '{}',
+  qty INTEGER NOT NULL DEFAULT 1,
+  coins_json TEXT NOT NULL DEFAULT '{}',
+  state TEXT NOT NULL DEFAULT 'offered',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_character_transfers_parties ON character_transfers(sender_character_id, recipient_character_id, state);
+
 -- Initiative tracker rows for the "Пульт сессии" cockpit (replaces the
 -- global "Мешок" widget in the search panel while on a session's live
 -- page). `id` doubles as the insertion-order tiebreak when sorting.

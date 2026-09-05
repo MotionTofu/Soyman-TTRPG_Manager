@@ -75,15 +75,18 @@ interface Props {
   ownerPlayerName?: string;
   onDone: () => void;
   onCancel: () => void;
+  // Система, выбранная шагом раньше (таббар чарников на десктопе): тогда
+  // автоопределение не запускаем — выбор уже сделан.
+  initialSystemId?: number | null;
 }
 
 // Guided step-by-step creation for a brand-new D&D 5.5 character statblock —
 // used only when adding a fresh dnd_character (see StatblockList's addStatblock).
 // Leveling up / editing an existing character stays in the regular
 // DndCharacterEdit form; this wizard is a one-time onboarding path only.
-export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel }: Props) {
+export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId }: Props) {
   const [step, setStep] = useState<Step>("Личность");
-  const [systemId, setSystemId] = useState<number | null>(null);
+  const [systemId, setSystemId] = useState<number | null>(initialSystemId ?? null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   // Справочник не загрузился. Отдельно от saveError: одно про сохранение,
@@ -148,6 +151,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const skills = useDndSkills(systemId);
 
   useEffect(() => {
+    if (initialSystemId != null) return;
     let alive = true;
     findDndSystemId()
       .then((sid) => alive && setSystemId(sid))
@@ -155,7 +159,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     return () => {
       alive = false;
     };
-  }, []);
+  }, [initialSystemId]);
 
   // Визард — мастер создания, и он листается быстро: шаг «Класс» может
   // смениться раньше, чем доедет ответ. Без отмены доехавший ответ дописывал
@@ -473,7 +477,13 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       character.raceId = speciesId;
       character.raceName = species?.name ?? "";
       character.raceTypeName = species?.creatureTypeName ?? "";
-      if (species?.walkSpeed) character.speed = `${species.walkSpeed} фт.`;
+      if (species?.walkSpeed) {
+        character.speed = `${species.walkSpeed} фт.`;
+        // Кость скорости читает структуру, а не строку (иначе «—» в кости).
+        // walkSpeed вида — строка, в структуру ложится числом.
+        const walk = Number(species.walkSpeed);
+        if (Number.isFinite(walk)) character.speeds = { ...character.speeds, walk };
+      }
       try {
         const speciesFeatureEntries = await loadDndSpeciesFeatures(systemId!, speciesId);
         character.speciesFeatures = featuresFromEntries(speciesFeatureEntries, speciesId, level);

@@ -4163,6 +4163,24 @@ th, td {
   max-height: 85vh;
   overflow-y: auto;
 }
+/* Подбор пачкой с телефона (этап 6): широкое окно — на телефоне почти весь
+   экран, на десктопе просторная колонка. Футер с кнопкой «Добавить» липкий. */
+.modal.modal-wide {
+  width: min(680px, 96vw);
+  max-height: 92dvh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-wide .picker-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+.modal-wide .picker-footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--paper-2);
+  padding-top: 10px;
+}
 
 .modal:has(.crop-viewport) {
   width: auto;

@@ -695,6 +695,7 @@ export function AppShell() {
                   key={item.to}
                   to={item.to!}
                   className={({ isActive }) => (isActive ? "active" : "")}
+                  onClick={() => setNavOpen(false)}
                 >
                   <NavIcon name={item.icon} />
                   {item.label}
@@ -732,7 +733,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <div id="search-panel" className={`search-panel-slot${searchOpen ? " open" : ""}`}>
-        <SearchPanel />
+        <SearchPanel onNavigate={() => setSearchOpen(false)} />
       </div>
       <NavWidget />
       {/* Players never had a reason to control music — only the GM runs the

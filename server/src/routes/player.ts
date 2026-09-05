@@ -711,6 +711,83 @@ playerRouter.get("/compendium/:systemId", (req: AuthedRequest, res) => {
   const entries = db.prepare("SELECT * FROM compendium_entries WHERE system_id = ? ORDER BY position").all(systemId);
   res.json({ sections, entries });
 });
+
+// Карточка существа для записи бестиария — ею открываются жетоны спутников
+// на карте персонажа (CreatureCardLoader). Мастерский /creature-card игроку
+// закрыт, а отдавать его как есть нельзя: в payload лежит `secret`.
+// Поэтому секрет здесь вырезан на сервере, а не только спрятан клиентом
+// (playerSafe прячет его и в рендере — оборона в глубину). Скоуп: система
+// записи стоит хотя бы в одной кампании игрока. Существа сеттинга (being)
+// игроку не отдаём вовсе — это не его инструмент.
+playerRouter.get("/creature-card/compendium_entry/:id", (req: AuthedRequest, res) => {
+  const entry = db
+    .prepare(
+      `SELECT ce.id, ce.name, ce.description, ce.combat_roles, ce.tactics, ce.avatar_image_path,
+              ce.system_id
+       FROM compendium_entries ce WHERE ce.id = ?`
+    )
+    .get(req.params.id) as
+    | {
+        id: number;
+        name: string;
+        description: string | null;
+        combat_roles: string;
+        tactics: string;
+        avatar_image_path: string | null;
+        system_id: number;
+      }
+    | undefined;
+  if (!entry) return res.status(404).json({ error: "not found" });
+  const campaignIds = myCampaignIds(req.user!.playerId!);
+  const hasAccess =
+    campaignIds.length > 0 &&
+    db
+      .prepare(`SELECT 1 FROM campaigns WHERE id IN (${campaignIds.map(() => "?").join(",")}) AND system_id = ?`)
+      .get(...campaignIds, entry.system_id);
+  if (!hasAccess) return res.status(404).json({ error: "not found" });
+  const parseList = (raw: unknown): string[] => {
+    if (typeof raw !== "string" || !raw.trim()) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+    } catch {
+      return [];
+    }
+  };
+  const statblock = db
+    .prepare(
+      `SELECT id, kind, format, content, theme, density, avatar_image_path
+       FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ? AND format = 'dnd_creature'
+       ORDER BY CASE kind WHEN 'full' THEN 0 ELSE 1 END, id`
+    )
+    .get(entry.id) as
+    | {
+        id: number;
+        kind: string;
+        format: string;
+        content: string;
+        theme: string | null;
+        density: string | null;
+        avatar_image_path: string | null;
+      }
+    | undefined;
+  const { avatar_image_path: sbAvatar, ...sbRest } = statblock ?? {};
+  res.json({
+    type: "compendium_entry",
+    id: entry.id,
+    name: entry.name,
+    description: entry.description ?? "",
+    combat_roles: parseList(entry.combat_roles),
+    tactics: parseList(entry.tactics),
+    secret: "",
+    avatar_image_url: entry.avatar_image_path ? toFileUrl(entry.avatar_image_path) : null,
+    statblock: statblock
+      ? { ...sbRest, avatar_image_url: sbAvatar ? toFileUrl(sbAvatar) : null }
+      : null,
+    statblock_inherited: false,
+    inherited: null,
+  });
+});
 // «Исследование мира» — личный дневник персонажа (2026-09-02, разбор в
 // SideWorks/Профиль_Кампании_Игрок.md). Раньше это был общий блокнот партии:
 // любой участник кампании читал, правил и архивировал чужие записи. Теперь
@@ -897,4 +974,394 @@ playerRouter.post("/world-entries/:id/restore", (req: AuthedRequest, res) => {
   if (!entry) return res.status(404).json({ error: "not found" });
   db.prepare("UPDATE world_exploration_entries SET archived_at = NULL WHERE id = ?").run(entry.id);
   res.json({ ok: true });
+});
+
+// --- Передачи вещей между персонажами игроков (этап 4б) ---
+//
+// Игрок не пишет в чужой лист напрямую (PUT /player/statblocks/:id отдаёт
+// 404 на чужой статблок), поэтому посредник — сервер: оффер, проверки
+// наличия в момент принятия («потратил до принятия» — оффер гаснет,
+// отправитель ничего не замечает) и locked-строки в оба листа.
+// Уведомления об отказе и чек о деньгах едут строкой gm_reminders персонажу:
+// для них уже есть оборот, отдельного мессенджера не заводим.
+
+interface TransferRow {
+  id: number;
+  sender_character_id: number;
+  sender_name: string;
+  recipient_character_id: number;
+  recipient_name: string;
+  kind: string;
+  item_name: string;
+  item_json: string;
+  qty: number;
+  coins_json: string;
+  state: string;
+}
+
+interface SheetHandle {
+  sheetId: number;
+  data: Record<string, unknown>;
+}
+
+interface EquipmentSection {
+  name: string;
+  items: Record<string, unknown>[];
+}
+
+// Лист dnd_character персонажа: его нет, например, пока игрок не залил
+// чарник нового уровня — передавать тогда некуда и неоткуда.
+function transferSheet(characterId: number): SheetHandle | null {
+  const sheet = db
+    .prepare("SELECT id, content FROM statblocks WHERE owner_type = 'character' AND owner_id = ? AND format = 'dnd_character' ORDER BY id LIMIT 1")
+    .get(characterId) as { id: number; content: string } | undefined;
+  if (!sheet) return null;
+  let data: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(sheet.content || "{}");
+    data = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return null;
+  }
+  return { sheetId: sheet.id, data };
+}
+
+function writeTransferSheet(handle: SheetHandle, characterId: number): void {
+  db.prepare("UPDATE statblocks SET content = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?").run(
+    JSON.stringify(handle.data),
+    handle.sheetId
+  );
+  broadcastCharacterUpdate(characterId);
+}
+
+function transferSections(data: Record<string, unknown>): EquipmentSection[] {
+  const raw = data.equipmentSections;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((s): s is EquipmentSection => !!s && typeof s === "object" && Array.isArray((s as EquipmentSection).items));
+}
+
+// Строка вещи по адресу из оффера. Сверяем и имя: стак могли переименовать
+// или потратить после предложения — тогда оффер честно гаснет, а не едет
+// не туда.
+function transferItem(
+  sections: EquipmentSection[],
+  section: number,
+  index: number,
+  name: string
+): { sec: EquipmentSection; item: Record<string, unknown> } | null {
+  const sec = sections[section];
+  const item = sec?.items[index];
+  if (!sec || !item || typeof item.name !== "string" || item.name !== name) return null;
+  return { sec, item };
+}
+
+// qty вещи — строка; пустая и нечисловая означают одну штуку.
+function transferHave(item: Record<string, unknown>): number {
+  const n = parseInt(String(item.qty ?? ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+const COIN_KEYS = ["cp", "sp", "ep", "gp", "pp"] as const;
+type Coins = Record<(typeof COIN_KEYS)[number], number>;
+
+function transferCoins(data: Record<string, unknown>): Record<string, string> {
+  const raw = (data.coins ?? {}) as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const k of COIN_KEYS) out[k] = typeof raw[k] === "string" ? raw[k] : "";
+  return out;
+}
+
+function coinNumber(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(n) || n < 0 || Math.floor(n) !== n) return null;
+  return n;
+}
+
+function formatCoins(coins: Coins): string {
+  const names: Record<string, string> = { cp: "мм", sp: "см", ep: "эм", gp: "зм", pp: "пм" };
+  return COIN_KEYS.filter((k) => coins[k] > 0)
+    .map((k) => `${coins[k]} ${names[k]}`)
+    .join(", ");
+}
+
+function getTransfer(id: string | number): TransferRow | null {
+  return (db.prepare("SELECT * FROM character_transfers WHERE id = ?").get(id) ?? null) as TransferRow | null;
+}
+
+function setTransferState(id: number, state: string): void {
+  db.prepare("UPDATE character_transfers SET state = ?, updated_at = datetime('now') WHERE id = ?").run(state, id);
+}
+
+// Получатель оффера: мой персонаж той же кампании, живой, с залитым чарником.
+// Отправителя дарит только свой активный персонаж (canWriteInCampaign):
+// дневник погибшего читается, но знание мертвеца уже не раздаривает вещи.
+function transferPeer(playerId: number, senderId: number, recipientId: number): { ok: boolean; error?: string } {
+  const sender = requireOwnCharacter(playerId, senderId);
+  if (!sender) return { ok: false, error: "not found" };
+  if (!canWriteInCampaign(playerId, sender.campaign_id as number)) {
+    return { ok: false, error: "read only in this campaign" };
+  }
+  const recipient = db
+    .prepare("SELECT id, character_name, campaign_id FROM characters WHERE id = ? AND archived_at IS NULL")
+    .get(recipientId) as { id: number; character_name: string; campaign_id: number } | undefined;
+  if (!recipient || recipient.id === senderId) return { ok: false, error: "not found" };
+  if (recipient.campaign_id !== sender.campaign_id) return { ok: false, error: "not found" };
+  if (!transferSheet(recipient.id)) return { ok: false, error: "у получателя нет чарника D&D" };
+  return { ok: true };
+}
+
+// Активные передачи персонажа: входящие офферы/принятые и исходящие.
+// История (declined/returned/claimed/expired) не отдаётся: её заменяют
+// состояния строк в листах и уведомления-строки в обороте.
+playerRouter.get("/characters/:id/transfers", (req: AuthedRequest, res) => {
+  const character = requireOwnCharacter(req.user!.playerId!, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  const rows = db
+    .prepare("SELECT * FROM character_transfers WHERE (sender_character_id = ? OR recipient_character_id = ?) AND state IN ('offered','accepted') ORDER BY created_at DESC, id DESC")
+    .all(character.id, character.id) as TransferRow[];
+  res.json({
+    incoming: rows.filter((r) => r.recipient_character_id === character.id),
+    outgoing: rows.filter((r) => r.sender_character_id === character.id),
+  });
+});
+
+// Предложение: вещь (kind=item|replica) или деньги (kind=money — уходят
+// сразу, чеком получателю). Вещь до принятия остаётся у отправителя обычной.
+playerRouter.post("/characters/:id/transfers", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const senderId = Number(req.params.id);
+  const { recipient_character_id, section, index, qty, kind, coins } = req.body as {
+    recipient_character_id?: number;
+    section?: number;
+    index?: number;
+    qty?: number;
+    kind?: string;
+    coins?: Partial<Record<string, unknown>>;
+  };
+  const recipientId = Number(recipient_character_id);
+  if (!Number.isFinite(recipientId)) return res.status(400).json({ error: "recipient_character_id is required" });
+  const peer = transferPeer(playerId, senderId, recipientId);
+  if (!peer.ok) return res.status(peer.error === "read only in this campaign" ? 403 : 404).json({ error: peer.error });
+  const sender = requireOwnCharacter(playerId, senderId)!;
+  const recipient = db.prepare("SELECT id, character_name FROM characters WHERE id = ?").get(recipientId) as {
+    id: number;
+    character_name: string;
+  };
+
+  if (kind === "money") {
+    const amounts = {} as Coins;
+    for (const k of COIN_KEYS) {
+      const n = coinNumber(coins?.[k] ?? 0);
+      if (n === null) return res.status(400).json({ error: `bad coins.${k}` });
+      amounts[k] = n;
+    }
+    if (!COIN_KEYS.some((k) => amounts[k] > 0)) return res.status(400).json({ error: "empty transfer" });
+    const senderSheet = transferSheet(senderId)!;
+    const recipientSheet = transferSheet(recipientId)!;
+    const senderCoins = transferCoins(senderSheet.data);
+    for (const k of COIN_KEYS) {
+      const have = parseInt(senderCoins[k] || "0", 10) || 0;
+      if (have < amounts[k]) return res.status(409).json({ error: `не хватает: ${k}` });
+    }
+    const recipientCoins = transferCoins(recipientSheet.data);
+    for (const k of COIN_KEYS) {
+      senderCoins[k] = String((parseInt(senderCoins[k] || "0", 10) || 0) - amounts[k]);
+      recipientCoins[k] = String((parseInt(recipientCoins[k] || "0", 10) || 0) + amounts[k]);
+    }
+    senderSheet.data.coins = senderCoins;
+    recipientSheet.data.coins = recipientCoins;
+    writeTransferSheet(senderSheet, senderId);
+    writeTransferSheet(recipientSheet, recipientId);
+    const info = db
+      .prepare(
+        `INSERT INTO character_transfers (sender_character_id, sender_name, recipient_character_id, recipient_name, kind, coins_json, qty, state)
+         VALUES (?, ?, ?, ?, 'money', ?, 0, 'claimed')`
+      )
+      .run(senderId, sender.character_name, recipientId, recipient.character_name, JSON.stringify(amounts));
+    db.prepare("INSERT INTO gm_reminders (target_type, target_id, message) VALUES ('character', ?, ?)").run(
+      recipientId,
+      `«${sender.character_name}» передал: ${formatCoins(amounts)}`
+    );
+    return res.status(201).json(db.prepare("SELECT * FROM character_transfers WHERE id = ?").get(info.lastInsertRowid));
+  }
+
+  if (kind !== undefined && kind !== "item" && kind !== "replica") {
+    return res.status(400).json({ error: "unknown kind" });
+  }
+  const senderSheet = transferSheet(senderId);
+  if (!senderSheet) return res.status(404).json({ error: "у отправителя нет чарника D&D" });
+  const sections = transferSections(senderSheet.data);
+  const found = transferItem(sections, Number(section), Number(index), String((req.body as { name?: unknown }).name ?? ""));
+  if (!found) return res.status(404).json({ error: "предмет не найден" });
+  if (found.item.transferOut || found.item.transferIn) {
+    return res.status(409).json({ error: "предмет уже в передаче" });
+  }
+  const want = qty === undefined ? transferHave(found.item) : Number(qty);
+  if (!Number.isFinite(want) || Math.floor(want) !== want || want < 1 || want > transferHave(found.item)) {
+    return res.status(400).json({ error: "bad qty" });
+  }
+  const { transferOut: _dropOut, transferIn: _dropIn, equipped: _dropEq, qty: _dropQty, ...snapshot } = found.item;
+  const info = db
+    .prepare(
+      `INSERT INTO character_transfers (sender_character_id, sender_name, recipient_character_id, recipient_name, kind, item_name, item_json, qty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      senderId,
+      sender.character_name,
+      recipientId,
+      recipient.character_name,
+      kind ?? "item",
+      String(found.item.name),
+      JSON.stringify(snapshot),
+      want
+    );
+  res.status(201).json(db.prepare("SELECT * FROM character_transfers WHERE id = ?").get(info.lastInsertRowid));
+});
+
+// Принятие: вещь делится (остаток свободен, доля — locked-строкой),
+// получателю ложится зелёная (принято) или фиолетовая (создано) строка.
+// Гонка «потратил до принятия»: вещи или хваталки нет — оффер гаснет
+// в expired, отправитель ничего не замечает (решение владельца).
+playerRouter.post("/transfers/:id/accept", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const row = getTransfer(req.params.id);
+  if (!row || row.state !== "offered") return res.status(404).json({ error: "not found" });
+  if (!requireOwnCharacter(playerId, row.recipient_character_id)) return res.status(404).json({ error: "not found" });
+  const senderSheet = transferSheet(row.sender_character_id);
+  const recipientSheet = transferSheet(row.recipient_character_id);
+  if (!senderSheet || !recipientSheet) {
+    setTransferState(row.id, "expired");
+    return res.status(409).json({ error: "чарки недоступны" });
+  }
+  const sections = transferSections(senderSheet.data);
+  const snapshot = JSON.parse(row.item_json || "{}") as Record<string, unknown>;
+  // Адрес устарел, а имя живо (строку двигали по секциям): ищем по имени.
+  let found: { sec: EquipmentSection; item: Record<string, unknown> } | null = null;
+  for (const sec of sections) {
+    const idx = sec.items.findIndex(
+      (it) => typeof it?.name === "string" && it.name === row.item_name && !it.transferOut && !it.transferIn
+    );
+    if (idx >= 0) {
+      found = { sec, item: sec.items[idx] };
+      break;
+    }
+  }
+  if (!found || transferHave(found.item) < row.qty) {
+    setTransferState(row.id, "expired");
+    return res.status(409).json({ error: "предмет уже недоступен" });
+  }
+  const have = transferHave(found.item);
+  const lock = {
+    id: row.id,
+    toCharacterId: row.recipient_character_id,
+    toName: row.recipient_name,
+    qty: row.qty,
+  };
+  if (have === row.qty) {
+    found.item.qty = String(row.qty);
+    found.item.equipped = false;
+    found.item.transferOut = lock;
+  } else {
+    found.item.qty = String(have - row.qty);
+    found.sec.items.splice(sections.indexOf(found.sec) >= 0 ? found.sec.items.indexOf(found.item) + 1 : 0, 0, {
+      ...snapshot,
+      name: row.item_name,
+      qty: String(row.qty),
+      equipped: false,
+      transferOut: lock,
+    });
+  }
+  const recipientSections = transferSections(recipientSheet.data);
+  const first = recipientSections[0];
+  if (!first) {
+    setTransferState(row.id, "expired");
+    return res.status(409).json({ error: "у получателя нет секций снаряжения" });
+  }
+  first.items.push({
+    ...snapshot,
+    name: row.item_name,
+    qty: String(row.qty),
+    equipped: false,
+    transferIn: {
+      id: row.id,
+      fromCharacterId: row.sender_character_id,
+      fromName: row.sender_name,
+      kind: row.kind,
+    },
+  });
+  writeTransferSheet(senderSheet, row.sender_character_id);
+  writeTransferSheet(recipientSheet, row.recipient_character_id);
+  setTransferState(row.id, "accepted");
+  res.json(db.prepare("SELECT * FROM character_transfers WHERE id = ?").get(row.id));
+});
+
+// Отказ: отправителю уходит строка «отклонено» в оборот его карты.
+playerRouter.post("/transfers/:id/decline", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const row = getTransfer(req.params.id);
+  if (!row || row.state !== "offered") return res.status(404).json({ error: "not found" });
+  if (!requireOwnCharacter(playerId, row.recipient_character_id)) return res.status(404).json({ error: "not found" });
+  setTransferState(row.id, "declined");
+  const what = row.kind === "money" ? formatCoins(JSON.parse(row.coins_json || "{}") as Coins) : `${row.item_name} ×${row.qty}`;
+  db.prepare("INSERT INTO gm_reminders (target_type, target_id, message) VALUES ('character', ?, ?)").run(
+    row.sender_character_id,
+    `«${row.recipient_name}» отклонил передачу: ${what}`
+  );
+  res.json(db.prepare("SELECT * FROM character_transfers WHERE id = ?").get(row.id));
+});
+
+// Возврат принятого: зелёная строка исчезает у получателя, серая
+// разблокируется у отправителя. Частично потраченную долю не высчитываем:
+// v1 считает долю целой, иначе — expired с разблокировкой отправителя.
+playerRouter.post("/transfers/:id/return", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const row = getTransfer(req.params.id);
+  if (!row || row.state !== "accepted") return res.status(404).json({ error: "not found" });
+  if (!requireOwnCharacter(playerId, row.recipient_character_id)) return res.status(404).json({ error: "not found" });
+  const recipientSheet = transferSheet(row.recipient_character_id);
+  const senderSheet = transferSheet(row.sender_character_id);
+  if (recipientSheet) {
+    for (const sec of transferSections(recipientSheet.data)) {
+      const idx = sec.items.findIndex((it) => (it.transferIn as { id?: number } | undefined)?.id === row.id);
+      if (idx >= 0) sec.items.splice(idx, 1);
+    }
+    writeTransferSheet(recipientSheet, row.recipient_character_id);
+  }
+  if (senderSheet) {
+    for (const sec of transferSections(senderSheet.data)) {
+      const item = sec.items.find((it) => (it.transferOut as { id?: number } | undefined)?.id === row.id);
+      if (item) delete item.transferOut;
+    }
+    writeTransferSheet(senderSheet, row.sender_character_id);
+  }
+  setTransferState(row.id, "returned");
+  res.json(db.prepare("SELECT * FROM character_transfers WHERE id = ?").get(row.id));
+});
+
+// Сделать своим: серая строка исчезает у отправителя, зелёная становится
+// обычной вещью получателя — ни цвета, ни чипа.
+playerRouter.post("/transfers/:id/claim", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const row = getTransfer(req.params.id);
+  if (!row || row.state !== "accepted") return res.status(404).json({ error: "not found" });
+  if (!requireOwnCharacter(playerId, row.recipient_character_id)) return res.status(404).json({ error: "not found" });
+  const recipientSheet = transferSheet(row.recipient_character_id);
+  const senderSheet = transferSheet(row.sender_character_id);
+  if (recipientSheet) {
+    for (const sec of transferSections(recipientSheet.data)) {
+      const item = sec.items.find((it) => (it.transferIn as { id?: number } | undefined)?.id === row.id);
+      if (item) delete item.transferIn;
+    }
+    writeTransferSheet(recipientSheet, row.recipient_character_id);
+  }
+  if (senderSheet) {
+    for (const sec of transferSections(senderSheet.data)) {
+      const idx = sec.items.findIndex((it) => (it.transferOut as { id?: number } | undefined)?.id === row.id);
+      if (idx >= 0) sec.items.splice(idx, 1);
+    }
+    writeTransferSheet(senderSheet, row.sender_character_id);
+  }
+  setTransferState(row.id, "claimed");
+  res.json(db.prepare("SELECT * FROM character_transfers WHERE id = ?").get(row.id));
 });
