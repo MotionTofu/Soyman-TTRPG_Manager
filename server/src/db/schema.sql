@@ -372,6 +372,15 @@ CREATE TABLE IF NOT EXISTS setting_locations (
   aliases TEXT NOT NULL DEFAULT '[]',
   name_original TEXT NOT NULL DEFAULT '',
   kind TEXT DEFAULT '',
+  -- Вес поведения: location — самостоятельное место, sector — контейнер
+  -- (район/этаж/крыло), spot — точка внутри родителя (комната). Свободный
+  -- kind остаётся вывеской, role определяет поведение. Подписи меняются
+  -- без миграции (словарь), стабильны только id 'location|sector|spot'.
+  role TEXT NOT NULL DEFAULT 'location',
+  -- Backlink копии «сделать локацией» (план «Зоны», этап 8): точка остаётся
+  -- точкой, рядом рождается локация с origin на неё. Хронология мира —
+  -- позже, колонка уже собирается.
+  origin_location_id INTEGER REFERENCES setting_locations(id) ON DELETE SET NULL,
   description TEXT DEFAULT '',
   folder_path TEXT,
   avatar_image_path TEXT,
@@ -385,10 +394,21 @@ CREATE TABLE IF NOT EXISTS setting_locations (
   archived_at TEXT
 );
 
+-- Наполнение локации/точки (план «Зоны локаций», этап 6): лёгкие строки
+-- «что внутри» — секрет, лут, ловушка, особенность. Без файлов, связей и
+-- uid: ездят внутри родителя, отдельным модулем не переносятся. Дерево =
+-- где, наполнение = что.
+CREATE TABLE IF NOT EXISTS location_content (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'feature',
+  text TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Pins placed on a location's map image, linking to any entity (usually a
 -- child location, but any type from the search panel can be dropped here).
-CREATE TABLE IF NOT EXISTS location_pins (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS location_pins (  id INTEGER PRIMARY KEY AUTOINCREMENT,
   location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
   target_type TEXT NOT NULL,
   target_id INTEGER NOT NULL,

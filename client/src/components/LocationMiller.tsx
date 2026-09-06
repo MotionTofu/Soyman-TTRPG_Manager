@@ -8,6 +8,7 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Modal } from "./Modal";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { EntityWizard } from "./entityWizard/EntityWizard";
+import { locationRoleOf } from "../locationRoles";
 import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { isSafeImageUrl } from "../utils/safeUrl";
@@ -162,11 +163,15 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     return out;
   }, [path, byId]);
 
-  // Колонки данных: пустые детские не показываем — их дело берёт превью.
+  // Колонки данных: ведут только сквозь не-точки (локации и секторы).
+  // Точки — всегда листья: колонок не создают, живут списком в превью
+  // (план «Зоны локаций», этап 3). Пустые детские не показываем — их дело
+  // берёт превью.
   const columns: { parent: SettingLocation | null; items: SettingLocation[] }[] = useMemo(() => {
-    const cols = [{ parent: null as SettingLocation | null, items: kidsOf.get(null) ?? [] }];
+    const nav = (kids: SettingLocation[]) => kids.filter((k) => locationRoleOf(k) !== "spot");
+    const cols = [{ parent: null as SettingLocation | null, items: nav(kidsOf.get(null) ?? []) }];
     for (const id of cleanPath) {
-      const kids = kidsOf.get(id) ?? [];
+      const kids = nav(kidsOf.get(id) ?? []);
       if (kids.length > 0) cols.push({ parent: byId.get(id) ?? null, items: kids });
     }
     return cols;
@@ -199,19 +204,29 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     return () => controller.abort();
   }, [focusId]);
 
-  const focusDescCount = useMemo(() => {
-    if (focus == null) return 0;
-    let n = 0;
+  // Потомки фокуса по весам: секторы / локации / точки (план «Зоны
+  // локаций», этап 3). Раньше был один счётчик на всех — данж на 25 комнат
+  // показывал «Вложенных: 26» и пугал.
+  const focusDescByRole = useMemo(() => {
+    const out = { sector: 0, location: 0, spot: 0 };
+    if (focus == null) return out;
     const stack = (kidsOf.get(focus.id) ?? []).map((l) => l.id);
     const seen = new Set<number>([focus.id]);
     while (stack.length) {
       const id = stack.pop()!;
       if (seen.has(id)) continue;
       seen.add(id);
-      n += 1;
+      const loc = byId.get(id);
+      if (loc && !loc.archived_at) out[locationRoleOf(loc)] += 1;
       for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
     }
-    return n;
+    return out;
+  }, [focus, kidsOf, byId]);
+
+  // Точки фокуса — прямыми детьми: compact-список «План» в превью.
+  const focusSpots = useMemo(() => {
+    if (focus == null) return [] as SettingLocation[];
+    return (kidsOf.get(focus.id) ?? []).filter((l) => locationRoleOf(l) === "spot");
   }, [focus, kidsOf]);
 
   const shownDetail = focusDetail && focus && focusDetail.id === focus.id ? focusDetail : null;
@@ -401,6 +416,63 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     ];
   }
 
+  // Строка колонки и списка точек — одна на всех (план «Зоны локаций»,
+  // этап 3): счётчик — только по навигационным детям (секторы/локации),
+  // у листа с точками вместо стрелки подпись «N точек».
+  function renderMillerRow(l: SettingLocation, activeId: number | null) {
+    const kidRoles = (kidsOf.get(l.id) ?? []).map((k) => locationRoleOf(k));
+    const navKids = kidRoles.filter((r) => r !== "spot").length;
+    const spotKids = kidRoles.length - navKids;
+    const isActive = l.id === activeId;
+    const isOver = dragOverId === l.id && draggedId !== l.id;
+    return (
+      <button
+        key={l.id}
+        className={`miller-item${isActive ? " is-active" : ""}${isOver ? " drag-over" : ""}`}
+        aria-current={isActive ? "true" : undefined}
+        onClick={() => pick(l.id)}
+        title={l.name}
+        draggable
+        onDragStart={(e) => handleDragStart(e, l.id)}
+        onDragEnd={() => {
+          setDraggedId(null);
+          setDragOverId(null);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (draggedId == null || draggedId === l.id) return;
+          if (isDescendantOf(draggedId, l.id)) return;
+          setDragOverId(l.id);
+        }}
+        onDragLeave={() => setDragOverId((prev) => (prev === l.id ? null : prev))}
+        onDrop={(e) => handleItemDrop(e, l.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setMenu({ x: e.clientX, y: e.clientY, id: l.id });
+        }}
+      >
+        <span className="miller-item__name">{l.name}</span>
+        <span className="miller-item__meta">
+          {l.kind && <span className="miller-item__kind">{l.kind}</span>}
+          {(l.map_image_path || l.map_image_url) && (
+            <span title="Есть карта">
+              <NavIcon name="map" />
+            </span>
+          )}
+          {navKids > 0 && <span className="miller-item__count">{navKids}</span>}
+          {navKids > 0 && <NavIcon name="arrowRight" />}
+          {navKids === 0 && spotKids > 0 && (
+            <span className="miller-item__kind" title="Точек внутри">
+              {spotKids} точек
+            </span>
+          )}
+        </span>
+      </button>
+    );
+  }
+
   function handleDragStart(e: DragEvent<HTMLElement>, id: number) {
     e.stopPropagation();
     setDraggedId(id);
@@ -581,52 +653,21 @@ export function LocationMiller({ settingId }: { settingId: number }) {
                     setMenu({ x: e.clientX, y: e.clientY, id: pid ?? -1 });
                   }}
                 >
-                  {col.items.map((l) => {
-                    const kids = (kidsOf.get(l.id) ?? []).length;
-                    const isActive = l.id === activeId;
-                    const isOver = dragOverId === l.id && draggedId !== l.id;
+                  {(() => {
+                    // Секторы отдельно от локаций; заголовки — только когда
+                    // обе секции непусты, иначе это шум (этап 3).
+                    const sectors = col.items.filter((l) => locationRoleOf(l) === "sector");
+                    const places = col.items.filter((l) => locationRoleOf(l) !== "sector");
+                    const showHeads = sectors.length > 0 && places.length > 0;
                     return (
-                      <button
-                        key={l.id}
-                        className={`miller-item${isActive ? " is-active" : ""}${isOver ? " drag-over" : ""}`}
-                        aria-current={isActive ? "true" : undefined}
-                        onClick={() => pick(l.id)}
-                        title={l.name}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, l.id)}
-                        onDragEnd={() => {
-                          setDraggedId(null);
-                          setDragOverId(null);
-                        }}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (draggedId == null || draggedId === l.id) return;
-                          if (isDescendantOf(draggedId, l.id)) return;
-                          setDragOverId(l.id);
-                        }}
-                        onDragLeave={() => setDragOverId((prev) => (prev === l.id ? null : prev))}
-                        onDrop={(e) => handleItemDrop(e, l.id)}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setMenu({ x: e.clientX, y: e.clientY, id: l.id });
-                        }}
-                      >
-                        <span className="miller-item__name">{l.name}</span>
-                        <span className="miller-item__meta">
-                          {l.kind && <span className="miller-item__kind">{l.kind}</span>}
-                          {(l.map_image_path || l.map_image_url) && (
-                            <span title="Есть карта">
-                              <NavIcon name="map" />
-                            </span>
-                          )}
-                          {kids > 0 && <span className="miller-item__count">{kids}</span>}
-                          {kids > 0 && <NavIcon name="arrowRight" />}
-                        </span>
-                      </button>
+                      <>
+                        {showHeads && <div className="miller-sec">Секторы</div>}
+                        {sectors.map((l) => renderMillerRow(l, activeId))}
+                        {showHeads && <div className="miller-sec">Локации</div>}
+                        {places.map((l) => renderMillerRow(l, activeId))}
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
               </div>
             );
@@ -659,8 +700,16 @@ export function LocationMiller({ settingId }: { settingId: number }) {
                 </div>
                 <dl className="location-sidecard__stats" style={{ marginTop: 8 }}>
                   <div>
-                    <dt>Вложенных</dt>
-                    <dd>{focusDescCount}</dd>
+                    <dt>Секторов</dt>
+                    <dd>{focusDescByRole.sector}</dd>
+                  </div>
+                  <div>
+                    <dt>Локаций</dt>
+                    <dd>{focusDescByRole.location}</dd>
+                  </div>
+                  <div>
+                    <dt>Точек</dt>
+                    <dd>{focusDescByRole.spot}</dd>
                   </div>
                   <div>
                     <dt>Население</dt>
@@ -680,7 +729,13 @@ export function LocationMiller({ settingId }: { settingId: number }) {
                   {(focus.description ?? "").trim() ? "" : " · без описания"}
                 </div>
                 {focus.description && (
-                  <p className="miller-preview__desc">{focus.description.slice(0, 220)}{focus.description.length > 220 ? "…" : ""}</p>
+                  <p className="miller-preview__desc">{focus.description.length > 220 ? `${focus.description.slice(0, 220).replace(/\s+\S*$/, "")}…` : focus.description}</p>
+                )}
+                {focusSpots.length > 0 && (
+                  <div className="miller-spots">
+                    <div className="miller-sec">Точки · {focusSpots.length}</div>
+                    {focusSpots.map((s) => renderMillerRow(s, focusId))}
+                  </div>
                 )}
                 <div className="miller-preview__actions">
                   <Link to={`/locations/${focus.id}`}>Открыть →</Link>

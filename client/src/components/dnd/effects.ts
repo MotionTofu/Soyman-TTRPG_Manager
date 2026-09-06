@@ -13,6 +13,7 @@
 // would have made that the special case instead.
 
 import { ABILITY_SCORES } from "../../compendium";
+import type { DndAbilityKey } from "../../types";
 
 export type DndCheckType = "attack" | "save";
 export type DndAttackRange = "melee" | "ranged";
@@ -123,10 +124,26 @@ export type DndCostPeriod = "short_rest" | "long_rest" | "day";
 export interface DndCost {
   kind: DndCostKind;
   amount?: number | null;
-  // dndResources.ts resource key, for kind === "resource".
+  // dndResources.ts resource key, for kind === "resource". Точный ключ
+  // (табличный или формульный пул) — когда он известен.
   resourceKey?: string;
+  // Название пула — когда точный ключ неизвестен: у классовых пулов в ключ
+  // зашит id записи класса, и из справочника на них ссылаются по названию
+  // («Очки чародейства»). Дублироваться им не с чего: пул классовый.
+  resourceLabel?: string;
   // For kind === "uses": how often the uses come back.
   per?: DndCostPeriod;
+  // Свой ресурс (структурность, гриллинг 2026-09-06): способность приносит
+  // собственный пул (ключ `feature:{entryId}`), а не тратит классовый.
+  // Без флага kind === "uses" механики не имеет — только текст цены.
+  ownResource?: boolean;
+  // Максимум своего пула — модификатор характеристики (минимум 1), а не
+  // число: хоумбрю-пул «очки = мод Харизмы» без правки кода. Без поля —
+  // amount как было.
+  maxAbility?: DndAbilityKey;
+  // Восстановление своего пула ценой из другого («Крылья дракона»: 1/долгий,
+  // восстановить за 3 очка чародейства). Кнопка — в строке пула.
+  restore?: { pool: string; amount: number };
 }
 
 export const EMPTY_COST: DndCost = { kind: "none" };

@@ -715,6 +715,37 @@ export function openDatabase(dbDir: string): Database.Database {
       "ALTER TABLE setting_locations ADD COLUMN map_labels_always INTEGER NOT NULL DEFAULT 0"
     );
   }
+  // Вес поведения локации: location — место, sector — контейнер, spot — точка
+  // внутри родителя (план «Зоны локаций», этап 1). NOT NULL DEFAULT закрывает
+  // существующие строки значением 'location' — поведение старых миров не меняется.
+  // Подписи живут в словаре и меняются без миграции, стабильны только id.
+  if (!columnExists(database, "setting_locations", "role")) {
+    database.exec(
+      "ALTER TABLE setting_locations ADD COLUMN role TEXT NOT NULL DEFAULT 'location'"
+    );
+  }
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_setting_locations_role ON setting_locations(setting_id, role)"
+  );
+  // Backlink «сделать локацией» (план «Зоны», этап 8).
+  if (!columnExists(database, "setting_locations", "origin_location_id")) {
+    database.exec(
+      "ALTER TABLE setting_locations ADD COLUMN origin_location_id INTEGER REFERENCES setting_locations(id) ON DELETE SET NULL"
+    );
+  }
+  // Наполнение локаций/точек (план «Зоны локаций», этап 6).
+  if (!tableExists(database, "location_content")) {
+    database.exec(`CREATE TABLE location_content (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'feature',
+      text TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_location_content_location ON location_content(location_id)"
+  );
   if (!columnExists(database, "setting_communities", "parent_id")) {
     database.exec(
       "ALTER TABLE setting_communities ADD COLUMN parent_id INTEGER REFERENCES setting_communities(id) ON DELETE CASCADE"
@@ -1469,6 +1500,73 @@ export function openDatabase(dbDir: string): Database.Database {
     database.exec(
       `CREATE INDEX idx_character_transfers_parties ON character_transfers(sender_character_id, recipient_character_id, state)`
     );
+  }
+
+  // Стоимости способностей (структурность, гриллинг 2026-09-06): uses-стабы
+  // без флага ownResource механики не имеют, а resource-стабы без ключа —
+  // мёртвую кнопку траты. Миграция размечает детерминированные случаи;
+  // остальное — флагом в редакторе. Одноразовая (флаг): повторный проход
+  // затоптал бы ручные правки Мастера в справочнике.
+  // Подпись владельца — в треде 2026-09-06 (списки A–D).
+  if (!appSettingFlag(database, "ability_costs_v2")) {
+    const setIfMissing = (id: number, cost: unknown) => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        return;
+      }
+      if (data.cost != null) return;
+      data.cost = cost;
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    const replace = (id: number, cost: unknown) => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        return;
+      }
+      data.cost = cost;
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    const U = (amount: number, per: string) => ({ kind: "uses", amount, per, ownResource: true });
+    // A: uses-стабы — флаг (значения уже стоят).
+    for (const id of [12048, 12050, 12057, 12058, 12108, 12207, 12529, 12472, 12538, 12540, 12586, 12669]) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      try {
+        const data = JSON.parse(row.data || "{}") as { cost?: Record<string, unknown> };
+        if (!data.cost || (data.cost.kind as string) !== "uses" || data.cost.ownResource) continue;
+        data.cost = { ...data.cost, ownResource: true };
+        database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    // C: resource-стабы без ключа.
+    replace(12047, { kind: "resource", resourceKey: "bardic_inspiration", amount: 1 });
+    replace(12239, { kind: "resource", resourceLabel: "Очки чародейства", amount: 5 });
+    replace(12467, { kind: "resource", resourceLabel: "Очки чародейства", amount: 1 });
+    // Подчинение удачи: редакция 2024 — 1 очко чародейства (не 2 как в 2014).
+    replace(12241, { kind: "resource", resourceLabel: "Очки чародейства", amount: 1 });
+    replace(12366, { kind: "uses", amount: 1, per: "long_rest", ownResource: true, restore: { pool: "Очки чародейства", amount: 3 } });
+    replace(12468, { kind: "uses", amount: 1, per: "long_rest", ownResource: true, restore: { pool: "Очки чародейства", amount: 7 } });
+    // D: с нуля.
+    setIfMissing(12477, U(1, "long_rest"));
+    setIfMissing(12103, U(2, "long_rest"));
+    setIfMissing(12248, U(1, "long_rest"));
+    setAppSettingFlag(database, "ability_costs_v2");
   }
 
   // Права администратора — единственное, что закрыто отдельно от роли: смена

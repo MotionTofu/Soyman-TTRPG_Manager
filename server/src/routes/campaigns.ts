@@ -372,7 +372,7 @@ campaignsRouter.delete("/:id/reminders/:reminderId", (req, res) => {
 // Pushes an image to every connected player device in this campaign in
 // real time (mobile GM's "показать изображение" button) — a no-op when
 // nobody's listening (local desktop GM app, or no player has the mobile app
-// open). requireAuth("gm") only bites when AUTH_ENABLED — see services/auth.
+// open). Auth is always on — see services/auth.
 campaignsRouter.post("/:id/show-image", requireAuth("gm"), (req, res) => {
   const { url } = req.body as { url?: string };
   if (!url) return res.status(400).json({ error: "url is required" });

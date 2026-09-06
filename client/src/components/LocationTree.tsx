@@ -1048,11 +1048,13 @@ export function LocationNode({
                 maxWidth: "100%",
               }}
             >
-              {location.description
-                .replace(/\[\[[^\]]+\|([^\]|]+)\]\]/g, "$1")
-                .replace(/\*\*([^*]+)\*\*/g, "$1")
-                .replace(/\*([^*]+)\*/g, "$1")
-                .slice(0, 120)}
+              {(() => {
+                const plain = location.description
+                  .replace(/\[\[[^\]]+\|([^\]|]+)\]\]/g, "$1")
+                  .replace(/\*\*([^*]+)\*\*/g, "$1")
+                  .replace(/\*([^*]+)\*/g, "$1");
+                return plain.length > 120 ? `${plain.slice(0, 120).replace(/\s+\S*$/, "")}…` : plain;
+              })()}
             </span>
           )}
         </summary>

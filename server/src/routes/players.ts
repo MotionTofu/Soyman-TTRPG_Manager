@@ -68,19 +68,138 @@ playersRouter.get("/:id", (req, res) => {
   if (!row) return res.status(404).json({ error: "not found" });
   const characters = db
     .prepare(
-      `SELECT c.*, ca.name as campaign_name FROM characters c
+      `SELECT c.*, ca.name as campaign_name, ca.system_id as campaign_system_id,
+              sys.name as campaign_system_name
+       FROM characters c
        LEFT JOIN campaigns ca ON ca.id = c.campaign_id
+       LEFT JOIN systems sys ON sys.id = ca.system_id
        WHERE c.player_id = ? AND c.archived_at IS NULL`
     )
-    .all(req.params.id) as { avatar_image_path: string | null }[];
+    .all(req.params.id) as {
+    id: number;
+    avatar_image_path: string | null;
+    thumbnail_image_path: string | null;
+    system_id: number | null;
+    campaign_system_id: number | null;
+    campaign_system_name: string | null;
+  }[];
+  const systemsById = new Map<number, string>(
+    (db.prepare("SELECT id, name FROM systems").all() as { id: number; name: string }[]).map(
+      (s) => [s.id, s.name]
+    )
+  );
   res.json({
     ...withThumbUrl(row),
     characters: characters.map((c) => ({
       ...c,
       avatar_image_url: c.avatar_image_path ? toFileUrl(c.avatar_image_path) : null,
+      thumbnail_image_url: c.thumbnail_image_path ? toFileUrl(c.thumbnail_image_path) : null,
+      ...summarizeCharacterSheet(c.id, c.system_id, c.campaign_system_id, systemsById),
     })),
   });
 });
+
+// Чарник персонажа для профиля игрока: какой лист показать по «Чарник →» и
+// что написать в строке «система + системная инфа». Первичный лист —
+// dnd_character > litm_character > zip_character > остальное, full раньше
+// short. Система: systemId из содержимого листа, иначе system_id персонажа
+// (для внекампанейских), иначе система кампании. Всё аддитивно: новых
+// запросов клиент не делает, старых полей не убираем.
+function summarizeCharacterSheet(
+  characterId: number,
+  characterSystemId: number | null,
+  campaignSystemId: number | null,
+  systemsById: Map<number, string>
+): {
+  sheet_statblock_id: number | null;
+  statblock_format: string | null;
+  system_name: string | null;
+  system_info: string | null;
+} {
+  const empty = {
+    sheet_statblock_id: null,
+    statblock_format: null,
+    system_name: null as string | null,
+    system_info: null as string | null,
+  };
+  let statblocks: { id: number; format: string; kind: string; content: string }[];
+  try {
+    statblocks = db
+      .prepare(
+        `SELECT id, format, kind, content FROM statblocks
+         WHERE owner_type = 'character' AND owner_id = ? AND archived_at IS NULL`
+      )
+      .all(characterId) as { id: number; format: string; kind: string; content: string }[];
+  } catch {
+    return empty;
+  }
+  if (statblocks.length === 0) {
+    const fallback = characterSystemId != null ? systemsById.get(characterSystemId) ?? null : null;
+    return { ...empty, system_name: fallback };
+  }
+  const formatRank = (f: string) =>
+    f === "dnd_character" ? 0 : f === "litm_character" ? 1 : f === "zip_character" ? 2 : 3;
+  const sorted = [...statblocks].sort(
+    (a, b) =>
+      formatRank(a.format) - formatRank(b.format) ||
+      (a.kind === "full" ? 0 : 1) - (b.kind === "full" ? 0 : 1) ||
+      a.id - b.id
+  );
+  const primary = sorted[0];
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(primary.content || "{}") as Record<string, unknown>;
+  } catch {
+    parsed = null;
+  }
+  const systemIdFromContent =
+    parsed && typeof parsed.systemId === "number" ? (parsed.systemId as number) : null;
+  const systemId = systemIdFromContent ?? characterSystemId ?? campaignSystemId ?? null;
+  const system_name = systemId != null ? (systemsById.get(systemId) ?? null) : null;
+
+  let system_info: string | null = null;
+  if (parsed) {
+    if (primary.format === "dnd_character") {
+      const race = typeof parsed.raceName === "string" ? parsed.raceName.trim() : "";
+      const classes = Array.isArray(parsed.classes)
+        ? (parsed.classes as { className?: unknown; subclassName?: unknown; level?: unknown }[])
+        : [];
+      const classSummary = classes
+        .filter((c) => typeof c.className === "string" && (c.className as string).trim())
+        .map((c) => {
+          const cls = (c.className as string).trim();
+          const sub =
+            typeof c.subclassName === "string" ? (c.subclassName as string).trim() : "";
+          const lvl = typeof c.level === "number" && Number.isFinite(c.level) ? ` ${c.level}` : "";
+          return `${[cls, sub].filter(Boolean).join(" — ")}${lvl}`;
+        })
+        .join(" / ");
+      system_info = [race, classSummary].filter(Boolean).join(" · ") || null;
+    } else if (primary.format === "litm_character") {
+      const themes = Array.isArray(parsed.themes)
+        ? (parsed.themes as { name?: unknown; themeType?: unknown }[])
+        : [];
+      const names = themes
+        .map((t) => (typeof t.name === "string" ? t.name.trim() : ""))
+        .filter(Boolean)
+        .slice(0, 4);
+      system_info = names.length > 0 ? names.join(" · ") : null;
+    } else if (primary.format === "zip_character") {
+      const typeName =
+        typeof parsed.characterTypeName === "string" ? parsed.characterTypeName.trim() : "";
+      const level = typeof parsed.level === "string" ? parsed.level.trim() : "";
+      const spec = typeof parsed.specialization === "string" ? parsed.specialization.trim() : "";
+      system_info =
+        [typeName, level ? `Ур. ${level}` : "", spec].filter(Boolean).join(" · ") || null;
+    }
+  }
+  return {
+    sheet_statblock_id: primary.id,
+    statblock_format: primary.format,
+    system_name,
+    system_info,
+  };
+}
 
 playersRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) => {
   const player = db

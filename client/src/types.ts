@@ -392,7 +392,23 @@ export interface Character {
 }
 
 export interface PlayerDetail extends Player {
-  characters: Character[];
+  characters: PlayerCharacter[];
+}
+
+// Персонаж в профиле игрока (GET /players/:id): сервер прикладывает сводку
+// по первичному чарнику — какой лист открывать по «Чарник →» и что писать в
+// строке «система + системная инфа» (вид/класс/подкласс/уровень для D&D).
+export interface PlayerCharacter extends Character {
+  /** Система кампании персонажа (systems.name через campaigns.system_id). */
+  campaign_system_name?: string | null;
+  /** Id первичного чарника — цель ссылки «Чарник →» (/characters/:id/sheet). */
+  sheet_statblock_id?: number | null;
+  /** Формат первичного чарника: dnd_character | litm_character | zip_character | … */
+  statblock_format?: string | null;
+  /** Имя системы листа (из systemId содержимого, иначе системы персонажа/кампании). */
+  system_name?: string | null;
+  /** Системная инфа: D&D — «вид · класс — подкласс уровень», LitM — темы, ZIP — типаж/уровень. */
+  system_info?: string | null;
 }
 
 export interface GmReminder {
@@ -714,6 +730,8 @@ export interface DndCharacterData {
   attacks: DndManualAttack[];
   equipmentSections: DndEquipmentSection[];
   attunementCount: number;
+  /** Дополнительные слоты настройки сверх трёх базовых (кнопка [+]). */
+  attunementExtra?: number;
   coins: DndCoins;
 
   speciesFeatures: DndFeature[];
@@ -1287,6 +1305,10 @@ export interface SettingLocation {
   name: string;
   short_name: string | null;
   kind: string;
+  // Вес поведения: location — место, sector — контейнер, spot — точка внутри
+  // родителя (план «Зоны локаций»). Подписи — в locationRoles.ts, в коде
+  // стабильны только id.
+  role: "location" | "sector" | "spot";
   /** Другие названия: переводы, сокращения, прозвища. */
   aliases: string[];
   /** Название в оригинале книги: «Sea Ward». */
@@ -1342,14 +1364,28 @@ export interface LocationInhabitantBeing extends SettingBeing {
   location_names?: string[];
 }
 
+export interface LocationContentItem {
+  id: number;
+  location_id: number;
+  kind: "secret" | "loot" | "trap" | "feature";
+  text: string;
+  created_at: string;
+}
+
 export interface SettingLocationDetail extends SettingLocation {
   children: SettingLocation[];
   ancestors: { id: number; name: string }[];
   pins: LocationPin[];
   chapters: LocationChapter[];
+  content: LocationContentItem[];
   inhabitant_beings: LocationInhabitantBeing[];
   nested_inhabitant_beings: LocationInhabitantBeing[];
   inhabitant_communities: { id: number; name: string }[];
+  // Сообщества из вложенных локаций/точек (план «Зоны локаций», этап 2):
+  // гильдия, держащая комнату, видна на странице родителя с подписью зоны.
+  nested_inhabitant_communities: { id: number; name: string; location_names?: string[] }[];
+  // Локации, рождённые из этой точки кнопкой «сделать локацией» (этап 8).
+  promoted_locations: { id: number; name: string }[];
   important_dates: ImportantDate[];
 }
 
@@ -1802,6 +1838,10 @@ export interface SearchResult {
   // shown next to the type chip so same-named entities across different
   // settings/campaigns are distinguishable.
   context?: string;
+  // Только у локаций, найденных через точку (план «Зоны», этап 7): совпавшая
+  // точка. Строка ведёт на родителя, страница подсвечивает строку точки.
+  spot_id?: number;
+  spot_name?: string;
 }
 
 export interface ArchiveItem {

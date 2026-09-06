@@ -560,7 +560,7 @@ function ArticleCard({
             <div className={clampOpen ? "" : "editable-clamp"} style={{ whiteSpace: "pre-wrap" }}>
               <MentionText text={article.content} />
             </div>
-            {article.content.split("\n").length > 8 || article.content.length > 400 ? (
+            {article.content.split("\n").length > 8 || article.content.length > 600 ? (
               <button className="editable-clamp-toggle" onClick={() => setClampOpen((v) => !v)}>
                 {clampOpen ? "Свернуть" : "Показать полностью"}
               </button>

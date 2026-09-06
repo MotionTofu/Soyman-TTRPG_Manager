@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { useUnloadTarget } from "../unloadTargets";
@@ -28,11 +28,14 @@ import { useConfirm } from "../hooks/useConfirm";
 import { BEING_CATEGORIES } from "../beingCategories";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { LocationImportantDatesTab } from "../components/LocationImportantDatesTab";
+import { LocationContent } from "../components/LocationContent";
+import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
 import type {
   SearchResult,
   SettingCommunity,
   SettingLocation,
   SettingLocationDetail,
+  LocationContentItem,
   LocationInhabitantBeing,
 } from "../types";
 
@@ -78,9 +81,85 @@ export function LocationDetailPage() {
   const [parentDraft, setParentDraft] = useState<number | null>(null);
   const [childName, setChildName] = useState("");
   const [childKind, setChildKind] = useState("");
+  const [childRole, setChildRole] = useState<"location" | "sector">("location");
+  const [planText, setPlanText] = useState("");
+  const [planKind, setPlanKind] = useState("комната");
+  const [planAdding, setPlanAdding] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertSel, setConvertSel] = useState<Set<number>>(new Set());
+  const [converting, setConverting] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+
+  // Повышение точки копией (план «Зоны», этап 8): точка жива, рядом
+  // рождается локация. Без потерь: обитатели, статьи и наполнение едут.
+  // После создания уходим на новую локацию — её и хотел увидеть Мастер.
+  async function promoteSpot() {
+    if (promoting) return;
+    setPromoting(true);
+    try {
+      const created = await api.post<{ id: number }>(`/setting-locations/${locationId}/make-location`, {});
+      navigate(`/locations/${created.id}`);
+    } catch (e) {
+      setLoadError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setPromoting(false);
+    }
+  }
+
+  // План родителя: его точки с наполнением и счётчиками — одним запросом.
+  // Грузится лениво при открытии «Вложенности», чтобы не утяжелять каждое
+  // открытие карточки (план «Зоны», этап 6).
+  type PlanSpot = {
+    id: number;
+    name: string;
+    kind: string;
+    description: string;
+    content: { id: number; kind: string; text: string }[];
+    beings_count: number;
+    communities_count: number;
+  };
+  const [planSpots, setPlanSpots] = useState<PlanSpot[] | null>(null);
+  const [planExpanded, setPlanExpanded] = useState<number | null>(null);
+  // Подсветка строки точки при переходе из поиска (?spot=, план «Зоны»,
+  // этап 7): раскрываем строку, прокручиваем, вспышка гаснет сама.
+  const [searchParams] = useSearchParams();
+  const [spotFlash, setSpotFlash] = useState<number | null>(null);
+
+  useEffect(() => {
+    const s = Number(searchParams.get("spot"));
+    if (Number.isFinite(s) && s > 0) {
+      setPlanExpanded(s);
+      setSpotFlash(s);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз на локацию
+  }, [locationId]);
+
+  useEffect(() => {
+    if (spotFlash == null || !(planSpots ?? []).some((s) => s.id === spotFlash)) return;
+    document
+      .querySelector(`[data-spot-row="${spotFlash}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const t = setTimeout(() => setSpotFlash(null), 2600);
+    return () => clearTimeout(t);
+  }, [spotFlash, planSpots]);
+
+  async function refreshPlan() {
+    try {
+      const r = await api.get<{ spots: PlanSpot[] }>(`/setting-locations/${locationId}/plan`);
+      setPlanSpots(r.spots);
+    } catch {
+      setPlanSpots([]);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === "Вложенность") {
+      setPlanExpanded(null);
+      refreshPlan();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только вход на таб
+  }, [tab, locationId]);
   const [inhabitantsDragOver, setInhabitantsDragOver] = useState(false);
-  const [showNestedInhabitants, setShowNestedInhabitants] = useState(false);
-  const [nestedLoading, setNestedLoading] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -167,21 +246,21 @@ export function LocationDetailPage() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    const query = showNestedInhabitants ? "?nested=1" : "";
+    // Вложенные обитатели (включая точки) — всегда: секция «В зонах» видна,
+    // когда непуста, без тумблера (план «Зоны локаций», этап 2).
+    const query = "?nested=1";
     setLoadError(null);
     api
       .get<SettingLocationDetail>(`/setting-locations/${locationId}${query}`, { signal: controller.signal })
       .then((l) => {
         if (controller.signal.aborted) return;
         setLocation(l);
-        setNestedLoading(false);
       })
       .catch((e: unknown) => {
         if ((e as Error).name === "AbortError") return;
         setLoadError(String(e instanceof Error ? e.message : e));
-        setNestedLoading(false);
       });
-  }, [locationId, showNestedInhabitants]);
+  }, [locationId]);
   useEffect(() => {
     refresh();
     return () => abortRef.current?.abort();
@@ -245,10 +324,10 @@ export function LocationDetailPage() {
   }, [allLocations, locationId]);
 
   const { allInhabitants, directIds, sortedFactionGroups, noFactionBeings, filteredCount, categoryCounts } = useMemo(() => {
-    if (!location) return { allInhabitants: [] as LocationInhabitantBeing[], directIds: new Set<number>(), sortedFactionGroups: [] as { id: number; name: string; beings: LocationInhabitantBeing[] }[], noFactionBeings: [] as LocationInhabitantBeing[], filteredCount: 0, categoryCounts: new Map<string, number>() };
-    const rawAll = showNestedInhabitants
-      ? [...location.inhabitant_beings, ...location.nested_inhabitant_beings]
-      : location.inhabitant_beings;
+    if (!location) return { allInhabitants: [] as LocationInhabitantBeing[], directIds: new Set<number>(), sortedFactionGroups: [] as { id: number; name: string; beings: LocationInhabitantBeing[]; nested?: boolean; locationNames?: string[] }[], noFactionBeings: [] as LocationInhabitantBeing[], filteredCount: 0, categoryCounts: new Map<string, number>() };
+    // Вложенные (из дочерних локаций и точек) — всегда в общем списке, с
+    // подписью зоны; тумблера больше нет (план «Зоны локаций», этап 2).
+    const rawAll = [...location.inhabitant_beings, ...location.nested_inhabitant_beings];
     // Фильтрация (U-P0-1 / U-P1-1) — по имени/тегам/типу/сообществам
     const q = debouncedQuery.trim().toLowerCase();
     const cat = categoryFilter;
@@ -281,7 +360,7 @@ export function LocationDetailPage() {
     const direct = new Set(location.inhabitant_beings.map((b) => b.id));
     // Группировка — только отфильтрованных, чтобы пустые фракции скрывались
     const qActive = !!q || !!cat;
-    const groups = new Map<number, { id: number; name: string; beings: typeof all }>();
+    const groups = new Map<number, { id: number; name: string; beings: typeof all; nested?: boolean; locationNames?: string[] }>();
     const noFaction: typeof all = [];
     for (const b of all) {
       if (b.communities.length === 0) {
@@ -299,6 +378,14 @@ export function LocationDetailPage() {
       for (const c of location.inhabitant_communities) {
         if (!groups.has(c.id)) groups.set(c.id, { id: c.id, name: c.name, beings: [] });
       }
+      // Сообщества из вложенных (держат точку, но существ с карточками в ней
+      // нет): заголовком с подписью зоны, без кнопки «Убрать» — убираются из
+      // самой точки, а не отсюда.
+      for (const c of location.nested_inhabitant_communities ?? []) {
+        if (!groups.has(c.id)) {
+          groups.set(c.id, { id: c.id, name: c.name, beings: [], nested: true, locationNames: c.location_names ?? [] });
+        }
+      }
     }
     const sorted = Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
     // Сортировка внутри групп уже учтена через all order, но на всякий — отсортировать
@@ -308,7 +395,7 @@ export function LocationDetailPage() {
     }
     return { allInhabitants: rawAll, directIds: direct, sortedFactionGroups: sorted, noFactionBeings: noFaction, filteredCount: all.length, categoryCounts: new Map(Object.entries(rawAll.reduce((acc, b) => { acc[b.category] = (acc[b.category] ?? 0) + 1; return acc; }, {} as Record<string, number>))) };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- location fields accessed via optional chaining
-  }, [location?.inhabitant_beings, location?.nested_inhabitant_beings, location?.inhabitant_communities, showNestedInhabitants, debouncedQuery, categoryFilter, sortMode]);
+  }, [location?.inhabitant_beings, location?.nested_inhabitant_beings, location?.inhabitant_communities, location?.nested_inhabitant_communities, debouncedQuery, categoryFilter, sortMode]);
 
   if (loadError && !location) {
     return (
@@ -334,10 +421,11 @@ export function LocationDetailPage() {
   }
   if (!location) return <div className="stack"><div className="card" style={{ padding: 24 }}><p className="muted" aria-busy="true">Загрузка…</p></div></div>;
 
-  async function saveNameKind(values: { name: string; kind: string; short_name: string }) {
+  async function saveNameKind(values: { name: string; role?: string; kind: string; short_name: string }) {
     try {
       await api.put(`/setting-locations/${locationId}`, {
         name: values.name,
+        role: values.role,
         kind: values.kind,
         short_name: values.short_name.trim(),
       });
@@ -398,7 +486,7 @@ export function LocationDetailPage() {
     }
   }
 
-  async function addChild() {
+  async function addChild(role: "location" | "sector" = "location") {
     if (!childName.trim() || addingChild) return;
     setAddingChild(true);
     try {
@@ -407,6 +495,7 @@ export function LocationDetailPage() {
         parent_id: locationId,
         name: childName.trim(),
         kind: childKind.trim() || null,
+        role,
       });
       setChildName("");
       setChildKind("");
@@ -415,6 +504,98 @@ export function LocationDetailPage() {
       setLoadError(String(e instanceof Error ? e.message : e));
     } finally {
       setAddingChild(false);
+    }
+  }
+
+  // План точками: «по строке на точку», формат «Название — заметка»
+  // (тире любое, пробелы вокруг обязательны), нумерация «1. » срезается.
+  // Повторная вставка не дублирует: совпавшие по имени пропускаются молча
+  // в создании, но честно показываются в preview (план «Зоны», этап 4).
+  function parsePlanLines(text: string): { name: string; note: string }[] {
+    const out: { name: string; note: string }[] = [];
+    for (const raw of text.split("\n")) {
+      let line = raw.trim();
+      if (!line) continue;
+      line = line.replace(/^\d{1,3}\s*[.)\-:]\s+/, "");
+      const m = line.match(/^(.*?)\s+[—–-]\s+(.*)$/);
+      const name = (m ? m[1] : line).trim();
+      const note = (m ? m[2] : "").trim();
+      if (name) out.push({ name, note });
+    }
+    return out;
+  }
+
+  const planParsed = parsePlanLines(planText);
+  const planExistingNames = new Set(
+    (childByParent.get(locationId) ?? []).map((c) => c.name.trim().toLowerCase())
+  );
+  const planFresh = planParsed.filter((p) => !planExistingNames.has(p.name.toLowerCase()));
+  const planDupes = planParsed.length - planFresh.length;
+
+  async function addPlan() {
+    if (planFresh.length === 0 || planAdding) return;
+    setPlanAdding(true);
+    try {
+      for (const p of planFresh) {
+        await api.post("/setting-locations", {
+          setting_id: location!.setting_id,
+          parent_id: locationId,
+          name: p.name,
+          kind: planKind.trim() || null,
+          role: "spot",
+          description: p.note || null,
+        });
+      }
+      setPlanText("");
+      refresh();
+      showSuccess(`Точек добавлено: ${planFresh.length}`);
+    } catch (e) {
+      setLoadError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setPlanAdding(false);
+    }
+  }
+
+  // Смена веса вложенным пачкой (план «Зоны», этап 5): перевод старых
+  // данжей, нарезанных локациями, в точки без открытия каждой карточки.
+  // В точку — только лист без живых детей (то же правило, что PUT на
+  // сервере): такие пропускаем с честным счётчиком, а не молча.
+  const directKids = childByParent.get(locationId) ?? [];
+
+  function toggleConvert(id: number) {
+    setConvertSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function convertSelected(role: "location" | "sector" | "spot") {
+    const ids = [...convertSel];
+    if (ids.length === 0 || converting) return;
+    setConverting(true);
+    let done = 0;
+    let skippedKids = 0;
+    try {
+      for (const id of ids) {
+        if (role === "spot" && (childByParent.get(id)?.length ?? 0) > 0) {
+          skippedKids++;
+          continue;
+        }
+        await api.put(`/setting-locations/${id}`, { role });
+        done++;
+      }
+      setConvertSel(new Set());
+      refresh();
+      showSuccess(
+        `Вес сменён: ${done}` +
+          (skippedKids > 0 ? ` · пропущено (есть вложенные): ${skippedKids}` : "")
+      );
+    } catch (e) {
+      setLoadError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setConverting(false);
     }
   }
 
@@ -541,6 +722,17 @@ export function LocationDetailPage() {
             fields={[
               { key: "name", label: "Имя", value: location.name, required: true },
               {
+                key: "role",
+                label: "Вес",
+                value: locationRoleOf(location),
+                options: [
+                  { value: "location", label: "Локация — самостоятельное место" },
+                  { value: "sector", label: "Сектор — контейнер" },
+                  { value: "spot", label: "Точка — внутри родителя" },
+                ],
+                title: "Вес определяет поведение: сектор группирует, точка живёт внутри родителя и не светится в поиске",
+              },
+              {
                 key: "kind",
                 label: "Тип",
                 value: location.kind ?? "",
@@ -553,7 +745,7 @@ export function LocationDetailPage() {
                 title: "Показывается вместо полного имени в подписи пина на карте локации",
               },
             ]}
-            onSave={(v) => saveNameKind({ name: v.name, kind: v.kind, short_name: v.short_name })}
+            onSave={(v) => saveNameKind({ name: v.name, role: v.role, kind: v.kind, short_name: v.short_name })}
           />
           <EditableTextCard
             title="Описание"
@@ -567,6 +759,36 @@ export function LocationDetailPage() {
             collapsible
             defaultOpen
           />
+          {locationRoleOf(location) === "spot" && (
+            <div className="card stack" style={{ gap: 8 }}>
+              <strong>Наполнение — что внутри</strong>
+              <LocationContent
+                locationId={locationId}
+                items={location.content ?? []}
+                onChange={refresh}
+              />
+              {(location.promoted_locations ?? []).length > 0 ? (
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                  Стала локацией:{" "}
+                  {(location.promoted_locations ?? []).map((p, i) => (
+                    <span key={p.id}>
+                      {i > 0 && ", "}
+                      <Link to={`/locations/${p.id}`}>{p.name}</Link>
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <div className="row">
+                  <button onClick={promoteSpot} disabled={promoting}>
+                    {promoting ? "…" : "Создать локацию из этой точки"}
+                  </button>
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "40ch" }}>
+                    Точка останется, рядом появится локация с теми же обитателями, статьями и наполнением
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <AliasesCard
             aliases={location.aliases ?? []}
             nameOriginal={location.name_original ?? ""}
@@ -701,27 +923,217 @@ export function LocationDetailPage() {
             )}
           </div>
           <div className="geography-node-header" style={{ margin: "-14px -14px 10px", padding: "8px 12px" }}>
-            Добавить вложенную локацию
+            Добавить: место или сектор
           </div>
           <div className="row">
             <input
               placeholder="Название"
               value={childName}
               onChange={(e) => setChildName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addChild(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") addChild(childRole); }}
               disabled={addingChild}
             />
             <input
               placeholder="Тип (необязательно)"
               value={childKind}
               onChange={(e) => setChildKind(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addChild(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") addChild(childRole); }}
               disabled={addingChild}
+              list="loc-kind-nested"
             />
-            <button className="primary" onClick={addChild} disabled={addingChild}>
+            <select
+              value={childRole}
+              onChange={(e) => setChildRole(e.target.value as "location" | "sector")}
+              disabled={addingChild}
+              title="Вес: локация — самостоятельное место, сектор — контейнер"
+            >
+              <option value="location">Локация</option>
+              <option value="sector">Сектор</option>
+            </select>
+            <button className="primary" onClick={() => addChild(childRole)} disabled={addingChild}>
               {addingChild ? "…" : "Добавить"}
             </button>
           </div>
+          <datalist id="loc-kind-nested">
+            <option value="город" />
+            <option value="таверна" />
+            <option value="храм" />
+            <option value="район" />
+            <option value="этаж" />
+            <option value="крыло" />
+            <option value="квартал" />
+          </datalist>
+          <div className="geography-node-header" style={{ margin: "10px -14px", padding: "8px 12px" }}>
+            План точками — по строке на точку
+          </div>
+          <textarea
+            placeholder={"Караулка — пахнет псиной\nКоридор шёпота\nКелья 3 — заперта"}
+            value={planText}
+            onChange={(e) => setPlanText(e.target.value)}
+            rows={4}
+            disabled={planAdding}
+            style={{ width: "100%", resize: "vertical" }}
+          />
+          <div className="row">
+            <input
+              placeholder="Тип для всех"
+              value={planKind}
+              onChange={(e) => setPlanKind(e.target.value)}
+              disabled={planAdding}
+              list="loc-kind-spots"
+              style={{ maxWidth: 220 }}
+            />
+            <datalist id="loc-kind-spots">
+              <option value="комната" />
+              <option value="зал" />
+              <option value="коридор" />
+              <option value="келья" />
+              <option value="кладовая" />
+              <option value="лестница" />
+            </datalist>
+            <button className="primary" onClick={addPlan} disabled={planAdding || planFresh.length === 0}>
+              {planAdding ? "…" : `Добавить точками (${planFresh.length})`}
+            </button>
+            {planParsed.length > 0 && (
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                Распознано: {planParsed.length}
+                {planDupes > 0 && ` · уже есть: ${planDupes} — пропустим`}
+              </span>
+            )}
+          </div>
+          {directKids.length > 0 && (
+            <>
+              <div className="geography-node-header" style={{ margin: "10px -14px", padding: "8px 12px" }}>
+                Сменить вес вложенным
+              </div>
+              {!convertOpen ? (
+                <div className="row">
+                  <button onClick={() => setConvertOpen(true)}>
+                    Выбрать из {directKids.length}
+                  </button>
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                    Для перевода старых данжей в точки без открытия каждой карточки
+                  </span>
+                </div>
+              ) : (
+                <div className="stack">
+                  {directKids.map((c) => {
+                    const hasKids = (childByParent.get(c.id)?.length ?? 0) > 0;
+                    return (
+                      <label key={c.id} className="row" style={{ gap: 8, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={convertSel.has(c.id)}
+                          onChange={() => toggleConvert(c.id)}
+                          disabled={converting}
+                        />
+                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {c.name}
+                          {c.kind && <span className="muted"> · {c.kind}</span>}
+                        </span>
+                        <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                          {LOCATION_ROLE_LABELS[locationRoleOf(c)]}
+                          {hasKids && " · есть вложенные"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        const all = new Set(directKids.map((c) => c.id));
+                        setConvertSel(convertSel.size === all.size ? new Set() : all);
+                      }}
+                      disabled={converting}
+                    >
+                      {convertSel.size === directKids.length ? "Снять все" : "Выбрать все"}
+                    </button>
+                    <button className="primary" onClick={() => convertSelected("spot")} disabled={converting || convertSel.size === 0}>
+                      {converting ? "…" : `В точки (${convertSel.size})`}
+                    </button>
+                    <button onClick={() => convertSelected("sector")} disabled={converting || convertSel.size === 0}>
+                      В секторы
+                    </button>
+                    <button onClick={() => convertSelected("location")} disabled={converting || convertSel.size === 0}>
+                      В локации
+                    </button>
+                    <button onClick={() => { setConvertOpen(false); setConvertSel(new Set()); }} disabled={converting}>
+                      Готово
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          {(planSpots ?? []).length > 0 && (
+            <>
+              <div className="geography-node-header" style={{ margin: "10px -14px", padding: "8px 12px" }}>
+                План · {(planSpots ?? []).length}
+              </div>
+              <div className="stack">
+                {(planSpots ?? []).map((s) => {
+                  const open = planExpanded === s.id;
+                  return (
+                    <div
+                      key={s.id}
+                      className="card"
+                      data-spot-row={s.id}
+                      style={{
+                        padding: 8,
+                        outline: spotFlash === s.id ? "2px solid var(--accent)" : undefined,
+                        outlineOffset: spotFlash === s.id ? 1 : undefined,
+                      }}
+                    >
+                      <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                        <button
+                          onClick={() => setPlanExpanded(open ? null : s.id)}
+                          title={open ? "Свернуть" : "Развернуть"}
+                          aria-expanded={open}
+                          style={{ minWidth: 28 }}
+                        >
+                          {open ? "▾" : "▸"}
+                        </button>
+                        <Link to={`/locations/${s.id}`} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <strong>{s.name}</strong>
+                        </Link>
+                        {s.kind && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{s.kind}</span>}
+                        <span className="muted" style={{ fontSize: "var(--fs-meta)" }} title="Обитатели и наполнение">
+                          {s.beings_count > 0 && `👤${s.beings_count} `}
+                          {s.content.length > 0 && `✦${s.content.length}`}
+                        </span>
+                      </div>
+                      {s.description && !open && (
+                        <div className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 4 }}>
+                          {s.description.length > 140 ? s.description.slice(0, 140) + "…" : s.description}
+                        </div>
+                      )}
+                      {open && (
+                        <div className="stack" style={{ marginTop: 8, gap: 8 }}>
+                          {s.description && <p style={{ margin: 0 }}>{s.description}</p>}
+                          {(s.beings_count > 0 || s.communities_count > 0) && (
+                            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                              Обитателей: {s.beings_count}{s.communities_count > 0 && ` · сообществ: ${s.communities_count}`} — <Link to={`/locations/${s.id}`}>подробно на карточке</Link>
+                            </span>
+                          )}
+                          <LocationContent
+                            locationId={s.id}
+                            items={s.content.map((c) => ({
+                              id: c.id,
+                              location_id: s.id,
+                              kind: c.kind as LocationContentItem["kind"],
+                              text: c.text,
+                              created_at: "",
+                            }))}
+                            onChange={refreshPlan}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
           <div className="stack">
             {childByParent.get(locationId)?.map((c) => (
               <LocationNode key={c.id} location={c} byParent={childByParent} onChange={refresh} />
@@ -847,26 +1259,15 @@ export function LocationDetailPage() {
           {(allInhabitants.length > 0 || location.inhabitant_communities.length > 0) && (
             <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: "var(--fs-meta)", fontFamily: "var(--font-mono)" }} aria-live="polite">
               <span>Обитателей: {filteredCount}{filteredCount !== allInhabitants.length ? ` из ${allInhabitants.length}` : ""}</span>
-              {showNestedInhabitants && location.nested_inhabitant_beings.length > 0 && (
-                <span>(+{location.nested_inhabitant_beings.length} из вложенных)</span>
+              {location.nested_inhabitant_beings.length > 0 && (
+                <span>(+{location.nested_inhabitant_beings.length} из вложенных: {(Array.from(new Set(location.nested_inhabitant_beings.flatMap((b)=> b.location_names ?? []))).join(", ") || "—")})</span>
               )}
               {filteredCount !== allInhabitants.length && (
                 <span style={{ color: "var(--ink)" }}>Показано: {filteredCount}</span>
               )}
             </div>
           )}
-          <label className="row inhabitants-nested-toggle">
-            <input
-              type="checkbox"
-              checked={showNestedInhabitants}
-              onChange={(e) => { setShowNestedInhabitants(e.target.checked); setNestedLoading(true); }}
-            />
-            Показывать обитателей вложенных локаций
-            {showNestedInhabitants && location.nested_inhabitant_beings.length > 0 && (
-              <span style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: "var(--fs-micro)" }}> +{location.nested_inhabitant_beings.length} из дочерних · {(Array.from(new Set(location.nested_inhabitant_beings.flatMap((b)=> b.location_names ?? []))).join(", ") || "—")}</span>
-            )}
-          </label>
-          {allInhabitants.length === 0 && location.inhabitant_communities.length === 0 ? (
+          {allInhabitants.length === 0 && location.inhabitant_communities.length === 0 && (location.nested_inhabitant_communities ?? []).length === 0 ? (
             <EmptyState
               title="Здесь пока никто не живёт"
               hint="Добавьте личность через форму выше или перетащите существо / сообщество из поиска. Сообщества появятся как фракции."
@@ -891,18 +1292,23 @@ export function LocationDetailPage() {
               }
             />
           ) : (
-            <div style={{ opacity: nestedLoading ? 0.5 : 1, transition: "opacity 150ms" }}>
+            <div>
               {sortedFactionGroups.map((group) => (
                 <details key={group.id} className="entity-group" open>
                   <summary className="inhabitants-group-header entity-group-header-toggle">
                     <span>
                       {group.name} ({group.beings.length})
+                      {group.nested && (group.locationNames ?? []).length > 0 && (
+                        <span className="muted"> · из {(group.locationNames ?? []).join(", ")}</span>
+                      )}
                     </span>
                     <span className="entity-group-actions" onClick={(e) => e.preventDefault()}>
                       <Link to={`/communities/${group.id}`}>Перейти</Link>
-                      <button type="button" onClick={() => removeInhabitant("community", group.id)}>
-                        Убрать
-                      </button>
+                      {!group.nested && (
+                        <button type="button" onClick={() => removeInhabitant("community", group.id)}>
+                          Убрать
+                        </button>
+                      )}
                     </span>
                   </summary>
                   <BeingEntityRowList

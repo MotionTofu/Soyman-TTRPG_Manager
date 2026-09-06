@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useQueuedSave } from "../hooks/useQueuedSave";
@@ -198,6 +198,23 @@ export function StatblockList({
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
   const [activeStatblockId, setActiveId] = useState<number | null>(null);
   const isMobileSheet = useIsMobile();
+  // Создание из «Чарников»: ?newSheet=1 однократно открывает визард, затем
+  // параметр снимается — иначе кнопка «назад» возвращала бы в визард.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const didAutoWizard = useRef(false);
+  useEffect(() => {
+    if (didAutoWizard.current || searchParams.get("newSheet") !== "1") return;
+    didAutoWizard.current = true;
+    setShowDndWizard(true);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("newSheet");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [searchParams, setSearchParams]);
   // Создание чарника с таббара (только десктоп, решение владельца 2026-09-06):
   // undefined — нет, null — выбор системы, number — визард с этой системой.
   const [creatingSystem, setCreatingSystem] = useState<number | null | undefined>(undefined);
@@ -618,6 +635,21 @@ export function StatblockList({
           )
         ) : (
           cards
+        )}
+        {/* Визард из «Чарников» (?newSheet=1): на странице чарника тоже,
+            иначе «Сразу в чарник» приводил бы на пустую страницу. */}
+        {showDndWizard && ownerType === "character" && (
+          <DndCharacterWizard
+            ownerType="character"
+            ownerId={ownerId}
+            ownerName={ownerName}
+            ownerPlayerName={ownerPlayerName}
+            onCancel={() => setShowDndWizard(false)}
+            onDone={() => {
+              setShowDndWizard(false);
+              refresh();
+            }}
+          />
         )}
       </div>
     );

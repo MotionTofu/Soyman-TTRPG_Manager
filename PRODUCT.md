@@ -8,11 +8,11 @@ web
 
 ## Users
 
-Two roles, treated as equally important: the **мастер** (GM), who preps and runs their own tabletop RPG campaigns, and their **active players**, who use the same app (via a role-branched mobile-adaptive web client) to view their characters, campaign info, upcoming sessions, and shared world content. This is a personal tool built by the GM for their own real group — not a multi-tenant SaaS product.
+Two roles, treated as equally important: the **мастер** (GM), who preps and runs their own tabletop RPG campaigns, and their **active players**, who use the same app (via a role-branched mobile-adaptive web client) to view their characters, campaign info, upcoming sessions, and shared world content. Started as a personal tool built by the GM for their own real group; now a commercial product aimed at earning well by genuinely serving the GMs and players it helps.
 
 ## Product Purpose
 
-A personal, offline-first TTRPG campaign and session manager. It replaces ad hoc use of Notion/Obsidian for campaign prep and lore-keeping, and Roll20/D&D Beyond for session running and character sheets, with one tool purpose-built for this GM's specific play style: financially-tracked paid GMing, heavy homebrew content, and primarily in-person (offline) play. Currently supports D&D 5.5 and Legend in the Mist, with the compendium architecture designed to add more systems.
+A commercial, offline-first TTRPG campaign and session manager. It replaces ad hoc use of Notion/Obsidian for campaign prep and lore-keeping, and Roll20/D&D Beyond for session running and character sheets, with one tool purpose-built for this GM's specific play style: financially-tracked paid GMing, heavy homebrew content, and primarily in-person (offline) play. Currently supports D&D 5.5 and Legend in the Mist, with the compendium architecture designed to add more systems.
 
 ## Positioning
 
@@ -21,7 +21,7 @@ The mechanism a neighboring product (Notion, Obsidian, Roll20, D&D Beyond) could
 - **Financial tracking is core, not bolted on.** Payment type, per-session rate, and amount-paid tracking live inside the campaign/session data model itself, for a GM who runs paid games.
 - **Deep homebrew authoring with computed statblocks.** Classes, spells, items, bestiary, and mechanics are structured compendium data; character/creature statblocks compute AC, spell slots, and bonuses from that data rather than being free-text sheets.
 - **Built-in music/audio player** (crossfade, per-session/setting playlists) — a feature rarely supported by offline-first tools, present here because in-person sessions need table music.
-- **Offline-first, self-hosted.** The GM's desktop Electron app runs its own local Express+SQLite server and is fully editable with zero dependency on any external service. A hosted server is an optional sync layer for player mobile access, never a required backend for the GM.
+- **Offline-first, self-hosted.** The GM's desktop Electron app runs its own local Express+SQLite server and is fully editable with zero dependency on any external service. Self-hosting stays first-class; a managed hosted offering (own Forge, single-tenant instances per client) is the commercial direction alongside it.
 - **Real-time session pult** (control panel): initiative tracker, second-monitor panel layout, "show image to players" broadcast — built for running the table live, not just prepping beforehand.
 - **One shared, role-branching client.** GM and player use the same mobile-responsive codebase with different role permissions, not separate apps — and the whole design center of gravity is in-person/offline play, with online play treated as a secondary "helper/archive" mode. Most competitors (Roll20, D&D Beyond) default the other way, online-first.
 

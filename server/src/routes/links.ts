@@ -116,7 +116,14 @@ interface ScopeQuery {
  * (существа, фракции, локации) не попадут, т.к. у них нет дома в рамках
  * этой кампании.
  */
-function buildScope(campaignId?: string, settingId?: string): Map<string, ScopeQuery> | null {
+function buildScope(
+  campaignId?: string,
+  settingId?: string,
+  // Точки в область графа по умолчанию не входят (план «Зоны», этап 10):
+  // иначе список «висят в воздухе» состоял бы из комнат. Изолированные
+  // существа при этом не теряются — их обитание перепривязано на родителя.
+  includeSpots = true
+): Map<string, ScopeQuery> | null {
   const scope = new Map<string, ScopeQuery>();
   if (campaignId) {
     const row = db.prepare("SELECT setting_id FROM campaigns WHERE id = ?").get(campaignId) as
@@ -132,15 +139,23 @@ function buildScope(campaignId?: string, settingId?: string): Map<string, ScopeQ
     for (const [type, sql] of Object.entries(CAMPAIGN_SCOPE_QUERIES)) {
       scope.set(type, { sql, param: campaignId });
     }
-    return scope;
-  }
-  if (settingId) {
+  } else if (settingId) {
     for (const [type, sql] of Object.entries(SETTING_SCOPE_QUERIES)) {
       scope.set(type, { sql, param: settingId });
     }
-    return scope;
+  } else {
+    return null;
   }
-  return null;
+  if (!includeSpots) {
+    const loc = scope.get("location");
+    if (loc) {
+      scope.set("location", {
+        sql: "SELECT id FROM setting_locations WHERE setting_id = ? AND role != 'spot'",
+        param: loc.param,
+      });
+    }
+  }
+  return scope;
 }
 
 // ── In-memory cache for /graph (TTL 30s) ─────────────────────────
@@ -150,12 +165,13 @@ const GRAPH_CACHE_TTL = 30_000;
 export const graphCache = new Map<string, { data: unknown; expires: number }>();
 
 linksRouter.get("/graph", (req, res) => {
-  const { types, setting_id, campaign_id, focus, depth } = req.query as {
+  const { types, setting_id, campaign_id, focus, depth, spots } = req.query as {
     types?: string;
     setting_id?: string;
     campaign_id?: string;
     focus?: string; // "being:416" — центр окрестности
     depth?: string; // сколько шагов от центра, 1..3
+    spots?: string; // "1" — показывать точки (план «Зоны», этап 10)
   };
   // Валидация focus: формат "type:id", где type — известный тип, id — число.
   if (focus && !/^[a-z_]+:\d+$/.test(focus)) {
@@ -171,15 +187,32 @@ linksRouter.get("/graph", (req, res) => {
   // галочки должны давать пустой граф, а не молча весь.
   const allowedTypes = types === undefined ? null : new Set(types.split(",").filter(Boolean));
 
+  // Точки (`role=spot`, план «Зоны», этап 10) в граф по умолчанию не идут:
+  // 25 комнат данжа превращали окрестность в паутину. Обитание и базирование
+  // перепривязываются на родителя («Грик обитает в Подземелье» остаётся
+  // правдой), вложенность и мнения про точки отбрасываются. Фокус на самой
+  // точке («Показать в графе» с её карточки) точки включает принудительно —
+  // иначе окрестность была бы пустой.
+  let includeSpots = spots === "1";
+  if (!includeSpots && focus) {
+    const m = focus.match(/^location:(\d+)$/);
+    if (m) {
+      const row = db
+        .prepare("SELECT role FROM setting_locations WHERE id = ?")
+        .get(m[1]) as { role: string } | undefined;
+      if (row?.role === "spot") includeSpots = true;
+    }
+  }
+
   // Cache check — graph data is expensive to build but changes rarely.
-  const cacheKey = `${types ?? ""}|${setting_id ?? ""}|${campaign_id ?? ""}|${focus ?? ""}|${depth ?? ""}`;
+  const cacheKey = `${types ?? ""}|${setting_id ?? ""}|${campaign_id ?? ""}|${focus ?? ""}|${depth ?? ""}|${includeSpots ? "spots" : ""}`;
   const cached = graphCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return res.json(cached.data);
   }
 
   // campaign_id is the narrower scope, so it wins if both are given.
-  const scopeQueries = buildScope(campaign_id, setting_id);
+  const scopeQueries = buildScope(campaign_id, setting_id, includeSpots);
 
   // Unified: all relations now live in entity_relations. Rows migrated from
   // generic_links have section set and tone='neutral'; original entity_relations
@@ -191,27 +224,77 @@ linksRouter.get("/graph", (req, res) => {
   // Structural membership (who belongs to a faction) and habitat (who lives
   // where) links — not authored opinions like entity_relations, just
   // existing roster data, so they render as plain untoned edges.
+  // Без точек обитание/базирование перепривязывается на родителя точки
+  // (этап 10): связь «Грик — Подземелье» правдива и без узла «Караулка».
+  // Точка с мёртвым/безвестным родителем отбрасывается вместе с ребром.
   const rawMemberships = db
     .prepare("SELECT being_id, community_id FROM being_communities")
     .all() as { being_id: number; community_id: number }[];
-  const rawHabitats = db
-    .prepare("SELECT being_id, location_id FROM being_locations")
-    .all() as { being_id: number; location_id: number }[];
+  const rawHabitats = (
+    includeSpots
+      ? db.prepare("SELECT being_id, location_id FROM being_locations").all()
+      : db
+          .prepare(
+            `SELECT bl.being_id,
+                    CASE WHEN sl.role = 'spot' THEN p.id ELSE bl.location_id END AS location_id
+             FROM being_locations bl
+             JOIN setting_locations sl ON sl.id = bl.location_id
+             LEFT JOIN setting_locations p ON p.id = sl.parent_id AND p.archived_at IS NULL
+             WHERE sl.role != 'spot' OR p.id IS NOT NULL`
+          )
+          .all()
+  ) as { being_id: number; location_id: number }[];
 
   // Location nesting (a district inside a city, a room inside a building) —
-  // same self-referencing parent_id used by the Geography tree.
-  const rawLocationNesting = db
-    .prepare("SELECT id, parent_id FROM setting_locations WHERE parent_id IS NOT NULL AND archived_at IS NULL")
-    .all() as { id: number; parent_id: number }[];
+  // same self-referencing parent_id used by the Geography tree. Точки-дети
+  // не ведут в граф (их дело — карточка родителя), родители-точки невозможны
+  // по инварианту весов.
+  const rawLocationNesting = (
+    includeSpots
+      ? db
+          .prepare("SELECT id, parent_id FROM setting_locations WHERE parent_id IS NOT NULL AND archived_at IS NULL")
+          .all()
+      : db
+          .prepare(
+            `SELECT sl.id, sl.parent_id FROM setting_locations sl
+             WHERE sl.parent_id IS NOT NULL AND sl.archived_at IS NULL AND sl.role != 'spot'`
+          )
+          .all()
+  ) as { id: number; parent_id: number }[];
 
   // Сообщество тоже где-то базируется — таблица симметрична being_locations,
   // но в граф до сих пор не попадала.
-  const rawCommunityLocations = db
-    .prepare("SELECT community_id, location_id FROM community_locations")
-    .all() as { community_id: number; location_id: number }[];
+  const rawCommunityLocations = (
+    includeSpots
+      ? db.prepare("SELECT community_id, location_id FROM community_locations").all()
+      : db
+          .prepare(
+            `SELECT cl.community_id,
+                    CASE WHEN sl.role = 'spot' THEN p.id ELSE cl.location_id END AS location_id
+             FROM community_locations cl
+             JOIN setting_locations sl ON sl.id = cl.location_id
+             LEFT JOIN setting_locations p ON p.id = sl.parent_id AND p.archived_at IS NULL
+             WHERE sl.role != 'spot' OR p.id IS NOT NULL`
+          )
+          .all()
+  ) as { community_id: number; location_id: number }[];
 
   const edges: GraphEdge[] = [];
   const wanted = new Map<string, { type: string; id: number }>();
+
+  // Мнения про точки (рёбра entity_relations с концом-точкой) в граф без
+  // точек не идут: перепривязать мнение нельзя, оно адресовано именно
+  // комнате (этап 10).
+  const spotIds = includeSpots
+    ? new Set<number>()
+    : new Set(
+        (
+          db.prepare("SELECT id FROM setting_locations WHERE role = 'spot'").all() as {
+            id: number;
+          }[]
+        ).map((r) => r.id)
+      );
+  const touchesSpot = (type: string, id: number) => type === "location" && spotIds.has(id);
 
   // Отбор по типам живёт здесь, а не в каждом цикле: раньше ребро проходило,
   // если нужного типа был хотя бы один его конец, и узлы снятого типа всё
@@ -244,6 +327,9 @@ linksRouter.get("/graph", (req, res) => {
   for (const r of allRelations) {
     // Rows with section set (migrated from generic_links) use linkKind;
     // rows with label/tone set (original relations) use "relation" kind.
+    if (!includeSpots && (touchesSpot(r.from_type, r.from_id) || touchesSpot(r.to_type, r.to_id))) {
+      continue;
+    }
     if (r.section) {
       connect(r.from_type, r.from_id, r.to_type, r.to_id, r.section, null, linkKind(r.section));
     } else {

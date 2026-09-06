@@ -829,9 +829,18 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 </button>
               )}
               {featEntry?.description && (
-                <div className="muted" style={{ whiteSpace: "pre-wrap", maxHeight: 220, overflowY: "auto" }}>
-                  {featEntry.description}
-                </div>
+                featEntry.description.length > 400 ? (
+                  <details className="muted" style={{ whiteSpace: "pre-wrap" }}>
+                    <summary style={{ cursor: "pointer" }}>
+                      {`${featEntry.description.replace(/\s+/g, " ").trim().split(" ").slice(0, 25).join(" ")}… Показать полностью`}
+                    </summary>
+                    <div style={{ marginTop: 6 }}>{featEntry.description}</div>
+                  </details>
+                ) : (
+                  <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+                    {featEntry.description}
+                  </div>
+                )
               )}
             </>
           )}

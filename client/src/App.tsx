@@ -70,6 +70,9 @@ const InvitationsPage = lazy(() => import("./pages/InvitationsPage").then((m) =>
 const PlayerCabinetPage = lazy(() =>
   import("./pages/PlayerCabinetPage").then((m) => ({ default: m.PlayerCabinetPage }))
 );
+const PlayerSheetsPage = lazy(() =>
+  import("./pages/PlayerSheetsPage").then((m) => ({ default: m.PlayerSheetsPage }))
+);
 const PlayerCampaignsListPage = lazy(() =>
   import("./pages/PlayerCampaignsListPage").then((m) => ({ default: m.PlayerCampaignsListPage }))
 );
@@ -172,6 +175,7 @@ function App() {
                   old standalone route for any stale links/bookmarks. */}
               <Route path="/my-characters" element={<Navigate to="/cabinet" replace />} />
               <Route path="/cabinet" element={<PlayerCabinetPage />} />
+              <Route path="/sheets" element={<PlayerSheetsPage />} />
               <Route path="/players/:id" element={<PlayerDetailPage />} />
               <Route path="/settings" element={<SettingsRoute />} />
               <Route path="/settings/:id" element={<SettingDetailRoute />} />

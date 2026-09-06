@@ -28,6 +28,8 @@ import {
   type DndMovementKind,
 } from "./effects";
 import { loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
+import { ABILITY_LABELS } from "./AbilityScores";
+import type { DndAbilityKey } from "../../types";
 import { NavIcon } from "../NavIcons";
 
 // Chip list for a carrier's checks + effects, modelled on the LitM power/
@@ -368,6 +370,79 @@ function CostRow({ cost, onChange }: { cost: DndCost; onChange: (v: DndCost) => 
               </option>
             ))}
           </select>
+        )}
+        {/* Свой ресурс (структурность): умение приносит собственный пул
+            (применения выше, восполнение слева), а не тратит классовый.
+            Без галочки uses — только текст цены, механики нет. */}
+        {cost.kind === "uses" && (
+          <label className="muted" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!cost.ownResource}
+              onChange={(e) => onChange({ ...cost, ownResource: e.target.checked })}
+            />
+            свой ресурс
+          </label>
+        )}
+        {/* Максимум пула — модификатор характеристики (минимум 1):
+            хоумбрю-пул без правки кода. Без выбора — число применений выше. */}
+        {cost.kind === "uses" && cost.ownResource && (
+          <select
+            value={cost.maxAbility ?? ""}
+            title="Максимум пула — модификатор"
+            onChange={(e) =>
+              onChange({ ...cost, maxAbility: (e.target.value || undefined) as DndAbilityKey | undefined })
+            }
+          >
+            <option value="">макс. числом</option>
+            {ABILITY_LABELS.map(({ key, label }) => (
+              <option key={key} value={key}>
+                макс. {label}
+              </option>
+            ))}
+          </select>
+        )}
+        {/* Восстановление чужой ценой («Крылья»: пополнить за 3 очка
+            чародейства): название пула-донора и цена. */}
+        {cost.kind === "uses" && cost.ownResource && (
+          <span className="muted" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            восст.
+            <input
+              value={cost.restore?.pool ?? ""}
+              placeholder="пул"
+              aria-label="Пул-донор восстановления"
+              onChange={(e) => {
+                const pool = e.target.value;
+                onChange(pool ? { ...cost, restore: { pool, amount: cost.restore?.amount ?? 1 } } : { ...cost, restore: undefined });
+              }}
+              style={{ width: 90 }}
+            />
+            <input
+              type="number"
+              className="dnd-effect-dc"
+              placeholder="цена"
+              aria-label="Цена восстановления"
+              value={cost.restore?.amount ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...cost,
+                  restore: { pool: cost.restore?.pool ?? "", amount: e.target.value === "" ? 1 : Number(e.target.value) || 1 },
+                })
+              }
+            />
+          </span>
+        )}
+        {/* Тратить из пула по названию (классовые пулы в ключ зашивают id
+            записи класса — из справочника на них ссылаются названием). */}
+        {cost.kind === "resource" && (
+          <input
+            value={cost.resourceLabel ?? ""}
+            placeholder="пул по названию"
+            title="Тратить из пула с таким названием"
+            aria-label="Пул по названию"
+            onChange={(e) => onChange({ ...cost, resourceLabel: e.target.value || undefined })}
+            style={{ width: 110 }}
+          />
         )}
       </span>
     </span>

@@ -141,7 +141,10 @@ function ThemeKitPicker({
                 </div>
                 {(kit.data.quest as string | undefined) && (
                   <div className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 6 }}>
-                    {String(kit.data.quest).slice(0, 60)}…
+                    {(() => {
+                      const q = String(kit.data.quest);
+                      return q.length > 60 ? `${q.slice(0, 60).replace(/\s+\S*$/, "")}…` : q;
+                    })()}
                   </div>
                 )}
               </button>

@@ -26,8 +26,7 @@ const upload = multer({
 // player_id — never trusts an id from the request body/query for anything
 // that determines *whose* data gets read or written. Used by the player
 // desktop sandbox app and the player mobile app; the GM desktop app never
-// calls these (AUTH_ENABLED is off there, so requireAuth("player") below is
-// a no-op and req.user is always undefined — see services/auth.ts).
+// calls these (it uses the gm-gated /api/* surface instead).
 export const playerRouter = Router();
 playerRouter.use(requireAuth("player"));
 
@@ -83,8 +82,46 @@ playerRouter.get("/me", (req: AuthedRequest, res) => {
        WHERE c.player_id = ? AND c.archived_at IS NULL
        ORDER BY c.created_at`
     )
-    .all(playerId);
-  res.json({ user: req.user, player, characters });
+    .all(playerId) as {
+    id: number;
+    character_name: string;
+    campaign_id: number | null;
+    avatar_image_path: string | null;
+    campaign_name: string | null;
+  }[];
+  // Сводка листа для кнопок «Чарников»: вид/класс/уровень для D&D, иначе
+  // кнопки показывают кампанию. Парсинг дешёвый — персонажей у игрока единицы.
+  const withSheets = characters.map((c) => {
+    const sheet = db
+      .prepare("SELECT format, content FROM statblocks WHERE owner_type = 'character' AND owner_id = ? ORDER BY id LIMIT 1")
+      .get(c.id) as { format: string; content: string } | undefined;
+    if (!sheet) return { ...c, sheet: null };
+    let summary: { format: string; race: string; class: string; subclass: string; level: number } | null = null;
+    if (sheet.format === "dnd_character") {
+      try {
+        const d = JSON.parse(sheet.content || "{}") as {
+          raceName?: string;
+          classes?: { className?: string; subclassName?: string; level?: number }[];
+        };
+        const classes = Array.isArray(d.classes) ? d.classes : [];
+        const main = [...classes].sort((a, b) => (b.level || 0) - (a.level || 0))[0];
+        const total = classes.reduce((n, cl) => n + (cl.level || 0), 0);
+        summary = {
+          format: sheet.format,
+          race: typeof d.raceName === "string" ? d.raceName : "",
+          class: typeof main?.className === "string" ? main.className : "",
+          subclass: typeof main?.subclassName === "string" ? main.subclassName : "",
+          level: total,
+        };
+      } catch {
+        summary = null;
+      }
+    } else {
+      summary = { format: sheet.format, race: "", class: "", subclass: "", level: 0 };
+    }
+    return { ...c, sheet: summary };
+  });
+  res.json({ user: req.user, player, characters: withSheets });
 });
 
 // Главная: 3 nearest upcoming sessions across every campaign the player is
@@ -155,13 +192,47 @@ playerRouter.get("/systems", (req: AuthedRequest, res) => {
   res.json(rows);
 });
 
+// Кампании игрока из ростера (не из персонажей!): иначе игроку без чарников
+// не к чему привязаться. Нужно созданию чарника — первым шагом выбирается
+// кампания, вторым система.
+playerRouter.get("/campaigns", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const campaignIds = myCampaignIds(playerId);
+  if (campaignIds.length === 0) return res.json([]);
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name, c.system_id, s.name as system_name
+       FROM campaigns c LEFT JOIN systems s ON s.id = c.system_id
+       WHERE c.id IN (${campaignIds.map(() => "?").join(",")}) AND c.archived_at IS NULL
+       ORDER BY c.name COLLATE NOCASE`
+    )
+    .all(...campaignIds) as { id: number; name: string; system_id: number | null; system_name: string | null }[];
+  res.json(rows);
+});
+
 // Standalone character — not tied to any campaign, filed under the player's
 // own vault folder. system_id is optional (a character can exist with no
-// mechanical system attached yet).
+// mechanical system attached yet). campaign_id — тоже опционален, но если
+// дан, то только своя активная кампания из ростера: создавать персонажа
+// сразу привязанным быстрее, чем просить Мастера.
 playerRouter.post("/characters", (req: AuthedRequest, res) => {
   const playerId = req.user!.playerId!;
-  const { character_name, system_id } = req.body as { character_name?: string; system_id?: number | null };
+  const { character_name, system_id, campaign_id } = req.body as {
+    character_name?: string;
+    system_id?: number | null;
+    campaign_id?: number | null;
+  };
   if (!character_name) return res.status(400).json({ error: "character_name is required" });
+  let campaignId: number | null = null;
+  if (campaign_id != null) {
+    if (!myCampaignIds(playerId).includes(Number(campaign_id))) {
+      return res.status(404).json({ error: "not found" });
+    }
+    if (!canWriteInCampaign(playerId, Number(campaign_id))) {
+      return res.status(403).json({ error: "read only in this campaign" });
+    }
+    campaignId = Number(campaign_id);
+  }
   const player = db.prepare("SELECT folder_path FROM players WHERE id = ?").get(playerId) as
     | { folder_path: string }
     | undefined;
@@ -169,9 +240,9 @@ playerRouter.post("/characters", (req: AuthedRequest, res) => {
   const folder = standaloneCharacterFolder(player.folder_path, character_name);
   const info = db
     .prepare(
-      "INSERT INTO characters (player_id, campaign_id, system_id, character_name, folder_path) VALUES (?, NULL, ?, ?, ?)"
+      "INSERT INTO characters (player_id, campaign_id, system_id, character_name, folder_path) VALUES (?, ?, ?, ?, ?)"
     )
-    .run(playerId, system_id ?? null, character_name, folder);
+    .run(playerId, campaignId, system_id ?? null, character_name, folder);
   res.status(201).json(db.prepare("SELECT * FROM characters WHERE id = ?").get(info.lastInsertRowid));
 });
 

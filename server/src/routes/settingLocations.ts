@@ -55,6 +55,28 @@ function withImageUrls<
   };
 }
 
+// Точки (`role=spot`) папок не получают (план «Зоны локаций»): их файлы живут
+// в папке родителя с префиксом `zone-<id>-`, чтобы 25 комнат не давали 25
+// папок-мусора, а пути оставались относительными и ехали вместе с родителем.
+// Возвращает каталог и префикс имени для нового файла изображения.
+function spotOrOwnImageTarget(loc: {
+  id: number;
+  folder_path: string | null;
+  parent_id: number | null;
+}): { dir: string; prefix: string } {
+  if (loc.folder_path) return { dir: loc.folder_path, prefix: "" };
+  if (loc.parent_id == null) {
+    throw new Error("spot location has no folder and no parent");
+  }
+  const parent = db
+    .prepare("SELECT folder_path FROM setting_locations WHERE id = ?")
+    .get(loc.parent_id) as { folder_path: string | null } | undefined;
+  if (!parent?.folder_path) {
+    throw new Error("spot parent has no folder");
+  }
+  return { dir: parent.folder_path, prefix: `zone-${loc.id}-` };
+}
+
 const MAX_NAME = 120;
 const MAX_KIND = 40;
 const MAX_SHORT = 20;
@@ -63,9 +85,20 @@ const MAX_ALIASES = 10;
 const MAX_ORIGINAL = 120;
 const MAX_DESC = 4000;
 
+// Вес поведения локации (план «Зоны локаций», этап 1). Словарь и гварды —
+// в чистом модуле без db, чтобы тестировались без открытия базы.
+import {
+  LOCATION_ROLES,
+  LOCATION_ROLE_LABELS,
+  isLocationRole,
+} from "../services/locationRoles";
+import type { LocationRole } from "../services/locationRoles";
+export { LOCATION_ROLES, LOCATION_ROLE_LABELS, isLocationRole };
+
 function validateLocationPayload(body: {
   name?: string;
   kind?: string;
+  role?: string;
   description?: string;
   short_name?: string;
   aliases?: string[];
@@ -78,6 +111,9 @@ function validateLocationPayload(body: {
   }
   if (body.kind !== undefined && body.kind !== null) {
     if (String(body.kind).length > MAX_KIND) return `kind must be ≤${MAX_KIND} chars`;
+  }
+  if (body.role !== undefined && body.role !== null) {
+    if (!isLocationRole(body.role)) return "role must be location|sector|spot";
   }
   if (body.short_name !== undefined && body.short_name !== null) {
     if (String(body.short_name).length > MAX_SHORT) return `short_name must be ≤${MAX_SHORT} chars`;
@@ -226,16 +262,19 @@ settingLocationsRouter.get("/:id", (req, res) => {
   // Beings from nested (descendant) locations, opt-in via ?nested=1 — each
   // tagged with the names of the specific descendant locations they
   // actually inhabit, shown as "(location)" suffixes in the UI. Excludes
-  // beings already listed directly above.
+  // beings already listed directly above. Archived descendants never
+  // contribute: otherwise an archived zone keeps supplying "residents"
+  // (план «Зоны локаций», этап 2).
   let nestedInhabitantBeings: ReturnType<typeof withBeingExtras> = [];
   if (req.query.nested === "1") {
     const directIds = new Set(inhabitantBeings.map((b) => b.id));
     const descendantRows = db
       .prepare(
         `WITH RECURSIVE descendants(id) AS (
-           SELECT id FROM setting_locations WHERE parent_id = ?
+           SELECT id FROM setting_locations WHERE parent_id = ? AND archived_at IS NULL
            UNION ALL
            SELECT sl.id FROM setting_locations sl JOIN descendants d ON sl.parent_id = d.id
+           WHERE sl.archived_at IS NULL
          )
          SELECT b.*, l.name as loc_name FROM being_locations bl
          JOIN setting_beings b ON b.id = bl.being_id
@@ -274,8 +313,52 @@ settingLocationsRouter.get("/:id", (req, res) => {
     )
     .all(req.params.id);
 
+  // Communities from nested locations — same shape as nested beings
+  // (план «Зоны локаций», этап 2): a community holding a zone (e.g. a guild
+  // keeping a hideout room) shows on the parent page tagged with zone names.
+  // Only fetched with ?nested=1, alongside nested beings.
+  let nestedInhabitantCommunities: { id: number; name: string; location_names: string[] }[] = [];
+  if (req.query.nested === "1") {
+    const directCommunityIds = new Set(inhabitantCommunities.map((c) => (c as { id: number }).id));
+    const descendantCommunityRows = db
+      .prepare(
+        `WITH RECURSIVE descendants(id) AS (
+           SELECT id FROM setting_locations WHERE parent_id = ? AND archived_at IS NULL
+           UNION ALL
+           SELECT sl.id FROM setting_locations sl JOIN descendants d ON sl.parent_id = d.id
+           WHERE sl.archived_at IS NULL
+         )
+         SELECT c.id, c.name, l.name as loc_name FROM community_locations cl
+         JOIN setting_communities c ON c.id = cl.community_id
+         JOIN setting_locations l ON l.id = cl.location_id
+         WHERE cl.location_id IN (SELECT id FROM descendants) AND c.archived_at IS NULL
+         ORDER BY c.name`
+      )
+      .all(req.params.id) as { id: number; name: string; loc_name: string }[];
+    const namesByCommunity = new Map<number, string[]>();
+    const seen = new Map<number, { id: number; name: string }>();
+    for (const r of descendantCommunityRows) {
+      if (directCommunityIds.has(r.id)) continue;
+      const list = namesByCommunity.get(r.id) ?? [];
+      if (!list.includes(r.loc_name)) list.push(r.loc_name);
+      namesByCommunity.set(r.id, list);
+      if (!seen.has(r.id)) seen.set(r.id, { id: r.id, name: r.name });
+    }
+    nestedInhabitantCommunities = Array.from(seen.values()).map((c) => ({
+      ...c,
+      location_names: namesByCommunity.get(c.id) ?? [],
+    }));
+  }
+
   const importantDates = db
     .prepare("SELECT * FROM important_dates WHERE owner_type = 'location' AND owner_id = ?")
+    .all(req.params.id);
+
+  // Локации, рождённые из этой точки кнопкой «сделать локацией» (этап 8).
+  const promotedLocations = db
+    .prepare(
+      "SELECT id, name FROM setting_locations WHERE origin_location_id = ? AND archived_at IS NULL ORDER BY name"
+    )
     .all(req.params.id);
 
   res.json({
@@ -284,9 +367,12 @@ settingLocationsRouter.get("/:id", (req, res) => {
     ancestors,
     pins,
     chapters,
+    content: getLocationContent(Number(req.params.id)),
+    promoted_locations: promotedLocations,
     inhabitant_beings: inhabitantBeings,
     nested_inhabitant_beings: nestedInhabitantBeings,
     inhabitant_communities: inhabitantCommunities,
+    nested_inhabitant_communities: nestedInhabitantCommunities,
     important_dates: importantDates,
   });
 });
@@ -565,16 +651,114 @@ settingLocationsRouter.delete("/chapters/:chapterId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Наполнение «что внутри» (план «Зоны локаций», этап 6): секрет, лут,
+// ловушка, особенность. Лёгкие строки без файлов и связей. Словарь и
+// валидация — в чистом модуле без db.
+import { validateContentInput } from "../services/locationContent";
+
+function getLocationContent(locationId: number) {
+  return db
+    .prepare("SELECT * FROM location_content WHERE location_id = ? ORDER BY id")
+    .all(locationId);
+}
+
+settingLocationsRouter.post("/:id/content", (req, res) => {
+  const loc = db
+    .prepare("SELECT id FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as { id: number } | undefined;
+  if (!loc) return res.status(404).json({ error: "not found" });
+  const { kind, text } = req.body as { kind?: string; text?: string };
+  const bad = validateContentInput(kind, text);
+  if (bad) return res.status(400).json({ error: bad });
+  const clean = String(text ?? "").trim();
+  const info = db
+    .prepare("INSERT INTO location_content (location_id, kind, text) VALUES (?, ?, ?)")
+    .run(req.params.id, kind, clean);
+  res
+    .status(201)
+    .json(db.prepare("SELECT * FROM location_content WHERE id = ?").get(info.lastInsertRowid));
+});
+
+settingLocationsRouter.put("/content/:contentId", (req, res) => {
+  const existing = db
+    .prepare("SELECT * FROM location_content WHERE id = ?")
+    .get(req.params.contentId) as { id: number; kind: string; text: string } | undefined;
+  if (!existing) return res.status(404).json({ error: "not found" });
+  const { kind, text } = req.body as { kind?: string; text?: string };
+  // Частичный PUT валидируем слиянием с текущим: отсутствующее поле берётся
+  // из строки, дальше — общая проверка.
+  const bad = validateContentInput(kind ?? existing.kind, text ?? existing.text);
+  if (bad) return res.status(400).json({ error: bad });
+  db.prepare(
+    "UPDATE location_content SET kind = COALESCE(?, kind), text = COALESCE(?, text) WHERE id = ?"
+  ).run(
+    kind ?? null,
+    text !== undefined ? String(text).trim() : null,
+    req.params.contentId
+  );
+  res.json(db.prepare("SELECT * FROM location_content WHERE id = ?").get(req.params.contentId));
+});
+
+settingLocationsRouter.delete("/content/:contentId", (req, res) => {
+  db.prepare("DELETE FROM location_content WHERE id = ?").run(req.params.contentId);
+  res.json({ ok: true });
+});
+
+// План родителя одним запросом: его точки с наполнением и счётчиками
+// обитателей — для секции «План» во «Вложенности» (этап 6).
+settingLocationsRouter.get("/:id/plan", (req, res) => {
+  const loc = db
+    .prepare("SELECT id FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as { id: number } | undefined;
+  if (!loc) return res.status(404).json({ error: "not found" });
+  const spots = db
+    .prepare(
+      `SELECT id, name, kind, description FROM setting_locations
+       WHERE parent_id = ? AND role = 'spot' AND archived_at IS NULL ORDER BY name`
+    )
+    .all(req.params.id) as { id: number; name: string; kind: string; description: string }[];
+  const contentBySpot = new Map<number, { id: number; kind: string; text: string }[]>();
+  const beingsCount = new Map<number, number>();
+  const communitiesCount = new Map<number, number>();
+  const contentStmt = db.prepare("SELECT id, kind, text FROM location_content WHERE location_id = ? ORDER BY id");
+  const beingsStmt = db.prepare(
+    `SELECT COUNT(*) AS n FROM being_locations bl
+     JOIN setting_beings b ON b.id = bl.being_id
+     WHERE bl.location_id = ? AND b.archived_at IS NULL`
+  );
+  const communitiesStmt = db.prepare(
+    `SELECT COUNT(*) AS n FROM community_locations cl
+     JOIN setting_communities c ON c.id = cl.community_id
+     WHERE cl.location_id = ? AND c.archived_at IS NULL`
+  );
+  for (const s of spots) {
+    contentBySpot.set(s.id, contentStmt.all(s.id) as { id: number; kind: string; text: string }[]);
+    beingsCount.set(s.id, (beingsStmt.get(s.id) as { n: number }).n);
+    communitiesCount.set(s.id, (communitiesStmt.get(s.id) as { n: number }).n);
+  }
+  res.json({
+    spots: spots.map((s) => ({
+      ...s,
+      content: contentBySpot.get(s.id) ?? [],
+      beings_count: beingsCount.get(s.id) ?? 0,
+      communities_count: communitiesCount.get(s.id) ?? 0,
+    })),
+  });
+});
+
 settingLocationsRouter.post("/:id/avatar", upload.single("file"), async (req, res) => {
   const location = db
-    .prepare("SELECT folder_path, avatar_image_path FROM setting_locations WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; avatar_image_path: string | null } | undefined;
+    .prepare("SELECT id, folder_path, parent_id, avatar_image_path FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as
+    | { id: number; folder_path: string | null; parent_id: number | null; avatar_image_path: string | null }
+    | undefined;
   if (!location) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
   if (!ALLOWED_IMAGE_EXTS.has(ext)) return res.status(400).json({ error: "Unsupported image type" });
-  const target = path.join(location.folder_path, `avatar${ext}`);
+  const { dir, prefix } = spotOrOwnImageTarget(location);
+  const target = path.join(dir, `${prefix}avatar${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, location.avatar_image_path, "avatar");
 
   db.prepare("UPDATE setting_locations SET avatar_image_path = ? WHERE id = ?").run(
@@ -588,14 +772,17 @@ settingLocationsRouter.post("/:id/avatar", upload.single("file"), async (req, re
 // independently from the square avatar, mirroring setting_beings.
 settingLocationsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) => {
   const location = db
-    .prepare("SELECT folder_path, thumbnail_image_path FROM setting_locations WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; thumbnail_image_path: string | null } | undefined;
+    .prepare("SELECT id, folder_path, parent_id, thumbnail_image_path FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as
+    | { id: number; folder_path: string | null; parent_id: number | null; thumbnail_image_path: string | null }
+    | undefined;
   if (!location) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
   if (!ALLOWED_IMAGE_EXTS.has(ext)) return res.status(400).json({ error: "Unsupported image type" });
-  const target = path.join(location.folder_path, `thumbnail${ext}`);
+  const { dir, prefix } = spotOrOwnImageTarget(location);
+  const target = path.join(dir, `${prefix}thumbnail${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, location.thumbnail_image_path, "thumbnail");
 
   db.prepare("UPDATE setting_locations SET thumbnail_image_path = ? WHERE id = ?").run(
@@ -635,14 +822,17 @@ settingLocationsRouter.delete("/:id/thumbnail", (req, res) => {
 
 settingLocationsRouter.post("/:id/map", upload.single("file"), async (req, res) => {
   const location = db
-    .prepare("SELECT folder_path, map_image_path FROM setting_locations WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; map_image_path: string | null } | undefined;
+    .prepare("SELECT id, folder_path, parent_id, map_image_path FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as
+    | { id: number; folder_path: string | null; parent_id: number | null; map_image_path: string | null }
+    | undefined;
   if (!location) return res.status(404).json({ error: "not found" });
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
   if (!ALLOWED_IMAGE_EXTS.has(ext)) return res.status(400).json({ error: "Unsupported image type" });
-  const target = path.join(location.folder_path, `map${ext}`);
+  const { dir, prefix } = spotOrOwnImageTarget(location);
+  const target = path.join(dir, `${prefix}map${ext}`);
   await writeReplacingOldFile(target, req.file.buffer, location.map_image_path);
 
   db.prepare("UPDATE setting_locations SET map_image_path = ? WHERE id = ?").run(
@@ -701,14 +891,17 @@ settingLocationsRouter.post("/:id/map/transfer", async (req, res) => {
   if (!source.map_image_path) return res.status(400).json({ error: "source has no map" });
 
   const target = db
-    .prepare("SELECT folder_path, map_image_path FROM setting_locations WHERE id = ?")
-    .get(targetLocationId) as { folder_path: string; map_image_path: string | null } | undefined;
+    .prepare("SELECT id, folder_path, parent_id, map_image_path FROM setting_locations WHERE id = ?")
+    .get(targetLocationId) as
+    | { id: number; folder_path: string | null; parent_id: number | null; map_image_path: string | null }
+    | undefined;
   if (!target) return res.status(404).json({ error: "target not found" });
   if (target.map_image_path) return res.status(409).json({ error: "target already has a map" });
 
   const buffer = fs.readFileSync(vaultAbs(source.map_image_path));
   const ext = path.extname(source.map_image_path) || ".jpg";
-  const targetPath = path.join(target.folder_path, `map${ext}`);
+  const { dir, prefix } = spotOrOwnImageTarget(target);
+  const targetPath = path.join(dir, `${prefix}map${ext}`);
 
   // Write the file first — only touch the DB once the bytes actually exist
   // at the new path, so a mid-transfer failure can't leave the DB pointing
@@ -891,39 +1084,56 @@ settingLocationsRouter.post("/resolve-labels", (req, res) => {
 });
 
 settingLocationsRouter.post("/", (req, res) => {
-  const { setting_id, parent_id, name, kind } = req.body as {
+  const { setting_id, parent_id, name, kind, role, description } = req.body as {
     setting_id: number;
     parent_id?: number | null;
     name: string;
     kind?: string;
+    role?: string;
+    description?: string;
   };
   if (!setting_id || !name)
     return res.status(400).json({ error: "setting_id and name are required" });
-  const err = validateLocationPayload({ name, kind });
+  const err = validateLocationPayload({ name, kind, role, description });
   if (err) return res.status(400).json({ error: err });
   if (!String(name).trim()) return res.status(400).json({ error: "name must not be empty" });
+  const newRole: LocationRole = isLocationRole(role) ? role : "location";
 
-  let baseFolder: string;
+  // Точка — всегда лист внутри родителя: без родителя ей негде жить, а под
+  // точкой никто жить не может (иначе ломается правило «точки без папок»).
+  let parent: { folder_path: string; role: string } | undefined;
   if (parent_id) {
-    const parent = db
-      .prepare("SELECT folder_path FROM setting_locations WHERE id = ?")
-      .get(parent_id) as { folder_path: string } | undefined;
+    parent = db
+      .prepare("SELECT folder_path, role FROM setting_locations WHERE id = ?")
+      .get(parent_id) as { folder_path: string; role: string } | undefined;
     if (!parent) return res.status(404).json({ error: "parent location not found" });
-    baseFolder = parent.folder_path;
-  } else {
-    const setting = db
-      .prepare("SELECT folder_path FROM settings WHERE id = ?")
-      .get(setting_id) as { folder_path: string } | undefined;
-    if (!setting) return res.status(404).json({ error: "setting not found" });
-    baseFolder = settingGeographyRoot(setting.folder_path);
+    if (parent.role === "spot") {
+      return res.status(400).json({ error: "cannot nest a location under a spot" });
+    }
+  } else if (newRole === "spot") {
+    return res.status(400).json({ error: "spot locations must have a parent" });
   }
-  const folder = locationFolder(baseFolder, name);
+
+  let baseFolder: string | null = null;
+  if (newRole !== "spot") {
+    if (parent) {
+      baseFolder = parent.folder_path;
+    } else {
+      const setting = db
+        .prepare("SELECT folder_path FROM settings WHERE id = ?")
+        .get(setting_id) as { folder_path: string } | undefined;
+      if (!setting) return res.status(404).json({ error: "setting not found" });
+      baseFolder = settingGeographyRoot(setting.folder_path);
+    }
+  }
+  // Точки папок не получают (файлы — в папке родителя с префиксом zone-<id>-).
+  const folder = newRole === "spot" ? null : locationFolder(baseFolder as string, name);
 
   const info = db
     .prepare(
-      "INSERT INTO setting_locations (setting_id, parent_id, name, kind, folder_path) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO setting_locations (setting_id, parent_id, name, kind, role, description, folder_path) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(setting_id, parent_id ?? null, name, kind ?? "", folder);
+    .run(setting_id, parent_id ?? null, name, kind ?? "", newRole, description ?? "", folder);
   res
     .status(201)
     .json(
@@ -934,26 +1144,56 @@ settingLocationsRouter.post("/", (req, res) => {
 settingLocationsRouter.put("/:id", (req, res) => {
   const existing = db
     .prepare("SELECT * FROM setting_locations WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; name: string } | undefined;
+    .get(req.params.id) as
+    | { folder_path: string | null; name: string; role: string }
+    | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
-  const { name, kind, description, short_name, aliases, name_original } = req.body as {
+  const { name, kind, role, description, short_name, aliases, name_original } = req.body as {
     name?: string;
     kind?: string;
+    role?: string;
     description?: string;
     short_name?: string;
     aliases?: string[];
     name_original?: string;
   };
-  const err = validateLocationPayload({ name, kind, description, short_name, aliases, name_original });
+  const err = validateLocationPayload({ name, kind, role, description, short_name, aliases, name_original });
   if (err) return res.status(400).json({ error: err });
+  // В точку — только лист: у неё не должно быть живых детей, иначе правило
+  // «точки без папок и без вложенности» ломается (конвертация непустых —
+  // отдельным инструментом этапа 5, здесь — отказ с объяснением). Точка
+  // в корне тоже запрещена: точке негде жить, ей нужен родитель.
+  if (isLocationRole(role) && role === "spot" && existing.role !== "spot") {
+    const self = db
+      .prepare("SELECT parent_id FROM setting_locations WHERE id = ?")
+      .get(req.params.id) as { parent_id: number | null };
+    if (self.parent_id == null) {
+      return res.status(400).json({ error: "spot locations must have a parent" });
+    }
+    const kids = db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM setting_locations WHERE parent_id = ? AND archived_at IS NULL"
+      )
+      .get(req.params.id) as { n: number };
+    if (kids.n > 0) {
+      return res
+        .status(400)
+        .json({ error: "cannot turn into a spot while it has nested locations" });
+    }
+  }
   let folderPath = existing.folder_path;
-  if (name && name !== existing.name) {
+  // У строк без папки (точки) переименовывать на диске нечего — moveFolder/
+  // renameFolder бросают исключение на null (filesystem.ts:326,350).
+  if (name && name !== existing.name && folderPath) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
+  // Смена spot → location/сектор папку задним числом НЕ заводит (иначе тихая
+  // генерация папок-мусора); файлы по-прежнему живут в папке родителя.
   db.prepare(
     `UPDATE setting_locations SET
        name = COALESCE(?, name), kind = COALESCE(?, kind),
+       role = COALESCE(?, role),
        description = COALESCE(?, description),
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
        aliases = COALESCE(?, aliases),
@@ -963,6 +1203,7 @@ settingLocationsRouter.put("/:id", (req, res) => {
   ).run(
     name ?? null,
     kind ?? null,
+    isLocationRole(role) ? role : null,
     description ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
@@ -983,7 +1224,7 @@ settingLocationsRouter.put("/:id/parent", (req, res) => {
   const location = db
     .prepare("SELECT * FROM setting_locations WHERE id = ?")
     .get(req.params.id) as
-    | { id: number; setting_id: number; folder_path: string }
+    | { id: number; setting_id: number; folder_path: string | null }
     | undefined;
   if (!location) return res.status(404).json({ error: "not found" });
 
@@ -1005,14 +1246,19 @@ settingLocationsRouter.put("/:id/parent", (req, res) => {
     }
   }
 
-  let baseFolder: string;
+  let baseFolder: string | null = null;
   if (parent_id) {
     const parent = db
-      .prepare("SELECT folder_path, setting_id FROM setting_locations WHERE id = ?")
-      .get(parent_id) as { folder_path: string; setting_id: number } | undefined;
+      .prepare("SELECT folder_path, setting_id, role FROM setting_locations WHERE id = ?")
+      .get(parent_id) as
+      | { folder_path: string | null; setting_id: number; role: string }
+      | undefined;
     if (!parent) return res.status(404).json({ error: "parent location not found" });
     if (parent.setting_id !== location.setting_id) {
       return res.status(400).json({ error: "parent must be in the same setting" });
+    }
+    if (parent.role === "spot") {
+      return res.status(400).json({ error: "cannot nest a location under a spot" });
     }
     baseFolder = parent.folder_path;
   } else {
@@ -1023,7 +1269,13 @@ settingLocationsRouter.put("/:id/parent", (req, res) => {
     baseFolder = settingGeographyRoot(setting.folder_path);
   }
 
-  const newFolderPath = moveEntityFolder(location.folder_path, baseFolder);
+  // Строка без папки (точка) на диске не переезжает — двигается только
+  // parent_id; moveFolder на null бросил бы исключение. Папка родителя для
+  // файлов точки резолвится лениво через spotOrOwnImageTarget.
+  const newFolderPath =
+    location.folder_path == null
+      ? null
+      : moveEntityFolder(location.folder_path, baseFolder as string);
   db.prepare("UPDATE setting_locations SET parent_id = ?, folder_path = ? WHERE id = ?").run(
     parent_id ?? null,
     newFolderPath,
@@ -1034,10 +1286,94 @@ settingLocationsRouter.put("/:id/parent", (req, res) => {
 
 settingLocationsRouter.delete("/:id", (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid id" });
+  if (!Number.isFinite(id)) return res.status(404).json({ error: "invalid id" });
   const tx = db.transaction(() => archiveSubtree(id));
   tx();
   res.json({ ok: true });
+});
+
+// Копия «сделать локацией» (план «Зоны локаций», этап 8): редкое повышение
+// точки. Точка остаётся точкой со своим наполнением и связями, рядом
+// рождается локация-сиблинг с backlink на неё. Понижения как операции нет.
+// Копируются обитатели, статьи и наполнение — повышение без потерь.
+settingLocationsRouter.post("/:id/make-location", (req, res) => {
+  const zone = db
+    .prepare("SELECT * FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as
+    | {
+        id: number;
+        setting_id: number;
+        parent_id: number | null;
+        name: string;
+        kind: string;
+        role: string;
+        description: string;
+        aliases: string;
+        name_original: string;
+        archived_at: string | null;
+      }
+    | undefined;
+  if (!zone) return res.status(404).json({ error: "not found" });
+  if (zone.role !== "spot") {
+    return res.status(400).json({ error: "only a spot can be made into a location" });
+  }
+  if (zone.archived_at) {
+    return res.status(400).json({ error: "archived locations cannot be promoted" });
+  }
+  const { name } = req.body as { name?: string };
+  const newName = (typeof name === "string" && name.trim() ? name.trim() : zone.name).slice(0, 120);
+  const nameErr = validateLocationPayload({ name: newName });
+  if (nameErr) return res.status(400).json({ error: nameErr });
+  if (zone.parent_id == null) {
+    return res.status(400).json({ error: "spot locations must have a parent" });
+  }
+  const parent = db
+    .prepare("SELECT folder_path, setting_id FROM setting_locations WHERE id = ?")
+    .get(zone.parent_id) as { folder_path: string | null; setting_id: number } | undefined;
+  if (!parent || parent.setting_id !== zone.setting_id || !parent.folder_path) {
+    return res.status(400).json({ error: "parent location not found" });
+  }
+
+  const folder = locationFolder(parent.folder_path, newName);
+  const run = db.transaction(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO setting_locations
+           (setting_id, parent_id, name, kind, role, description, aliases, name_original, folder_path, origin_location_id)
+         VALUES (?, ?, ?, ?, 'location', ?, ?, ?, ?, ?)`
+      )
+      .run(
+        zone.setting_id,
+        zone.parent_id,
+        newName,
+        zone.kind ?? "",
+        zone.description ?? "",
+        zone.aliases ?? "[]",
+        zone.name_original ?? "",
+        folder,
+        zone.id
+      );
+    const newId = info.lastInsertRowid as number;
+    db.prepare(
+      "INSERT INTO being_locations (being_id, location_id) SELECT being_id, ? FROM being_locations WHERE location_id = ?"
+    ).run(newId, zone.id);
+    db.prepare(
+      "INSERT INTO community_locations (community_id, location_id) SELECT community_id, ? FROM community_locations WHERE location_id = ?"
+    ).run(newId, zone.id);
+    db.prepare(
+      `INSERT INTO location_chapters (location_id, title, content, visible_to_players)
+       SELECT ?, title, content, visible_to_players
+       FROM location_chapters WHERE location_id = ?`
+    ).run(newId, zone.id);
+    db.prepare(
+      "INSERT INTO location_content (location_id, kind, text) SELECT ?, kind, text FROM location_content WHERE location_id = ?"
+    ).run(newId, zone.id);
+    return newId;
+  });
+  const newId = run();
+  res
+    .status(201)
+    .json(db.prepare("SELECT * FROM setting_locations WHERE id = ?").get(newId));
 });
 
 settingLocationsRouter.put("/:id/restore", (req, res) => {

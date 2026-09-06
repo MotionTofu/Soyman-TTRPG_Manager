@@ -1,4 +1,5 @@
-import type { DndAbilityScores, DndClassEntry } from "../../types";
+import type { DndAbilityScores, DndClassEntry, DndFeature } from "../../types";
+import type { DndCost, DndCostPeriod } from "./effects";
 import { abilityModifier } from "./AbilityScores";
 import {
   columnsAtLevel,
@@ -29,6 +30,9 @@ export interface DndResourceDef {
   recharge: ProgressionRecharge;
   /** Класс, из таблицы которого пришёл пул — показывается, когда их несколько. */
   className: string;
+  /** Чем пополнить вне отдыха («3 очка чародейства»): название пула-донора
+   *  и цена. Донор ищется по названию среди пулов персонажа. */
+  restore?: { pool: string; amount: number };
 }
 
 export interface DndStatDef {
@@ -212,4 +216,50 @@ export function allResources(
     (r) => !labels.has(r.label.toLowerCase())
   );
   return [...fromTable, ...fromFormula];
+}
+
+// Свои ресурсы способностей (структурность, гриллинг 2026-09-06): умение с
+// cost {kind: "uses", ownResource: true} приносит собственный пул, а не
+// тратит классовый. Ключ — по записи компендиума (имя рядом не нужно: имя
+// берётся из умения при отрисовке, а ключ лишь сводит трату и остаток).
+// Без entryId пула нет: вписанному руками соответствию не на что опереться,
+// и его цена остаётся текстом, как раньше.
+export function featurePoolKey(entryId: number): string {
+  return `feature:${entryId}`;
+}
+
+function featureRecharge(per: DndCostPeriod | undefined): ProgressionRecharge {
+  // «В день» восстанавливается долгим отдыхом, как и всё дневное.
+  if (per === "short_rest") return "short";
+  return "long";
+}
+
+/** Пулы умений из списка (живых, разрешённых) — дедуп по ключу: одна и та же
+ *  способность дважды не даёт два пула. Максимум — числом, а при maxAbility —
+ *  модификатором характеристики (минимум 1): хоумбрю без правки кода. */
+export function featurePools(features: DndFeature[], abilities?: DndAbilityScores): DndResourceDef[] {
+  const seen = new Set<string>();
+  const out: DndResourceDef[] = [];
+  for (const f of features) {
+    const cost: DndCost | undefined = f.cost;
+    if (cost?.kind !== "uses" || !cost.ownResource || typeof f.entryId !== "number") continue;
+    const key = featurePoolKey(f.entryId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const max =
+      cost.maxAbility && abilities
+        ? Math.max(1, abilityModifier(abilities[cost.maxAbility]))
+        : cost.amount && cost.amount > 0
+          ? cost.amount
+          : 1;
+    out.push({
+      key,
+      label: f.name || "Свой ресурс",
+      max,
+      recharge: featureRecharge(cost.per),
+      className: "",
+      ...(cost.restore?.pool ? { restore: { pool: cost.restore.pool, amount: cost.restore.amount } } : {}),
+    });
+  }
+  return out;
 }

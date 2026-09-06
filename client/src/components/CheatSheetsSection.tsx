@@ -664,7 +664,10 @@ function CombatSheet({ format, enemies }: { format: SheetFormat; enemies: Settin
           <div className="combat-row-name">
             <strong>{e.name}</strong>
             {e.statblock_short && (
-              <div className="muted combat-row-note">{e.statblock_short.split("\n")[0]}</div>
+              <div className="muted combat-row-note">{(() => {
+                const first = e.statblock_short.split("\n")[0];
+                return first.length > 120 ? `${first.slice(0, 120).replace(/\s+\S*$/, "")}…` : first;
+              })()}</div>
             )}
           </div>
           <label className="combat-field">

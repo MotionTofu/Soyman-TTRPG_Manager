@@ -50,6 +50,12 @@ const A4_W = 794;
 const A4_H = 1123;
 const GAP = 12;
 
+function previewChars(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}
+
 function estimateSize(entry: CompendiumEntry): { w: number; h: number } {
   const desc = entry.description || "";
   const dataCount = entry.data ? Object.keys(entry.data).length : 0;
@@ -241,9 +247,9 @@ export function Verstak({ entries, selectedIds, onPrint, onShow, forceOpen, onCl
           ${page.tiles
             .map(
               ({ entry, layout }) => `
-            <div style="position:absolute;left:${layout.x}%;top:${layout.y}px;width:${layout.w}%;height:${layout.h}px;border:1.5px solid #111;background:#fff;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:hidden;box-sizing:border-box;">
+            <div style="position:absolute;left:${layout.x}%;top:${layout.y}px;width:${layout.w}%;height:auto;min-height:${layout.h}px;border:1.5px solid #111;background:#fff;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:visible;box-sizing:border-box;">
               <div style="font-family:Oswald,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(entry.name || "Без названия").replace(/</g, "&lt;")}</div>
-              <div style="font-size:11px;line-height:1.35;white-space:pre-wrap;overflow:hidden;flex:1;">${stripMentions(entry.description || "").slice(0, 800).replace(/</g, "&lt;") || '<span style="color:#666">Без описания</span>'}</div>
+              <div style="font-size:11px;line-height:1.35;white-space:pre-wrap;overflow:visible;flex:none;">${stripMentions(entry.description || "").replace(/</g, "&lt;") || '<span style="color:#666">Без описания</span>'}</div>
               ${entry.data && Object.keys(entry.data).length ? `<div style="color:#666;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Object.entries(entry.data).slice(0, 3).map(([k, v]) => `${String(k).replace(/</g, "&lt;")}: ${String(v).replace(/</g, "&lt;")}`).join(" · ")}</div>` : ""}
             </div>`
             )
@@ -668,12 +674,12 @@ function Tile({ entry, layout, mode, displayMode, isDragged, pageIndex, tool, on
         <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1, border: "1px dashed var(--line)", padding: 6 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Статблок — {entry.name}</div>
           <div className="muted">Карточка статблока пока в разработке — здесь будет полный статблок существа.</div>
-          <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{stripMentions(entry.description || "").slice(0, 320) || "Без описания"}</div>
+          <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{previewChars(stripMentions(entry.description || ""), 320) || "Без описания"}</div>
         </div>
       ) : (
         <>
           <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.name || "Без названия"}</div>
-          <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1 }}>{stripMentions(entry.description || "").slice(0, 320) || <span className="muted">Без описания</span>}</div>
+          <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1 }}>{previewChars(stripMentions(entry.description || ""), 320) || <span className="muted">Без описания</span>}</div>
           {entry.data && Object.keys(entry.data).length > 0 && <div className="muted" style={{ fontSize: "var(--fs-micro)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{Object.entries(entry.data).slice(0, 3).map(([k, v]) => `${k}: ${String(v)}`).join(" · ")}</div>}
         </>
       )}
@@ -721,7 +727,7 @@ function SpellOrMonsterCard({ entry }: { entry: CompendiumEntry }) {
           {d?.range && <span>Дистанция: {d.range}</span>}
           {d?.duration && <span>Длительность: {d.duration}</span>}
         </div>
-        <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1, borderTop: "1px solid var(--line)", paddingTop: 4 }}>{plain.slice(0, 400) || "Без описания"}</div>
+        <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1, borderTop: "1px solid var(--line)", paddingTop: 4 }}>{previewChars(plain, 400) || "Без описания"}</div>
       </div>
     );
   }
@@ -730,14 +736,14 @@ function SpellOrMonsterCard({ entry }: { entry: CompendiumEntry }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, overflow: "hidden" }}>
         <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 700, textTransform: "uppercase" }}>{entry.name || "Без названия"}</div>
         <div className="muted" style={{ fontSize: "var(--fs-micro)" }}>{[d?.size, d?.creature_type?.name].filter(Boolean).join(" · ") || "Существо"}</div>
-        <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1, borderTop: "1px solid var(--line)", paddingTop: 4 }}>{plain.slice(0, 400) || "Без описания"}</div>
+        <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1, borderTop: "1px solid var(--line)", paddingTop: 4 }}>{previewChars(plain, 400) || "Без описания"}</div>
       </div>
     );
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, overflow: "hidden" }}>
       <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 700, textTransform: "uppercase" }}>{entry.name || "Без названия"}</div>
-      <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1 }}>{plain.slice(0, 400) || "Без описания"}</div>
+        <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1 }}>{previewChars(plain, 400) || "Без описания"}</div>
       {d && Object.keys(d).length > 0 && <div className="muted" style={{ fontSize: "var(--fs-micro)" }}>{Object.entries(d).slice(0, 3).map(([k, v]) => `${k}: ${String((v as any)?.name ?? v)}`).join(" · ")}</div>}
     </div>
   );

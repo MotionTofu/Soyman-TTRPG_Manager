@@ -16,9 +16,14 @@ import { EntityPreviewModal } from "../components/EntityPreviewModal";
 
 // Most types deep-link via DETAIL_ROUTES/:id; compendium entries instead
 // live inside a System's tab and need system_id+section_id to open at.
+// Локация, найденная через точку (план «Зоны», этап 7), ведёт на родителя
+// с раскрытием строки точки: таб «Вложенность» + ?spot=.
 function resultLink(r: SearchResult): string | null {
   if (r.type === "compendium_entry") {
     return r.system_id != null ? `/systems/${r.system_id}?section=${r.section_id}&entry=${r.id}` : null;
+  }
+  if (r.type === "location" && r.spot_id != null) {
+    return `/locations/${r.id}?tab=${encodeURIComponent("Вложенность")}&spot=${r.spot_id}`;
   }
   return DETAIL_ROUTES[r.type] ? `${DETAIL_ROUTES[r.type]}/${r.id}` : null;
 }

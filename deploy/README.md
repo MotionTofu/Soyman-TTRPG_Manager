@@ -1,17 +1,19 @@
 # Deploying the hosted (remote) server
 
-This is only for the **player desktop app / mobile apps** deployment — a
-second, separate server instance reachable from the internet. Your normal
-local desktop GM app is untouched by any of this: it doesn't set
-`AUTH_ENABLED`, so it keeps working exactly as before, no login, no server
-to maintain.
+A second, separate server instance reachable from the internet — for player
+devices and remote GM access. Auth is always on (no opt-out flag exists):
+every deployment, local Electron included, uses logins + JWT (see
+`server/src/services/auth.ts`). The hosted instance just has its own data:
+its own SQLite database and vault — **not** the same files your local
+desktop app uses. Keep them separate.
 
 ## What you're setting up
 
 One Node process (this repo's `server/`) behind nginx, with:
 - Its own SQLite database and vault (upload storage) — **not** the same
   files your local desktop app uses. Keep them separate.
-- Accounts (`AUTH_ENABLED=true`) so player devices can log in.
+- Accounts for GM + players (first GM via `/api/auth/setup` or
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD` bootstrap, players via GM-issued logins).
 - HTTPS via Let's Encrypt, since real devices over the real internet need it
   (and Capacitor/mobile HTTP clients generally refuse plain HTTP anyway).
 
@@ -33,16 +35,17 @@ One Node process (this repo's `server/`) behind nginx, with:
 
 3. **Create the service user and data dirs:**
    ```bash
-   useradd -r -s /usr/sbin/nologin rpgmanager
-   mkdir -p /opt/rpg-manager/data /opt/rpg-manager/vault
-   chown -R rpgmanager:rpgmanager /opt/rpg-manager
+    useradd -r -s /usr/sbin/nologin rpgmanager
+    mkdir -p /opt/rpg-manager/data /opt/rpg-manager/vault /opt/rpg-manager/config /opt/rpg-manager/RPG-Backups
+    chown -R rpgmanager:rpgmanager /opt/rpg-manager
    ```
 
 4. **Configure:** copy `.env.example` to `/opt/rpg-manager/.env`, fill in
    `JWT_SECRET` (`openssl rand -hex 32`), `ADMIN_USERNAME`/`ADMIN_PASSWORD`
    (your own GM login — remove these two from the file after the first
    successful login, they're a one-time bootstrap), and set `ALLOWED_ORIGINS`
-   once you know the mobile apps' actual origins.
+   once you know the browsers'/apps' actual origins (LAN/private origins are
+   allowed automatically; public origins must be listed explicitly).
 
 5. **systemd:**
    ```bash
@@ -79,8 +82,14 @@ cd server && npm install && npm run build
 systemctl restart rpg-manager
 ```
 
-## Known gap, deliberately deferred
+## Notes
 
-Nothing in this Phase 0 pass builds the actual player desktop app or mobile
-apps yet — this is just the backend + hosting they'll talk to. Test it with
-`curl`/Postman against `/api/auth/login` and `/api/player/*` for now.
+- Player surface is live: `/api/player/*` (dashboard, characters, statblocks,
+  world-entries, transfers) behind the role gate in
+  `server/src/services/playerAccess.ts`. Test with `curl`/Postman against
+  `/api/auth/login` and `/api/player/*`.
+- The local Electron app keeps working as before — it just logs in with its
+  own local accounts against its own local database.
+- No sync exists between the local and hosted databases (separate files by
+  design). Moving data = `POST /api/backup` zip → restore/import on the
+  other side.

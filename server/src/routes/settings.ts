@@ -1023,6 +1023,9 @@ const NEVER_COPY = new Set([
   "background_image_path",
   "map_image_path",
   "file_path",
+  // Backlink «сделана из точки»: сырой id из чужой базы, пересчитывается
+  // отдельным проходом через locationIdMap (план «Зоны», этап 9).
+  "origin_location_id",
 ]);
 
 function copyPlainFields(table: string, newId: number, row: Record<string, unknown>): void {
@@ -1060,6 +1063,51 @@ function insertChapters(
        VALUES (?${fields.map(() => ", ?").join("")})`
     ).run(ownerId, ...fields.map((f) => ch[f as keyof ChapterData] as string | number));
   }
+}
+
+/**
+ * Наполнение «что внутри» (план «Зоны локаций», этап 9): чистка строк
+ * выгрузки (тип из словаря, текст обрезан) — дальше вставка или слияние.
+ */
+const LOCATION_CONTENT_KIND_SET = new Set(["secret", "loot", "trap", "feature"]);
+
+function cleanLocationContent(
+  items: { kind: string; text: string }[] | undefined
+): { kind: string; text: string }[] {
+  if (!items?.length) return [];
+  return items
+    .filter(
+      (c) => c && LOCATION_CONTENT_KIND_SET.has(String(c.kind)) && String(c.text ?? "").trim()
+    )
+    .map((c) => ({ kind: String(c.kind), text: String(c.text).trim().slice(0, 2000) }));
+}
+
+function insertLocationContent(
+  ownerId: number,
+  items: { kind: string; text: string }[] | undefined
+): void {
+  const clean = cleanLocationContent(items);
+  if (!clean.length) return;
+  const stmt = db.prepare("INSERT INTO location_content (location_id, kind, text) VALUES (?, ?, ?)");
+  for (const c of clean) stmt.run(ownerId, c.kind, c.text);
+}
+
+/** Слияние для merge-импорта: дописываем только то, чего точно нет (вид+текст). */
+function mergeLocationContent(
+  ownerId: number,
+  items: { kind: string; text: string }[] | undefined
+): void {
+  const clean = cleanLocationContent(items);
+  if (!clean.length) return;
+  const existing = new Set(
+    (
+      db
+        .prepare("SELECT kind, text FROM location_content WHERE location_id = ?")
+        .all(ownerId) as { kind: string; text: string }[]
+    ).map((r) => `${r.kind}\n${r.text}`)
+  );
+  const fresh = clean.filter((c) => !existing.has(`${c.kind}\n${c.text}`));
+  if (fresh.length) insertLocationContent(ownerId, fresh);
 }
 
 /**
@@ -1477,6 +1525,18 @@ export function buildSettingExportData(
   attachChapters(beings, "being_chapters", "being_id");
   attachChapters(communities, "community_chapters", "community_id");
 
+  // Наполнение точек (план «Зоны локаций», этап 9): лёгкие строки едут
+  // внутри локации, как главы. Пустые списки не пишем — файл худее.
+  {
+    const getContent = db.prepare(
+      "SELECT kind, text FROM location_content WHERE location_id = ? ORDER BY id"
+    );
+    for (const loc of locations) {
+      const list = getContent.all(loc.id) as { kind: string; text: string }[];
+      if (list.length) loc.content = list;
+    }
+  }
+
   // Галерея — единственная часть сеттинга, которая тащит за собой мегабайты,
   // поэтому едет под тем же флагом, что аватары и карты. Без файлов записи
   // галереи бессмысленны (подпись без картинки), так что гейт общий.
@@ -1622,6 +1682,14 @@ export interface SettingExportData {
     parent_id: number | null;
     name: string;
     kind: string;
+    // Вес поведения (план «Зоны», этап 9): едет строкой, применяется через
+    // copyPlainFields; у старых файлов поля нет — там всё локации.
+    role?: string;
+    // Backlink «сделана из точки»: в файле старый id источника, при развороте
+    // пересчитывается через locationIdMap (сырой id копировать нельзя).
+    origin_location_id?: number | null;
+    // Наполнение «что внутри» (секреты/лут/ловушки/особенности).
+    content?: { kind: string; text: string }[];
     description: string;
     avatar_data?: FileData | null;
     thumbnail_data?: FileData | null;
@@ -1749,13 +1817,16 @@ const RESOURCE_CATEGORY_SUBDIR: Record<string, string> = {
 
 async function writeEntityImages(
   folder: string,
-  data: { avatar_data?: FileData | null; thumbnail_data?: FileData | null }
+  data: { avatar_data?: FileData | null; thumbnail_data?: FileData | null },
+  // Префикс имён для точек без папки (`zone-<id>-`, план «Зоны», этап 9):
+  // файлы точки живут в папке родителя и не должны пересекаться с его.
+  prefix = ""
 ): Promise<{ avatarPath: string | null; thumbnailPath: string | null }> {
   const avatarPath = data.avatar_data
-    ? await writeBase64File(folder, `avatar-${data.avatar_data.filename}`, data.avatar_data.base64)
+    ? await writeBase64File(folder, `${prefix}avatar-${data.avatar_data.filename}`, data.avatar_data.base64)
     : null;
   const thumbnailPath = data.thumbnail_data
-    ? await writeBase64File(folder, `thumbnail-${data.thumbnail_data.filename}`, data.thumbnail_data.base64)
+    ? await writeBase64File(folder, `${prefix}thumbnail-${data.thumbnail_data.filename}`, data.thumbnail_data.base64)
     : null;
   return { avatarPath, thumbnailPath };
 }
@@ -1821,8 +1892,12 @@ export async function importSettingExport(
     const r = insertLocation.run(newSettingId, l.name, l.kind || "", l.description || "");
     locationIdMap.set(l.id, r.lastInsertRowid as number);
     imported.claim("location", r.lastInsertRowid as number, l.uid);
+    // role едет через copyPlainFields (строка, не в NEVER_COPY); у старых
+    // файлов поля нет — остаётся дефолт 'location'. origin_location_id в
+    // NEVER_COPY (сырой id чужой базы) — пересчёт ниже, отдельным проходом.
     copyPlainFields("setting_locations", r.lastInsertRowid as number, l as Record<string, unknown>);
     insertChapters("location_chapters", "location_id", r.lastInsertRowid as number, l.chapters);
+    insertLocationContent(r.lastInsertRowid as number, l.content);
   }
   const updateLocationParent = db.prepare("UPDATE setting_locations SET parent_id = ? WHERE id = ?");
   for (const l of body.locations ?? []) {
@@ -1830,6 +1905,18 @@ export async function importSettingExport(
     const newId = locationIdMap.get(l.id);
     const newParentId = locationIdMap.get(l.parent_id);
     if (newId && newParentId) updateLocationParent.run(newParentId, newId);
+  }
+  // Backlink «сделана из точки»: сырые id файла → новые id (этап 9).
+  {
+    const remapOrigin = db.prepare(
+      "UPDATE setting_locations SET origin_location_id = ? WHERE id = ?"
+    );
+    for (const l of body.locations ?? []) {
+      const newId = locationIdMap.get(l.id);
+      if (newId && l.origin_location_id != null) {
+        remapOrigin.run(locationIdMap.get(l.origin_location_id) ?? null, newId);
+      }
+    }
   }
 
   const geoRoot = settingGeographyRoot(folder);
@@ -1841,11 +1928,15 @@ export async function importSettingExport(
       const newId = locationIdMap.get(l.id);
       if (!newId) continue;
       const baseFolder = l.parent_id != null ? locationFolderByOldId.get(l.parent_id) ?? geoRoot : geoRoot;
-      const locFolder = locationFolder(baseFolder, l.name);
-      locationFolderByOldId.set(l.id, locFolder);
-      const { avatarPath, thumbnailPath } = await writeEntityImages(locFolder, l);
+      // Точки папок не получают (план «Зоны», этап 9): их файлы — в папке
+      // родителя с префиксом zone-<newId>-, folder_path остаётся NULL.
+      const isSpot = l.role === "spot";
+      const locFolder = isSpot ? baseFolder : locationFolder(baseFolder, l.name);
+      locationFolderByOldId.set(l.id, isSpot ? baseFolder : locFolder);
+      const prefix = isSpot ? `zone-${newId}-` : "";
+      const { avatarPath, thumbnailPath } = await writeEntityImages(locFolder, l, prefix);
       const mapPath = l.map_data
-        ? await writeBase64File(locFolder, `map-${l.map_data.filename}`, l.map_data.base64)
+        ? await writeBase64File(locFolder, `${prefix}map-${l.map_data.filename}`, l.map_data.base64)
         : null;
       db.prepare(
         `UPDATE setting_locations
@@ -1853,7 +1944,7 @@ export async function importSettingExport(
              map_image_path = ?, map_max_zoom = ?, map_start_zoom = ?, map_goto_zoom = ?, map_labels_always = ?
          WHERE id = ?`
       ).run(
-        locFolder,
+        isSpot ? null : locFolder,
         avatarPath,
         thumbnailPath,
         mapPath,
@@ -2146,8 +2237,11 @@ export async function updateSettingFromExport(
       updateLocation.run(l.kind || "", l.description || "", existingId);
       locationIdMap.set(l.id, existingId);
       imported.claim("location", existingId, l.uid);
+      // role синхронизируется здесь же через copyPlainFields (не в NEVER_COPY);
+      // origin_location_id там же отфильтрован и пересчитывается проходом ниже.
       copyPlainFields("setting_locations", existingId, l as Record<string, unknown>);
       mergeChapters("location_chapters", "location_id", existingId, l.chapters);
+      mergeLocationContent(existingId, l.content);
       touchedLocationIds.add(existingId);
       summary.locationsUpdated++;
     } else {
@@ -2158,6 +2252,7 @@ export async function updateSettingFromExport(
       imported.claim("location", insertedId, l.uid);
       copyPlainFields("setting_locations", insertedId, l as Record<string, unknown>);
       mergeChapters("location_chapters", "location_id", insertedId, l.chapters);
+      mergeLocationContent(insertedId, l.content);
       touchedLocationIds.add(insertedId);
       summary.locationsAdded++;
       if (l.avatar_data || l.thumbnail_data || l.map_data) {
@@ -2169,10 +2264,15 @@ export async function updateSettingFromExport(
                   | undefined
               )?.folder_path ?? geoRoot
             : geoRoot;
-        const locFolder = locationFolder(parentFolder, l.name);
-        const { avatarPath, thumbnailPath } = await writeEntityImages(locFolder, l);
+        // Точки — в папку родителя с префиксом, без своей папки (этап 9).
+        const isSpot = l.role === "spot";
+        const locFolder = isSpot ? parentFolder : locationFolder(parentFolder, l.name);
+        const prefix = isSpot
+          ? `zone-${insertedId}-`
+          : "";
+        const { avatarPath, thumbnailPath } = await writeEntityImages(locFolder, l, prefix);
         const mapPath = l.map_data
-          ? await writeBase64File(locFolder, `map-${l.map_data.filename}`, l.map_data.base64)
+          ? await writeBase64File(locFolder, `${prefix}map-${l.map_data.filename}`, l.map_data.base64)
           : null;
         db.prepare(
           `UPDATE setting_locations
@@ -2180,7 +2280,7 @@ export async function updateSettingFromExport(
                map_image_path = ?, map_max_zoom = ?, map_start_zoom = ?, map_goto_zoom = ?, map_labels_always = ?
            WHERE id = ?`
         ).run(
-          locFolder,
+          isSpot ? null : locFolder,
           avatarPath,
           thumbnailPath,
           mapPath,
@@ -2200,6 +2300,19 @@ export async function updateSettingFromExport(
     }
   }
   summary.locationsKeptLocal = existingLocations.filter((l) => !touchedLocationIds.has(l.id)).length;
+
+  // Backlink «сделана из точки» (этап 9): сырые id файла → новые id.
+  {
+    const remapOrigin = db.prepare(
+      "UPDATE setting_locations SET origin_location_id = ? WHERE id = ?"
+    );
+    for (const l of body.locations ?? []) {
+      const newId = locationIdMap.get(l.id);
+      if (newId && l.origin_location_id != null) {
+        remapOrigin.run(locationIdMap.get(l.origin_location_id) ?? null, newId);
+      }
+    }
+  }
 
   // --- Communities: same name-path matching as locations ---
   const existingCommunities = db

@@ -17,6 +17,10 @@ interface SearchResult {
   // shown next to the type chip in search results so same-named entities
   // across different settings/campaigns are distinguishable at a glance.
   context?: string;
+  // Только у локаций, найденных через точку (план «Зоны», этап 7): совпавшая
+  // точка. Строка ведёт на родителя, клиент подсвечивает строку точки.
+  spot_id?: number;
+  spot_name?: string;
 }
 
 // Cut a readable fragment around the first match so the user sees the context.
@@ -229,13 +233,16 @@ searchRouter.get("/", (req, res) => {
 
   // Имя ищется вместе с синонимами и оригиналом: «Sea Ward» и «Морской округ»
   // должны находить тот же район, что и «Приморский район».
+  // Точки (`role=spot`) в прямую выдачу не идут: 25 комнат дали бы 25 строк.
+  // Они находятся следующим запросом — одной строкой родителя с бейджем
+  // (план «Зоны локаций», этап 7).
   if (wantsType("location")) {
     const rows = db
       .prepare(
         `SELECT sl.id, sl.name, sl.kind, sl.description, s.name as setting_name
          FROM setting_locations sl JOIN settings s ON s.id = sl.setting_id
          WHERE (lower_u(sl.name || ' ' || sl.aliases || ' ' || sl.name_original) LIKE ?
-                OR lower_u(sl.description) LIKE ?) AND sl.archived_at IS NULL`
+                OR lower_u(sl.description) LIKE ?) AND sl.archived_at IS NULL AND sl.role != 'spot'`
       )
       .all(like, like) as { id: number; name: string; kind: string; description: string; setting_name: string }[];
     rows.forEach((r) =>
@@ -251,16 +258,77 @@ searchRouter.get("/", (req, res) => {
       })
     );
 
+    // Совпадение с точкой ведёт на родителя: дедуп push оставляет прямое
+    // попадание родителя, если он совпал сам; ранг у родителя через точку
+    // ниже (заголовок не содержит запрос) — прямые попадания выше.
+    const spotRows = db
+      .prepare(
+        `SELECT p.id as parent_id, p.name as parent_name,
+                sl.id as spot_id, sl.name as spot_name, sl.description as spot_desc,
+                s.name as setting_name
+         FROM setting_locations sl
+         JOIN setting_locations p ON p.id = sl.parent_id
+         JOIN settings s ON s.id = sl.setting_id
+         WHERE sl.role = 'spot'
+           AND (lower_u(sl.name || ' ' || sl.aliases || ' ' || sl.name_original) LIKE ?
+                OR lower_u(sl.description) LIKE ?)
+           AND sl.archived_at IS NULL AND p.archived_at IS NULL`
+      )
+      .all(like, like) as {
+      parent_id: number;
+      parent_name: string;
+      spot_id: number;
+      spot_name: string;
+      spot_desc: string;
+      setting_name: string;
+    }[];
+    spotRows.forEach((r) =>
+      push({
+        type: "location",
+        id: r.parent_id,
+        title: r.parent_name,
+        subtitle:
+          `Точка: ${r.spot_name}` +
+          (r.spot_desc && r.spot_desc.toLowerCase().includes(qLower)
+            ? ` · ${snippet(r.spot_desc, q)}`
+            : ""),
+        context: `Сеттинг: ${r.setting_name}`,
+        spot_id: r.spot_id,
+        spot_name: r.spot_name,
+      })
+    );
+
     const locationChapters = db
       .prepare(
-        `SELECT sl.id, sl.name, (lc.title || ' ' || lc.content) as blob
+        `SELECT sl.id, sl.name, sl.role, p.id as parent_id, p.name as parent_name,
+                (lc.title || ' ' || lc.content) as blob
          FROM location_chapters lc JOIN setting_locations sl ON sl.id = lc.location_id
+         LEFT JOIN setting_locations p ON p.id = sl.parent_id AND p.archived_at IS NULL
          WHERE lower_u(blob) LIKE ? AND sl.archived_at IS NULL`
       )
-      .all(like) as { id: number; name: string; blob: string }[];
-    locationChapters.forEach((r) =>
-      push({ type: "location", id: r.id, title: r.name, subtitle: snippet(r.blob, q) })
-    );
+      .all(like) as {
+      id: number;
+      name: string;
+      role: string;
+      parent_id: number | null;
+      parent_name: string | null;
+      blob: string;
+    }[];
+    locationChapters.forEach((r) => {
+      // Глава точки — тоже находка родителя (той же строкой с бейджем).
+      if (r.role === "spot" && r.parent_id != null) {
+        push({
+          type: "location",
+          id: r.parent_id,
+          title: r.parent_name ?? r.name,
+          subtitle: `Точка: ${r.name} · ${snippet(r.blob, q)}`,
+          spot_id: r.id,
+          spot_name: r.name,
+        });
+        return;
+      }
+      push({ type: "location", id: r.id, title: r.name, subtitle: snippet(r.blob, q) });
+    });
   }
 
   if (wantsType("being")) {

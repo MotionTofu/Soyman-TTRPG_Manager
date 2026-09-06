@@ -81,6 +81,7 @@ import { useCompendiumEntries } from "./useCompendiumEntries";
 import { sheetClassColor, textOnClassColor } from "./dndClassColors";
 import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
 import { DndDie } from "./DndDie";
+import { TofuPips } from "./TofuPips";
 import { DndCardBack } from "./DndCardBack";
 import { DndTransferBox } from "./DndTransferBox";
 import {
@@ -112,6 +113,8 @@ import { EMPTY_GRANTS, grantsFromEntry, mergeGrants, type SourceGrants } from ".
 import {
   allResources,
   applicableStats,
+  featurePoolKey,
+  featurePools,
   replicaLimits,
   type ClassResourceSource,
   type DndResourceDef,
@@ -178,6 +181,7 @@ export function emptyDndCharacter(): DndCharacterData {
     attacks: [],
     equipmentSections: [{ name: "Общее", items: [] }],
     attunementCount: 0,
+    attunementExtra: 0,
     coins: { cp: "", sp: "", ep: "", gp: "", pp: "" },
     speciesFeatures: [],
     classFeatures: [],
@@ -639,13 +643,16 @@ function readSearchDrop(e: DragEvent): SearchResult | null {
 // languages don't have a "check").
 function DndProficienciesView({
   value,
+  systemId,
   onChange,
 }: {
   value: DndProficiencyEntry[];
+  systemId: number | null;
   onChange?: (v: DndProficiencyEntry[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [tools, setTools] = useState<CompendiumEntry[] | null>(null);
   function commitAdd() {
     if (draft.trim()) onChange?.([...value, { entryId: null, name: draft.trim(), abilityKey: null }]);
     setDraft("");
@@ -653,6 +660,37 @@ function DndProficienciesView({
   }
   function remove(i: number) {
     onChange?.(value.filter((_, idx) => idx !== i));
+  }
+  // Список инструментов, которыми можно овладеть, — из справочника
+  // (снаряжение категорий «Инструменты»/«Ремесленные инструменты»).
+  // Грузим по открытию добавления, а не заранее: нужно не каждому листу.
+  function openAdd() {
+    setAdding(true);
+    setDraft("");
+    if (tools !== null || !systemId) return;
+    loadDndEquipmentEntries(systemId)
+      .then((rows) =>
+        setTools(
+          rows.filter(
+            (e) =>
+              e.kind === "equipment" &&
+              (e.data.category === "Инструменты" || e.data.category === "Ремесленные инструменты") &&
+              !value.some((p) => p.entryId === e.id)
+          )
+        )
+      )
+      .catch(() => setTools([]));
+  }
+  function addTool(e: CompendiumEntry) {
+    onChange?.([
+      ...value,
+      {
+        entryId: e.id,
+        name: e.name,
+        abilityKey: typeof e.data.ability === "string" ? (ABILITY_NAME_TO_KEY[e.data.ability] ?? null) : null,
+      },
+    ]);
+    setTools((prev) => prev?.filter((t) => t.id !== e.id) ?? prev);
   }
   if (value.length === 0 && !onChange) return null;
   return (
@@ -671,21 +709,37 @@ function DndProficienciesView({
         ))}
         {onChange &&
           (adding ? (
-            <span className="row dnd-proficiency-chip-add">
-              <input
-                autoFocus
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitAdd();
-                  if (e.key === "Escape") setAdding(false);
-                }}
-                onBlur={commitAdd}
-                placeholder="Название…"
-              />
+            <span className="stack dnd-proficiency-chip-add" style={{ gap: 4 }}>
+              {tools !== null && tools.length > 0 ? (
+                <span className="stack" style={{ gap: 4 }}>
+                  {tools.map((t) => (
+                    <button key={t.id} type="button" className="dnd-chip" onClick={() => addTool(t)} style={{ alignSelf: "flex-start" }}>
+                      + {t.name}
+                    </button>
+                  ))}
+                </span>
+              ) : (
+                <span className="row dnd-proficiency-chip-add">
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitAdd();
+                      if (e.key === "Escape") setAdding(false);
+                    }}
+                    onBlur={commitAdd}
+                    placeholder={tools === null ? "Загрузка…" : "Название…"}
+                    disabled={tools === null}
+                  />
+                </span>
+              )}
+              <button type="button" className="dnd-chip" onClick={() => setAdding(false)} style={{ alignSelf: "flex-start" }}>
+                Готово
+              </button>
             </span>
           ) : (
-            <button type="button" className="comp-mini" onClick={() => setAdding(true)}>
+            <button type="button" className="dnd-chip" onClick={openAdd}>
               + добавить владение
             </button>
           ))}
@@ -1223,6 +1277,7 @@ function DndSpellLevelSection({
   used,
   onUsedChange,
   preparedOnly,
+  onCast,
 }: {
   level: number;
   systemId: number | null;
@@ -1237,6 +1292,8 @@ function DndSpellLevelSection({
   used?: number;
   onUsedChange?: (v: number) => void;
   preparedOnly?: boolean;
+  /** Тап по названию — модалка использования (трата ячейки). */
+  onCast?: (row: AttackRow) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -1338,12 +1395,22 @@ function DndSpellLevelSection({
             className="row"
             style={{ gap: 10 }}
           >
-            <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={edit ? onSlotsChange : undefined} label={`Ячейки, ${label}`} />
-            {!edit && onUsedChange && slots > 0 && (
+            {/* Один трек вместо двух: максимум виден числом кругов, а ячейки —
+                тофу (есть голова — цела, потратили — съели). Дубль «макс + исп»
+                сбивал с толку. Без правки — только показ. */}
+            {!edit && slots > 0 && (
               <span className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
                 исп.
-                <PipTrack value={used ?? 0} max={slots} onChange={onUsedChange} size={13} label={`Потрачено ячеек, ${label}`} />
+                <TofuPips
+                  max={slots}
+                  left={Math.max(0, slots - (used ?? 0))}
+                  label={`Потрачено ячеек, ${label}`}
+                  onSetLeft={onUsedChange ? (next) => onUsedChange(slots - next) : undefined}
+                />
               </span>
+            )}
+            {edit && (
+              <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={onSlotsChange} label={`Ячейки, ${label}`} />
             )}
           </span>
         )}
@@ -1365,12 +1432,21 @@ function DndSpellLevelSection({
               <div
                 className={`comp-row dnd-spell-row${s.prepared === 2 ? " is-prepared" : ""}${s.prepared === 1 ? " is-prepared-once" : ""}`}
               >
-                {s.entryId ? (
+                {s.entryId && onCast ? (
                   <button
                     type="button"
                     className="comp-name dnd-spell-name dnd-spell-name-link"
-                    aria-expanded={expandedIndex === realIndex}
-                    onClick={() => toggleDescription(realIndex, s.entryId!)}
+                    aria-label={`${s.name} — использовать (трата ячейки)`}
+                    onClick={() =>
+                      onCast({
+                        name: s.name,
+                        bonus: "",
+                        damage: "",
+                        range: "",
+                        timing: "action",
+                        source: { kind: "spell", spell: s, level },
+                      })
+                    }
                   >
                     {s.name}
                     {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
@@ -1381,7 +1457,19 @@ function DndSpellLevelSection({
                     {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
                   </span>
                 )}
-                <SpellMetaLine s={s} />
+                {s.entryId ? (
+                  <button
+                    type="button"
+                    className="dnd-spell-meta-link"
+                    aria-expanded={expandedIndex === realIndex}
+                    aria-label={`${s.name} — открыть описание`}
+                    onClick={() => toggleDescription(realIndex, s.entryId!)}
+                  >
+                    <SpellMetaLine s={s} />
+                  </button>
+                ) : (
+                  <SpellMetaLine s={s} />
+                )}
                 {edit ? (
                   <span className="comp-actions dnd-spell-actions">
                     {/* Звёздочка ходит по кругу «не подготовлено → подготовлено
@@ -1505,6 +1593,7 @@ function DndSpellsView({
   onSlotsChange,
   onSpellsChange,
   preparedOnly,
+  onCast,
 }: {
   cantrips: DndSpellEntry[];
   spellSlotLevels: number;
@@ -1522,6 +1611,8 @@ function DndSpellsView({
   onSlotsChange?: (level0idx: number, v: number) => void;
   onSpellsChange?: (level0idx: number, v: DndSpellEntry[]) => void;
   preparedOnly?: boolean;
+  /** Тап по названию — модалка использования (трата ячейки). */
+  onCast?: (row: AttackRow) => void;
 }) {
   const activeLevels = Array.from({ length: spellSlotLevels }, (_, i) => i).filter(
     (i) => edit || spellSlotPips[i] > 0 || spellsByLevel[i].length > 0
@@ -1540,6 +1631,7 @@ function DndSpellsView({
           showSlots={false}
           onSlotsChange={() => {}}
           onSpellsChange={edit && onCantripsChange ? onCantripsChange : () => {}}
+          onCast={onCast}
         />
       )}
       {activeLevels.map((i) => (
@@ -1556,6 +1648,7 @@ function DndSpellsView({
           showSlots
           onSlotsChange={edit && onSlotsChange ? (v) => onSlotsChange(i, v) : () => {}}
           onSpellsChange={edit && onSpellsChange ? (v) => onSpellsChange(i, v) : () => {}}
+          onCast={onCast}
         />
       ))}
     </div>
@@ -2060,7 +2153,7 @@ function DndEquipmentView({ sections }: { sections: DndEquipmentSection[] }) {
       <div className="sb-section cs-mt">Снаряжение</div>
       {nonEmpty.map((section, si) => (
         <div key={si} className="sb-entry">
-          {sections.length > 1 && <span className="sb-prop-label">{section.name}</span>}
+          {sections.length > 1 &&   <div className="dnd-section-title">{section.name}</div>}
           <ul className="dnd-equipment-view-list">
             {section.items.map((item, ii) => (
               <li key={ii}>
@@ -2179,11 +2272,14 @@ function DndEquipmentQuickView({
   sections,
   systemId,
   coins,
+  accentColor,
   onQuickUpdate,
 }: {
   sections: DndEquipmentSection[];
   systemId: number | null;
   coins?: DndCoins;
+  /** Цвет класса — кромка магических предметов, единственная краска. */
+  accentColor?: string;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
@@ -2360,27 +2456,9 @@ function DndEquipmentQuickView({
         {summary.equipped > 0 && <><span>·</span><span>Надето: {summary.equipped}</span></>}
         {summary.hasWeight && <><span>·</span><span>Вес: {summary.totalWeight.toFixed(1).replace(/\.0$/, "")}</span></>}
       </div>
-      {/* Монеты правятся прямо здесь. Раньше они только показывались, и то
-          лишь когда были непустыми: вписать добычу после боя было негде,
-          хотя это ровно то, что за столом делают чаще всего остального в
-          этой вкладке. Порядок — от медной к платиновой, как в кошельке. */}
-      <div className="row dnd-coins">
-        {COIN_FIELDS.map(({ key, label, title }) => (
-          <label key={key} className="dnd-coin" title={title}>
-            <input
-              inputMode="numeric"
-              value={coins?.[key] ?? ""}
-              aria-label={title}
-              onChange={(e) =>
-                commit({
-                  coins: { ...(coins ?? EMPTY_COINS), [key]: e.target.value.replace(/[^\d-]/g, "") },
-                })
-              }
-            />
-            <span className="muted">{label}</span>
-          </label>
-        ))}
-      </div>
+      {/* Монеты — в самом низу вкладки, все в одну строку: добычу делят
+          после боя, когда список уже пролистан. Порядок — от медной к
+          платиновой, как в кошельке. */}
       {transferError && (
         <p className="sb-save-error" role="status">
           {transferError}
@@ -2397,9 +2475,15 @@ function DndEquipmentQuickView({
           onDragLeave={() => setDragOverSection(null)}
           onDrop={(e) => handleDrop(e, si)}
         >
-          {sections.length > 1 && <span className="sb-prop-label">{section.name}</span>}
+          {sections.length > 1 &&   <div className="dnd-section-title">{section.name}</div>}
           <ul className="dnd-equipment-view-list">
-            {section.items.map((item, ii) =>
+            {/* Надетое — вверх списка: за столом спрашивают, что надето, а не
+                что лежит. Сортировка стабильна, индексы исходные — правки,
+                приём и удаление бьют по ним же. */}
+            {section.items
+              .map((item, ii) => ({ item, ii }))
+              .sort((a, b) => Number(b.item.equipped) - Number(a.item.equipped))
+              .map(({ item, ii }) =>
               editing && editing.si === si && editing.ii === ii ? (
                 <li key={ii}>
                   <EquipmentInlineForm
@@ -2413,15 +2497,19 @@ function DndEquipmentQuickView({
               ) : (
                 <li
                   key={ii}
-                  className={
+                  className={[
                     item.transferOut
                       ? "is-transfer-out"
                       : item.transferIn
                         ? item.transferIn.kind === "replica"
                           ? "is-transfer-created"
                           : "is-transfer-in"
-                        : undefined
-                  }
+                        : "",
+                    item.magical ? "is-magical" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined}
+                  style={item.magical && accentColor ? { borderLeftColor: accentColor } : undefined}
                 >
                   <div className="row dnd-equipment-quick-row" style={{ gap: 6 }}>
                     <button
@@ -2540,13 +2628,13 @@ function DndEquipmentQuickView({
             )
           ) : (
             <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-              <button type="button" className="dnd-equipment-add-btn" onClick={() => startAdd(si, null)}>
+              <button type="button" className="dnd-chip" onClick={() => startAdd(si, null)}>
                 + Свой
               </button>
-              <button type="button" className="dnd-equipment-add-btn" onClick={() => setPickingSection(si)}>
+              <button type="button" className="dnd-chip" onClick={() => setPickingSection(si)}>
                 + Из компендиума
               </button>
-              <button type="button" className="dnd-equipment-add-btn" onClick={() => startAdd(si, "bag")}>
+              <button type="button" className="dnd-chip" onClick={() => startAdd(si, "bag")}>
                 + Из мешка
               </button>
             </div>
@@ -2580,6 +2668,29 @@ function DndEquipmentQuickView({
           onClose={() => setPickingSection(null)}
         />
       )}
+      {/* Монеты — в самом низу вкладки, все в одну строку: добычу делят после
+          боя, когда список уже пролистан. Подписи столбиком (М над М), иначе
+          пятая монета не влезает. */}
+      <div className="row dnd-coins-bottom">
+        {COIN_FIELDS.map(({ key, label, title }) => (
+          <label key={key} className="dnd-coin" title={title}>
+            <input
+              inputMode="numeric"
+              value={coins?.[key] ?? ""}
+              aria-label={title}
+              onChange={(e) =>
+                commit({
+                  coins: { ...(coins ?? EMPTY_COINS), [key]: e.target.value.replace(/[^\d-]/g, "") },
+                })
+              }
+            />
+            <span className="muted dnd-coin-letters" aria-hidden="true">
+              <span>{label[0]}</span>
+              <span>{label[1]}</span>
+            </span>
+          </label>
+        ))}
+      </div>
     </>
   );
 }
@@ -3130,10 +3241,12 @@ interface AttackRow {
   timing: DndActionTiming;
   // Откуда строка пришла — чтобы клик открыл её карточку, а окно знало, что
   // именно тратить. У оружия и вручную вписанных атак источника нет: тратить
-  // им нечего, а описание ручной атаки и так стоит в строке.
+  // им нечего, а описание ручной атаки и так стоит в строке. У оружия зато
+  // есть entryId записи снаряжения — по нему окно показывает описание.
   source?:
     | { kind: "spell"; spell: DndSpellEntry; level: number }
     | { kind: "feature"; feature: DndFeature };
+  entryId?: number | null;
 }
 
 // Equipped weapons show up as attack rows automatically — no need to
@@ -3179,6 +3292,7 @@ function weaponAttackRows(
         damage,
         range,
         timing: "action" as const,
+        entryId: i.entryId ?? null,
       };
     });
 }
@@ -3552,7 +3666,7 @@ function AttacksTable({
   if (rows.length === 0) return null;
   return (
     <div className="cs-list">
-      <div className="sb-section">{title}</div>
+      <div className="dnd-section-title">{title}</div>
       <div className="stack dnd-action-cards" style={{ gap: 0 }}>
         {rows.map((r, i) => {
           // Строка, из-за которой всплывает лента пулов, подсвечена и несёт
@@ -3669,6 +3783,7 @@ function DndSkillsView({
   backgroundSkillNames,
   proficiencies,
   skills,
+  systemId,
   onQuickUpdate,
   highlight,
   exhaustionPenalty = 0,
@@ -3681,6 +3796,8 @@ function DndSkillsView({
   proficiencies: DndProficiencyEntry[];
   /** Встроенный каталог навыков, уточнённый справочником (useDndSkills). */
   skills: DndSkills;
+  /** Система — для списка инструментов (добавить владение). */
+  systemId: number | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
   /** Ключ строки, на которую увёл поиск (см. DndSheetSearch). */
   highlight?: string | null;
@@ -3801,6 +3918,7 @@ function DndSkillsView({
       )}
       <DndProficienciesView
         value={proficiencies}
+        systemId={systemId}
         onChange={onQuickUpdate ? (v) => onQuickUpdate({ proficiencies: v }) : undefined}
       />
     </div>
@@ -3958,9 +4076,26 @@ function SpendAction({
       </div>
     );
   }
-  const cost = row.source?.kind === "feature" ? row.source.feature.cost : undefined;
-  if (!cost || cost.kind !== "resource" || !cost.resourceKey) return null;
-  const res = resources.find((r) => r.key === cost.resourceKey);
+  const feature = row.source?.kind === "feature" ? row.source.feature : undefined;
+  const cost = feature?.cost;
+  // Ключ пула: классовый — по resourceKey, свой — по записи умения
+  // (featurePools). Третий путь — по названию: у классовых пулов в ключ
+  // зашит id записи класса, и из справочника на них ссылаются названием
+  // («Очки чародейства»). Дублироваться им не с чего: пул классовый.
+  // Без флага uses остаётся текстом: механики нет.
+  const poolKey =
+    cost?.kind === "resource"
+      ? (cost.resourceKey ?? null)
+      : cost?.kind === "uses" && cost.ownResource && typeof feature?.entryId === "number"
+        ? featurePoolKey(feature.entryId)
+        : null;
+  if (!cost) return null;
+  const res =
+    poolKey != null
+      ? resources.find((r) => r.key === poolKey)
+      : cost.kind === "resource" && cost.resourceLabel
+        ? resources.find((r) => r.label.toLowerCase() === cost.resourceLabel!.toLowerCase())
+        : undefined;
   if (!res) return null;
   const bonus = value.resourceBonus[res.key] ?? 0;
   const max = res.max + bonus;
@@ -4161,6 +4296,8 @@ function DndClassSpellListModal({
   cantrips,
   spellsByLevel,
   maxCircle,
+  titleLine,
+  color,
   onPick,
   onClose,
 }: {
@@ -4170,16 +4307,21 @@ function DndClassSpellListModal({
   cantrips: DndSpellEntry[];
   spellsByLevel: DndSpellEntry[][];
   /** Старший доступный круг: выкладка по умолчанию — заговоры и круги не
-      выше него («что обычно берут на этом уровне», этап 6). Поиск вторым
-      эшелоном ищет по всем кругам, тумблер раскрывает выкладку целиком. */
+      выше него («что обычно берут на этом уровне», этап 6). */
   maxCircle: number;
+  /** «Имя · Класс N» в шапку (канвас SpellPicker). */
+  titleLine: string;
+  /** Цвет класса — заливка выбранных галочек и кнопки. */
+  color: string;
   /** Пачка: отметить несколько и добавить разом, одним сохранением. */
   onPick: (items: { level: number; entry: CompendiumEntry }[]) => void;
   onClose: () => void;
 }) {
   const [all, setAll] = useState<CompendiumEntry[] | null>(null);
   const [query, setQuery] = useState("");
-  const [showAllCircles, setShowAllCircles] = useState(false);
+  const [myClass, setMyClass] = useState(true);
+  const [myCircle, setMyCircle] = useState(true);
+  const [circleSel, setCircleSel] = useState<number | null>(null);
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [failed, setFailed] = useState(false);
 
@@ -4197,6 +4339,15 @@ function DndClassSpellListModal({
     return () => ac.abort();
   }, [systemId]);
 
+  // Escape закрывает полноэкранный подборщик (крестик — для пальца).
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const sourceIds = new Set(sources.map((s) => s.id));
   // Уже в листе — по entryId: показывать «взять» у того, что уже взято,
   // значит собирать двойники руками пользователя.
@@ -4204,15 +4355,24 @@ function DndClassSpellListModal({
     [...cantrips, ...spellsByLevel.flat()].map((s) => s.entryId).filter((id): id is number => typeof id === "number")
   );
 
+  const classSpells = (all ?? []).filter((e) => {
+    const refs = Array.isArray(e.data?.classes) ? (e.data.classes as { id?: number }[]) : [];
+    return refs.some((r) => typeof r.id === "number" && sourceIds.has(r.id));
+  });
+  // Круги в чипах — только те, что есть у класса (пустых кнопок не надо).
+  const presentCircles = [...new Set(classSpells.map((e) => e.level ?? 0))].sort((a, b) => a - b);
+
   const q = query.trim().toLowerCase();
   // Сначала фильтр класса (свой список), потом круга, поиск — последним:
-  // пустое поле показывает выкладку, а не пустой экран.
-  const matching = (all ?? []).filter((e) => {
-    const refs = Array.isArray(e.data?.classes) ? (e.data.classes as { id?: number }[]) : [];
-    if (!refs.some((r) => typeof r.id === "number" && sourceIds.has(r.id))) return false;
+  // пустое поле показывает выкладку, а не пустой экран. Конкретный круг
+  // перекрывает «мой круг», «Все» сбрасывает оба ограничения.
+  const base = myClass ? classSpells : (all ?? []);
+  const matching = base.filter((e) => {
     const lvl = e.level ?? 0;
-    if (!showAllCircles && !q && lvl > Math.max(0, maxCircle)) return false;
-    return !q || e.name.toLowerCase().includes(q);
+    if (q) return e.name.toLowerCase().includes(q);
+    if (circleSel != null) return lvl === circleSel;
+    if (myCircle) return lvl <= Math.max(0, maxCircle);
+    return true;
   });
   const byLevel = new Map<number, CompendiumEntry[]>();
   for (const e of matching) {
@@ -4231,97 +4391,168 @@ function DndClassSpellListModal({
     });
   }
 
+  // Короткое действие для подписи строки (канвас: «действие», «реакция»).
+  const actionWord = (e: CompendiumEntry): string | undefined => {
+    const t = spellTimingFromData(e.data).castingTiming;
+    if (t === "action") return "действие";
+    if (t === "bonus") return "бонусное";
+    if (t === "reaction") return "реакция";
+    return undefined;
+  };
+  const spellMeta = (e: CompendiumEntry): string =>
+    [
+      spellSchoolName(e.data?.school),
+      actionWord(e),
+      typeof e.data?.range === "string" ? e.data.range : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
   return (
-    <Modal wide onClose={onClose}>
-      <div className="stack dnd-spell-list-modal">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>Доступные заклинания</h3>
-          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+    <div className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Взять заклинания">
+      <div className="dnd-spell-picker-head">
+        <div className="dnd-spell-picker-title-row">
+          <div>
+            <div className="dnd-spell-picker-title">Взять заклинания</div>
+            <div className="dnd-spell-picker-sub">
+              {titleLine} · известно {owned.size} из {classSpells.length}
+            </div>
+          </div>
+          <button type="button" className="dnd-spell-picker-close" onClick={onClose} aria-label="Закрыть">
             <NavIcon name="close" />
           </button>
         </div>
-        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-          {sources.map((s) => s.name).join(" · ") || "Класс не выбран"}
+        <div className="dnd-spell-picker-search">
+          <input
+            placeholder="Искать, если уже знаете название"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Поиск заклинаний по названию"
+          />
         </div>
-        <input
-          placeholder="Поиск по названию — вторым эшелоном"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {!q && (
+        <div className="dnd-spell-picker-chips" role="group" aria-label="Фильтры">
           <button
             type="button"
-            className="comp-mini"
-            style={{ alignSelf: "flex-start" }}
-            aria-pressed={showAllCircles}
-            onClick={() => setShowAllCircles((v) => !v)}
+            className={`dnd-pick-chip${myClass ? " is-on" : ""}`}
+            aria-pressed={myClass}
+            onClick={() => setMyClass((v) => !v)}
           >
-            {showAllCircles ? `Только доступные (до ${Math.max(0, maxCircle)} круга)` : "Показать все круги"}
+            Мой класс
           </button>
-        )}
+          <button
+            type="button"
+            className={`dnd-pick-chip${myCircle && circleSel == null ? " is-on" : ""}`}
+            aria-pressed={myCircle && circleSel == null}
+            onClick={() => {
+              setMyCircle((v) => !v);
+              setCircleSel(null);
+            }}
+          >
+            Мой круг
+          </button>
+          {presentCircles
+            .filter((lvl) => lvl > 0)
+            .map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                className={`dnd-pick-chip${circleSel === lvl ? " is-on" : ""}`}
+                aria-pressed={circleSel === lvl}
+                onClick={() => setCircleSel((prev) => (prev === lvl ? null : lvl))}
+              >
+                {lvl} круг
+              </button>
+            ))}
+          <button
+            type="button"
+            className={`dnd-pick-chip${!myClass && !myCircle && circleSel == null ? " is-on" : ""}`}
+            aria-pressed={!myClass && !myCircle && circleSel == null}
+            onClick={() => {
+              setMyClass(false);
+              setMyCircle(false);
+              setCircleSel(null);
+            }}
+          >
+            Все
+          </button>
+        </div>
+      </div>
+      <div className="dnd-spell-picker-list">
         {failed && <p className="muted">Не удалось загрузить справочник заклинаний.</p>}
         {!failed && all === null && <p className="muted">Загрузка…</p>}
         {all !== null && levels.length === 0 && (
           <p className="muted">
-            {sources.length === 0
+            {sources.length === 0 && myClass
               ? "Сначала выберите класс — список строится по нему."
               : "Ничего не нашлось: у класса нет заклинаний в справочнике либо не подходит поиск."}
           </p>
         )}
-        <div className="stack picker-list" style={{ gap: 8 }}>
-          {levels.map((lvl) => (
-            <div key={lvl} className="stack" style={{ gap: 4 }}>
-              <div className="sb-prop-label">{lvl === 0 ? "Заговоры" : `${lvl} круг`}</div>
-              {byLevel.get(lvl)!.map((e) => {
-                const isOwned = owned.has(e.id);
-                const isPicked = picked.has(e.id);
-                return (
-                  <button
-                    key={e.id}
-                    type="button"
-                    className={`dnd-picker-row${isPicked ? " is-picked" : ""}`}
-                    disabled={isOwned}
-                    aria-pressed={isPicked}
-                    onClick={() => toggle(e.id)}
-                  >
-                    <span className="dnd-picker-check" aria-hidden="true">
-                      {isPicked ? "●" : "○"}
-                    </span>
-                    <span style={{ flex: "1 1 auto", minWidth: 0, textAlign: "left" }}>{e.name}</span>
-                    {isOwned && (
-                      <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                        уже в листе
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+        {levels.map((lvl) => (
+          <div key={lvl}>
+            <div className="dnd-spell-picker-group">
+              <span>{lvl === 0 ? "Заговоры" : `${lvl} круг`}</span>
             </div>
-          ))}
-        </div>
-        <div className="row picker-footer" style={{ gap: 8 }}>
-          <button
-            type="button"
-            className="primary"
-            disabled={picked.size === 0}
-            onClick={() => {
-              const byId = new Map((all ?? []).map((e) => [e.id, e]));
-              onPick(
-                [...picked]
-                  .map((id) => byId.get(id))
-                  .filter((e): e is CompendiumEntry => !!e)
-                  .map((e) => ({ level: e.level ?? 0, entry: e }))
+            {byLevel.get(lvl)!.map((e) => {
+              const isOwned = owned.has(e.id);
+              const isPicked = picked.has(e.id);
+              const meta = spellMeta(e);
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  className={`dnd-spell-pick-row${isPicked ? " is-picked" : ""}`}
+                  disabled={isOwned}
+                  aria-pressed={isPicked}
+                  onClick={() => toggle(e.id)}
+                >
+                  <span
+                    className="dnd-pick-box"
+                    style={isPicked ? { background: color, borderColor: color } : undefined}
+                    aria-hidden="true"
+                  >
+                    {isPicked && (
+                      <svg viewBox="0 0 18 18">
+                        <path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" strokeWidth="2.6" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="dnd-spell-pick-main">
+                    <span className="dnd-spell-pick-name">{e.name}</span>
+                    {meta && <span className="dnd-spell-pick-meta">{meta}</span>}
+                  </span>
+                  <span className="dnd-spell-pick-circle">{lvl === 0 ? "Заговор" : `${lvl} круг`}</span>
+                </button>
               );
-            }}
-          >
-            Добавить{picked.size > 0 ? ` (${picked.size})` : ""}
-          </button>
-          <button type="button" onClick={onClose}>
-            Отмена
-          </button>
-        </div>
+            })}
+          </div>
+        ))}
       </div>
-    </Modal>
+      <div className="dnd-spell-picker-foot">
+        <span className="muted dnd-spell-picker-count">
+          Отмечено <strong>{picked.size}</strong>
+        </span>
+        <button type="button" className="comp-mini" disabled={picked.size === 0} onClick={() => setPicked(new Set())}>
+          Снять
+        </button>
+        <button
+          type="button"
+          className="primary"
+          style={{ background: color, borderColor: color }}
+          disabled={picked.size === 0}
+          onClick={() => {
+            const byId = new Map((all ?? []).map((e) => [e.id, e]));
+            onPick(
+              [...picked]
+                .map((id) => byId.get(id))
+                .filter((e): e is CompendiumEntry => !!e)
+                .map((e) => ({ level: e.level ?? 0, entry: e }))
+            );
+          }}
+        >
+          Добавить{picked.size > 0 ? ` ${picked.size}` : ""}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -4503,7 +4734,7 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
   if (values.length === 0) return null;
   return (
     <details className="cs-list" open>
-      <summary className="sb-section">{title}</summary>
+      <summary className="dnd-section-title">{title}</summary>
       {values.map((f, i) => (
         <div key={i}>
           <button
@@ -4898,10 +5129,13 @@ function TextQuickBox({
     onQuickUpdate?.({ [field]: draft } as Partial<DndCharacterData>);
     setEditing(false);
   }
-  return (
-    <div>
-      <div className="sb-label">{label}</div>
-      {editing ? (
+  // Кнопка по центру: выше и уже обычного поля, клик по любой области
+  // открывает правку (а не только по числу — мимо числа на телефоне
+  // попадают чаще, чем в него).
+  if (editing) {
+    return (
+      <div className="dnd-initiative-edit">
+        <div className="sb-label">{label}</div>
         <input
           autoFocus
           style={{ width }}
@@ -4910,22 +5144,27 @@ function TextQuickBox({
           onBlur={commit}
           onKeyDown={(e) => e.key === "Enter" && commit()}
         />
-      ) : (
-        <SbQuickValue
-          ariaLabel={`${label} — изменить`}
-          onClick={
-            onQuickUpdate
-              ? () => {
-                  setDraft(value);
-                  setEditing(true);
-                }
-              : undefined
-          }
-        >
-          {value || "—"}
-        </SbQuickValue>
-      )}
-    </div>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="dnd-initiative-btn dnd-tab-mid"
+      aria-label={`${label} ${value || "—"} — изменить`}
+      onClick={
+        onQuickUpdate
+          ? () => {
+              setDraft(value);
+              setEditing(true);
+            }
+          : undefined
+      }
+      disabled={!onQuickUpdate}
+    >
+      <span className="sb-label">{label}</span>
+      <span className="dnd-initiative-value">{value || "—"}</span>
+    </button>
   );
 }
 
@@ -4996,12 +5235,51 @@ function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () =
   return (
     <button
       type="button"
-      className="comp-mini dnd-tab-edit-toggle"
+      className="comp-mini dnd-tab-edit-toggle dnd-tab-btn"
       title={editing ? "Сохранить" : "Редактировать"}
       aria-label={editing ? "Сохранить" : "Редактировать"}
       onClick={onToggle}
     >
       <NavIcon name={editing ? "check" : "edit"} />
+    </button>
+  );
+}
+
+// Подписанный карандаш для шапок вкладок: иконка + текст («Свойства»,
+// «умения»). Тот же размер, что веер.
+function LabeledEditButton({
+  label,
+  editing,
+  onToggle,
+}: {
+  label: string;
+  editing?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="dnd-chip dnd-edit-labeled"
+      title={editing ? "Сохранить" : `Редактировать: ${label}`}
+      onClick={onToggle}
+    >
+      <NavIcon name={editing ? "check" : "edit"} />
+      {label}
+    </button>
+  );
+}
+
+// Кнопка веера: миниатюра колоды — 8 квадратиков (4 ряда по 2, по числу карт).
+// Один размер со всеми инструментальными кнопками вкладок (dnd-tab-btn):
+// предсказуемость важнее экономии пикселей.
+function DndFanButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button type="button" className="dnd-tab-btn dnd-fan-btn" title="Колода карт" aria-label="Открыть колоду карт" onClick={onOpen}>
+      <span className="dnd-fan-btn-grid" aria-hidden="true">
+        {Array.from({ length: 8 }, (_, i) => (
+          <span key={i} />
+        ))}
+      </span>
     </button>
   );
 }
@@ -5496,45 +5774,11 @@ function DndReplicaBasePicker({
 
 /**
  * Лента пулов сверху «Действий» (этап 5, вид — по канвасу Actions): чёрная
- * плашка-инверсия. Квадратные пипсы (только здесь — общий PipTrack круглый
- * и остаётся на «Ресурсах»), залитые — остаток («3 из 5» читается как
- * «осталось», это боевое число), подпись речарджа. Ячейки — текстом, трата
+ * плашка-инверсия. Пипсы — головы тофу (съеденные блеклые), «3 из 5»
+ * читается как «осталось», это боевое число. Ячейки — текстом, трата
  * остаётся в окнах строк. Показывается только то, что тратит хоть одна
  * строка этой карты; пусто — компоненты нет вовсе.
  */
-function DndPoolPips({
-  max,
-  left,
-  label,
-  color,
-  onSetLeft,
-}: {
-  max: number;
-  /** Осталось — залитые квадраты. */
-  left: number;
-  label: string;
-  color: string;
-  /** Клик по i-му квадрату ставит остаток i+1 (потрачено max-i-1). */
-  onSetLeft?: (left: number) => void;
-}) {
-  return (
-    <span className="dnd-pip-squares" role="group" aria-label={label}>
-      {Array.from({ length: max }, (_, i) => (
-        <button
-          key={i}
-          type="button"
-          className={`dnd-pip-sq${i < left ? " is-on" : ""}`}
-          style={i < left ? { background: color, borderColor: color } : undefined}
-          aria-label={`${label}: осталось ${i + 1}`}
-          aria-pressed={i < left}
-          disabled={!onSetLeft}
-          onClick={() => onSetLeft?.(i + 1)}
-        />
-      ))}
-    </span>
-  );
-}
-
 function DndActionPools({
   actionRows,
   resourceSources,
@@ -5545,7 +5789,7 @@ function DndActionPools({
   spellSlotsUsed,
   pact,
   pactUsed,
-  color,
+  ownPools,
   onQuickUpdate,
 }: {
   actionRows: AttackRow[];
@@ -5557,22 +5801,28 @@ function DndActionPools({
   spellSlotsUsed: number[];
   pact: { count: number; circle: number } | null;
   pactUsed: number;
-  /** Цвет класса — заливка пипсов, единственная краска на плашке. */
-  color: string;
+  /** Свои пулы умений — в ту же ленту, что классовые. */
+  ownPools: DndResourceDef[];
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   // Боевые заклинания — строки-заклинания кругов ≥1. Заговоры ячеек не
   // тратят, и ради них ленту не поднимаем.
   const hasCombatSpells = actionRows.some((r) => r.source?.kind === "spell" && r.source.level > 0);
-  // Классовые пулы, задетые стоимостями строк. Ключ — тот же resourceKey,
-  // по которому окно строки ищет свой пул для кнопки «Потратить».
+  // Пулы, задетые стоимостями строк. Ключ — тот же, по которому окно строки
+  // ищет свой пул для кнопки «Потратить»: классовый по resourceKey, свой —
+  // по записи умения.
   const spentKeys = new Set(
     actionRows.flatMap((r) => {
-      const cost = r.source?.kind === "feature" ? r.source.feature.cost : undefined;
-      return cost?.kind === "resource" && cost.resourceKey ? [cost.resourceKey] : [];
+      if (r.source?.kind !== "feature") return [];
+      const cost = r.source.feature.cost;
+      if (cost?.kind === "resource" && cost.resourceKey) return [cost.resourceKey];
+      if (cost?.kind === "uses" && cost.ownResource && typeof r.source.feature.entryId === "number") {
+        return [featurePoolKey(r.source.feature.entryId)];
+      }
+      return [];
     })
   );
-  const pools = allResources(resourceSources, abilities).filter(
+  const pools = [...allResources(resourceSources, abilities), ...ownPools].filter(
     (r) => spentKeys.has(r.key) && r.max + (resourceBonus[r.key] ?? 0) > 0
   );
   const slotLeft = shownSlotPips.map((max, i) => max - (spellSlotsUsed[i] ?? 0));
@@ -5613,11 +5863,10 @@ function DndActionPools({
               {r.label}
               {showClass && <span className="dnd-pool-band-muted"> · {r.className}</span>}
             </span>
-            <DndPoolPips
+            <TofuPips
               max={max}
               left={left}
               label={r.label}
-              color={color}
               onSetLeft={onQuickUpdate ? (next) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: max - next } }) : undefined}
             />
             <span className="dnd-pool-count">
@@ -5640,6 +5889,7 @@ function DndResourcesView({
   systemId,
   campaignId,
   ownerCharacterId,
+  ownPools,
   onQuickUpdate,
 }: {
   sources: ClassResourceSource[];
@@ -5650,51 +5900,79 @@ function DndResourcesView({
   systemId: number | null;
   campaignId?: number | null;
   ownerCharacterId?: number | null;
+  /** Свои пулы умений — теми же строками, что классовые. */
+  ownPools: DndResourceDef[];
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
-  const resources = allResources(sources, abilities);
+  const resources = [...allResources(sources, abilities), ...ownPools];
   const stats = applicableStats(sources);
   const replicas = replicaLimits(sources);
   if (resources.length === 0 && stats.length === 0 && replicas.length === 0)
     return <p className="muted">Нет доступных ресурсов для текущих классов.</p>;
   // Класс подписываем только у многоклассовых персонажей: у одноклассового
   // это шум, а «Проведение божественности» бывает и у Жреца, и у Паладина
-  // сразу, и различить их иначе нечем.
+  // сразу, и различить их иначе нечем. У своих пулов класса нет — суффикса нет.
   const showClass = sources.filter((s) => s.entry.level > 0).length > 1;
   return (
-    <div className="stack">
+    <div className="stack dnd-pools">
       {resources.map((r) => {
         const bonus = resourceBonus[r.key] ?? 0;
         const max = r.max + bonus;
         const used = Math.min(resourceUsed[r.key] ?? 0, max);
         return (
-          <div key={r.key} className="sb-entry">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <span className="sb-prop-label">
-                {r.label}
-                {showClass && <span className="muted"> · {r.className}</span>}
-              </span>
-              <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
-                доп. бонус
-                <input
-                  type="number"
-                  style={{ width: 44 }}
-                  disabled={!onQuickUpdate}
-                  value={bonus || ""}
-                  onChange={(e) =>
-                    onQuickUpdate?.({ resourceBonus: { ...resourceBonus, [r.key]: Number(e.target.value) || 0 } })
-                  }
-                />
-              </label>
-            </div>
-            <PipTrack
-              value={used}
-              label={`Потрачено, ${r.label}`}
+          <div key={r.key} className="sb-entry dnd-pool-row">
+            <span className="sb-prop-label">
+              {r.label}
+              {showClass && r.className && <span className="muted"> · {r.className}</span>}
+            </span>
+            <label className="row muted dnd-pool-bonus" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
+              доп. бонус
+              <input
+                type="number"
+                style={{ width: 44 }}
+                disabled={!onQuickUpdate}
+                value={bonus || ""}
+                onChange={(e) =>
+                  onQuickUpdate?.({ resourceBonus: { ...resourceBonus, [r.key]: Number(e.target.value) || 0 } })
+                }
+              />
+            </label>
+            <TofuPips
               max={max}
-              onChange={
-                onQuickUpdate ? (v) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: v } }) : undefined
+              left={max - used}
+              label={r.label}
+              onSetLeft={
+                onQuickUpdate ? (next) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: max - next } }) : undefined
               }
             />
+            {/* Восстановление чужой ценой («Крылья»: пополнить за 3 очка
+                чародейства): одним сохранением обнуляет свой и списывает
+                с донора. Видна, только когда есть что чинить и чем платить. */}
+            {(() => {
+              if (!r.restore || !onQuickUpdate || used <= 0) return null;
+              const donor = resources.find(
+                (d) => d.key !== r.key && d.label.toLowerCase() === r.restore!.pool.toLowerCase()
+              );
+              if (!donor) return null;
+              const donorMax = donor.max + (resourceBonus[donor.key] ?? 0);
+              const donorUsed = Math.min(resourceUsed[donor.key] ?? 0, donorMax);
+              const price = r.restore.amount;
+              if (donorMax - donorUsed < price) return null;
+              return (
+                <button
+                  type="button"
+                  className="comp-mini"
+                  style={{ alignSelf: "flex-start" }}
+                  onClick={() =>
+                    onQuickUpdate({
+                      resourceUsed: { ...resourceUsed, [r.key]: 0, [donor.key]: donorUsed + price },
+                    })
+                  }
+                >
+                  Восстановить ({price} {donor.label})
+                </button>
+              );
+            })()}
           </div>
         );
       })}
@@ -6173,6 +6451,8 @@ export function DndCharacterView({
   // берётся класс с наибольшим уровнем (dndClassColors.ts).
   const cardColor = sheetClassColor(value.classes, getEntry);
   const [fanOpen, setFanOpen] = useState(false);
+  // Модалка передачи из Снаряжения: то же меню, что оборот карты.
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
   // Раскрывашка мёртвых ссылок (вид — канвас Actions): имена нужны для
   // починки, но не каждый раз.
   const [deadOpen, setDeadOpen] = useState(false);
@@ -6673,6 +6953,11 @@ export function DndCharacterView({
     value.feats,
     value.specialAbilities,
   ].map((g) => g.map((f) => resolveFeature(f, getEntry)));
+  // Свои ресурсы умений (структурность): пулы из cost {uses, ownResource}
+  // живых (разрешённых) особенностей. Дальше едут одним списком с
+  // классовыми: трата, лента, «Ресурсы», сброс на отдыхе.
+  const ownPools = featurePools(liveFeatureGroups.flat(), value.abilities);
+  const allPools = [...allResources(resourceSources, value.abilities), ...ownPools];
   // Индекс поиска. Порядок групп особенностей здесь и в liveFeatureGroups
   // должен совпадать — подписи результата берутся по индексу группы.
   const searchHits = collectSheetHits(value, liveCantrips, liveSpellsByLevel, liveFeatureGroups);
@@ -6813,7 +7098,7 @@ export function DndCharacterView({
                   row={openAction}
                   value={value}
                   slots={shownSlotPips}
-                  resources={allResources(resourceSources, value.abilities)}
+                  resources={allPools}
                   onQuickUpdate={onQuickUpdate}
                   onDone={() => setOpenAction(null)}
                 />
@@ -6828,6 +7113,10 @@ export function DndCharacterView({
             cantrips={value.cantrips}
             spellsByLevel={value.spellsByLevel}
             maxCircle={shownSlotLevels}
+            titleLine={`${value.characterName || "Без имени"} · ${stripLatin(
+              value.classes.find((c) => c.className)?.className ?? "Без класса"
+            )} ${totalLevel}`}
+            color={cardColor}
             onPick={(items) => {
               if (!onQuickUpdate || items.length === 0) return;
               // Берутся неподготовленными: взять в книгу и подготовить на день
@@ -6962,7 +7251,7 @@ export function DndCharacterView({
         {restOpen && (
           <DndRestModal
             value={value}
-            resources={allResources(resourceSources, value.abilities)}
+            resources={allPools}
             pools={pools}
             onQuickUpdate={onQuickUpdate!}
             onClose={() => setRestOpen(false)}
@@ -7437,11 +7726,16 @@ export function DndCharacterView({
           )}
           {tab === "Действия" && (
             <div className="stack">
-              {/* Инициативу бросают в начале боя — там же, где выбирают, чем
-                  бить. На лицевой стороне ей места нет (гриллинг 2026-09-04:
-                  карта отвечает на «кто я и чем бью», а не на всё сразу). */}
-              <div className="dnd-live-row">
+              {/* Инициатива — кнопкой по центру строки: слева правка раздела,
+                  справа веер (решение владельца). Кнопки одного размера. */}
+              <div className="dnd-tab-tools">
+                {onQuickUpdate ? (
+                  <TabEditToggle editing={editingActions} onToggle={() => setEditingActions((v) => !v)} />
+                ) : (
+                  <span className="dnd-tab-btn" aria-hidden="true" />
+                )}
                 <TextQuickBox label="Инициатива" value={value.initiative} field="initiative" onQuickUpdate={onQuickUpdate} />
+                <DndFanButton onOpen={() => setFanOpen(true)} />
               </div>
               {/* Лента пулов (этап 5): только то, что тратит хоть одна строка
                   этой карты, — ячейки, если тут есть боевые заклинания, и
@@ -7459,15 +7753,12 @@ export function DndCharacterView({
                 spellSlotsUsed={value.spellSlotsUsed}
                 pact={computedSlots.pact}
                 pactUsed={value.pactSlotsUsed ?? 0}
-                color={cardColor}
+                ownPools={ownPools}
                 onQuickUpdate={onQuickUpdate}
               />
               {/* Вручную вписанные атаки (то, чего нет ни в оружии, ни в
                   заклинаниях) правились только в форме. Теперь — там же, где
-                  показываются. */}
-              {onQuickUpdate && (
-                <TabEditToggle editing={editingActions} onToggle={() => setEditingActions((v) => !v)} />
-              )}
+                  показываются. Правка раздела — карандашом в строке выше. */}
               {editingActions && onQuickUpdate && (
                 <AttackListEdit values={value.attacks} onChange={(v) => onQuickUpdate({ attacks: v })} />
               )}
@@ -7491,19 +7782,28 @@ export function DndCharacterView({
 
           {tab === "Магия" && (
             <div>
-              {onQuickUpdate && (
-                <TabEditToggle editing={editingSpells} onToggle={() => setEditingSpells((v) => !v)} />
-              )}
+              {/* Шапка вкладки: правка слева, веер справа, по центру СЛ и АТК —
+                  то, зачем сюда заглядывают. Полные подписи убраны: строка
+                  принадлежит числам, а не словам. */}
+              <div className="dnd-tab-tools">
+                {onQuickUpdate ? (
+                  <TabEditToggle editing={editingSpells} onToggle={() => setEditingSpells((v) => !v)} />
+                ) : (
+                  <span className="dnd-tab-btn" aria-hidden="true" />
+                )}
+                <div className="dnd-tab-center dnd-tab-mid">
+                  {spellAbilityKey ? (
+                    <span>
+                      СЛ: {spellDc} · АТК: {formatModifier(spellAttackBonus)}
+                    </span>
+                  ) : (
+                    <span className="muted">Нет заклинательной характеристики</span>
+                  )}
+                </div>
+                <DndFanButton onOpen={() => setFanOpen(true)} />
+              </div>
               {(value.spellcasting || spellAbilityKey) && (
                 <>
-                  {spellAbilityKey && (
-                    <div className="sb-entry">
-                      <span className="sb-prop-label">Сложность заклинаний</span> {spellDc}
-                      {"  ·  "}
-                      <span className="sb-prop-label">Бонус к атаке заклинаниями</span>{" "}
-                      {formatModifier(spellAttackBonus)}
-                    </div>
-                  )}
                   {value.spellcasting && !editingSpells && (
                     <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
                       <MentionText text={value.spellcasting} />
@@ -7548,27 +7848,24 @@ export function DndCharacterView({
                   утром его выключают, чтобы подготовиться, в бою включают,
                   чтобы не листать книгу. Скрытое всегда посчитано вслух —
                   иначе через сессию это выглядит как пропажа заклинаний. */}
-              <div className="row sb-entry dnd-prepared-filter">
+              <div className="row sb-entry dnd-prepared-filter" style={{ gap: 8, flexWrap: "wrap" }}>
                 <button
                   type="button"
-                  className="comp-mini"
+                  className={`dnd-chip${prefs.spellsPreparedOnly ? " is-on" : ""}`}
                   aria-pressed={prefs.spellsPreparedOnly}
                   onClick={() => saveDndPrefs({ ...prefs, spellsPreparedOnly: !prefs.spellsPreparedOnly })}
                 >
-                  <NavIcon name="star" filled={prefs.spellsPreparedOnly} />{" "}
-                  {prefs.spellsPreparedOnly ? "Только подготовленные" : "Показаны все"}
+                  Подготовленные/Доступные
                 </button>
+                {onQuickUpdate && (
+                  <button type="button" className="dnd-chip" onClick={() => setSpellListOpen(true)}>
+                    Добавить
+                  </button>
+                )}
                 {prefs.spellsPreparedOnly && editingSpells && (
                   <span className="muted">в правке показаны все — подготовить можно только видимое</span>
                 )}
               </div>
-              {onQuickUpdate && (
-                <div className="row sb-entry">
-                  <button type="button" className="comp-mini" onClick={() => setSpellListOpen(true)}>
-                    Список доступных заклинаний
-                  </button>
-                </div>
-              )}
               {(spellLimits.cantrips != null || spellLimits.prepared != null) && (
                 <div className="row sb-entry" style={{ gap: 10, flexWrap: "wrap" }}>
                   {spellLimits.cantrips != null && (
@@ -7586,7 +7883,9 @@ export function DndCharacterView({
                   )}
                 </div>
               )}
-              {computedSlots.basis !== "none" && (
+              {/* Расчёт ячеек — под меню редактирования: пользуются ячейками,
+                  а настраивают расчёт. Вне правки здесь только то, что тратят. */}
+              {editingSpells && computedSlots.basis !== "none" && (
                 <div className="row sb-entry" style={{ gap: 8, flexWrap: "wrap" }}>
                   <span className="muted">
                     {autoSlots
@@ -7669,12 +7968,22 @@ export function DndCharacterView({
                       }
                     : undefined
                 }
+                onCast={(row) => setOpenAction(row)}
               />
             </div>
           )}
 
           {tab === "Навыки" && (
-            <DndSkillsView
+            <>
+              {/* Шапка вкладки: слева крупно БМ, справа веер. Карандаша нет —
+                  навыки правятся прямо в строках, владение добавляется
+                  списком инструментов ниже. */}
+              <div className="dnd-tab-tools">
+                <span className="dnd-tab-bm">БМ {value.proficiencyBonus}</span>
+                <span style={{ flex: "1 1 auto" }} aria-hidden="true" />
+                <DndFanButton onOpen={() => setFanOpen(true)} />
+              </div>
+              <DndSkillsView
               exhaustionPenalty={exhaustionPenalty}
               highlight={highlight}
               abilities={value.abilities}
@@ -7684,15 +7993,31 @@ export function DndCharacterView({
               backgroundSkillNames={value.backgroundSkillNames}
               proficiencies={value.proficiencies}
               skills={skills}
+              systemId={value.systemId}
               onQuickUpdate={onQuickUpdate}
             />
+            </>
           )}
 
           {tab === "Снаряжение" && (
-            <div>
-              {onQuickUpdate && (
-                <TabEditToggle editing={editingInventory} onToggle={() => setEditingInventory((v) => !v)} />
-              )}
+            <div className="stack">
+              {/* Шапка вкладки: правка слева, передача по центру, веер справа.
+                  Передача открывает то же меню, что оборот карты. */}
+              <div className="dnd-tab-tools">
+                {onQuickUpdate ? (
+                  <TabEditToggle editing={editingInventory} onToggle={() => setEditingInventory((v) => !v)} />
+                ) : (
+                  <span className="dnd-tab-btn" aria-hidden="true" />
+                )}
+                <div className="dnd-tab-center dnd-tab-mid">
+                  {canUseInbox && ownerCharacterId != null && (
+                    <button type="button" className="dnd-transfer-btn" onClick={() => setTransferModalOpen(true)}>
+                      Передать предмет
+                    </button>
+                  )}
+                </div>
+                <DndFanButton onOpen={() => setFanOpen(true)} />
+              </div>
               {editingInventory ? (
                 <>
                   <DndEquipmentEdit
@@ -7708,87 +8033,140 @@ export function DndCharacterView({
                     sections={value.equipmentSections}
                     systemId={value.systemId}
                     coins={value.coins}
+                    accentColor={cardColor}
                     onQuickUpdate={onQuickUpdate}
                   />
                 </>
               )}
-              {/* Настройка предметов: дорожка кликабельна, а не просто
-                  показывается — настроить предмет можно и посреди боя. */}
+              {/* Настройка предметов: ромбы вместо точек, слоты сверх трёх —
+                  кнопкой [+]. Настроить предмет можно и посреди боя. */}
               {(value.attunementCount > 0 || onQuickUpdate) && (
                 <div className="sb-entry">
                   <span className="sb-prop-label">Настроено предметов</span>{" "}
                   <PipTrack
+                    diamondFrom={4}
                     value={value.attunementCount}
                     label="Настроено предметов"
-                    max={3}
+                    max={3 + (value.attunementExtra ?? 0)}
                     onChange={onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined}
                   />
+                  {onQuickUpdate && (
+                    <>
+                      <button
+                        type="button"
+                        className="comp-mini"
+                        title="Добавить слот настройки"
+                        aria-label="Добавить слот настройки"
+                        onClick={() => onQuickUpdate({ attunementExtra: (value.attunementExtra ?? 0) + 1 })}
+                      >
+                        +
+                      </button>
+                      {(value.attunementExtra ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className="comp-mini"
+                          title="Убрать слот настройки"
+                          aria-label="Убрать слот настройки"
+                          onClick={() =>
+                            onQuickUpdate({
+                              attunementExtra: (value.attunementExtra ?? 0) - 1,
+                              attunementCount: Math.min(value.attunementCount, 3 + (value.attunementExtra ?? 0) - 1),
+                            })
+                          }
+                        >
+                          −
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
+              )}
+              {transferModalOpen && canUseInbox && ownerCharacterId != null && (
+                <Modal onClose={() => setTransferModalOpen(false)}>
+                  <DndTransferBox
+                    color={cardColor}
+                    campaignId={campaignId}
+                    characterId={ownerCharacterId}
+                    equipment={value.equipmentSections}
+                    incoming={transfers?.incoming ?? []}
+                    outgoing={transfers?.outgoing ?? []}
+                    loading={transfersLoading}
+                    loadError={transfersError}
+                    notice={transferNotice}
+                    busyId={transferBusyId}
+                    onAction={(id, action) => void handleTransferAction(id, action)}
+                    onSendItem={(args) => void handleTransferSend(args)}
+                    onSendMoney={(args) => void handleMoneySend(args)}
+                    onRetry={refreshTransfers}
+                  />
+                </Modal>
               )}
             </div>
           )}
 
           {tab === "Ресурсы" && (
             <>
+            {/* Кости хитов — в одной строке с веером, высотой как веер
+                (решение владельца): это первое, что ищут на «Ресурсах».
+                Спасброски ниже — они нужны только при нуле хитов. */}
+            <div className="dnd-tab-tools">
+              {pools.length > 0 ? (
+                <div className="dnd-tab-mid dnd-hitdice-row">
+                  <span className="sb-label">Кости хитов</span>
+                  {pools.map((pool) => (
+                    <span key={pool.die} className="row dnd-hitdice-pool">
+                      <span className="dnd-hitdice-die">{pool.die}</span>
+                      <PipTrack
+                        value={pool.used}
+                        label={`Потрачено костей хитов ${pool.die}`}
+                        max={pool.total}
+                        size={12}
+                        onChange={
+                          onQuickUpdate
+                            ? (n) => onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: n } })
+                            : undefined
+                        }
+                      />
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ flex: "1 1 auto" }} aria-hidden="true" />
+              )}
+              <DndFanButton onOpen={() => setFanOpen(true)} />
+            </div>
+            {atZeroHp && (
+              <div>
+                <div className="sb-label">Спас от смерти</div>
+                <div className="stack sb-death-saves">
+                  <span className="row muted">
+                    +
+                    <PipTrack
+                      value={value.deathSaveSuccesses}
+                      label="Успехи спасбросков от смерти"
+                      max={3}
+                      size={12}
+                      onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
+                    />
+                  </span>
+                  <span className="row muted">
+                    −
+                    <PipTrack
+                      value={value.deathSaveFailures}
+                      label="Провалы спасбросков от смерти"
+                      max={3}
+                      size={12}
+                      onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveFailures: v }) : undefined}
+                    />
+                  </span>
+                </div>
+              </div>
+            )}
             {/* Кости хитов и спасброски от смерти стоят здесь, а не на карте:
                 гриллинг 2026-09-04 оставил на лицевой стороне только КЗ,
                 хиты, пассивное восприятие, скорость, характеристики, живой
                 ряд, закладки и спутников. Кости хитов тратят на коротком
                 отдыхе, а не каждый ход, и их место — среди ресурсов. */}
-            {(pools.length > 0 || atZeroHp) && (
-              <div className="dnd-live-row">
-                {pools.length > 0 && (
-                  <div>
-                    <div className="sb-label">Кости хитов</div>
-                    <div className="stack dnd-hitdice-pools">
-                      {pools.map((pool) => (
-                        <span key={pool.die} className="row dnd-hitdice-pool">
-                          <span className="dnd-hitdice-die">{pool.die}</span>
-                          <PipTrack
-                            value={pool.used}
-                            label={`Потрачено костей хитов ${pool.die}`}
-                            max={pool.total}
-                            size={12}
-                            onChange={
-                              onQuickUpdate
-                                ? (n) => onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: n } })
-                                : undefined
-                            }
-                          />
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {atZeroHp && (
-                  <div>
-                    <div className="sb-label">Спас от смерти</div>
-                    <div className="stack sb-death-saves">
-                      <span className="row muted">
-                        +
-                        <PipTrack
-                          value={value.deathSaveSuccesses}
-                          label="Успехи спасбросков от смерти"
-                          max={3}
-                          size={12}
-                          onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
-                        />
-                      </span>
-                      <span className="row muted">
-                        −
-                        <PipTrack
-                          value={value.deathSaveFailures}
-                          label="Провалы спасбросков от смерти"
-                          max={3}
-                          size={12}
-                          onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveFailures: v }) : undefined}
-                        />
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
             <DndResourcesView
               sources={resourceSources}
               abilities={value.abilities}
@@ -7798,6 +8176,7 @@ export function DndCharacterView({
               systemId={value.systemId}
               campaignId={campaignId}
               ownerCharacterId={ownerCharacterId}
+              ownPools={ownPools}
               onQuickUpdate={onQuickUpdate}
             />
             </>
@@ -7805,15 +8184,42 @@ export function DndCharacterView({
 
           {tab === "Особенности" && (
             <div>
+              {/* Шапка вкладки: обе правки наверху — «Свойства» (скорость,
+                  чувства, защиты) и «умения» (видовые/классовые/черты/особые),
+                  справа веер. Сохранение умений — строкой внизу, как было. */}
+              <div className="dnd-tab-tools">
+                <div className="row dnd-tab-mid" style={{ gap: 8, flexWrap: "wrap", justifyContent: "flex-start" }}>
+                  {onQuickUpdate && (
+                    <LabeledEditButton
+                      label="Свойства"
+                      editing={editingTraits}
+                      onToggle={() => setEditingTraits((v) => !v)}
+                    />
+                  )}
+                  {onQuickUpdate && !draftFeatures && (
+                    <LabeledEditButton
+                      label="умения"
+                      onToggle={() =>
+                        setDraftFeatures({
+                          speciesFeatures: [...value.speciesFeatures],
+                          classFeatures: [...value.classFeatures],
+                          feats: [...value.feats],
+                          specialAbilities: [...value.specialAbilities],
+                        })
+                      }
+                    />
+                  )}
+                </div>
+                <span style={{ flex: "1 1 auto" }} aria-hidden="true" />
+                <DndFanButton onOpen={() => setFanOpen(true)} />
+              </div>
               {/* Чувства, скорости, защиты и заметки класса жили только внутри
                   формы правки и в просмотре не показывались вовсе — то есть
                   введённое было не увидеть, не открыв форму. После её роспуска
                   им дом здесь: сопротивление огню по природе ничем не
                   отличается от видовой особенности (гриллинг 2026-09-03).
-                  Правка — на месте, значения сохраняются сразу. */}
-              {onQuickUpdate && (
-                <TabEditToggle editing={editingTraits} onToggle={() => setEditingTraits((v) => !v)} />
-              )}
+                  Правка — на месте, значения сохраняются сразу. Карандаш —
+                  в шапке вкладки. */}
               {editingTraits && onQuickUpdate ? (
                 <div className="stack">
                   <SpeedEditor value={value.speeds} onChange={(v) => onQuickUpdate({ speeds: v })} />
@@ -7894,19 +8300,6 @@ export function DndCharacterView({
                   <SbFeatureGroup title="Классовые особенности" values={value.classFeatures} />
                   <SbFeatureGroup title="Черты" values={value.feats} />
                   <SbFeatureGroup title="Особые умения" values={value.specialAbilities} />
-                  {onQuickUpdate && (
-                    <TabEditToggle
-                      editing={false}
-                      onToggle={() =>
-                        setDraftFeatures({
-                          speciesFeatures: [...value.speciesFeatures],
-                          classFeatures: [...value.classFeatures],
-                          feats: [...value.feats],
-                          specialAbilities: [...value.specialAbilities],
-                        })
-                      }
-                    />
-                  )}
                 </>
               )}
             </div>
@@ -7944,19 +8337,25 @@ export function DndCharacterView({
 
           {tab === "Досье" && !draftDossier && (
             <div className="dnd-personality-grid">
-              {onQuickUpdate && (
-                <TabEditToggle
-                  editing={false}
-                  onToggle={() =>
-                    setDraftDossier({
-                      personalityTraits: value.personalityTraits ?? "",
-                      ideals: value.ideals ?? "",
-                      bonds: value.bonds ?? "",
-                      flaws: value.flaws ?? "",
-                    })
-                  }
-                />
-              )}
+              <div className="dnd-tab-tools" style={{ gridColumn: "1 / -1" }}>
+                {onQuickUpdate ? (
+                  <TabEditToggle
+                    editing={false}
+                    onToggle={() =>
+                      setDraftDossier({
+                        personalityTraits: value.personalityTraits ?? "",
+                        ideals: value.ideals ?? "",
+                        bonds: value.bonds ?? "",
+                        flaws: value.flaws ?? "",
+                      })
+                    }
+                  />
+                ) : (
+                  <span className="dnd-tab-btn" aria-hidden="true" />
+                )}
+                <span style={{ flex: "1 1 auto" }} aria-hidden="true" />
+                <DndFanButton onOpen={() => setFanOpen(true)} />
+              </div>
               {NARRATIVE_FIELDS.map(
                 ({ key, label }) =>
                   value[key] && (

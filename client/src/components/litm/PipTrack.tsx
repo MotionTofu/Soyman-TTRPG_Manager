@@ -7,6 +7,12 @@ interface Props {
   // Уходит в aria-label каждой пипки: без него скринридер читает подряд
   // десяток безымянных кнопок и не говорит, к чему они относятся.
   label?: string;
+  // Ромбы вместо точек — слоты настройки (решение владельца): круглые пипки
+  // заняты ресурсами и хитовыми костями, у настройки свой знак.
+  diamond?: boolean;
+  // Смешанная дорожка: ромбы начиная с n-й пипки. Базовые три слота
+  // настройки круглые, добавленные кнопкой [+] — ромбические.
+  diamondFrom?: number;
 }
 
 // A small clickable dot-track for Might / Improve style ratings.
@@ -16,7 +22,7 @@ interface Props {
 // Пипка — кнопка, а не `<span onClick>`: до этого дорожка не бралась
 // табом и не читалась вслух вовсе. Когда `onChange` нет, дорожка только
 // показывает значение — тогда это обычные точки, и в фокус им не нужно.
-export function PipTrack({ value, max, onChange, size = 16, label }: Props) {
+export function PipTrack({ value, max, onChange, size = 16, label, diamond, diamondFrom }: Props) {
   const pips = Array.from({ length: max }, (_, i) => i + 1);
   return (
     <span
@@ -27,10 +33,12 @@ export function PipTrack({ value, max, onChange, size = 16, label }: Props) {
     >
       {pips.map((n) => {
         const filled = n <= value;
+        const isDiamond = diamond || (diamondFrom != null && n >= diamondFrom);
         const dot = {
           width: size,
           height: size,
-          borderRadius: "50%",
+          borderRadius: isDiamond ? 0 : "50%",
+          transform: isDiamond ? "rotate(45deg)" : undefined,
           display: "inline-block",
           background: filled ? "var(--accent)" : "var(--bg-elevated)",
           border: "1px solid var(--line)",

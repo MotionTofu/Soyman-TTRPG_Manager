@@ -29,6 +29,9 @@ export function GraphPage() {
   const [settingId, setSettingId] = useState<number | "">("");
   const [campaignId, setCampaignId] = useState<number | "">("");
   const [scopeError, setScopeError] = useState<string | null>(null);
+  // Точки (`role=spot`) в граф по умолчанию не идут: 25 комнат данжа давали
+  // паутину (план «Зоны», этап 10). Обитание перепривязано на родителя.
+  const [showSpots, setShowSpots] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +50,7 @@ export function GraphPage() {
     const params = new URLSearchParams({ types });
     if (campaignId) params.set("campaign_id", String(campaignId));
     else if (settingId) params.set("setting_id", String(settingId));
+    if (showSpots) params.set("spots", "1");
     if (focus) {
       params.set("focus", focus);
       params.set("depth", String(depth));
@@ -58,7 +62,7 @@ export function GraphPage() {
         setError(e instanceof Error ? e.message : "Ошибка загрузки графа");
       });
     return () => controller.abort();
-  }, [activeTypes, settingId, campaignId, focus, depth]);
+  }, [activeTypes, settingId, campaignId, focus, depth, showSpots]);
 
   // Campaigns belong to a setting, so narrowing by campaign only makes sense
   // within the currently chosen setting (or "any" if none chosen yet).
@@ -151,6 +155,14 @@ export function GraphPage() {
                 </option>
               ))}
             </select>
+            <label className="row" style={{ gap: 6, alignItems: "center" }} title="Показывать точки (комнаты) как узлы">
+              <input
+                type="checkbox"
+                checked={showSpots}
+                onChange={(e) => setShowSpots(e.target.checked)}
+              />
+              Точки
+            </label>
           </>
         }
       />

@@ -37,6 +37,7 @@ import { NavIcon } from "../components/NavIcons";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
+import { LOCATION_ROLE_LABELS, type LocationRole } from "../locationRoles";
 import { useSoundEngineOptional } from "../sound/engine";
 import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import "../canvas.css";
@@ -323,6 +324,8 @@ interface EntityNodeData extends Record<string, unknown> {
   nodeType: string;
   thumbUrl: string | null;
   mentionedIn: number;
+  // Вес локации с сервера (план «Зоны», этап 10): точка красится иначе.
+  role?: string | null;
 }
 
 // Подписи видов — только там, где вид что-то добавляет к имени. У локации и
@@ -367,7 +370,9 @@ function EntityNode({ data, selected }: NodeProps<Node<EntityNodeData>>) {
       <div className="canvas-node__body">
         <div className="canvas-node__chips">
           <span className="canvas-node__chip">
-            {ENTITY_TYPE_LABEL[data.nodeType] ?? data.nodeType}
+            {data.nodeType === "location" && typeof data.role === "string" && data.role
+              ? (LOCATION_ROLE_LABELS[data.role as LocationRole] ?? ENTITY_TYPE_LABEL[data.nodeType] ?? data.nodeType)
+              : (ENTITY_TYPE_LABEL[data.nodeType] ?? data.nodeType)}
           </span>
           {/* Упоминания рёбрами не рисуются — схема утонула бы. Но «упомянут и
               не подцеплен» стоит показать: в текстах существо есть, в составе

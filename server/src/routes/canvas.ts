@@ -185,14 +185,16 @@ function overrideMap(campaignId: number, settingId: number): Map<number, SceneRo
 // Где искать имя и портрет каждого вида ноды. Тот же список, что у графа
 // связей (routes/links.ts), плюс наборы, которых в графе нет: набор — часть
 // схемы, а не сущность мира.
-const ENTITY_NODES: Record<string, { table: string; nameCol: string; thumbCol?: string; kindCol?: string }> = {
+const ENTITY_NODES: Record<string, { table: string; nameCol: string; thumbCol?: string; kindCol?: string; roleCol?: string }> = {
   being: {
     table: "setting_beings",
     nameCol: "name",
     thumbCol: "thumbnail_image_path",
     kindCol: "category",
   },
-  location: { table: "setting_locations", nameCol: "name", thumbCol: "thumbnail_image_path" },
+  // Вес локации едет чипом ноды (план «Зоны», этап 10): точка красится
+  // иначе, чем город.
+  location: { table: "setting_locations", nameCol: "name", thumbCol: "thumbnail_image_path", roleCol: "role" },
   artifact: { table: "artifacts", nameCol: "name", thumbCol: "avatar_image_path" },
   community: { table: "setting_communities", nameCol: "name", thumbCol: "thumbnail_image_path" },
   compendium_entry: { table: "compendium_entries", nameCol: "name", kindCol: "kind" },
@@ -843,9 +845,9 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
         .prepare(
           `SELECT ${spec.nameCol} AS name${spec.kindCol ? `, ${spec.kindCol} AS kind` : ""}${
             spec.thumbCol ? `, ${spec.thumbCol} AS thumb` : ""
-          } FROM ${spec.table} WHERE id = ?`
+          }${spec.roleCol ? `, ${spec.roleCol} AS role` : ""} FROM ${spec.table} WHERE id = ?`
         )
-        .get(p.node_id) as { name: string; kind?: string; thumb?: string | null } | undefined;
+        .get(p.node_id) as { name: string; kind?: string; thumb?: string | null; role?: string | null } | undefined;
       if (!row) return null;
       return {
         key: `${p.node_type}:${p.node_id}`,
@@ -860,6 +862,7 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
           id: p.node_id,
           name: row.name,
           kind: row.kind ?? null,
+          role: row.role ?? null,
           // Готовый URL, а не путь: <img> его и ждёт, а собирать ссылку на
           // клиенте — это второе место, где живёт устройство хранилища.
           thumbnail_image_url: row.thumb ? toFileUrl(row.thumb) : null,

@@ -108,7 +108,7 @@ const ClassTile = memo(function ClassTile({ entry, onOpenModal, onToggleFavourit
         <span className="monster-tile__monogram" aria-hidden="true">{monogramLetter(entry.name)}</span>
         <div className="monster-tile__facts">
           <span className="monster-tile__meta">{hd ? `Кость ${hd}` : "Класс"}</span>
-          <span className="monster-tile__value" style={{ fontSize: "var(--fs-meta)" }}>{entry.description ? entry.description.slice(0, 80) : "—"}</span>
+          <span className="monster-tile__value" style={{ fontSize: "var(--fs-meta)" }}>{entry.description ? (entry.description.length > 80 ? `${entry.description.slice(0, 80).replace(/\s+\S*$/, "")}…` : entry.description) : "—"}</span>
         </div>
       </div>
       <footer className="monster-tile__actions" onClick={(ev) => ev.stopPropagation()}>

@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/rpg-manager/server
+WorkingDirectory=/opt/rpg-manager/repo/server
 EnvironmentFile=/opt/rpg-manager/.env
 ExecStart=/usr/bin/node dist/index.js
 Restart=on-failure
@@ -13,11 +13,11 @@ User=rpgmanager
 Group=rpgmanager
 
 # Basic hardening — the service only needs to read its own code and write to
-# DB_DIR/VAULT_ROOT (both live outside WorkingDirectory, so ProtectSystem
-# doesn't need an exception for them).
+# DB_DIR/VAULT_ROOT/CONFIG_DIR/BACKUP_DIR (all live outside
+# WorkingDirectory, so ProtectSystem doesn't need an exception for them).
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/rpg-manager/data /opt/rpg-manager/vault
+ReadWritePaths=/opt/rpg-manager/data /opt/rpg-manager/vault /opt/rpg-manager/config /opt/rpg-manager/RPG-Backups
 PrivateTmp=true
 
 [Install]
