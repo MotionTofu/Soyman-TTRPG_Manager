@@ -345,7 +345,7 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
       <div className="sp-subcard stack">
         <strong className="sp-title">Боевая шпаргалка</strong>
         <p className="muted" style={{ margin: 0, fontSize: "var(--fs-meta)", maxWidth: "68ch" }}>
-          Строка на каждого противника: КД, инициатива, ХП и клетки для учёта урона.
+          Строка на каждого противника: КЗ, инициатива, ХП и клетки для учёта урона.
         </p>
         <div className="row">
           <select
@@ -668,7 +668,7 @@ function CombatSheet({ format, enemies }: { format: SheetFormat; enemies: Settin
             )}
           </div>
           <label className="combat-field">
-            КД <span className="fill-box" />
+            КЗ <span className="fill-box" />
           </label>
           <label className="combat-field">
             Иниц. <span className="fill-box" />

@@ -5,6 +5,7 @@ import { addToBag } from "../bag";
 import { CHALLENGE_RATINGS, CREATURE_SIZES, kindLabel, normaliseCr, searchableText } from "../compendium";
 import { loadMechanicsOptions, type MechanicsOption } from "../compendiumMechanics";
 import { MonsterTileGrid, saveFavourite, type MonsterGrouping } from "./MonsterTileGrid";
+import { COMBAT_ROLES } from "./CreatureCard";
 import { NavIcon } from "./NavIcons";
 import { EmptyState } from "./EmptyState";
 import { useCurrentUser } from "../api/currentUser";
@@ -40,6 +41,27 @@ export function MonsterSection({ systemId, section }: Props) {
   const [filterSize, setFilterSize] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showFavOnly, setShowFavOnly] = useState(false);
+  // Чипсы ролей (мультивыбор) и пределы УВР.
+  const [filterRoles, setFilterRoles] = useState<string[]>([]);
+  // Логика мультивыбора: or — любой из тегов, and — все сразу, not — ни одного.
+  const [filterLogic, setFilterLogic] = useState<"or" | "and" | "not">("or");
+  const [filterDprMin, setFilterDprMin] = useState("");
+  const [filterDprMax, setFilterDprMax] = useState("");
+
+  function toggleFilterRole(role: string) {
+    setFilterRoles((cur) => (cur.includes(role) ? cur.filter((r) => r !== role) : [...cur, role]));
+  }
+
+  function cycleFilterLogic() {
+    setFilterLogic((cur) => (cur === "or" ? "and" : cur === "and" ? "not" : "or"));
+  }
+
+  const FILTER_LOGIC_LABEL = { or: "ИЛИ", and: "И", not: "НЕ" } as const;
+  const FILTER_LOGIC_HINT = {
+    or: "Любой из выбранных тегов. Клик — переключить на И.",
+    and: "Все выбранные теги сразу. Клик — переключить на НЕ.",
+    not: "Без выбранных тегов. Клик — переключить на ИЛИ.",
+  } as const;
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const raw = localStorage.getItem(`compendium-sort-${"anon"}-${section.id}`) ?? localStorage.getItem(`compendium-sort-${section.id}`);
     const stored = raw?.split(":")[0] as SortMode | null;
@@ -96,7 +118,8 @@ export function MonsterSection({ systemId, section }: Props) {
   }, [systemId]);
 
   const monsterFiltersActive =
-    filterCreatureType !== "" || filterCR !== "" || filterSize !== "" || searchQuery !== "" || showFavOnly;
+    filterCreatureType !== "" || filterCR !== "" || filterSize !== "" || searchQuery !== "" || showFavOnly ||
+    filterRoles.length > 0 || filterDprMin !== "" || filterDprMax !== "";
 
   // Сортировку не трогает: её выбирают осознанно и надолго, а фильтры с
   // поиском — на один заход.
@@ -106,6 +129,9 @@ export function MonsterSection({ systemId, section }: Props) {
     setFilterSize("");
     setSearchQuery("");
     setShowFavOnly(false);
+    setFilterRoles([]);
+    setFilterDprMin("");
+    setFilterDprMax("");
   }
 
   // Звезда пишется точечно и правит одну запись в состоянии: перезагружать
@@ -150,6 +176,28 @@ export function MonsterSection({ systemId, section }: Props) {
 
   const topLevel = useMemo(() => entries.filter((e) => e.parent_id == null), [entries]);
 
+  // Границы слайдера УВР — по загруженному разделу: от 0 до максимума.
+  const dprValues = useMemo(
+    () => topLevel.map((e) => e.dpr).filter((d): d is number => typeof d === "number"),
+    [topLevel]
+  );
+  const dprBoundMax = dprValues.length ? Math.max(...dprValues) : 0;
+  const dprBoundMin = dprValues.length ? Math.min(...dprValues) : 0;
+  const clampBound = (v: number) => Math.max(0, Math.min(dprBoundMax, v));
+  // Пустое поле = граница: слайдер на краю фильтр снимает, а не держит.
+  const dprLo = filterDprMin !== "" ? clampBound(Number(filterDprMin)) : 0;
+  const dprHi = filterDprMax !== "" ? clampBound(Number(filterDprMax)) : dprBoundMax;
+
+  function changeDprLo(v: number) {
+    const lo = Math.max(0, Math.min(Number.isFinite(v) ? v : 0, dprHi));
+    setFilterDprMin(lo <= 0 ? "" : String(lo));
+  }
+
+  function changeDprHi(v: number) {
+    const hi = Math.min(dprBoundMax, Math.max(Number.isFinite(v) ? v : dprBoundMax, dprLo));
+    setFilterDprMax(hi >= dprBoundMax ? "" : String(hi));
+  }
+
   // Фильтры одни и те же на каждый ре-рендер, но результат обязан быть
   // стабильным по ссылке: MonsterTileGrid кэширует группы через useMemo, и
   // новый массив на каждый рендер сводил бы этот кэш к нулю (замерено на 535
@@ -168,10 +216,23 @@ export function MonsterSection({ systemId, section }: Props) {
       // десятичной, а фильтр сверяется с каноническим списком.
       if (filterCR !== "" && normaliseCr(e.data?.cr) !== filterCR) return false;
       if (filterSize !== "" && (e.data?.size as string | undefined) !== filterSize) return false;
+      if (filterRoles.length > 0) {
+        const roles = Array.isArray(e.combat_roles) ? e.combat_roles.filter((r) => r) : [];
+        if (filterLogic === "and" && !filterRoles.every((r) => roles.includes(r))) return false;
+        if (filterLogic === "not" && filterRoles.some((r) => roles.includes(r))) return false;
+        if (filterLogic === "or" && !filterRoles.some((r) => roles.includes(r))) return false;
+      }
+      // Пределы УВР: без посчитанного урона в диапазон не попадает.
+      if (filterDprMin !== "" || filterDprMax !== "") {
+        const dpr = typeof e.dpr === "number" ? e.dpr : null;
+        if (dpr === null) return false;
+        if (filterDprMin !== "" && dpr < Number(filterDprMin)) return false;
+        if (filterDprMax !== "" && dpr > Number(filterDprMax)) return false;
+      }
       if (q && !searchableText(e).includes(q)) return false;
       return true;
     });
-  }, [topLevel, searchQuery, filterCreatureType, creatureTypeFilterName, filterCR, filterSize, showFavOnly]);
+  }, [topLevel, searchQuery, filterCreatureType, creatureTypeFilterName, filterCR, filterSize, showFavOnly, filterRoles, filterLogic, filterDprMin, filterDprMax]);
 
   // Плитки не редактируются в линии (правка на странице профиля) — после
   // создания сразу ведём в профиль, иначе в сетке остаётся сирота «Без названия».
@@ -244,8 +305,6 @@ export function MonsterSection({ systemId, section }: Props) {
         <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
           {filteredTopLevel.length} / {topLevel.length}
         </span>
-      </div>
-      <div className="row" style={{ flexWrap: "wrap" }}>
         <select value={filterCreatureType} onChange={(e) => setFilterCreatureType(e.target.value)}>
           <option value="">Все типы существ</option>
           {creatureTypes.map((o) => (
@@ -282,6 +341,59 @@ export function MonsterSection({ systemId, section }: Props) {
         >
           <NavIcon name="star" filled={showFavOnly} /> {showFavOnly ? "Только избранное" : "Избранное"}
         </button>
+      </div>
+      <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        <span className="muted">Роли:</span>
+        <button
+          type="button"
+          className="role-chip is-on"
+          onClick={cycleFilterLogic}
+          title={FILTER_LOGIC_HINT[filterLogic]}
+        >
+          {FILTER_LOGIC_LABEL[filterLogic]}
+        </button>
+        {COMBAT_ROLES.map((r) => (
+          <button
+            key={r}
+            type="button"
+            className={`role-chip${filterRoles.includes(r) ? " is-on" : ""}`}
+            onClick={() => toggleFilterRole(r)}
+            title={filterRoles.includes(r) ? `Убрать роль «${r}»` : `Только роль «${r}»`}
+          >
+            {r}
+          </button>
+        ))}
+        <span className="muted" style={{ marginLeft: 8 }}>УВР:</span>
+        {dprBoundMax > 0 && (
+          <DprRangeSlider
+            boundMax={dprBoundMax}
+            lower={dprLo}
+            upper={dprHi}
+            onLower={changeDprLo}
+            onUpper={changeDprHi}
+          />
+        )}
+        <input
+          type="number"
+          min={0}
+          step={1}
+          placeholder={String(dprBoundMin)}
+          aria-label="УВР от"
+          value={filterDprMin}
+          onChange={(e) => setFilterDprMin(e.target.value)}
+          style={{ width: 70 }}
+        />
+        <span className="muted">–</span>
+        <input
+          type="number"
+          min={0}
+          step={1}
+          placeholder={dprBoundMax > 0 ? String(dprBoundMax) : "до"}
+          aria-label="УВР до"
+          value={filterDprMax}
+          onChange={(e) => setFilterDprMax(e.target.value)}
+          style={{ width: 70 }}
+        />
         {/* Кнопки нет, пока сбрасывать нечего (§1.11): пустая кнопка в
              ряду фильтров — это лишний орган управления за столом. */}
         {monsterFiltersActive && (
@@ -330,18 +442,62 @@ export function MonsterSection({ systemId, section }: Props) {
   );
 }
 
+function DprRangeSlider({
+  boundMax,
+  lower,
+  upper,
+  onLower,
+  onUpper,
+}: {
+  boundMax: number;
+  lower: number;
+  upper: number;
+  onLower: (v: number) => void;
+  onUpper: (v: number) => void;
+}) {
+  // Две точки на одной линейке: ползунки лежат друг на друге, active —
+  // верхний по DOM. Пересечение запрещено — точки толкают друг друга.
+  return (
+    <span className="dpr-range" title={`УВР от ${lower} до ${upper}`}>
+      <input
+        type="range"
+        min={0}
+        max={boundMax}
+        step={1}
+        value={Math.min(lower, upper)}
+        aria-label="УВР от"
+        onChange={(e) => onLower(Number(e.target.value))}
+      />
+      <input
+        type="range"
+        min={0}
+        max={boundMax}
+        step={1}
+        value={Math.max(lower, upper)}
+        aria-label="УВР до"
+        onChange={(e) => onUpper(Number(e.target.value))}
+      />
+    </span>
+  );
+}
+
 function MonsterListRow({ entry, onToggleFavourite }: { entry: CompendiumEntry; onToggleFavourite: (e: CompendiumEntry, f: boolean) => void }) {
   const favourite = !!entry.favourite;
   const type = (entry.data?.creature_type as { name?: string } | undefined)?.name ?? "";
   const size = typeof entry.data?.size === "string" ? entry.data.size : "";
   const cr = typeof entry.data?.cr === "string" ? entry.data.cr : "";
-  const ac = (entry.data as Record<string, unknown>)?.ac != null ? String((entry.data as Record<string, unknown>).ac) : "";
-  const hp = (entry.data as Record<string, unknown>)?.hp != null ? String((entry.data as Record<string, unknown>).hp) : "";
+  const acRaw = (entry.data as Record<string, unknown>)?.ac;
+  const hpRaw = (entry.data as Record<string, unknown>)?.hp;
+  // Ручное поле главнее, пустое добирается из статблока (statblock_ac/hp).
+  const ac = (acRaw != null && String(acRaw) !== "" ? String(acRaw) : entry.statblock_ac) || "";
+  const hp = (hpRaw != null && String(hpRaw) !== "" ? String(hpRaw) : entry.statblock_hp) || "";
+  const roles = Array.isArray(entry.combat_roles) ? entry.combat_roles.filter((r) => r) : [];
+  const dpr = typeof entry.dpr === "number" ? `УВР ${entry.dpr_approx ? "~" : ""}${entry.dpr}` : null;
   return (
     <div className="row" style={{ gap: 8, alignItems: "center", padding: "6px 8px", border: "1.5px solid var(--line)", background: "var(--paper)" }}>
       <button type="button" className={`monster-tile__star${favourite ? " is-on" : ""}`} title={favourite ? "Убрать из избранного" : "В избранное"} onClick={() => onToggleFavourite(entry, !favourite)}><NavIcon name="star" filled={favourite} /></button>
       <Link to={`/compendium/${entry.id}`} style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name || "Без названия"}</Link>
-      <span className="muted" style={{ fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}>{[type, size, cr ? `КО ${cr}` : null, ac ? `КД ${ac}` : null, hp ? `${hp} хитов` : null].filter(Boolean).join(" · ") || "—"}</span>
+      <span className="muted" style={{ fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}>{[type, size, cr ? `КО ${cr}` : null, ac ? `КЗ ${ac}` : null, hp ? `${hp} хитов` : null, dpr, ...roles.slice(0, 2)].filter(Boolean).join(" · ") || "—"}</span>
       <button type="button" className="monster-tile__bag" title="В мешок" onClick={() => addToBag({ type: "compendium_entry", id: entry.id, title: entry.name, kind: entry.kind, system_id: entry.system_id, section_id: entry.section_id })}><NavIcon name="bag" /></button>
       <Link to={`/compendium/${entry.id}`} className="comp-mini">Профиль</Link>
     </div>

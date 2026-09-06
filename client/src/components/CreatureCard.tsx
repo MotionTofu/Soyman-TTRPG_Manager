@@ -376,11 +376,11 @@ export function CreatureCard({
         >
           {creature && (
             <div className="creature-card__rows">
-              {/* КД и хиты — одной строкой пополам: два самых спрашиваемых
+              {/* КЗ и хиты — одной строкой пополам: два самых спрашиваемых
                   числа, и держать их на двух строках значит гонять глаз
                   вертикально там, где хватает одного взгляда. */}
               <div className="creature-card__row creature-card__row--pair">
-                <span className="creature-card__label">КД</span>
+                <span className="creature-card__label">КЗ</span>
                 <span className="creature-card__value">{cardArmorClass(creature)}</span>
                 <span className="creature-card__label">Хиты</span>
                 <span className="creature-card__value">{cardHitPoints(creature) || "—"}</span>

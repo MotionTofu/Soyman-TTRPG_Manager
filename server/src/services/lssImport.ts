@@ -324,7 +324,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
   }
 
   const vitalsLine = [
-    getVitalValue("ac") ? `КД ${getVitalValue("ac")}` : "",
+    getVitalValue("ac") ? `КЗ ${getVitalValue("ac")}` : "",
     getVitalValue("hp-max")
       ? `ХП ${getVitalValue("hp-current") || getVitalValue("hp-max")}/${getVitalValue("hp-max")}`
       : "",

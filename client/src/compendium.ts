@@ -415,7 +415,7 @@ export const KIND_DEFS: Record<string, KindDef> = {
     fields: [
       { key: "size", label: "Размер", type: "select", options: [...CREATURE_SIZES] },
       { key: "cr", label: "Класс опасности", type: "select", options: [...CHALLENGE_RATINGS] },
-      { key: "ac", label: "Класс доспеха", type: "text" },
+      { key: "ac", label: "Класс защиты", type: "text" },
       { key: "hp", label: "Хиты", type: "text" },
       { key: "speed", label: "Скорость", type: "text" },
     ],
@@ -429,7 +429,7 @@ export const KIND_DEFS: Record<string, KindDef> = {
       { key: "crew", label: "Экипаж", type: "text" },
       { key: "passengers", label: "Пассажиры", type: "text" },
       { key: "cargo", label: "Груз", type: "text" },
-      { key: "ac", label: "Класс доспеха", type: "text" },
+      { key: "ac", label: "Класс защиты", type: "text" },
       { key: "hp", label: "Прочность", type: "text" },
       { key: "damage_threshold", label: "Порог урона", type: "text" },
       { key: "cost", label: "Стоимость", type: "text" },
@@ -443,7 +443,7 @@ export const KIND_DEFS: Record<string, KindDef> = {
     label: "Пост экипажа",
     fields: [
       { key: "size", label: "Размер", type: "select", options: [...CREATURE_SIZES] },
-      { key: "ac", label: "Класс доспеха", type: "text" },
+      { key: "ac", label: "Класс защиты", type: "text" },
       { key: "hp", label: "Прочность", type: "text" },
     ],
   },

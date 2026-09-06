@@ -81,12 +81,18 @@ export function MonsterDetailPage({
     types: [],
     alignments: [],
   });
+  const [sectionName, setSectionName] = useState("");
   const [aliasDraft, setAliasDraft] = useState("");
 
   useEffect(() => {
     if (!system) return;
     loadCreatureLists(system.id).then(setLists);
-  }, [system?.id]);
+    // Раздел в крошках: «Системы / D&D 5.5 / Бестиарий / Гоблин».
+    api
+      .get<SystemSection[]>(`/systems/${system.id}/sections`)
+      .then((ss) => setSectionName(ss.find((s) => s.id === entry.section_id)?.name ?? ""))
+      .catch(() => setSectionName(""));
+  }, [system?.id, entry.section_id]);
 
   async function saveDescription(value: string) {
     await api.put(`/systems/entries/${entryId}`, { description: value });
@@ -132,7 +138,7 @@ export function MonsterDetailPage({
             value: size,
             options: [{ value: "", label: "—" }, ...CREATURE_SIZES.map((s) => ({ value: s, label: s }))],
           } as EntityField,
-          { key: "ac", label: "КД", value: ac } as EntityField,
+          { key: "ac", label: "КЗ", value: ac } as EntityField,
           { key: "hp", label: "Хиты", value: hp } as EntityField,
           { key: "speed", label: "Скорость", value: speed } as EntityField,
         ]
@@ -190,6 +196,9 @@ export function MonsterDetailPage({
         items={[
           { label: "Системы", to: "/systems" },
           ...(system ? [{ label: system.name, to: `/systems/${system.id}` }] : []),
+          ...(sectionName && system
+            ? [{ label: sectionName, to: `/systems/${system.id}?section=${entry.section_id}` }]
+            : []),
           { label: entry.name },
         ]}
       />

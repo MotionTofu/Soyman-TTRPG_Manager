@@ -91,7 +91,7 @@ interface Props {
   /** Портрет владельца — он же лицо первой карты листа (гриллинг 2026-09-04). */
   ownerPortraitUrl?: string | null;
   // Bestiary-only (ownerType === "compendium_entry"): pre-fills a new
-  // dnd_creature statblock's Размер/Тип/КО/КД/Хиты/Скорость from the profile fields set on the
+  // dnd_creature statblock's Размер/Тип/КО/КЗ/Хиты/Скорость from the profile fields set on the
   // compendium monster entry itself, so they don't have to be typed twice.
   ownerCreatureType?: string;
   ownerCreatureSize?: string;
@@ -748,7 +748,7 @@ export function StatblockList({
               <span className="muted">Имя</span><span>{preview.characterName || "—"}</span>
               <span className="muted">Раса</span><span>{preview.summary.raceName || "—"} {preview.summary.raceId ? "✓ в справочнике" : preview.summary.raceName ? "— текстом" : ""}</span>
               <span className="muted">Класс</span><span>{[preview.summary.className, preview.summary.subclassName].filter(Boolean).join(" — ") || "—"} {preview.summary.classId ? "✓" : preview.summary.className ? "— текстом" : ""} · Ур. {preview.summary.level}</span>
-              <span className="muted">КД / Хиты / Скорость</span><span>{preview.summary.armorClass || "—"} / {preview.summary.hitPointMax || "—"} / {preview.summary.speed || "—"}</span>
+              <span className="muted">КЗ / Хиты / Скорость</span><span>{preview.summary.armorClass || "—"} / {preview.summary.hitPointMax || "—"} / {preview.summary.speed || "—"}</span>
               <span className="muted">Навыков / Атак / Снаряжения</span><span>{preview.summary.skillCount} / {preview.summary.attackCount} / {preview.summary.equipmentCount}</span>
             </div>
             {preview.warnings.length > 0 && (

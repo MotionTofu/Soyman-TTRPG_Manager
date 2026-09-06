@@ -11,7 +11,7 @@ import type { CompendiumEntry, Statblock } from "../types";
 // модалки поверх первой (приём statblockInline).
 //
 // Сводка и правка живут на странице судна — карточка только показывает то,
-// что уже есть в entry.data (КД/хиты — канон сводки, см. E4: статблок —
+// что уже есть в entry.data (КЗ/хиты — канон сводки, см. E4: статблок —
 // отдельный боевой лист и может отличаться).
 
 export function VehicleCardPreview({
@@ -89,8 +89,8 @@ export function VehicleCardPreview({
   };
   const category = str("category");
   const size = str("size");
-  const ac = str("ac");
-  const hp = str("hp");
+  const ac = str("ac") || entry.statblock_ac || "";
+  const hp = str("hp") || entry.statblock_hp || "";
   const facts: [string, string][] = (
     [
       ["Скорость", str("speed")],
@@ -113,7 +113,7 @@ export function VehicleCardPreview({
         <div className="creature-card__title">
           <div className="creature-card__name">{entry.name || "Без названия"}</div>
           <div className="creature-card__cr">
-            КД {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
+            КЗ {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
           </div>
         </div>
         {onClose && (

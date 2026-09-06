@@ -280,10 +280,14 @@ const MonsterTile = memo(function MonsterTile({
     const v = raw[k];
     return v == null || v === "" ? "" : String(v);
   };
-  const ac = str("ac");
-  const hp = str("hp");
+  const ac = str("ac") || entry.statblock_ac || "";
+  const hp = str("hp") || entry.statblock_hp || "";
   const favourite = !!entry.favourite;
   const isPhb = systemCode === "phb";
+  // Роли и DPR едут со списком раздела (systems.ts): правая колонка тела
+  // плитки — «во что оно попадёт и зачем его выставлять».
+  const roles = Array.isArray(entry.combat_roles) ? entry.combat_roles.filter((r) => r) : [];
+  const dpr = typeof entry.dpr === "number" ? entry.dpr : null;
 
   return (
     <article
@@ -340,9 +344,26 @@ const MonsterTile = memo(function MonsterTile({
           </span>
           {isPhb && <span className="monster-tile__cr">{cr ? `КО ${cr}` : "КО —"}</span>}
           <span className="monster-tile__value">
-            КД {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
+            КЗ {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
           </span>
         </div>
+        {(dpr !== null || roles.length > 0) && (
+          <div className="monster-tile__combat">
+            {roles.slice(0, 2).map((r) => (
+              <span key={r} className="monster-tile__role">
+                {r}
+              </span>
+            ))}
+            {dpr !== null && (
+              <span
+                className="monster-tile__dpr"
+                title="Урон в раунд при всех попаданиях (верхняя граница угрозы)"
+              >
+                УВР {entry.dpr_approx ? "~" : ""}{dpr}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <footer className="monster-tile__actions" onClick={(ev) => ev.stopPropagation()}>

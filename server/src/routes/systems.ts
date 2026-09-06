@@ -32,6 +32,7 @@ import {
   backfillCompendiumSummaries,
   writeDndCreatureSummary,
 } from "../services/monsterSummary";
+import { estimateCreatureDpr, extractArmorHp } from "../services/creatureDpr";
 import { isCompendiumKind } from "../services/compendiumKinds";
 import { applyTidy, planTidy } from "../services/tidyCompendium";
 
@@ -255,17 +256,33 @@ systemsRouter.get("/:id/entries", (req: AuthedRequest, res) => {
   // описании. Одним запросом на весь список, а не по записи.
   const ids = rows.map((r) => Number(r.id));
   const counts = statblockCounts(ids);
+  // Роли и боевые числа для плиток бестиария — тем же батч-приёмом: combat_roles
+  // лежат в строке записи, DPR/КЗ/хиты считаются из первого dnd-статблока
+  // (один запрос на весь список, ~535 разборов локально — доли сотни миллисекунд).
+  const roleMap = combatRoleMap(rows);
+  const combatMap = creatureCombatMap(ids);
   // Звёздочка — тем же приёмом: один запрос на весь список. По ней бестиарий
   // ещё и сортирует, поэтому догружать её по записи значило бы 535 запросов
   // на открытие раздела. Портрет догружать не нужно вовсе — он лежит в самой
   // строке записи.
   const favourites = favouriteEntryIds(req.user?.id ?? null, ids);
   res.json(
-    rows.map((row) => ({
-      ...parseEntry(row),
-      statblock_count: counts.get(Number(row.id)) ?? 0,
-      favourite: favourites.has(Number(row.id)),
-    }))
+    rows.map((row) => {
+      const id = Number(row.id);
+      const combat = combatMap.get(id);
+      return {
+        ...parseEntry(row),
+        // parseEntry отдаёт строку как есть; плитке нужен готовый массив.
+        combat_roles: roleMap.get(id) ?? [],
+        dpr: combat?.dpr ?? null,
+        dpr_approx: combat?.approx ?? false,
+        // Быстрая инфа из статблока: клиент кладёт её под ручные поля записи.
+        statblock_ac: combat?.ac ?? null,
+        statblock_hp: combat?.hp ?? null,
+        statblock_count: counts.get(id) ?? 0,
+        favourite: favourites.has(id),
+      };
+    })
   );
 });
 
@@ -319,6 +336,60 @@ function statblockCounts(entryIds: number[]): Map<number, number> {
     )
     .all(...entryIds) as { owner_id: number; count: number }[];
   for (const r of rows) map.set(r.owner_id, r.count);
+  return map;
+}
+
+/** Распарсенные combat_roles строк списка (в базе — JSON-текст). */
+function combatRoleMap(rows: EntryRow[]): Map<number, string[]> {
+  const map = new Map<number, string[]>();
+  for (const r of rows) {
+    const raw = (r as { combat_roles?: unknown }).combat_roles;
+    let list: string[] = [];
+    if (Array.isArray(raw)) list = raw.filter((s): s is string => typeof s === "string");
+    else if (typeof raw === "string" && raw) {
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed)) list = parsed.filter((s): s is string => typeof s === "string");
+      } catch {
+        list = [];
+      }
+    }
+    map.set(Number(r.id), list);
+  }
+  return map;
+}
+
+/**
+ * Боевые числа монстров списка из первых dnd-статблоков: DPR, КЗ, хиты. Один
+ * запрос на весь список; у записи с несколькими статблоками берётся первый
+ * (то же правило, что в monsterSummary.readFirstDndStatblock).
+ */
+function creatureCombatMap(
+  entryIds: number[]
+): Map<number, { dpr: number | null; approx: boolean; ac: string | null; hp: string | null }> {
+  const map = new Map<number, { dpr: number | null; approx: boolean; ac: string | null; hp: string | null }>();
+  if (entryIds.length === 0) return map;
+  const placeholders = entryIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT owner_id, id, content FROM statblocks
+        WHERE owner_type = 'compendium_entry' AND format = 'dnd_creature'
+          AND owner_id IN (${placeholders})
+        ORDER BY id`
+    )
+    .all(...entryIds) as { owner_id: number; id: number; content: string }[];
+  const seen = new Set<number>();
+  for (const r of rows) {
+    if (seen.has(r.owner_id)) continue;
+    seen.add(r.owner_id);
+    try {
+      const dpr = estimateCreatureDpr(r.content);
+      const { ac, hp } = extractArmorHp(r.content);
+      map.set(r.owner_id, { dpr: dpr.dpr, approx: dpr.approx, ac, hp });
+    } catch {
+      map.set(r.owner_id, { dpr: null, approx: false, ac: null, hp: null });
+    }
+  }
   return map;
 }
 

@@ -262,7 +262,7 @@ export function DndCreatureWizard({
 
           <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
             <label className="row" style={{ gap: 4 }}>
-              КД
+              КЗ
               <input
                 type="number"
                 style={{ width: 56 }}
@@ -521,7 +521,7 @@ export function DndCreatureWizard({
           </div>
           <div className="row" style={{ gap: 12 }}>
             <span>
-              <b>КД</b> {draft.armorClass.value ?? "—"}
+              <b>КЗ</b> {draft.armorClass.value ?? "—"}
             </span>
             <span>
               <b>ХП</b> {formatHitPoints(draft.hitPoints) || "—"}

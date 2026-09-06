@@ -232,8 +232,8 @@ const VehicleTile = memo(function VehicleTile({
     const v = raw[k];
     return v == null || v === "" ? "" : String(v);
   };
-  const ac = str("ac");
-  const hp = str("hp");
+  const ac = str("ac") || entry.statblock_ac || "";
+  const hp = str("hp") || entry.statblock_hp || "";
 
   return (
     <article
@@ -289,7 +289,7 @@ const VehicleTile = memo(function VehicleTile({
             {[category, size].filter(Boolean).join(" · ") || "Категория не указана"}
           </span>
           <span className="monster-tile__value">
-            КД {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
+            КЗ {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
           </span>
         </div>
       </div>

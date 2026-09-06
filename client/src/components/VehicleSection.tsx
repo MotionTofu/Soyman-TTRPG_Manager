@@ -275,13 +275,15 @@ function VehicleListRow({ entry, onToggleFavourite }: { entry: CompendiumEntry; 
   const favourite = !!entry.favourite;
   const cat = typeof entry.data?.category === "string" ? entry.data.category : "";
   const size = typeof entry.data?.size === "string" ? entry.data.size : "";
-  const ac = (entry.data as Record<string, unknown>)?.ac != null ? String((entry.data as Record<string, unknown>).ac) : "";
-  const hp = (entry.data as Record<string, unknown>)?.hp != null ? String((entry.data as Record<string, unknown>).hp) : "";
+  const acRaw = (entry.data as Record<string, unknown>)?.ac;
+  const hpRaw = (entry.data as Record<string, unknown>)?.hp;
+  const ac = (acRaw != null && String(acRaw) !== "" ? String(acRaw) : entry.statblock_ac) || "";
+  const hp = (hpRaw != null && String(hpRaw) !== "" ? String(hpRaw) : entry.statblock_hp) || "";
   return (
     <div className="row" style={{ gap: 8, alignItems: "center", padding: "6px 8px", border: "1.5px solid var(--line)", background: "var(--paper)" }}>
       <button type="button" className={`monster-tile__star${favourite ? " is-on" : ""}`} title={favourite ? "Убрать из избранного" : "В избранное"} onClick={() => onToggleFavourite(entry, !favourite)}><NavIcon name="star" filled={favourite} /></button>
       <Link to={`/compendium/${entry.id}`} style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name || "Без названия"}</Link>
-      <span className="muted" style={{ fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}>{[cat, size, ac ? `КД ${ac}` : null, hp ? `${hp} хитов` : null].filter(Boolean).join(" · ") || "—"}</span>
+      <span className="muted" style={{ fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}>{[cat, size, ac ? `КЗ ${ac}` : null, hp ? `${hp} хитов` : null].filter(Boolean).join(" · ") || "—"}</span>
       <button type="button" className="monster-tile__bag" title="В мешок" onClick={() => addToBag({ type: "compendium_entry", id: entry.id, title: entry.name, kind: entry.kind, system_id: entry.system_id, section_id: entry.section_id })}><NavIcon name="bag" /></button>
       <Link to={`/compendium/${entry.id}`} className="comp-mini">Профиль</Link>
     </div>

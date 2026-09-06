@@ -35,7 +35,7 @@ export interface CreatureSummary {
   alignment: string;
   /** Класс опасности. Двусторонний: живёт в `data` и в статблоке. */
   cr: string;
-  /** Слово, стоявшее на месте типа, но не найденное в словаре: «Объект», «бестия». */
+  /** Слово, стоявшее на месте типа, но не найденное в словаре: «Объект», «голем». */
   unknownType: string;
 }
 
@@ -333,7 +333,7 @@ export interface SummaryFillReport {
   filled: { size: number; creatureType: number; alignment: number; cr: number };
   /** Поле записи расходится со статблоком; заполненное руками не трогаем. */
   conflicts: { name: string; field: string; entry: string; statblock: string }[];
-  /** Слово на месте типа, не найденное в словаре механик: «Объект», «бестия». */
+  /** Слово на месте типа, не найденное в словаре механик: «Объект», «голем». */
   unknownTypes: { name: string; word: string }[];
 }
 

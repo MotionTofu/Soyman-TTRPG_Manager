@@ -10,7 +10,7 @@ import { EntityTypeChip } from "../components/EntityTypeChip";
 import { useTabState } from "../hooks/useTabState";
 import { api } from "../api/client";
 import { KIND_DEFS, extractEnglishName } from "../compendium";
-import type { CompendiumEntry, System } from "../types";
+import type { CompendiumEntry, System, SystemSection } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 
 // «Изображения» — перед «Упоминаниями», как на странице существа: служебные
@@ -35,6 +35,7 @@ export function VehicleDetailPage({
   const navigate = useNavigate();
   const [tab, selectTab] = useTabState(TABS, "Досье", { Статблок: "Статблоки" });
   const [posts, setPosts] = useState<CompendiumEntry[]>([]);
+  const [sectionName, setSectionName] = useState("");
   const isPost = entry.kind === "vehicle_post";
 
   useEffect(() => {
@@ -43,6 +44,15 @@ export function VehicleDetailPage({
       .get<CompendiumEntry[]>(`/systems/${entry.system_id}/entries?section_id=${entry.section_id}`)
       .then((all) => setPosts(all.filter((e) => e.parent_id === entryId).sort((a, b) => a.position - b.position)));
   }, [entryId, entry.section_id, entry.system_id, isPost]);
+
+  useEffect(() => {
+    if (!system) return;
+    // Раздел в крошках: «Системы / D&D 5.5 / Транспорт / Галеон».
+    api
+      .get<SystemSection[]>(`/systems/${system.id}/sections`)
+      .then((ss) => setSectionName(ss.find((s) => s.id === entry.section_id)?.name ?? ""))
+      .catch(() => setSectionName(""));
+  }, [system?.id, entry.section_id]);
 
   const def = KIND_DEFS[entry.kind];
 
@@ -121,6 +131,9 @@ export function VehicleDetailPage({
         items={[
           { label: "Системы", to: "/systems" },
           ...(system ? [{ label: system.name, to: `/systems/${system.id}` }] : []),
+          ...(sectionName && system
+            ? [{ label: sectionName, to: `/systems/${system.id}?section=${entry.section_id}` }]
+            : []),
           { label: entry.name },
         ]}
       />

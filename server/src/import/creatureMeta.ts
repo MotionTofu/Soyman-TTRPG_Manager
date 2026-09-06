@@ -78,8 +78,16 @@ export function matchSize(word: string): string {
 /**
  * Тип существа по одному слову. Неоднозначное слово не сопоставляется вовсе:
  * лучше пустое поле, которое человек дозаполнит, чем тихо неверная ссылка.
+ *
+ * Старые переводы сводятся к нынешним: «бестия» (любой падеж) — это
+ * «Исчадие». Точное совпадение по формам слова, а не по основе: основа
+ * «бести» есть и у «бестиария», а он типом не является.
  */
 export function matchCreatureType(word: string, vocabulary: string[]): string {
+  if (/^(бести)(ями|ям|ях|ею|ей|ю|я|е|и|й)$/i.test(word)) {
+    const current = vocabulary.find((v) => v === "Исчадие");
+    if (current) return current;
+  }
   const hits = vocabulary.filter((v) => sameWordStem(v, word));
   return hits.length === 1 ? hits[0] : "";
 }
@@ -90,7 +98,7 @@ export interface CreatureMeta {
   type: string;
   /** Хвост строки как есть — книга пишет там условия («любое не-доброе»). */
   alignment: string;
-  /** Слово, принятое за тип, но не найденное в словаре: «Объект», «бестия». */
+  /** Слово, принятое за тип, но не найденное в словаре: «Объект», «голем». */
   unknownType: string;
 }
 
