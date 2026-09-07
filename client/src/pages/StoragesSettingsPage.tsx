@@ -26,9 +26,9 @@ import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
 import { loadPultFinishAction, savePultFinishAction, type PultFinishAction } from "../pultPrefs";
 import {
-  DND_ABILITY_PRIMARY_OPTIONS, DND_DISTANCE_UNIT_OPTIONS, DND_SKILL_SORT_OPTIONS,
+  DND_ABILITY_PRIMARY_OPTIONS, DND_DISTANCE_UNIT_OPTIONS, DND_SKILL_SORT_OPTIONS, DND_WEIGHT_UNIT_OPTIONS,
   loadDndPrefs, saveDndPrefs,
-  type DndAbilityPrimary, type DndDistanceUnit, type DndSkillSortMode,
+  type DndAbilityPrimary, type DndDistanceUnit, type DndSkillSortMode, type DndWeightUnit,
 } from "../dndPrefs";
 
 function loadSectionOpen(key: string, fallback: boolean): boolean {
@@ -135,6 +135,11 @@ export function StoragesSettingsPage() {
   }
   function changeDndDistanceUnit(unit: DndDistanceUnit) {
     const next = { ...dndPrefs, distanceUnit: unit };
+    setDndPrefs(next);
+    saveDndPrefs(next);
+  }
+  function changeDndWeightUnit(unit: DndWeightUnit) {
+    const next = { ...dndPrefs, weightUnit: unit };
     setDndPrefs(next);
     saveDndPrefs(next);
   }
@@ -811,6 +816,16 @@ export function StoragesSettingsPage() {
                 ))}
               </div>
               <span className="muted" style={{ maxWidth: "62ch" }}>Только показ: в листах скорость хранится в футах, как в книге.</span>
+              <div className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Вес снаряжения</div>
+              <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
+                {DND_WEIGHT_UNIT_OPTIONS.map((opt) => (
+                  <label key={opt.key} className="row" style={{ gap: 6 }}>
+                    <input type="radio" name="dnd-weight-unit" checked={dndPrefs.weightUnit === opt.key} onChange={() => changeDndWeightUnit(opt.key as DndWeightUnit)} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              <span className="muted" style={{ maxWidth: "62ch" }}>Только показ: вес в листах хранится в фунтах, грузоподъёмность считается СИЛ × 15 фунтов.</span>
             </div>
           </details>
 

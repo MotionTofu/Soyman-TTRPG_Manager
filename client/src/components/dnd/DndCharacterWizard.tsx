@@ -8,6 +8,7 @@ import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
 import {
   EMPTY_EQUIPMENT_ITEM,
   fetchEquipmentMeta,
+  makeEquipmentId,
   startingSetsFrom,
   type StartingSet,
 } from "./dndEquipment";
@@ -1390,18 +1391,20 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       for (const set of takenSets2) {
         const metas = await Promise.all(set.items.map((it) => fetchEquipmentMeta(it.entryId).catch(() => ({}))));
         set.items.forEach((item, idx) => {
+          const { entryId: _eid, ...restMeta } = (metas[idx] ?? {}) as Record<string, unknown>;
           addedItems.push({
             ...EMPTY_EQUIPMENT_ITEM,
+            ...(restMeta as object),
+            id: makeEquipmentId(),
             name: item.name,
             qty: item.qty > 1 ? String(item.qty) : "",
             entryId: item.entryId,
-            ...metas[idx],
           });
         });
         // Выборные позиции кладутся строкой: выбрать за игрока приложение не
         // вправе, а потерять их из набора тем более.
         for (const text of set.manual) {
-          addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, name: text, notes: "выбрать самому" });
+          addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, id: makeEquipmentId(), name: text, notes: "выбрать самому" });
         }
         const gold = Number.parseInt((set.gold ?? "").trim(), 10);
         if (Number.isFinite(gold)) goldToAdd += gold;

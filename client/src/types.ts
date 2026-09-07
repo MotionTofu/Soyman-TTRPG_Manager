@@ -856,6 +856,9 @@ export interface DndMasteredWeapon {
 }
 
 export interface DndEquipmentItem {
+  /** Стабильный ключ строки: переживает сортировку, drag-drop и удаление.
+   *  Генерируется при создании, старые листы добираются нормализацией. */
+  id?: string;
   name: string;
   qty: string;
   weight: string;
@@ -901,6 +904,14 @@ export interface DndEquipmentItem {
    *  +1» не заводят второй строки инвентаря, а ложатся сюда поверх базового
    *  предмета (решение R3). */
   magicBonus?: number;
+  /** Предмет настроен: связь «пипс ↔ строка», счётчик считается сам. */
+  attuned?: boolean;
+  // Снапшот магпредмета из справочника: редкость, требование настройки,
+  // проклятие и тип — теги строки и фильтры пикера без живого лукапа.
+  rarity?: string;
+  requiresAttunement?: boolean;
+  cursed?: boolean;
+  itemType?: string;
   /** Реплика Артефактора, создавшая эту строку: по ней строка убирается
    *  вместе с исчезновением реплики. */
   replicaId?: string;

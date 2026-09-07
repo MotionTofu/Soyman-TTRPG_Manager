@@ -45,6 +45,29 @@ export function formatDistance(feet: number, unit: DndDistanceUnit): string {
   return `${String(rounded).replace(".", ",")} кл.`;
 }
 
+// В чём показывать вес снаряжения. В книге и в листах — фунты; килограммы —
+// только показ, хранимое не трогается (тот же принцип, что у расстояний).
+export type DndWeightUnit = "lb" | "kg";
+
+export const DND_WEIGHT_UNIT_OPTIONS: { key: DndWeightUnit; label: string }[] = [
+  { key: "lb", label: "Фунты (фнт.)" },
+  { key: "kg", label: "Килограммы (кг)" },
+];
+
+/** Фунтов в килограмме. */
+export const LB_PER_KG = 2.20462;
+
+/** Вес в выбранной единице. Хранится всегда в фунтах. */
+export function formatWeight(pounds: number, unit: DndWeightUnit): string {
+  if (unit === "kg") {
+    const kg = pounds / LB_PER_KG;
+    const rounded = Math.round(kg * 10) / 10;
+    return `${String(rounded).replace(".", ",")} кг`;
+  }
+  const rounded = Math.round(pounds * 10) / 10;
+  return `${String(rounded).replace(".", ",")} фнт.`;
+}
+
 interface DndPrefs {
   skillSortMode: DndSkillSortMode;
   abilityPrimary: DndAbilityPrimary;
@@ -55,6 +78,7 @@ interface DndPrefs {
   // перезагрузку — за столом переключать её заново каждый раз незачем.
   spellsPreparedOnly: boolean;
   distanceUnit: DndDistanceUnit;
+  weightUnit: DndWeightUnit;
 }
 
 const DEFAULTS: DndPrefs = {
@@ -67,6 +91,8 @@ const DEFAULTS: DndPrefs = {
   abilityPrimary: "mod",
   // По умолчанию футы: так написано в книге и так лежит в листах.
   distanceUnit: "feet",
+  // По умолчанию фунты: так написаны веса в книге.
+  weightUnit: "lb",
 };
 
 const STORAGE_KEY = "rpgManagerDndPrefs";
@@ -83,6 +109,7 @@ export function loadDndPrefs(): DndPrefs {
       if (parsed.abilityPrimary === "mod" || parsed.abilityPrimary === "score") out.abilityPrimary = parsed.abilityPrimary;
       if (typeof parsed.spellsPreparedOnly === "boolean") out.spellsPreparedOnly = parsed.spellsPreparedOnly;
       if (parsed.distanceUnit === "feet" || parsed.distanceUnit === "cells") out.distanceUnit = parsed.distanceUnit;
+      if (parsed.weightUnit === "lb" || parsed.weightUnit === "kg") out.weightUnit = parsed.weightUnit;
       return out;
     }
   } catch {

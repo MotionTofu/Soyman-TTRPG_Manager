@@ -53,7 +53,7 @@ import {
 import { skillSourceClass, skillSourceWord } from "./skillSource";
 import { resolveSkillOriginal } from "./skillCatalog";
 import { useDndSkills, type DndSkills, type SkillRow } from "./useDndSkills";
-import { formatDistance, loadDndPrefs, saveDndPrefs, type DndDistanceUnit } from "../../dndPrefs";
+import { formatDistance, formatWeight, loadDndPrefs, saveDndPrefs, type DndDistanceUnit } from "../../dndPrefs";
 import {
   loadDndBackgroundOptions,
   loadDndClassFeatures,
@@ -112,7 +112,8 @@ import {
   transferAction,
   type CharacterTransfer,
 } from "./characterTransfers";
-import { EMPTY_EQUIPMENT_ITEM, fetchEquipmentMeta } from "./dndEquipment";
+import { armorProfNames, carryCapacityLb, EMPTY_EQUIPMENT_ITEM, ensureEquipmentIds, entryRequiresAttunement, fetchEquipmentMeta, findCarryDoublings, isArmorProficient, isRationRow, isStackableEquipmentEntry, makeEquipmentId } from "./dndEquipment";
+import { DndCoinCalculator } from "./DndCoinCalculator";
 import { deadEntryIds, ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { deadLinkNames } from "./deadLinks";
 import { computeSpellSlots, effectiveCasterLevel, highestCircle, isRoundUpCaster, sourceCasterKind } from "./dndSlots";
@@ -321,8 +322,14 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((name) => ({ name, qty: "", weight: "", notes: "" }));
+      .map((name) => ({ id: makeEquipmentId(), name, qty: "", weight: "", notes: "" }));
     merged.equipmentSections = [{ name: "Общее", items }];
+  } else {
+    // Старым строкам добить id, иначе ключи снова индексные.
+    merged.equipmentSections = merged.equipmentSections.map((sec) => ({
+      ...sec,
+      items: ensureEquipmentIds(Array.isArray(sec.items) ? sec.items : []),
+    }));
   }
 
   // Old saved statblocks kept one combined "featuresTraits" list — since we
@@ -1205,6 +1212,11 @@ function equipmentTagsLine(item: DndEquipmentItem): string {
     }
   }
   if (item.acBonus) parts.push(`+${item.acBonus} КЗ`);
+  if (item.itemType) parts.push(item.itemType);
+  if (item.rarity) parts.push(item.rarity);
+  if (item.requiresAttunement) parts.push("требует настройки");
+  if (item.cursed) parts.push("проклят");
+  if (item.attuned) parts.push("настроен");
   if (item.magical) parts.push("магический");
   if (item.weaponDamage) {
     const type = item.weaponAttackMelee && item.weaponAttackRanged ? "Ближняя/дальняя атака" : item.weaponAttackRanged ? "Дальняя атака" : "Ближняя атака";
@@ -2211,7 +2223,7 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
     dropItemAt(ii);
   });
   function addItem() {
-    onItemsChange([...section.items, { name: "", qty: "", weight: "", notes: "" }]);
+    onItemsChange([...section.items, { id: makeEquipmentId(), name: "", qty: "", weight: "", notes: "" }]);
   }
 
   const items = section.items;
@@ -2267,7 +2279,7 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
       <div className="stack" style={{ gap: 4 }}>
         {items.map((item, ii) => (
           <EquipmentItemRow
-            key={ii}
+            key={item.id ?? ii}
             item={item}
             onChangeName={nameCallbacks[ii]}
             onChangeQty={qtyCallbacks[ii]}
@@ -2279,7 +2291,7 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
           />
         ))}
         {items.length === 0 && (
-          <span className="muted">Пусто — перетащите сюда предмет или добавьте вручную.</span>
+          <span className="muted">Пусто — перетащите предмет из поиска или добавьте в быстром виде.</span>
         )}
         <button type="button" className="comp-mini" onClick={addItem} style={{ alignSelf: "flex-start" }}>
           + Добавить предмет
@@ -2304,6 +2316,15 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
 
   function addSection() {
     onChange([...sections, { name: "Новый раздел", items: [] }]);
+  }
+  // Шаблон разделов: новичок валит всё в «Общее», а спрашивают за столом
+  // «где зелья». Добавляет только недостающие — существующие не тронет.
+  function addTemplateSections() {
+    const template = ["Оружие", "Броня", "Расходники", "Магия", "Прочее"];
+    const have = new Set(sections.map((s) => s.name.trim().toLowerCase()));
+    const missing = template.filter((t) => !have.has(t.toLowerCase()));
+    if (missing.length === 0) return;
+    onChange([...sections, ...missing.map((name) => ({ name, items: [] }))]);
   }
   const updateSectionName = useEvent((si: number, name: string) => {
     const next = sections.slice();
@@ -2330,7 +2351,7 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
     next[toSi].items.push(item);
     onChange(next);
   });
-  const handleDrop = useEvent((e: DragEvent<HTMLDivElement>, si: number) => {
+  const handleDrop = useEvent(async (e: DragEvent<HTMLDivElement>, si: number) => {
     e.preventDefault();
     setDragOverSection(null);
     const movePayload = e.dataTransfer.getData(EQUIPMENT_DRAG_MIME);
@@ -2344,9 +2365,37 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
     const result = readSearchDrop(e);
     if (!result) return;
     const suffix = result.kind === "spell" ? " (свиток)" : "";
+    // Дроп из поиска в режиме полной правки: ссылку на запись не теряем —
+    // иначе предмет станет «ручным». Мета догружается, магпредметы с флагом.
+    if (result.type === "compendium_entry" && (result.kind === "equipment" || result.kind === "magic_item")) {
+      const meta = await fetchEquipmentMeta(result.id).catch(() => ({} as Partial<DndEquipmentItem>));
+      const { entryId: _eid, magical: _mag, ...restMeta } = meta;
+      const next = sections.map((s, idx) =>
+        idx === si
+          ? {
+              ...s,
+              items: [
+                ...s.items,
+                {
+                  id: makeEquipmentId(),
+                  name: result.title,
+                  qty: "",
+                  weight: "",
+                  notes: "",
+                  ...restMeta,
+                  entryId: result.id,
+                  ...(result.kind === "magic_item" ? { magical: true } : null),
+                },
+              ],
+            }
+          : s
+      );
+      onChange(next);
+      return;
+    }
     const next = sections.map((s, idx) =>
       idx === si
-        ? { ...s, items: [...s.items, { name: `${result.title}${suffix}`, qty: "", weight: "", notes: "" }] }
+        ? { ...s, items: [...s.items, { id: makeEquipmentId(), name: `${result.title}${suffix}`, qty: "", weight: "", notes: "" }] }
         : s
     );
     onChange(next);
@@ -2381,7 +2430,7 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
   return (
     <div className="stack">
       {confirmDialog}
-      <div className="sb-section" style={{ margin: 0 }}>
+      <div className="dnd-equipment-head" style={{ margin: 0 }}>
         Снаряжение
       </div>
       {sections.map((section, si) => (
@@ -2398,9 +2447,14 @@ const DndEquipmentEdit = memo(function DndEquipmentEdit({
           onSectionDrop={dropCallbacks[si]}
         />
       ))}
-      <button type="button" onClick={addSection} style={{ alignSelf: "flex-start" }}>
-        + Добавить раздел
-      </button>
+      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        <button type="button" onClick={addSection} style={{ alignSelf: "flex-start" }}>
+          + Добавить раздел
+        </button>
+        <button type="button" className="dnd-chip" onClick={addTemplateSections} title="Оружие, Броня, Расходники, Магия, Прочее — только недостающие">
+          + Шаблон разделов
+        </button>
+      </div>
     </div>
   );
 });
@@ -2433,12 +2487,27 @@ function DndEquipmentView({ sections }: { sections: DndEquipmentSection[] }) {
 
 
 function isValidQty(v: string): boolean {
+  // Кол-во — пусто или целое ≥0: дробные стрелы и «-2 зелья» не существуют.
   if (!v.trim()) return true;
-  return /^-?\d+([.,]\d+)?$/.test(v.trim());
+  return /^\d+$/.test(v.trim());
+}
+function parseQty(v: string): number {
+  const t = v.trim();
+  if (!t) return 1;
+  if (!/^\d+$/.test(t)) return 1;
+  const n = parseInt(t, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 1;
 }
 function isValidWeight(v: string): boolean {
+  // Вес — пусто или число ≥0 с необязательной единицей.
   if (!v.trim()) return true;
-  return /^-?\d+([.,]\d+)?$/.test(v.trim().split(" ")[0]);
+  return /^\d+([.,]\d+)?\s*(фунт(ов|а|ы)?|фнт\.?|lb|lbs|кг|kg)?$/i.test(v.trim());
+}
+function parseWeight(v: string): number | null {
+  const m = /^\d+([.,]\d+)?/.exec(v.trim());
+  if (!m) return null;
+  const n = parseFloat(m[0].replace(",", "."));
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 function EquipmentInlineForm({
   draft,
@@ -2469,14 +2538,14 @@ function EquipmentInlineForm({
         value={draft.qty}
         onChange={(e) => onChange({ ...draft, qty: e.target.value })}
         style={{ flex: "1 1 60px", borderColor: qtyOk ? undefined : "var(--accent)" }}
-        title={qtyOk ? undefined : "Число, напр. 2 или 1"}
+        title={qtyOk ? undefined : "Целое ≥ 0, напр. 2"}
       />
       <input
         placeholder="Вес"
         value={draft.weight}
         onChange={(e) => onChange({ ...draft, weight: e.target.value })}
         style={{ flex: "1 1 60px", borderColor: wOk ? undefined : "var(--accent)" }}
-        title={wOk ? undefined : "Число, напр. 0.5"}
+        title={wOk ? undefined : "Число ≥ 0, напр. 0.5"}
       />
       <input
         placeholder="Заметка"
@@ -2503,6 +2572,24 @@ function EquipmentInlineForm({
           onChange={(e) => onChange({ ...draft, equipped: e.target.checked })}
         />
         Надето
+      </label>
+      {(draft.requiresAttunement || draft.attuned) && (
+        <label className="row" style={{ gap: 4, flex: "0 0 auto" }} title="Настройка занимает слот (максимум 3)">
+          <input
+            type="checkbox"
+            checked={!!draft.attuned}
+            onChange={(e) => onChange({ ...draft, attuned: e.target.checked })}
+          />
+          Настроено
+        </label>
+      )}
+      <label className="row" style={{ gap: 4, flex: "0 0 auto" }} title="Проклятый предмет: снятие — с подтверждением">
+        <input
+          type="checkbox"
+          checked={!!draft.cursed}
+          onChange={(e) => onChange({ ...draft, cursed: e.target.checked })}
+        />
+        Проклят
       </label>
       <button type="button" className="primary" onClick={onSave} disabled={!draft.name.trim()}>
         Сохранить
@@ -2541,11 +2628,27 @@ const COIN_FIELDS = [
 
 const EMPTY_COINS: DndCoins = { cp: "", sp: "", ep: "", gp: "", pp: "" };
 
+/** Весь кошелёк в медяках (курс книги: см=10, эм=50, зм=100, пм=1000). */
+function coinsTotalCp(c: DndCoins): number {
+  const num = (v: string | undefined) => {
+    const n = parseInt(String(v ?? "").trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  return num(c.cp) + num(c.sp) * 10 + num(c.ep) * 50 + num(c.gp) * 100 + num(c.pp) * 1000;
+}
+
 function DndEquipmentQuickView({
   sections,
   systemId,
   coins,
   accentColor,
+  strength,
+  carryDoublingNames,
+  armorProfs,
+  calcCampaignId,
+  calcSenderId,
+  calcSenderName,
+  onCalcChanged,
   onQuickUpdate,
 }: {
   sections: DndEquipmentSection[];
@@ -2553,6 +2656,18 @@ function DndEquipmentQuickView({
   coins?: DndCoins;
   /** Цвет класса — кромка магических предметов, единственная краска. */
   accentColor?: string;
+  /** Значение СИЛ — для грузоподъёмности. */
+  strength: number;
+  /** Удвоения грузоподъёмности, каждое ×2. */
+  carryDoublingNames?: string[];
+  /** Имена владений доспехами — надетое без владения помечается в тегах. */
+  armorProfs?: readonly string[];
+  /** Калькулятор монет: кампания и свой персонаж для дележа/рассылки. */
+  calcCampaignId?: number | null;
+  calcSenderId?: number | null;
+  calcSenderName?: string;
+  /** После рассылки долей: дотянуть передачи/входящие. */
+  onCalcChanged?: () => void;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
@@ -2573,6 +2688,15 @@ function DndEquipmentQuickView({
   // (broadcastCharacterUpdate) — ждать его здесь не надо, только ошибку.
   const [transferBusy, setTransferBusy] = useState<number | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
+  // Хуки — все до раннего return (rules-of-hooks): prefs, поиск/фильтр,
+  // калькулятор, цель перемещения, ошибки описаний и их контроллеры.
+  const prefs = useDndPrefs();
+  const [equipQuery, setEquipQuery] = useState("");
+  const [equipFilter, setEquipFilter] = useState<"all" | "equipped" | "magical">("all");
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<number | null>(null);
+  const [descErrors, setDescErrors] = useState<Record<number, true>>({});
+  const descControllers = useRef(new Map<number, AbortController>());
   async function transferAction(id: number, action: "return" | "claim") {
     setTransferBusy(id);
     setTransferError(null);
@@ -2596,6 +2720,7 @@ function DndEquipmentQuickView({
 
   function startEdit(si: number, ii: number) {
     setEditing({ si, ii });
+    setMoveTarget(si);
     setAddingSection(null);
     setDraft({ ...sections[si].items[ii] });
   }
@@ -2607,26 +2732,52 @@ function DndEquipmentQuickView({
   }
   function cancel() {
     setEditing(null);
+    setMoveTarget(null);
     setAddingSection(null);
     setAddMode(null);
   }
   function saveEdit() {
     if (!editing || !draft.name.trim()) return;
-    const next = sections.map((s, si) =>
-      si !== editing.si ? s : { ...s, items: s.items.map((it, ii) => (ii === editing.ii ? draft : it)) }
-    );
-    commit({ equipmentSections: next });
-    setEditing(null);
+    void (async () => {
+      // Снятие проклятия — с подтверждением: замком, а не флажком.
+      const original = sections[editing.si]?.items[editing.ii];
+      if (original?.cursed && !draft.cursed) {
+        const ok = await confirm({
+          title: "Снять проклятие?",
+          message: `«${original.name || "Предмет"}» перестанет быть проклятым.`,
+          confirmLabel: "Снять",
+        });
+        if (!ok) return;
+      }
+      // Перемещение в другой раздел — здесь же, без drag-drop.
+      // id строки едет вместе с ней, чтобы ключи не прыгали.
+      if (moveTarget != null && moveTarget !== editing.si && sections[moveTarget]) {
+        const next = sections.map((s) => ({ ...s, items: s.items.slice() }));
+        const [moved] = next[editing.si].items.splice(editing.ii, 1);
+        next[moveTarget].items.push({ ...draft, id: moved?.id ?? draft.id ?? makeEquipmentId() });
+        commit({ equipmentSections: next });
+        setEditing(null);
+        setMoveTarget(null);
+        return;
+      }
+      const next = sections.map((s, si) =>
+        si !== editing.si ? s : { ...s, items: s.items.map((it, ii) => (ii === editing.ii ? draft : it)) }
+      );
+      commit({ equipmentSections: next });
+      setEditing(null);
+    })();
   }
   function appendItem(si: number, item: DndEquipmentItem) {
-    const next = sections.map((s, idx) => (idx !== si ? s : { ...s, items: [...s.items, item] }));
+    const withId = item.id ? item : { ...item, id: makeEquipmentId() };
+    const next = sections.map((s, idx) => (idx !== si ? s : { ...s, items: [...s.items, withId] }));
     commit({ equipmentSections: next });
     setAddingSection(null);
     setAddMode(null);
   }
   function appendItems(si: number, items: DndEquipmentItem[]) {
     if (items.length === 0) return;
-    const next = sections.map((s, idx) => (idx !== si ? s : { ...s, items: [...s.items, ...items] }));
+    const withIds = items.map((it) => (it.id ? it : { ...it, id: makeEquipmentId() }));
+    const next = sections.map((s, idx) => (idx !== si ? s : { ...s, items: [...s.items, ...withIds] }));
     commit({ equipmentSections: next });
     setAddingSection(null);
     setAddMode(null);
@@ -2656,7 +2807,17 @@ function DndEquipmentQuickView({
   async function addFromBag(si: number, result: SearchResult) {
     if (result.type === "compendium_entry" && (result.kind === "equipment" || result.kind === "magic_item")) {
       const meta = await fetchEquipmentMeta(result.id);
-      appendItem(si, { name: result.title, qty: "", weight: "", notes: "", ...meta });
+      // Магпредмет из мешка/поиска — сразу с флагом и ссылкой, иначе
+      // выглядит обычным и теряет описание.
+      appendItem(si, {
+        name: result.title,
+        qty: "",
+        weight: "",
+        notes: "",
+        ...meta,
+        entryId: result.id,
+        ...(result.kind === "magic_item" ? { magical: true } : null),
+      });
     } else {
       const suffix = result.kind === "spell" ? " (свиток)" : "";
       appendItem(si, { name: `${result.title}${suffix}`, qty: "", weight: "", notes: "" });
@@ -2677,6 +2838,30 @@ function DndEquipmentQuickView({
       sIdx !== si ? s : { ...s, items: s.items.map((it, iIdx) => (iIdx === ii ? { ...it, equipped: !it.equipped } : it)) }
     );
     commit({ equipmentSections: next });
+  }
+  // Степпер расходника: зелье тратится одним тапом, а не через ✎. Виден там,
+  // где есть счёт (qty задано). В ноль — можно, удаление — руками.
+  function bumpQty(si: number, ii: number, delta: number) {
+    const next = sections.map((s, sIdx) =>
+      sIdx !== si
+        ? s
+        : {
+            ...s,
+            items: s.items.map((it, iIdx) =>
+              iIdx === ii ? { ...it, qty: String(Math.max(0, parseQty(String(it.qty ?? "")) + delta)) } : it
+            ),
+          }
+    );
+    commit({ equipmentSections: next });
+  }
+  // Настройка на строке: пипс ↔ конкретный предмет. Счётчик внизу вкладки
+  // синхронизируется сюда же, чтобы не было двух правд.
+  function toggleAttuned(si: number, ii: number) {
+    const next = sections.map((s, sIdx) =>
+      sIdx !== si ? s : { ...s, items: s.items.map((it, iIdx) => (iIdx === ii ? { ...it, attuned: !it.attuned } : it)) }
+    );
+    const counted = next.flatMap((s) => s.items).filter((it) => it.attuned && !it.transferOut).length;
+    commit({ equipmentSections: next, attunementCount: counted });
   }
   // Заряды предмета в инвентаре: степпер −/+ в строке. Максимум-кубик
   // («1к8+1») верхней границей не является — работает только пол (0).
@@ -2701,17 +2886,36 @@ function DndEquipmentQuickView({
   async function toggleDescription(si: number, ii: number, entryId?: number | null) {
     if (!entryId) return;
     if (descOpen && descOpen.si === si && descOpen.ii === ii) {
+      descControllers.current.get(entryId)?.abort();
+      descControllers.current.delete(entryId);
       setDescOpen(null);
       return;
     }
     setDescOpen({ si, ii });
-    if (!(entryId in descriptions)) {
-      try {
-        const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
-        setDescriptions((d) => ({ ...d, [entryId]: entry.description || "Нет описания." }));
-      } catch {
-        setDescriptions((d) => ({ ...d, [entryId]: "Нет описания." }));
-      }
+    if (entryId in descriptions) return;
+    await loadDescription(entryId);
+  }
+  // Догрузка описания с ретраем: «не загрузилось» — строка с кнопкой повтора,
+  // а не тупик. Повторный тап бьёт прошлый запрос, протухший ответ игнится.
+  async function loadDescription(entryId: number) {
+    descControllers.current.get(entryId)?.abort();
+    const controller = new AbortController();
+    descControllers.current.set(entryId, controller);
+    setDescErrors((d) => {
+      if (!(entryId in d)) return d;
+      const next = { ...d };
+      delete next[entryId];
+      return next;
+    });
+    try {
+      const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setDescriptions((d) => ({ ...d, [entryId]: entry.description || "Нет описания." }));
+    } catch (e) {
+      if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
+      setDescErrors((d) => ({ ...d, [entryId]: true }));
+    } finally {
+      if (descControllers.current.get(entryId) === controller) descControllers.current.delete(entryId);
     }
   }
   async function handleDrop(e: DragEvent<HTMLDivElement>, si: number) {
@@ -2722,32 +2926,84 @@ function DndEquipmentQuickView({
     await addFromBag(si, result);
   }
 
-  // S-17: сводка веса/кол-ва/атюна над инвентарём
+  // S-17: сводка веса/кол-ва над инвентарём. Отданное (transferOut) исключено:
+  // физически его уже нет. Невалидные qty/вес — как 1 шт / пропускаются
+  // (та же математика, что валидация). Вес хранится в фунтах, показывается
+  // в единице из настроек.
+  const doublings = carryDoublingNames ?? [];
+  const capacityLb = carryCapacityLb(strength, doublings.length);
   const summary = (() => {
-    const all = sections.flatMap((s) => s.items);
+    const all = sections.flatMap((s) => s.items).filter((i) => !i.transferOut);
     const totalItems = all.length;
     const equipped = all.filter((i) => i.equipped).length;
     let totalWeight = 0;
     let hasWeight = false;
     for (const it of all) {
-      const w = parseFloat(String(it.weight).replace(",", "."));
-      if (Number.isFinite(w)) {
-        const q = parseInt(String(it.qty).trim(), 10);
-        const qty = Number.isFinite(q) && q > 0 ? q : 1;
-        totalWeight += w * qty;
+      const w = parseWeight(String(it.weight ?? ""));
+      if (w != null) {
+        totalWeight += w * parseQty(String(it.qty ?? ""));
         hasWeight = true;
       }
     }
-    return { totalItems, equipped, totalWeight, hasWeight };
+    return { totalItems, equipped, totalWeight, hasWeight, overloaded: hasWeight && totalWeight > capacityLb };
   })();
+  // Видимые строки под поиском/фильтром: порядок — ручной, как лежит в
+  // секциях. Автосортировки «надетое вверх» нет: она прыгала под пальцем при
+  // каждом тоггле; вопрос «что надето» закрывает фильтр. Индексы исходные.
+  const equipQ = equipQuery.trim().toLowerCase();
+  const filtering = equipQ !== "" || equipFilter !== "all";
+  const visibleSections = sections
+    .map((section, si) => ({
+      section,
+      si,
+      rows: section.items
+        .map((item, ii) => ({ item, ii }))
+        .filter(
+          ({ item }) =>
+            (!equipQ || `${item.name} ${item.notes}`.toLowerCase().includes(equipQ)) &&
+            (equipFilter === "all" || (equipFilter === "equipped" ? !!item.equipped : !!item.magical))
+        ),
+    }))
+    .filter(({ section, rows }) => rows.length > 0 || (!filtering && section.items.length === 0));
   return (
     <>
       {confirmDialog}
-      <div className="sb-section cs-mt">Снаряжение</div>
-      <div className="row muted" style={{ gap: 8, flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-        <span>Предметов: {summary.totalItems}</span>
-        {summary.equipped > 0 && <><span>·</span><span>Надето: {summary.equipped}</span></>}
-        {summary.hasWeight && <><span>·</span><span>Вес: {summary.totalWeight.toFixed(1).replace(/\.0$/, "")}</span></>}
+      <div className="dnd-equipment-head">Снаряжение</div>
+      <div className="row muted" style={{ gap: 8, flexWrap: "wrap", fontSize: "var(--fs-meta)" }}>
+        <span>Предметов: <span className="dnd-summary-num">{summary.totalItems}</span></span>
+        {summary.equipped > 0 && <><span>·</span><span>Надето: <span className="dnd-summary-num">{summary.equipped}</span></span></>}
+        {summary.hasWeight && <><span>·</span><span>Вес: <span className="dnd-summary-num">{formatWeight(summary.totalWeight, prefs.weightUnit)}</span></span></>}
+        {summary.hasWeight && (
+          <>
+            <span>·</span>
+            <span title={doublings.length > 0 ? `СИЛ × 15 × 2^${doublings.length} (${doublings.join(", ")})` : "СИЛ × 15"}>
+              Нести: <span className="dnd-summary-num">{formatWeight(capacityLb, prefs.weightUnit)}</span>
+            </span>
+          </>
+        )}
+        {summary.overloaded && <><span>·</span><span className="dnd-limit-over">Перегруз!</span></>}
+      </div>
+      {/* Поиск по снаряжению: имя и заметка. Фильтр надето/магия — те же два
+          вопроса за столом. */}
+      <div className="row dnd-equipment-search" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+        <input
+          placeholder="Поиск по снаряжению…"
+          value={equipQuery}
+          onChange={(e) => setEquipQuery(e.target.value)}
+          aria-label="Поиск по снаряжению"
+          style={{ flex: "1 1 160px" }}
+        />
+        {(["all", "equipped", "magical"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            className={`dnd-chip${equipFilter === f ? " is-on" : ""}`}
+            aria-pressed={equipFilter === f}
+            onClick={() => setEquipFilter(f)}
+          >
+            {f === "all" ? "Все" : f === "equipped" ? "Надето" : "Магия"}
+          </button>
+        ))}
       </div>
       {/* Монеты — в самом низу вкладки, все в одну строку: добычу делят
           после боя, когда список уже пролистан. Порядок — от медной к
@@ -2757,7 +3013,26 @@ function DndEquipmentQuickView({
           {transferError}
         </p>
       )}
-      {sections.map((section, si) => (
+      {filtering && visibleSections.length === 0 && (
+        <p className="muted">Ничего не нашлось — ослабьте поиск или фильтр.</p>
+      )}
+      {/* Пустая вкладка (§1.11): не «пустоту», а приглашение с действием. */}
+      {!filtering && summary.totalItems === 0 && sections.length > 0 ? (
+        <div className="sb-entry">
+          <p className="muted" style={{ margin: "0 0 8px" }}>
+            Имущества пока нет — возьмите из компендиума или запишите своё.
+          </p>
+          <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+            <button type="button" className="primary" onClick={() => setPickingSection(0)}>
+              + Из компендиума
+            </button>
+            <button type="button" onClick={() => startAdd(0, null)}>
+              + Свой
+            </button>
+          </div>
+        </div>
+      ) : (
+      visibleSections.map(({ section, si, rows }) => (
         <div
           key={si}
           className={`sb-entry${dragOverSection === si ? " drag-over" : ""}`}
@@ -2770,15 +3045,27 @@ function DndEquipmentQuickView({
         >
           {sections.length > 1 &&   <div className="dnd-section-title">{section.name}</div>}
           <ul className="dnd-equipment-view-list">
-            {/* Надетое — вверх списка: за столом спрашивают, что надето, а не
-                что лежит. Сортировка стабильна, индексы исходные — правки,
-                приём и удаление бьют по ним же. */}
-            {section.items
-              .map((item, ii) => ({ item, ii }))
-              .sort((a, b) => Number(b.item.equipped) - Number(a.item.equipped))
+            {/* Порядок ручной — см. visibleSections выше. */}
+            {rows
               .map(({ item, ii }) =>
               editing && editing.si === si && editing.ii === ii ? (
-                <li key={ii}>
+                <li key={item.id ?? ii}>
+                  {sections.length > 1 && (
+                    <label className="row muted" style={{ gap: 6, margin: "4px 0", fontSize: "var(--fs-meta)" }}>
+                      Раздел:
+                      <select
+                        value={moveTarget ?? si}
+                        onChange={(e) => setMoveTarget(Number(e.target.value))}
+                        aria-label="Переместить в раздел"
+                      >
+                        {sections.map((sec, idx) => (
+                          <option key={idx} value={idx}>
+                            {sec.name || `Раздел ${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <EquipmentInlineForm
                     draft={draft}
                     onChange={setDraft}
@@ -2789,7 +3076,7 @@ function DndEquipmentQuickView({
                 </li>
               ) : (
                 <li
-                  key={ii}
+                  key={item.id ?? ii}
                   className={[
                     item.transferOut
                       ? "is-transfer-out"
@@ -2809,33 +3096,99 @@ function DndEquipmentQuickView({
                       type="button"
                       className={`comp-mini dnd-equip-toggle${item.equipped ? " is-equipped" : ""}`}
                       title={item.transferOut ? "Передано — надеть нельзя" : item.equipped ? "Надето" : "Не надето"}
-                      aria-label={`${item.name || "Предмет"}: надето`}
+                      aria-label={`${item.name || "Предмет"}: ${item.equipped ? "надето" : "не надето"}`}
                       aria-pressed={!!item.equipped}
                       disabled={!!item.transferOut}
                       onClick={() => toggleEquipped(si, ii)}
                     >
                       {item.equipped ? "●" : "○"}
                     </button>
-                    {item.entryId ? (
+                    {/* Строка — только имя (счёт/вес/заметка). Характеристика —
+                        в карточке по тапу, иначе строки втрое выше. */}
+                    <div className="dnd-equipment-name" style={{ flex: 1, minWidth: 0 }}>
+                      {item.entryId ? (
+                        <button
+                          type="button"
+                          className="dnd-equipment-name-link"
+                          aria-label={`${item.name} — открыть описание`}
+                          onClick={() => toggleDescription(si, ii, item.entryId!)}
+                        >
+                          {item.name}
+                          {item.qty && ` ×${item.qty}`}
+                          {item.weight && ` (${item.weight})`}
+                          {item.notes && ` — ${item.notes}`}
+                        </button>
+                      ) : (
+                        <span>
+                          {item.name}
+                          {item.qty && ` ×${item.qty}`}
+                          {item.weight && ` (${item.weight})`}
+                          {item.notes && ` — ${item.notes}`}
+                        </span>
+                      )}
+                    </div>
+                    {/* Мало — только у рационов (1–3). */}
+                    {(() => {
+                      const q = String(item.qty ?? "").trim();
+                      return (
+                        isRationRow(item) && q !== "" && isValidQty(item.qty) && parseQty(q) >= 1 && parseQty(q) <= 3
+                      );
+                    })() && (
+                      <span className="dnd-mark-chip" title="Рационы заканчиваются">
+                        мало
+                      </span>
+                    )}
+                    {/* Метки строки: проклятие, реплика, доспех без владения. */}
+                    {item.cursed && (
+                      <span className="dnd-mark-chip" title="Проклят: снять можно только в правке с подтверждением">
+                        проклят
+                      </span>
+                    )}
+                    {item.replicaId && (
+                      <span className="dnd-mark-chip" title="Создано умением: исчезнет вместе с ним">
+                        реплика
+                      </span>
+                    )}
+                    {item.equipped && item.armorType && armorProfs && !isArmorProficient(item.armorType, armorProfs) && (
+                      <span className="dnd-mark-chip" title="Нет владения этим доспехом: мешает заклинаниям">
+                        без владения
+                      </span>
+                    )}
+                    {/* Степпер: только там, где есть счёт. */}
+                    {String(item.qty ?? "").trim() !== "" && (
+                      <span className="row" style={{ gap: 2, flex: "0 0 auto" }} role="group" aria-label={`${item.name || "Предмет"}: количество`}>
+                        <button
+                          type="button"
+                          className="comp-mini dnd-qty-step"
+                          aria-label="Потратить один"
+                          title="Потратить −1"
+                          onClick={() => bumpQty(si, ii, -1)}
+                        >
+                          −
+                        </button>
+                        <button
+                          type="button"
+                          className="comp-mini dnd-qty-step"
+                          aria-label="Добавить один"
+                          title="Добавить +1"
+                          onClick={() => bumpQty(si, ii, 1)}
+                        >
+                          +
+                        </button>
+                      </span>
+                    )}
+                    {/* Настройка: только у требующих её (или уже настроенных). */}
+                    {(item.requiresAttunement || item.attuned) && (
                       <button
                         type="button"
-                        className="dnd-equipment-name-link"
-                        aria-label={`${item.name} — открыть описание`}
-                        onClick={() => toggleDescription(si, ii, item.entryId!)}
-                        style={{ flex: 1 }}
+                        className={`comp-mini dnd-attune-toggle${item.attuned ? " is-attuned" : ""}`}
+                        title={item.attuned ? "Настроено — тап чтобы снять" : "Настроить (занимает слот)"}
+                        aria-label={`${item.name || "Предмет"}: настроено`}
+                        aria-pressed={!!item.attuned}
+                        onClick={() => toggleAttuned(si, ii)}
                       >
-                        {item.name}
-                        {item.qty && ` ×${item.qty}`}
-                        {item.weight && ` (${item.weight})`}
-                        {item.notes && ` — ${item.notes}`}
+                        {item.attuned ? "◆" : "◇"}
                       </button>
-                    ) : (
-                      <span style={{ flex: 1 }}>
-                        {item.name}
-                        {item.qty && ` ×${item.qty}`}
-                        {item.weight && ` (${item.weight})`}
-                        {item.notes && ` — ${item.notes}`}
-                      </span>
                     )}
                     {item.chargesMax && (
                       <span className="row" style={{ gap: 4, alignItems: "center" }} title="Заряды предмета">
@@ -2867,59 +3220,73 @@ function DndEquipmentQuickView({
                       </span>
                     )}
                     {/* Переданное чужой репликой: пока не принято, строка
-                        стоит с пометкой и двумя кнопками — это и есть всё
-                        «уведомление», которого в приложении нет (R2/W8). */}
+                        стоит с пометкой — это и есть всё «уведомление»,
+                        которого в приложении нет (R2/W8). Действия свернуты
+                        под ···: строка не разъезжается на три ряда. */}
                     {item.pendingFrom && (
-                      <>
-                        <span className="dnd-pending-mark">не принято</span>
-                        <button type="button" className="comp-mini" onClick={() => acceptItem(si, ii)}>
-                          Принять
-                        </button>
-                        <button type="button" className="comp-mini" onClick={() => removeItem(si, ii)}>
-                          Вернуть
-                        </button>
-                      </>
+                      <details className="dnd-transfer-fold">
+                        <summary className="dnd-transfer-chip" title="Передача требует решения">
+                          не принято ···
+                        </summary>
+                        <span className="row" style={{ gap: 4 }}>
+                          <button type="button" className="comp-mini" onClick={() => acceptItem(si, ii)}>
+                            Принять
+                          </button>
+                          <button type="button" className="comp-mini" onClick={() => removeItem(si, ii)}>
+                            Вернуть
+                          </button>
+                        </span>
+                      </details>
                     )}
                     {/* Этап 4б: отданная строка серая («передано → имя») —
-                        только сведения; принятая зелёная («принято ← имя»)
-                        или фиолетовая («создал имя») — с кнопками вернуть /
-                        сделать своим. */}
+                        только сведения; принятая/created — с кнопками под ···. */}
                     {item.transferOut && (
                       <span className="dnd-transfer-chip">передано → {item.transferOut.toName}</span>
                     )}
                     {item.transferIn && (
-                      <>
-                        <span className="dnd-transfer-chip">
+                      <details className="dnd-transfer-fold">
+                        <summary className="dnd-transfer-chip" title="Передача требует решения">
                           {item.transferIn.kind === "replica"
-                            ? `создал ${item.transferIn.fromName}`
-                            : `принято ← ${item.transferIn.fromName}`}
+                            ? `создал ${item.transferIn.fromName} ···`
+                            : `принято ← ${item.transferIn.fromName} ···`}
+                        </summary>
+                        <span className="row" style={{ gap: 4 }}>
+                          <button
+                            type="button"
+                            className="comp-mini"
+                            disabled={transferBusy === item.transferIn.id}
+                            onClick={() => void transferAction(item.transferIn!.id, "return")}
+                          >
+                            Вернуть
+                          </button>
+                          <button
+                            type="button"
+                            className="comp-mini"
+                            disabled={transferBusy === item.transferIn.id}
+                            onClick={() => void transferAction(item.transferIn!.id, "claim")}
+                          >
+                            Сделать своим
+                          </button>
                         </span>
-                        <button
-                          type="button"
-                          className="comp-mini"
-                          disabled={transferBusy === item.transferIn.id}
-                          onClick={() => void transferAction(item.transferIn!.id, "return")}
-                        >
-                          Вернуть
-                        </button>
-                        <button
-                          type="button"
-                          className="comp-mini"
-                          disabled={transferBusy === item.transferIn.id}
-                          onClick={() => void transferAction(item.transferIn!.id, "claim")}
-                        >
-                          Сделать своим
-                        </button>
-                      </>
+                      </details>
                     )}
-                    <button type="button" className="comp-mini" title="Редактировать" aria-label="Редактировать предмет" onClick={() => startEdit(si, ii)}>
+                    <button type="button" className="comp-mini dnd-row-edit" title="Редактировать" aria-label="Редактировать предмет" onClick={() => startEdit(si, ii)}>
                       <NavIcon name="edit" />
                     </button>
                   </div>
                   {descOpen && descOpen.si === si && descOpen.ii === ii && item.entryId && (
                     <div className="dnd-spell-description">
                       {equipmentTagsLine(item) && <div className="dnd-equipment-tags">{equipmentTagsLine(item)}</div>}
-                      <MentionText text={descriptions[item.entryId] ?? "Загрузка…"} />
+                      {descErrors[item.entryId] ? (
+                        <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                          <span className="muted">Описание не загрузилось.</span>
+                          <button type="button" className="comp-mini" onClick={() => void loadDescription(item.entryId!)}>
+                            Повторить
+                          </button>
+                        </span>
+                      ) : (
+                        <MentionText text={descriptions[item.entryId] ?? "Загрузка…"} />
+                      )}
                     </div>
                   )}
                 </li>
@@ -2929,7 +3296,7 @@ function DndEquipmentQuickView({
           {addingSection === si ? (
             addMode === "bag" ? (
               <div className="stack" style={{ gap: 4 }}>
-                {bagItems.length === 0 && <span className="muted">Мешок пуст.</span>}
+                {bagItems.length === 0 && <span className="muted">В мешке ничего нет.</span>}
                 {bagItems.map((b, bi) => (
                   <button
                     key={bi}
@@ -2962,7 +3329,8 @@ function DndEquipmentQuickView({
             </div>
           )}
         </div>
-      ))}
+      ))
+      )}
       {pickingSection != null && (
         <DndEquipmentPickerModal
           systemId={systemId}
@@ -2978,41 +3346,115 @@ function DndEquipmentQuickView({
             setPickingSection(null);
             if (entries.length === 0) return;
             // Пачка одним сохранением: мета догружается, строки ложатся разом.
+            // Повтор расходника — +1 в его строку, а не вторая строка.
             void (async () => {
               const items: DndEquipmentItem[] = [];
+              let bumped = false;
+              const base = sections.map((s) => ({ ...s, items: s.items.map((it) => ({ ...it })) }));
+              const findRow = (entryId: number) => {
+                for (let bi = 0; bi < base.length; bi++) {
+                  const ii = base[bi].items.findIndex((it) => it.entryId === entryId);
+                  if (ii >= 0) return { si: bi, ii };
+                }
+                return null;
+              };
               for (const e of entries) {
+                const at = findRow(e.id);
+                if (at && isStackableEquipmentEntry(e)) {
+                  const row = base[at.si].items[at.ii];
+                  row.qty = String(parseQty(String(row.qty ?? "")) + 1);
+                  bumped = true;
+                  continue;
+                }
                 const meta = await fetchEquipmentMeta(e.id);
-                items.push({ name: e.name, qty: "", weight: "", notes: "", ...meta });
+                items.push({
+                  name: e.name,
+                  qty: "",
+                  weight: "",
+                  notes: "",
+                  ...meta,
+                  // Ссылку и флаг магии держим явно поверх спреда.
+                  entryId: e.id,
+                  ...(e.kind === "magic_item" ? { magical: true } : null),
+                });
               }
-              appendItems(si, items);
+              if (bumped) commit({ equipmentSections: base.map((s) => ({ ...s })) });
+              if (items.length > 0) {
+                const next = base.map((s, idx) =>
+                  idx !== si
+                    ? s
+                    : {
+                        ...s,
+                        items: [
+                          ...s.items,
+                          ...items.map((it) => (it.id ? it : { ...it, id: makeEquipmentId() })),
+                        ],
+                      }
+                );
+                commit({ equipmentSections: next });
+              }
+              setAddingSection(null);
+              setAddMode(null);
             })();
           }}
           onClose={() => setPickingSection(null)}
         />
       )}
-      {/* Монеты — в самом низу вкладки, все в одну строку: добычу делят после
-          боя, когда список уже пролистан. Подписи столбиком (М над М), иначе
+      {/* Монеты — в самом низу вкладки, в своей рамке отдельно от настройки.
+          Порядок — от медной к платиновой. Подписи столбиком (М над М), иначе
           пятая монета не влезает. */}
-      <div className="row dnd-coins-bottom">
-        {COIN_FIELDS.map(({ key, label, title }) => (
-          <label key={key} className="dnd-coin" title={title}>
-            <input
-              inputMode="numeric"
-              value={coins?.[key] ?? ""}
-              aria-label={title}
-              onChange={(e) =>
-                commit({
-                  coins: { ...(coins ?? EMPTY_COINS), [key]: e.target.value.replace(/[^\d-]/g, "") },
-                })
-              }
-            />
-            <span className="muted dnd-coin-letters" aria-hidden="true">
-              <span>{label[0]}</span>
-              <span>{label[1]}</span>
-            </span>
-          </label>
-        ))}
+      <div className="dnd-frame">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+          <span className="sb-prop-label">Монеты</span>
+          {(() => {
+            const totalCp = coinsTotalCp(coins ?? EMPTY_COINS);
+            const totalGp = Math.floor(totalCp / 100) + ((totalCp % 100) / 100);
+            return (
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                Итого ≈ {String(Math.round(totalGp * 10) / 10).replace(".", ",")} ЗМ
+              </span>
+            );
+          })()}
+        </div>
+        <div className="row dnd-coins-bottom">
+          {COIN_FIELDS.map(({ key, label, title }) => (
+            <label key={key} className="dnd-coin" title={title}>
+              <input
+                inputMode="numeric"
+                value={coins?.[key] ?? ""}
+                aria-label={title}
+                onChange={(e) =>
+                  commit({
+                    // Монеты не бывают отрицательными: только цифры, до 6 знаков.
+                    coins: { ...(coins ?? EMPTY_COINS), [key]: e.target.value.replace(/[^\d]/g, "").slice(0, 6) },
+                  })
+                }
+              />
+              <span className="muted dnd-coin-letters" aria-hidden="true">
+                <span>{label[0]}</span>
+                <span>{label[1]}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {/* Калькулятор монет: курс, добыча пулом, делёж с рассылкой. */}
+        <div className="row" style={{ gap: 4 }}>
+          <button type="button" className="dnd-chip" onClick={() => setCalcOpen(true)}>
+            Калькулятор монет
+          </button>
+        </div>
       </div>
+      {calcOpen && (
+        <DndCoinCalculator
+          campaignId={calcCampaignId}
+          senderId={calcSenderId}
+          senderName={calcSenderName ?? ""}
+          ownCoins={coins ?? EMPTY_COINS}
+          onCommitCoins={(c) => commit({ coins: c })}
+          onChanged={() => onCalcChanged?.()}
+          onClose={() => setCalcOpen(false)}
+        />
+      )}
     </>
   );
 }
@@ -5414,6 +5856,12 @@ function DndEquipmentPickerModal({
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [failed, setFailed] = useState(false);
+  // Фильтры пикера: тип, редкость, «требует настройки», сортировка.
+  // До добавления видна характеристика строки.
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [rarityFilter, setRarityFilter] = useState<string>("any");
+  const [attuneOnly, setAttuneOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<"name" | "ac" | "cost">("name");
 
   useEffect(() => {
     if (!systemId) {
@@ -5434,7 +5882,76 @@ function DndEquipmentPickerModal({
   }, [systemId]);
 
   const q = query.trim().toLowerCase();
-  const matching = (all ?? []).filter((e) => !q || e.name.toLowerCase().includes(q));
+  // Тип записи для фильтра: категория снаряжения или тип магпредмета,
+  // оружие/броня — ещё и по полям урона/КЗ.
+  function entryTypeKey(e: CompendiumEntry): string {
+    const data = (e.data ?? {}) as Record<string, unknown>;
+    const cat = typeof data.category === "string" ? data.category : "";
+    const type = typeof data.item_type === "string" ? data.item_type : "";
+    if (typeof data.damage === "string" && data.damage) return "Оружие";
+    if (typeof data.armor_type === "string" && data.armor_type) return "Доспехи";
+    if (/доспех|щит/i.test(`${cat} ${type}`)) return "Доспехи";
+    if (/оружие/i.test(`${cat} ${type}`)) return "Оружие";
+    if (/инструмент/i.test(cat)) return "Инструменты";
+    if (cat === "Расходники" || isStackableEquipmentEntry(e)) return "Расходники";
+    return type || cat || "Прочее";
+  }
+  // Характеристика записи до добавления: КЗ/урон/тип/редкость/цена.
+  function entrySpecLine(e: CompendiumEntry): string {
+    const data = (e.data ?? {}) as Record<string, unknown>;
+    const parts: string[] = [];
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const ac = str(data.ac);
+    if (ac) parts.push(`КЗ ${ac}`);
+    const dmg = str(data.damage);
+    if (dmg) parts.push(dmg);
+    const t = str(data.item_type) || str(data.category);
+    if (t) parts.push(t);
+    const rarity = str(data.rarity);
+    if (rarity) parts.push(rarity);
+    if (entryRequiresAttunement(data)) parts.push("настройка");
+    const cost = str(data.cost);
+    if (cost) parts.push(cost);
+    return parts.join(" · ");
+  }
+  function entrySortVal(e: CompendiumEntry): number {
+    const data = (e.data ?? {}) as Record<string, unknown>;
+    if (sortMode === "ac") {
+      const m = /^[\d.,]+/.exec(String(data.ac ?? ""));
+      return m ? -parseFloat(m[0].replace(",", ".")) : Number.POSITIVE_INFINITY;
+    }
+    const m = /[\d][\d\s.,]*/.exec(String(data.cost ?? ""));
+    if (!m) return Number.POSITIVE_INFINITY;
+    const n = parseFloat(m[0].replace(/\s/g, "").replace(",", "."));
+    return Number.isFinite(n) ? -n : Number.POSITIVE_INFINITY;
+  }
+  const rarities = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of all ?? []) {
+      const r = (e.data as Record<string, unknown> | undefined)?.rarity;
+      if (typeof r === "string" && r.trim()) set.add(r.trim());
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "ru"));
+  }, [all]);
+  const typeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of all ?? []) set.add(entryTypeKey(e));
+    const preferred = ["Оружие", "Доспехи", "Инструменты", "Расходники", "Зелья", "Свитки", "Кольца", "Чудесные предметы"];
+    const rest = [...set].filter((t) => !preferred.includes(t)).sort((a, b) => a.localeCompare(b, "ru"));
+    return [...preferred.filter((t) => set.has(t)), ...rest];
+  }, [all]);
+  const matching = (all ?? [])
+    .filter((e) => !q || e.name.toLowerCase().includes(q))
+    .filter((e) => typeFilter === "all" || entryTypeKey(e) === typeFilter)
+    .filter((e) => {
+      if (rarityFilter === "any") return true;
+      const r = (e.data as Record<string, unknown> | undefined)?.rarity;
+      return r === rarityFilter;
+    })
+    .filter((e) => !attuneOnly || entryRequiresAttunement((e.data ?? {}) as Record<string, unknown>))
+    .sort((a, b) =>
+      sortMode === "name" ? a.name.localeCompare(b.name, "ru") : entrySortVal(a) - entrySortVal(b) || a.name.localeCompare(b.name, "ru")
+    );
   const groups = [
     { title: "Магические предметы", entries: matching.filter((e) => e.kind === "magic_item") },
     { title: "Снаряжение", entries: matching.filter((e) => e.kind !== "magic_item") },
@@ -5463,32 +5980,87 @@ function DndEquipmentPickerModal({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <div className="row" style={{ gap: 4, flexWrap: "wrap" }} role="group" aria-label="Фильтр по типу">
+          {["all", ...typeOptions].map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`dnd-chip${typeFilter === t ? " is-on" : ""}`}
+              aria-pressed={typeFilter === t}
+              onClick={() => setTypeFilter(t)}
+            >
+              {t === "all" ? "Все" : t}
+            </button>
+          ))}
+        </div>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
+            Редкость:
+            <select value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value)} aria-label="Фильтр по редкости">
+              <option value="any">любая</option>
+              {rarities.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
+            <input type="checkbox" checked={attuneOnly} onChange={(e) => setAttuneOnly(e.target.checked)} />
+            требует настройки
+          </label>
+          <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
+            Сорт:
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as "name" | "ac" | "cost")}
+              aria-label="Сортировка"
+            >
+              <option value="name">по имени</option>
+              <option value="ac">по КЗ</option>
+              <option value="cost">по цене</option>
+            </select>
+          </label>
+        </div>
         {failed && <p className="muted">Не удалось загрузить справочник снаряжения.</p>}
         {!failed && all === null && <p className="muted">Загрузка…</p>}
         {all !== null && groups.length === 0 && <p className="muted">Ничего не нашлось.</p>}
-        <div className="stack picker-list" style={{ gap: 8 }}>
+        {/* Список: только вертикальный скролл — панорама вбок мешала вести
+            пальцем и список «плавал». */}
+        <div className="stack picker-list" style={{ gap: 8, overflowX: "hidden", touchAction: "pan-y" }}>
           {groups.map((g) => (
             <div key={g.title} className="stack" style={{ gap: 4 }}>
               <div className="sb-prop-label">{g.title}</div>
               {g.entries.map((e) => {
                 const isOwned = ownedIds.has(e.id);
+                // Расходник берут повторно как +1 в ту же строку,
+                // уникальное — по-прежнему блоком.
+                const stackable = isStackableEquipmentEntry(e);
+                const blocked = isOwned && !stackable;
                 const isPicked = picked.has(e.id);
                 return (
                   <button
                     key={e.id}
                     type="button"
                     className={`dnd-picker-row${isPicked ? " is-picked" : ""}`}
-                    disabled={isOwned}
+                    disabled={blocked}
                     aria-pressed={isPicked}
                     onClick={() => toggle(e.id)}
                   >
                     <span className="dnd-picker-check" aria-hidden="true">
                       {isPicked ? "●" : "○"}
                     </span>
-                    <span style={{ flex: "1 1 auto", minWidth: 0, textAlign: "left" }}>{e.name}</span>
+                    <span style={{ flex: "1 1 auto", minWidth: 0, textAlign: "left" }}>
+                      <span style={{ display: "block" }}>{e.name}</span>
+                      {entrySpecLine(e) && (
+                        <span style={{ display: "block", opacity: 0.7, fontSize: "var(--fs-meta)" }}>
+                          {entrySpecLine(e)}
+                        </span>
+                      )}
+                    </span>
                     {isOwned && (
                       <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                        уже в листе
+                        {stackable ? "есть — будет +1" : "уже в листе"}
                       </span>
                     )}
                   </button>
@@ -6232,6 +6804,7 @@ function DndReplicaBlock({
       ? {
           ...EMPTY_EQUIPMENT_ITEM,
           ...base.meta,
+          id: makeEquipmentId(),
           name: bonus ? `${base.name} +${bonus}` : base.name,
           entryId: base.entryId,
           magical: true,
@@ -6241,6 +6814,7 @@ function DndReplicaBlock({
         }
       : {
           ...EMPTY_EQUIPMENT_ITEM,
+          id: makeEquipmentId(),
           name: scheme.name,
           entryId: scheme.entryId,
           magical: true,
@@ -6444,6 +7018,7 @@ function DndReplicaHandover({
           : [{ name: "Общее", items: [] }];
       const row: DndEquipmentItem = {
         ...EMPTY_EQUIPMENT_ITEM,
+        id: makeEquipmentId(),
         name: item.baseName ? `${item.baseName} — ${item.name}` : item.name,
         entryId: item.baseEntryId ?? item.schemeEntryId,
         magical: true,
@@ -7058,6 +7633,13 @@ function DndRestModal({
   );
   const spentDice = pools.reduce((n, p) => n + p.used, 0);
   const totalDice = pools.reduce((n, p) => n + p.total, 0);
+  // Рационы: долгий отдых предлагает съесть один. Считаем только своё
+  // (не отданное), строка без счёта — это 1 шт.
+  const rationRows = value.equipmentSections.flatMap((s, si) =>
+    s.items.map((it, ii) => ({ it, si, ii })).filter(({ it }) => !it.transferOut && isRationRow(it))
+  );
+  const rationTotal = rationRows.reduce((n, { it }) => n + parseQty(String(it.qty ?? "")), 0);
+  const [eatRation, setEatRation] = useState(true);
 
   function resetResources(which: "short" | "long"): Record<string, number> {
     const next = { ...value.resourceUsed };
@@ -7115,6 +7697,8 @@ function DndRestModal({
       .filter((it) => it.chargesMax)
       .map((it) => it.name)
       .filter((n) => n);
+    // Рацион списываем с первой непустой строки.
+    const rationAt = eatRation ? rationRows.find(({ it }) => parseQty(String(it.qty ?? "")) > 0) : undefined;
     const ok = await confirm({
       title: "Длинный отдых?",
       message: [
@@ -7137,10 +7721,25 @@ function DndRestModal({
         restoredCharges.length > 0 ? `
 
 Заряды предметов восстановлены до максимума: ${restoredCharges.join(", ")}.` : "",
+        rationAt ? `
+
+Съеден рацион (−1).` : "",
       ].join(""),
       confirmLabel: "Отдохнуть",
     });
     if (!ok) return;
+    const finalSections = rationAt
+      ? restoredSections.map((s, si) =>
+          si !== rationAt.si
+            ? s
+            : {
+                ...s,
+                items: s.items.map((it, ii) =>
+                  ii !== rationAt.ii ? it : { ...it, qty: String(Math.max(0, parseQty(String(it.qty ?? "")) - 1)) }
+                ),
+              }
+        )
+      : restoredSections;
     onQuickUpdate({
       spellSlotsUsed: value.spellSlotsUsed.map(() => 0),
       pactSlotsUsed: 0,
@@ -7148,7 +7747,7 @@ function DndRestModal({
       ...(companionsAfterRest ? { companions: companionsAfterRest } : {}),
       // Эликсиры сгорают вместе с флаконами — чистим, новые создаёт игрок.
       ...((value.elixirs ?? []).length > 0 ? { elixirs: [] } : {}),
-      equipmentSections: restoredSections,
+      equipmentSections: finalSections,
       hitDiceUsed: restoreHitDiceOnLongRest(pools),
       hitPointsCurrent: value.hitPointMax,
       hitPointsTemp: "0",
@@ -7200,6 +7799,12 @@ function DndRestModal({
             {(value.elixirs ?? []).length > 0 && " Эликсиры сгорят."}
             {neverNames.length > 0 && ` Не восстановится: ${neverNames.join(", ")}.`}
           </p>
+          {rationTotal > 0 && (
+            <label className="row" style={{ gap: 6, alignItems: "center" }}>
+              <input type="checkbox" checked={eatRation} onChange={(e) => setEatRation(e.target.checked)} />
+              Съесть рацион (−1, осталось: {rationTotal})
+            </label>
+          )}
           <button type="button" className="primary" onClick={longRest} style={{ alignSelf: "flex-start" }}>
             Провести длинный отдых
           </button>
@@ -7791,7 +8396,9 @@ export function DndCharacterView({
             color={cardColor}
             campaignId={campaignId}
             characterId={ownerCharacterId}
+            characterName={value.characterName}
             equipment={value.equipmentSections}
+            ownCoins={value.coins}
             incoming={transfers?.incoming ?? []}
             outgoing={transfers?.outgoing ?? []}
             loading={transfersLoading}
@@ -7801,6 +8408,11 @@ export function DndCharacterView({
             onAction={(id, action) => void handleTransferAction(id, action)}
             onSendItem={(args) => void handleTransferSend(args)}
             onSendMoney={(args) => void handleMoneySend(args)}
+            onCommitCoins={(c) => onQuickUpdate?.({ coins: c })}
+            onCalcChanged={() => {
+              refreshTransfers();
+              refreshInbox();
+            }}
             onRetry={refreshTransfers}
           />
         )}
@@ -9512,60 +10124,97 @@ export function DndCharacterView({
                     systemId={value.systemId}
                     coins={value.coins}
                     accentColor={cardColor}
+                    armorProfs={armorProfNames(value.proficiencies)}
+                    strength={value.abilities.str}
+                    carryDoublingNames={findCarryDoublings([
+                      ...value.speciesFeatures,
+                      ...value.classFeatures,
+                      ...value.feats,
+                      ...value.specialAbilities,
+                    ])}
+                    calcCampaignId={campaignId}
+                    calcSenderId={ownerCharacterId}
+                    calcSenderName={value.characterName}
+                    onCalcChanged={() => {
+                      refreshTransfers();
+                      refreshInbox();
+                    }}
                     onQuickUpdate={onQuickUpdate}
                   />
                 </>
               )}
-              {/* Настройка предметов: ромбы вместо точек, слоты сверх трёх —
-                  кнопкой [+]. Настроить предмет можно и посреди боя. */}
-              {(value.attunementCount > 0 || onQuickUpdate) && (
-                <div className="sb-entry">
-                  <span className="sb-prop-label">Настроено предметов</span>{" "}
-                  <PipTrack
-                    diamondFrom={4}
-                    value={value.attunementCount}
-                    label="Настроено предметов"
-                    max={3 + (value.attunementExtra ?? 0)}
-                    onChange={onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined}
-                  />
-                  {onQuickUpdate && (
-                    <>
-                      <button
-                        type="button"
-                        className="comp-mini"
-                        title="Добавить слот настройки"
-                        aria-label="Добавить слот настройки"
-                        onClick={() => onQuickUpdate({ attunementExtra: (value.attunementExtra ?? 0) + 1 })}
-                      >
-                        +
-                      </button>
-                      {(value.attunementExtra ?? 0) > 0 && (
+              {/* Настройка предметов: ромбы вместо точек, слоты сверх трёх.
+                  Счёт — по строкам с ◆: ручное число осталось только для
+                  старых листов, где строк с флагом ещё нет. */}
+              {(() => {
+                const rows = value.equipmentSections.flatMap((s) => s.items).filter((it) => !it.transferOut);
+                const rowsAreSource = rows.some((it) => "attuned" in it);
+                const counted = rows.filter((it) => it.attuned).length;
+                const shown = rowsAreSource ? counted : (value.attunementCount ?? 0);
+                const over = counted > 3 + (value.attunementExtra ?? 0);
+                return (shown > 0 || onQuickUpdate) ? (
+                <div className="dnd-frame">
+                  <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                    <span className="sb-prop-label">Настроено предметов</span>{" "}
+                    {over && (
+                      <span className="dnd-limit-over" title="Лимит настройки превышен">
+                        сверх лимита!
+                      </span>
+                    )}
+                  </div>
+                  {/* Кнопки слотов — в строке с ячейками, у правого края. */}
+                  <div className="row" style={{ gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+                    <PipTrack
+                      diamondFrom={4}
+                      value={shown}
+                      label="Настроено предметов"
+                      max={3 + (value.attunementExtra ?? 0)}
+                      onChange={
+                        !rowsAreSource && onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined
+                      }
+                    />
+                    {onQuickUpdate && (
+                      <span className="row" style={{ gap: 4 }}>
                         <button
                           type="button"
                           className="comp-mini"
-                          title="Убрать слот настройки"
-                          aria-label="Убрать слот настройки"
-                          onClick={() =>
-                            onQuickUpdate({
-                              attunementExtra: (value.attunementExtra ?? 0) - 1,
-                              attunementCount: Math.min(value.attunementCount, 3 + (value.attunementExtra ?? 0) - 1),
-                            })
-                          }
+                          title="Добавить слот настройки"
+                          aria-label="Добавить слот настройки"
+                          onClick={() => onQuickUpdate({ attunementExtra: (value.attunementExtra ?? 0) + 1 })}
                         >
-                          −
+                          +
                         </button>
-                      )}
-                    </>
-                  )}
+                        {(value.attunementExtra ?? 0) > 0 && (
+                          <button
+                            type="button"
+                            className="comp-mini"
+                            title="Убрать слот настройки"
+                            aria-label="Убрать слот настройки"
+                            onClick={() =>
+                              onQuickUpdate({
+                                attunementExtra: (value.attunementExtra ?? 0) - 1,
+                                attunementCount: Math.min(shown, 3 + (value.attunementExtra ?? 0) - 1),
+                              })
+                            }
+                          >
+                            −
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              )}
+                ) : null;
+              })()}
               {transferModalOpen && canUseInbox && ownerCharacterId != null && (
                 <Modal onClose={() => setTransferModalOpen(false)}>
                   <DndTransferBox
                     color={cardColor}
                     campaignId={campaignId}
                     characterId={ownerCharacterId}
+                    characterName={value.characterName}
                     equipment={value.equipmentSections}
+                    ownCoins={value.coins}
                     incoming={transfers?.incoming ?? []}
                     outgoing={transfers?.outgoing ?? []}
                     loading={transfersLoading}
@@ -9575,6 +10224,11 @@ export function DndCharacterView({
                     onAction={(id, action) => void handleTransferAction(id, action)}
                     onSendItem={(args) => void handleTransferSend(args)}
                     onSendMoney={(args) => void handleMoneySend(args)}
+                    onCommitCoins={(c) => onQuickUpdate?.({ coins: c })}
+                    onCalcChanged={() => {
+                      refreshTransfers();
+                      refreshInbox();
+                    }}
                     onRetry={refreshTransfers}
                   />
                 </Modal>

@@ -603,7 +603,7 @@
 }
 .dnd-equipment-section.drag-over {
   border: var(--card-border-width, 1px) dashed var(--accent);
-  border-radius: var(--card-radius);
+  border-radius: 0;
   background: var(--bg-elevated);
   padding: 8px;
 }
@@ -623,11 +623,21 @@
   margin: 0;
   padding-left: 0;
   list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Строка снаряжения — плашка: рамка держит строку между крупными кнопками,
+   иначе имя теряется. Магическая кромка и заливки трансферов поверх живут. */
+.dnd-equipment-view-list > li {
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: 0;
+  padding: 2px;
 }
 .dnd-equipment-quick-row {
-  border-radius: var(--card-radius);
-  padding: 1px 4px;
-  margin-left: -4px;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
 }
 .dnd-equipment-quick-row:hover {
   background: color-mix(in oklab, var(--sb-paper) 90%, var(--sb-ink));
@@ -643,13 +653,124 @@
   font: inherit;
   color: inherit;
 }
+/* Имя в строке: блок тянется и допихивает кнопки вправо, а сам текст —
+   максимум ~25 знаков в строке, дальше перенос целыми словами. */
+.dnd-equipment-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dnd-equipment-name > * {
+  display: block;
+  max-width: 25ch;
+  white-space: normal;
+}
 .dnd-equip-toggle {
   flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
   opacity: 0.6;
 }
 .dnd-equip-toggle.is-equipped {
   opacity: 1;
   color: var(--accent, inherit);
+}
+/* Степпер расходника: мишени 44px — за столом попадают пальцем.
+   Настройка: ромб вместо второго кружка, чтобы не путать с «надето».
+   Чип-метка («мало», «проклят», «реплика»): подпись, а не цвет.
+   Правка строки: та же мишень 44px. */
+.dnd-qty-step {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 18px;
+  line-height: 1;
+}
+.dnd-attune-toggle {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  opacity: 0.6;
+}
+.dnd-attune-toggle.is-attuned {
+  opacity: 1;
+  color: var(--accent, inherit);
+}
+.dnd-mark-chip {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.dnd-row-edit {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+}
+/* Шапка вкладки — плашка-инверсия (§1.4), а не капс на черте: тот же язык,
+   что sb-head, но scoped под снаряжение — глобальный .sb-section не тронут.
+   Сводка под ней: слова — Body/Label, числа — моно (§1.5). */
+.dnd-equipment-head {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: var(--section-transform);
+  background: var(--head-bg, var(--ink));
+  color: var(--head-ink, var(--paper));
+  border-radius: 0;
+  padding: 6px 8px;
+  margin: var(--sec-gap) 0 8px;
+}
+.dnd-summary-num {
+  font-family: var(--font-mono);
+}
+/* Рамка раздела внутри вкладки (монеты, настройка): свои 1px, угол 0. */
+.dnd-frame {
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: 0;
+  padding: 8px;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Трансфер под ···: свёрнут в одну строку-статус, действия — по раскрытию.
+   summary — тот же чип, маркер details гасим. */
+.dnd-transfer-fold {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.dnd-transfer-fold > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.dnd-transfer-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.dnd-transfer-fold > summary::marker {
+  content: "";
+}
+.dnd-transfer-fold .row {
+  margin-top: 4px;
+}
+/* Печать снаряжения: стопка строк без интерактива — кнопки, поиск, фильтры
+   и добавление на бумаге не нужны. */
+@media print {
+  .dnd-equipment-search,
+  .dnd-equipment-quick-row button,
+  .dnd-transfer-fold .row,
+  .dnd-coins-bottom + .row,
+  .dnd-equipment-view-list + .row {
+    display: none !important;
+  }
+  .dnd-equipment-view-list > li {
+    break-inside: avoid;
+  }
+  .dnd-coins-bottom input {
+    border: none;
+  }
 }
 /* Breaks the table out to the same edges as the rest of the card (ignoring
    .sb-body's own --pad-x side padding) and falls back to horizontal scroll
@@ -2466,10 +2587,10 @@ span.dnd-tab-btn {
   flex-direction: column;
   line-height: 1.1;
 }
-/* Магический предмет — кромкой цвета класса (цвет инлайном). */
+/* Магический предмет — кромкой цвета класса (цвет инлайном). Без добавочного
+   паддинга: как все строки, 2px. */
 .dnd-equipment-view-list > li.is-magical {
   border-left: 3px solid var(--line);
-  padding-left: 6px;
 }
 /* Кнопка веера: миниатюра колоды 4×2. */
 .dnd-fan-btn {

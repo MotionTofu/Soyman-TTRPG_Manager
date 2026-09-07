@@ -98,7 +98,7 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
       {confirmDialog}
       <strong>{title}</strong>
       <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
-        Перетащите сюда результат поиска (правая панель) или выгрузите из Мешка. Совет: Ctrl+K — поиск.
+        Перетащите сюда результат поиска (правая панель) или выгрузите из Мешка. Совет: клавиша / — поиск.
       </span>
       <div
         className={`drop-zone${dragOver ? " drag-over" : ""}`}

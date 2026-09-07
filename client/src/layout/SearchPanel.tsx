@@ -76,12 +76,6 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        const ae = document.activeElement as HTMLElement | null;
-        if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
       if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const ae = document.activeElement as HTMLElement | null;
         if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
@@ -161,7 +155,7 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
         <div className="search-input-wrap">
           <input
             ref={inputRef}
-            placeholder="Например: Гоблин (Ctrl+K, /)"
+            placeholder="Например: Гоблин (/)"
             aria-label="Поиск"
             value={query}
             onChange={(e) => setQuery(e.target.value)}

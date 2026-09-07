@@ -6,7 +6,8 @@ import {
   type TransferAction,
   type TransferPartyMember,
 } from "./characterTransfers";
-import type { DndEquipmentSection } from "../../types";
+import type { DndCoins, DndEquipmentSection } from "../../types";
+import { DndCoinCalculator } from "./DndCoinCalculator";
 
 // Инструмент передачи игрок→игрок на обороте карты (этап 4б). Живёт слотом
 // в DndCardBack: списки и действия поднимает родитель (ему же нужен счётчик
@@ -26,7 +27,9 @@ export function DndTransferBox({
   color,
   campaignId,
   characterId,
+  characterName,
   equipment,
+  ownCoins,
   incoming,
   outgoing,
   loading,
@@ -36,12 +39,17 @@ export function DndTransferBox({
   onAction,
   onSendItem,
   onSendMoney,
+  onCommitCoins,
+  onCalcChanged,
   onRetry,
 }: {
   color: string;
   campaignId: number | null | undefined;
   characterId: number;
+  characterName?: string;
   equipment: DndEquipmentSection[];
+  /** Свой кошелёк — для калькулятора монет. */
+  ownCoins: DndCoins;
   incoming: CharacterTransfer[];
   outgoing: CharacterTransfer[];
   loading: boolean;
@@ -51,6 +59,9 @@ export function DndTransferBox({
   onAction: (id: number, action: TransferAction) => void;
   onSendItem: (args: { recipientId: number; section: number; index: number; name: string; qty: number; kind: "item" | "replica" }) => void;
   onSendMoney: (args: { recipientId: number; coins: { cp: number; sp: number; ep: number; gp: number; pp: number } }) => void;
+  onCommitCoins: (c: DndCoins) => void;
+  /** После рассылки долей из калькулятора: дотянуть списки. */
+  onCalcChanged: () => void;
   onRetry: () => void;
 }) {
   // Партия для выбора получателя — тихий справочник, грузится сам.
@@ -78,6 +89,25 @@ export function DndTransferBox({
   const [qtyText, setQtyText] = useState("1");
   const [itemKind, setItemKind] = useState<"item" | "replica">("item");
   const [coinTexts, setCoinTexts] = useState<Record<string, string>>({ cp: "", sp: "", ep: "", gp: "", pp: "" });
+  // Калькулятор монет — встраивается в этот же диалог (bare, без своей
+  // модалки), кнопка рядом с отправкой денег.
+  const [calcOpen, setCalcOpen] = useState(false);
+  if (calcOpen) {
+    return (
+      <div className="stack dnd-transfer-box">
+        <DndCoinCalculator
+          bare
+          campaignId={campaignId}
+          senderId={characterId}
+          senderName={characterName ?? ""}
+          ownCoins={ownCoins}
+          onCommitCoins={onCommitCoins}
+          onChanged={onCalcChanged}
+          onClose={() => setCalcOpen(false)}
+        />
+      </div>
+    );
+  }
 
   // Отдать можно только свободную строку: уже едущая или приехавшая вещь
   // второй раз не предлагается.
@@ -268,6 +298,9 @@ export function DndTransferBox({
                 }}
               >
                 Передать деньги
+              </button>
+              <button type="button" className="comp-mini dnd-transfer-send" onClick={() => setCalcOpen(true)}>
+                Калькулятор монет
               </button>
             </div>
           )}
