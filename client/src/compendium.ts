@@ -267,6 +267,32 @@ export const MAGIC_ITEM_RARITIES = [
   "Варьируется",
 ] as const;
 
+// Восстановление зарядов магического предмета (data.charges.recharge).
+export const MAGIC_ITEM_CHARGES_RECHARGE = [
+  { value: "dawn", label: "на рассвете" },
+  { value: "none", label: "не восстанавливаются" },
+] as const;
+
+export function chargesRechargeLabel(raw: unknown): string {
+  const hit = MAGIC_ITEM_CHARGES_RECHARGE.find((o) => o.value === raw);
+  return hit ? hit.label : "";
+}
+
+// Структурный источник магического предмета — книга, откуда он взят.
+// Русские короткие лейблы; при выходе новых книг список расширяется.
+export const MAGIC_ITEM_SOURCES = [
+  "Руководство Мастера 2024",
+  "Книга игрока 2024",
+  "Planescape",
+  "Arcana Unleashed",
+  "Adventures in Faerun",
+  "Heroes of Faerun",
+  "Forge of the Artificer",
+  "Netheril's Fall",
+  "Ravenloft",
+  "Homebrew",
+] as const;
+
 // Предмет сокровищницы бывает двух родов: магический (у него есть редкость и
 // настройка) и обычное снаряжение (у него их нет). От выбора зависит список
 // типов — те же списки, что и в одноимённых разделах компендиума.
@@ -388,6 +414,7 @@ export const KIND_DEFS: Record<string, KindDef> = {
     fields: [
       { key: "item_type", label: "Тип", type: "select", options: [...MAGIC_ITEM_TYPES] },
       { key: "rarity", label: "Редкость", type: "select", options: [...MAGIC_ITEM_RARITIES] },
+      { key: "source", label: "Источник", type: "select", options: [...MAGIC_ITEM_SOURCES] },
       { key: "cost", label: "Стоимость", type: "text" },
     ],
   },

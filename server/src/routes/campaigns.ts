@@ -416,6 +416,29 @@ campaignsRouter.get("/:id/debts", (req, res) => {
   res.json(debtsForCampaign(campaignId));
 });
 
+// Путевые заметки игроков кампании — мастерский read-only вид (решение
+// владельца 2026-09-07): как игроки понимают сюжет и что им важно. Только
+// чтение: ни создания, ни правок, ни удаления здесь нет — дневник остаётся
+// инструментом игрока, мастер по нему готовится, а не пишет в него.
+// Сюда же попадают ничьи записи (character_id IS NULL) — с пометкой.
+campaignsRouter.get("/:id/player-journals", (req, res) => {
+  const campaignId = Number(req.params.id);
+  if (!Number.isFinite(campaignId)) return res.status(400).json({ error: "bad id" });
+  const rows = db
+    .prepare(
+      `SELECT e.id, e.campaign_id, e.player_id, e.character_id, e.kind, e.name,
+              e.description, e.created_at,
+              p.name as player_name, c.character_name as character_name
+       FROM world_exploration_entries e
+       LEFT JOIN players p ON p.id = e.player_id
+       LEFT JOIN characters c ON c.id = e.character_id
+       WHERE e.campaign_id = ? AND e.archived_at IS NULL
+       ORDER BY e.created_at DESC, e.id DESC`
+    )
+    .all(campaignId);
+  res.json(rows);
+});
+
 campaignsRouter.get("/:id/sessions", (req, res) => {
   const campaign = db
     .prepare("SELECT payment_type FROM campaigns WHERE id = ?")

@@ -1533,6 +1533,19 @@ body.sheet-fullscreen .app-content {
   font-size: var(--fs-meta);
   font-weight: 600;
 }
+/* ---- Тело спутника (пушка/защитник/призыв): бокс с хитами, а не жетон.
+   Без скруглений (§6.2 — только жетонам и аватарам): шов вместо рамки,
+   как у подвала ленты выше. Мёртвое/развеянное — приглушено. ---- */
+.dnd-companion-body {
+  flex: 1 1 240px;
+  min-width: min(100%, 240px);
+  border-top: 1px solid var(--muted);
+  padding-top: 6px;
+}
+.dnd-companion-body.is-dead,
+.dnd-companion-body.is-dismissed {
+  opacity: 0.6;
+}
 
 /* Жетон отдыха — зеркало вдохновения: тот же круг, тот же отступ, левый
    угол. Обе кнопки, которые нажимают прямо с карты, стоят по краям

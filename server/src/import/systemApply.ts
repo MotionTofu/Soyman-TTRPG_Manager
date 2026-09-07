@@ -115,6 +115,7 @@ function convertChecks(checks: ImportSpell["checks"]): unknown[] {
     ...(c.attack_range ? { attackRange: c.attack_range } : {}),
     ...(c.save_ability ? { saveAbility: c.save_ability } : {}),
     ...(c.dc_override != null ? { dcOverride: c.dc_override } : {}),
+    ...(c.save_dc_ability ? { dcAbility: c.save_dc_ability } : {}),
   }));
 }
 
@@ -134,6 +135,9 @@ function convertEffects(effects: ImportSpell["effects"], resolve: Resolve): unkn
       ...(e.half_on_success ? { halfOnSuccess: true } : {}),
       ...(e.upcast_per_level ? { upcastPerLevel: e.upcast_per_level } : {}),
       ...(e.cantrip_scaling ? { cantripScaling: e.cantrip_scaling } : {}),
+      ...(e.level_scaling?.length
+        ? { levelDice: e.level_scaling.map((s) => ({ level: s.level, dice: s.dice })) }
+        : {}),
       ...(e.condition ? { condition: resolve(e.condition) } : {}),
       ...(e.movement_kind ? { movementKind: e.movement_kind } : {}),
       ...(e.distance ? { distance: e.distance } : {}),
@@ -165,6 +169,39 @@ function activatableData(
       kind: source.cost.kind,
       ...(source.cost.amount != null ? { amount: source.cost.amount } : {}),
       ...(source.cost.per ? { per: source.cost.per } : {}),
+      // snake_case формата → camelCase компендиума (см. convertChecks выше).
+      // Без этого resource-цены из файла приезжали голыми и затирали полную
+      // цену (с resourceLabel) при слиянии — кнопка траты ломалась молча.
+      ...(source.cost.resource_label ? { resourceLabel: source.cost.resource_label } : {}),
+      ...(source.cost.resource_key ? { resourceKey: source.cost.resource_key } : {}),
+      ...(source.cost.own_resource ? { ownResource: true } : {}),
+      ...(source.cost.slot_spend ? { slotSpend: true } : {}),
+      ...(source.cost.max_ability ? { maxAbility: source.cost.max_ability } : {}),
+      ...(source.cost.max_multiplier ? { maxMultiplier: source.cost.max_multiplier } : {}),
+      ...(source.cost.level_steps?.length
+        ? { levelSteps: source.cost.level_steps.map((s) => ({ level: s.level, max: s.max })) }
+        : {}),
+      ...(source.cost.slot_return ? { slotReturn: true } : {}),
+      ...(source.cost.restore
+        ? { restore: { pool: source.cost.restore.pool, amount: source.cost.restore.amount } }
+        : {}),
+      ...(source.cost.short_rest
+        ? {
+            shortRest: {
+              pool: source.cost.short_rest.pool,
+              amount: source.cost.short_rest.amount ?? 1,
+              ...(source.cost.short_rest.needs_attuned ? { needsAttuned: true } : {}),
+            },
+          }
+        : {}),
+      ...(source.cost.death_cheat
+        ? {
+            deathCheat: {
+              ...(source.cost.death_cheat.rarities?.length ? { rarities: source.cost.death_cheat.rarities } : {}),
+              ...(source.cost.death_cheat.hp_per ? { hpPer: source.cost.death_cheat.hp_per } : {}),
+            },
+          }
+        : {}),
     };
   }
   return data;
@@ -265,7 +302,17 @@ function equipmentSetData(
 function progressionData(source: ImportClass): Record<string, unknown> {
   const p = source.progression;
   if (!p || p.columns.length === 0) return {};
-  const columns = p.columns.map((col, i) => ({ key: `c${i + 1}`, label: col.label, role: col.role }));
+  const columns = p.columns.map((col, i) => ({
+    key: `c${i + 1}`,
+    label: col.label,
+    role: col.role,
+    // recharge — только когда в файле есть: «нет поля» = «не трогай», иначе
+    // реимпорт сбрасывал бы short-пулы (монах) в дефолт. Невалидное значение
+    // молча опускаем — код и так считает отсутствие длинным отдыхом.
+    ...(col.recharge === "long" || col.recharge === "short" || col.recharge === "none"
+      ? { recharge: col.recharge }
+      : {}),
+  }));
   const rows = p.rows.map((row) => {
     const out: Record<string, string> = {};
     columns.forEach((col, i) => (out[col.key] = row[i] ?? ""));
@@ -330,6 +377,7 @@ function classData(source: ImportClass, resolve: Resolve): Record<string, unknow
     tool_profs: picks(source.tool_profs, resolve),
     ...(source.skill_choice_count != null ? { skill_choice_count: source.skill_choice_count } : {}),
     skill_choice_options: source.skill_choice_options,
+    ...(source.multiclass_prereq ? { multiclass_prereq: source.multiclass_prereq } : {}),
     ...equipmentSetData("a", source.starting_equipment?.a, resolve),
     ...equipmentSetData("b", source.starting_equipment?.b, resolve),
     ...progressionData(source),
@@ -577,6 +625,8 @@ function flatten(file: SystemImportFile): PendingEntry[] {
         ...filled({
           item_type: m.item_type ?? "",
           rarity: m.rarity ?? "",
+          source: m.source ?? "",
+          ...(m.charges?.max ? { charges: { max: m.charges.max, ...(m.charges.recharge ? { recharge: m.charges.recharge } : {}) } } : {}),
           cost: m.price ?? "",
           attunement: m.attunement,
           classes: m.classes.map((c) => resolve(c)).filter(Boolean),
@@ -1166,6 +1216,48 @@ export function applySystemImport(
       // Слияние, а не замена: поля, которых в файле нет, дописаны человеком в
       // редакторе — импорт их не трогает.
       const merged = { ...previous, ...item.entry.data(resolve) };
+      // Прогрессия — исключение из слияния верхнего уровня: она приходит
+      // целиком (колонки+строки), и колонка файла без recharge затоптала бы
+      // ручную правку Мастера (монах: Очки духа = short). Добираем недостающий
+      // recharge из прежних колонок по совпадению label+role — явное значение
+      // из файла всегда главнее.
+      {
+        const prevProg = (previous.progression ?? null) as {
+          columns?: { label?: string; role?: string; recharge?: string }[];
+        } | null;
+        const nextProg = (merged.progression ?? null) as {
+          columns?: { label?: string; role?: string; recharge?: string }[];
+        } | null;
+        if (prevProg && Array.isArray(prevProg.columns) && nextProg && Array.isArray(nextProg.columns)) {
+          const prevByKey = new Map<string, string>();
+          for (const c of prevProg.columns) {
+            if (c && typeof c.recharge === "string" && c.recharge) {
+              prevByKey.set(`${c.label ?? ""}‖${c.role ?? ""}`, c.recharge);
+            }
+          }
+          if (prevByKey.size > 0) {
+            for (const c of nextProg.columns) {
+              if (c && !c.recharge) {
+                const kept = prevByKey.get(`${c.label ?? ""}‖${c.role ?? ""}`);
+                if (kept === "long" || kept === "short" || kept === "none") c.recharge = kept;
+              }
+            }
+          }
+        }
+      }
+      // Цена — слияние на ключ глубже (прецедент: recharge прогрессии выше):
+      // файл несёт kind/amount/per и что автор вписал, а структурные флаги
+      // (ownResource, maxAbility, restore…), дописанные миграцией или руками,
+      // при отсутствии в файле сохраняются. Явное значение из файла главнее.
+      {
+        const prev = (previous.cost ?? null) as Record<string, unknown> | null;
+        const next = (merged.cost ?? null) as Record<string, unknown> | null;
+        const isObj = (v: unknown): v is Record<string, unknown> =>
+          !!v && typeof v === "object" && !Array.isArray(v);
+        if (isObj(prev) && isObj(next)) {
+          merged.cost = { ...prev, ...next };
+        }
+      }
       // Доступность заклинания классам — единственное поле, которое
       // складывается, а не заменяется: глава про Артефактора дописывает его в
       // заклинания, где уже стоят Волшебник и Бард, и заменить список значило

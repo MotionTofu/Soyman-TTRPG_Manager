@@ -83,6 +83,31 @@ const file = {
           effects: [{ type: "special", when: "always", text: "Возвращает ячейки" }],
           description: "Восстанавливает ячейки, потраченные на [[spell.burning-hands|Горящие руки]] и [[spell.unknown|Неведомое]].",
         },
+        {
+          key: "feature.wizard.pool",
+          name: "Источник магии",
+          level: 1,
+          casting_timing: "Иное",
+          effects: [],
+          cost: {
+            kind: "uses",
+            amount: 2,
+            per: "long_rest",
+            own_resource: true,
+            max_ability: "int",
+            max_multiplier: 2,
+            level_steps: [
+              { level: 3, max: 2 },
+              { level: 5, max: 3 },
+            ],
+            slot_spend: true,
+            slot_return: true,
+            restore: { pool: "Ячейки", amount: 1 },
+            short_rest: { pool: "Источник", amount: 1 },
+            death_cheat: { rarities: ["Необычный"], hp_per: 20 },
+          },
+          description: "Пул со всеми флагами.",
+        },
       ],
       subclasses: [{ key: "sub.wizard.evocation", name: "Воплотитель", description: "", features: [] }],
       description: "",
@@ -149,7 +174,7 @@ const feat = db
   .get() as { description: string };
 console.log(feat.description);
 console.log(
-  /\[\[compendium_entry:\d+\|Горящие руки\]\]/.test(feat.description) &&
+  /\[\[compendium_entry@[^|]+\|[^|]+\|Горящие руки\]\]/.test(feat.description) &&
     !feat.description.includes("[[spell.")
     ? "  ОК: ключ стал ссылкой, неизвестный — обычным текстом"
     : "  ПРОВАЛ: упоминание не разобрано"
@@ -225,6 +250,79 @@ console.log(
     : "  ПРОВАЛ: данные класса затёрты"
 );
 rollbackSystemBatch(applied3.batchId);
+
+show("цена со всеми флагами: файл → компендиум");
+const poolRow = db
+  .prepare(
+    `SELECT e.data FROM compendium_entries e
+     JOIN system_import_keys k ON k.entry_id = e.id WHERE k.key = 'feature.wizard.pool'`
+  )
+  .get() as { data: string };
+const poolCost = JSON.parse(poolRow.data).cost;
+console.log("  cost:", JSON.stringify(poolCost));
+const poolOk =
+  poolCost?.kind === "uses" &&
+  poolCost?.ownResource === true &&
+  poolCost?.maxAbility === "int" &&
+  poolCost?.maxMultiplier === 2 &&
+  Array.isArray(poolCost?.levelSteps) &&
+  poolCost.levelSteps.length === 2 &&
+  poolCost?.slotSpend === true &&
+  poolCost?.slotReturn === true &&
+  poolCost?.restore?.pool === "Ячейки" &&
+  poolCost?.shortRest?.pool === "Источник" &&
+  poolCost?.deathCheat?.hpPer === 20;
+console.log(poolOk ? "  ОК: snake_case файла стал camelCase записи" : "  ПРОВАЛ: флаги не доехали");
+
+show("реимпорт с голой ценой: флаги переживают");
+const slimFile = {
+  ...file,
+  spells: [],
+  equipment: [],
+  mechanics: [],
+  classes: [
+    {
+      ...file.classes[0],
+      features: [
+        {
+          key: "feature.wizard.pool",
+          name: "Источник магии",
+          level: 1,
+          cost: { kind: "uses", amount: 5, per: "long_rest" },
+          description: "",
+        },
+      ],
+      subclasses: [],
+    },
+  ],
+};
+const slimCost = validateSystemImport(slimFile, knownSystemKeys(systemId));
+console.log("ok:", slimCost.ok, "ошибок:", slimCost.errors.length);
+const appliedSlim = applySystemImport(slimCost.data!, { systemId, fileName: "проба-худая.json" });
+console.log(appliedSlim.counts);
+const poolAfter = JSON.parse(
+  (
+    db
+      .prepare(
+        `SELECT e.data FROM compendium_entries e
+         JOIN system_import_keys k ON k.entry_id = e.id WHERE k.key = 'feature.wizard.pool'`
+      )
+      .get() as { data: string }
+  ).data
+).cost;
+console.log("  cost:", JSON.stringify(poolAfter));
+const mergeOk =
+  poolAfter?.amount === 5 &&
+  poolAfter?.maxAbility === "int" &&
+  poolAfter?.ownResource === true &&
+  poolAfter?.slotSpend === true &&
+  poolAfter?.restore?.pool === "Ячейки";
+console.log(
+  mergeOk
+    ? "  ОК: amount из файла обновился, флаги уцелели"
+    : "  ПРОВАЛ: слияние цены сломано"
+);
+rollbackSystemBatch(appliedSlim.batchId);
 
 show("откат второго импорта");
 console.log(rollbackSystemBatch(applied2.batchId));

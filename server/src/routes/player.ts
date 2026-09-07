@@ -22,13 +22,20 @@ const upload = multer({
   },
 });
 
-// Everything here is scoped to the authenticated player account's own
+// Everything here is scoped to the authenticated account's own
 // player_id — never trusts an id from the request body/query for anything
 // that determines *whose* data gets read or written. Used by the player
-// desktop sandbox app and the player mobile app; the GM desktop app never
-// calls these (it uses the gm-gated /api/* surface instead).
+// desktop sandbox app and the player mobile app; the GM desktop app calls
+// these too, but only for the GM's own player profile (an account with
+// role 'gm' AND a linked player_id — see PUT /auth/players/:playerId/role):
+// without this the GM looking at their own D&D 5.5 sheet gets 403 on inbox,
+// transfers and world-entries, and the sheet treats them as a stranger.
 export const playerRouter = Router();
-playerRouter.use(requireAuth("player"));
+playerRouter.use(requireAuth());
+playerRouter.use((req: AuthedRequest, res, next) => {
+  if (!req.user?.playerId) return res.status(403).json({ error: "forbidden" });
+  next();
+});
 
 interface CharacterRow {
   id: number;
@@ -860,10 +867,12 @@ playerRouter.get("/creature-card/compendium_entry/:id", (req: AuthedRequest, res
   });
 });
 // «Исследование мира» — личный дневник персонажа (2026-09-02, разбор в
-// SideWorks/Профиль_Кампании_Игрок.md). Раньше это был общий блокнот партии:
-// любой участник кампании читал, правил и архивировал чужие записи. Теперь
-// запись принадлежит персонажу, видит её только автор, а Мастер не видит
-// вовсе — прежний мастерский роут /api/world-exploration-entries удалён.
+// SideWorks/Профиль_Кампании_Игрок.md; чтение мастером — решение 2026-09-07).
+// Раньше это был общий блокнот партии: любой участник кампании читал, правил
+// и архивировал чужие записи. Теперь запись принадлежит персонажу, правит её
+// только автор, соседям по партии чужие заметки невидимы, а Мастер видит их
+// только на чтение (GET /api/campaigns/:id/player-journals) — готовит по ним
+// сюжет, но не пишет в чужой дневник.
 //
 // character_id = NULL — законное состояние: игрок пишет до того, как завёл
 // персонажа, или у него их несколько и он ещё не сказал, чей это дневник.

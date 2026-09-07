@@ -71,6 +71,13 @@ export interface GrantedSpellChoice {
   /** Круг заклинания; null — любой. */
   level: number | null;
   outsideLimit: boolean;
+  /** Число брать из колонки прогрессии на уровне, а не из count
+   *  (заговоры/подготовленные Мистического рыцаря растут с уровнем;
+   *  count — запасной, когда прогрессии нет). */
+  countFrom?: "cantrips" | "prepared";
+  /** Только эти заклинания (имена справочника; стабильнее id при реимпорте).
+   *  Пусто — любой кандидат по остальным фильтрам. */
+  names?: string[];
 }
 
 /** «Выбери N владений» — три музыкальных инструмента у «Музыканта», три
@@ -194,6 +201,10 @@ function parseSpellChoices(raw: unknown): GrantedSpellChoice[] {
       schools: Array.isArray(r.schools) ? (r.schools as unknown[]).filter((x): x is string => typeof x === "string") : [],
       level: typeof r.level === "number" ? r.level : null,
       outsideLimit: r.outsideLimit !== false,
+      countFrom: r.countFrom === "cantrips" || r.countFrom === "prepared" ? r.countFrom : undefined,
+      names: Array.isArray(r.names)
+        ? (r.names as unknown[]).filter((x): x is string => typeof x === "string" && !!x.trim())
+        : undefined,
     });
   }
   return out;

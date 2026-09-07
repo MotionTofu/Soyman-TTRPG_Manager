@@ -73,6 +73,7 @@ import type {
   StorySecret,
   System,
   CampaignDebt,
+  WorldExplorationEntry,
 } from "../types";
 import { Timeline } from "../components/Timeline";
 import { sessionLabel } from "../sessionLabel";
@@ -750,6 +751,13 @@ export function CampaignDetailPage() {
               <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>видны на Главной игроков</span>
             </div>
             <RemindersWidget targetType="campaign" targetId={campaignId} />
+          </section>
+          <section className="stack">
+            <div className="section-heading-sub">
+              <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◈</span> Путевые заметки игроков</h3>
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>только чтение — как игроки понимают сюжет</span>
+            </div>
+            <PlayerJournalsSection campaignId={campaignId} />
           </section>
         </div>
       )}
@@ -1556,6 +1564,99 @@ function PlayersAndCharactersTab({
       {pcConfirmDialog}
       {pcAlertDialog}
       {peekCharId != null && <CharacterPeekModal characterId={peekCharId} onClose={() => setPeekCharId(null)} />}
+    </div>
+  );
+}
+
+// Путевые заметки игроков глазами мастера (read-only, решение 2026-09-07):
+// как игроки понимают сюжет и что им важно. Без правок и удаления — дневник
+// остаётся инструментом игрока, мастер по нему готовится, а не пишет в него.
+function PlayerJournalsSection({ campaignId }: { campaignId: number }) {
+  type JournalRow = WorldExplorationEntry & { player_name?: string | null; character_name?: string | null };
+  const [rows, setRows] = useState<JournalRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [author, setAuthor] = useState("all");
+  function load() {
+    setError(null);
+    api
+      .get<JournalRow[]>(`/campaigns/${campaignId}/player-journals`)
+      .then((r) => setRows(r))
+      .catch((e) => {
+        setError(String(e instanceof Error ? e.message : e));
+        setRows([]);
+      });
+  }
+  useEffect(load, [campaignId]);
+  const authors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows ?? []) {
+      const key = `${r.player_name ?? "—"} · ${r.character_name ?? "без персонажа"}`;
+      if (!map.has(key)) map.set(key, key);
+    }
+    return [...map.keys()].sort((a, b) => a.localeCompare(b, "ru"));
+  }, [rows]);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (rows ?? [])
+      .filter((r) => (author === "all" ? true : `${r.player_name ?? "—"} · ${r.character_name ?? "без персонажа"}` === author))
+      .filter((r) => !q || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q));
+  }, [rows, query, author]);
+  if (rows === null) return <p className="muted">Загрузка…</p>;
+  if (error) {
+    return (
+      <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <span>Заметки не загрузились: {error}</span>
+        <button className="primary" onClick={load}>Повторить</button>
+      </div>
+    );
+  }
+  if (rows.length === 0) return <p className="muted">Игроки пока ничего не записали.</p>;
+  return (
+    <div className="stack">
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          className="res-toolbar__search"
+          placeholder="Поиск по заметкам…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Поиск по заметкам игроков"
+          style={{ flex: "1 1 200px", minWidth: 160 }}
+        />
+        <select value={author} onChange={(e) => setAuthor(e.target.value)} aria-label="Фильтр по автору" style={{ maxWidth: 260 }}>
+          <option value="all">Все авторы</option>
+          {authors.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", whiteSpace: "nowrap" }}>
+          {visible.length} из {rows.length}
+        </span>
+      </div>
+      {visible.length === 0 ? (
+        <p className="muted">По этому запросу записей нет — снимите фильтр.</p>
+      ) : (
+        visible.map((r) => (
+          <div key={r.id} className="card stack" style={{ gap: 6 }}>
+            <div className="row" style={{ justifyContent: "space-between", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
+                {r.created_at.slice(0, 10).split("-").reverse().join(".")}
+                {" · "}
+                {r.player_name ?? "—"}
+                {" · "}
+                {r.character_name ?? "без персонажа"}
+              </span>
+              {r.kind && (
+                <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  {r.kind}
+                </span>
+              )}
+            </div>
+            {r.name && <strong>{r.name}</strong>}
+            <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{r.description}</p>
+          </div>
+        ))
+      )}
     </div>
   );
 }

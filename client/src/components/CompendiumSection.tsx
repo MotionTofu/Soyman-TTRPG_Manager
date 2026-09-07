@@ -35,8 +35,11 @@ import {
   FEAT_CATEGORIES,
   KIND_DEFS,
   kindLabel,
+  chargesRechargeLabel,
   visibleMonsterFields,
   MAGIC_ITEM_RARITIES,
+  MAGIC_ITEM_CHARGES_RECHARGE,
+  MAGIC_ITEM_SOURCES,
   MAGIC_ITEM_TYPES,
   MECHANICS_TOOL_GROUP,
   type FieldDef,
@@ -166,6 +169,11 @@ interface EditDraft {
   checks: DndCheck[];
   effects: DndEffect[];
   cost: DndCost;
+  // Feature-only: бонус к пределам реплик (Лучший бронник: +схема/+предмет).
+  // Строками ввода (пусто = нет бонуса), в данные — только непустое.
+  replicaBonusSchemes: string;
+  replicaBonusItems: string;
+  replicaBonusNote: string;
   // Spell-only.
   ritual: boolean;
   concentration: boolean;
@@ -215,6 +223,10 @@ interface EditDraft {
   // Magic item-only. Empty itemClasses means "available to every class".
   itemAttunement: boolean;
   itemClasses: MechanicsOption[];
+  // Magic item-only. Charges template: max as written ("7", "1к8+1"),
+  // recharge "dawn" | "none". Empty max = no charges tracking.
+  itemChargesMax: string;
+  itemChargesRecharge: string;
   // Equipment/magic_item-only, shown when category/item_type is "Оружие" or
   // "Доспехи" — see getExtraFields below for the plain-text/select fields
   // (damage, ac, …) which go through the generic `data` map instead.
@@ -441,6 +453,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [filterSchool, setFilterSchool] = useState("");
   const [filterItemType, setFilterItemType] = useState("");
   const [filterRarity, setFilterRarity] = useState("");
+  const [filterSource, setFilterSource] = useState("");
   const [filterItemClass, setFilterItemClass] = useState("");
   const [filterAttunement, setFilterAttunement] = useState("");
   const [filterVehicleCategory, setFilterVehicleCategory] = useState("");
@@ -815,6 +828,24 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       checks: (entry.data.checks as DndCheck[] | undefined) ?? [],
       effects: (entry.data.effects as DndEffect[] | undefined) ?? [],
       cost: (entry.data.cost as DndCost | undefined) ?? EMPTY_COST,
+      replicaBonusSchemes: (() => {
+        const b = entry.data.replicaBonus as
+          | { schemes?: unknown; items?: unknown; note?: unknown }
+          | undefined;
+        return typeof b?.schemes === "number" && b.schemes > 0 ? String(b.schemes) : "";
+      })(),
+      replicaBonusItems: (() => {
+        const b = entry.data.replicaBonus as
+          | { schemes?: unknown; items?: unknown; note?: unknown }
+          | undefined;
+        return typeof b?.items === "number" && b.items > 0 ? String(b.items) : "";
+      })(),
+      replicaBonusNote: (() => {
+        const b = entry.data.replicaBonus as
+          | { schemes?: unknown; items?: unknown; note?: unknown }
+          | undefined;
+        return typeof b?.note === "string" ? b.note : "";
+      })(),
       ritual: !!entry.data.ritual,
       concentration: !!entry.data.concentration,
       spellClasses: (entry.data.classes as MechanicsOption[] | undefined) ?? [],
@@ -855,6 +886,12 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       unlimitedGrantedSpells: !!entry.data.unlimited,
       itemAttunement: !!entry.data.attunement,
       itemClasses: (entry.data.classes as MechanicsOption[] | undefined) ?? [],
+      itemChargesMax: typeof (entry.data.charges as { max?: unknown } | undefined)?.max === "string"
+        ? ((entry.data.charges as { max?: string }).max ?? "")
+        : "",
+      itemChargesRecharge: typeof (entry.data.charges as { recharge?: unknown } | undefined)?.recharge === "string"
+        ? ((entry.data.charges as { recharge?: string }).recharge ?? "")
+        : "",
       weaponProperties: dedupeByName((entry.data.weapon_properties as MechanicsPick[] | undefined) ?? []),
       weaponMastery: (entry.data.weapon_mastery as MechanicsOption | undefined) ?? null,
       attackMelee: !!entry.data.attack_melee,
@@ -940,6 +977,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (original?.kind === "magic_item") {
       data.attunement = editing.itemAttunement;
       data.classes = editing.itemClasses;
+      // Пустой макс = без зарядов: ключа не остаётся вовсе.
+      if (editing.itemChargesMax.trim()) {
+        data.charges = {
+          max: editing.itemChargesMax.trim(),
+          ...(editing.itemChargesRecharge ? { recharge: editing.itemChargesRecharge } : {}),
+        };
+      } else {
+        delete data.charges;
+      }
     }
     if (original?.kind === "equipment" || original?.kind === "magic_item") {
       data.weapon_properties = editing.weaponProperties;
@@ -953,6 +999,17 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data.checks = editing.checks;
       data.effects = editing.effects;
       data.cost = editing.cost;
+    }
+    // Бонус к пределам реплик — только у умений; пустые поля ключа не оставляют.
+    if (original?.kind === "feature") {
+      const schemes = Math.max(0, Math.floor(Number(editing.replicaBonusSchemes) || 0));
+      const items = Math.max(0, Math.floor(Number(editing.replicaBonusItems) || 0));
+      const note = editing.replicaBonusNote.trim();
+      if (schemes > 0 || items > 0) {
+        data.replicaBonus = { schemes, items, ...(note ? { note } : {}) };
+      } else {
+        delete data.replicaBonus;
+      }
     }
     if (original?.kind === "spell") {
       data.ritual = editing.ritual;
@@ -990,6 +1047,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data.equipment_b = editing.equipmentB;
       data.skill_choice_count = editing.skillChoiceCount ? Number(editing.skillChoiceCount) : 0;
       data.skill_choice_options = editing.skillChoiceOptions;
+      data.progression_table = editing.progressionTable;
+      data.progression = editing.progression;
+    }
+    if (original?.kind === "subclass") {
+      // Подклассу из классового положены только заклинательная
+      // характеристика (Мистический рыцарь — Интеллект) и таблица развития
+      // (ячейки, кости превосходства, кости пси-энергии). Владения, наборы
+      // и навыки — только у класса.
+      data.spellcasting_ability = editing.spellcastingAbility;
       data.progression_table = editing.progressionTable;
       data.progression = editing.progression;
     }
@@ -1101,6 +1167,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       return topLevel.filter((e) => {
         if (filterItemType !== "" && e.data.item_type !== filterItemType) return false;
         if (filterRarity !== "" && e.data.rarity !== filterRarity) return false;
+        if (filterSource !== "" && (e.data.source as string | undefined) !== filterSource) return false;
         if (filterItemClass !== "") {
           // Empty classes on the item means "available to every class", so
           // it always matches regardless of which class is filtered on.
@@ -1141,6 +1208,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     filterSchool,
     filterItemType,
     filterRarity,
+    filterSource,
     filterItemClass,
     filterAttunement,
     filterVehicleCategory,
@@ -1492,6 +1560,14 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             {MAGIC_ITEM_RARITIES.map((r) => (
               <option key={r} value={r}>
                 {r}
+              </option>
+            ))}
+          </select>
+          <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
+            <option value="">Все источники</option>
+            {MAGIC_ITEM_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {s}
               </option>
             ))}
           </select>
@@ -1942,8 +2018,12 @@ function EntryNode(props: NodeProps) {
     : [];
   const classEquipmentA = isClass ? (entry.data.equipment_a as string | undefined) ?? "" : "";
   const classEquipmentB = isClass ? (entry.data.equipment_b as string | undefined) ?? "" : "";
-  const classProgressionTable = isClass ? (entry.data.progression_table as string | undefined) ?? "" : "";
-  const classProgression = (isClass ? (entry.data.progression as ClassProgression | undefined) : undefined) ?? EMPTY_PROGRESSION;
+  const classProgressionTable =
+    isClass || entry.kind === "subclass" ? (entry.data.progression_table as string | undefined) ?? "" : "";
+  const classProgression =
+    (isClass || entry.kind === "subclass"
+      ? (entry.data.progression as ClassProgression | undefined)
+      : undefined) ?? EMPTY_PROGRESSION;
   const hasClassSummary =
     isClass &&
     (classPrimaryAbilities.length > 0 ||
@@ -1957,6 +2037,9 @@ function EntryNode(props: NodeProps) {
       !!classEquipmentB);
   const itemAttunement = !!entry.data.attunement;
   const itemClasses = (entry.data.classes as MechanicsOption[] | undefined) ?? [];
+  const itemCharges = (entry.data.charges as { max?: unknown; recharge?: unknown } | undefined) ?? {};
+  const itemChargesMax = typeof itemCharges.max === "string" ? itemCharges.max : "";
+  const itemChargesRecharge = typeof itemCharges.recharge === "string" ? itemCharges.recharge : "";
   // Always show Настройка/Классы for magic items (not just when non-default)
   // — they're two of the standard card fields the user asked for.
   const hasMagicItemSummary = isMagicItem;
@@ -2319,6 +2402,38 @@ function EntryNode(props: NodeProps) {
                 />
               </div>
             )}
+            {entry.kind === "feature" && (
+              <div className="stack">
+                <span className="muted" title="Лимит сверх таблицы развития (Лучший бронник: +1 схема и +1 предмет, только доспехи)">
+                  Бонус к пределам реплик
+                </span>
+                <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    value={editing.replicaBonusSchemes}
+                    placeholder="+схем"
+                    aria-label="Бонус схем реплик"
+                    onChange={(e) => props.onDraftChange({ ...editing, replicaBonusSchemes: e.target.value })}
+                    style={{ width: 70 }}
+                  />
+                  <input
+                    type="number"
+                    value={editing.replicaBonusItems}
+                    placeholder="+предм."
+                    aria-label="Бонус предметов реплик"
+                    onChange={(e) => props.onDraftChange({ ...editing, replicaBonusItems: e.target.value })}
+                    style={{ width: 70 }}
+                  />
+                  <input
+                    value={editing.replicaBonusNote}
+                    placeholder="оговорка (напр. только доспехи)"
+                    aria-label="Оговорка бонуса реплик"
+                    onChange={(e) => props.onDraftChange({ ...editing, replicaBonusNote: e.target.value })}
+                    style={{ flex: "1 1 auto" }}
+                  />
+                </div>
+              </div>
+            )}
             {isMagicItem && (
               <div className="stack" style={{ gap: 8 }}>
                 <label className="row" style={{ gap: 6 }}>
@@ -2343,6 +2458,30 @@ function EntryNode(props: NodeProps) {
                     })
                   }
                 />
+                <div className="row" style={{ gap: 6 }}>
+                  <input
+                    placeholder="Заряды, макс. (напр. 7)"
+                    value={editing.itemChargesMax}
+                    onChange={(e) =>
+                      props.onDraftChange({ ...editing, itemChargesMax: e.target.value })
+                    }
+                    style={{ maxWidth: 190 }}
+                  />
+                  <select
+                    value={editing.itemChargesRecharge}
+                    onChange={(e) =>
+                      props.onDraftChange({ ...editing, itemChargesRecharge: e.target.value })
+                    }
+                    title="Восстановление зарядов"
+                  >
+                    <option value="">Восстановление…</option>
+                    {MAGIC_ITEM_CHARGES_RECHARGE.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
             {isWeaponEntry && (
@@ -2759,7 +2898,27 @@ function EntryNode(props: NodeProps) {
                 </label>
               </>
             )}
-            {isClass && (
+            {entry.kind === "subclass" && (
+              <div>
+                <span className="muted">Заклинательная характеристика</span>
+                <div className="row">
+                  <select
+                    value={editing.spellcastingAbility}
+                    onChange={(e) =>
+                      props.onDraftChange({ ...editing, spellcastingAbility: e.target.value })
+                    }
+                  >
+                    <option value="">— нет —</option>
+                    {ABILITY_SCORES.map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+            {(isClass || entry.kind === "subclass") && (
               <details className="card">
                 <summary className="muted chevron-summary">
                   <NavIcon name="chevron" className="chevron-icon" />
@@ -2942,6 +3101,14 @@ function EntryNode(props: NodeProps) {
               <div className="muted">
                 <strong>Настройка:</strong> {itemAttunement ? "да" : "нет"}
               </div>
+              {itemChargesMax && (
+                <div className="muted">
+                  <strong>Заряды:</strong> {itemChargesMax}
+                  {chargesRechargeLabel(itemChargesRecharge)
+                    ? ` · восст. ${chargesRechargeLabel(itemChargesRecharge)}`
+                    : ""}
+                </div>
+              )}
               {itemClasses.length > 0 ? (
                 <div className="muted">
                   <strong>Классы:</strong> {itemClasses.map((c) => c.name).join(", ")}

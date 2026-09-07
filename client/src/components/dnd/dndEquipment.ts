@@ -65,7 +65,19 @@ export async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEq
       weaponAttackRanged: !!entry.data.attack_ranged,
       weaponProperties: weaponProperties || undefined,
       weaponMastery: weaponMastery || undefined,
+      // Категория для монашеского оружия (см. isMonkWeapon в dndMonk.ts).
+      weaponCategory: typeof entry.data.category === "string" && entry.data.category ? entry.data.category : undefined,
     };
+    // Снапшот зарядов магического предмета: шаблон (max/recharge) копируется
+    // строкой, остаток стартует с максимума, если он — обычное число.
+    // Максимум-кубик («1к8+1») числом не выразить — остаток остаётся
+    // незаданным, игрок впишет его сам (степпер/форма ниже это умеют).
+    const charges = entry.data.charges as { max?: unknown; recharge?: unknown } | undefined;
+    if (charges && typeof charges.max === "string" && charges.max.trim()) {
+      meta.chargesMax = charges.max.trim();
+      meta.chargesRecharge = charges.recharge === "dawn" || charges.recharge === "none" ? charges.recharge : undefined;
+      meta.chargesLeft = /^\d+$/.test(charges.max.trim()) ? Number(charges.max.trim()) : null;
+    }
     equipmentMetaCache.set(entryId, meta);
     return meta;
   } catch {

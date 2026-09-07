@@ -116,6 +116,9 @@ const checkSchema = z.object({
   attack_range: z.enum(["melee", "ranged"]).optional(),
   save_ability: z.enum(ABILITY_NAMES).optional(),
   dc_override: z.number().int().optional(),
+  // Чья характеристика задаёт СЛ сейва, когда это не заклинательная
+  // (Ошеломляющий удар — Мудрость). Ключом ("wis"), не русским именем.
+  save_dc_ability: z.enum(["str", "dex", "con", "int", "wis", "cha"]).optional(),
 });
 
 const effectSchema = z.object({
@@ -130,6 +133,11 @@ const effectSchema = z.object({
   half_on_success: z.boolean().optional(),
   upcast_per_level: optionalText,
   cantrip_scaling: optionalText,
+  // Кубы от уровня класса-хозяина (пушка +1к8 на 9-м): пороги свои у каждого
+  // эффекта, в отличие от фиксированных 5/11/17 у заговоров.
+  level_scaling: z
+    .array(z.object({ level: z.number().int().min(1).max(20), dice: z.string().min(1) }))
+    .optional(),
   condition: optionalRef,
   movement_kind: z.enum(["push", "pull", "teleport", "speed"]).optional(),
   distance: optionalText,
@@ -143,6 +151,35 @@ const costSchema = z.object({
   kind: z.enum(["none", "spell_slot", "resource", "uses", "hit_dice"]).default("none"),
   amount: z.number().int().optional(),
   per: z.enum(["short_rest", "long_rest", "day"]).optional(),
+  // Ссылка на пул классового ресурса по названию («Очки духа»): точный ключ
+  // пула содержит id записи класса и из файла неизвестен. Без этого поля
+  // импорт ронял resource-цены до голого kind (молча ломал кнопку траты —
+  // .scratch/monk/issues/02).
+  resource_label: optionalText,
+  resource_key: optionalText,
+  own_resource: z.boolean().optional(),
+  slot_spend: z.boolean().optional(),
+  // Структурные флаги пулов (аудит Артефактора 2026-09-07): без них в схеме
+  // файл не мог выразить пул от характеристики/уровня, и реимпорт главы
+  // с голой ценой затирал размеченное миграциями и руками.
+  // Ключ характеристики — короткий (str/dex/con/int/wis/cha), как в листе.
+  max_ability: z.enum(["str", "dex", "con", "int", "wis", "cha"]).optional(),
+  max_multiplier: z.number().int().min(1).optional(),
+  level_steps: z
+    .array(z.object({ level: z.number().int().min(1).max(20), max: z.number().int().min(1) }))
+    .optional(),
+  slot_return: z.boolean().optional(),
+  restore: z.object({ pool: z.string().min(1), amount: z.number().int().min(1) }).optional(),
+  short_rest: z
+    .object({
+      pool: z.string().min(1),
+      amount: z.union([z.number().int().min(1), z.literal("full")]).optional(),
+      needs_attuned: z.boolean().optional(),
+    })
+    .optional(),
+  death_cheat: z
+    .object({ rarities: z.array(z.string().min(1)).optional(), hp_per: z.number().int().min(1).optional() })
+    .optional(),
 });
 
 /** Общая часть всего, что можно «применить»: заклинание, умение, черта. */
@@ -202,7 +239,18 @@ const featureSchema = z.object({
 });
 
 const progressionSchema = z.object({
-  columns: z.array(z.object({ label: text, role: z.enum(PROGRESSION_ROLES).default("") })).default([]),
+  columns: z
+    .array(
+      z.object({
+        label: text,
+        role: z.enum(PROGRESSION_ROLES).default(""),
+        // Когда пул восстанавливается. Опционально намеренно: «нет поля» значит
+        // «не трогай» (см. filled), а не «сбрось в long» — иначе реимпорт без
+        // поля затоптал бы ручную правку Мастера (монах: Очки духа = short).
+        recharge: z.enum(["long", "short", "none"]).optional(),
+      })
+    )
+    .default([]),
   /** Строка — значения по порядку колонок. */
   rows: z.array(z.array(z.string())).default([]),
 });
@@ -244,6 +292,9 @@ export const classSchema = z.object({
   tool_profs: refs,
   skill_choice_count: z.number().int().min(0).optional(),
   skill_choice_options: z.array(z.string()).default([]),
+  // Требования мультикласса свободной строкой («Ловкость 13 и Мудрость 13»):
+  // лист показывает их подсказкой, гейта нет (домашние правила).
+  multiclass_prereq: optionalText,
   starting_equipment: startingEquipmentSchema.optional(),
   progression: progressionSchema.optional(),
   features: z.array(featureSchema).default([]),
@@ -331,6 +382,13 @@ export const magicItemSchema = z.object({
   aliases,
   item_type: optionalText,
   rarity: optionalText,
+  // Структурный источник предмета (книга). Свободная строка: канонический
+  // список живёт на клиенте (MAGIC_ITEM_SOURCES), импорт его не ограничивает.
+  source: optionalText,
+  // Заряды: max строкой («7», «1к8+1»), recharge — правило восстановления.
+  charges: z
+    .object({ max: optionalText, recharge: optionalText })
+    .optional(),
   // «Настройка заклинателем» — тоже настройка: в компендиуме это флажок, а
   // кем именно, сказано в описании предмета.
   attunement: z.preprocess(

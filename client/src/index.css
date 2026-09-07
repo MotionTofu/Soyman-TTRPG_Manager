@@ -5290,6 +5290,75 @@ details.card[open] summary {
   border-top: var(--card-border-width, 1px) solid var(--line);
   padding-top: 10px;
 }
+/* Визард персонажа в модалке: футер липнет к низу, длинные шаги
+   (навыки, снаряжение) скроллятся под ним. Значения — из .card (14px) и
+   .modal (20px): футер перекрывает их паддинги и встаёт встык. */
+.wizard-footer {
+  position: sticky;
+  bottom: -14px;
+  margin: 0 -14px -14px;
+  padding: 10px 14px 14px;
+  background: var(--paper-2);
+  border-top: var(--card-border-width, 1px) solid var(--line);
+}
+/* Визард персонажа: на телефоне лента из 9 язычков не читается — вместо неё
+   выпадающий пикер шагов (тот же приём, что .dnd-section-picker у листа).
+   Счётчик «Шаг N из 9» виден всегда, в обоих режимах. */
+.wizard-step-picker {
+  max-width: 240px;
+}
+@media (max-width: 700px) {
+  .wizard-steps-tabs {
+    display: none;
+  }
+}
+@media (min-width: 701px) {
+  .wizard-step-row {
+    display: none;
+  }
+}
+/* Фаза 3: боксы характеристик в визарде рисуют свою рамку — это плитки
+   выбора, а не вложенный контент (§1.3). Специфичность выше flatten-правила
+   `.card .dnd-ability-box`, порядок файлов не важен. */
+.card.wizard .dnd-ability-box {
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+  border-radius: 0;
+  padding: var(--sp-2) var(--sp-1);
+}
+/* Модификаторы чернилами; акцентом — только разогнанные предысторией
+   (§1.8: один горячий объект, а не двенадцать). */
+.card.wizard .dnd-ability-mod {
+  color: var(--ink);
+}
+.card.wizard .dnd-ability-mod.is-boosted {
+  color: var(--accent);
+}
+/* Фаза 3: токены вместо магии в инлайнах. */
+.wizard-spread {
+  justify-content: space-between;
+}
+.wizard-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.wizard-blurb {
+  white-space: pre-wrap;
+}
+.wizard-blurb summary {
+  cursor: pointer;
+}
+.wizard-blurb-more {
+  margin-top: var(--sp-1);
+}
+.wizard-level-input {
+  width: 60px;
+}
+.wizard-touch {
+  min-width: 44px;
+  min-height: 44px;
+}
 
 /* Кнопки, раскрывающие спрятанную панель (Создать, Фильтры): раскрытое
    состояние — и включённый фильтр — видно по подсветке. */

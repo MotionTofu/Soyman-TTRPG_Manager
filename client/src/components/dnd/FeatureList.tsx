@@ -57,17 +57,25 @@ export const FeatureListEdit = memo(function FeatureListEdit({
   values,
   onChange,
   headerColorClass,
+  // Дроп записей справочника (приёмы, выстрелы, черты): строка хранит
+  // entryId, и дальше живёт как связанная — цена/тайминг/эффекты из
+  // справочника, мёртвая ссылка при удалении. Без дропа — обычная ручная
+  // строка без entryId, как раньше. Заклинания и предметы сюда не принимаем:
+  // у них свои разделы (круги заклинаний, инвентарь).
+  allowSearchDrop,
 }: {
   title: string;
   values: DndFeature[];
   onChange: (v: DndFeature[]) => void;
   headerColorClass?: string;
+  allowSearchDrop?: boolean;
 }) {
   const [confirmDialog, confirm] = useConfirm();
   const valuesRef = useRef(values);
   valuesRef.current = values;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const [dragOver, setDragOver] = useState(false);
 
   const update = useCallback((i: number, patch: Partial<DndFeature>) => {
     const next = valuesRef.current.slice();
@@ -87,6 +95,26 @@ export const FeatureListEdit = memo(function FeatureListEdit({
     onChange([...values, { name: "", description: "" }]);
   }
 
+  async function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const result = readSearchDrop(e);
+    if (!result || result.type !== "compendium_entry") return;
+    // Приёмы (mechanic_item), умения (feature) и черты (feat) — то, что
+    // может жить строкой умений. Заклинания, снаряжение, классы и прочие
+    // виды — нет: у них свои разделы, дроп туда молча игнорируем.
+    if (result.kind !== "feat" && result.kind !== "feature" && result.kind !== "mechanic_item") return;
+    if (valuesRef.current.some((f) => f.name === result.title)) return;
+    let description = "";
+    try {
+      const entry = await api.get<CompendiumEntry>(`/systems/entries/${result.id}`);
+      description = entry.description || "";
+    } catch {
+      /* entry missing — leave description blank */
+    }
+    onChangeRef.current([...valuesRef.current, { name: result.title, description, entryId: result.id }]);
+  }
+
   // Stable per-row callbacks — rebuilt only when the row count changes
   // (add/remove), not on every keystroke, so FeatureRow's memo actually
   // skips the rows the user isn't currently editing.
@@ -101,7 +129,12 @@ export const FeatureListEdit = memo(function FeatureListEdit({
   const removeCallbacks = useMemo(() => values.map((_, i) => () => remove(i)), [values.length, remove]);
 
   return (
-    <div className="dnd-feature-section">
+    <div
+      className={`dnd-feature-section${dragOver ? " drag-over" : ""}`}
+      onDragOver={allowSearchDrop ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+      onDragLeave={allowSearchDrop ? () => setDragOver(false) : undefined}
+      onDrop={allowSearchDrop ? handleDrop : undefined}
+    >
       {confirmDialog}
       <div className={`dnd-feature-header ${headerColorClass ?? ""}`}>{title}</div>
       <div className="stack">
@@ -136,8 +169,8 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
   values,
   onChange,
   headerColorClass,
-  // Only "Черты" wires this up — dragging a "feat"-kind result from search
-  // fetches its full compendium description and adds it as a row.
+  // Дроп записей справочника в «Черты» — только вида feat; «Особые умения»
+  // (FeatureListEdit) принимают feat/feature/mechanic_item своим флагом.
   allowSearchDrop,
 }: {
   title: string;
@@ -198,7 +231,10 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
     } catch {
       /* feat entry missing — leave description blank */
     }
-    onChangeRef.current([...valuesRef.current, { name: result.title, description }]);
+    // entryId храним: цена/тайминг/эффекты подхватятся живьём через
+    // resolveFeature, а удаление записи из справочника покажется мёртвой
+    // ссылкой (deadLinks), а не молча пустеющим текстом.
+    onChangeRef.current([...valuesRef.current, { name: result.title, description, entryId: result.id }]);
   }
 
   return (

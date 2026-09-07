@@ -21,10 +21,11 @@ function withAvatarUrl<T extends { avatar_image_path?: string | null }>(row: T) 
 
 // Старая общая картотека «Исследование Мира» живёт ТОЛЬКО в кампаниях, где
 // владелец сам играет (`campaigns.role = 'player'`, вкладка PLAYER_TABS в
-// CampaignDetailPage). В кампаниях, которые он водит, эти же строки — личные
-// путевые заметки его игроков, и мастеру они не видны: разбор 2026-09-02,
-// SideWorks/Профиль_Кампании_Игрок.md. Без этой проверки роут был бы ровно той
-// дверью, которую там решили закрыть.
+// CampaignDetailPage). В кампаниях, которые он водит, путевые заметки игроков
+// мастеру видны только на чтение через GET /campaigns/:id/player-journals
+// (решение 2026-09-07); этот роут сюда не входит: разбор 2026-09-02,
+// SideWorks/Профиль_Кампании_Игрок.md. Без проверки ниже роут был бы дверью
+// для правок чужого дневника.
 function isOwnPlayerCampaign(campaignId: number | string | undefined): boolean {
   if (campaignId == null) return false;
   const row = db.prepare("SELECT role FROM campaigns WHERE id = ?").get(campaignId) as

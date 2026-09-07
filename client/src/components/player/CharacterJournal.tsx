@@ -288,6 +288,9 @@ export function CharacterJournal({
               {saving ? "Записываю…" : "Записать"}
             </button>
           </div>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+            Мастер видит заметки на чтение — по ним он понимает, как вы трактуете сюжет.
+          </span>
         </div>
       )}
 

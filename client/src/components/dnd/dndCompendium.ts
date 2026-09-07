@@ -53,6 +53,9 @@ export interface DndClassOption {
   // Уровень класса, с которого доступен подкласс (data.subclass_level).
   // 0 — поле не заполнено, ограничения нет.
   subclassLevel: number;
+  // Требования мультикласса (data.multiclass_prereq, напр. «Ловкость 13»).
+  // Пусто — в данных нет, подсказку не показываем.
+  multiclassPrereq: string;
 }
 export interface DndSubclassOption {
   id: number;
@@ -83,6 +86,7 @@ export async function loadDndClassHierarchy(systemId: number, opts?: LoadOpts): 
       name: e.name,
       hitDie: String(e.data.hit_die ?? ""),
       subclassLevel: Number(e.data.subclass_level) || 0,
+      multiclassPrereq: typeof e.data.multiclass_prereq === "string" ? e.data.multiclass_prereq : "",
     }))
     .sort(byNameRu);
   const subclassesByClass: Record<number, DndSubclassOption[]> = {};
@@ -153,9 +157,14 @@ export interface DndFeatOption {
   name: string;
 }
 
-/** Черты происхождения — те, что визард предлагает на шаге выбора черты.
- *  Отбираются по полю `category`, оно заполнено у всех 129 черт. */
-export async function loadDndOriginFeats(systemId: number, opts?: LoadOpts): Promise<DndFeatOption[]> {
+/** Черты заданной категории — черта происхождения для визарда, боевые
+ *  стили для выбора Воина. Категория — поле `category`, оно заполнено
+ *  у всех черт (проверено: 129 записей). */
+export async function loadDndFeatsByCategory(
+  systemId: number,
+  category: string,
+  opts?: LoadOpts
+): Promise<DndFeatOption[]> {
   const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const featSections = sections.filter((s) => s.kind === "feat");
   const lists = await Promise.all(
@@ -163,9 +172,15 @@ export async function loadDndOriginFeats(systemId: number, opts?: LoadOpts): Pro
   );
   return lists
     .flat()
-    .filter((e) => e.kind === "feat" && e.data.category === "Черта происхождения")
+    .filter((e) => e.kind === "feat" && e.data.category === category)
     .map((e) => ({ id: e.id, name: e.name }))
     .sort(byNameRu);
+}
+
+/** Черты происхождения — те, что визард предлагает на шаге выбора черты.
+ *  Отбираются по полю `category`, оно заполнено у всех 129 черт. */
+export async function loadDndOriginFeats(systemId: number, opts?: LoadOpts): Promise<DndFeatOption[]> {
+  return loadDndFeatsByCategory(systemId, "Черта происхождения", opts);
 }
 
 export interface DndBackgroundOption {
@@ -266,6 +281,21 @@ export async function loadDndMechanicsGroup(systemId: number, groupName: string,
     .filter((e) => e.parent_id === group.id)
     .sort((a, b) => a.position - b.position)
     .map((e) => ({ id: e.id, name: e.name }));
+}
+
+// Полные записи группы механик (с описаниями) — для пика приёмов/выстрелов
+// в визарде: выбирать вслепую по именам нельзя.
+export async function loadDndMechanicsGroupEntries(
+  systemId: number,
+  groupName: string,
+  opts?: LoadOpts
+): Promise<CompendiumEntry[]> {
+  const entries = await loadMechanicsEntries(systemId, opts);
+  const group = entries.find((e) => e.parent_id === null && e.name === groupName);
+  if (!group) return [];
+  return entries
+    .filter((e) => e.parent_id === group.id)
+    .sort((a, b) => a.position - b.position);
 }
 
 // Снаряжение/Магические предметы entries, for the Инвентарь tab's

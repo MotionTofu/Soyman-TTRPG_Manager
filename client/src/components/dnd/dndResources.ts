@@ -48,11 +48,33 @@ export interface ReplicateScheme {
   minLevel: number;
 }
 
+/** Общая строка таблицы схем («любой обычный…», книга): шаблон выбора, каждый
+ *  взятый по нему предмет — отдельная схема. id стабилен в пределах записи
+ *  класса ("common", "uncommon-wondrous", "rare-wondrous"). */
+export interface ReplicaGeneric {
+  id: string;
+  label: string;
+  minLevel: number;
+  rarity?: string;
+  types?: string[];
+  excludeTypes?: string[];
+  excludeCursed?: boolean;
+}
+
 export interface ClassResourceSource {
   entry: DndClassEntry;
   progression?: ClassProgression;
   /** Схемы реплик, если класс их даёт (Артефактор). */
   replicateSchemes?: ReplicateScheme[];
+  /** Общие строки схем из данных записи класса. */
+  replicateGenerics?: ReplicaGeneric[];
+  /** Источник — подкласс этого класса (id записи класса): пулы и показатели
+   *  подкласса (кости превосходства, ячейки Мистического рыцаря — нет, те
+   *  идут слотами) живут в прогрессии записи подкласса, а уровень берётся
+   *  из строки базового класса. Нужно, чтобы подпись «· класс» у
+   *  многоклассовых считалась по корням, а не по источникам: иначе
+   *  одноклассовый Воин/Мастер боевых искусств выглядел бы многоклассовым. */
+  subOf?: number | null;
 }
 
 // Ключ должен пережить переименование колонки и не столкнуться с колонкой
@@ -85,9 +107,20 @@ export function applicableResources(sources: ClassResourceSource[]): DndResource
   return out;
 }
 
+/** Бонус к пределам реплик сверх таблицы (Лучший бронник 9 ур.: +1 схема и
+ *  +1 предмет, но только доспехи). Маркер — поле replicaBonus у записи
+ *  умения, цифры и оговорка — из него же. Не форсится (философия R4:
+ *  показываем, не запираем): категория «только доспехи» — на честности. */
+export interface ReplicaBonus {
+  schemes: number;
+  items: number;
+  notes: string[];
+}
+
 /** Пределы реплик на текущем уровне класса: сколько схем можно знать и
  *  сколько предметов держать созданными. Обе колонки живут в таблице
- *  развития со своими ролями — искать их по названию в коде не нужно. */
+ *  развития со своими ролями — искать их по названию в коде не нужно.
+ *  generics — доступные общие строки («любой обычный…») того же уровня. */
 export interface ReplicaLimits {
   classId: number | null;
   className: string;
@@ -95,16 +128,24 @@ export interface ReplicaLimits {
   schemes: number;
   items: number;
   available: ReplicateScheme[];
+  generics: ReplicaGeneric[];
 }
 
 export function replicaLimits(sources: ClassResourceSource[]): ReplicaLimits[] {
   const out: ReplicaLimits[] = [];
-  for (const { entry, progression, replicateSchemes } of sources) {
-    if (!replicateSchemes || replicateSchemes.length === 0 || entry.level <= 0) continue;
+  for (const { entry, progression, replicateSchemes, replicateGenerics } of sources) {
+    if (
+      (!replicateSchemes || replicateSchemes.length === 0) &&
+      (!replicateGenerics || replicateGenerics.length === 0)
+    ) {
+      continue;
+    }
+    if (entry.level <= 0) continue;
     const schemes = toNumber(columnsAtLevel(progression, entry.level, "replica_schemes")[0]?.value ?? "");
     const items = toNumber(columnsAtLevel(progression, entry.level, "replica_items")[0]?.value ?? "");
     // Схема доступна, когда уровень класса дорос до её порога.
-    const available = replicateSchemes.filter((s) => s.minLevel <= entry.level);
+    const available = (replicateSchemes ?? []).filter((s) => s.minLevel <= entry.level);
+    const generics = (replicateGenerics ?? []).filter((g) => g.minLevel <= entry.level);
     if (schemes <= 0 && items <= 0) continue;
     out.push({
       classId: entry.classId,
@@ -113,9 +154,22 @@ export function replicaLimits(sources: ClassResourceSource[]): ReplicaLimits[] {
       schemes,
       items,
       available,
+      generics,
     });
   }
   return out;
+}
+
+/** Подписывать ли пулы/показатели классом («· Воин»): корней больше одного.
+ *  Корень — класс, а не источник: подкласс (subOf) корнем не считается, иначе
+ *  одноклассовый персонаж с подклассом выглядел бы многоклассовым. */
+export function showClassSuffix(sources: ClassResourceSource[]): boolean {
+  const roots = new Set<number | string>();
+  for (const s of sources) {
+    if (s.entry.level <= 0) continue;
+    roots.add(s.subOf ?? s.entry.classId ?? s.entry.className);
+  }
+  return roots.size > 1;
 }
 
 export function applicableStats(sources: ClassResourceSource[]): DndStatDef[] {
@@ -136,9 +190,10 @@ export function applicableStats(sources: ClassResourceSource[]): DndStatDef[] {
 
 // ——— то, чего в таблице нет ———
 //
-// Три пула в 5.5 по уровням не расписаны, а считаются формулой, поэтому в
+// Четыре пула в 5.5 по уровням не расписаны, а считаются формулой, поэтому в
 // таблице развития их попросту нет: Возложение рук — уровень Паладина × 5,
-// Кости вдохновения — модификатор Харизмы, Избранный враг — бонус владения.
+// Кости вдохновения — модификатор Харизмы, Избранный враг — бонус владения,
+// Чародейные выстрелы — модификатор Интеллекта у подкласса (минимум 1).
 // Пока для них нет поля в записи класса, они остаются здесь — но уже как
 // три явных исключения, а не как вся система целиком.
 //
@@ -146,13 +201,21 @@ export function applicableStats(sources: ClassResourceSource[]): DndStatDef[] {
 // («уровень класса × N», «модификатор характеристики», «бонус владения»),
 // после чего этот блок уходит вместе с последними именами классов в коде.
 
-function nameMatches(stored: string, name: string): boolean {
+// «Воин [Fighter]» и «Воин (Fighter)» — тот же класс, что «Воин»:
+// оригинал в скобках — подпись справочника, а не другой класс.
+export function nameMatches(stored: string, name: string): boolean {
   return stored === name || stored.startsWith(`${name} [`) || stored.startsWith(`${name} (`);
 }
 
 function classLevel(classes: DndClassEntry[], name: string): number {
   const c = classes.find((c) => nameMatches(c.className, name));
   return c ? c.level : 0;
+}
+
+// Есть ли строка с таким подклассом (имя — как в записи справочника,
+// скобочные суффиксы «[Fighter]» снимаются тем же nameMatches).
+function hasSubclass(classes: DndClassEntry[], name: string): boolean {
+  return classes.some((c) => c.subclassName && nameMatches(c.subclassName, name));
 }
 
 function proficiencyBonusNumber(classes: DndClassEntry[]): number {
@@ -164,6 +227,9 @@ const FORMULA_RESOURCES: {
   key: string;
   label: string;
   className: string;
+  /** Только когда строка несёт этот подкласс (Чародейный стрелок): пул
+   *  подкласса, а не класса. Без поля — как раньше, по классу. */
+  subclassName?: string;
   recharge: ProgressionRecharge;
   compute(classes: DndClassEntry[], abilities: DndAbilityScores): number;
 }[] = [
@@ -189,6 +255,15 @@ const FORMULA_RESOURCES: {
     className: "Следопыт",
     recharge: "long",
     compute: (classes) => (classLevel(classes, "Следопыт") > 0 ? proficiencyBonusNumber(classes) : 0),
+  },
+  {
+    key: "arcane_shot",
+    label: "Чародейные выстрелы",
+    className: "Воин",
+    subclassName: "Чародейный стрелок",
+    recharge: "short",
+    compute: (classes, abilities) =>
+      hasSubclass(classes, "Чародейный стрелок") ? Math.max(1, abilityModifier(abilities.int)) : 0,
   },
 ];
 
@@ -228,6 +303,22 @@ export function featurePoolKey(entryId: number): string {
   return `feature:${entryId}`;
 }
 
+/** Наибольший порог levelSteps не выше уровня (3/5/9/15 → 2/3/4/5).
+ *  Ниже первого порога — первый (умение всё равно требует свой минимальный
+ *  уровень, ниже него персонаж его не имеет). Без уровня (null) — null,
+ *  вызывающий откатывается к amount. */
+export function steppedMax(
+  steps: { level: number; max: number }[],
+  level: number | null
+): number | null {
+  if (level == null) return null;
+  let best: number | null = null;
+  for (const s of steps) {
+    if (s.level <= level && (best == null || s.max > best)) best = s.max;
+  }
+  return best ?? (steps.length > 0 ? steps[0].max : null);
+}
+
 function featureRecharge(per: DndCostPeriod | undefined): ProgressionRecharge {
   // «В день» восстанавливается долгим отдыхом, как и всё дневное.
   if (per === "short_rest") return "short";
@@ -235,9 +326,17 @@ function featureRecharge(per: DndCostPeriod | undefined): ProgressionRecharge {
 }
 
 /** Пулы умений из списка (живых, разрешённых) — дедуп по ключу: одна и та же
- *  способность дважды не даёт два пула. Максимум — числом, а при maxAbility —
- *  модификатором характеристики (минимум 1): хоумбрю без правки кода. */
-export function featurePools(features: DndFeature[], abilities?: DndAbilityScores): DndResourceDef[] {
+ *  способность дважды не даёт два пула. Максимум — по старшинству: сначала
+ *  levelSteps (порог по уровню класса через levelOf — эликсиры 2→3→4→5),
+ *  потом maxAbility (модификатор, минимум 1 / кратно множителю), потом число.
+ *  levelOf возвращает уровень класса-хозяина записи (по родителям) или null —
+ *  без него шаги не на что опереть, и работает amount. Хоумбрю без правки
+ *  кода. */
+export function featurePools(
+  features: DndFeature[],
+  abilities?: DndAbilityScores,
+  levelOf?: (entryId: number) => number | null
+): DndResourceDef[] {
   const seen = new Set<string>();
   const out: DndResourceDef[] = [];
   for (const f of features) {
@@ -246,12 +345,19 @@ export function featurePools(features: DndFeature[], abilities?: DndAbilityScore
     const key = featurePoolKey(f.entryId);
     if (seen.has(key)) continue;
     seen.add(key);
+    const mult = cost.maxMultiplier && cost.maxMultiplier > 0 ? Math.floor(cost.maxMultiplier) : 1;
+    const stepped =
+      cost.levelSteps && cost.levelSteps.length > 0 && levelOf
+        ? steppedMax(cost.levelSteps, levelOf(f.entryId))
+        : null;
     const max =
-      cost.maxAbility && abilities
-        ? Math.max(1, abilityModifier(abilities[cost.maxAbility]))
-        : cost.amount && cost.amount > 0
-          ? cost.amount
-          : 1;
+      stepped != null
+        ? stepped
+        : cost.maxAbility && abilities
+          ? Math.max(mult, abilityModifier(abilities[cost.maxAbility]) * mult)
+          : cost.amount && cost.amount > 0
+            ? cost.amount
+            : 1;
     out.push({
       key,
       label: f.name || "Свой ресурс",

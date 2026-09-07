@@ -11,7 +11,20 @@ import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndSpeedStructure } from "./dndSpeedStructure";
 import { migrateDndSheetRefs } from "./dndSheetRefs";
 import { migrateDndStartingSets } from "./dndStartingSets";
-import { migrateDndReplicaSchemes } from "./dndReplicaSchemes";
+import { migrateDndReplicaColumnRoles, migrateDndReplicaSchemes } from "./dndReplicaSchemes";
+import {
+  migrateDndArtificerCompanionActions,
+  migrateDndArtificerLevelDice,
+  migrateDndArtificerMasterworker,
+  migrateDndArtificerPoolRows,
+  migrateDndArtificerTouchups,
+} from "./dndArtificerCompanions";
+import { migrateDndArtificerReanimator } from "./dndArtificerReanimator";
+import {
+  ensureNamedReplicaSchemes,
+  migrateDndReplicaGenerics,
+  migrateDndReplicaTiers,
+} from "./dndReplicaTiers";
 
 function tableExists(database: Database.Database, name: string): boolean {
   return !!database
@@ -1569,6 +1582,1779 @@ export function openDatabase(dbDir: string): Database.Database {
     setAppSettingFlag(database, "ability_costs_v2");
   }
 
+  // Пулы Артефактора от модификатора Интеллекта (аудит класса, 2026-09-07):
+  // по книге лимит использований — мод INT, а не константа. Код пулы от
+  // характеристики уже умеет (DndCost.maxAbility/maxMultiplier), редактор —
+  // тоже, данные — нет. Дописываем слиянием в существующий cost, чужие поля
+  // (kind/per/ownResource/restore) не трогаем. Одноразовая (флаг): повторный
+  // проход затоптал бы ручные правки Мастера в справочнике.
+  // 12108 Магия вещей — мод INT (мин. 1); 12586 Проблеск гениальности — мод
+  // INT (мин. 1); 12472 Восстанавливающие реагенты — мод INT (мин. 1);
+  // 12669 Хранящий заклинания предмет — удвоенный мод INT (мин. дважды).
+  if (!appSettingFlag(database, "ability_costs_int_pools")) {
+    const setIntPool = (id: number, maxMultiplier?: number) => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        return;
+      }
+      const prev =
+        data.cost && typeof data.cost === "object" && !Array.isArray(data.cost)
+          ? (data.cost as Record<string, unknown>)
+          : {};
+      const fallbackAmount = typeof prev.amount === "number" && prev.amount > 0 ? prev.amount : maxMultiplier && maxMultiplier > 1 ? maxMultiplier : 1;
+      const next: Record<string, unknown> = {
+        kind: "uses",
+        amount: fallbackAmount,
+        per: "long_rest",
+        ownResource: true,
+        ...prev,
+      };
+      // Ручную характеристику Мастера не перебиваем — дописываем только
+      // недостающее (миграция одноразовая, но аккуратность дешевле споров).
+      if (typeof next.maxAbility !== "string" || !next.maxAbility) next.maxAbility = "int";
+      if (maxMultiplier && maxMultiplier > 1 && next.maxMultiplier == null) next.maxMultiplier = maxMultiplier;
+      data.cost = next;
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    setIntPool(12108);
+    setIntPool(12586);
+    setIntPool(12472);
+    setIntPool(12669, 2);
+    setAppSettingFlag(database, "ability_costs_int_pools");
+  }
+
+  // Активация умений тратой ячейки (аудит Артефактора, 2026-09-07): повторное
+  // создание пушки и доп. эликсиры — за слот сверх бесплатных использований,
+  // воскрешение защитника — всегда за слот. Карточка умения (SpendAction)
+  // такую кнопку уже умеет (DndCost.slotSpend), данные — нет. Слиянием:
+  // отсутствующий cost выставляем целиком, у существующего дописываем только
+  // недостающий флаг. Одноразовая (флаг).
+  // 12244 Мистическая пушка — 1/долгий + слот; 12243 Экспериментальный
+  // эликсир — 2/долгий + слот; 12371 Стальной защитник — только слот.
+  if (!appSettingFlag(database, "ability_costs_slot_spend")) {
+    const setSlotSpend = (id: number, poolAmount: number | null) => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        return;
+      }
+      const prev =
+        data.cost && typeof data.cost === "object" && !Array.isArray(data.cost)
+          ? (data.cost as Record<string, unknown>)
+          : null;
+      if (!prev) {
+        data.cost =
+          poolAmount != null
+            ? { kind: "uses", amount: poolAmount, per: "long_rest", ownResource: true, slotSpend: true }
+            : { kind: "none", slotSpend: true };
+      } else if (prev.slotSpend == null) {
+        prev.slotSpend = true;
+      }
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    setSlotSpend(12244, 1);
+    setSlotSpend(12243, 2);
+    setSlotSpend(12371, null);
+    setAppSettingFlag(database, "ability_costs_slot_spend");
+  }
+
+  // Формульный лимит подготовленных (аудит Артефактора, 2026-09-07): готовит
+  // мод INT + половина уровня (вниз, мин. 1), а статика колонки «Подготовленные
+  // заклинания» при нештатном INT врёт тихо. Маркер — поле prepared_formula у
+  // записи класса: код имён классов не знает, счётчик формулу уже умеет
+  // (classPreparedFormula). Только недостающее поле, во всех системах;
+  // ручной маркер Мастера не перебиваем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "class_prepared_formula_artificer")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+      if (data.prepared_formula != null) continue;
+      data.prepared_formula = "mod_plus_half_level";
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Формула подготовленных Артефактора: записей: ${fixed}`);
+    setAppSettingFlag(database, "class_prepared_formula_artificer");
+  }
+
+  // Откат маркера выше (2026-09-07, текст умения): в этой редакции
+  // («Кузня Артефактора») лимит подготовленных — столбец таблицы, а не
+  // мод INT + пол-уровня (то было правило Таши). Механизм формулы в коде
+  // остаётся (без маркера инертен, годится хоумбрю), с записи — снимаем.
+  if (!appSettingFlag(database, "class_prepared_formula_artificer_revert")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+      if (data.prepared_formula == null) continue;
+      delete data.prepared_formula;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Маркер формулы подготовленных снят: записей: ${fixed}`);
+    setAppSettingFlag(database, "class_prepared_formula_artificer_revert");
+  }
+
+  // Округление вверх в мультиклассе (аудит Артефактора, 2026-09-07): его
+  // собственный подсчёт — уровень/2 вверх, у остальных половинчатых вниз.
+  // Маркер — поле round_up_multiclass у записи класса (effectiveCasterLevel
+  // его уже умеет). Только недостающее поле, во всех системах. Одноразовая.
+  if (!appSettingFlag(database, "class_round_up_artificer")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+      if (data.round_up_multiclass != null) continue;
+      data.round_up_multiclass = true;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Округление вверх Артефактора: записей: ${fixed}`);
+    setAppSettingFlag(database, "class_round_up_artificer");
+  }
+
+  // Откат маркера выше (2026-09-07): округление вверх — правило Таши, а в
+  // данных этой редакции подтверждающего текста нет (поиск по справочнику
+  // пуст). Без доказательств — общий знаменатель: половина вниз, как у всех
+  // половинчатых. Механизм в коде остаётся (без маркера инертен): найдётся
+  // правило в книге — вернётся одной миграцией.
+  if (!appSettingFlag(database, "class_round_up_artificer_revert")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+      if (data.round_up_multiclass == null) continue;
+      delete data.round_up_multiclass;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Маркер округления вверх снят: записей: ${fixed}`);
+    setAppSettingFlag(database, "class_round_up_artificer_revert");
+  }
+
+  // Возврат маркера (2026-09-07, аудит по эталону): next.dnd.su, раздел
+  // мультикласса — «вы добавляете в уровень заклинателя половину уровней
+  // Артефактора (округляя вверх)». Дословно, сомнения сняты. Механизм в коде
+  // всё это время был на месте (isRoundUpCaster), маркер — только данным.
+  if (!appSettingFlag(database, "class_round_up_artificer_v2")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+      if (data.round_up_multiclass === true) continue;
+      data.round_up_multiclass = true;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Округление вверх Артефактора (подтверждено эталоном): записей: ${fixed}`);
+    setAppSettingFlag(database, "class_round_up_artificer_v2");
+  }
+
+  // Переименование «Скольжение» → «Намасливание» (2026-09-07): запись 13571 —
+  // это Grease (name_original), а «Скольжение» уходит в алиасы, чтобы старый
+  // поиск и упоминания не осиротели. Ссылки-mention идут по uid и переживают
+  // переименование сами; три текстовых упоминания правим точечно (предмет
+  // «Масло скольжения» — другое имя, не трогаем). Листы подхватят новое имя
+  // сами (resolveSpell берёт имя из записи). Одноразовая (флаг).
+  if (!appSettingFlag(database, "spell_rename_grease")) {
+    const spell = database.prepare("SELECT name, aliases FROM compendium_entries WHERE id = 13571").get() as
+      | { name: string; aliases: string | null }
+      | undefined;
+    if (spell) {
+      let aliases: string[];
+      try {
+        const v: unknown = JSON.parse(spell.aliases || "[]");
+        aliases = Array.isArray(v) ? (v as unknown[]).filter((a): a is string => typeof a === "string") : [];
+      } catch {
+        aliases = [];
+      }
+      if (spell.name !== "Намасливание") {
+        if (!aliases.includes("Скольжение")) aliases.push("Скольжение");
+        database
+          .prepare("UPDATE compendium_entries SET name = ?, aliases = ? WHERE id = 13571")
+          .run("Намасливание", JSON.stringify(aliases));
+      }
+      const fixDesc = (id: number, from: string, to: string) => {
+        const row = database.prepare("SELECT description FROM compendium_entries WHERE id = ?").get(id) as
+          | { description: string | null }
+          | undefined;
+        if (!row?.description || !row.description.includes(from)) return;
+        database
+          .prepare("UPDATE compendium_entries SET description = ? WHERE id = ?")
+          .run(row.description.replace(from, to), id);
+      };
+      // Таблица дикой магии, рекомендация в Сотворении (метка uid-ссылки),
+      // эффект масла: везде имеется в виду заклинание.
+      fixDesc(11970, "5 — Скольжение;", "5 — Намасливание;");
+      fixDesc(11971, "|Скольжение]]", "|Намасливание]]");
+      fixDesc(13597, "эффект заклинания Скольжение", "эффект заклинания Намасливание");
+    }
+    setAppSettingFlag(database, "spell_rename_grease");
+  }
+
+  // Призыв гомункула заклинанием (2026-09-07): чертёж тела в data.summon
+  // записи 14812 «Гомункул-слуга» — КЗ 13, хиты 5+5×круг ячейки, лимит 1
+  // (новый каст заменяет), перманентный (отдыхом не трогаем). Механизм общий
+  // (companionFormula + ряд спутников), слиянием только недостающее.
+  // Одноразовая (флаг).
+  if (!appSettingFlag(database, "spell_summon_homunculus")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 14812").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        data = {};
+      }
+      if (data.summon == null && data && typeof data === "object" && !Array.isArray(data)) {
+        data.summon = {
+          name: "Гомункул-слуга",
+          ac: "13",
+          hp: "5+5*spell",
+          maxCount: 1,
+          expiry: "permanent",
+          actions: [
+            { name: "Силовой удар", note: "атака заклинанием, 5 фт/30 фт, 1к6+круг силовым полем" },
+            { name: "Проведение магии", note: "реакция: передать касательное заклинание в пределах 120 футов" },
+          ],
+        };
+        database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 14812").run(JSON.stringify(data));
+      }
+    }
+    setAppSettingFlag(database, "spell_summon_homunculus");
+  }
+
+  // Эликсиры 2→3→4→5 (аудит 2026-09-07, эталон): бесплатных эликсиров за
+  // долгий отдых 2 на 3-м, 3 на 5-м, 4 на 9-м, 5 на 15-м. Механизм levelSteps
+  // в коде (featurePools считает по уровню класса-хозяина), сюда — только
+  // пороги слиянием. Одноразовая (флаг).
+  if (!appSettingFlag(database, "ability_costs_elixir_steps")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 12243").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        data = {};
+      }
+      const cost =
+        data.cost && typeof data.cost === "object" && !Array.isArray(data.cost)
+          ? (data.cost as Record<string, unknown>)
+          : null;
+      if (cost && cost.levelSteps == null) {
+        cost.levelSteps = [
+          { level: 3, max: 2 },
+          { level: 5, max: 3 },
+          { level: 9, max: 4 },
+          { level: 15, max: 5 },
+        ];
+        database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 12243").run(JSON.stringify(data));
+        console.log("[db] Эликсиры: скейл 2→3→4→5 проставлен");
+      }
+    }
+    setAppSettingFlag(database, "ability_costs_elixir_steps");
+  }
+
+  // Гранты короткого отдыха (аудит 2026-09-07, эталон): 12706 «Отдохнувший
+  // гений» — +1 использование Проблеска; 12813 «Магическое наставление» —
+  // всё, если настроен хотя бы на один предмет (условие проверяет лист по
+  // attunementCount). Обе записи пассивные (без тайминга) — грант виден
+  // только в модалке отдыха. Слиянием, только недостающее. Одноразовая.
+  if (!appSettingFlag(database, "ability_short_rest_grants")) {
+    const grant = (id: number, shortRest: Record<string, unknown>) => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        return;
+      }
+      const cost =
+        data.cost && typeof data.cost === "object" && !Array.isArray(data.cost)
+          ? (data.cost as Record<string, unknown>)
+          : null;
+      if (cost) {
+        if (cost.shortRest == null) {
+          cost.shortRest = shortRest;
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+        }
+      } else {
+        data.cost = { kind: "none", shortRest };
+        database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+        console.log(`[db] Грант короткого отдыха: cost создан для ${id}`);
+      }
+    };
+    grant(12706, { pool: "Проблеск гениальности", amount: 1 });
+    grant(12813, { pool: "Проблеск гениальности", amount: "full", needsAttuned: true });
+    setAppSettingFlag(database, "ability_short_rest_grants");
+  }
+
+  // Обман смерти (аудит 2026-09-07, эталон): «Душа творения» — на нуле хитов
+  // (не мгновенная смерть) разрушить N необычных/редких реплик → хиты 20×N.
+  // Кнопка живёт в блоке спасбросков (компонент SoulCheat), редкость читается
+  // из записи схемы. Слиянием, только недостающее. Одноразовая (флаг).
+  if (!appSettingFlag(database, "artificer_death_cheat")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 12813").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        const cost =
+          data.cost && typeof data.cost === "object" && !Array.isArray(data.cost)
+            ? (data.cost as Record<string, unknown>)
+            : null;
+        if (cost && cost.deathCheat == null) {
+          cost.deathCheat = { rarities: ["Необычный", "Редкий"], hpPer: 20 };
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 12813").run(JSON.stringify(data));
+          console.log("[db] Обман смерти: флаг на Душе творения");
+        }
+      } catch {
+        // Битый JSON — не наша авария.
+      }
+    }
+    setAppSettingFlag(database, "artificer_death_cheat");
+  }
+
+  // Бонус бронника-9 к репликам (аудит 2026-09-07, эталон): +1 известная схема
+  // и +1 создаваемый предмет, оба строго доспехи. Маркер replicaBonus у записи
+  // 12541; лист показывает строкой в блоке реплик (не форсинг — R4).
+  // Одноразовая (флаг).
+  if (!appSettingFlag(database, "artificer_armorer_bonus")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 12541").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data && typeof data === "object" && !Array.isArray(data) && data.replicaBonus == null) {
+          data.replicaBonus = { schemes: 1, items: 1, note: "только доспехи" };
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 12541").run(JSON.stringify(data));
+          console.log("[db] Бонус бронника к репликам проставлен");
+        }
+      } catch {
+        // Битый JSON — не наша авария.
+      }
+    }
+    setAppSettingFlag(database, "artificer_armorer_bonus");
+  }
+
+  // Таблица эликсиров 1к6 (аудит, удобство алхимика): коробка «Эликсиры на
+  // руках» в карточке умения читает её из данных. Короткие строки с числами
+  // книги (скейл 9/15 — в строке, полный текст — в описании рядом).
+  // Одноразовая (флаг).
+  if (!appSettingFlag(database, "artificer_elixir_table")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 12243").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data && typeof data === "object" && !Array.isArray(data) && data.elixirTable == null) {
+          data.elixirTable = [
+            { key: "heal", name: "Лечение", short: "2к8 + INT хитов; 9/15 ур.: 3к8/4к6" },
+            { key: "swift", name: "Стремительность", short: "+10 к скорости, 1 час; 9/15: 15/20 футов" },
+            { key: "tough", name: "Устойчивость", short: "+1 КЗ, 10 мин; 9/15: 1 час/8 часов" },
+            { key: "bold", name: "Смелость", short: "+1к4 к атакам и спасброскам, 1 мин; 9/15: 10 мин/1 час" },
+            { key: "flight", name: "Полёт", short: "полёт 10 футов, 10 мин; 9/15: 20/30 футов" },
+            { key: "choice", name: "На выбор", short: "эффект на ваш выбор (кубик 6, эликсир за ячейку)" },
+          ];
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 12243").run(JSON.stringify(data));
+          console.log("[db] Таблица эликсиров проставлена");
+        }
+      } catch {
+        // Битый JSON — не наша авария.
+      }
+    }
+    setAppSettingFlag(database, "artificer_elixir_table");
+  }
+
+  // Дубли строк «Действий» (аудит вкладки, 2026-09-07): у 12538 и 12588 всё
+  // trackable-содержимое переехало в дочерние строки (котёл; полёт/притяжка),
+  // а сами они висят без бросков/цен. Тайминг снимаем — тексты остаются в
+  // списке особенностей. Одноразовая (флаг).
+  if (!appSettingFlag(database, "artificer_dedup_rows")) {
+    for (const id of [12538, 12588]) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data.casting_timing != null) {
+          delete data.casting_timing;
+          delete data.casting_timing_other;
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+          console.log(`[db] Строка-дубль убрана из Действий: ${id}`);
+        }
+      } catch {
+        // Битый JSON — не наша авария.
+      }
+    }
+    setAppSettingFlag(database, "artificer_dedup_rows");
+  }
+
+  // Воин (аудит класса, 2026-09-07): три расходуемых пула вместо полутора.
+  // Второе дыхание жило дважды — колонкой таблицы развития и собственным
+  // пулом умения (cost uses+ownResource с фиксированным запасом 2): в
+  // «Ресурсах» висели два одинаковых пула с разными максимумами, а кнопка
+  // траты из карточки списывала только свой. Всплеск действий и Упорный не
+  // отслеживались вовсе — ни колонок в прогрессии, ни cost у умений.
+  // Чинится данными, код трогать не надо: лист читает cost
+  // (resolveFeature) и прогрессию (resourceSources) живьём, правки
+  // подхватываются существующими персонажами без их миграций.
+  // Одноразовая (флаг): повторный проход затоптал бы ручные правки Мастера
+  // в справочнике, поэтому всё ниже — setIfMissing либо замена строго
+  // известной плохой формы.
+  if (!appSettingFlag(database, "fighter_costs_v1")) {
+    const readEntryData = (id: number): Record<string, unknown> | null => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return null;
+      try {
+        return JSON.parse(row.data || "{}") as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    };
+    const writeEntryData = (id: number, data: Record<string, unknown>) => {
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    const setCostIfMissing = (id: number, cost: unknown) => {
+      const data = readEntryData(id);
+      if (!data || data.cost != null) return;
+      data.cost = cost;
+      writeEntryData(id, data);
+    };
+    // 1. Второе дыхание (12058): собственный пул -> ссылка на табличный
+    // («Второе дыхание» из прогрессии, ключ prog:12191:c4). Заменяем только
+    // известную плохую форму {uses, 2, short_rest, ownResource}.
+    {
+      const data = readEntryData(12058);
+      const cost = (data?.cost ?? null) as Record<string, unknown> | null;
+      if (
+        data &&
+        cost &&
+        cost.kind === "uses" &&
+        cost.amount === 2 &&
+        cost.per === "short_rest" &&
+        cost.ownResource === true
+      ) {
+        data.cost = { kind: "resource", resourceLabel: "Второе дыхание" };
+        writeEntryData(12058, data);
+      }
+    }
+    // 2. Умения без стоимости — ссылка на свой пул из прогрессии.
+    // Тактический разум тратит использование Второго дыхания (кнопка жмётся
+    // по факту успеха — игрок видит бросок раньше, чем трату, поэтому
+    // «не тратится при провале» остаётся на его совести, как и было).
+    setCostIfMissing(12317, { kind: "resource", resourceLabel: "Всплеск действий" });
+    setCostIfMissing(12695, { kind: "resource", resourceLabel: "Упорный" });
+    setCostIfMissing(12423, { kind: "resource", resourceLabel: "Второе дыхание" });
+    // 3. Прогрессия Воина (12191): колонке Второго дыхания — короткий отдых,
+    // плюс две новые resource-колонки. «—» скрывает пул на уровнях, где
+    // умения ещё нет (columnsAtLevel отбрасывает прочерки).
+    {
+      const data = readEntryData(12191);
+      const progression = (data?.progression ?? null) as {
+        columns?: { key: string; label: string; role: string; recharge?: string }[];
+        rows?: Record<string, string>[];
+      } | null;
+      const keys = new Set((progression?.columns ?? []).map((c) => c.key));
+      if (data && progression && Array.isArray(progression.columns) && Array.isArray(progression.rows)) {
+        const levelOf = (row: Record<string, string>): number => {
+          const levelCol = progression.columns!.find((c) => c.role === "level");
+          const n = parseInt(String(row[levelCol?.key ?? "c1"] ?? "").replace(/[^\d]/g, ""), 10);
+          return Number.isFinite(n) ? n : 0;
+        };
+        for (const col of progression.columns) {
+          if (col.key === "c4" && !col.recharge) col.recharge = "short";
+        }
+        if (!keys.has("c6")) {
+          progression.columns.push({ key: "c6", label: "Всплеск действий", role: "resource", recharge: "short" });
+          for (const row of progression.rows) {
+            const lvl = levelOf(row);
+            row.c6 = lvl < 2 ? "—" : lvl < 17 ? "1" : "2";
+          }
+        }
+        if (!keys.has("c7")) {
+          progression.columns.push({ key: "c7", label: "Упорный", role: "resource", recharge: "long" });
+          for (const row of progression.rows) {
+            const lvl = levelOf(row);
+            row.c7 = lvl < 9 ? "—" : lvl < 13 ? "1" : lvl < 17 ? "2" : "3";
+          }
+        }
+        data.progression = progression;
+        writeEntryData(12191, data);
+      }
+    }
+    setAppSettingFlag(database, "fighter_costs_v1");
+  }
+
+  // Подклассы Воина (аудит класса, 2026-09-07, заход 2): у Мистического рыцаря
+  // появляются ячейки/заговоры/подготовленные, у Мастера боевых искусств —
+  // кости превосходства, у Пси-воина — кости пси-энергии. Числа — по таблице
+  // PHB 2024 (ЭК: заговоры 2→3 на 10, ячейки 1–4 кругов, подготовленные
+  // 3→13; БМ: кости 4→5 на 7→6 на 15, грань к8→к10 на 10→к12 на 18, манёвры
+  // 3→5→7→9; Пси: 4к6→6к8→8к8→8к10→10к10→12к12).
+  // Прогрессия лежит в data.progression записи подкласса и читается листом
+  // наравне с классовой (subProgression в слотах/лимитах/ресурсах), уровень —
+  // уровень базового класса. Редактор справочника её тоже умеет (вкладка
+  // «Таблица развития» у подкласса), поэтому сеем только при отсутствии:
+  // правка Мастера главнее посева.
+  // Речардж костей Пси — приближение: по книге на коротком возвращается 1
+  // кость, а модель recharge умеет только «все/ничего» (та же оговорка, что
+  // у Второго дыхания).
+  if (!appSettingFlag(database, "fighter_subclass_v1")) {
+    const readSub = (id: number): Record<string, unknown> | null => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return null;
+      try {
+        return JSON.parse(row.data || "{}") as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    };
+    const writeSub = (id: number, data: Record<string, unknown>) => {
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    const setSubCostIfMissing = (id: number, cost: unknown) => {
+      const data = readSub(id);
+      if (!data || data.cost != null) return;
+      data.cost = cost;
+      writeSub(id, data);
+    };
+    type ProgCol = { key: string; label: string; role: string; recharge?: string };
+    const levels = Array.from({ length: 20 }, (_, i) => i + 1);
+    const prog = (columns: ProgCol[], cell: (level: number) => Record<string, string>) => ({
+      columns,
+      rows: levels.map((lvl) => ({ c1: String(lvl), ...cell(lvl) })),
+    });
+    // Мистический рыцарь (12937):cantrips/prepared/slot1-4. Пустые строки на
+    // 1–2 уровнях — подкласса там ещё нет, лимитов быть не должно.
+    {
+      const data = readSub(12937);
+      if (data && data.progression == null) {
+        const ek: Record<number, { cant: string; prep: string; s: [string, string, string, string] }> = {
+          3: { cant: "2", prep: "3", s: ["2", "", "", ""] },
+          4: { cant: "2", prep: "4", s: ["3", "", "", ""] },
+          5: { cant: "2", prep: "4", s: ["3", "", "", ""] },
+          6: { cant: "2", prep: "4", s: ["3", "", "", ""] },
+          7: { cant: "2", prep: "5", s: ["4", "2", "", ""] },
+          8: { cant: "2", prep: "6", s: ["4", "2", "", ""] },
+          9: { cant: "2", prep: "6", s: ["4", "2", "", ""] },
+          10: { cant: "3", prep: "7", s: ["4", "3", "", ""] },
+          11: { cant: "3", prep: "8", s: ["4", "3", "", ""] },
+          12: { cant: "3", prep: "8", s: ["4", "3", "", ""] },
+          13: { cant: "3", prep: "9", s: ["4", "3", "2", ""] },
+          14: { cant: "3", prep: "10", s: ["4", "3", "2", ""] },
+          15: { cant: "3", prep: "10", s: ["4", "3", "2", ""] },
+          16: { cant: "3", prep: "11", s: ["4", "3", "3", ""] },
+          17: { cant: "3", prep: "11", s: ["4", "3", "3", ""] },
+          18: { cant: "3", prep: "11", s: ["4", "3", "3", ""] },
+          19: { cant: "3", prep: "12", s: ["4", "3", "3", "1"] },
+          20: { cant: "3", prep: "13", s: ["4", "3", "3", "1"] },
+        };
+        data.progression = prog(
+          [
+            { key: "c1", label: "Ур.", role: "level" },
+            { key: "c2", label: "Заговоры", role: "cantrips" },
+            { key: "c3", label: "Подготовленные", role: "prepared" },
+            { key: "c4", label: "Ячейки 1", role: "slot1" },
+            { key: "c5", label: "Ячейки 2", role: "slot2" },
+            { key: "c6", label: "Ячейки 3", role: "slot3" },
+            { key: "c7", label: "Ячейки 4", role: "slot4" },
+          ],
+          (lvl) => {
+            const r = ek[lvl];
+            return r
+              ? { c2: r.cant, c3: r.prep, c4: r.s[0], c5: r.s[1], c6: r.s[2], c7: r.s[3] }
+              : { c2: "", c3: "", c4: "", c5: "", c6: "", c7: "" };
+          }
+        );
+        if (typeof data.spellcasting_ability !== "string" || !data.spellcasting_ability) {
+          data.spellcasting_ability = "Интеллект";
+        }
+        writeSub(12937, data);
+      }
+    }
+    // Мастер боевых искусств (12889): пул костей на короткий отдых целиком
+    // (по книге так и есть), грань и число манёвров — показателями.
+    {
+      const data = readSub(12889);
+      if (data && data.progression == null) {
+        data.progression = prog(
+          [
+            { key: "c1", label: "Ур.", role: "level" },
+            { key: "c2", label: "Кости превосходства", role: "resource", recharge: "short" },
+            { key: "c3", label: "Кость превосходства", role: "stat" },
+            { key: "c4", label: "Манёвры", role: "stat" },
+          ],
+          (lvl) => {
+            if (lvl < 3) return { c2: "—", c3: "—", c4: "—" };
+            return {
+              c2: lvl < 7 ? "4" : lvl < 15 ? "5" : "6",
+              c3: lvl < 10 ? "к8" : lvl < 18 ? "к10" : "к12",
+              c4: lvl < 7 ? "3" : lvl < 10 ? "5" : lvl < 15 ? "7" : "9",
+            };
+          }
+        );
+        writeSub(12889, data);
+      }
+    }
+    // Пси-воин (12959): число и грань костей по таблице книги.
+    {
+      const data = readSub(12959);
+      if (data && data.progression == null) {
+        data.progression = prog(
+          [
+            { key: "c1", label: "Ур.", role: "level" },
+            { key: "c2", label: "Кости псионической энергии", role: "resource", recharge: "short" },
+            { key: "c3", label: "Кость псионической энергии", role: "stat" },
+          ],
+          (lvl) => {
+            if (lvl < 3) return { c2: "—", c3: "—" };
+            return {
+              c2: lvl < 5 ? "4" : lvl < 9 ? "6" : lvl < 11 ? "8" : lvl < 13 ? "8" : lvl < 17 ? "10" : "12",
+              c3: lvl < 5 ? "к6" : lvl < 11 ? "к8" : lvl < 17 ? "к10" : "к12",
+            };
+          }
+        );
+        writeSub(12959, data);
+      }
+    }
+    setSubCostIfMissing(12059, { kind: "resource", resourceLabel: "Кости превосходства" });
+    setSubCostIfMissing(11925, { kind: "resource", resourceLabel: "Кости псионической энергии" });
+    setAppSettingFlag(database, "fighter_subclass_v1");
+  }
+
+  // Недостающие подклассы Воина (аудит, 2026-09-07, заход 3): Баннерет и
+  // Чародейный стрелок — с полными текстами умений, прогрессиями и ценами.
+  // Плюс каталог боевых приёмов (20) и чародейных выстрелов (8) записями
+  // механик:Selectable-списка «выбери N» в приложении пока нет, поэтому
+  // приёмы лежат справочником (читаются, упоминаются ссылками), а счётчики
+  // известных (БМ: 3→5→7→9, стрелок: 2→3→4→5→6) — показателями в прогрессиях.
+  // Одноразовая (флаг); вставки — только при отсутствии (идемпотентно).
+  if (!appSettingFlag(database, "fighter_new_subclasses_v1")) {
+    const fighterRow = database
+      .prepare("SELECT system_id AS sysId, section_id AS sectionId FROM compendium_entries WHERE id = 12191")
+      .get() as { sysId: number; sectionId: number } | undefined;
+    const mechGroupRow = database
+      .prepare(
+        "SELECT id, section_id AS sectionId FROM compendium_entries WHERE parent_id IS NULL AND name = ?"
+      )
+      .get("Мастерство оружия") as { id: number; sectionId: number } | undefined;
+    if (fighterRow && mechGroupRow) {
+      const { sysId, sectionId: classSection } = fighterRow;
+      const mechSection = mechGroupRow.sectionId;
+      const findChild = (parentId: number | null, kind: string, name: string): number | null => {
+        const sql =
+          parentId == null
+            ? "SELECT id FROM compendium_entries WHERE parent_id IS NULL AND section_id = ? AND kind = ? AND name = ?"
+            : "SELECT id FROM compendium_entries WHERE parent_id = ? AND kind = ? AND name = ?";
+        const args = parentId == null ? [mechSection, kind, name] : [parentId, kind, name];
+        const row = database.prepare(sql).get(...args) as { id: number } | undefined;
+        return row ? row.id : null;
+      };
+      const nextPos = (parentId: number | null): number => {
+        const sql =
+          parentId == null
+            ? "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE parent_id IS NULL AND section_id = ?"
+            : "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE parent_id = ?";
+        const arg = parentId == null ? mechSection : parentId;
+        return (database.prepare(sql).get(arg) as { p: number }).p;
+      };
+      const insertEntry = (
+        section: number,
+        parentId: number | null,
+        kind: string,
+        name: string,
+        original: string,
+        level: number | null,
+        data: Record<string, unknown>,
+        description: string
+      ): number => {
+        const info = database
+          .prepare(
+            "INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, name_original, level, data, description, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          )
+          .run(sysId, section, parentId, kind, name, original, level, JSON.stringify(data), description, nextPos(parentId));
+        return Number(info.lastInsertRowid);
+      };
+      const featData = (extra?: Record<string, unknown>): Record<string, unknown> => ({
+        checks: [],
+        effects: [],
+        ...extra,
+      });
+      const shotPool = { kind: "resource", resourceLabel: "Чародейные выстрелы" };
+      const supPool = { kind: "resource", resourceLabel: "Кости превосходства" };
+
+      // ——— Баннерет ———
+      let banneret = findChild(12191, "subclass", "Баннерет");
+      if (banneret == null) {
+        banneret = insertEntry(
+          classSection,
+          12191,
+          "subclass",
+          "Баннерет",
+          "Banneret",
+          null,
+          {},
+          "Баннереты — образцы доблести и предводительства. В одиночку это умелые бойцы, но во главе союзников они превращают даже плоховооружённое ополчение в свирепый отряд."
+        );
+      }
+      const banneretFeats: [number, string, string][] = [
+        [3, "Посланник рыцарства",
+          "Вы знаете, как подобает держаться благородному посланнику, и получаете следующие преимущества.\n\n**Понимание.** Вы можете накладывать заклинание «Понимание языков», но только как ритуал. Ваша заклинательная характеристика для него — Харизма.\n\n**Полиглот.** Вы изучаете один язык на ваш выбор. Когда вы заканчиваете продолжительный отдых, вы можете заменить его другим языком, который слышали, читали или видели в жестовом виде за последние 24 часа.\n\n**Поставленная речь.** Вы получаете владение одним из следующих навыков на ваш выбор: Выступление, Запугивание, Проницательность, Убеждение."],
+        [3, "Групповое оздоровление",
+          "Когда вы используете Второе дыхание для восстановления хитов, вы можете выбрать союзников в исходящей от вас 30-футовой эманации числом не больше вашего модификатора Харизмы (минимум один союзник). Каждый выбранный союзник восстанавливает хиты в количестве 1к4 + ваш уровень воина. Использовав это умение, вы не сможете использовать его снова, пока не закончите короткий или продолжительный отдых."],
+        [7, "Групповая тактика",
+          "Когда вы используете Групповое оздоровление, каждый выбранный им союзник совершает с преимуществом все броски к20 до начала вашего следующего хода."],
+        [10, "Воодушевляющий всплеск",
+          "Когда вы используете Всплеск действий, вы можете выбрать союзников в исходящей от вас 30-футовой эманации числом не больше вашего модификатора Харизмы (минимум один союзник). Каждый выбранный союзник может немедленно реакцией выполнить одно из следующего.\n\n**Атака.** Союзник совершает одну атаку оружием или безоружным ударом.\n\n**Перемещение.** Союзник перемещается на расстояние до половины своей скорости, не вызывая провоцированные атаки."],
+        [15, "Устойчивость команды",
+          "Когда видимый вами в пределах 60 футов от вас союзник проваливает спасбросок, вы можете реакцией потратить одно использование вашего Упорного: союзник немедленно перебрасывает проваленный спасбросок с бонусом, равным вашему уровню воина, и должен использовать новый результат."],
+        [18, "Вдохновляющий командир",
+          "Вы получаете следующие преимущества.\n\n**Усиленное воодушевление.** Область воздействия ваших умений Групповое оздоровление и Воодушевляющий всплеск увеличивается до 60-футовой эманации.\n\n**Непоколебимая храбрость.** Вы получаете иммунитет к состояниям испуганный и очарованный."],
+      ];
+      for (const [level, name, descr] of banneretFeats) {
+        if (findChild(banneret, "feature", name) != null) continue;
+        insertEntry(
+          classSection, banneret, "feature", name, "", level,
+          featData(name === "Устойчивость команды" ? { cost: { kind: "resource", resourceLabel: "Упорный" } } : undefined),
+          descr
+        );
+      }
+
+      // ——— Чародейный стрелок ———
+      let archer = findChild(12191, "subclass", "Чародейный стрелок");
+      if (archer == null) {
+        archer = insertEntry(
+          classSection,
+          12191,
+          "subclass",
+          "Чародейный стрелок",
+          "Arcane Archer",
+          null,
+          {},
+          "Чародейные стрелки вплетают магию в свои выстрелы: их боеприпасы взрываются, сами находят цель, опутывают и изгоняют врага."
+        );
+      }
+      const archerFeats: [number, string, Record<string, unknown> | undefined, string][] = [
+        [3, "Знания чародейного стрелка", undefined,
+          "Вы изучаете один заговор на ваш выбор: «Искусство друидов» или «Фокусы». Ваша заклинательная характеристика для него — Интеллект.\n\nВы получаете владение навыками Природа и Арканная магия. Если вы уже владеете одним из этих навыков, вместо него выберите владение другим навыком на ваш выбор."],
+        [3, "Чародейный выстрел", { cost: shotPool },
+          "Вы умеете наполнять боеприпасы магией. Вы знаете 2 варианта чародейного выстрела на ваш выбор (см. «Чародейные выстрелы»). Вы изучаете ещё по одному варианту, когда достигаете 7, 10, 15 и 18 уровней воина.\n\nОдин раз в свой ход, когда вы попадаете дальнобойной атакой оружием со свойством «Боеприпасы», вы можете применить к ней один известный вам вариант.\n\nЧисло использований — ваш модификатор Интеллекта (минимум 1). Вы восстанавливаете все потраченные использования, когда заканчиваете короткий или продолжительный отдых.\n\nКость выстрела — к6. Она становится к8 на 10 уровне воина, к10 на 15 и к12 на 18.\n\nЕсли вариант требует спасброска, его Сл равна 8 + ваш модификатор Интеллекта + ваш бонус мастерства."],
+        [7, "Странствующая стрела", { casting_timing: "Бонусное действие" },
+          "Когда вы промахиваетесь дальнобойной атакой оружием со свойством «Боеприпасы», вы можете бонусным действием перенаправить боеприпас в новую цель, которую видите в пределах 60 футов от прежней цели. Совершите бросок атаки по новой цели."],
+        [7, "Магические боеприпасы", undefined,
+          "Действием Магия вы можете зарядить один немагический боеприпас и выстрелить им в видимую поверхность, создав один из следующих эффектов.\n\n**Затемняющий.** Магическая тьма заполняет 15-футовую эманацию от боеприпаса на 1 минуту. Немагическое пламя внутри гаснет, а существа внутри получают −5 к проверкам Восприятия.\n\n**Открывающий.** Вспышка магии заполняет 15-футовую эманацию и открывает немагические замки; раздаётся щелчок, слышный в пределах 300 футов.\n\n**Лозовой.** Из боеприпаса вырастает лоза длиной 120 футов, по которой можно лазать; она исчезает через 10 минут.\n\nИспользовав это умение, вы не сможете использовать его снова, пока не закончите короткий или продолжительный отдых, если только вы не потратите использование вашего Второго дыхания (действие не требуется), чтобы восстановить его использование."],
+        [10, "Заготовленный выстрел", undefined,
+          "Когда вы совершаете бросок инициативы, вы восстанавливаете одно потраченное использование Чародейного выстрела."],
+        [15, "Неукротимая телепортация", undefined,
+          "Когда вы преуспеваете в спасброске благодаря вашему Упорному, вы можете телепортироваться на расстояние до 60 футов в видимое вами свободное пространство."],
+        [18, "Мастерская стрельба", { casting_timing: "Реакция", casting_timing_other: "когда по вам промахиваются атакой" },
+          "Когда по вам промахиваются атакой, вы можете реакцией переместиться на расстояние до половины вашей скорости, не вызывая провоцированные атаки, а затем совершить дальнобойную атаку."],
+      ];
+      for (const [level, name, extra, descr] of archerFeats) {
+        if (findChild(archer, "feature", name) != null) continue;
+        insertEntry(classSection, archer, "feature", name, "", level, featData(extra), descr);
+      }
+      // Прогрессия стрелка: грань кости и число известных вариантов. Пула
+      // здесь нет намеренно: использования — мод Интеллекта, их даёт
+      // формульный пул «Чародейные выстрелы» (dndResources).
+      {
+        const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(archer) as { data: string };
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data.progression == null) {
+          const columns = [
+            { key: "c1", label: "Ур.", role: "level" },
+            { key: "c2", label: "Кость выстрела", role: "stat" },
+            { key: "c3", label: "Выстрелы", role: "stat" },
+          ];
+          const rows: Record<string, string>[] = [];
+          for (let lvl = 1; lvl <= 20; lvl++) {
+            rows.push({
+              c1: String(lvl),
+              c2: lvl < 3 ? "—" : lvl < 10 ? "к6" : lvl < 15 ? "к8" : lvl < 18 ? "к10" : "к12",
+              c3: lvl < 3 ? "—" : lvl < 7 ? "2" : lvl < 10 ? "3" : lvl < 15 ? "4" : lvl < 18 ? "5" : "6",
+            });
+          }
+          data.progression = { columns, rows };
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), archer);
+        }
+      }
+
+      // ——— «Подкласс воина»: теперь их шесть ———
+      {
+        const row = database.prepare("SELECT data, description FROM compendium_entries WHERE id = 12517").get() as {
+          data: string; description: string;
+        };
+        if (row && row.description.includes("Мастер боевых искусств, Чемпион, Мистический рыцарь и Пси-воин")) {
+          const next = row.description.replace(
+            "Подклассы Мастер боевых искусств, Чемпион, Мистический рыцарь и Пси-воин подробно описаны после умений этого класса.",
+            "Подклассы Мастер боевых искусств, Чемпион, Мистический рыцарь, Пси-воин, Баннерет и Чародейный стрелок подробно описаны после умений этого класса."
+          );
+          database.prepare("UPDATE compendium_entries SET description = ? WHERE id = 12517").run(next);
+        }
+      }
+
+      // ——— Каталог приёмов и выстрелов ———
+      const maneuverGroup = findChild(null, "mechanic_group", "Боевые приёмы") ??
+        insertEntry(mechSection, null, "mechanic_group", "Боевые приёмы", "", null, {},
+          "Приёмы Мастера боя. Каждый требует траты кости превосходства (см. умение «Боевое превосходство»). Спасбросок против приёма: Сл 8 + бонус владения + модификатор Силы или Ловкости.");
+      const shotGroup = findChild(null, "mechanic_group", "Чародейные выстрелы") ??
+        insertEntry(mechSection, null, "mechanic_group", "Чародейные выстрелы", "", null, {},
+          "Варианты Чародейного выстрела. Один раз в ход при попадании дальнобойной атакой с «Боеприпасами»; тратит использование (модификатор Интеллекта, минимум 1). Кость: к6, к8 на 10, к10 на 15, к12 на 18. Сл 8 + Интеллект + бонус владения.");
+      const BONUS = { casting_timing: "Бонусное действие" };
+      const REACTION = (other: string): Record<string, unknown> => ({ casting_timing: "Реакция", casting_timing_other: other });
+      const maneuvers: [string, Record<string, unknown> | undefined, string][] = [
+        ["Активное уклонение", BONUS, "Бонусным действием потратьте кость превосходства и совершите действие Отход. До начала вашего следующего хода ваш КЗ увеличивается на выпавшее число."],
+        ["Атака с выпадом", BONUS, "Бонусным действием потратьте кость превосходства и совершите действие Рывок. Если перед рукопашной атакой в этом ходу вы переместились по прямой не менее чем на 5 футов, добавьте кость к её урону."],
+        ["Атака с манёвром", undefined, "Когда вы попадаете атакой, потратьте кость превосходства: добавьте её к урону, и один видимый вами союзник может реакцией переместиться на расстояние до половины своей скорости, не вызывая провоцированные атаки от цели этой атаки."],
+        ["Атака с угрозой", undefined, "Когда вы попадаете атакой, потратьте кость превосходства: добавьте её к урону, и цель совершает спасбросок Мудрости. При провале она испугана до конца вашего следующего хода."],
+        ["Атака с финтом", BONUS, "Бонусным действием потратьте кость превосходства против цели в пределах 5 футов от вас: ваша следующая атака по ней в этом ходу совершается с преимуществом, добавьте кость к её урону."],
+        ["Засада", undefined, "Когда вы совершаете проверку Скрытности или бросок инициативы, потратьте кость превосходства и добавьте её к результату."],
+        ["Командирский напор", undefined, "Когда вы совершаете проверку Харизмы (Выступление, Запугивание или Убеждение), потратьте кость превосходства и добавьте её к результату."],
+        ["Обезоруживающая атака", undefined, "Когда вы попадаете атакой, потратьте кость превосходства: добавьте её к урону, и цель совершает спасбросок Силы. При провале она роняет один удерживаемый предмет."],
+        ["Опрокидывающая атака", undefined, "Когда вы попадаете атакой оружием или безоружным ударом, потратьте кость превосходства: добавьте её к урону, и цель размера Большой или меньше совершает спасбросок Силы. При провале она опрокинута."],
+        ["Ответный удар", REACTION("когда по вам промахиваются рукопашной атакой"), "Когда по вам промахиваются рукопашной атакой, вы можете реакцией потратить кость превосходства и совершить рукопашную атаку, добавив кость к её урону."],
+        ["Отвлекающий удар", undefined, "Когда вы попадаете атакой, потратьте кость превосходства: добавьте её к урону. Следующая атака по этой цели не от вас до начала вашего следующего хода совершается с преимуществом."],
+        ["Парирование", REACTION("когда вы получаете урон от рукопашной атаки"), "Когда вы получаете урон от рукопашной атаки, вы можете реакцией потратить кость превосходства и уменьшить урон на выпавшее число + ваш модификатор Силы или Ловкости."],
+        ["Подмена", undefined, "В свой ход рядом с согласным существом потратьте кость превосходства и поменяйтесь с ним местами (вам это стоит 5 футов перемещения). Вы или оно получаете бонус к КЗ, равный выпавшему числу, до начала вашего следующего хода."],
+        ["Провоцирующая атака", undefined, "Когда вы попадаете атакой, потратьте кость превосходства: добавьте её к урону, и цель совершает спасбросок Мудрости. При провале у неё помеха на атаки не по вам до конца вашего следующего хода."],
+        ["Рассекающая атака", undefined, "Когда вы попадаете рукопашной атакой, потратьте кость превосходства: вторая цель в пределах 5 футов от первой и в пределах вашей досягаемости получает урон, равный выпавшему числу, если исходный бросок атаки попал бы и по ней."],
+        ["Сплочение", BONUS, "Бонусным действием потратьте кость превосходства: один видимый вами союзник в пределах 30 футов от вас получает временные хиты, равные выпавшему числу + половина вашего уровня воина (округлить вниз)."],
+        ["Тактическая оценка", undefined, "Когда вы совершаете проверку Интеллекта (История или Анализ) либо проверку Мудрости (Проницательность), потратьте кость превосходства и добавьте её к результату."],
+        ["Толкающая атака", undefined, "Когда вы попадаете атакой оружием или безоружным ударом, потратьте кость превосходства: добавьте её к урону, и цель размера Большой или меньше совершает спасбросок Силы. При провале она оттолкнута от вас на 15 футов по прямой."],
+        ["Точная атака", undefined, "Когда вы промахиваетесь атакой, потратьте кость превосходства и добавьте её к броску атаки."],
+        ["Удар командующего", undefined, "Действием Атака откажитесь от одной из ваших атак: один видимый вами союзник может реакцией совершить атаку оружием или безоружным ударом, добавив вашу кость превосходства к её урону."],
+      ];
+      for (const [name, extra, descr] of maneuvers) {
+        if (findChild(maneuverGroup, "mechanic_item", name) != null) continue;
+        insertEntry(mechSection, maneuverGroup, "mechanic_item", name, "", null, featData({ cost: supPool, ...extra }), descr);
+      }
+      const shots: [string, string][] = [
+        ["Взрывной", "Когда вы попадаете чародейным выстрелом, цель и каждое существо в пределах 10 футов от неё получают урон силовым полем, равный двум броскам вашей кости выстрела."],
+        ["Изгоняющий", "Когда вы попадаете чародейным выстрелом, добавьте кость выстрела психической энергией к урону, и цель совершает спасбросок Харизмы. При провале она изгнана до конца своего следующего хода: у неё скорость 0 и состояние недееспособный, затем она возвращается в оставленное место (или ближайшее свободное)."],
+        ["Ищущий", "Вместо броска атаки чародейным выстрелом выберите видимую цель: она совершает спасбросок Ловкости. При провале она получает обычный урон вашего оружия и дополнительно урон силовым полем, равный двум броскам вашей кости выстрела."],
+        ["Ослабляющий", "Когда вы попадаете чародейным выстрелом, добавьте два броска кости выстрела некротической энергией к урону, и цель совершает спасбросок Телосложения. При провале она отравлена до конца своего следующего хода, а когда она попадает атакой, из урона вычитается один бросок вашей кости выстрела."],
+        ["Пронзающий", "Вместо броска атаки выпустите боеприпас линией 30 на 1 фут от вас. Каждое существо в линии совершает спасбросок Ловкости. При провале оно получает обычный урон вашего оружия и дополнительно колющий урон, равный двум броскам вашей кости выстрела."],
+        ["Тьмяной", "Когда вы попадаете чародейным выстрелом, добавьте кость выстрела психической энергией к урону, и цель совершает спасбросок Мудрости. При провале она ослеплена до конца своего следующего хода."],
+        ["Удерживающий", "Когда вы попадаете чародейным выстрелом, добавьте кость выстрела рубящим к урону, и цель совершает спасбросок Силы. При провале она опутана на 1 минуту или пока вы не используете этот вариант снова. Цель или существо в её досягаемости может действием совершить проверку Силы (Атлетика) против вашей Сл выстрела и окончить состояние при успехе."],
+        ["Чарующий", "Когда вы попадаете чародейным выстрелом, добавьте два броска кости выстрела психической энергией к урону, и цель совершает спасбросок Мудрости. При провале она очарована вами или одним вашим союзником в пределах 30 футов от неё (на ваш выбор) до начала вашего следующего хода. Состояние оканчивается досрочно, если очаровавший атакует цель, наносит ей урон или заставляет совершать спасбросок."],
+      ];
+      for (const [name, descr] of shots) {
+        if (findChild(shotGroup, "mechanic_item", name) != null) continue;
+        insertEntry(mechSection, shotGroup, "mechanic_item", name, "", null, featData({ cost: shotPool }), descr);
+      }
+    setAppSettingFlag(database, "fighter_new_subclasses_v1");
+  }
+
+  // Выборы черт боевого стиля (тикет 03): определения на умениях
+  // «Боевой стиль» (11921) и «Дополнительный боевой стиль» (12194).
+  // Один ключ на оба — пики копятся массивом (у Чемпиона 7+ их два).
+  // Только при отсутствии: правка Мастера главнее посева.
+  if (!appSettingFlag(database, "fighter_feat_choice_v1")) {
+    for (const id of [11921, 12194]) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data.choices == null) {
+          data.choices = [{ key: "fighting_style", kind: "feat", category: "Боевой Стиль", count: 1 }];
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_feat_choice_v1");
+  }
+
+  // Выборы заклинаний подклассов (тикет 04): Мистический рыцарь (число из
+  // прогрессии — заговоры/подготовленные растут с уровнем) и Чародейный
+  // стрелок (1 заговор из двух названных — имена стабильнее id при
+  // реимпорте). outsideLimit: false — выборы идут в лимиты листа.
+  // Только при отсутствии: правка Мастера главнее посева.
+  if (!appSettingFlag(database, "fighter_spell_choice_v1")) {
+    const wizRow = database
+      .prepare("SELECT id FROM compendium_entries WHERE name_original = 'Wizard' AND kind = 'class'")
+      .get() as { id: number } | undefined;
+    const seeds: { id: number; choices: unknown[] }[] = [
+      {
+        id: 12937,
+        choices:
+          wizRow == null
+            ? []
+            : [
+                { count: 2, countFrom: "cantrips", level: 0, classIds: [wizRow.id], outsideLimit: false },
+                { count: 3, countFrom: "prepared", level: null, classIds: [wizRow.id], outsideLimit: false },
+              ],
+      },
+      {
+        id: 12959,
+        choices: [
+          { count: 1, level: 0, classIds: [], names: ["Искусство друидов", "Фокусы"], outsideLimit: false },
+        ],
+      },
+    ];
+    for (const { id, choices } of seeds) {
+      if (choices.length === 0) continue;
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data.spell_choices == null) {
+          data.spell_choices = choices;
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_spell_choice_v1");
+  }
+
+  // Выборы приёмов/выстрелов (тикет 05): лесенки дефов с minLevel на одном
+  // умении, общий key копит пики. БМ «Боевое превосходство» (12059):
+  // 3 +2@7 +2@10 +2@15; стрелок «Чародейный выстрел» (15876):
+  // 2 +1@7 +1@10 +1@15 +1@18. Только при отсутствии.
+  if (!appSettingFlag(database, "fighter_maneuver_choice_v1")) {
+    const seeds: { id: number; choices: unknown[] }[] = [
+      {
+        id: 12059,
+        choices: [
+          { key: "maneuvers", kind: "entry", group: "Боевые приёмы", count: 3 },
+          { key: "maneuvers", kind: "entry", group: "Боевые приёмы", count: 2, minLevel: 7 },
+          { key: "maneuvers", kind: "entry", group: "Боевые приёмы", count: 2, minLevel: 10 },
+          { key: "maneuvers", kind: "entry", group: "Боевые приёмы", count: 2, minLevel: 15 },
+        ],
+      },
+      {
+        id: 15876,
+        choices: [
+          { key: "arcane_shots", kind: "entry", group: "Чародейные выстрелы", count: 2 },
+          { key: "arcane_shots", kind: "entry", group: "Чародейные выстрелы", count: 1, minLevel: 7 },
+          { key: "arcane_shots", kind: "entry", group: "Чародейные выстрелы", count: 1, minLevel: 10 },
+          { key: "arcane_shots", kind: "entry", group: "Чародейные выстрелы", count: 1, minLevel: 15 },
+          { key: "arcane_shots", kind: "entry", group: "Чародейные выстрелы", count: 1, minLevel: 18 },
+        ],
+      },
+    ];
+    for (const { id, choices } of seeds) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data.choices == null) {
+          data.choices = choices;
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_maneuver_choice_v1");
+  }
+
+  // Выбор освоенного оружия (тикет 06): лесенка дефов на умении
+  // «Оружейные приёмы» (12192): 3 +1@4 +1@10 +1@16 — вровень с колонкой
+  // таблицы (таблица остаётся для показа, дефы — для пика).
+  // Только при отсутствии.
+  if (!appSettingFlag(database, "fighter_weapon_choice_v1")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 12192").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (data.choices == null) {
+          data.choices = [
+            { key: "weapon_mastery", kind: "weapon", count: 3 },
+            { key: "weapon_mastery", kind: "weapon", count: 1, minLevel: 4 },
+            { key: "weapon_mastery", kind: "weapon", count: 1, minLevel: 10 },
+            { key: "weapon_mastery", kind: "weapon", count: 1, minLevel: 16 },
+          ];
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 12192").run(JSON.stringify(data));
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_weapon_choice_v1");
+  }
+
+  // Выборы навыков/инструментов подклассов (тикет 07): Ученик войны
+  // (12889) — навык из списка Воина (копируем с записи класса, чтобы не
+  // разъехаться) + ремесленный инструмент; Посланник рыцарства (15867) —
+  // навык из четырёх названных. Язык Баннерета и замена дубля стрелка —
+  // текстом (см. тикет), данных не требуют. Попольно, при отсутствии.
+  if (!appSettingFlag(database, "fighter_skill_choice_v1")) {
+    const classRow = database.prepare("SELECT data FROM compendium_entries WHERE id = 12191").get() as
+      | { data: string }
+      | undefined;
+    let fighterSkills: string[] = [];
+    try {
+      const classData = JSON.parse(classRow?.data || "{}") as Record<string, unknown>;
+      if (Array.isArray(classData.skill_choice_options)) {
+        fighterSkills = (classData.skill_choice_options as unknown[]).filter(
+          (s): s is string => typeof s === "string" && !!s.trim()
+        );
+      }
+    } catch {
+      // Битый JSON класса — выборы не сеем, флаг всё равно ставим ниже.
+    }
+    const seeds: { id: number; patch: Record<string, unknown> }[] = [
+      {
+        id: 12889,
+        patch: {
+          skill_choice_count: 1,
+          skill_choice_options: fighterSkills,
+          tool_choice: { count: 1, group: "Ремесленные инструменты" },
+        },
+      },
+      {
+        id: 15867,
+        patch: {
+          skill_choice_count: 1,
+          skill_choice_options: ["Выступление", "Запугивание", "Проницательность", "Убеждение"],
+        },
+      },
+    ];
+    for (const { id, patch } of seeds) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        let changed = false;
+        for (const [k, v] of Object.entries(patch)) {
+          if (data[k] == null && v != null && (!Array.isArray(v) || v.length > 0)) {
+            data[k] = v;
+            changed = true;
+          }
+        }
+        if (changed) {
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_skill_choice_v1");
+  }
+  }
+
+  // Монах (аудит класса, .scratch/monk/issues/01): Очки духа по PHB 2024
+  // возвращаются на коротком И длинном отдыхе, а колонка жила без recharge —
+  // код считал отсутствие длинным отдыхом, и короткий отдых очки не вернул.
+  // Чинится данными: колонке «Очки духа» — короткий отдых (длинный чинит и
+  // короткие тоже). Только недостающее поле, во всех системах; ручной выбор
+  // Мастера не перебиваем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "monk_focus_short_v1")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      const progression = (data.progression ?? null) as {
+        columns?: { key: string; label: string; role: string; recharge?: string }[];
+      } | null;
+      if (!progression || !Array.isArray(progression.columns)) continue;
+      let touched = false;
+      for (const col of progression.columns) {
+        if (col?.role === "resource" && (col.label ?? "").trim() === "Очки духа" && !col.recharge) {
+          col.recharge = "short";
+          touched = true;
+        }
+      }
+      if (!touched) continue;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Очки духа монаха — короткий отдых: записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_focus_short_v1");
+  }
+
+  // Монах, приёмы за очки духа (.scratch/monk/issues/02): все фичи класса жили
+  // чистым текстом (checks=[], effects=[], cost отсутствует) — в «Бой» попадали
+  // только две реакции, а Шквал и Ошеломляющий не имели ни цены, ни бросков.
+  // Чинится данными, код трогать не надо: лист перечитывает timing/checks/
+  // effects/cost из записей живьём (resolveFeature), правки подхватываются
+  // существующими персонажами без их миграций. Только недостающее, ручные
+  // правки Мастера не перебиваем. Одноразовая (флаг).
+  //
+  // Границы проведены сознательно:
+  // - «Дух монаха» становится строкой «Бонусное действие, −1 дух»: это Шквал
+  //   (единственный приём, который всегда стоит очко). Бесплатные Рывок/Отход
+  //   через Поступь/Оборону игрок жмёт без траты — на его совести, как
+  //   «не тратится при провале» у Тактического разума воина.
+  // - «Отражение атак» цены не получает: базовое уменьшение урона бесплатно,
+  //   очко стоит только перенаправление. Цена на строке сделала бы бесплатную
+  //   реакцию платной — хуже, чем ручная трата.
+  if (!appSettingFlag(database, "monk_costs_v1")) {
+    const monkRows = database
+      .prepare(
+        `SELECT e.id, e.system_id
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number; system_id: number }[];
+    const readData = (id: number): Record<string, unknown> | null => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return null;
+      try {
+        return JSON.parse(row.data || "{}") as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    };
+    const writeData = (id: number, data: Record<string, unknown>) => {
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    const findFeatureId = (parentId: number, name: string): number | null => {
+      const row = database
+        .prepare(
+          "SELECT id FROM compendium_entries WHERE parent_id = ? AND name = ? LIMIT 1"
+        )
+        .get(parentId, name) as { id: number } | undefined;
+      return row?.id ?? null;
+    };
+    let fixed = 0;
+    for (const monk of monkRows) {
+      // Состояние «Ошеломлённый» — ссылкой {id, name}: id механики свой в каждой
+      // базе, ищем в своей системе. Нет — эффект станет текстовым (special).
+      const stun = database
+        .prepare(
+          "SELECT id, name FROM compendium_entries WHERE system_id = ? AND kind = 'mechanic_item' AND name = 'Ошеломлённый' LIMIT 1"
+        )
+        .get(monk.system_id) as { id: number; name: string } | undefined;
+      // 1. Дух монаха: строка Шквала в «Бою».
+      {
+        const id = findFeatureId(monk.id, "Дух монаха");
+        const data = id != null ? readData(id) : null;
+        if (id != null && data) {
+          let touched = false;
+          if (data.casting_timing == null) {
+            data.casting_timing = "Бонусное действие";
+            touched = true;
+          }
+          if (data.cost == null) {
+            data.cost = { kind: "resource", resourceLabel: "Очки духа" };
+            touched = true;
+          }
+          if (touched) {
+            writeData(id, data);
+            fixed++;
+          }
+        }
+      }
+      // 2. Ошеломляющий удар: сейв Телосложения + состояние при провале + цена.
+      {
+        const id = findFeatureId(monk.id, "Ошеломляющий удар");
+        const data = id != null ? readData(id) : null;
+        if (id != null && data) {
+          let touched = false;
+          if (data.casting_timing == null) {
+            data.casting_timing = "Иное";
+            touched = true;
+          }
+          if (data.casting_timing_other == null) {
+            data.casting_timing_other =
+              "один раз за ход, при попадании безоружным ударом или монашеским оружием";
+            touched = true;
+          }
+          if (!Array.isArray(data.checks) || data.checks.length === 0) {
+            data.checks = [{ id: "save1", type: "save", saveAbility: "Телосложение" }];
+            touched = true;
+          }
+          if (!Array.isArray(data.effects) || data.effects.length === 0) {
+            data.effects = [
+              stun
+                ? {
+                    id: "i1",
+                    type: "condition",
+                    when: "save_fail",
+                    checkId: "save1",
+                    condition: { id: stun.id, name: stun.name },
+                    text: "до начала вашего следующего хода; при успехе — скорость цели уменьшается вдвое до начала вашего следующего хода, следующая атака по ней с преимуществом",
+                  }
+                : {
+                    id: "i1",
+                    type: "special",
+                    when: "save_fail",
+                    checkId: "save1",
+                    text: "провал — ошеломлён до начала вашего следующего хода; успех — скорость уменьшается вдвое, следующая атака с преимуществом",
+                  },
+            ];
+            touched = true;
+          }
+          if (data.cost == null) {
+            data.cost = { kind: "resource", resourceLabel: "Очки духа" };
+            touched = true;
+          }
+          if (touched) {
+            writeData(id, data);
+            fixed++;
+          }
+        }
+      }
+      // 3. Отражение атак: численное уменьшение урона в строку «Боя».
+      {
+        const id = findFeatureId(monk.id, "Отражение атак");
+        const data = id != null ? readData(id) : null;
+        if (id != null && data) {
+          if (!Array.isArray(data.effects) || data.effects.length === 0) {
+            data.effects = [
+              {
+                id: "i1",
+                type: "defense",
+                when: "always",
+                text: "уменьшить дробящий/колющий/режущий урон на 1к10 + мод. Лов + уровень монаха (с 13 уровня — любой тип); за 1 очко духа — перенаправить при снижении до 0",
+              },
+            ];
+            writeData(id, data);
+            fixed++;
+          }
+        }
+      }
+    }
+    if (fixed > 0) console.log(`[db] Приёмы монаха (цена/броски): записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_costs_v1");
+  }
+
+  // Требования мультикласса (PHB 2024, гл. 2; у 2014 те же): чтобы взять уровень
+  // в новом классе, нужны 13+ в его ключевых характеристиках. Данными, а не
+  // кодом: лист показывает их подсказкой у второго и следующих классов, гейта
+  // нет (домашние правила сплошь и рядом). Только недостающее поле.
+  // Одноразовая (флаг).
+  if (!appSettingFlag(database, "class_multiclass_prereq_v1")) {
+    const prereq: Record<string, string> = {
+      "Варвар": "Сила 13",
+      "Бард": "Харизма 13",
+      "Воин": "Сила 13 или Ловкость 13",
+      "Волшебник": "Интеллект 13",
+      "Друид": "Мудрость 13",
+      "Жрец": "Мудрость 13",
+      "Колдун": "Харизма 13",
+      "Монах": "Ловкость 13 и Мудрость 13",
+      "Паладин": "Сила 13 и Харизма 13",
+      "Плут": "Ловкость 13",
+      "Следопыт": "Ловкость 13 и Мудрость 13",
+      "Чародей": "Харизма 13",
+      "Артефактор": "Интеллект 13",
+    };
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.name, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL`
+      )
+      .all() as { id: number; name: string; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      const want = prereq[row.name];
+      if (!want) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (data.multiclass_prereq != null) continue;
+      data.multiclass_prereq = want;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Требования мультикласса: записей: ${fixed}`);
+    setAppSettingFlag(database, "class_multiclass_prereq_v1");
+  }
+  // - Мастер Тени: «Теневые обманки» — заговор Малая иллюзия known (рядом с
+  //   Тьмой, которая уже в грантах). Механика выдачи та же: recomputeGrantedSpells
+  //   читает granted_spells класса и подкласса с фильтром по уровню.
+  // - Мастер Стихий: «Манипуляция стихией» — заговор Элементализм known.
+  // - Мастер Милосердия: «Орудия милосердия» — навыки Медицина/Проницательность
+  //   и Набор травника (skills + tool_profs читает grantsFromEntry; применение
+  //   на выбор подкласса — в pickSubclass, снятие — через revokeGrants).
+  // Монах, зазоры аудита 2024, ч.1 (.scratch/monk/audit-2024.md): выдачи подкласса,
+  // которые есть в книге, но не лежат в данных. Только недостающее, ручные
+  // правки Мастера не перебиваем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "monk_subclass_grants_v1")) {
+    const findSpell = (systemId: number, original: string): { id: number; name: string } | null => {
+      const row = database
+        .prepare(
+          "SELECT id, name FROM compendium_entries WHERE system_id = ? AND kind = 'spell' AND name_original = ? LIMIT 1"
+        )
+        .get(systemId, original) as { id: number; name: string } | undefined;
+      return row ?? null;
+    };
+    const findTool = (systemId: number, original: string): { id: number; name: string } | null => {
+      const row = database
+        .prepare(
+          "SELECT id, name FROM compendium_entries WHERE system_id = ? AND kind = 'equipment' AND name_original = ? LIMIT 1"
+        )
+        .get(systemId, original) as { id: number; name: string } | undefined;
+      return row ?? null;
+    };
+    const monks = database
+      .prepare(
+        `SELECT e.id, e.system_id
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number; system_id: number }[];
+    let fixed = 0;
+    for (const monk of monks) {
+      const subId = (name: string): number | null => {
+        const row = database
+          .prepare("SELECT id FROM compendium_entries WHERE parent_id = ? AND name = ? LIMIT 1")
+          .get(monk.id, name) as { id: number } | undefined;
+        return row?.id ?? null;
+      };
+      const grantCantrip = (subName: string, spellOriginal: string) => {
+        const sid = subId(subName);
+        if (sid == null) return;
+        const spell = findSpell(monk.system_id, spellOriginal);
+        if (!spell) return;
+        const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(sid) as
+          | { data: string }
+          | undefined;
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(row?.data || "{}");
+        } catch {
+          return;
+        }
+        const grants = Array.isArray(data.granted_spells) ? [...(data.granted_spells as unknown[])] : [];
+        const has = grants.some((g) => {
+          const r = g as Record<string, unknown>;
+          return r.id === spell.id || r.original === spellOriginal;
+        });
+        if (has) return;
+        grants.push({ id: spell.id, name: spell.name, grantLevel: 3, original: spellOriginal });
+        data.granted_spells = grants;
+        database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), sid);
+        fixed++;
+      };
+      grantCantrip("Мастер Тени", "Minor Illusion");
+      grantCantrip("Мастер Стихий", "Elementalism");
+      // Орудия милосердия.
+      const mercyId = subId("Мастер Милосердия");
+      if (mercyId != null) {
+        const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(mercyId) as
+          | { data: string }
+          | undefined;
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(row?.data || "{}");
+        } catch {
+          data = {};
+        }
+        let touched = false;
+        if (!Array.isArray(data.skills)) {
+          data.skills = ["Медицина", "Проницательность"];
+          touched = true;
+        }
+        if (!Array.isArray(data.tool_profs)) {
+          const kit = findTool(monk.system_id, "Herbalism Kit");
+          if (kit) {
+            data.tool_profs = [{ id: kit.id, name: kit.name }];
+            touched = true;
+          }
+        }
+        if (touched) {
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), mercyId);
+          fixed++;
+        }
+      }
+    }
+    if (fixed > 0) console.log(`[db] Выдачи подклассов монаха: записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_subclass_grants_v1");
+  }
+  // Монах, выбор валюты за Тьму (.scratch/monk/audit-2024.md): «Искусства тени»
+  // позволяют сотворить Тьму за 1 очко сосредоточения, но в листе заклинание
+  // шло только строкой заклинания — а SpendAction для заклинаний умеет тратить
+  // ТОЛЬКО ячейки. Итог: в мультиклассе с кастером предлагалась только ячейка
+  // (по книге — только очко), а у чистого монаха строка говорила «ячеек нет».
+  // Чинится данными: признаку — время Действие + цена 1 очко (кнопка фокуса в
+  // «Бою» у всех), дарованное заклинание остаётся строкой (текст + permissive
+  // ячейка в мультиклассе). В мультиклассе получается выбор: фокус на строке
+  // умения, ячейка на строке заклинания. Только недостающее. Одноразовая.
+  if (!appSettingFlag(database, "monk_shadow_arts_cost_v1")) {
+    const monks = database
+      .prepare(
+        `SELECT e.id
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number }[];
+    let fixed = 0;
+    for (const monk of monks) {
+      const shadow = database
+        .prepare("SELECT id FROM compendium_entries WHERE parent_id = ? AND name = 'Мастер Тени' LIMIT 1")
+        .get(monk.id) as { id: number } | undefined;
+      if (!shadow) continue;
+      const feat = database
+        .prepare("SELECT id, data FROM compendium_entries WHERE parent_id = ? AND name = 'Искусства тени' LIMIT 1")
+        .get(shadow.id) as { id: number; data: string } | undefined;
+      if (!feat) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(feat.data || "{}");
+      } catch {
+        continue;
+      }
+      let touched = false;
+      if (data.casting_timing == null) {
+        data.casting_timing = "Действие";
+        touched = true;
+      }
+      if (data.cost == null) {
+        data.cost = { kind: "resource", resourceLabel: "Очки духа" };
+        touched = true;
+      }
+      if (!touched) continue;
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), feat.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Искусства тени (цена — очко): записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_shadow_arts_cost_v1");
+  }
+  // Монах, СЛ Ошеломляющего удара (.scratch/monk/audit-2024.md, код-аудит):
+  // СЛ сейва считалась от заклинательной характеристики, которой у чистого
+  // монаха нет — показывало 8 + 0 + БМ вместо 8 + Муд + БМ. Чинится данными:
+  // бросок получает dcAbility "wis" (механизм в checksLabel). Только
+  // недостающее поле. Одноразовая (флаг).
+  if (!appSettingFlag(database, "monk_stunning_dc_v1")) {
+    const monks = database
+      .prepare(
+        `SELECT e.id
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number }[];
+    let fixed = 0;
+    for (const monk of monks) {
+      const feat = database
+        .prepare("SELECT id, data FROM compendium_entries WHERE parent_id = ? AND name = 'Ошеломляющий удар' LIMIT 1")
+        .get(monk.id) as { id: number; data: string } | undefined;
+      if (!feat) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(feat.data || "{}");
+      } catch {
+        continue;
+      }
+      const checks = Array.isArray(data.checks) ? (data.checks as Record<string, unknown>[]) : null;
+      const save = checks?.find((c) => c.type === "save");
+      if (!save || save.dcAbility != null) continue;
+      save.dcAbility = "wis";
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), feat.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] СЛ Ошеломляющего (Муд): записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_stunning_dc_v1");
+  }
+  // Монах, опечатка (.scratch/monk/issues/04): в строке 1 уровня таблицы
+  // развития «Боевые искуства» вместо «искусства». Только известная плохая
+  // форма, остальное не трогаем. Одноразовая (флаг). Риск: реимпорт главы из
+  // исходного файла вернёт опечатку — источник файла неизвестен, при повторе
+  // править там.
+  if (!appSettingFlag(database, "monk_typo_v1")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      const progression = (data.progression ?? null) as {
+        rows?: Record<string, string>[];
+      } | null;
+      if (!progression || !Array.isArray(progression.rows)) continue;
+      let touched = false;
+      for (const r of progression.rows) {
+        for (const key of Object.keys(r)) {
+          if (typeof r[key] === "string" && r[key].includes("Боевые искуства")) {
+            r[key] = r[key].replace("Боевые искуства", "Боевые искусства");
+            touched = true;
+          }
+        }
+      }
+      if (!touched) continue;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Опечатка монаха («искуства»): записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_typo_v1");
+  }
+
+  // Монах, сверка с редакцией 2024 (.scratch/monk/audit-2024.md): точечные
+  // расхождения текста с источником 5e24. Только известные плохие формы,
+  // ручные правки Мастера не перебиваем (замена — строго по подстроке).
+  // Одноразовая (флаг).
+  // 1. «halved» в эффекте Ошеломляющего удара — огрызок английского из первой
+  //    версии миграции monk_costs_v1: флаг одноразовый, прод-база успела
+  //    забрать плохую строку до правки исходника.
+  // 2. «Плащ теней»: время — Бонусное действие, а не Действие (источник 5e24:
+  //    «то Бонусным действием вы можете потратить 3 Очка...»).
+  // 3. «Орудия милосердия»: навык — Проницательность, а не Внимательность
+  //    (терминология 2024).
+  // 4. Мультикласс: при взятии даётся и кость хитов, и умения 1 уровня.
+  if (!appSettingFlag(database, "monk_text_repairs_v1")) {
+    const readRow = (id: number): { description: string; data: string } | null => {
+      const row = database
+        .prepare("SELECT description, data FROM compendium_entries WHERE id = ?")
+        .get(id) as { description: string; data: string } | undefined;
+      return row ?? null;
+    };
+    const findByName = (parentId: number | null, name: string): number | null => {
+      const row = database
+        .prepare(
+          parentId == null
+            ? "SELECT id FROM compendium_entries WHERE parent_id IS NULL AND name = ? LIMIT 1"
+            : "SELECT id FROM compendium_entries WHERE parent_id = ? AND name = ? LIMIT 1"
+        )
+        .get(...(parentId == null ? [name] : [parentId, name])) as { id: number } | undefined;
+      return row?.id ?? null;
+    };
+    let fixed = 0;
+    const monkId = findByName(null, "Монах");
+    // 1. halved → русская фраза (эффекты + запасной special-вариант).
+    if (monkId != null) {
+      const id = findByName(monkId, "Ошеломляющий удар");
+      const row = id != null ? readRow(id) : null;
+      if (id != null && row) {
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(row.data || "{}");
+        } catch {
+          data = {};
+        }
+        let touched = false;
+        if (Array.isArray(data.effects)) {
+          for (const e of data.effects) {
+            const eff = e as Record<string, unknown>;
+            if (typeof eff.text === "string" && eff.text.includes("halved")) {
+              eff.text = eff.text
+                .replace("скорость цели halved", "скорость цели уменьшается вдвое")
+                .replace("скорость halved", "скорость уменьшается вдвое");
+              touched = true;
+            }
+          }
+        }
+        if (touched) {
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+          fixed++;
+        }
+      }
+    }
+    // 2. Плащ теней: время накладывания.
+    {
+      const shadowId = monkId != null ? findByName(monkId, "Мастер Тени") : null;
+      // Имя умения уникально в пределах класса — ищем среди потомков подкласса,
+      // а не найдём — среди всех потомков Монаха.
+      let cloakId: number | null = null;
+      if (shadowId != null) cloakId = findByName(shadowId, "Плащ теней");
+      if (cloakId == null && monkId != null) {
+        const row = database
+          .prepare(
+            `SELECT e.id FROM compendium_entries e
+               JOIN compendium_entries p ON p.id = e.parent_id
+              WHERE p.parent_id = ? AND e.name = 'Плащ теней' LIMIT 1`
+          )
+          .get(monkId) as { id: number } | undefined;
+        cloakId = row?.id ?? null;
+      }
+      const row = cloakId != null ? readRow(cloakId) : null;
+      if (cloakId != null && row) {
+        let touched = false;
+        let description = row.description;
+        if (description.includes("Действием магия, находясь полностью в тускло освещённой местности или тьме,")) {
+          description = description.replace(
+            "Действием магия, находясь полностью в тускло освещённой местности или тьме,",
+            "Бонусным действием, находясь полностью в тускло освещённой местности или тьме,"
+          );
+          touched = true;
+        }
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(row.data || "{}");
+        } catch {
+          data = {};
+        }
+        if (data.casting_timing === "Действие") {
+          data.casting_timing = "Бонусное действие";
+          touched = true;
+        }
+        if (touched) {
+          database
+            .prepare("UPDATE compendium_entries SET description = ?, data = ? WHERE id = ?")
+            .run(description, JSON.stringify(data), cloakId);
+          fixed++;
+        }
+      }
+    }
+    // 3. Орудия милосердия: название навыка.
+    if (monkId != null) {
+      const mercyId = findByName(monkId, "Мастер Милосердия");
+      const id = mercyId != null ? findByName(mercyId, "Орудия милосердия") : null;
+      const row = id != null ? readRow(id) : null;
+      if (id != null && row && row.description.includes("навыками Внимательность и Медицина")) {
+        const description = row.description.replace(
+          "навыками Внимательность и Медицина",
+          "навыками Медицина и Проницательность"
+        );
+        database.prepare("UPDATE compendium_entries SET description = ? WHERE id = ?").run(description, id);
+        fixed++;
+      }
+    }
+    // 4. Мультикласс: умения 1 уровня тоже даются.
+    if (monkId != null) {
+      const row = readRow(monkId);
+      if (row && row.description.includes("**Мультикласс.** Получите: кость хитов.")) {
+        const description = row.description.replace(
+          "**Мультикласс.** Получите: кость хитов.",
+          "**Мультикласс.** Получите кость хитов и умения монаха 1-го уровня."
+        );
+        database.prepare("UPDATE compendium_entries SET description = ? WHERE id = ?").run(description, monkId);
+        fixed++;
+      }
+    }
+    if (fixed > 0) console.log(`[db] Текст монаха (сверка 2024): записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_text_repairs_v1");
+  }
+
   // Права администратора — единственное, что закрыто отдельно от роли: смена
   // роли у чужих учёток. Сама роль при этом остаётся 'gm', то есть обычный
   // мастерский доступ у такого аккаунта тоже есть.
@@ -2854,6 +4640,23 @@ export function openDatabase(dbDir: string): Database.Database {
   migrateDndSheetRefs(database);
   migrateDndStartingSets(database);
   migrateDndReplicaSchemes(database);
+  // Роли колонок реплик правились внутри сидинга и не достались живым базам
+  // (см. dndReplicaSchemes.ts) — догоняем отдельным ключом.
+  migrateDndReplicaColumnRoles(database);
+  // Боевые спутники Артефактора: кидаемые строки и чертежи тел (Фаза A —
+  // только данные, движок уже есть). См. dndArtificerCompanions.ts.
+  migrateDndArtificerCompanionActions(database);
+  migrateDndArtificerMasterworker(database);
+  migrateDndArtificerPoolRows(database);
+  migrateDndArtificerTouchups(database);
+  migrateDndArtificerLevelDice(database);
+  migrateDndArtificerReanimator(database);
+  // Тиры схем по книге 2/6/10/14 вместо эвристики редкости (аудит 2026-09-07).
+  migrateDndReplicaTiers(database);
+  migrateDndReplicaGenerics(database);
+  // Догоняющее добавление именных схем (без флага): заведённые позже
+  // предметы подтягиваются сами.
+  ensureNamedReplicaSchemes(database);
 
   if (tableExists(database, "canvas_frames") && !columnExists(database, "canvas_frames", "color")) {
     database.exec("ALTER TABLE canvas_frames ADD COLUMN color TEXT NOT NULL DEFAULT '#2C3E50'");

@@ -2,6 +2,86 @@ import { memo, useEffect, useState } from "react";
 import { loadDndEquipmentEntries } from "./dndCompendium";
 import type { CompendiumEntry } from "../../types";
 
+// Оружие справочника — кандидат в освоенные («Оружейные приёмы» Воина,
+// тикет 06): простое/воинское различие здесь не нужно, мастер листа видит
+// всё оружие, лимит считает вызывающий.
+export function isMasterableWeapon(entry: CompendiumEntry): boolean {
+  if (entry.kind !== "equipment") return false;
+  const data = entry.data as Record<string, unknown>;
+  if (typeof data.armor_type === "string" && data.armor_type) return false;
+  if (typeof data.damage !== "string" || !data.damage) return false;
+  return true;
+}
+
+function weaponMasteryName(entry: CompendiumEntry): string {
+  const data = entry.data as Record<string, unknown>;
+  const mastery = data.weapon_mastery;
+  if (mastery && typeof mastery === "object") {
+    const name = (mastery as { name?: unknown }).name;
+    if (typeof name === "string" && name) return name;
+  }
+  return "";
+}
+
+/** Пик освоенного оружия: поиск + чекбоксы до лимита. Лимит держит
+ *  вызывающий (onToggle сверх лимита просто не зовёт); здесь только показ.
+ *  Используют и визард, и лист — одна реализация на оба входа. */
+export const WeaponMasteryPicker = memo(function WeaponMasteryPicker({
+  title,
+  entries,
+  pickedIds,
+  limit,
+  onToggle,
+}: {
+  title: string;
+  entries: CompendiumEntry[];
+  pickedIds: number[];
+  limit: number;
+  onToggle: (entry: CompendiumEntry) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const picked = new Set(pickedIds);
+  const filtered = q
+    ? entries.filter((e) => {
+        const hay = [e.name ?? "", e.name_original ?? ""].join(" ").toLowerCase();
+        return hay.includes(q);
+      })
+    : entries;
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <span className="muted">
+        {title}: {picked.size} из {limit}
+      </span>
+      <input placeholder="Поиск оружия…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      {filtered.slice(0, 60).map((e) => {
+        const data = e.data as Record<string, unknown>;
+        const damage = typeof data.damage === "string" ? data.damage : "";
+        const mastery = weaponMasteryName(e);
+        return (
+          <div key={e.id}>
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={picked.has(e.id)}
+                disabled={!picked.has(e.id) && picked.size >= limit}
+                onChange={() => onToggle(e)}
+              />
+              {e.name}
+              <span className="muted">
+                {[damage, mastery && `мастерство: ${mastery}`].filter(Boolean).join(" · ")}
+              </span>
+            </label>
+          </div>
+        );
+      })}
+      {filtered.length > 60 && (
+        <span className="muted">Показаны первые 60 — уточни поиск.</span>
+      )}
+    </div>
+  );
+});
+
 // Стартовый набор класса или предыстории — ссылками на записи раздела
 // «Снаряжение», а не строкой. Строка остаётся рядом как человекочитаемое
 // описание (и как единственное место, где живёт то, чего в компендиуме ещё

@@ -8,6 +8,7 @@ import type {
   DndCoins,
   DndCompanion,
   DndCreatureSpeed,
+  DndElixir,
   DndPinnedAction,
   DndReplicaItem,
   Statblock,
@@ -17,6 +18,7 @@ import type {
   DndEquipmentSection,
   DndFeature,
   DndManualAttack,
+  DndMasteredWeapon,
   DndProficiencyEntry,
   DndSkillProfLevel,
   DndSpellEntry,
@@ -73,6 +75,8 @@ import {
   costSummary,
   effectsLabel,
   hasResolvableEffect,
+  resolveLevelDice,
+  type DcExtra,
   type DndCheck,
   type DndCost,
   type DndEffect,
@@ -82,6 +86,17 @@ import { sheetClassColor, textOnClassColor } from "./dndClassColors";
 import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
 import { DndDie } from "./DndDie";
 import { TofuPips } from "./TofuPips";
+import {
+  blueprintFromEntryData,
+  companionClassId,
+  companionMaxCount,
+  companionStats,
+  companionsAfterLongRest,
+  liveCompanionsOf,
+  liveSummonOf,
+  type CompanionBlueprint,
+} from "./companionFormula";
+import { rollDiceFormula } from "./diceRoll";
 import { DndCardBack } from "./DndCardBack";
 import { DndTransferBox } from "./DndTransferBox";
 import {
@@ -100,24 +115,34 @@ import {
 import { EMPTY_EQUIPMENT_ITEM, fetchEquipmentMeta } from "./dndEquipment";
 import { deadEntryIds, ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { deadLinkNames } from "./deadLinks";
-import { casterKind, computeSpellSlots, effectiveCasterLevel, highestCircle } from "./dndSlots";
-import { cantripsAtLevel, preparedAtLevel, PROGRESSION_RECHARGE_LABELS, type ClassProgression } from "./progression";
+import { computeSpellSlots, effectiveCasterLevel, highestCircle, isRoundUpCaster, sourceCasterKind } from "./dndSlots";
+import { cantripsAtLevel, classPreparedFormula, formulaPreparedLimit, preparedAtLevel, PROGRESSION_RECHARGE_LABELS, type ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
 import { PipTrack } from "../litm/PipTrack";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
-import { computeArmorClass } from "./armorClass";
+import { computeArmorClass, unarmoredDefenseBonus } from "./armorClass";
+import {
+  isItemMonkWeapon,
+  resolveMartialArts,
+  unarmoredMovementBonus,
+  upgradeDamageDie,
+} from "./dndMonk";
 import { EMPTY_GRANTS, grantsFromEntry, mergeGrants, type SourceGrants } from "./dndGrants";
 import {
   allResources,
   applicableStats,
   featurePoolKey,
   featurePools,
+  nameMatches,
   replicaLimits,
+  showClassSuffix,
   type ClassResourceSource,
   type DndResourceDef,
+  type ReplicaBonus,
+  type ReplicaGeneric,
   type ReplicaLimits,
   type ReplicateScheme,
 } from "./dndResources";
@@ -127,9 +152,10 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
-import { featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TIMING_KEY_TO_LABEL } from "./dndFeatures";
+import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TIMING_KEY_TO_LABEL, type ChoiceDef } from "./dndFeatures";
+import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
-import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
+import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
 import { useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { CompendiumEntryPicker } from "../MonsterTemplatePicker";
@@ -187,6 +213,7 @@ export function emptyDndCharacter(): DndCharacterData {
     classFeatures: [],
     feats: [],
     specialAbilities: [],
+    masteredWeapons: [],
     proficiencies: [],
     personalityTraits: "",
     ideals: "",
@@ -312,6 +339,12 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   merged.classFeatures = Array.isArray(merged.classFeatures) ? merged.classFeatures : [];
   merged.feats = Array.isArray(merged.feats) ? merged.feats : [];
   merged.specialAbilities = Array.isArray(merged.specialAbilities) ? merged.specialAbilities : [];
+  merged.masteredWeapons = Array.isArray(merged.masteredWeapons)
+    ? (merged.masteredWeapons as unknown[]).filter(
+        (w): w is DndMasteredWeapon =>
+          !!w && typeof w === "object" && typeof (w as { name?: unknown }).name === "string"
+      )
+    : [];
 
   if (!Array.isArray(merged.proficiencies) || merged.proficiencies.length === 0) {
     const legacy = typeof r.proficienciesLanguages === "string" ? r.proficienciesLanguages : "";
@@ -635,6 +668,218 @@ function readSearchDrop(e: DragEvent): SearchResult | null {
   }
 }
 
+// Счётчик черт боевого стиля (тикет 03): положено — 1 за Воина + 1 за
+// Чемпиона 7+; есть — строки с entryId из категории «Боевой Стиль».
+// Пик — дропом черты в «Черты» выше (с entryId строка живёт связанной);
+// замена черты при уровне — тикет 08.
+function FightingStyleCounter({
+  classes,
+  feats,
+  getEntry,
+}: {
+  classes: DndClassEntry[];
+  feats: DndFeature[];
+  getEntry: (id: number | null | undefined) => CompendiumEntry | undefined;
+}) {
+  const owed = classes.reduce(
+    (n, c) =>
+      n +
+      (c.classId != null && nameMatches(c.className, "Воин") ? 1 : 0) +
+      (c.subclassName && nameMatches(c.subclassName, "Чемпион") && c.level >= 7 ? 1 : 0),
+    0
+  );
+  if (owed === 0) return null;
+  const have = feats.filter(
+    (f) =>
+      typeof f.entryId === "number" &&
+      (getEntry(f.entryId)?.data.category as string | undefined) === "Боевой Стиль"
+  ).length;
+  return (
+    <span className="muted">
+      Боевой стиль: {Math.min(have, owed)} из {owed}
+      {have < owed ? " — перетяни черту из поиска в «Черты» выше" : ""}
+    </span>
+  );
+}
+
+// Счётчик выборов из каталога (приёмы/выстрелы, тикет 05): лимит — сумма
+// count открытых уровнем дефов kind entry на умениях подклассов; есть —
+// строки «Особых умений» с entryId из группы дефа. Пик — дропом из поиска
+// (с entryId строка живёт связанной); замена — тикет 08.
+function EntryChoiceCounter({
+  classes,
+  abilities,
+  systemId,
+}: {
+  classes: DndClassEntry[];
+  abilities: DndFeature[];
+  systemId: number | null;
+}) {
+  const [defsBySub, setDefsBySub] = useState<Record<number, ChoiceDef[]>>({});
+  const [catalogs, setCatalogs] = useState<Record<string, CompendiumEntry[]>>({});
+  const subKey = classes.map((c) => `${c.subclassId ?? ""}:${c.level}`).join(",");
+  useEffect(() => {
+    if (!systemId) return;
+    const ids = [...new Set(classes.map((c) => c.subclassId).filter((id): id is number => typeof id === "number"))];
+    if (ids.length === 0) return;
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    Promise.all(
+      ids.map((id) => loadDndClassFeatures(systemId, id, opts).then((es) => [id, choicesFromEntries(es, false)] as const))
+    )
+      .then((pairs) => {
+        setDefsBySub((prev) => {
+          const next = { ...prev };
+          for (const [id, defs] of pairs) next[id] = defs.filter((d) => d.kind === "entry" && d.group);
+          return next;
+        });
+      })
+      .catch(() => {
+        /* тихий пропуск: без дефов счётчика нет, лист работает */
+      });
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemId, subKey]);
+  const groupsKey = Object.values(defsBySub)
+    .flat()
+    .map((d) => d.group ?? "")
+    .filter(Boolean)
+    .sort()
+    .join("|");
+  useEffect(() => {
+    if (!systemId || !groupsKey) return;
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    Promise.all(
+      groupsKey.split("|").map((g) => loadDndMechanicsGroupEntries(systemId, g, opts).then((es) => [g, es] as const))
+    )
+      .then((pairs) => {
+        setCatalogs((prev) => {
+          const next = { ...prev };
+          for (const [g, es] of pairs) if (!(g in next)) next[g] = es;
+          return next;
+        });
+      })
+      .catch(() => {
+        /* тихий пропуск */
+      });
+    return () => ac.abort();
+  }, [systemId, groupsKey]);
+  const rows: { key: string; group: string; picked: number; total: number }[] = [];
+  {
+    const byKey = new Map<string, { group: string; total: number }>();
+    for (const c of classes) {
+      if (c.subclassId == null) continue;
+      for (const d of defsBySub[c.subclassId] ?? []) {
+        if (d.minLevel > c.level) continue;
+        const g = byKey.get(d.key) ?? { group: d.group ?? "", total: 0 };
+        g.total += d.count;
+        byKey.set(d.key, g);
+      }
+    }
+    const pickIds = new Set(
+      abilities.map((f) => f.entryId).filter((id): id is number => typeof id === "number")
+    );
+    for (const [key, g] of byKey) {
+      const inGroup = new Set((catalogs[g.group] ?? []).map((e) => e.id));
+      // Каталог ещё грузится — строку не показываем, чтобы не врать нулями.
+      if (!(g.group in catalogs)) continue;
+      const picked = [...pickIds].filter((id) => inGroup.has(id)).length;
+      rows.push({ key, group: g.group, picked, total: g.total });
+    }
+  }
+  if (rows.length === 0) return null;
+  return (
+    <>
+      {rows.map((r) => (
+        <span key={r.key} className="muted">
+          {r.group}: {Math.min(r.picked, r.total)} из {r.total}
+          {r.picked < r.total ? " — добери дропом из поиска в «Особые умения»" : ""}
+        </span>
+      ))}
+    </>
+  );
+}
+
+// Правка освоенного оружия (тикет 06): лимит — сумма count открытых
+// уровнем дефов kind weapon на умениях классов; пик — общим пикером.
+// Смена оружия на долгом отдыхе — напоминанием в 08, здесь поле и пик.
+function WeaponMasteryEdit({
+  classes,
+  mastered,
+  systemId,
+  onChange,
+}: {
+  classes: DndClassEntry[];
+  mastered: DndMasteredWeapon[];
+  systemId: number | null;
+  onChange?: (v: DndMasteredWeapon[]) => void;
+}) {
+  const [defs, setDefs] = useState<{ level: number; def: ChoiceDef }[]>([]);
+  const [catalog, setCatalog] = useState<CompendiumEntry[] | null>(null);
+  const classKey = classes.map((c) => `${c.classId ?? ""}:${c.level}`).join(",");
+  useEffect(() => {
+    if (!systemId) return;
+    const rows = classes.filter((c) => c.classId != null) as { classId: number; level: number }[];
+    if (rows.length === 0) return;
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    Promise.all(
+      rows.map((c) =>
+        loadDndClassFeatures(systemId, c.classId, opts).then(
+          (es) => ({ level: c.level, defs: choicesFromEntries(es, true) }) as const
+        )
+      )
+    )
+      .then((lists) => {
+        setDefs(lists.flatMap((l) => l.defs.filter((d) => d.kind === "weapon").map((def) => ({ level: l.level, def }))));
+      })
+      .catch(() => {
+        /* тихий пропуск: без дефов правки нет, лист работает */
+      });
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemId, classKey]);
+  useEffect(() => {
+    if (!systemId || defs.length === 0) return;
+    const ac = new AbortController();
+    loadDndEquipmentEntries(systemId, { signal: ac.signal })
+      .then((rows) => setCatalog(rows.filter(isMasterableWeapon)))
+      .catch(() => {
+        setCatalog([]);
+      });
+    return () => ac.abort();
+  }, [systemId, defs.length > 0]);
+  if (defs.length === 0) return null;
+  const limit = defs.reduce((n, { level, def }) => n + (def.minLevel <= level ? def.count : 0), 0);
+  if (limit <= 0) return null;
+  const pickedIds = mastered.map((w) => w.entryId).filter((id): id is number => typeof id === "number");
+  function toggle(entry: CompendiumEntry) {
+    if (!onChange) return;
+    if (pickedIds.includes(entry.id)) {
+      onChange(mastered.filter((w) => w.entryId !== entry.id));
+      return;
+    }
+    if (pickedIds.length >= limit) return;
+    onChange([...mastered, { entryId: entry.id, name: entry.name }]);
+  }
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      {catalog === null ? (
+        <span className="muted">Загружаю оружие…</span>
+      ) : (
+        <WeaponMasteryPicker
+          title="Оружейные приёмы"
+          entries={catalog}
+          pickedIds={pickedIds}
+          limit={limit}
+          onToggle={toggle}
+        />
+      )}
+    </div>
+  );
+}
+
 // Requirement 10: a droppable list for proficiencies/languages. Anything
 // dragged from search (a compendium item, a mechanics-list tool/language
 // entry, …) lands as a row; an ability can be assigned per row to compute
@@ -784,7 +1029,7 @@ function SpellMetaLine({ s }: { s: DndSpellEntry }) {
   if (s.checks && s.checks.length > 0) parts.push(s.checks.map((c) => checkLabel(c)).join(" / "));
   else if (s.attackSave) parts.push(s.attackSave);
   if (s.effects && s.effects.length > 0) {
-    parts.push(<span title={s.upcast || undefined}>{effectsLabel(s.effects)}</span>);
+    parts.push(<span title={s.upcast || undefined}>{effectsLabel(s.effects, s.checks ?? [])}</span>);
   } else if (s.damage || s.healing) {
     parts.push(<span title={s.upcast || undefined}>{s.damage || `Лечение ${s.healing}`}</span>);
   }
@@ -1183,9 +1428,12 @@ function sheetEntryIds(value: DndCharacterData): (number | null | undefined)[] {
     ...value.specialAbilities,
   ].map((f) => f.entryId);
   // Записи классов нужны ради таблиц развития (по ним считаются ячейки) и
-  // стартовых наборов; предыстория — только ради набора.
+  // стартовых наборов; предыстория — только ради набора. Подклассы — ради
+  // их прогрессий (кости превосходства, ячейки Мистического рыцаря) и
+  // заклинательной характеристики.
   const classes = value.classes.map((c) => c.classId);
-  return [...spells, ...features, ...classes, value.backgroundId];
+  const subclasses = value.classes.map((c) => c.subclassId);
+  return [...spells, ...features, ...classes, ...subclasses, value.backgroundId];
 }
 
 // Full field set shown when a spell name is clicked (requirement 2).
@@ -1743,6 +1991,13 @@ const DndClassesEdit = memo(function DndClassesEdit({
         const subclasses = c.classId != null ? hierarchy.subclassesByClass[c.classId] ?? [] : [];
         const subclassLevelFor = (row: DndClassEntry) =>
           hierarchy.classes.find((cl) => cl.id === row.classId)?.subclassLevel ?? 0;
+        // Требования мультикласса — подсказкой у второго и следующих классов.
+        // Гейта нет сознательно: домашние правила сплошь и рядом, а лист не
+        // вправе запрещать. Первый класс требований не имеет по определению.
+        const prereq =
+          i > 0 && c.classId != null
+            ? (hierarchy.classes.find((cl) => cl.id === c.classId)?.multiclassPrereq ?? "")
+            : "";
         return (
           <div key={i} className="row dnd-class-row">
             {hasCompendiumClasses ? (
@@ -1833,7 +2088,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 const ok = await confirm({
                   title: "Убрать класс?",
                   message: c.className
-                    ? `«${c.className}» уйдёт из листа вместе со своими особенностями, спасбросками и инструментами.`
+                    ? `«${c.className}» уйдёт из листа вместе со своими особенностями, спасбросками, навыками и инструментами.`
                     : "Строка класса будет убрана.",
                   confirmLabel: "Убрать",
                   danger: true,
@@ -1843,6 +2098,11 @@ const DndClassesEdit = memo(function DndClassesEdit({
             >
               <NavIcon name="close" />
             </button>
+            {prereq && (
+              <span className="muted" style={{ fontSize: "var(--fs-meta)" }} title="Требования мультикласса (PHB 2024): домашние правила могут отменять">
+                нужно: {prereq}
+              </span>
+            )}
           </div>
         );
       })}
@@ -2155,14 +2415,15 @@ function DndEquipmentView({ sections }: { sections: DndEquipmentSection[] }) {
         <div key={si} className="sb-entry">
           {sections.length > 1 &&   <div className="dnd-section-title">{section.name}</div>}
           <ul className="dnd-equipment-view-list">
-            {section.items.map((item, ii) => (
-              <li key={ii}>
-                {item.name}
-                {item.qty && ` ×${item.qty}`}
-                {item.weight && ` (${item.weight})`}
-                {item.notes && ` — ${item.notes}`}
-              </li>
-            ))}
+              {section.items.map((item, ii) => (
+                <li key={ii}>
+                  {item.name}
+                  {item.qty && ` ×${item.qty}`}
+                  {item.weight && ` (${item.weight})`}
+                  {item.chargesMax && ` · заряды ${item.chargesLeft ?? "?"} из ${item.chargesMax}`}
+                  {item.notes && ` — ${item.notes}`}
+                </li>
+              ))}
           </ul>
         </div>
       ))}
@@ -2223,6 +2484,18 @@ function EquipmentInlineForm({
         onChange={(e) => onChange({ ...draft, notes: e.target.value })}
         style={{ flex: "2 1 120px" }}
       />
+      {draft.chargesMax && (
+        <input
+          placeholder={`Заряды (макс ${draft.chargesMax})`}
+          title="Остаток зарядов — числом"
+          value={draft.chargesLeft ?? ""}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            onChange({ ...draft, chargesLeft: v === "" ? null : Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : draft.chargesLeft ?? null });
+          }}
+          style={{ flex: "1 1 70px" }}
+        />
+      )}
       <label className="row" style={{ gap: 4, flex: "0 0 auto" }}>
         <input
           type="checkbox"
@@ -2405,6 +2678,26 @@ function DndEquipmentQuickView({
     );
     commit({ equipmentSections: next });
   }
+  // Заряды предмета в инвентаре: степпер −/+ в строке. Максимум-кубик
+  // («1к8+1») верхней границей не является — работает только пол (0).
+  function bumpCharges(si: number, ii: number, delta: number) {
+    const next = sections.map((s, sIdx) =>
+      sIdx !== si
+        ? s
+        : {
+            ...s,
+            items: s.items.map((it, iIdx) => {
+              if (iIdx !== ii || !it.chargesMax) return it;
+              const maxNum = /^\d+$/.test(it.chargesMax.trim()) ? Number(it.chargesMax.trim()) : null;
+              const cur = typeof it.chargesLeft === "number" ? it.chargesLeft : (delta > 0 ? (maxNum ?? 0) : 0);
+              const raw = cur + delta;
+              const left = Math.max(0, maxNum != null ? Math.min(maxNum, raw) : raw);
+              return { ...it, chargesLeft: left };
+            }),
+          }
+    );
+    commit({ equipmentSections: next });
+  }
   async function toggleDescription(si: number, ii: number, entryId?: number | null) {
     if (!entryId) return;
     if (descOpen && descOpen.si === si && descOpen.ii === ii) {
@@ -2542,6 +2835,35 @@ function DndEquipmentQuickView({
                         {item.qty && ` ×${item.qty}`}
                         {item.weight && ` (${item.weight})`}
                         {item.notes && ` — ${item.notes}`}
+                      </span>
+                    )}
+                    {item.chargesMax && (
+                      <span className="row" style={{ gap: 4, alignItems: "center" }} title="Заряды предмета">
+                        <button
+                          type="button"
+                          className="comp-mini"
+                          aria-label={`${item.name}: потратить заряд`}
+                          disabled={(item.chargesLeft ?? 0) <= 0}
+                          onClick={() => bumpCharges(si, ii, -1)}
+                        >
+                          −
+                        </button>
+                        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
+                          {item.chargesLeft ?? "?"} из {item.chargesMax}
+                        </span>
+                        <button
+                          type="button"
+                          className="comp-mini"
+                          aria-label={`${item.name}: вернуть заряд`}
+                          disabled={
+                            item.chargesLeft != null &&
+                            /^\d+$/.test(item.chargesMax.trim()) &&
+                            item.chargesLeft >= Number(item.chargesMax.trim())
+                          }
+                          onClick={() => bumpCharges(si, ii, 1)}
+                        >
+                          +
+                        </button>
                       </span>
                     )}
                     {/* Переданное чужой репликой: пока не принято, строка
@@ -2901,6 +3223,22 @@ function useDndOrigin(
       const hierarchy = hierarchyRef.current;
       const oldClass = value.classes[i];
       let classFeatures = removeFeaturesBySource(value.classFeatures, oldClass?.subclassId);
+      // Выдачи подкласса (навыки и инструменты — напр. Орудия милосердия):
+      // уходящий подкласс забирает своё, кроме того, что подтверждает
+      // оставшееся (класс строки, остальные строки, предыстория). Тем же
+      // приёмом, что смена класса и предыстории выше.
+      const revoked = mergeGrants(await loadGrants([oldClass?.subclassId], skillsRef.current.resolve));
+      const kept = await loadGrants(
+        [
+          ...value.classes.filter((_, idx) => idx !== i).flatMap((c) => [c.classId, c.subclassId]),
+          oldClass?.classId,
+          value.backgroundId,
+        ],
+        skillsRef.current.resolve
+      );
+      const cleared = revokeGrants(value, revoked, kept);
+      let skillProfs = cleared.skillProfs;
+      let proficiencies = cleared.proficiencies;
       const subclasses = oldClass?.classId != null ? hierarchy.subclassesByClass[oldClass.classId] ?? [] : [];
       const opt = subclasses.find((s) => s.id === subclassId);
       const nextClasses = value.classes.slice();
@@ -2911,8 +3249,45 @@ function useDndOrigin(
           ...classFeatures,
           ...featuresFromEntries(featureEntries, subclassId, nextClasses[i].level),
         ];
+        // Выдача нового подкласса: навыки — владением (не затирая экспертизу
+        // и ручные), инструменты — строками (способность подтягивается с
+        // записи, как при смене класса).
+        try {
+          const entry = await api.get<CompendiumEntry>(`/systems/entries/${subclassId}`);
+          const grantedSkills = (Array.isArray(entry.data.skills) ? (entry.data.skills as unknown[]) : [])
+            .filter((s): s is string => typeof s === "string" && !!s.trim())
+            .map((s) => skillsRef.current.resolve(s) ?? s.trim());
+          if (grantedSkills.length > 0) {
+            const nextSkillProfs = { ...skillProfs };
+            for (const s of grantedSkills) if (!nextSkillProfs[s]) nextSkillProfs[s] = 1;
+            skillProfs = nextSkillProfs;
+          }
+          const toolPicks = Array.isArray(entry.data.tool_profs)
+            ? (entry.data.tool_profs as { id: number; name: string }[])
+            : [];
+          const newTools = toolPicks.filter((t) => !proficiencies.some((p) => p.name === t.name));
+          if (newTools.length > 0) {
+            const abilityKeys = await Promise.all(
+              newTools.map(async (t) => {
+                try {
+                  const toolEntry = await api.get<CompendiumEntry>(`/systems/entries/${t.id}`);
+                  const ability = typeof toolEntry.data.ability === "string" ? toolEntry.data.ability : "";
+                  return ability ? ABILITY_NAME_TO_KEY[ability] ?? null : null;
+                } catch {
+                  return null;
+                }
+              })
+            );
+            proficiencies = [
+              ...proficiencies,
+              ...newTools.map((t, idx) => ({ entryId: t.id, name: t.name, abilityKey: abilityKeys[idx] })),
+            ];
+          }
+        } catch {
+          /* subclass has no compendium entry — nothing to grant */
+        }
       }
-      const nextValue = { ...valueRef.current, classes: nextClasses, classFeatures };
+      const nextValue = { ...valueRef.current, classes: nextClasses, classFeatures, skillProfs, proficiencies };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
       if (seq !== opSeqRef.current) return;
       onChangeRef.current({ ...nextValue, cantrips, spellsByLevel, spellSlotLevels });
@@ -3258,7 +3633,14 @@ function weaponAttackRows(
   sections: DndEquipmentSection[],
   abilities: DndCharacterData["abilities"],
   profBonus: number,
-  exhaustionPenalty = 0
+  exhaustionPenalty = 0,
+  // Боевые искусства монаха: кость для замены и классификатор строк.
+  // Без него (немонах, умение погашено) — всё как было.
+  martial?: { die: string; isMonkWeapon: (item: DndEquipmentItem) => boolean } | null,
+  // Освоенные типы оружия («Оружейные приёмы» Воина, тикет 06): свойство
+  // мастерства применимо только к освоенному. null/пусто — воин без выбора,
+  // не-воин или старый лист: показ как раньше, без пометок.
+  mastered?: { ids: Set<number>; names: Set<string> } | null
 ): AttackRow[] {
   const str = abilityModifier(abilities.str);
   const dex = abilityModifier(abilities.dex);
@@ -3276,14 +3658,39 @@ function weaponAttackRows(
       // Метательное ближнее оружие бросают Силой, если оно не фехтовальное —
       // то есть выбор характеристики тот же, что и в ближнем бою.
       const rangedOnly = !!i.weaponAttackRanged && !i.weaponAttackMelee && !thrown;
-      const mod = finesse ? Math.max(str, dex) : rangedOnly ? dex : str;
+      // Ловкие атаки монаха: монашеское оружие бьёт Ловкостью (фехтовальное —
+      // как было, max, чтобы умение не занижало готовую строку).
+      const monkWeapon = !!martial && martial.isMonkWeapon(i);
+      const mod = monkWeapon ? (finesse ? Math.max(str, dex) : dex) : finesse ? Math.max(str, dex) : rangedOnly ? dex : str;
       const range = i.weaponAttackMelee && i.weaponAttackRanged ? "Ближний/Дальний" : i.weaponAttackRanged ? "Дальний" : "Ближний";
+      // Кость боевых искусств вместо своей, если больше («1к4 колющий» кинжала
+      // на 1к8 с 5 уровня). Тип урона и хвост сохраняются в upgradeDamageDie.
+      const upgraded = monkWeapon ? upgradeDamageDie(i.weaponDamage ?? "", martial.die) : null;
+      const baseDamage = upgraded ?? i.weaponDamage;
       // Урон печатался как есть — «1к8» без модификатора, который игрок
       // прибавлял в уме каждый бросок. Теперь формула полная: «1к8 +3».
-      const damageWithMod = i.weaponDamage
-        ? `${i.weaponDamage}${mod !== 0 ? ` ${formatModifier(mod)}` : ""}`
+      const damageWithMod = baseDamage
+        ? `${baseDamage}${mod !== 0 ? ` ${formatModifier(mod)}` : ""}`
         : "";
-      const damage = [damageWithMod, i.weaponProperties, i.weaponMastery && `Мастерство: ${i.weaponMastery}`]
+      // Мастерство применимо, только если оружие освоено. Список пуст —
+      // старый лист или не-воин: показываем как раньше, без пометок.
+      const masteryKnown = mastered == null || (mastered.ids.size === 0 && mastered.names.size === 0);
+      const isMastered =
+        masteryKnown ||
+        (i.entryId != null && mastered.ids.has(i.entryId)) ||
+        mastered.names.has(i.name.trim().toLowerCase());
+      const masteryText =
+        i.weaponMastery && isMastered
+          ? `Мастерство: ${i.weaponMastery}`
+          : i.weaponMastery && !masteryKnown
+            ? "Мастерство: не освоено"
+            : "";
+      const damage = [
+        damageWithMod,
+        i.weaponProperties,
+        masteryText,
+        upgraded || (monkWeapon && !finesse && !rangedOnly) ? "кость боевых искусств" : "",
+      ]
         .filter(Boolean)
         .join(" · ");
       return {
@@ -3348,7 +3755,7 @@ function combatSpellRows(
         bonus: structured
           ? checksLabel(s.checks ?? [], spellAttackBonus, spellDc)
           : formatSpellAttackSave(s.attackSave, spellAttackBonus, spellDc),
-        damage: structured ? effectsLabel(s.effects ?? []) : s.damage || s.healing || "—",
+        damage: structured ? effectsLabel(s.effects ?? [], s.checks ?? []) : s.damage || s.healing || "—",
         range: s.range || "—",
         timing,
         source: { kind: "spell", spell: s, level: s.__level },
@@ -3360,18 +3767,28 @@ function combatSpellRows(
 // накладывания — Второе дыхание, Наложение рук, Ярость. До появления
 // эффектов такие способности во вкладку не попадали вовсе: она собиралась
 // только из оружия, заклинаний и вручную вписанных атак.
+// classLevelOf — уровень класса-хозяина по sourceParentId (строка класса или
+// подкласса): им резолвятся кубы levelDice (пушка +1к8 на 9-м). Без него —
+// базовые кубы.
 function featureActionRows(
   groups: DndFeature[][],
   spellAttackBonus: number,
-  spellDc: number
+  spellDc: number,
+  classLevelOf?: (sourceParentId: number | null | undefined) => number | null,
+  // СЛ сейвов не от заклинательной характеристики (Ошеломляющий удар — Муд):
+  // без неё чистый монах видел СЛ 8 + 0 + БМ.
+  dcExtra?: DcExtra
 ): AttackRow[] {
   return groups
     .flat()
     .filter((f) => !!f.castingTiming)
     .map((f) => ({
       name: f.name,
-      bonus: checksLabel(f.checks ?? [], spellAttackBonus, spellDc),
-      damage: effectsLabel(f.effects ?? []),
+      bonus: checksLabel(f.checks ?? [], spellAttackBonus, spellDc, dcExtra),
+      damage: effectsLabel(
+        resolveLevelDice(f.effects ?? [], classLevelOf?.(f.sourceParentId) ?? null),
+        f.checks ?? []
+      ),
       // Время не дублируем — оно и есть заголовок секции таблицы; в этой
       // колонке у умения полезнее его стоимость («Ячейка», «1 за долгий
       // отдых»), и «Иное» показываем только когда оно что-то уточняет.
@@ -3605,6 +4022,320 @@ function CompanionToken({
         </button>
       )}
     </span>
+  );
+}
+
+// Тело спутника по чертежу (Фаза B): пушка и защитник Артефактора. Жетон
+// отвечает «кто это», тело — «сколько хитов и что с ним»: пипсы хитов, КЗ,
+// развеивание/возврат, Починка, детонация, укрытие. Максимум хитов и КЗ
+// считаются из уровня класса и INT при каждом рендере — ап уровня сам
+// поднимает тело; хранится только израсходованное (как у пулов ресурсов).
+function CompanionBody({
+  companion,
+  blueprint,
+  maxHp,
+  ac,
+  ownerFeatureName,
+  ownsDetonate,
+  ownsCover,
+  previewEntryId,
+  onPatch,
+  onRemove,
+}: {
+  companion: DndCompanion;
+  blueprint: CompanionBlueprint;
+  maxHp: number;
+  ac: number | null;
+  /** Умение-хозяин — подсказка, где пересоздавать мёртвое тело. */
+  ownerFeatureName: string;
+  ownsDetonate: boolean;
+  ownsCover: boolean;
+  /** Запись для окна-превью по клику на имя (фича-чертёж или заклинание). */
+  previewEntryId?: number | null;
+  onPatch: (patch: Partial<DndCompanion>) => void;
+  onRemove: () => void;
+}) {
+  const [hurt, setHurt] = useState("");
+  const [lastMend, setLastMend] = useState<number | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const used = Math.min(companion.hpUsed ?? 0, maxHp);
+  const left = maxHp - used;
+  const nameNode = previewEntryId ? (
+    <>
+      <button type="button" className="dnd-spell-name-link" onClick={() => setPreviewOpen(true)}>
+        {companion.name}
+      </button>
+      {previewOpen && (
+        <EntityPreviewModal type="compendium_entry" id={previewEntryId} onClose={() => setPreviewOpen(false)} />
+      )}
+    </>
+  ) : (
+    <strong>{companion.name}</strong>
+  );
+  if (companion.dead) {
+    return (
+      <div className="dnd-companion-body is-dead">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          {nameNode}
+          <button type="button" className="comp-mini danger" onClick={onRemove} aria-label={`Убрать тело: ${companion.name}`}>
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <span className="muted">Уничтожен — пересоздание через «{ownerFeatureName}».</span>
+      </div>
+    );
+  }
+  if (companion.dismissed) {
+    return (
+      <div className="dnd-companion-body is-dismissed">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          {nameNode}
+          <button type="button" className="comp-mini danger" onClick={onRemove} aria-label={`Убрать тело: ${companion.name}`}>
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <div className="row" style={{ gap: 6, alignItems: "center" }}>
+          <span className="muted">Развеян.</span>
+          <button type="button" className="comp-mini" onClick={() => onPatch({ dismissed: false })}>
+            Вернуть
+          </button>
+        </div>
+      </div>
+    );
+  }
+  const applyHurt = () => {
+    const n = Math.floor(Number(hurt));
+    if (!Number.isFinite(n) || n <= 0) return;
+    const next = used + n;
+    onPatch({ hpUsed: next, ...(next >= maxHp ? { dead: true } : {}) });
+    setHurt("");
+  };
+  // Числовое лечение (починка защитника, отдых у костра и т.п.): пипсами
+  // тридцать хитов не натыкать, а кнопки Починки есть только у пушки.
+  const applyHeal = () => {
+    const n = Math.floor(Number(hurt));
+    if (!Number.isFinite(n) || n <= 0) return;
+    onPatch({ hpUsed: Math.max(0, used - n) });
+    setHurt("");
+  };
+  const mend = () => {
+    if (!blueprint.mending) return;
+    const rolled = rollDiceFormula(blueprint.mending) ?? 0;
+    onPatch({ hpUsed: Math.max(0, used - rolled) });
+    setLastMend(rolled);
+  };
+  return (
+    <div className="dnd-companion-body">
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        {nameNode}
+        <span className="row" style={{ gap: 6, alignItems: "center" }}>
+          {companion.spellEntryId != null && companion.spellLevel != null && (
+            <span className="muted">круг {companion.spellLevel}</span>
+          )}
+          {ac != null && <span className="muted">КЗ {ac}</span>}
+          <button type="button" className="comp-mini danger" onClick={onRemove} aria-label={`Убрать тело: ${companion.name}`}>
+            <NavIcon name="close" />
+          </button>
+        </span>
+      </div>
+      <TofuPips
+        max={maxHp}
+        left={left}
+        label={`${companion.name}: хиты`}
+        onSetLeft={(next) => onPatch({ hpUsed: maxHp - next, ...(maxHp - next >= maxHp ? { dead: true } : {}) })}
+      />
+      <span className="dnd-pool-count">
+        {left} из {maxHp}
+      </span>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          type="number"
+          value={hurt}
+          onChange={(e) => setHurt(e.target.value)}
+          placeholder="число"
+          aria-label={`Урон или лечение: ${companion.name}`}
+          style={{ width: 64 }}
+        />
+        <button type="button" className="comp-mini" onClick={applyHurt}>
+          Ударить
+        </button>
+        <button type="button" className="comp-mini" onClick={applyHeal}>
+          Вылечить
+        </button>
+        {blueprint.mending && (
+          <button type="button" className="comp-mini" title={`Починка: ${blueprint.mending}`} onClick={mend}>
+            Починка {blueprint.mending}
+            {lastMend != null ? ` (${lastMend})` : ""}
+          </button>
+        )}
+        {blueprint.dismissable && (
+          <button type="button" className="comp-mini" onClick={() => onPatch({ dismissed: true })}>
+            Развеять
+          </button>
+        )}
+        {ownsDetonate && (
+          <button
+            type="button"
+            className="comp-mini danger"
+            title="Пушка уничтожается; спасбросок — строкой «Взрывная пушка» в Действиях"
+            onClick={() => onPatch({ dead: true })}
+          >
+            Детонировать
+          </button>
+        )}
+        <button type="button" className="comp-mini" onClick={() => onPatch({ dead: true })}>
+          Мёртв
+        </button>
+      </div>
+      {ownsCover && (
+        <span className="muted">Укрытие на половину в радиусе 10 футов от пушки.</span>
+      )}
+      {blueprint.actions && blueprint.actions.length > 0 && (
+        <div className="stack" style={{ gap: 2 }}>
+          {blueprint.actions.map((a, k) => (
+            <span key={k} className="muted">
+              {a.name && <strong>{a.name}. </strong>}
+              {a.note}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Обман смерти («Душа творения», 20 ур.): на нуле хитов разрушить N созданных
+// реплик указанных редкостей → хиты = hpPer × N. Редкость читается из записи
+// схемы; какие именно разрушать — решает игрок, лист снимает старейшие
+// (порядок массива = порядок создания). Кроме мгновенной смерти — на
+// честности стола, лист её не объявляет (как и весь урон).
+function SoulCheat({
+  rarities,
+  hpPer,
+  items,
+  getEntry,
+  onCheat,
+}: {
+  rarities: string[];
+  hpPer: number;
+  items: DndReplicaItem[];
+  getEntry: (id: number | null | undefined) => CompendiumEntry | undefined;
+  onCheat: (count: number, destroyIds: string[]) => void;
+}) {
+  const [n, setN] = useState("1");
+  const eligible = items.filter((it) => {
+    const data = getEntry(it.schemeEntryId)?.data as { rarity?: unknown } | undefined;
+    return typeof data?.rarity === "string" && rarities.includes(data.rarity);
+  });
+  if (eligible.length === 0) return null;
+  const count = Math.min(Math.max(1, Math.floor(Number(n) || 1)), eligible.length);
+  return (
+    <div className="stack sb-death-saves" style={{ gap: 4 }}>
+      <span className="muted">
+        Обман смерти: разрушьте реплики ({eligible.length} подходят) — хиты станут {hpPer} за каждую.
+        Кроме мгновенной смерти; разрушаются старейшие.
+      </span>
+      <div className="row" style={{ gap: 6, alignItems: "center" }}>
+        <input
+          type="number"
+          value={n}
+          min={1}
+          max={eligible.length}
+          onChange={(e) => setN(e.target.value)}
+          style={{ width: 56 }}
+          aria-label="Реплик разрушить"
+        />
+        <button
+          type="button"
+          className="comp-mini danger"
+          onClick={() => {
+            onCheat(count, eligible.slice(0, count).map((e) => e.id));
+            setN("1");
+          }}
+        >
+          Разрушить → {hpPer * count} хитов
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Эликсиры алхимика на руках (таблица 1к6 — в данных умения, elixirTable).
+// За столом кубики кидают сами: бросок снаружи → ткнуть эффект в пикер;
+// [🎲] — для тех, кто кидает приложухой (6 = «выбери сам», как в книге).
+// Пул созданий живёт отдельно (тратится кнопками выше); здесь — что за
+// эликсиры фактически на руках. На долгом отдыхе сгорают (чистит отдых).
+function ElixirBox({
+  table,
+  elixirs,
+  onChange,
+}: {
+  table: { key: string; name: string; short: string }[];
+  elixirs: DndElixir[];
+  onChange: (next: DndElixir[]) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const add = (effect: string) => {
+    onChange([
+      ...elixirs,
+      { id: `elixir-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, effect },
+    ]);
+  };
+  const roll = () => {
+    const d = 1 + Math.floor(Math.random() * 6);
+    if (d >= table.length) {
+      // Последний ряд таблицы — «на выбор»: кубик его не даёт, открываем список.
+      setPicking(true);
+      return;
+    }
+    add(table[d - 1].key);
+  };
+  const nameOf = (effect: string) => table.find((t) => t.key === effect)?.name ?? effect;
+  return (
+    <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
+      <strong>Эликсиры на руках ({elixirs.length})</strong>
+      {elixirs.length === 0 && <span className="muted">Пусто — создайте на долгом отдыхе.</span>}
+      {elixirs.map((e) => (
+        <div key={e.id} className="row" style={{ gap: 6, alignItems: "center" }}>
+          <span style={{ flex: "1 1 auto" }}>{nameOf(e.effect)}</span>
+          <button
+            type="button"
+            className="comp-mini"
+            title="Выпито или вылито — флакон исчезает"
+            onClick={() => onChange(elixirs.filter((x) => x.id !== e.id))}
+          >
+            Выпито
+          </button>
+        </div>
+      ))}
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <button type="button" className="comp-mini" onClick={() => setPicking((v) => !v)}>
+          {picking ? "Скрыть список" : "Выбрать эффект"}
+        </button>
+        <button type="button" className="comp-mini" title="Бросок 1к6 по таблице (6 — выбираете сами)" onClick={roll}>
+          🎲 Случайный
+        </button>
+      </div>
+      {picking && (
+        <div className="stack" style={{ gap: 2 }}>
+          {table.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className="comp-mini"
+              style={{ textAlign: "left", alignSelf: "stretch" }}
+              title={t.short}
+              onClick={() => {
+                add(t.key);
+                setPicking(false);
+              }}
+            >
+              {t.name} <span className="muted">— {t.short}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -4090,31 +4821,129 @@ function SpendAction({
         ? featurePoolKey(feature.entryId)
         : null;
   if (!cost) return null;
+  const blocks: ReactNode[] = [];
+  // 1) Трата из пула — как было. Кнопки может не быть (пул неизвестен или
+  // пуст), а слотовая ниже — быть: источники независимы.
   const res =
     poolKey != null
       ? resources.find((r) => r.key === poolKey)
       : cost.kind === "resource" && cost.resourceLabel
         ? resources.find((r) => r.label.toLowerCase() === cost.resourceLabel!.toLowerCase())
         : undefined;
-  if (!res) return null;
-  const bonus = value.resourceBonus[res.key] ?? 0;
-  const max = res.max + bonus;
-  const used = value.resourceUsed[res.key] ?? 0;
-  const amount = cost.amount && cost.amount > 0 ? cost.amount : 1;
-  if (used + amount > max) return <span className="muted">«{res.label}» — не осталось.</span>;
-  return (
-    <button
-      type="button"
-      className="primary"
-      style={{ alignSelf: "flex-start" }}
-      onClick={() => {
-        onQuickUpdate({ resourceUsed: { ...value.resourceUsed, [res.key]: used + amount } });
+  // Состояние пула считаем один раз: нужно и кнопке траты, и возврату ячейки
+  // (поглощение идёт в счёт пула 1/долгий — без заряда только плашка).
+  const bonus = res ? (value.resourceBonus[res.key] ?? 0) : 0;
+  const max = res ? res.max + bonus : 0;
+  const used = res ? (value.resourceUsed[res.key] ?? 0) : 0;
+  // uses-пул: amount — размер запаса («2 за долгий отдых»), а не цена нажатия.
+  // Одно применение = один заряд (Врождённое чародейство и пр.). У resource
+  // наоборот: amount — цена одного применения в очках (Бастион закона ×5).
+  const amount = cost.kind === "uses" ? 1 : cost.amount && cost.amount > 0 ? cost.amount : 1;
+  const poolDepleted = !!res && used + amount > max;
+  if (res) {
+    if (poolDepleted) {
+      blocks.push(<span key="pool-empty" className="muted">«{res.label}» — не осталось.</span>);
+    } else {
+      blocks.push(
+        <button
+          key="pool"
+          type="button"
+          className="primary"
+          style={{ alignSelf: "flex-start" }}
+          onClick={() => {
+            onQuickUpdate({ resourceUsed: { ...value.resourceUsed, [res.key]: used + amount } });
+            onDone();
+          }}
+        >
+          Потратить: {res.label}
+          {amount > 1 ? ` ×${amount}` : ""}
+        </button>
+      );
+    }
+  }
+  // 2.5) Возврат потраченной ячейки (поглощение реплики). Круги, в которых
+  // есть потраченные, — кнопками; пусто — плашкой. Редкость развеянного
+  // (обычный→1, необычный/редкий→2) — на честности игрока: лист видит
+  // только ячейки, а какой предмет развеян — выбирается руками в инвентаре.
+  // Возврат идёт в счёт пула одним нажатием (лимит 1/долгий): без заряда
+  // поглощать нечего, плашка «не осталось» уже показана веткой пула выше.
+  if (cost.slotReturn && !poolDepleted) {
+    const spent: number[] = [];
+    for (let i = 0; i < slots.length; i++) {
+      if ((value.spellSlotsUsed[i] ?? 0) > 0) spent.push(i);
+    }
+    if (spent.length === 0) {
+      blocks.push(<span key="slotback-empty" className="muted">Потраченных ячеек нет.</span>);
+    } else {
+      const unspend = (circle: number) => {
+        const next = value.spellSlotsUsed.slice();
+        next[circle] = Math.max(0, (next[circle] ?? 0) - 1);
+        onQuickUpdate({
+          spellSlotsUsed: next,
+          // Пул тоже тратим (если он есть): поглощение — одно действие целиком.
+          ...(res ? { resourceUsed: { ...value.resourceUsed, [res.key]: used + amount } } : {}),
+        });
         onDone();
-      }}
-    >
-      Потратить: {res.label}
-      {amount > 1 ? ` ×${amount}` : ""}
-    </button>
+      };
+      blocks.push(
+        <div key="slotback" className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
+          <span className="muted">Вернуть ячейку (развейте предмет в инвентаре):</span>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {spent.map((i) => (
+              <button key={i} type="button" className="comp-mini" onClick={() => unspend(i)}>
+                {i + 1}й круг
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+  }
+  // 2) Активация тратой ячейки (пушка/эликсир/защитник: повторное создание
+  // за слот). Круг не важен — берём самую дешёвую свободную, остальные
+  // мелкими, тем же рядом, что у заклинаний.
+  if (cost.slotSpend) {
+    let first = -1;
+    const rest: number[] = [];
+    for (let i = 0; i < slots.length; i++) {
+      if ((slots[i] ?? 0) > (value.spellSlotsUsed[i] ?? 0)) {
+        if (first < 0) first = i;
+        else rest.push(i);
+      }
+    }
+    if (first < 0) {
+      blocks.push(<span key="slot-empty" className="muted">Свободных ячеек нет.</span>);
+    } else {
+      const spendSlot = (circle: number) => {
+        const next = value.spellSlotsUsed.slice();
+        next[circle] = (next[circle] ?? 0) + 1;
+        onQuickUpdate({ spellSlotsUsed: next });
+        onDone();
+      };
+      blocks.push(
+        <div key="slot" className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
+          <button type="button" style={{ alignSelf: "flex-start" }} onClick={() => spendSlot(first)}>
+            Потратить ячейку {first + 1} круга
+          </button>
+          {rest.length > 0 && (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <span className="muted">другой круг:</span>
+              {rest.map((i) => (
+                <button key={i} type="button" className="comp-mini" onClick={() => spendSlot(i)}>
+                  {i + 1}й
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+  }
+  if (blocks.length === 0) return null;
+  return (
+    <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
+      {blocks}
+    </div>
   );
 }
 
@@ -4260,11 +5089,14 @@ function DndSheetSearch({
 function walkDieParts(
   speeds: DndCreatureSpeed,
   exhaustion: number,
-  unit: DndDistanceUnit
+  unit: DndDistanceUnit,
+  // Движение без доспехов монаха — прибавка к базе ходьбы. Ноль по умолчанию:
+  // у существ и немонахов кости без бонуса, как было.
+  bonus = 0
 ): { value: string; sub: string } {
   if (speeds.walk === null) return { value: "—", sub: "" };
   const penalty = Math.max(0, exhaustion) * 5;
-  const reduced = Math.max(0, speeds.walk - penalty);
+  const reduced = Math.max(0, speeds.walk + Math.max(0, bonus) - penalty);
   const split = (feet: number) => {
     const text = formatDistance(feet, unit);
     const i = text.lastIndexOf(" ");
@@ -4495,13 +5327,18 @@ function DndClassSpellListModal({
             {byLevel.get(lvl)!.map((e) => {
               const isOwned = owned.has(e.id);
               const isPicked = picked.has(e.id);
+              // Круга ещё нет (выше ячеек): брать нельзя — готовить такое
+              // заклинание правила запрещают. «Мой круг» их и так прячет;
+              // запрет нужен режиму «Все», где их видно. Заговоры (0) — всегда.
+              const overCircle = (e.level ?? 0) > maxCircle;
               const meta = spellMeta(e);
               return (
                 <button
                   key={e.id}
                   type="button"
                   className={`dnd-spell-pick-row${isPicked ? " is-picked" : ""}`}
-                  disabled={isOwned}
+                  disabled={isOwned || overCircle}
+                  title={overCircle ? `Нужен ${e.level} круг — у вас пока ${maxCircle}` : undefined}
                   aria-pressed={isPicked}
                   onClick={() => toggle(e.id)}
                 >
@@ -4760,11 +5597,22 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
 // Compact GM/player summary card — same content, .card-mini layout.
 function DndCharacterViewMini({ value }: { value: DndCharacterData }) {
   const classLine = classAndLevelSummary(value.classes);
-  const computedAc = computeArmorClass(
-    abilityModifier(value.abilities.dex),
-    value.equipmentSections,
-    parseBonus(value.manualAcBonus)
-  );
+  // Защита без доспехов идёт плюсом поверх computeArmorClass: базовая формула
+  // про умение ничего не знает, а менять её сигнатуру ради двух классов —
+  // значит трогать и существ, и шпаргалку. Бонус уже с гейтом «без доспеха».
+  const computedAc =
+    computeArmorClass(
+      abilityModifier(value.abilities.dex),
+      value.equipmentSections,
+      parseBonus(value.manualAcBonus)
+    ) +
+    unarmoredDefenseBonus(
+      value.classFeatures,
+      value.classes,
+      abilityModifier(value.abilities.wis),
+      abilityModifier(value.abilities.con),
+      value.equipmentSections
+    ).bonus;
   return (
     <div className="sb-scope">
       <div className="sb-card card-mini">
@@ -5169,16 +6017,20 @@ function TextQuickBox({
 }
 
 // КЗ is always computed (10/armor + Ловкость, capped per equipped armor,
-// plus flat bonuses from equipped items) — the only thing a click here
-// edits is the small manual bonus for effects not captured by inventory
-// (Shield/Mage Armor spells, …), same click-to-edit shell as TextQuickBox.
+// plus flat bonuses from equipped items, plus Защита без доспехов when its
+// feature is on the sheet and no armor — and no shield for a monk — is worn)
+// — the only thing a click here edits is the small manual bonus for effects
+// not captured by inventory (Shield/Mage Armor spells, …), same click-to-edit
+// shell as TextQuickBox.
 function AcQuickBox({
   computed,
   manualBonus,
+  hint,
   onQuickUpdate,
 }: {
   computed: number;
   manualBonus: string;
+  hint?: string | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -5222,6 +6074,11 @@ function AcQuickBox({
             <span className="dnd-die-value">{computed}</span>
           </DndDie>
         </SbQuickValue>
+      )}
+      {hint && (
+        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          {hint}
+        </div>
       )}
     </div>
   );
@@ -5305,12 +6162,21 @@ function DndFanButton({ onOpen }: { onOpen: () => void }) {
  * его ищут. Строка помнит свою реплику (`replicaId`), поэтому исчезает
  * вместе с ней.
  */
+function pluralRu(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
 function DndReplicaBlock({
   limits,
   value,
   systemId,
   campaignId,
   ownerCharacterId,
+  replicaBonus,
   onQuickUpdate,
 }: {
   limits: ReplicaLimits;
@@ -5318,6 +6184,8 @@ function DndReplicaBlock({
   systemId: number | null;
   campaignId?: number | null;
   ownerCharacterId?: number | null;
+  /** Бонус сверх таблицы (Лучший бронник) — строкой, не форсингом. */
+  replicaBonus?: ReplicaBonus | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -5439,6 +6307,21 @@ function DndReplicaBlock({
           {items.length} из {limits.items}
         </span>
       </div>
+      {replicaBonus && (replicaBonus.schemes > 0 || replicaBonus.items > 0) && (
+        <span className="muted">
+          {[
+            replicaBonus.schemes > 0
+              ? `+${replicaBonus.schemes} ${pluralRu(replicaBonus.schemes, "схема", "схемы", "схем")}`
+              : "",
+            replicaBonus.items > 0
+              ? `+${replicaBonus.items} ${pluralRu(replicaBonus.items, "предмет", "предмета", "предметов")}`
+              : "",
+            ...replicaBonus.notes,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+      )}
       {items.length === 0 ? (
         <span className="muted">Ничего не создано.</span>
       ) : (
@@ -5467,6 +6350,7 @@ function DndReplicaBlock({
         <DndReplicaSchemePicker
           limits={limits}
           chosen={schemes}
+          systemId={systemId}
           onClose={() => setPickerOpen(false)}
           onChange={setSchemes}
         />
@@ -5617,19 +6501,34 @@ function DndReplicaHandover({
 }
 
 /** Выбор схем: список доступных на текущем уровне, с поиском. */
+/** Подходит ли предмет под общую строку («любой обычный…»). */
+function genericMatches(g: ReplicaGeneric, e: CompendiumEntry): boolean {
+  const d = e.data as { rarity?: unknown; item_type?: unknown; cursed?: unknown } | undefined;
+  if (g.rarity && d?.rarity !== g.rarity) return false;
+  if (g.types && g.types.length > 0 && !g.types.includes(String(d?.item_type ?? ""))) return false;
+  if (g.excludeTypes && g.excludeTypes.includes(String(d?.item_type ?? ""))) return false;
+  if (g.excludeCursed && d?.cursed === true) return false;
+  return true;
+}
+
 function DndReplicaSchemePicker({
   limits,
   chosen,
+  systemId,
   onChange,
   onClose,
 }: {
   limits: ReplicaLimits;
   chosen: DndReplicaScheme[];
+  systemId: number | null;
   onChange: (next: DndReplicaScheme[]) => void;
   onClose: () => void;
 }) {
   const [entries, setEntries] = useState<Map<number, CompendiumEntry> | null>(null);
   const [query, setQuery] = useState("");
+  // Раскрытый общий шаблон + кандидаты-предметы под него.
+  const [genericOpen, setGenericOpen] = useState<string | null>(null);
+  const [genericItems, setGenericItems] = useState<CompendiumEntry[] | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -5659,9 +6558,51 @@ function DndReplicaSchemePicker({
     );
 
   function toggle(entryId: number, name: string) {
-    const has = chosen.some((c) => c.entryId === entryId);
+    // Именные схемы — без genericId: выбор из общего шаблона того же предмета
+    // считается отдельной схемой (по книге) и чекбоксом не снимается.
+    const has = chosen.some((c) => c.entryId === entryId && (c.genericId ?? null) === null);
     onChange(
-      has ? chosen.filter((c) => c.entryId !== entryId) : [...chosen, { entryId, name, classId: limits.classId }]
+      has
+        ? chosen.filter((c) => !(c.entryId === entryId && (c.genericId ?? null) === null))
+        : [...chosen, { entryId, name, classId: limits.classId }]
+    );
+  }
+
+  function openGeneric(g: ReplicaGeneric) {
+    if (genericOpen === g.id) {
+      setGenericOpen(null);
+      return;
+    }
+    setGenericOpen(g.id);
+    setGenericItems(null);
+    if (!systemId) {
+      setGenericItems([]);
+      return;
+    }
+    loadDndEquipmentEntries(systemId)
+      .then((all) => {
+        setGenericItems(
+          all
+            .filter((e) => e.kind === "magic_item" && genericMatches(g, e))
+            .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+        );
+      })
+      .catch(() => setGenericItems([]));
+  }
+
+  function addGeneric(g: ReplicaGeneric, entry: CompendiumEntry) {
+    // Каждый выбор по общему шаблону — отдельная схема: дубли разрешены.
+    onChange([...chosen, { entryId: entry.id, name: entry.name, classId: limits.classId, genericId: g.id }]);
+  }
+
+  function removeGenericPick(genericId: string, occurrence: number) {
+    let seen = -1;
+    onChange(
+      chosen.filter((c) => {
+        if ((c.genericId ?? null) !== genericId) return true;
+        seen++;
+        return seen !== occurrence;
+      })
     );
   }
 
@@ -5685,7 +6626,7 @@ function DndReplicaSchemePicker({
           <label key={scheme.entryId} className="row dnd-replica-row">
             <input
               type="checkbox"
-              checked={chosen.some((c) => c.entryId === scheme.entryId)}
+              checked={chosen.some((c) => c.entryId === scheme.entryId && (c.genericId ?? null) === null)}
               onChange={() => toggle(scheme.entryId, entry!.name)}
             />
             <span style={{ flex: "1 1 12ch", minWidth: 0 }}>{entry!.name}</span>
@@ -5694,6 +6635,65 @@ function DndReplicaSchemePicker({
             </span>
           </label>
         ))}
+        {limits.generics.length > 0 && (
+          <>
+            <h4 style={{ margin: "8px 0 0" }}>Общие схемы</h4>
+            <p className="muted" style={{ margin: 0, fontSize: "var(--fs-meta)" }}>
+              Любой подходящий предмет — отдельная схема за каждый выбор.
+            </p>
+            {limits.generics.map((g) => {
+              const picked = chosen.filter((c) => (c.genericId ?? null) === g.id);
+              const open = genericOpen === g.id;
+              return (
+                <div key={g.id} className="stack" style={{ gap: 4 }}>
+                  <div className="row dnd-replica-row" style={{ justifyContent: "space-between" }}>
+                    <span style={{ flex: "1 1 12ch", minWidth: 0 }}>
+                      {g.label} <span className="muted">с {g.minLevel} ур.</span>
+                    </span>
+                    <button type="button" className="comp-mini" onClick={() => openGeneric(g)}>
+                      {open ? "Скрыть" : `Выбрать (${picked.length})`}
+                    </button>
+                  </div>
+                  {picked.map((p, k) => (
+                    <div key={`${p.entryId}-${k}`} className="row" style={{ gap: 6, alignItems: "center" }}>
+                      <span className="muted" style={{ flex: "1 1 12ch", minWidth: 0 }}>
+                        ↳ {p.name}
+                      </span>
+                      <button
+                        type="button"
+                        className="comp-mini danger"
+                        aria-label={`Убрать выбор: ${p.name}`}
+                        onClick={() => removeGenericPick(g.id, k)}
+                      >
+                        <NavIcon name="close" />
+                      </button>
+                    </div>
+                  ))}
+                  {open && (
+                    <div className="stack" style={{ gap: 2 }}>
+                      {genericItems === null && <p className="muted">Загрузка…</p>}
+                      {genericItems !== null && genericItems.length === 0 && (
+                        <p className="muted">Ничего не подошло.</p>
+                      )}
+                      {genericItems !== null &&
+                        genericItems
+                          .filter((e) => !q || e.name.toLowerCase().includes(q))
+                          .slice(0, 60)
+                          .map((e) => (
+                            <div key={e.id} className="row dnd-replica-row" style={{ justifyContent: "space-between" }}>
+                              <span style={{ flex: "1 1 12ch", minWidth: 0 }}>{e.name}</span>
+                              <button type="button" className="comp-mini" onClick={() => addGeneric(g, e)}>
+                                ＋ схема
+                              </button>
+                            </div>
+                          ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
     </Modal>
   );
@@ -5829,7 +6829,7 @@ function DndActionPools({
   const showSlots = hasCombatSpells && shownSlotPips.some((max) => max > 0);
   const showPact = hasCombatSpells && pact != null && pact.count > 0;
   // Класс подписываем только многоклассовым — как на «Ресурсах».
-  const showClass = resourceSources.filter((s) => s.entry.level > 0).length > 1;
+  const showClass = showClassSuffix(resourceSources);
   if (!showSlots && !showPact && pools.length === 0) return null;
   return (
     <div className="dnd-pool-band" role="status" aria-label="Остаток боевых ресурсов">
@@ -5890,6 +6890,7 @@ function DndResourcesView({
   campaignId,
   ownerCharacterId,
   ownPools,
+  replicaBonus,
   onQuickUpdate,
 }: {
   sources: ClassResourceSource[];
@@ -5902,6 +6903,8 @@ function DndResourcesView({
   ownerCharacterId?: number | null;
   /** Свои пулы умений — теми же строками, что классовые. */
   ownPools: DndResourceDef[];
+  /** Бонус к пределам реплик (Лучший бронник) — показом в блоке реплик. */
+  replicaBonus?: ReplicaBonus | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const resources = [...allResources(sources, abilities), ...ownPools];
@@ -5912,7 +6915,9 @@ function DndResourcesView({
   // Класс подписываем только у многоклассовых персонажей: у одноклассового
   // это шум, а «Проведение божественности» бывает и у Жреца, и у Паладина
   // сразу, и различить их иначе нечем. У своих пулов класса нет — суффикса нет.
-  const showClass = sources.filter((s) => s.entry.level > 0).length > 1;
+  // Подкласс корнем не считается (showClassSuffix): иначе одноклассовый
+  // Воин/Мастер боевых искусств выглядел бы многоклассовым.
+  const showClass = showClassSuffix(sources);
   return (
     <div className="stack dnd-pools">
       {resources.map((r) => {
@@ -5984,6 +6989,7 @@ function DndResourcesView({
           systemId={systemId}
           campaignId={campaignId}
           ownerCharacterId={ownerCharacterId}
+          replicaBonus={replicaBonus}
           onQuickUpdate={onQuickUpdate}
         />
       ))}
@@ -6018,12 +7024,20 @@ function DndRestModal({
   value,
   resources,
   pools,
+  companionsAfterRest,
+  shortGrants,
   onQuickUpdate,
   onClose,
 }: {
   value: DndCharacterData;
   resources: DndResourceDef[];
   pools: HitDicePool[];
+  /** Тела спутников после долгого отдыха (пушки развеяны, защитник пересобран)
+   *  — null, когда менять нечего. Считает родитель: модалке компендиум не виден. */
+  companionsAfterRest?: DndCompanion[] | null;
+  /** Гранты короткого отдыха чужим пулам («Проблеск +1») — считает родитель
+   *  из живых особенностей; модалка только применяет. */
+  shortGrants?: { key: string; label: string; amount: number | "full" }[];
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
   onClose: () => void;
 }) {
@@ -6031,6 +7045,17 @@ function DndRestModal({
   const shortNames = resources.filter((r) => r.recharge === "short").map((r) => r.label);
   const longNames = resources.filter((r) => r.recharge === "long").map((r) => r.label);
   const neverNames = resources.filter((r) => r.recharge === "none").map((r) => r.label);
+  // Предметы с зарядами «на рассвете» и числовым максимумом — длинный отдых
+  // вернёт их до максимума (см. longRest ниже).
+  const restoredPreviewCharges = value.equipmentSections.some((sec) =>
+    sec.items.some(
+      (it) =>
+        it.chargesRecharge === "dawn" &&
+        !!it.chargesMax &&
+        /^\d+$/.test(it.chargesMax.trim()) &&
+        it.chargesLeft !== Number(it.chargesMax.trim())
+    )
+  );
   const spentDice = pools.reduce((n, p) => n + p.used, 0);
   const totalDice = pools.reduce((n, p) => n + p.total, 0);
 
@@ -6046,6 +7071,11 @@ function DndRestModal({
     return next;
   }
 
+  // Подписи грантов короткого отдыха: «Проблеск гениальности (+1)».
+  // Только неполные пулы — полный обещать «восстановить» враньё.
+  const grantLabels = (shortGrants ?? [])
+    .filter((g) => (value.resourceUsed[g.key] ?? 0) > 0)
+    .map((g) => `${g.label} (${g.amount === "full" ? "полностью" : `+${g.amount}`})`);
   async function shortRest() {
     const ok = await confirm({
       title: "Короткий отдых?",
@@ -6053,17 +7083,38 @@ function DndRestModal({
         shortNames.length > 0
           ? `Восстановятся ячейки договора магии и ресурсы: ${shortNames.join(", ")}.`
           : "Восстановятся ячейки договора магии. Ресурсов короткого отдыха у этого персонажа нет.",
+        ...(grantLabels.length > 0 ? [`Частично восстановятся: ${grantLabels.join(", ")}.`] : []),
         "Кости хитов тратятся вручную дорожкой в виталах: сколько потратили, столько и вылечили.",
       ].join("\n\n"),
       confirmLabel: "Отдохнуть",
     });
     if (!ok) return;
-    onQuickUpdate({ pactSlotsUsed: 0, resourceUsed: resetResources("short") });
+    const used = resetResources("short");
+    for (const g of shortGrants ?? []) {
+      const cur = used[g.key] ?? value.resourceUsed[g.key] ?? 0;
+      used[g.key] = g.amount === "full" ? 0 : Math.max(0, cur - g.amount);
+    }
+    onQuickUpdate({ pactSlotsUsed: 0, resourceUsed: used });
     onClose();
   }
 
   async function longRest() {
     const back = pools.length > 0 ? Math.max(1, Math.floor(totalDice / 2)) : 0;
+    // Заряды предметов «на рассвете» — до числового максимума из снапшота.
+    // Кубический максимум и «не восстанавливаются» не трогаем.
+    const restoredSections = value.equipmentSections.map((sec) => ({
+      ...sec,
+      items: sec.items.map((it) => {
+        if (it.chargesRecharge !== "dawn" || !it.chargesMax || !/^\d+$/.test(it.chargesMax.trim())) return it;
+        const max = Number(it.chargesMax.trim());
+        return it.chargesLeft === max ? it : { ...it, chargesLeft: max };
+      }),
+    }));
+    const restoredCharges = restoredSections
+      .flatMap((s) => s.items)
+      .filter((it) => it.chargesMax)
+      .map((it) => it.name)
+      .filter((n) => n);
     const ok = await confirm({
       title: "Длинный отдых?",
       message: [
@@ -6077,6 +7128,15 @@ function DndRestModal({
         neverNames.length > 0 ? `
 
 Не восстановится: ${neverNames.join(", ")}.` : "",
+        companionsAfterRest ? `
+
+Тела спутников: временные исчезают (час пушки истёк), защитник собирается заново.` : "",
+        (value.elixirs ?? []).length > 0 ? `
+
+Эликсиры: старые сгорают вместе с флаконами — создайте новые.` : "",
+        restoredCharges.length > 0 ? `
+
+Заряды предметов восстановлены до максимума: ${restoredCharges.join(", ")}.` : "",
       ].join(""),
       confirmLabel: "Отдохнуть",
     });
@@ -6085,6 +7145,10 @@ function DndRestModal({
       spellSlotsUsed: value.spellSlotsUsed.map(() => 0),
       pactSlotsUsed: 0,
       resourceUsed: resetResources("long"),
+      ...(companionsAfterRest ? { companions: companionsAfterRest } : {}),
+      // Эликсиры сгорают вместе с флаконами — чистим, новые создаёт игрок.
+      ...((value.elixirs ?? []).length > 0 ? { elixirs: [] } : {}),
+      equipmentSections: restoredSections,
       hitDiceUsed: restoreHitDiceOnLongRest(pools),
       hitPointsCurrent: value.hitPointMax,
       hitPointsTemp: "0",
@@ -6113,6 +7177,7 @@ function DndRestModal({
             {shortNames.length > 0
               ? `Восстановит: ячейки договора магии, ${shortNames.join(", ")}.`
               : "Восстановит ячейки договора магии. Ресурсов короткого отдыха у этого персонажа нет."}
+            {grantLabels.length > 0 && ` Частично: ${grantLabels.join(", ")}.`}
           </p>
           {pools.length > 0 && (
             <p className="muted" style={{ margin: 0 }}>
@@ -6129,7 +7194,10 @@ function DndRestModal({
           <p className="muted" style={{ margin: 0 }}>
             Восстановит хиты, снимет спасброски от смерти и концентрацию, вернёт все ячейки
             {longNames.length + shortNames.length > 0 ? " и ресурсы классов" : ""}
+            {restoredPreviewCharges ? ", заряды предметов" : ""}
             {pools.length > 0 ? `, вернёт половину костей хитов (${Math.max(1, Math.floor(totalDice / 2))})` : ""}.
+            {companionsAfterRest && " Временные тела исчезнут, защитник соберётся заново."}
+            {(value.elixirs ?? []).length > 0 && " Эликсиры сгорят."}
             {neverNames.length > 0 && ` Не восстановится: ${neverNames.join(", ")}.`}
           </p>
           <button type="button" className="primary" onClick={longRest} style={{ alignSelf: "flex-start" }}>
@@ -6844,6 +7912,10 @@ export function DndCharacterView({
   const [highlight, setHighlight] = useState<string | null>(null);
   const [openAction, setOpenAction] = useState<AttackRow | null>(null);
   const [addingCompanion, setAddingCompanion] = useState(false);
+  // Призыв заклинанием — двухшаговый: сначала «Призвать», потом круг ячейки
+  // (мощь тела зависит от круга, а ритуал ячейки не тратит — форсить трату
+  // выбором круга нельзя).
+  const [summonSpell, setSummonSpell] = useState<number | null>(null);
   const [restOpen, setRestOpen] = useState(false);
   // Происхождение правится адресом ?edit=1 (карандаш на плашке чарника в
   // профиле): кнопки-карандаша в шапке больше нет (решение владельца
@@ -6885,15 +7957,21 @@ export function DndCharacterView({
   const slotSources = value.classes
     .filter((c) => c.classId != null && c.level > 0)
     .map((c) => ({
+      classId: c.classId,
       level: c.level,
       progression: getEntry(c.classId)?.data.progression as ClassProgression | undefined,
+      subProgression:
+        c.subclassId != null
+          ? (getEntry(c.subclassId)?.data.progression as ClassProgression | undefined)
+          : undefined,
+      roundUp: isRoundUpCaster(getEntry(c.classId)?.data as Record<string, unknown> | undefined),
     }));
   // Запасная таблица нужна ровно в одном случае: заклинательных классов
   // несколько и ни один из них не полный (Паладин + Следопыт). Тогда таблицу
   // многоклассья брать неоткуда, кроме как у полного заклинателя системы.
   const needsFallbackTable =
-    slotSources.filter((s) => casterKind(s.progression) !== "none").length > 1 &&
-    !slotSources.some((s) => casterKind(s.progression) === "full");
+    slotSources.filter((s) => sourceCasterKind(s) !== "none").length > 1 &&
+    !slotSources.some((s) => sourceCasterKind(s) === "full");
   useEffect(() => {
     if (!needsFallbackTable || !systemIdForSlots || fallbackProgressions.length > 0) return;
     loadDndClassProgressions(systemIdForSlots).then((list) =>
@@ -6913,10 +7991,32 @@ export function DndCharacterView({
     let cantrips: number | null = null;
     let prepared: number | null = null;
     for (const src of slotSources) {
-      const c = cantripsAtLevel(src.progression, src.level);
-      if (c != null) cantrips = (cantrips ?? 0) + c;
+      // Классовая и подклассовая (Мистический рыцарь) таблицы складываются:
+      // лимиты у подкласса свои, у класса их нет — дубля взяться неоткуда.
+      for (const prog of [src.progression, src.subProgression]) {
+        const c = cantripsAtLevel(prog, src.level);
+        if (c != null) cantrips = (cantrips ?? 0) + c;
+      }
+      // Формульный лимит (Артефактор: мод + пол-уровня) главнее табличного:
+      // статика колонки при нештатном INT врёт тихо. Характеристика берётся
+      // из записи самого класса; не разобралась — откат к таблице, а не
+      // пропавший лимит.
+      const classData = (src.classId != null ? getEntry(src.classId)?.data : undefined) as
+        | { prepared_formula?: unknown; spellcasting_ability?: unknown }
+        | undefined;
+      if (classPreparedFormula(classData as Record<string, unknown> | undefined)) {
+        const key = parseAbilityNames(classData?.spellcasting_ability)[0];
+        if (key) {
+          prepared =
+            (prepared ?? 0) +
+            formulaPreparedLimit("mod_plus_half_level", src.level, abilityModifier(value.abilities[key]));
+          continue;
+        }
+      }
       const p = preparedAtLevel(src.progression, src.level);
       if (p != null) prepared = (prepared ?? 0) + p;
+      const subP = preparedAtLevel(src.subProgression, src.level);
+      if (subP != null) prepared = (prepared ?? 0) + subP;
     }
     const counts = (list: DndSpellEntry[]) => list.filter((sp) => !sp.outsideLimit).length;
     return {
@@ -6933,13 +8033,53 @@ export function DndCharacterView({
     };
   })();
   // Стартовые наборы: у каждого класса персонажа и у предыстории.
-  const resourceSources: ClassResourceSource[] = value.classes.map((c) => ({
-    entry: c,
-    progression: getEntry(c.classId)?.data.progression as ClassProgression | undefined,
-    // Схемы реплик лежат у записи класса (решение R1) — сюда попадают,
-    // потому что вкладка «Ресурсы» и есть место, где ими пользуются.
-    replicateSchemes: (getEntry(c.classId)?.data.replicate_schemes as ReplicateScheme[] | undefined) ?? [],
-  }));
+  // Плюс источники подклассов: их прогрессии (кости превосходства, кости
+  // пси-энергии) читаются тем же кодом по уровню базового класса.
+  const resourceSources: ClassResourceSource[] = value.classes.flatMap((c) => {
+    const own: ClassResourceSource = {
+      entry: c,
+      progression: getEntry(c.classId)?.data.progression as ClassProgression | undefined,
+      // Схемы реплик лежат у записи класса (решение R1) — сюда попадают,
+      // потому что вкладка «Ресурсы» и есть место, где ими пользуются.
+      replicateSchemes: (getEntry(c.classId)?.data.replicate_schemes as ReplicateScheme[] | undefined) ?? [],
+      replicateGenerics: (getEntry(c.classId)?.data.replicate_generics as ReplicaGeneric[] | undefined) ?? [],
+    };
+    if (c.subclassId == null) return [own];
+    const sub: ClassResourceSource = {
+      entry: {
+        classId: c.subclassId,
+        className: c.subclassName || "Подкласс",
+        subclassId: null,
+        subclassName: "",
+        level: c.level,
+        skillChoiceOptions: [],
+        skillChoiceCount: 0,
+        spellcastingAbility: "",
+      },
+      progression: getEntry(c.subclassId)?.data.progression as ClassProgression | undefined,
+      replicateSchemes: [],
+      subOf: c.classId,
+    };
+    return [own, sub];
+  });
+  // Боевые искусства монаха: категория оружия — снимком инвентаря, а у старых
+  // строк — живым резолвом по entryId (снимка тогда не было).
+  const weaponCategoryOf = (entryId: number | null | undefined): string | undefined => {
+    if (entryId == null) return undefined;
+    const cat = getEntry(entryId)?.data.category;
+    return typeof cat === "string" ? cat : undefined;
+  };
+  // Состояние целиком: активно ли умение, какая кость. Живой резолв — те же
+  // записи, что карточка уже догрузила для таблиц развития и особенностей.
+  const martial = resolveMartialArts(
+    value.classFeatures,
+    value.equipmentSections,
+    resourceSources,
+    weaponCategoryOf
+  );
+  const monkWeaponOf = (item: DndEquipmentItem) => isItemMonkWeapon(item, weaponCategoryOf);
+  // Движение без доспехов — из той же таблицы развития, что и пулы.
+  const moveBonus = unarmoredMovementBonus(resourceSources, value.equipmentSections);
   // Ручная правка выигрывает всегда: у самодельного класса таблицы может не
   // быть вовсе, и обнулять ему ячейки расчётом нельзя.
   const autoSlots = !value.spellSlotsManual && computedSlots.basis !== "none";
@@ -6956,12 +8096,116 @@ export function DndCharacterView({
   // Свои ресурсы умений (структурность): пулы из cost {uses, ownResource}
   // живых (разрешённых) особенностей. Дальше едут одним списком с
   // классовыми: трата, лента, «Ресурсы», сброс на отдыхе.
-  const ownPools = featurePools(liveFeatureGroups.flat(), value.abilities);
+  // Уровень класса-хозяина умения (для levelSteps): вверх по родителям записи
+  // до строки классов листа (фича → подкласс → класс). Чужие (виды, черты)
+  // ни к чему не привяжутся — там откат к amount.
+  const featureClassLevel = (entryId: number): number | null => {
+    let cur: number | null | undefined = entryId;
+    const seen = new Set<number>();
+    while (cur != null && !seen.has(cur)) {
+      seen.add(cur);
+      const hit = value.classes.find((c) => c.classId === cur || c.subclassId === cur);
+      if (hit) return hit.level;
+      cur = getEntry(cur)?.parent_id ?? null;
+    }
+    return null;
+  };
+  const ownPools = featurePools(liveFeatureGroups.flat(), value.abilities, featureClassLevel);
+  // Тела спутников (Фаза B): чертежи из живых особенностей с data.companion.
+  // Именами не ищем никого — чертёж привязан к записи фичи, лимит — к нему же.
+  const entryParentId = (id: number | null | undefined) => getEntry(id)?.parent_id ?? null;
+  const ownedFeatureNames = liveFeatureGroups.flat().map((f) => f.name);
+  const summonOptions = liveFeatureGroups
+    .flat()
+    .filter((f): f is DndFeature & { entryId: number } => typeof f.entryId === "number")
+    .map((f) => ({
+      feature: f,
+      blueprint: blueprintFromEntryData(
+        getEntry(f.entryId)?.data as Record<string, unknown> | undefined
+      ),
+    }))
+    .filter(
+      (o): o is { feature: DndFeature & { entryId: number }; blueprint: CompanionBlueprint } =>
+        o.blueprint != null
+    );
+  const blueprintOfInstance = (c: DndCompanion) => {
+    const id = c.featureEntryId ?? c.spellEntryId;
+    return id != null
+      ? blueprintFromEntryData(getEntry(id)?.data as Record<string, unknown> | undefined)
+      : null;
+  };
+  // Призывы заклинаниями (data.summon): те же тела, хозяин — запись спелла.
+  // Круг выбирается при призыве (мощь от круга, а ритуал ячейки не тратит),
+  // поэтому кнопка двухшаговая через summonSpell, а не мгновенная.
+  const spellSummonOptions = (() => {
+    const seen = new Set<number>();
+    const out: { spell: DndSpellEntry & { entryId: number }; blueprint: CompanionBlueprint }[] = [];
+    for (const sp of [...liveCantrips, ...liveSpellsByLevel.flat()]) {
+      if (typeof sp.entryId !== "number" || seen.has(sp.entryId)) continue;
+      seen.add(sp.entryId);
+      const withId = sp as DndSpellEntry & { entryId: number };
+      const blueprint = blueprintFromEntryData(
+        getEntry(withId.entryId)?.data as Record<string, unknown> | undefined
+      );
+      if (blueprint?.hp) out.push({ spell: withId, blueprint });
+    }
+    return out;
+  })();
+  const companionsRest = companionsAfterLongRest(value.companions, blueprintOfInstance);
   const allPools = [...allResources(resourceSources, value.abilities), ...ownPools];
+  // Бонус к пределам реплик (Лучший бронник: +схема/+предмет только доспехи):
+  // суммируем маркеры replicaBonus живых особенностей. Показ, не enforcement.
+  const replicaBonus: ReplicaBonus | null = (() => {
+    const out: ReplicaBonus = { schemes: 0, items: 0, notes: [] };
+    for (const f of liveFeatureGroups.flat()) {
+      if (typeof f.entryId !== "number") continue;
+      const b = (
+        getEntry(f.entryId)?.data as
+          | { replicaBonus?: { schemes?: number; items?: number; note?: string } }
+          | undefined
+      )?.replicaBonus;
+      if (!b) continue;
+      out.schemes += b.schemes ?? 0;
+      out.items += b.items ?? 0;
+      if (b.note && !out.notes.includes(b.note)) out.notes.push(b.note);
+    }
+    return out.schemes > 0 || out.items > 0 ? out : null;
+  })();
+  // Гранты короткого отдыха чужим пулам (Отдохнувший гений, Магическое
+  // наставление): собираются с живых особенностей, пул ищется названием
+  // (прецедент: restore.pool). Модалке отдыха едут готовыми парами.
+  const shortRestGrants = (() => {
+    const out: { key: string; label: string; amount: number | "full" }[] = [];
+    for (const f of liveFeatureGroups.flat()) {
+      const g = f.cost?.shortRest;
+      if (!g?.pool) continue;
+      if (g.needsAttuned && !(value.attunementCount > 0)) continue;
+      const pool = allPools.find((r) => r.label.toLowerCase() === g.pool.toLowerCase());
+      if (!pool || out.some((o) => o.key === pool.key)) continue;
+      out.push({ key: pool.key, label: pool.label, amount: g.amount ?? 1 });
+    }
+    return out;
+  })();
   // Индекс поиска. Порядок групп особенностей здесь и в liveFeatureGroups
   // должен совпадать — подписи результата берутся по индексу группы.
   const searchHits = collectSheetHits(value, liveCantrips, liveSpellsByLevel, liveFeatureGroups);
-  const spellAbilityKey = characterSpellcastingAbility(value.classes);
+  const spellAbilityKey = characterSpellcastingAbility(value.classes) ?? subclassSpellcastingAbility();
+  function subclassSpellcastingAbility(): DndAbilityKey | null {
+    // Заклинатель через подкласс (Мистический рыцарь — Интеллект): у строки
+    // Воина своей характеристики нет, берём из записи подкласса. Динамически,
+    // а не записью в строку — тогда работает и у старых персонажей, и у
+    // пришедших визардом, без миграций строк.
+    for (const c of value.classes) {
+      if (c.spellcastingAbility) continue;
+      const sub =
+        c.subclassId != null ? getEntry(c.subclassId)?.data.spellcasting_ability : undefined;
+      if (typeof sub === "string" && sub) {
+        const key = ABILITY_NAME_TO_KEY[sub] ?? null;
+        if (key) return key;
+      }
+    }
+    return null;
+  }
   const spellAbilityMod = spellAbilityKey ? abilityModifier(value.abilities[spellAbilityKey]) : 0;
   const spellProfBonus = parseBonus(value.proficiencyBonus);
   const spellAttackBonus =
@@ -7002,15 +8246,53 @@ export function DndCharacterView({
   // заклинания, умения классов, видов, черт и вручную вписанные атаки.
   // Считается здесь, а не на карте «Действия»: те же строки нужны закладкам
   // на первой карте, а собирать их дважды значит однажды разойтись.
+  // Безоружный удар монаха — первой строкой: им бьют и вместо атаки, и Шквалом.
+  const dexModForMartial = abilityModifier(value.abilities.dex);
+  const unarmedRows =
+    martial.active && martial.die
+      ? [
+          {
+            name: "Безоружный удар",
+            bonus: formatModifier(dexModForMartial + parseBonus(value.proficiencyBonus) - exhaustionPenalty),
+            damage: `${martial.die}${dexModForMartial !== 0 ? ` ${formatModifier(dexModForMartial)}` : ""}`,
+            range: "Ближний",
+            timing: "action" as const,
+            entryId: null,
+          },
+        ]
+      : [];
   const actionRows = [
+    ...unarmedRows,
     ...weaponAttackRows(
       value.equipmentSections,
       value.abilities,
       parseBonus(value.proficiencyBonus),
-      exhaustionPenalty
+      exhaustionPenalty,
+      martial.active && martial.die
+        ? { die: martial.die, isMonkWeapon: monkWeaponOf }
+        : null,
+      value.masteredWeapons.length > 0
+        ? {
+            ids: new Set(
+              value.masteredWeapons.map((w) => w.entryId).filter((id): id is number => typeof id === "number")
+            ),
+            names: new Set(value.masteredWeapons.map((w) => w.name.trim().toLowerCase()).filter(Boolean)),
+          }
+        : null
     ),
     ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc),
-    ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc),
+    // Уровень класса-хозяина для кубов levelDice: строка класса/подкласса
+    // по sourceParentId особенности. Ручные (без sourceParentId) — без скейла.
+    ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc, (pid) => {
+      if (pid == null) return null;
+      const hit = value.classes.find((c) => c.classId === pid || c.subclassId === pid);
+      return hit ? hit.level : null;
+    },
+    {
+      abilities: value.abilities,
+      profBonus: parseBonus(value.proficiencyBonus),
+      misc: parseBonus(value.spellDcMisc),
+    }),
     ...manualAttackRows(value.attacks),
   ];
   const pinnedNames = (value.pinnedActions ?? []).map((p) => p.name);
@@ -7037,8 +8319,9 @@ export function DndCharacterView({
 
   // И −5 футов скорости за уровень. Считается только от структурной ходьбы:
   // в свободном тексте («9 клеток, лазание 3») отнимать нечего, и он
-  // остаётся примечанием под итогом.
-  const walkDie = walkDieParts(value.speeds, value.exhaustion, prefs.distanceUnit);
+  // остаётся примечанием под итогом. Движение без доспехов монаха — плюсом к
+  // базе до штрафа: бонус — часть скорости, а не освобождение от истощения.
+  const walkDie = walkDieParts(value.speeds, value.exhaustion, prefs.distanceUnit, moveBonus.bonus);
   // Остальные способы передвижения на кость не лезут и туда не нужны: кость
   // отвечает на вопрос «сколько я прохожу», а полёт и лазание есть не у всех
   // и спрашиваются реже. Они уходят подписью под рядом — вместе со старой
@@ -7072,11 +8355,23 @@ export function DndCharacterView({
     (value.hitPointsCurrent !== "" && (Number(value.hitPointsCurrent) || 0) <= 0) ||
     value.deathSaveSuccesses > 0 ||
     value.deathSaveFailures > 0;
-  const computedAc = computeArmorClass(
-    abilityModifier(value.abilities.dex),
-    value.equipmentSections,
-    parseBonus(value.manualAcBonus)
+  // Защита без доспехов — плюсом поверх computeArmorClass (та же схема, что в
+  // мини-карте выше): базовая формула про умение не знает.
+  const unarmored = unarmoredDefenseBonus(
+    value.classFeatures,
+    value.classes,
+    abilityModifier(value.abilities.wis),
+    abilityModifier(value.abilities.con),
+    value.equipmentSections
   );
+  const computedAc =
+    computeArmorClass(
+      abilityModifier(value.abilities.dex),
+      value.equipmentSections,
+      parseBonus(value.manualAcBonus)
+    ) + unarmored.bonus;
+  // Подпись под костью КЗ — откуда прибавка, если защита без доспехов активна.
+  const unarmoredHint = unarmored.source;
   return (
     <div className="sb-scope" onClickCapture={() => highlight && setHighlight(null)}>
       <div className="sb-card">
@@ -7094,14 +8389,38 @@ export function DndCharacterView({
             onClose={() => setOpenAction(null)}
             extra={
               onQuickUpdate ? (
-                <SpendAction
-                  row={openAction}
-                  value={value}
-                  slots={shownSlotPips}
-                  resources={allPools}
-                  onQuickUpdate={onQuickUpdate}
-                  onDone={() => setOpenAction(null)}
-                />
+                <div className="stack" style={{ gap: 10, alignItems: "stretch" }}>
+                  <SpendAction
+                    row={openAction}
+                    value={value}
+                    slots={shownSlotPips}
+                    resources={allPools}
+                    onQuickUpdate={onQuickUpdate}
+                    onDone={() => setOpenAction(null)}
+                  />
+                  {(() => {
+                    // Коробка эликсиров — только у умения с таблицей (алхимик):
+                    // что за эффекты на руках после бросков/выбора.
+                    const f =
+                      openAction.source.kind === "feature" ? openAction.source.feature : null;
+                    const table =
+                      f?.entryId != null
+                        ? (
+                            getEntry(f.entryId)?.data as
+                              | { elixirTable?: { key: string; name: string; short: string }[] }
+                              | undefined
+                          )?.elixirTable
+                        : null;
+                    if (!table || table.length === 0) return null;
+                    return (
+                      <ElixirBox
+                        table={table}
+                        elixirs={value.elixirs ?? []}
+                        onChange={(elixirs) => onQuickUpdate({ elixirs })}
+                      />
+                    );
+                  })()}
+                </div>
               ) : undefined
             }
           />
@@ -7253,6 +8572,8 @@ export function DndCharacterView({
             value={value}
             resources={allPools}
             pools={pools}
+            companionsAfterRest={companionsRest}
+            shortGrants={shortRestGrants}
             onQuickUpdate={onQuickUpdate!}
             onClose={() => setRestOpen(false)}
           />
@@ -7468,7 +8789,7 @@ export function DndCharacterView({
                 на которые чаще всего смотрит игрок; всё остальное из витальных
                 ячеек — ниже, обычными плашками. */}
             <div className="dnd-triad">
-              <AcQuickBox computed={computedAc} manualBonus={value.manualAcBonus} onQuickUpdate={onQuickUpdate} />
+              <AcQuickBox computed={computedAc} manualBonus={value.manualAcBonus} hint={unarmoredHint} onQuickUpdate={onQuickUpdate} />
               <HpQuickBox value={value} onQuickUpdate={onQuickUpdate} accentColor={cardColor} />
               <div>
                 <DndDie size="lg">
@@ -7484,8 +8805,18 @@ export function DndCharacterView({
                 <div className="sb-label">Скорость</div>
               </div>
             </div>
-            {(otherSpeeds || legacySpeedNote) && (
-              <div className="muted dnd-triad-note">{[otherSpeeds, legacySpeedNote].filter(Boolean).join(" · ")}</div>
+            {(otherSpeeds || legacySpeedNote || (moveBonus.bonus > 0 && value.speeds.walk != null)) && (
+              <div className="muted dnd-triad-note">
+                {[
+                  otherSpeeds,
+                  legacySpeedNote,
+                  // Расшифровка бонуса — чтобы игрок, вбивший +10 руками в базу,
+                  // увидел двойной учёт, а не молчаливую сумму.
+                  moveBonus.bonus > 0 && value.speeds.walk != null
+                    ? `ходьба ${value.speeds.walk} + ${moveBonus.bonus} (без доспехов)`
+                    : "",
+                ].filter(Boolean).join(" · ")}
+              </div>
             )}
 
             {/* Живой ряд: инициатива, концентрация, истощение — то, что
@@ -7606,21 +8937,168 @@ export function DndCharacterView({
                 зверя в бестиарии. */}
             {((value.companions ?? []).length > 0 || onQuickUpdate) && (
               <div className="dnd-companions">
-                {(value.companions ?? []).map((c, i) => (
-                  <CompanionToken
-                    key={`${c.entryId ?? "manual"}-${i}`}
-                    companion={c}
-                    getEntry={getEntry}
-                    onRemove={
-                      onQuickUpdate
-                        ? () =>
-                            onQuickUpdate({
-                              companions: (value.companions ?? []).filter((_, j) => j !== i),
-                            })
-                        : undefined
+                {(value.companions ?? []).map((c, i) => {
+                  const remove = onQuickUpdate
+                    ? () =>
+                        onQuickUpdate({
+                          companions: (value.companions ?? []).filter((_, j) => j !== i),
+                        })
+                    : undefined;
+                  // Тело по чертежу вместо жетона: пушка/защитник/призыв с хитами.
+                  // Чертёж не разобрался (запись уехала) — падаем назад на
+                  // жетон, а не в пустоту: имя и так сохранено рядом с id.
+                  const bodyBlueprint =
+                    c.featureEntryId != null || c.spellEntryId != null ? blueprintOfInstance(c) : null;
+                  const bodyStats =
+                    bodyBlueprint != null
+                      ? companionStats(bodyBlueprint, value.classes, c.classId, value.abilities, c.spellLevel ?? 0)
+                      : null;
+                  if (bodyBlueprint != null && bodyStats != null && onQuickUpdate) {
+                    const ownerName =
+                      (c.featureEntryId != null
+                        ? summonOptions.find((o) => o.feature.entryId === c.featureEntryId)?.feature.name
+                        : spellSummonOptions.find((o) => o.spell.entryId === c.spellEntryId)?.spell.name) ??
+                      bodyBlueprint.name ??
+                      c.name;
+                    return (
+                      <CompanionBody
+                        key={`body-${c.featureEntryId ?? c.spellEntryId}-${i}`}
+                        companion={c}
+                        blueprint={bodyBlueprint}
+                        maxHp={bodyStats.maxHp}
+                        ac={bodyStats.ac}
+                        ownerFeatureName={ownerName}
+                        previewEntryId={c.featureEntryId ?? c.spellEntryId ?? c.entryId}
+                        ownsDetonate={
+                          !!bodyBlueprint.detonateFeature &&
+                          ownedFeatureNames.includes(bodyBlueprint.detonateFeature)
+                        }
+                        ownsCover={
+                          !!bodyBlueprint.coverFeature &&
+                          ownedFeatureNames.includes(bodyBlueprint.coverFeature)
+                        }
+                        onPatch={(patch) =>
+                          onQuickUpdate({
+                            companions: (value.companions ?? []).map((x, j) =>
+                              j === i ? { ...x, ...patch } : x
+                            ),
+                          })
+                        }
+                        onRemove={remove ?? (() => {})}
+                      />
+                    );
+                  }
+                  return (
+                    <CompanionToken
+                      key={`${c.entryId ?? "manual"}-${i}`}
+                      companion={c}
+                      getEntry={getEntry}
+                      onRemove={remove}
+                    />
+                  );
+                })}
+                {/* Вывод тел по чертежам: кнопка только пока живых меньше
+                    лимита (вторая пушка — за «Укреплённую позицию»). */}
+                {onQuickUpdate &&
+                  summonOptions
+                    .filter(
+                      (o) =>
+                        liveCompanionsOf(value.companions, o.feature.entryId).length <
+                        companionMaxCount(o.blueprint, ownedFeatureNames)
+                    )
+                    .map((o) => (
+                      <button
+                        key={`summon-${o.feature.entryId}`}
+                        type="button"
+                        className="comp-mini"
+                        title={`Вывести: ${o.blueprint.name ?? o.feature.name}`}
+                        onClick={() =>
+                          onQuickUpdate({
+                            // Развеянное/мёртвое тело того же чертежа уходит:
+                            // новый вызов — новое тело, а не второе рядом.
+                            companions: [
+                              ...(value.companions ?? []).filter(
+                                (x) =>
+                                  x.featureEntryId !== o.feature.entryId || (!x.dead && !x.dismissed)
+                              ),
+                              {
+                                entryId: null,
+                                name: o.blueprint.name ?? o.feature.name,
+                                featureEntryId: o.feature.entryId,
+                                classId: companionClassId(o.feature.entryId, value.classes, entryParentId),
+                              },
+                            ],
+                          })
+                        }
+                      >
+                        Вывести: {o.blueprint.name ?? o.feature.name}
+                      </button>
+                    ))}
+                {/* Призыв заклинанием (data.summon): двухшаговый — сначала
+                    «Призвать», потом круг (мощь от круга, ритуал ячейки не
+                    тратит). Живого сверх лимита заменяем, мёртвого — тоже. */}
+                {onQuickUpdate &&
+                  spellSummonOptions.map((o) => {
+                    const live = liveSummonOf(value.companions, o.spell.entryId);
+                    const max = companionMaxCount(o.blueprint, ownedFeatureNames);
+                    const name = o.blueprint.name ?? o.spell.name;
+                    const picking = summonSpell === o.spell.entryId;
+                    const circles: number[] = [];
+                    for (let ci = 0; ci < shownSlotPips.length; ci++) {
+                      if ((shownSlotPips[ci] ?? 0) > 0) circles.push(ci + 1);
                     }
-                  />
-                ))}
+                    if (circles.length === 0) circles.push(1);
+                    return (
+                      <span key={`spell-summon-${o.spell.entryId}`} className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <button
+                          type="button"
+                          className="comp-mini"
+                          title={live.length >= max ? `Пересоздать (заменит живого): ${name}` : `Призвать: ${name}`}
+                          onClick={() => setSummonSpell(picking ? null : o.spell.entryId)}
+                        >
+                          {live.length >= max ? `Пересоздать: ${name}` : `Призвать: ${name}`}
+                        </button>
+                        {picking &&
+                          circles.map((circle) => (
+                            <button
+                              key={circle}
+                              type="button"
+                              className="comp-mini"
+                              title={`Круг ${circle}: хиты по формуле чертежа`}
+                              onClick={() => {
+                                const next = [...(value.companions ?? [])];
+                                if (live.length >= max && live.length > 0) {
+                                  const idx = live[0].index;
+                                  next[idx] = {
+                                    ...next[idx],
+                                    spellLevel: circle,
+                                    hpUsed: 0,
+                                    dead: false,
+                                    dismissed: false,
+                                  };
+                                } else {
+                                  const kept = next.filter(
+                                    (x) => x.spellEntryId !== o.spell.entryId || (!x.dead && !x.dismissed)
+                                  );
+                                  kept.push({
+                                    entryId: null,
+                                    name,
+                                    spellEntryId: o.spell.entryId,
+                                    spellLevel: circle,
+                                  });
+                                  next.length = 0;
+                                  next.push(...kept);
+                                }
+                                onQuickUpdate({ companions: next });
+                                setSummonSpell(null);
+                              }}
+                            >
+                              {circle}й
+                            </button>
+                          ))}
+                      </span>
+                    );
+                  })}
                 {/* Поле поиска не стоит на карте постоянно: спутника заводят
                     раз в кампанию, а орган управления виден каждый ход.
                     Пока он не нужен — на его месте «+». */}
@@ -8138,6 +9616,31 @@ export function DndCharacterView({
             {atZeroHp && (
               <div>
                 <div className="sb-label">Спас от смерти</div>
+                {(() => {
+                  const cheat = liveFeatureGroups.flat().find((f) => f.cost?.deathCheat)?.cost?.deathCheat;
+                  if (!cheat || !onQuickUpdate) return null;
+                  return (
+                    <SoulCheat
+                      rarities={cheat.rarities}
+                      hpPer={cheat.hpPer}
+                      items={value.replicaItems ?? []}
+                      getEntry={getEntry}
+                      onCheat={(count, ids) => {
+                        const gone = new Set(ids);
+                        onQuickUpdate({
+                          hitPointsCurrent: String(cheat.hpPer * count),
+                          deathSaveSuccesses: 0,
+                          deathSaveFailures: 0,
+                          replicaItems: (value.replicaItems ?? []).filter((it) => !gone.has(it.id)),
+                          equipmentSections: value.equipmentSections.map((sec) => ({
+                            ...sec,
+                            items: sec.items.filter((row) => !gone.has(row.replicaId ?? "")),
+                          })),
+                        });
+                      }}
+                    />
+                  );
+                })()}
                 <div className="stack sb-death-saves">
                   <span className="row muted">
                     +
@@ -8177,6 +9680,7 @@ export function DndCharacterView({
               campaignId={campaignId}
               ownerCharacterId={ownerCharacterId}
               ownPools={ownPools}
+              replicaBonus={replicaBonus}
               onQuickUpdate={onQuickUpdate}
             />
             </>
@@ -8276,10 +9780,23 @@ export function DndCharacterView({
                     onChange={(v) => setDraftFeatures({ ...draftFeatures, feats: v })}
                     allowSearchDrop
                   />
+                  <FightingStyleCounter classes={value.classes} feats={draftFeatures.feats} getEntry={getEntry} />
                   <FeatureListEdit
                     title="Особые умения"
                     values={draftFeatures.specialAbilities}
                     onChange={(v) => setDraftFeatures({ ...draftFeatures, specialAbilities: v })}
+                    allowSearchDrop
+                  />
+                  <EntryChoiceCounter
+                    classes={value.classes}
+                    abilities={draftFeatures.specialAbilities}
+                    systemId={value.systemId}
+                  />
+                  <WeaponMasteryEdit
+                    classes={value.classes}
+                    mastered={value.masteredWeapons}
+                    systemId={value.systemId}
+                    onChange={onQuickUpdate ? (v) => onQuickUpdate({ masteredWeapons: v }) : undefined}
                   />
                   <div className="row" style={{ marginTop: 6, alignItems: "center" }}>
                     <TabEditToggle

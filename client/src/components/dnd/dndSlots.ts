@@ -14,6 +14,20 @@ export type CasterKind = "none" | "third" | "half" | "full";
 export interface ClassSlotSource {
   level: number;
   progression?: ClassProgression;
+  /** Прогрессия подкласса (Мистический рыцарь, Плут-Мистический трюкач):
+   *  даёт ячейки, заговоры и подготовленные, когда у самого класса слотовых
+   *  колонок нет. Уровень — уровень базового класса, строки таблицы
+   *  подкласса размечены им же. */
+  subProgression?: ClassProgression;
+  /** Половинчатый заклинатель с округлением вверх (Артефактор: собственный
+   *  подсчёт мультикласса — уровень/2 вверх, а не вниз как у остальных).
+   *  Маркер — поле round_up_multiclass у записи класса, имён в коде нет. */
+  roundUp?: boolean;
+}
+
+/** Маркер округления вверх из данных записи класса. */
+export function isRoundUpCaster(classData: Record<string, unknown> | undefined): boolean {
+  return classData?.round_up_multiclass === true;
 }
 
 export interface ComputedSlots {
@@ -42,19 +56,38 @@ export function casterKind(progression: ClassProgression | undefined): CasterKin
   return "none";
 }
 
+// Тип заклинателя строки классов с учётом подкласса: у Воина слотовых
+// колонок нет, и без подклассовой прогрессии Мистический рыцарь навсегда
+// остался бы не-заклинателем. Классовая таблица главнее: если ячейки есть
+// у обеих (homebrew), считаем по классу.
+export function sourceCasterKind(source: ClassSlotSource): CasterKind {
+  const own = casterKind(source.progression);
+  return own !== "none" ? own : casterKind(source.subProgression);
+}
+
+// Ячейки строки: классовые, а когда их нет — подклассовые. null, если ячеек
+// нет ни там, ни там.
+export function sourceSpellSlots(source: ClassSlotSource): number[] | null {
+  return (
+    spellSlotsAtLevel(source.progression, source.level) ??
+    spellSlotsAtLevel(source.subProgression, source.level)
+  );
+}
+
 // Уровень заклинателя для многоклассья: полные классы идут целиком,
 // половинчатые — половина, третьеразрядные — треть, всё с округлением вниз
-// по каждому классу отдельно (правила 5.5). Договор магии Колдуна в этот
-// счёт не входит вовсе.
+// по каждому классу отдельно (правила 5.5). Исключение — Артефактор: его
+// собственный подсчёт округляет половину вверх (roundUp с записи класса).
+// Договор магии Колдуна в этот счёт не входит вовсе.
 export function effectiveCasterLevel(sources: ClassSlotSource[]): number {
   let total = 0;
   for (const s of sources) {
-    switch (casterKind(s.progression)) {
+    switch (sourceCasterKind(s)) {
       case "full":
         total += s.level;
         break;
       case "half":
-        total += Math.floor(s.level / 2);
+        total += s.roundUp ? Math.ceil(s.level / 2) : Math.floor(s.level / 2);
         break;
       case "third":
         total += Math.floor(s.level / 3);
@@ -73,7 +106,7 @@ function fullCasterTable(
   sources: ClassSlotSource[],
   fallbacks: (ClassProgression | undefined)[]
 ): ClassProgression | undefined {
-  const own = sources.find((s) => casterKind(s.progression) === "full");
+  const own = sources.find((s) => sourceCasterKind(s) === "full");
   if (own?.progression) return own.progression;
   return fallbacks.find((p) => casterKind(p) === "full");
 }
@@ -93,7 +126,7 @@ export function computeSpellSlots(
   sources: ClassSlotSource[],
   fallbackProgressions: (ClassProgression | undefined)[] = []
 ): ComputedSlots {
-  const casters = sources.filter((s) => s.level > 0 && casterKind(s.progression) !== "none");
+  const casters = sources.filter((s) => s.level > 0 && sourceCasterKind(s) !== "none");
   const pact = pactFrom(sources);
 
   if (casters.length === 0) {
@@ -101,9 +134,10 @@ export function computeSpellSlots(
   }
   // Один заклинательный класс — берём его собственную строку. Это точнее
   // любой общей формулы: у половинчатых классов своя таблица, а не «половина
-  // от полной».
+  // от полной». Подклассовая строка (Мистический рыцарь) подхватывается
+  // внутри sourceSpellSlots, когда у класса своих ячеек нет.
   if (casters.length === 1) {
-    const slots = spellSlotsAtLevel(casters[0].progression, casters[0].level);
+    const slots = sourceSpellSlots(casters[0]);
     return { slots: slots ?? Array(9).fill(0), pact, basis: "single" };
   }
   const level = effectiveCasterLevel(casters);

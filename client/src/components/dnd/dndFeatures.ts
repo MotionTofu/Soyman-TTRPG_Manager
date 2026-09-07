@@ -79,3 +79,75 @@ export function featuresFromEntries(
       cost: e.data.cost as DndCost | undefined,
     }));
 }
+
+// ——— выборы игрока (fighter-choices) ———
+//
+// Выбор — то, что персонаж берёт сам, а не получает автовыдачей: черта
+// боевого стиля, приёмы, заклинания, оружие мастерства. Определение живёт
+// в data.choices записи умения (видит и визард, и лист), пик хранится
+// строкой персонажа С entryId — и дальше работает как связанная запись.
+// Уровень доступности — уровень самого умения (Черта стиля — 1,
+// Дополнительный стиль Чемпиона — 7) либо явный minLevel в дефе
+// (лесенки приёмов/выстрелов на одном умении).
+
+export interface ChoiceDef {
+  /** Стабильный ключ для хранения пиков. Один на вид выбора: обе черты
+   *  стиля (1 и 7 ур.) делят "fighting_style", пики копятся массивом. */
+  key: string;
+  /** Вид выбора: "feat" (03), далее "spell" | "entry" | "weapon" | "skill". */
+  kind: string;
+  /** Для kind === "feat": категория черт ("Боевой Стиль"). */
+  category?: string;
+  /** Для kind === "entry": имя группы механик ("Боевые приёмы"). */
+  group?: string;
+  /** Сколько пиков даёт это определение. */
+  count: number;
+  /** Минимальный уровень: явный minLevel из данных или уровень умения.
+   *  Несколько дефов на одном умении дают лесенку (приёмы БМ: 3 +2@7
+   *  +2@10 +2@15) — общий key копит пики массивом. */
+  minLevel: number;
+  /** Имя умения-источника для подписей. */
+  sourceName: string;
+  /** Id записи умения-источника (чистка пиков при смене класса/подкласса). */
+  sourceEntryId: number;
+  /** Источник — класс (true) или подкласс (false): пики чистятся вместе
+   *  со своим источником, чужые не трогаем. */
+  fromClass: boolean;
+}
+
+function parseChoiceDef(raw: unknown, entry: CompendiumEntry): ChoiceDef | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const key = typeof r.key === "string" && r.key.trim() ? r.key.trim() : "";
+  const kind = typeof r.kind === "string" && r.kind.trim() ? r.kind.trim() : "";
+  if (!key || !kind) return null;
+  const count = typeof r.count === "number" ? r.count : Number.parseInt(String(r.count ?? "1"), 10);
+  if (!Number.isFinite(count) || count <= 0) return null;
+  const explicitMin = typeof r.minLevel === "number" ? r.minLevel : Number.parseInt(String(r.minLevel ?? ""), 10);
+  return {
+    key,
+    kind,
+    category: typeof r.category === "string" && r.category.trim() ? r.category.trim() : undefined,
+    group: typeof r.group === "string" && r.group.trim() ? r.group.trim() : undefined,
+    count,
+    minLevel: Number.isFinite(explicitMin) && explicitMin > 0 ? explicitMin : (entry.level ?? 1),
+    sourceName: entry.name,
+    sourceEntryId: entry.id,
+    fromClass: false,
+  };
+}
+
+/** Определения выборов из записей умений класса/подкласса. fromClass
+ *  размечает источник (класс или подкласс) для чистки пиков. */
+export function choicesFromEntries(entries: CompendiumEntry[], fromClass: boolean): ChoiceDef[] {
+  const out: ChoiceDef[] = [];
+  for (const e of entries) {
+    const list = (e.data as Record<string, unknown> | undefined)?.choices;
+    if (!Array.isArray(list)) continue;
+    for (const raw of list) {
+      const def = parseChoiceDef(raw, e);
+      if (def) out.push({ ...def, fromClass });
+    }
+  }
+  return out.sort((a, b) => a.minLevel - b.minLevel || a.sourceEntryId - b.sourceEntryId);
+}

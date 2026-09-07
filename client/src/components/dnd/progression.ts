@@ -211,6 +211,24 @@ export function preparedAtLevel(progression: ClassProgression | undefined, level
   return raw ? num(raw) : null;
 }
 
+// Лимит подготовленных формулой, а не числом из таблицы: «мод заклинательной
+// характеристики + половина уровня класса (вниз, минимум 1)». Так готовит
+// Артефактор, а статика его колонки при INT выше/ниже базового врёт тихо.
+// Маркер — поле prepared_formula у записи класса, а не имя класса в коде:
+// хоумбрю-класс с тем же правилом заводится данными.
+export type PreparedFormula = "mod_plus_half_level";
+
+export function classPreparedFormula(classData: Record<string, unknown> | undefined): PreparedFormula | null {
+  return classData?.prepared_formula === "mod_plus_half_level" ? "mod_plus_half_level" : null;
+}
+
+export function formulaPreparedLimit(formula: PreparedFormula, level: number, mod: number): number {
+  switch (formula) {
+    case "mod_plus_half_level":
+      return Math.max(1, mod + Math.floor(level / 2));
+  }
+}
+
 // Колонки заданной роли с их значением на данном уровне — то, ради чего
 // dndResources.ts перестаёт быть списком классов в коде.
 export function columnsAtLevel(

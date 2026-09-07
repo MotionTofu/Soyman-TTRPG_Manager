@@ -30,6 +30,14 @@ import type { Database } from "better-sqlite3";
  */
 
 const MIGRATION_KEY = "dnd_replica_schemes_seeded";
+// Колонки «Известные схемы» / «Магические предметы» приехали импортом как
+// «показатель по уровню» (role: "stat"), а лист ищет их строго по ролям
+// replica_schemes / replica_items (replicaLimits). Первый запуск сидинга
+// типизировал колонки только вместе со списком схем — у баз, где список уже
+// был (владелец разметил руками или повторный импорт), роли так и остались
+// "stat", и блок реплик на листе не рендерился. Поэтому типизация колонок —
+// отдельная миграция с собственным ключом: чинит и живые базы, и будущие.
+const COLUMNS_MIGRATION_KEY = "dnd_replica_columns_typed";
 
 /** Прибавка к оружию и доспеху — их создают чаще всего, а по редкости и
  *  типу они в общий отбор не попадают. */
@@ -41,6 +49,74 @@ const EXTRA_SCHEMES: { name: string; minLevel: number }[] = [
 ];
 
 const WONDROUS = "Чудесные предметы";
+
+/** Ставит колонкам «Известные схемы» / «Магические предметы» роли пределов
+ *  реплик. Возвращает true, если хоть одна роль изменилась. Чистая функция
+ *  над распарсенным data — запись в БД делает вызывающий код. */
+function typeReplicaColumns(artData: Record<string, unknown>): boolean {
+  // Колонки приехали импортом как «показатель по уровню» — просто числа.
+  // Для реплик это пределы, с которыми лист работает, поэтому им ставятся
+  // свои роли; иначе искать их пришлось бы по названию колонки в коде.
+  const progression = artData.progression as { columns?: { key: string; label: string; role?: string }[] } | undefined;
+  let changed = false;
+  for (const col of progression?.columns ?? []) {
+    const label = (col.label ?? "").trim().toLowerCase();
+    const role = label.startsWith("известные схемы")
+      ? "replica_schemes"
+      : label.startsWith("магические предметы")
+        ? "replica_items"
+        : "";
+    if (role && col.role !== role) {
+      col.role = role;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
+ * Догоняющая миграция ролей колонок (см. COLUMNS_MIGRATION_KEY). Основная
+ * migrateDndReplicaSchemes уже отработала на живых базах и больше не
+ * запускается (флаг MIGRATION_KEY выставлен), а колонки у них так и остались
+ * role: "stat" — блок реплик на листе из-за этого не рендерится. Проходит по
+ * всем записям «Артефактор» во всех системах и правит только роли, ничего
+ * больше не трогая: схемы, ручные правки и чужие колонки не задеваются.
+ */
+export function migrateDndReplicaColumnRoles(database: Database): void {
+  const done = database.prepare("SELECT value FROM app_settings WHERE key = ?").get(COLUMNS_MIGRATION_KEY);
+  if (done) return;
+
+  let typed = 0;
+  const run = database.transaction(() => {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        const v: unknown = JSON.parse(row.data || "{}");
+        if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+        data = v as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (typeReplicaColumns(data)) {
+        update.run(JSON.stringify(data), row.id);
+        typed++;
+      }
+    }
+    database.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))").run(COLUMNS_MIGRATION_KEY);
+  });
+
+  run();
+  if (typed > 0) console.log(`[db] Роли колонок реплик Артефактора: исправлено записей: ${typed}`);
+}
 
 export function migrateDndReplicaSchemes(database: Database): void {
   const done = database.prepare("SELECT value FROM app_settings WHERE key = ?").get(MIGRATION_KEY);
@@ -83,7 +159,13 @@ export function migrateDndReplicaSchemes(database: Database): void {
 
     for (const artificer of artificers) {
       const artData = parse(artificer.data);
-      // Уже размечено (владельцем или прошлым запуском) — не трогаем.
+      // Роли колонок — всегда: список схем мог уже существовать, а роли —
+      // нет (см. COLUMNS_MIGRATION_KEY). Перетипизация идемпотентна.
+      if (typeReplicaColumns(artData)) {
+        columnsTyped++;
+        update.run(JSON.stringify(artData), artificer.id);
+      }
+      // Уже размечено (владельцем или прошлым запуском) — список не трогаем.
       if (Array.isArray(artData.replicate_schemes) && artData.replicate_schemes.length > 0) continue;
 
       const items = itemsOf.all(artificer.system_id) as {
@@ -113,24 +195,6 @@ export function migrateDndReplicaSchemes(database: Database): void {
         else if (rarity === "Необычный" && type === WONDROUS) minLevel = 10;
         else if (rarity === "Редкий" && type === WONDROUS) minLevel = 14;
         if (minLevel > 0) list.push({ entryId: item.id, minLevel });
-      }
-
-      // Колонки таблицы развития «Известные схемы» и «Магические предметы»
-      // приехали импортом как «показатель по уровню» — просто числа. Для
-      // реплик это пределы, с которыми лист работает, поэтому им ставятся
-      // свои роли; иначе искать их пришлось бы по названию колонки в коде.
-      const progression = artData.progression as { columns?: { key: string; label: string; role?: string }[] } | undefined;
-      for (const col of progression?.columns ?? []) {
-        const label = (col.label ?? "").trim().toLowerCase();
-        const role = label.startsWith("известные схемы")
-          ? "replica_schemes"
-          : label.startsWith("магические предметы")
-            ? "replica_items"
-            : "";
-        if (role && col.role !== role) {
-          col.role = role;
-          columnsTyped++;
-        }
       }
 
       if (list.length === 0) continue;

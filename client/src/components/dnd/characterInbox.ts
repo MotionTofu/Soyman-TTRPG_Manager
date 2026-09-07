@@ -26,8 +26,9 @@ export function inboxSourceLabel(targetType: CharacterInboxMessage["target_type"
   return "Тебе одному";
 }
 
-// Игроцкий роут требует player-токен владельца: Мастеру сервер отвечает
-// 404, и оборот тогда просто не показывается — это не ошибка, а чужой лист.
+// Игроцкий роут требует токен владельца (player или gm с привязанным
+// профилем игрока): чужому сервер отвечает 404, и оборот тогда просто не
+// показывается — это не ошибка, а чужой лист.
 export function fetchCharacterInbox(characterId: number): Promise<CharacterInboxMessage[]> {
   return api.get<CharacterInboxMessage[]>(`/player/characters/${characterId}/inbox`);
 }
@@ -51,8 +52,9 @@ export function noteNameFromMessage(message: string): string {
   return name || message.trim().slice(0, 80);
 }
 
-// Послание уходит статьёй в личный дневник персонажа — туда, куда Мастеру
-// хода нет (kind = "" — «без метки», контракт POST world-entries).
+// Послание уходит статьёй в личный дневник персонажа — соседям по партии
+// хода нет, мастер видит на чтение (kind = "" — «без метки», контракт POST
+// world-entries).
 export function saveInboxMessageAsNote(args: {
   campaignId: number;
   characterId: number;

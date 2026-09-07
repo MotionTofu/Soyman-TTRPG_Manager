@@ -4,7 +4,7 @@ import { api } from "../api/client";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { abilityModifier, parseBonus } from "./dnd/AbilityScores";
 import { SKILL_CATALOG } from "./dnd/skillCatalog";
-import { computeArmorClass } from "./dnd/armorClass";
+import { computeArmorClass, unarmoredDefenseBonus } from "./dnd/armorClass";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import type { Character, DndCharacterData, SettingBeing, Statblock, StorySecret } from "../types";
@@ -135,7 +135,15 @@ async function loadCharacterCards(campaignId: number): Promise<CharacterCardData
           return null;
         }
       const dexMod = abilityModifier(data.abilities.dex);
-      const ac = computeArmorClass(dexMod, data.equipmentSections, parseBonus(data.manualAcBonus));
+      const ac =
+        computeArmorClass(dexMod, data.equipmentSections, parseBonus(data.manualAcBonus)) +
+        unarmoredDefenseBonus(
+          data.classFeatures ?? [],
+          data.classes ?? [],
+          abilityModifier(data.abilities.wis),
+          abilityModifier(data.abilities.con),
+          data.equipmentSections
+        ).bonus;
       const profBonus = parseBonus(data.proficiencyBonus);
       const wisMod = abilityModifier(data.abilities.wis);
       // Ключ владения — английский `original` (см. dnd/skillCatalog.ts).

@@ -738,6 +738,9 @@ export interface DndCharacterData {
   classFeatures: DndFeature[];
   feats: DndFeature[];
   specialAbilities: DndFeature[];
+  /** Освоенные типы оружия («Оружейные приёмы» Воина). Пусто — воин без
+   *  выбора, не-воин или старый лист: подсветка мастерства не меняется. */
+  masteredWeapons: DndMasteredWeapon[];
   proficiencies: DndProficiencyEntry[];
 
   personalityTraits: string;
@@ -798,6 +801,17 @@ export interface DndCharacterData {
   // Фамильяры и спутники — ряд жетонов внизу карты. Не картинка, а ссылка на
   // статблок существа: жетон открывает его лист, чтобы Мастер видел КЗ волка.
   companions?: DndCompanion[];
+  /** Эликсиры алхимика на руках: эффект — ключом таблицы (data.elixirTable
+   *  у умения), остальное читается оттуда. На долгом отдыхе сгорают вместе
+   *  с флаконами — лист чистит сам. */
+  elixirs?: DndElixir[];
+}
+
+/** Эликсир на руках: что внутри — по таблице умения. */
+export interface DndElixir {
+  id: string;
+  /** Ключ эффекта из elixirTable записи умения. */
+  effect: string;
 }
 
 /** Закрепление строки «Действий» на карте персонажа. */
@@ -815,6 +829,30 @@ export interface DndCompanion {
   name: string;
   /** Свой статблок в приложении, если спутник заведён отдельной записью. */
   statblockId?: number | null;
+  /** Тело спутника (пушка/защитник Артефактора): хиты и состояние.
+   *  Максимум считается по чертежу (data.companion у фичи-хозяина) из
+   *  уровня класса и INT — хранится только израсходованное. */
+  hpUsed?: number;
+  /** Развеян досрочно (пушка) — не мёртв, вернуть можно кнопкой. */
+  dismissed?: boolean;
+  /** Хиты на нуле: воскрешение/пересоздание — через карточку умения. */
+  dead?: boolean;
+  /** Откуда выведен: фича-чертёж и класс (для пересчёта формул при апе). */
+  featureEntryId?: number | null;
+  classId?: number | null;
+  /** Призыв заклинанием (data.summon): id заклинания и круг ячейки, которым
+   *  призвано — от него зависит мощь (хиты гомункула 5+5×круг). */
+  spellEntryId?: number | null;
+  spellLevel?: number;
+}
+
+// Освоенное оружие Воина («Оружейные приёмы», тикет 06): свойство
+// мастерства оружия применимо только к освоенному. entryId — ссылка на
+// тип оружия в справочнике (не на экземпляр в инвентаре): освоение не
+// зависит от того, что сейчас в рюкзаке.
+export interface DndMasteredWeapon {
+  entryId: number | null;
+  name: string;
 }
 
 export interface DndEquipmentItem {
@@ -845,6 +883,17 @@ export interface DndEquipmentItem {
   weaponAttackRanged?: boolean;
   weaponProperties?: string;
   weaponMastery?: string;
+  /** Снапшот зарядов магического предмета на момент добавления в инвентарь:
+   *  chargesMax — строка шаблона («7», «1к8+1»), chargesRecharge — правило
+   *  восстановления, chargesLeft — текущий остаток (null = не задан, напр.
+   *  для максимума-кубика, пока игрок не бросит). */
+  chargesMax?: string;
+  chargesRecharge?: "dawn" | "none";
+  chargesLeft?: number | null;
+  // Категория из справочника («Простое оружие» / «Воинское оружие») — нужна,
+  // чтобы отличить монашеское оружие. Снимок с момента добавления; у старых
+  // строк её нет — там категория резолвится живьём по entryId (см. dndMonk).
+  weaponCategory?: string;
   /** Предмет магический — своя пометка в списке. Ставится репликой
    *  Артефактора и вручную. */
   magical?: boolean;
@@ -876,6 +925,9 @@ export interface DndReplicaScheme {
   name: string;
   /** Класс, чьё умение дало схему — у мультикласса их может быть несколько. */
   classId: number | null;
+  /** Выбор из общей строки («любой обычный…»): id шаблона. Каждый такой выбор —
+   *  отдельная схема (по книге), дубли одного предмета разрешены. */
+  genericId?: string | null;
 }
 
 /** Созданный по схеме предмет. Живёт счётчиком во вкладке «Ресурсы» и

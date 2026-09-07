@@ -13,7 +13,8 @@
 // would have made that the special case instead.
 
 import { ABILITY_SCORES } from "../../compendium";
-import type { DndAbilityKey } from "../../types";
+import type { DndAbilityKey, DndAbilityScores } from "../../types";
+import { abilityModifier } from "./AbilityScores";
 
 export type DndCheckType = "attack" | "save";
 export type DndAttackRange = "melee" | "ranged";
@@ -31,6 +32,11 @@ export interface DndCheck {
   // Overrides the caster's computed spell save DC / attack bonus. Almost
   // always empty — magic items with a fixed DC are the reason it exists.
   dcOverride?: number | null;
+  // Save-only: whose modifier sets the DC, when it ISN'T the spellcasting
+  // ability (Stunning Strike runs on Wisdom while the monk casts nothing;
+  // dragon breath on Constitution). Key ("wis"), not a Russian name — it
+  // indexes abilities, like maxAbility below. Empty = spellDc, как было.
+  dcAbility?: DndAbilityKey;
 }
 
 export type DndEffectType =
@@ -94,6 +100,12 @@ export interface DndEffect {
   // so a different field. The die is per-spell (Eldritch Blast adds 1d10,
   // Sacred Flame 1d8); the thresholds are fixed by 5.5 at levels 5/11/17 and
   // so aren't stored.
+  // Class-level scaling (cannon +1d8 at artificer 9, jolt 2d6→4d6 at 15):
+  // thresholds live in the effect because they differ per feature (9 vs 15),
+  // unlike cantrips. Effective dice = last step at/below the owner class
+  // level, else base dice. Owner level is resolved by the sheet from the
+  // feature's source (class/subclass row), never typed by hand.
+  levelDice?: { level: number; dice: string }[];
   cantripScaling?: string;
 
   // condition / condition_remove
@@ -141,9 +153,38 @@ export interface DndCost {
   // число: хоумбрю-пул «очки = мод Харизмы» без правки кода. Без поля —
   // amount как было.
   maxAbility?: DndAbilityKey;
+  // Множитель к модификатору из maxAbility: «удвоенный мод Интеллекта» у
+  // Хранящего заклинания предмета — maxAbility "int" + maxMultiplier 2.
+  // Без maxAbility не работает. Минимум итога — сам множитель (2×мод при
+  // моде 0 даёт 2, «минимум дважды» по тексту умения).
+  maxMultiplier?: number;
   // Восстановление своего пула ценой из другого («Крылья дракона»: 1/долгий,
   // восстановить за 3 очка чародейства). Кнопка — в строке пула.
   restore?: { pool: string; amount: number };
+  // Грант короткого отдыха чужому пулу («Отдохнувший гений»: +1 использование
+  // Проблеска; «Магическое наставление»: всё, если настроен). Пул — названием
+  // (прецедент: restore.pool), amount — число или "full". needsAttuned —
+  // только когда персонаж настроен хотя бы на один предмет.
+  shortRest?: { pool: string; amount: number | "full"; needsAttuned?: boolean };
+  // Обман смерти («Душа творения»): на нуле хитов разрушить N созданных
+  // реплик указанных редкостей → хиты = hpPer × N. Редкость — из записи
+  // схемы, какие именно — на честности (разрушаются старейшие).
+  deathCheat?: { rarities: string[]; hpPer: number };
+  // Умение можно активировать тратой ячейки заклинания сверх своего пула
+  // (пушка/эликсир/защитник Артефактора: повторное создание за слот).
+  // Круг не важен — карточка предлагает самую дешёвую свободную ячейку.
+  slotSpend?: boolean;
+  // Наоборот: умение ВОЗВРАЩАЕТ потраченную ячейку (поглощение реплики:
+  // развеял предмет → вернул ячейку; круг выбирает игрок по редкости
+  // развеянного). Карточка предлагает круги, в которых есть потраченные.
+  // Накопить сверх максимума нельзя по построению: возвращается только
+  // потраченное (исчезновение «созданной» ячейки на долгом учтено тем же).
+  slotReturn?: boolean;
+  // Максимум пула растёт с уровнем класса (эликсиры: 2→3→4→5 на 3/5/9/15-м).
+  // Пары отсортированы по уровню; берётся наибольший порог не выше уровня.
+  // Уровень класса лист подставляет сам (по родителям записи), amount
+  // остаётся запасным для мест без резолвера.
+  levelSteps?: { level: number; max: number }[];
 }
 
 export const EMPTY_COST: DndCost = { kind: "none" };
@@ -242,6 +283,46 @@ export function newCheck(type: DndCheckType): DndCheck {
     : { id: newLocalId("c"), type: "save", saveAbility: SAVE_ABILITIES[1] };
 }
 
+/** Эффективный куб с учётом уровня класса-хозяина: наибольший порог
+ *  levelDice не выше уровня, иначе базовый dice. Без уровня — как есть. */
+export function resolveLevelDice(effects: DndEffect[], level: number | null): DndEffect[] {
+  if (level == null) return effects;
+  let touched = false;
+  const out = effects.map((e) => {
+    if (!e.levelDice || e.levelDice.length === 0) return e;
+    let bestLevel = -1;
+    let best: string | null = null;
+    for (const s of e.levelDice) {
+      if (s.level <= level && s.level > bestLevel) {
+        bestLevel = s.level;
+        best = s.dice;
+      }
+    }
+    if (best == null || best === e.dice) return e;
+    touched = true;
+    return { ...e, dice: best };
+  });
+  return touched ? out : effects;
+}
+
+// Редакторное представление levelDice: «9:3к8».
+export function formatDiceSteps(steps: { level: number; dice: string }[] | undefined): string {
+  return (steps ?? []).map((s) => `${s.level}:${s.dice}`).join(", ");
+}
+
+export function parseDiceSteps(raw: string): { level: number; dice: string }[] | undefined {
+  const out: { level: number; dice: string }[] = [];
+  for (const part of raw.split(",")) {
+    const m = /^\s*(\d+)\s*:\s*(.+?)\s*$/.exec(part);
+    if (!m) continue;
+    const level = Number(m[1]);
+    const dice = m[2].trim();
+    if (level >= 1 && level <= 20 && dice) out.push({ level, dice });
+  }
+  if (out.length === 0) return undefined;
+  return out.sort((a, b) => a.level - b.level);
+}
+
 // A new effect defaults to the first outcome that actually exists on this
 // carrier: with a save present that's "при провале", which is what it is for
 // the overwhelming majority of spells.
@@ -265,6 +346,14 @@ export function checkLabel(check: DndCheck): string {
 
 // Short ability abbreviation used in the compact chip summary, so a chip
 // reads "Урон · 8d6 огнём · пров. Лвк" instead of wrapping onto three lines.
+const ABILITY_KEY_ABBR: Record<string, string> = {
+  str: "Сил",
+  dex: "Лвк",
+  con: "Тел",
+  int: "Инт",
+  wis: "Мдр",
+  cha: "Хар",
+};
 const ABILITY_ABBR: Record<string, string> = {
   Сила: "Сил",
   Ловкость: "Лвк",
@@ -326,7 +415,21 @@ export function effectSummary(effect: DndEffect, checks: DndCheck[]): string {
 // Строка «чем это разрешается» для таблицы Действий: бонус атаки берётся у
 // персонажа, СЛ — тоже, если у броска не задана своя (dcOverride есть только
 // у предметов с фиксированной СЛ).
-export function checksLabel(checks: DndCheck[], spellAttackBonus: number, spellDc: number): string {
+// dcExtra — для сейвов НЕ от заклинательной характеристики (Ошеломляющий
+// удар монаха: 8 + Муд + БМ). Без него такое умение показывало СЛ заклинателя
+// (у чистого монаха — 8 + 0 + БМ), и ошибка была видна только в цифре.
+export interface DcExtra {
+  abilities: DndAbilityScores;
+  profBonus: number;
+  misc: number;
+}
+
+export function checksLabel(
+  checks: DndCheck[],
+  spellAttackBonus: number,
+  spellDc: number,
+  dcExtra?: DcExtra
+): string {
   if (!checks || checks.length === 0) return "—";
   return checks
     .map((c) => {
@@ -334,19 +437,26 @@ export function checksLabel(checks: DndCheck[], spellAttackBonus: number, spellD
         return `АТК ${spellAttackBonus >= 0 ? "+" : ""}${spellAttackBonus}`;
       }
       const abbr = c.saveAbility ? ABILITY_ABBR[c.saveAbility] ?? c.saveAbility : "";
-      return `СЛ ${abbr} ${c.dcOverride ?? spellDc}`.replace(/\s+/g, " ").trim();
+      const dc =
+        c.dcOverride ??
+        (c.dcAbility && dcExtra
+          ? 8 + abilityModifier(dcExtra.abilities[c.dcAbility]) + dcExtra.profBonus + dcExtra.misc
+          : spellDc);
+      return `СЛ ${abbr} ${dc}`.replace(/\s+/g, " ").trim();
     })
     .join(" / ");
 }
 
 // Урон/лечение одной строкой. Показываем только то, что реально в цифрах —
 // состояния и зоны в этой колонке не помещаются и живут в описании.
-export function effectsLabel(effects: DndEffect[]): string {
+// checks нужны нечисловым эффектам: иначе «притягивание при провале» теряет
+// способность сейва («пров.» без «Сил»).
+export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = []): string {
   if (!effects || effects.length === 0) return "—";
   const numeric = effects.filter((e) => e.type === "damage" || e.type === "heal" || e.type === "temp_hp");
   if (numeric.length === 0) {
     // Ничего числового — показываем типы, чтобы строка не была пустой.
-    return effects.map((e) => effectSummary(e, [])).join("; ");
+    return effects.map((e) => effectSummary(e, checks)).join("; ");
   }
   return numeric
     .map((e) => {
@@ -365,8 +475,28 @@ export function hasResolvableEffect(checks: DndCheck[], effects: DndEffect[]): b
   return (effects ?? []).some((e) => e.type === "damage" || e.type === "heal" || e.type === "temp_hp");
 }
 
+// Редакторное представление levelSteps: «3:2, 5:3, 9:4, 15:5» (уровень:макс).
+export function formatLevelSteps(steps: { level: number; max: number }[] | undefined): string {
+  return (steps ?? []).map((s) => `${s.level}:${s.max}`).join(", ");
+}
+
+export function parseLevelSteps(raw: string): { level: number; max: number }[] | undefined {
+  const out: { level: number; max: number }[] = [];
+  for (const part of raw.split(",")) {
+    const m = /^\s*(\d+)\s*:\s*(\d+)\s*$/.exec(part);
+    if (!m) continue;
+    const level = Number(m[1]);
+    const max = Number(m[2]);
+    if (level >= 1 && level <= 20 && max >= 1) out.push({ level, max });
+  }
+  if (out.length === 0) return undefined;
+  return out.sort((a, b) => a.level - b.level);
+}
+
 export function costSummary(cost: DndCost | undefined): string | null {
-  if (!cost || cost.kind === "none") return null;
+  // Слотовая активация без пула (воскрешение защитника) — тоже стоимость,
+  // а не пустая строка: иначе в таблице Действий умение выглядит бесплатным.
+  if (!cost || cost.kind === "none") return cost?.slotSpend ? "Ячейка" : null;
   switch (cost.kind) {
     case "spell_slot":
       return "Ячейка";
@@ -374,8 +504,27 @@ export function costSummary(cost: DndCost | undefined): string | null {
       return `Кости хитов${cost.amount ? ` ×${cost.amount}` : ""}`;
     case "resource":
       return `Ресурс${cost.amount ? ` ×${cost.amount}` : ""}`;
-    case "uses":
-      return `${cost.amount ?? 1} ${COST_PERIOD_LABELS[cost.per ?? "long_rest"]}`;
+    case "uses": {
+      // Пул от характеристики («мод. Инт за долгий отдых») вместо числа:
+      // в таблице Действий число соврало бы, modifiers у листа свои.
+      // Суффиксы: трата ячейки (пушка/эликсир) и её возврат (поглощение).
+      const slot = [
+        cost.slotSpend ? " + ячейка" : "",
+        cost.slotReturn ? " + возврат ячейки" : "",
+      ].join("");
+      // Скейл от уровня статикой не показать — показываем вилку («2–5»),
+      // точное число живёт в строке пула.
+      if (cost.levelSteps && cost.levelSteps.length > 0) {
+        const ms = cost.levelSteps.map((s) => s.max).sort((a, b) => a - b);
+        return `${ms[0]}–${ms[ms.length - 1]} ${COST_PERIOD_LABELS[cost.per ?? "long_rest"]}${slot}`;
+      }
+      if (cost.maxAbility) {
+        const abbr = ABILITY_KEY_ABBR[cost.maxAbility] ?? cost.maxAbility;
+        const mult = cost.maxMultiplier && cost.maxMultiplier > 1 ? `×${Math.floor(cost.maxMultiplier)}` : "";
+        return `мод. ${abbr}${mult} ${COST_PERIOD_LABELS[cost.per ?? "long_rest"]}${slot}`;
+      }
+      return `${cost.amount ?? 1} ${COST_PERIOD_LABELS[cost.per ?? "long_rest"]}${slot}`;
+    }
     default:
       return null;
   }

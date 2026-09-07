@@ -14,8 +14,12 @@ import {
   checkLabel,
   costSummary,
   effectSummary,
+  formatDiceSteps,
+  formatLevelSteps,
+  parseDiceSteps,
   newCheck,
   newEffect,
+  parseLevelSteps,
   type DndAttackRange,
   type DndCheck,
   type DndCost,
@@ -127,7 +131,8 @@ function EffectFields({
             />
           )}
           {/* Заговоры растут по уровню персонажа, заклинания — по кругу
-              ячейки, поэтому поля разные и показываются по уровню записи. */}
+              ячейки, поэтому поля разные и показываются по уровню записи.
+              Плюс кубы от уровня класса (пушка +1к8 на 9-м) — своим полем. */}
           {isCantrip ? (
             <input
               placeholder="Прибавка на 5/11/17 ур., напр. 1к8"
@@ -141,6 +146,12 @@ function EffectFields({
               onChange={(e) => onChange({ upcastPerLevel: e.target.value })}
             />
           )}
+          <input
+            placeholder="Куб от ур. класса, напр. 9:3к8"
+            title="Кубы от уровня класса-хозяина: 9:3к8, 15:4к6"
+            value={formatDiceSteps(effect.levelDice)}
+            onChange={(e) => onChange({ levelDice: parseDiceSteps(e.target.value) })}
+          />
         </>
       );
     case "condition":
@@ -229,6 +240,20 @@ function CheckRow({
             {SAVE_ABILITIES.map((a) => (
               <option key={a} value={a}>
                 Спасбросок {a}
+              </option>
+            ))}
+          </select>
+        )}
+        {check.type === "save" && (
+          <select
+            value={check.dcAbility ?? ""}
+            onChange={(e) => onChange({ dcAbility: (e.target.value as DndAbilityKey) || undefined })}
+            title="Чья характеристика задаёт СЛ — пусто: от заклинательной (как было)"
+          >
+            <option value="">СЛ: заклинатель</option>
+            {ABILITY_LABELS.map(({ key, label }) => (
+              <option key={key} value={key}>
+                СЛ: {label}
               </option>
             ))}
           </select>
@@ -371,6 +396,31 @@ function CostRow({ cost, onChange }: { cost: DndCost; onChange: (v: DndCost) => 
             ))}
           </select>
         )}
+        {/* Активация тратой ячейки сверх пула (пушка/эликсир/защитник):
+            карточка умения предложит свободную ячейку. Работает и без пула
+            (kind «none» — воскрешение защитника всегда за слот). */}
+        {(cost.kind === "uses" || cost.kind === "none") && (
+          <label className="muted" title="Умение можно активировать тратой ячейки заклинания" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!cost.slotSpend}
+              onChange={(e) => onChange({ ...cost, slotSpend: e.target.checked || undefined })}
+            />
+            трата ячейки
+          </label>
+        )}
+        {/* Возврат потраченной ячейки (поглощение реплики): карточка
+            предложит круги, в которых есть потраченные. */}
+        {(cost.kind === "uses" || cost.kind === "none") && (
+          <label className="muted" title="Умение возвращает потраченную ячейку заклинания" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!cost.slotReturn}
+              onChange={(e) => onChange({ ...cost, slotReturn: e.target.checked || undefined })}
+            />
+            возврат ячейки
+          </label>
+        )}
         {/* Свой ресурс (структурность): умение приносит собственный пул
             (применения выше, восполнение слева), а не тратит классовый.
             Без галочки uses — только текст цены, механики нет. */}
@@ -391,7 +441,12 @@ function CostRow({ cost, onChange }: { cost: DndCost; onChange: (v: DndCost) => 
             value={cost.maxAbility ?? ""}
             title="Максимум пула — модификатор"
             onChange={(e) =>
-              onChange({ ...cost, maxAbility: (e.target.value || undefined) as DndAbilityKey | undefined })
+              onChange({
+                ...cost,
+                maxAbility: (e.target.value || undefined) as DndAbilityKey | undefined,
+                // Без характеристики множителю не на что опереться — сбрасываем.
+                ...(e.target.value ? {} : { maxMultiplier: undefined }),
+              })
             }
           >
             <option value="">макс. числом</option>
@@ -401,6 +456,36 @@ function CostRow({ cost, onChange }: { cost: DndCost; onChange: (v: DndCost) => 
               </option>
             ))}
           </select>
+        )}
+        {/* Скейл максимума от уровня класса («3:2, 5:3, 9:4, 15:5» — эликсиры):
+            уровень подставляет лист по родителям записи. */}
+        {cost.kind === "uses" && cost.ownResource && (
+          <input
+            value={formatLevelSteps(cost.levelSteps)}
+            placeholder="ур:макс"
+            title="Максимум по уровню класса: 3:2, 5:3, 9:4, 15:5"
+            aria-label="Скейл максимума от уровня"
+            onChange={(e) => onChange({ ...cost, levelSteps: parseLevelSteps(e.target.value) })}
+            style={{ width: 130 }}
+          />
+        )}
+        {/* Множитель к модификатору («удвоенный мод Интеллекта»): только
+            вместе с выбранной характеристикой выше. */}
+        {cost.kind === "uses" && cost.ownResource && cost.maxAbility && (
+          <input
+            type="number"
+            className="dnd-effect-dc"
+            placeholder="×N"
+            title="Множитель к модификатору (пусто = ×1)"
+            value={cost.maxMultiplier ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...cost,
+                maxMultiplier: e.target.value === "" ? undefined : Math.max(1, Number(e.target.value) || 1),
+              })
+            }
+            style={{ width: 52 }}
+          />
         )}
         {/* Восстановление чужой ценой («Крылья»: пополнить за 3 очка
             чародейства): название пула-донора и цена. */}
@@ -429,6 +514,104 @@ function CostRow({ cost, onChange }: { cost: DndCost; onChange: (v: DndCost) => 
                   restore: { pool: cost.restore?.pool ?? "", amount: e.target.value === "" ? 1 : Number(e.target.value) || 1 },
                 })
               }
+            />
+          </span>
+        )}
+        {/* Грант короткого отдыха чужому пулу (Отдохнувший гений +1,
+            Магическое наставление всё при настройке): пул — названием,
+            количество — числом или «full». Сама запись обычно kind none. */}
+        {(cost.kind === "uses" || cost.kind === "none") && (
+          <span className="muted" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            корот.отдых
+            <input
+              value={cost.shortRest?.pool ?? ""}
+              placeholder="пул"
+              aria-label="Пул гранта короткого отдыха"
+              onChange={(e) => {
+                const pool = e.target.value;
+                onChange(
+                  pool
+                    ? { ...cost, shortRest: { pool, amount: cost.shortRest?.amount ?? 1 } }
+                    : { ...cost, shortRest: undefined }
+                );
+              }}
+              style={{ width: 90 }}
+            />
+            <input
+              value={
+                cost.shortRest?.amount === "full"
+                  ? "full"
+                  : (cost.shortRest?.amount ?? "")
+              }
+              placeholder="1/full"
+              title="Сколько вернуть: число или full"
+              aria-label="Количество гранта"
+              onChange={(e) => {
+                const v = e.target.value.trim().toLowerCase();
+                onChange({
+                  ...cost,
+                  shortRest: {
+                    pool: cost.shortRest?.pool ?? "",
+                    amount: v === "full" ? "full" : Math.max(1, Number(v) || 1),
+                  },
+                });
+              }}
+              style={{ width: 56 }}
+            />
+            <label style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={!!cost.shortRest?.needsAttuned}
+                onChange={(e) =>
+                  onChange({
+                    ...cost,
+                    shortRest: {
+                      pool: cost.shortRest?.pool ?? "",
+                      amount: cost.shortRest?.amount ?? 1,
+                      ...(e.target.checked ? { needsAttuned: true } : {}),
+                    },
+                  })
+                }
+              />
+              +настройка
+            </label>
+          </span>
+        )}
+        {/* Обман смерти (Душа творения): редкости через запятую и хитов
+            за разрушенную реплику. */}
+        {(cost.kind === "uses" || cost.kind === "none") && (
+          <span className="muted" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            обман смерти
+            <input
+              value={(cost.deathCheat?.rarities ?? []).join(", ")}
+              placeholder="редкости"
+              aria-label="Редкости обмана смерти"
+              onChange={(e) => {
+                const rarities = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                onChange(
+                  rarities.length > 0 || (cost.deathCheat?.hpPer ?? 0) > 0
+                    ? { ...cost, deathCheat: { rarities, hpPer: cost.deathCheat?.hpPer ?? 20 } }
+                    : { ...cost, deathCheat: undefined }
+                );
+              }}
+              style={{ width: 110 }}
+            />
+            <input
+              type="number"
+              className="dnd-effect-dc"
+              placeholder="хиты"
+              aria-label="Хитов за реплику"
+              value={cost.deathCheat?.hpPer ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...cost,
+                  deathCheat: {
+                    rarities: cost.deathCheat?.rarities ?? [],
+                    hpPer: e.target.value === "" ? 20 : Math.max(1, Number(e.target.value) || 20),
+                  },
+                })
+              }
+              style={{ width: 56 }}
             />
           </span>
         )}
@@ -518,6 +701,7 @@ export const EffectList = memo(function EffectList({
           <span key={c.id} className="litm-tag dnd-check-chip">
             {checkLabel(c)}
             {c.dcOverride != null ? ` (СЛ ${c.dcOverride})` : ""}
+            {c.dcOverride == null && c.dcAbility ? ` (СЛ: ${ABILITY_LABELS.find((a) => a.key === c.dcAbility)?.label ?? c.dcAbility})` : ""}
           </span>
         ))}
         {safeEffects.map((e) => (
