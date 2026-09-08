@@ -52,6 +52,13 @@ export function broadcastToCampaign(campaignId: number, event: string, payload: 
   io?.to(`campaign:${campaignId}`).emit(event, payload);
 }
 
+// Player-to-GM signals (hunter's mark, hex): the GM desktop app sits in the
+// "gm" room with no campaign scope, so table signals go there and the pult
+// filters by campaignId itself.
+export function broadcastToGm(event: string, payload: unknown): void {
+  io?.to("gm").emit(event, payload);
+}
+
 // Fired after any save touching a character (profile fields, chapters,
 // statblock content) so an open player-app character view and an open
 // desktop CharacterDetailPage stay in sync without a manual "Синхронизировать".

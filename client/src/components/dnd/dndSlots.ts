@@ -153,3 +153,33 @@ export function highestCircle(slots: number[]): number {
   for (let i = 0; i < slots.length; i += 1) if (slots[i] > 0) top = i + 1;
   return top;
 }
+
+// Таинственный арканум колдуна (тикет 03 warlock): какой круг открывается
+// на каком уровне КОЛДУНА (не суммарном — у мультикласса свой счёт).
+// Пустых кругов арканум не даёт: пипсы выводятся из самих пиков строк.
+export const ARCANUM_UNLOCKS: { circle: number; warlockLevel: number }[] = [
+  { circle: 6, warlockLevel: 11 },
+  { circle: 7, warlockLevel: 13 },
+  { circle: 8, warlockLevel: 15 },
+  { circle: 9, warlockLevel: 17 },
+];
+
+export function arcanumUnlockedCircles(warlockLevel: number): number[] {
+  return ARCANUM_UNLOCKS.filter((a) => warlockLevel >= a.warlockLevel).map((a) => a.circle);
+}
+
+// Пипсы кругов с арканумом (тикет 03): сколько использований показывает
+// круг — число строк арканума в нём (обычно 1, в круге не больше одного).
+// isArcanum — предикат строки (у листа это s.arcanum), чтобы не тащить тип.
+export function arcanumCountByCircle(
+  spellsByLevel: { arcanum?: boolean }[][],
+): number[] {
+  return Array.from({ length: 9 }, (_, i) =>
+    i < 5 ? 0 : spellsByLevel[i].filter((s) => s?.arcanum === true).length
+  );
+}
+
+// Старший круг с пиками арканума — секции ниже не разворачиваем.
+export function arcanumTopCircle(spellsByLevel: { arcanum?: boolean }[][]): number {
+  return arcanumCountByCircle(spellsByLevel).reduce((top, n, i) => (n > 0 ? i + 1 : top), 0);
+}

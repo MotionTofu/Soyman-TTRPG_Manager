@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { inboxSourceLabel, type CharacterInboxMessage } from "./characterInbox";
 import { textOnClassColor } from "./dndClassColors";
 import type { ReactNode } from "react";
@@ -30,6 +31,8 @@ export function DndCardBack({
   onSave,
   onClose,
   children,
+  oracleQuotes,
+  flipKey,
 }: {
   characterName: string;
   color: string;
@@ -46,8 +49,21 @@ export function DndCardBack({
   onClose: () => void;
   // Слот под инструмент передач (этап 4б): тот же оборот, та же рубашка.
   children?: ReactNode;
+  // Оракул класса: пул цитат/подсказок записи класса. При каждом перевороте
+  // (flipKey растёт) тянется случайная; пустой пул — секции нет вовсе.
+  oracleQuotes?: string[];
+  flipKey?: number;
 }) {
   const unread = messages.filter((m) => !m.read_at).length;
+  const [oracle, setOracle] = useState<string | null>(null);
+  useEffect(() => {
+    const pool = (oracleQuotes ?? [])
+      .map((q) => q.trim().replace(/^«+|»+$/g, "").trim())
+      .filter(Boolean);
+    setOracle(pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null);
+    // Реролл только по перевороту: входящие и передачи цитату не дёргают.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flipKey]);
   return (
     <div
       className="dnd-card-back"
@@ -118,6 +134,11 @@ export function DndCardBack({
       )}
       {notice && <p className="dnd-card-back-notice" role="status">{notice}</p>}
       {children}
+      {oracle && (
+        <figure className="dnd-oracle-slip" style={{ borderLeftColor: color }}>
+          <blockquote>«{oracle}»</blockquote>
+        </figure>
+      )}
       {/* Угол возврата — тот же треугольник, что на лицевой, но бумажный на
           чёрном (по канвасу). Единственный жест назад с оборота. */}
       <button

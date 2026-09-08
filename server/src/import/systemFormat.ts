@@ -292,6 +292,8 @@ export const classSchema = z.object({
   tool_profs: refs,
   skill_choice_count: z.number().int().min(0).optional(),
   skill_choice_options: z.array(z.string()).default([]),
+  // Оракул класса: пул цитат/подсказок на оборот карты. Свободные строки.
+  oracle_quotes: z.array(z.string()).default([]),
   // Требования мультикласса свободной строкой («Ловкость 13 и Мудрость 13»):
   // лист показывает их подсказкой, гейта нет (домашние правила).
   multiclass_prereq: optionalText,
@@ -354,6 +356,7 @@ export const equipmentSchema = z.object({
   name_original: nameOriginal,
   aliases,
   category: optionalText,
+  source: optionalText,
   cost: optionalText,
   weight: optionalText,
   damage: optionalText,

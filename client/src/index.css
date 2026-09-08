@@ -5317,6 +5317,68 @@ details.card[open] summary {
     display: none;
   }
 }
+/* D1: десктоп-сплит визарда создания — шаги слева, живой мини-чарник
+   справа липко. Модалка расширяется только там, где сплит реально в две
+   колонки; ниже брейкпоинта сайдбар скрыт (мобиле — оборот D2).
+   Разделитель 1px (§1.3), без теней (§1.2). */
+@media (min-width: 1001px) {
+  .modal:has(.wizard-split) {
+    width: 1020px;
+  }
+  .wizard-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: var(--sp-2);
+    align-items: start;
+  }
+  .wizard-main {
+    min-width: 0;
+  }
+  .wizard-side {
+    position: sticky;
+    top: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    border-left: var(--card-border-width, 1px) solid var(--line);
+    padding-left: var(--sp-2);
+  }
+}
+@media (max-width: 1000px) {
+  .wizard-side {
+    display: none;
+  }
+}
+/* D2: оборот визарда на мобиле — лицо (шаг) ↔ оборот (живой чарник).
+   Кнопка видна только там, где нет сайдбара. Оборот доворачивается
+   готовым dnd-card-in, угол возврата — зеркало .dnd-card-back-corner:
+   бумажный треугольник, только на светлой карточке он чернильный. */
+.wizard-flip-row {
+  justify-content: flex-end;
+}
+@media (min-width: 1001px) {
+  .wizard-flip-row {
+    display: none;
+  }
+}
+.wizard-back {
+  position: relative;
+  animation: dnd-card-in 0.32s ease;
+  padding-bottom: 56px;
+}
+.wizard-back-corner {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  background: var(--ink);
+  opacity: 0.9;
+}
 /* Фаза 3: боксы характеристик в визарде рисуют свою рамку — это плитки
    выбора, а не вложенный контент (§1.3). Специфичность выше flatten-правила
    `.card .dnd-ability-box`, порядок файлов не важен. */
@@ -5338,6 +5400,40 @@ details.card[open] summary {
 .wizard-spread {
   justify-content: space-between;
 }
+/* C1: легенды fieldset — капс-подпись (Label: Oswald, капс, трекинг),
+   а не проза Archivo. Счётчики (n/N) внутри — значения, им моно. */
+.wizard-legend {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0;
+}
+/* C1: числа — голос Data (моно), а не проза. */
+.wizard-data {
+  font-family: var(--font-mono);
+}
+/* P1-3: активный язычок сливается с телом (§5) — а тело визарда paper-2,
+   не paper. Только визард: остальные модалки чинит их собственный шаг. */
+.card.wizard .tabs button.active {
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--paper-2);
+}
+/* P2-5: внутренности прямоугольные всегда (§4: радиус — только внешний
+   угол карточки). */
+.card.wizard .wizard-avatar-preview {
+  border-radius: 0;
+}
+/* P2-4: поля ≥16px только на телефоне — Safari зумит при фокусе <16px.
+   Десктоп не трогаем: там компактность важнее. */
+@media (max-width: 700px) {
+  .card.wizard input,
+  .card.wizard select,
+  .card.wizard textarea {
+    font-size: 16px;
+  }
+}
 .wizard-fieldset {
   border: 0;
   padding: 0;
@@ -5357,6 +5453,12 @@ details.card[open] summary {
 }
 .wizard-touch {
   min-width: 44px;
+  min-height: 44px;
+}
+/* Степпер уровня в визарде — та же тач-мишень 44px, что у point-buy:
+   базовый .dnd-level-step-btn (22px) переопределяем с запасом специфичности. */
+.card.wizard .dnd-level-step-btn.wizard-touch {
+  flex-basis: 44px;
   min-height: 44px;
 }
 
@@ -7143,6 +7245,12 @@ button.mention-link:focus-visible {
   color: #fff;
   padding: 1px 6px;
   white-space: nowrap;
+}
+/* Прицел метки (Метка охотника / Сглаз): condition-строка «Метка охотника:
+   Имя» / «Сглаз: Имя» рисуется прицелом у строки цели, а не текстовым чипом. */
+.initiative-condition-chip[title^="Метка охотника:"]::before,
+.initiative-condition-chip[title^="Сглаз:"]::before {
+  content: "⌖ ";
 }
 .initiative-condition-picker {
   gap: 2px;

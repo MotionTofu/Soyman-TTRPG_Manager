@@ -168,6 +168,10 @@ export function StatblockList({
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState("");
   const [importWarnings, setImportWarnings] = useState<{ field: string; message: string }[]>([]);
+  // Батч-импорт (Волна 2, Q1/Q4/Q6): поштучные результаты, частичный успех —
+  // валидные создаются, битые остаются в списке с причиной. Один файл идёт
+  // старым путём через превью-модалку.
+  const [batchResults, setBatchResults] = useState<{ file: string; ok: boolean; detail: string }[]>([]);
   const [importDragOver, setImportDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
@@ -193,6 +197,74 @@ export function StatblockList({
   }>(null);
   const [pendingJson, setPendingJson] = useState<string | null>(null);
   const [showDndWizard, setShowDndWizard] = useState(false);
+  // Клон чарника (Волна 2, Q1–Q8): мгновенная копия данных, не префилл
+  // визарда — токены визарда (навыки «группа:ключ», метки наборов, прибавка
+  // поверх) из готового листа не восстанавливаются без вранья, а копия
+  // данных переносит билд 1:1. Визард не открывается — черновик не тронут
+  // (Q5 закрыт сильней, чем договаривались: confirm не нужен вовсе).
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneSourceId, setCloneSourceId] = useState<number | null>(null);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneEdited, setCloneEdited] = useState(false);
+  const [cloning, setCloning] = useState(false);
+  const [cloneError, setCloneError] = useState("");
+  const dndCharacters = statblocks.filter((s) => s.format === "dnd_character");
+  function openClone() {
+    const first = dndCharacters[0] ?? null;
+    setCloneSourceId(first?.id ?? null);
+    setCloneName(first ? `${statblockTitle(first)} (копия)` : "");
+    setCloneEdited(false);
+    setCloneError("");
+    setCloneOpen(true);
+  }
+  async function confirmClone() {
+    const src = statblocks.find((s) => s.id === cloneSourceId) ?? null;
+    if (!src || src.format !== "dnd_character") return;
+    const name = cloneName.trim();
+    if (!name) {
+      setCloneError("Назовите копию — без имени создать нельзя.");
+      return;
+    }
+    setCloning(true);
+    setCloneError("");
+    try {
+      const data = JSON.parse(src.content) as DndCharacterData;
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error("Статблок-источник не похож на персонажа.");
+      }
+      // Билд целиком; сбрасываются имя, портрет (уровень строки — не
+      // копируется) и живое состояние (Q2, Q8).
+      const copy: DndCharacterData = {
+        ...data,
+        characterName: name,
+        hitPointsCurrent: typeof data.hitPointMax === "string" ? data.hitPointMax : "",
+        hitPointsTemp: "",
+        hitPointMaxTemp: "",
+        hitDiceUsed: {},
+        deathSaveSuccesses: 0,
+        deathSaveFailures: 0,
+        exhaustion: 0,
+        conditions: [],
+        concentration: "",
+        inspiration: false,
+      };
+      await api.post("/statblocks", {
+        owner_type: ownerType,
+        owner_id: ownerId,
+        format: "dnd_character",
+        kind: src.kind,
+        content: JSON.stringify(copy),
+      });
+      setCloneOpen(false);
+      refresh();
+      setImportSuccess(`Клонирован «${name}»`);
+      setTimeout(() => setImportSuccess(""), 6000);
+    } catch (e) {
+      setCloneError(e instanceof Error && e.message ? e.message : "Не удалось клонировать.");
+    } finally {
+      setCloning(false);
+    }
+  }
   const [showDndCreatureWizard, setShowDndCreatureWizard] = useState(false);
   const [showLitmWizard, setShowLitmWizard] = useState(false);
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
@@ -529,8 +601,79 @@ export function StatblockList({
   function onImportDrop(e: React.DragEvent) {
     e.preventDefault();
     setImportDragOver(false);
-    const file = e.dataTransfer.files?.[0] ?? null;
-    if (file) importFile(file);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) void importFiles(files);
+  }
+
+  async function importFiles(files: FileList | File[] | null, inputEl?: HTMLInputElement | null) {
+    const list = Array.from(files ?? []);
+    if (list.length === 0) return;
+    // Один файл — старый путь с превью-модалкой, без смены поведения.
+    if (list.length === 1) {
+      importFile(list[0] ?? null, inputEl);
+      return;
+    }
+    const targetInput = inputEl ?? fileInputRef.current;
+    const hasExisting = statblocks.some((s) => s.format === "dnd_character");
+    if (hasExisting) {
+      const ok = await confirm({
+        title: "Импортировать пачку?",
+        message: `Файлов: ${list.length}. У персонажа уже есть чарник(и) — валидные файлы добавятся новыми статблоками, битые останутся в списке с причиной.`,
+        confirmLabel: "Импортировать",
+      });
+      if (!ok) {
+        if (targetInput) targetInput.value = "";
+        return;
+      }
+    }
+    setImporting(true);
+    setImportError("");
+    setImportSuccess("");
+    setImportWarnings([]);
+    setBatchResults([]);
+    const results: { file: string; ok: boolean; detail: string }[] = [];
+    // Последовательно: сервер один, локальный — пачки по 3–10 файлов,
+    // параллелить нечего, а порядок в списке совпадает с выбором.
+    for (const file of list) {
+      if (file.size > MAX_IMPORT_BYTES) {
+        results.push({ file: file.name, ok: false, detail: `слишком большой (${(file.size / 1024 / 1024).toFixed(1)} МБ, лимит 5 МБ)` });
+        setBatchResults([...results]);
+        continue;
+      }
+      try {
+        const json = await file.text();
+        if (!json.trim()) throw new Error("Файл пустой");
+        try {
+          JSON.parse(json);
+        } catch {
+          throw new Error("Файл не похож на JSON — нужен экспорт с longstoryshort.app");
+        }
+        const pv = await api.post<{ characterName: string; warnings: { field: string; message: string }[] }>(
+          "/statblocks/import/preview",
+          { owner_type: ownerType, owner_id: ownerId, json }
+        );
+        const res = await api.post<{ characterName: string; warnings: { field: string; message: string }[] }>(
+          "/statblocks/import",
+          { owner_type: ownerType, owner_id: ownerId, json }
+        );
+        const wCount = res.warnings?.length ?? pv.warnings?.length ?? 0;
+        results.push({
+          file: file.name,
+          ok: true,
+          detail: `«${res.characterName || pv.characterName || "персонаж"}» создан${wCount ? ` — ${wCount} замечаний` : ""}`,
+        });
+      } catch (e) {
+        const msg = e instanceof Error && e.message ? e.message : String(e);
+        results.push({ file: file.name, ok: false, detail: msg || "Не удалось импортировать" });
+      }
+      setBatchResults([...results]);
+    }
+    setImporting(false);
+    if (targetInput) targetInput.value = "";
+    refresh();
+    const okCount = results.filter((r) => r.ok).length;
+    setImportSuccess(`Пачка: ${okCount} из ${results.length} импортировано`);
+    setTimeout(() => setImportSuccess(""), 6000);
   }
 
   const showLssImport = ownerType === "character";
@@ -593,6 +736,19 @@ export function StatblockList({
             )}
           </div>
         )}
+        {/* Пусто и на телефоне: без чарников табы скрыты и страницы создания
+            нет — тупик. Решение владельца (создание табом [+] только десктоп,
+            остальное на профиле) не трогаем: чиним только «ноль чарников». */}
+        {isEmpty && creatingSystem === undefined && ownerType === "character" && (
+          <div className="card stack">
+            <span className="muted">Чарника пока нет — создайте первый.</span>
+            <div className="row">
+              <button type="button" className="primary" onClick={startSheetCreate}>
+                Создать чарник
+              </button>
+            </div>
+          </div>
+        )}
         {creatingSystem !== undefined ? (
           creatingSystem === null ? (
             <div className="card stack">
@@ -626,6 +782,7 @@ export function StatblockList({
               ownerName={ownerName}
               ownerPlayerName={ownerPlayerName}
               initialSystemId={creatingSystem}
+              ownerPortraitUrl={ownerPortraitUrl}
               onCancel={() => setCreatingSystem(undefined)}
               onDone={() => {
                 setCreatingSystem(undefined);
@@ -644,6 +801,7 @@ export function StatblockList({
             ownerId={ownerId}
             ownerName={ownerName}
             ownerPlayerName={ownerPlayerName}
+            ownerPortraitUrl={ownerPortraitUrl}
             onCancel={() => setShowDndWizard(false)}
             onDone={() => {
               setShowDndWizard(false);
@@ -680,8 +838,9 @@ export function StatblockList({
                   ref={fileInputRef}
                   type="file"
                   accept="application/json,.json"
+                  multiple
                   style={{ display: "none" }}
-                  onChange={(e) => importFile(e.target.files?.[0] ?? null, e.target as HTMLInputElement)}
+                  onChange={(e) => void importFiles(e.target.files, e.target as HTMLInputElement)}
                 />
               </label>
               <a href="https://longstoryshort.app/" target="_blank" rel="noreferrer" className="muted" style={{ fontSize: "var(--fs-meta)", textDecoration: "underline" }}>
@@ -708,6 +867,64 @@ export function StatblockList({
       )}
       {cards}
 
+      {/* Клон чарника — рядом с созданием, не в листе за столом (Q3).
+          Оба типа владельцев: список и так ограничен владельцем (Q7). */}
+      {dndCharacters.length > 0 && (
+        <div className="row">
+          <button type="button" onClick={openClone}>
+            Клонировать чарник…
+          </button>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+            Копия билда: класс, вид, предыстория, черта, навыки, заклинания, снаряжение. Имя, портрет и раны — с нуля.
+          </span>
+        </div>
+      )}
+      {cloneOpen && (
+        <Modal onClose={() => !cloning && setCloneOpen(false)} closeOnBackdropClick={false}>
+          <div className="stack" style={{ minWidth: 320 }}>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-display)", textTransform: "uppercase" }}>Клон чарника</h3>
+            <label>
+              Источник
+              <select
+                value={cloneSourceId ?? ""}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setCloneSourceId(id);
+                  if (!cloneEdited) {
+                    const src = statblocks.find((s) => s.id === id) ?? null;
+                    setCloneName(src ? `${statblockTitle(src)} (копия)` : "");
+                  }
+                }}
+              >
+                {dndCharacters.map((sb) => (
+                  <option key={sb.id} value={sb.id}>
+                    {statblockTitle(sb)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Имя копии
+              <input
+                value={cloneName}
+                onChange={(e) => {
+                  setCloneName(e.target.value);
+                  setCloneEdited(true);
+                }}
+                placeholder="Имя персонажа"
+                maxLength={80}
+              />
+            </label>
+            {cloneError && <div className="backup-info error" role="alert">{cloneError}</div>}
+            <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => setCloneOpen(false)} disabled={cloning}>Отмена</button>
+              <button className="primary" onClick={confirmClone} disabled={cloning || !cloneName.trim()}>
+                {cloning ? "Создаю…" : "Создать копию"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {showLssImport && !isEmpty && (
         <div
           className={`import-drop-zone${importDragOver ? " drag-over" : ""}`}
@@ -734,12 +951,13 @@ export function StatblockList({
               ref={fileInputRef}
               type="file"
               accept="application/json,.json"
+              multiple
               style={{ display: "none" }}
-              onChange={(e) => importFile(e.target.files?.[0] ?? null, e.target as HTMLInputElement)}
+              onChange={(e) => void importFiles(e.target.files, e.target as HTMLInputElement)}
             />
           </label>
           <span className="muted" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35 }}>
-            Экспорт в LSS: откройте персонажа → меню → «Экспорт JSON». Мы создадим статблок «D&D — Персонаж».
+            Экспорт в LSS: откройте персонажа → меню → «Экспорт JSON». Можно выбрать несколько файлов сразу — создадутся поштучно. Мы создадим статблоки «D&D — Персонаж».
           </span>
         </div>
       )}
@@ -769,6 +987,20 @@ export function StatblockList({
             ))}
           </ul>
         </details>
+      )}
+      {showLssImport && batchResults.length > 0 && (
+        <div className="card" style={{ padding: 10 }}>
+          <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Пачка — {batchResults.filter((r) => r.ok).length} из {batchResults.length}
+          </span>
+          <ul style={{ margin: "8px 0 0 16px", display: "flex", flexDirection: "column", gap: 4, fontSize: "var(--fs-meta)" }}>
+            {batchResults.map((r, i) => (
+              <li key={`${r.file}-${i}`} className="muted">
+                <strong>{r.file}:</strong> {r.ok ? "✓ " : "✗ "}{r.detail}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {preview && (
@@ -884,6 +1116,7 @@ export function StatblockList({
           ownerId={ownerId}
           ownerName={ownerName}
           ownerPlayerName={ownerPlayerName}
+          ownerPortraitUrl={ownerPortraitUrl}
           onCancel={() => setShowDndWizard(false)}
           onDone={() => {
             setShowDndWizard(false);

@@ -1889,6 +1889,24 @@ span.dnd-card-corner {
   font-size: var(--fs-meta);
   margin: 4px 0 0;
 }
+/* Оракул класса: листок-предсказание внизу оборота. Бумага на тёмном (та же,
+   что --paper поверх), кромка цвета класса как у входящих, лёгкий наклон —
+   как вытянутый из печенья листок. Заголовка нет: цитата говорит сама. */
+.dnd-oracle-slip {
+  margin: 6px 8px 0;
+  padding: 10px 14px;
+  background: var(--paper);
+  color: #1c1c1c;
+  border-left: 4px solid var(--line);
+  transform: rotate(-0.6deg);
+}
+.dnd-oracle-slip blockquote {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  line-height: 1.35;
+}
 /* Движение только с согласия: и блик, и доворот гаснут. Угол при этом
    остаётся читаемым — подсветка есть/нет, а не мигает/не мигает. */
 @media (prefers-reduced-motion: reduce) {

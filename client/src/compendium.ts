@@ -202,6 +202,16 @@ export const EQUIPMENT_CATEGORIES = [
   "Прочие предметы",
 ] as const;
 
+// Источники снаряжения — короче, чем у магических предметов: обычный
+// ассортимент из Книги игрока плюс огнестрел/яды/драгоценности из
+// Руководства Мастера. Faerun/Homebrew — на будущее.
+export const EQUIPMENT_SOURCES = [
+  "Книга игрока 2024",
+  "Руководство Мастера 2024",
+  "Heroes of Faerun",
+  "Homebrew",
+] as const;
+
 // Короткие лейблы для узких экранов (S-25): «Ремесленные инструменты» → «Рем. инструменты»
 export const EQUIPMENT_CATEGORY_SHORT: Record<string, string> = {
   "Ремесленные инструменты": "Рем. инструменты",
@@ -478,6 +488,7 @@ export const KIND_DEFS: Record<string, KindDef> = {
     label: "Снаряжение",
     fields: [
       { key: "category", label: "Категория", type: "select", options: [...EQUIPMENT_CATEGORIES] },
+      { key: "source", label: "Источник", type: "select", options: [...EQUIPMENT_SOURCES] },
       { key: "cost", label: "Цена", type: "text" },
       { key: "weight", label: "Вес", type: "text" },
     ],

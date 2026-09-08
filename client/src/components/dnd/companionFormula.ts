@@ -1,5 +1,5 @@
 import { abilityModifier } from "./AbilityScores";
-import type { DndAbilityScores, DndClassEntry, DndCompanion } from "../../types";
+import type { DndAbilityKey, DndAbilityScores, DndClassEntry, DndCompanion } from "../../types";
 
 // Тела спутников по чертежам (Фаза B): пушка и защитник Артефактора.
 //
@@ -10,10 +10,20 @@ import type { DndAbilityScores, DndClassEntry, DndCompanion } from "../../types"
 //     mending?: "2к6" | null, detonateFeature?: "Взрывная пушка",
 //     coverFeature?: "Укреплённая позиция",
 //     actions?: [{ name: "Силовой удар", note: "…" }], expiry?: "permanent" }
-// Формулы — мини-язык: целые числа, level (уровень класса), int (мод INT),
-// spell (круг ячейки призыва), операции + - * и скобки. Свой парсер (не eval):
+// Формулы — мини-язык: целые числа, level (уровень класса), моды характеристик
+// (str dex con int wis cha — английские ключи, регистр не важен), spell (круг
+// ячейки призыва), операции + - * и скобки. Свой парсер (не eval):
 // данные идут из справочника, который правит Мастер, — выполнять их как код
 // нельзя.
+
+export interface CompanionBlueprintVariant {
+  /** Имя вида («Наземный зверь»). Хранится в инстансе как variant. */
+  name?: string;
+  ac?: string;
+  hp?: string;
+  /** Приёмы вида (карточка): перекрывают общие actions чертежа. */
+  actions?: { name?: string; note?: string }[];
+}
 
 export interface CompanionBlueprint {
   name?: string;
@@ -32,6 +42,9 @@ export interface CompanionBlueprint {
   /** "permanent" — призыв мгновенного сотворения (гомункул): отдыхом не
    *  трогаем вовсе. Без поля — по dismissable, как раньше. */
   expiry?: string;
+  /** Виды тела на одном чертеже (звери Повелителя зверей: наземный, морской,
+   *  небесный — разные КД/хиты/приёмы). Без поля — как раньше, один вид. */
+  variants?: CompanionBlueprintVariant[];
 }
 
 // Чертеж лежит в data записи компендиума, а не в строке листа — достаётся
@@ -137,17 +150,24 @@ function parseExpr(toks: Tok[], vars: Record<string, number>): number | null {
 }
 
 /** Безопасный подсчёт формулы чертежа. level — уровень класса, int — мод INT,
- *  spell — круг ячейки призыва (гомункул 5+5×круг). */
+ *  spell — круг ячейки призыва (гомункул 5+5×круг). mods — моды остальных
+ *  характеристик ключами (str/dex/con/wis/cha, регистр не важен): зверь
+ *  Повелителя зверей считается от Мудрости (КД 13+wis, хиты 5+5×level). */
 export function evalCompanionFormula(
   src: string | undefined,
   level: number,
   intMod: number,
-  spellLevel = 0
+  spellLevel = 0,
+  mods: Partial<Record<string, number>> = {}
 ): number | null {
   if (!src) return null;
   const toks = tokenize(src);
   if (!toks || toks.length === 0) return null;
-  const v = parseExpr(toks, { level, int: intMod, spell: spellLevel });
+  const lowered: Record<string, number> = {};
+  for (const [k, v] of Object.entries(mods)) {
+    if (typeof v === "number") lowered[k.toLowerCase()] = v;
+  }
+  const v = parseExpr(toks, { level, int: intMod, spell: spellLevel, ...lowered });
   if (v == null || !Number.isFinite(v)) return null;
   return Math.floor(v);
 }
@@ -157,23 +177,51 @@ export interface CompanionStats {
   ac: number | null;
 }
 
-/** Живые статы инстанса: уровень класса + INT (+ круг призыва) пересчитываются
- *  при каждом рендере, поэтому ап уровня сам поднимает максимум
- *  (израсходованное не трогаем — как у пулов ресурсов). */
+/** Активный вид тела: выбранный инстансом или первый из списка. Без
+ *  variants — сам чертёж. Возвращает плоский вид (имя/КД/хиты/приёмы). */
+export function resolveBlueprintVariant(
+  blueprint: CompanionBlueprint | null,
+  variantName: string | null | undefined
+): { name?: string; ac?: string; hp?: string; actions?: { name?: string; note?: string }[] } | null {
+  if (!blueprint) return null;
+  const list = blueprint.variants;
+  if (!list || list.length === 0) {
+    return { name: blueprint.name, ac: blueprint.ac, hp: blueprint.hp, actions: blueprint.actions };
+  }
+  const picked =
+    (variantName != null && variantName !== ""
+      ? list.find((v) => v.name === variantName)
+      : undefined) ?? list[0];
+  return {
+    name: picked.name ?? blueprint.name,
+    ac: picked.ac ?? blueprint.ac,
+    hp: picked.hp ?? blueprint.hp,
+    actions: picked.actions ?? blueprint.actions,
+  };
+}
+
+const ABILITY_MOD_KEYS: DndAbilityKey[] = ["str", "dex", "con", "int", "wis", "cha"];
+
+/** Живые статы инстанса: уровень класса + моды характеристик (+ круг призыва)
+ *  пересчитываются при каждом рендере, поэтому ап уровня сам поднимает
+ *  максимум (израсходованное не трогаем — как у пулов ресурсов). */
 export function companionStats(
   blueprint: CompanionBlueprint | null,
   classes: DndClassEntry[],
   classId: number | null | undefined,
   abilities: DndAbilityScores,
-  spellLevel = 0
+  spellLevel = 0,
+  variantName: string | null | undefined = null
 ): CompanionStats | null {
-  if (!blueprint?.hp) return null;
+  const view = resolveBlueprintVariant(blueprint, variantName);
+  if (!view?.hp) return null;
   const lvl = classes.find((c) => c.classId === classId)?.level
     ?? Math.max(0, ...classes.map((c) => c.level || 0));
-  const intMod = abilityModifier(abilities.int);
-  const maxHp = evalCompanionFormula(blueprint.hp, lvl, intMod, spellLevel);
+  const mods: Partial<Record<string, number>> = {};
+  for (const k of ABILITY_MOD_KEYS) mods[k] = abilityModifier(abilities[k]);
+  const maxHp = evalCompanionFormula(view.hp, lvl, mods.int ?? 0, spellLevel, mods);
   if (maxHp == null || maxHp < 1) return null;
-  const ac = blueprint.ac ? evalCompanionFormula(blueprint.ac, lvl, intMod, spellLevel) : null;
+  const ac = view.ac ? evalCompanionFormula(view.ac, lvl, mods.int ?? 0, spellLevel, mods) : null;
   return { maxHp, ac };
 }
 

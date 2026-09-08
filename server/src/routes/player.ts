@@ -9,7 +9,7 @@ import {
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { unpaidSessionsForPlayer } from "../services/finance";
-import { broadcastCharacterUpdate } from "../services/realtime";
+import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { mergeContentPatch } from "../db/statblockContent";
 
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -402,6 +402,43 @@ playerRouter.post("/characters/:id/notes", (req: AuthedRequest, res) => {
     .run(character.id, content ?? "");
   broadcastCharacterUpdate(character.id);
   res.status(201).json(db.prepare("SELECT * FROM character_chapters WHERE id = ?").get(info.lastInsertRowid));
+});
+
+// Сигнал столу: «вешаю Метку охотника / Сглаз» (или перевешиваю).
+// Игрок заявляет вслух и жмёт кнопку в карточке заклинания; сервер кладёт
+// напоминалку кампании (мастер выбирает цель в пульте) и шлёт живое событие
+// в gm-комнату, чтобы пульт подсветил панель напоминаний. Трата ячейки/пула
+// и концентрация — на клиенте, сюда приезжает только факт заявления:
+// двойная трата из одного нажатия исключена построением.
+const MARK_SPELLS = ["Метка охотника", "Сглаз"];
+playerRouter.post("/characters/:id/mark", (req: AuthedRequest, res) => {
+  const character = requireOwnCharacter(req.user!.playerId!, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  if (character.campaign_id == null) return res.status(400).json({ error: "character is not in a campaign" });
+  if (!canWriteInCampaign(req.user!.playerId!, character.campaign_id)) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  const { spell, mode } = req.body as { spell?: string; mode?: string };
+  if (!MARK_SPELLS.includes(spell ?? "") || (mode !== "spend" && mode !== "move")) {
+    return res.status(400).json({ error: "spell must be Метка охотника|Сглаз, mode spend|move" });
+  }
+  const message =
+    `🏹 ${character.character_name}: ${spell} — ` +
+    (mode === "spend" ? "вешает (с тратой)" : "перевешивает (без траты)") +
+    ". Цель не выбрана.";
+  const info = db
+    .prepare("INSERT INTO gm_reminders (target_type, target_id, message) VALUES ('campaign', ?, ?)")
+    .run(character.campaign_id, message);
+  const reminder = db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(info.lastInsertRowid);
+  broadcastToGm("hunter-mark", {
+    reminderId: info.lastInsertRowid,
+    campaignId: character.campaign_id,
+    characterId: character.id,
+    characterName: character.character_name,
+    spell,
+    mode,
+  });
+  res.status(201).json(reminder);
 });
 
 playerRouter.put("/characters/:id/chapters/:chapterId", (req: AuthedRequest, res) => {

@@ -151,3 +151,33 @@ export function choicesFromEntries(entries: CompendiumEntry[], fromClass: boolea
   }
   return out.sort((a, b) => a.minLevel - b.minLevel || a.sourceEntryId - b.sourceEntryId);
 }
+
+// Суммирование слотов выборов записей каталога (тикет 05 fighter-choices,
+// тикет 02 warlock): дефы лесенки с общим key копят count, в зачёт идёт
+// только открытое уровнем. Один подсчёт на визард и счётчик листа — двумя
+// реализациями они уже разъезжались бы молча.
+export interface EntrySlotSource {
+  def: ChoiceDef;
+  /** Уровень, которым открыт def: уровень класса для классовых/подклассовых
+   *  дефов, суммарный уровень персонажа для черт (черты не привязаны
+   *  к классу, а бонусные пики вроде воззваний идут именно оттуда). */
+  level: number;
+}
+
+export interface EntrySlot {
+  key: string;
+  group: string;
+  total: number;
+}
+
+export function sumEntrySlots(list: EntrySlotSource[]): EntrySlot[] {
+  const out: EntrySlot[] = [];
+  for (const { def, level } of list) {
+    if (def.kind !== "entry" || !def.group) continue;
+    if (def.minLevel > level) continue;
+    const g = out.find((x) => x.key === def.key);
+    if (g) g.total += def.count;
+    else out.push({ key: def.key, group: def.group, total: def.count });
+  }
+  return out;
+}

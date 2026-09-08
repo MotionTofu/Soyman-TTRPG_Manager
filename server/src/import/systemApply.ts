@@ -377,6 +377,9 @@ function classData(source: ImportClass, resolve: Resolve): Record<string, unknow
     tool_profs: picks(source.tool_profs, resolve),
     ...(source.skill_choice_count != null ? { skill_choice_count: source.skill_choice_count } : {}),
     skill_choice_options: source.skill_choice_options,
+    // Пустой массив чистит filled — как остальные списки: «нет поля» значит
+    // «не трогай», стереть пул можно только правкой записи.
+    oracle_quotes: source.oracle_quotes,
     ...(source.multiclass_prereq ? { multiclass_prereq: source.multiclass_prereq } : {}),
     ...equipmentSetData("a", source.starting_equipment?.a, resolve),
     ...equipmentSetData("b", source.starting_equipment?.b, resolve),
@@ -387,6 +390,7 @@ function classData(source: ImportClass, resolve: Resolve): Record<string, unknow
 function equipmentData(source: ImportEquipment, resolve: Resolve): Record<string, unknown> {
   return filled({
     category: source.category ?? "",
+    source: source.source ?? "",
     cost: source.cost ?? "",
     weight: source.weight ?? "",
     ...(source.damage ? { damage: source.damage } : {}),

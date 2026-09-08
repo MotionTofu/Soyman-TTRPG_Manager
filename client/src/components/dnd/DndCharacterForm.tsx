@@ -94,10 +94,14 @@ import {
   companionsAfterLongRest,
   liveCompanionsOf,
   liveSummonOf,
+  resolveBlueprintVariant,
   type CompanionBlueprint,
 } from "./companionFormula";
 import { rollDiceFormula } from "./diceRoll";
 import { DndCardBack } from "./DndCardBack";
+import { DndLevelUpWizard } from "./DndLevelUpWizard";
+import { PosterButtons } from "./PosterButtons";
+import type { PosterData } from "./CharacterPoster";
 import { DndTransferBox } from "./DndTransferBox";
 import {
   fetchCharacterInbox,
@@ -116,7 +120,7 @@ import { armorProfNames, carryCapacityLb, EMPTY_EQUIPMENT_ITEM, ensureEquipmentI
 import { DndCoinCalculator } from "./DndCoinCalculator";
 import { deadEntryIds, ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { deadLinkNames } from "./deadLinks";
-import { computeSpellSlots, effectiveCasterLevel, highestCircle, isRoundUpCaster, sourceCasterKind } from "./dndSlots";
+import { ARCANUM_UNLOCKS, arcanumCountByCircle, arcanumTopCircle, arcanumUnlockedCircles, computeSpellSlots, effectiveCasterLevel, highestCircle, isRoundUpCaster, sourceCasterKind } from "./dndSlots";
 import { cantripsAtLevel, classPreparedFormula, formulaPreparedLimit, preparedAtLevel, PROGRESSION_RECHARGE_LABELS, type ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
 import { PipTrack } from "../litm/PipTrack";
@@ -153,7 +157,7 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
-import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, TIMING_KEY_TO_LABEL, type ChoiceDef } from "./dndFeatures";
+import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, type ChoiceDef } from "./dndFeatures";
 import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
@@ -691,7 +695,8 @@ function FightingStyleCounter({
   const owed = classes.reduce(
     (n, c) =>
       n +
-      (c.classId != null && nameMatches(c.className, "Воин") ? 1 : 0) +
+      // classId не требуем: freehand-строка «Воин» без ссылки — тоже воин.
+      (nameMatches(c.className, "Воин") ? 1 : 0) +
       (c.subclassName && nameMatches(c.subclassName, "Чемпион") && c.level >= 7 ? 1 : 0),
     0
   );
@@ -703,26 +708,32 @@ function FightingStyleCounter({
   ).length;
   return (
     <span className="muted">
-      Боевой стиль: {Math.min(have, owed)} из {owed}
+      Боевой стиль: {have} из {owed}
       {have < owed ? " — перетяни черту из поиска в «Черты» выше" : ""}
+      {have > owed ? " — лишние убери руками" : ""}
     </span>
   );
 }
 
 // Счётчик выборов из каталога (приёмы/выстрелы, тикет 05): лимит — сумма
-// count открытых уровнем дефов kind entry на умениях подклассов; есть —
+// count открытых уровнем дефов kind entry на умениях классов, подклассов
+// и черт (черты — бонусные пики вроде воззваний, тикет 02 warlock); есть —
 // строки «Особых умений» с entryId из группы дефа. Пик — дропом из поиска
 // (с entryId строка живёт связанной); замена — тикет 08.
 function EntryChoiceCounter({
   classes,
   abilities,
+  feats,
   systemId,
 }: {
   classes: DndClassEntry[];
   abilities: DndFeature[];
+  feats: DndFeature[];
   systemId: number | null;
 }) {
   const [defsBySub, setDefsBySub] = useState<Record<number, ChoiceDef[]>>({});
+  const [defsByClass, setDefsByClass] = useState<Record<number, ChoiceDef[]>>({});
+  const [featDefs, setFeatDefs] = useState<ChoiceDef[]>([]);
   const [catalogs, setCatalogs] = useState<Record<string, CompendiumEntry[]>>({});
   const subKey = classes.map((c) => `${c.subclassId ?? ""}:${c.level}`).join(",");
   useEffect(() => {
@@ -747,7 +758,61 @@ function EntryChoiceCounter({
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemId, subKey]);
-  const groupsKey = Object.values(defsBySub)
+  // Дефы классов (воззвания колдуна живут на классовом умении, а не на
+  // подклассе, как приёмы БМ) — тем же приёмом, ключом classId.
+  const classKey = classes.map((c) => `${c.classId ?? ""}:${c.level}`).join(",");
+  useEffect(() => {
+    if (!systemId) return;
+    const ids = [...new Set(classes.map((c) => c.classId).filter((id): id is number => typeof id === "number"))];
+    if (ids.length === 0) return;
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    Promise.all(
+      ids.map((id) => loadDndClassFeatures(systemId, id, opts).then((es) => [id, choicesFromEntries(es, true)] as const))
+    )
+      .then((pairs) => {
+        setDefsByClass((prev) => {
+          const next = { ...prev };
+          for (const [id, defs] of pairs) next[id] = defs.filter((d) => d.kind === "entry" && d.group);
+          return next;
+        });
+      })
+      .catch(() => {
+        /* тихий пропуск */
+      });
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemId, classKey]);
+  // Дефы черт (бонусные пики): уровень гейта — суммарный уровень персонажа,
+  // черты ни к какому классу не привязаны.
+  const featKey = feats.map((f) => f.entryId ?? "").join(",");
+  useEffect(() => {
+    if (!systemId) return;
+    const ids = [...new Set(feats.map((f) => f.entryId).filter((id): id is number => typeof id === "number"))];
+    if (ids.length === 0) {
+      setFeatDefs([]);
+      return;
+    }
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    Promise.all(
+      ids.map((id) =>
+        api
+          .get<CompendiumEntry>(`/systems/entries/${id}`, opts)
+          .then((e) => choicesFromEntries([e], false))
+          .catch(() => [] as ChoiceDef[])
+      )
+    )
+      .then((lists) => {
+        setFeatDefs(lists.flat().filter((d) => d.kind === "entry" && d.group));
+      })
+      .catch(() => {
+        /* тихий пропуск */
+      });
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemId, featKey]);
+  const groupsKey = [...Object.values(defsBySub), ...Object.values(defsByClass), featDefs]
     .flat()
     .map((d) => d.group ?? "")
     .filter(Boolean)
@@ -772,27 +837,28 @@ function EntryChoiceCounter({
       });
     return () => ac.abort();
   }, [systemId, groupsKey]);
+  // Лимиты — общим хелпером sumEntrySlots (он же у визарда): классовые и
+  // подклассовые дефы открываются уровнем своего класса, дефы черт —
+  // суммарным уровнем персонажа.
+  const slotSources = [
+    ...classes.flatMap((c) => [
+      ...(defsByClass[c.classId ?? -1] ?? []).map((def) => ({ def, level: c.level })),
+      ...(c.subclassId != null ? (defsBySub[c.subclassId] ?? []) : []).map((def) => ({ def, level: c.level })),
+    ]),
+    ...featDefs.map((def) => ({ def, level: totalCharacterLevel(classes) })),
+  ];
   const rows: { key: string; group: string; picked: number; total: number }[] = [];
   {
-    const byKey = new Map<string, { group: string; total: number }>();
-    for (const c of classes) {
-      if (c.subclassId == null) continue;
-      for (const d of defsBySub[c.subclassId] ?? []) {
-        if (d.minLevel > c.level) continue;
-        const g = byKey.get(d.key) ?? { group: d.group ?? "", total: 0 };
-        g.total += d.count;
-        byKey.set(d.key, g);
-      }
-    }
+    const slots = sumEntrySlots(slotSources);
     const pickIds = new Set(
       abilities.map((f) => f.entryId).filter((id): id is number => typeof id === "number")
     );
-    for (const [key, g] of byKey) {
+    for (const g of slots) {
       const inGroup = new Set((catalogs[g.group] ?? []).map((e) => e.id));
       // Каталог ещё грузится — строку не показываем, чтобы не врать нулями.
       if (!(g.group in catalogs)) continue;
       const picked = [...pickIds].filter((id) => inGroup.has(id)).length;
-      rows.push({ key, group: g.group, picked, total: g.total });
+      rows.push({ key: g.key, group: g.group, picked, total: g.total });
     }
   }
   if (rows.length === 0) return null;
@@ -800,8 +866,9 @@ function EntryChoiceCounter({
     <>
       {rows.map((r) => (
         <span key={r.key} className="muted">
-          {r.group}: {Math.min(r.picked, r.total)} из {r.total}
+          {r.group}: {r.picked} из {r.total}
           {r.picked < r.total ? " — добери дропом из поиска в «Особые умения»" : ""}
+          {r.picked > r.total ? " — лишние убери руками" : ""}
         </span>
       ))}
     </>
@@ -1527,6 +1594,7 @@ function buildSpellDetail(entry: CompendiumEntry): SpellDetail {
 
 function DndSpellLevelSection({
   level,
+  title,
   systemId,
   slots,
   spells,
@@ -1538,8 +1606,11 @@ function DndSpellLevelSection({
   onUsedChange,
   preparedOnly,
   onCast,
+  slotsLocked,
 }: {
   level: number;
+  /** Переименование секции (арканум): по умолчанию «Заговоры»/«N круг». */
+  title?: string;
   systemId: number | null;
   slots: number;
   spells: DndSpellEntry[];
@@ -1554,6 +1625,9 @@ function DndSpellLevelSection({
   preparedOnly?: boolean;
   /** Тап по названию — модалка использования (трата ячейки). */
   onCast?: (row: AttackRow) => void;
+  /** Пипсы деривационные (считаются из строк, не из хранилища): редактор
+   *  числа прячем, иначе задвоим счётчик. */
+  slotsLocked?: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -1593,9 +1667,12 @@ function DndSpellLevelSection({
   // Ни запроса за метой, ни снапшота: всё, кроме ссылки и имени, лист берёт
   // из компендиума при отрисовке (см. resolveSpell). Раньше здесь был GET на
   // каждое добавляемое заклинание, и он же был источником устаревания.
+  // Дубль в том же круге не добавляем (тикет 08: замена не должна плодить
+  // дубли): сверяем ссылку, без неё — имя.
   function addSpell(entryId: number | null, name: string) {
     setAdding(false);
     setQuery("");
+    if (spells.some((s) => (entryId != null && s.entryId === entryId) || s.name === name)) return;
     onSpellsChange([...spells, { entryId, name, prepared: 0 }]);
   }
   // Cycles the same star through not prepared → prepared → always prepared.
@@ -1623,6 +1700,7 @@ function DndSpellLevelSection({
     setDragOver(false);
     const result = readSearchDrop(e);
     if (!result || result.kind !== "spell") return;
+    if (spells.some((s) => s.entryId === result.id || s.name === result.title)) return;
     onSpellsChange([...spells, { entryId: result.id, name: result.title, prepared: 0 }]);
   }
 
@@ -1635,7 +1713,7 @@ function DndSpellLevelSection({
   // заголовке живут ячейки, и они нужны независимо от подготовки.
   const sorted = preparedOnly && !edit ? ordered.filter((sp) => sp.prepared > 0) : ordered;
   const hiddenCount = ordered.length - sorted.length;
-  const label = level === 0 ? "Заговоры" : `${level} круг`;
+  const label = title ?? (level === 0 ? "Заговоры" : `${level} круг`);
 
   return (
     <details className="dnd-spell-level-card">
@@ -1669,7 +1747,7 @@ function DndSpellLevelSection({
                 />
               </span>
             )}
-            {edit && (
+            {edit && !slotsLocked && (
               <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={onSlotsChange} label={`Ячейки, ${label}`} />
             )}
           </span>
@@ -1854,6 +1932,8 @@ function DndSpellsView({
   onSpellsChange,
   preparedOnly,
   onCast,
+  levelTitles,
+  slotsLockedCircles,
 }: {
   cantrips: DndSpellEntry[];
   spellSlotLevels: number;
@@ -1873,6 +1953,11 @@ function DndSpellsView({
   preparedOnly?: boolean;
   /** Тап по названию — модалка использования (трата ячейки). */
   onCast?: (row: AttackRow) => void;
+  /** Переименование секций (арканум колдуна): круг → подпись. */
+  levelTitles?: Record<number, string>;
+  /** Круги с деривационными пипсами (арканум): ручную правку числа прячем,
+   *  чтобы не задвоить счётчик. */
+  slotsLockedCircles?: ReadonlySet<number>;
 }) {
   const activeLevels = Array.from({ length: spellSlotLevels }, (_, i) => i).filter(
     (i) => edit || spellSlotPips[i] > 0 || spellsByLevel[i].length > 0
@@ -1898,6 +1983,7 @@ function DndSpellsView({
         <DndSpellLevelSection
           key={i}
           level={i + 1}
+          title={levelTitles?.[i + 1]}
           systemId={edit ? systemId ?? null : null}
           slots={spellSlotPips[i]}
           spells={spellsByLevel[i]}
@@ -1906,6 +1992,7 @@ function DndSpellsView({
           edit={!!edit}
           preparedOnly={preparedOnly}
           showSlots
+          slotsLocked={slotsLockedCircles?.has(i + 1) ?? false}
           onSlotsChange={edit && onSlotsChange ? (v) => onSlotsChange(i, v) : () => {}}
           onSpellsChange={edit && onSpellsChange ? (v) => onSpellsChange(i, v) : () => {}}
           onCast={onCast}
@@ -4481,6 +4568,9 @@ function CompanionBody({
   ownsDetonate,
   ownsCover,
   previewEntryId,
+  variants,
+  activeVariant,
+  onVariant,
   onPatch,
   onRemove,
 }: {
@@ -4494,6 +4584,10 @@ function CompanionBody({
   ownsCover: boolean;
   /** Запись для окна-превью по клику на имя (фича-чертёж или заклинание). */
   previewEntryId?: number | null;
+  /** Виды тела из variants чертежа (звери Повелителя зверей). */
+  variants?: string[];
+  activeVariant?: string;
+  onVariant?: (name: string) => void;
   onPatch: (patch: Partial<DndCompanion>) => void;
   onRemove: () => void;
 }) {
@@ -4589,6 +4683,24 @@ function CompanionBody({
       <span className="dnd-pool-count">
         {left} из {maxHp}
       </span>
+      {/* Виды тела (звери Повелителя зверей): смена вида — новое тело. */}
+      {(variants ?? []).length > 1 && onVariant && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {(variants ?? []).map((v) => (
+            <button
+              key={v}
+              type="button"
+              className="comp-mini"
+              disabled={v === activeVariant}
+              title={v === activeVariant ? "Текущий вид" : `Сменить вид: ${v} (новое тело, полные хиты)`}
+              aria-pressed={v === activeVariant}
+              onClick={() => onVariant(v)}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         <input
           type="number"
@@ -5184,11 +5296,20 @@ function collectSheetHits(
 // однозначен: у заклинания это ячейка его круга (а если её нет — ближайшая
 // доступная выше, повышение круга штатный приём 5.5), у умения — пул,
 // заданный в его стоимости. Где источник неоднозначен, кнопки нет.
+// Метка охотника и Сглаз: заявление столу с выбором «с тратой /
+// перевесить». Механика та же у обоих: первое наложение тратит ресурс
+// (у следопыта — использование Избранного врага, иначе ячейка; у Сглаза
+// только ячейка), перевешивание на новую цель после смерти старой —
+// бонусным действием без траты. Обе кнопки ставят концентрацию и шлют
+// сигнал мастеру (напоминалка + живое событие), цель выбирает мастер.
+const MARK_SPELLS = ["Метка охотника", "Сглаз"];
+
 function SpendAction({
   row,
   value,
   slots,
   resources,
+  characterId,
   onQuickUpdate,
   onDone,
 }: {
@@ -5196,12 +5317,17 @@ function SpendAction({
   value: DndCharacterData;
   slots: number[];
   resources: DndResourceDef[];
+  /** Id персонажа — для сигнала мастеру (метка/сглаз). Без него кнопок нет. */
+  characterId?: number | null;
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
   onDone: () => void;
 }) {
   if (row.source?.kind === "spell") {
     const level = row.source.level;
     if (level === 0) return <span className="muted">Заговор — тратить нечего.</span>;
+    // Арканум колдуна (тикет 03 warlock): ячейки нет, есть 1 использование
+    // на долгий отдых — трек тот же (пипсы круга), подпись честная.
+    const isArcanum = row.source.spell.arcanum === true;
     // Ищем ближайший круг с непотраченной ячейкой, начиная со своего.
     let use = -1;
     for (let i = level - 1; i < slots.length; i++) {
@@ -5210,7 +5336,12 @@ function SpendAction({
         break;
       }
     }
-    if (use < 0) return <span className="muted">Свободных ячеек {level} круга и выше нет.</span>;
+    if (use < 0)
+      return (
+        <span className="muted">
+          {isArcanum ? "Арканум уже использован — вернётся долгим отдыхом." : `Свободных ячеек ${level} круга и выше нет.`}
+        </span>
+      );
     // Вниз кастовать нельзя (только вверх), поэтому другие круги — тоже
     // от своего и выше. Основная кнопка — ближайший свободный (обычный
     // случай за столом), остальные — мелкими: выбор круга не должен стоить
@@ -5226,6 +5357,48 @@ function SpendAction({
     for (let i = level - 1; i < slots.length; i++) {
       if (i !== use && (slots[i] ?? 0) > (value.spellSlotsUsed[i] ?? 0)) others.push(i);
     }
+    // Сигнал мастеру о метке/сглазе (и «вешаю», и «перевешиваю»): стол
+    // устный, а кнопка — фиксация. Тихо при офлайне: игра идёт словами.
+    const notifyMark = (spell: string, mode: "spend" | "move") => {
+      if (characterId == null) return;
+      api
+        .post(`/player/characters/${characterId}/mark`, { spell, mode })
+        .catch(() => {
+          /* офлайн — мастер услышал вслух */
+        });
+    };
+    const markSpell =
+      row.source.spell.name && MARK_SPELLS.includes(row.source.spell.name)
+        ? row.source.spell.name
+        : null;
+    // Пул бесплатных использований — только у Метки (Избранный враг
+    // следопыта): трата идёт из него, пока есть остаток, иначе — ячейка.
+    const markPool =
+      markSpell === "Метка охотника"
+        ? resources.find((r) => r.label === "Избранный враг")
+        : undefined;
+    const markPoolLeft = markPool
+      ? markPool.max + (value.resourceBonus[markPool.key] ?? 0) - (value.resourceUsed[markPool.key] ?? 0)
+      : 0;
+    const hangMark = (mode: "spend" | "move") => {
+      if (!markSpell) return;
+      if (mode === "spend") {
+        if (markPool && markPoolLeft > 0) {
+          onQuickUpdate({
+            resourceUsed: { ...value.resourceUsed, [markPool.key]: (value.resourceUsed[markPool.key] ?? 0) + 1 },
+            concentration: markSpell,
+          });
+        } else {
+          spend(use);
+          onQuickUpdate({ concentration: markSpell });
+        }
+      } else {
+        onQuickUpdate({ concentration: markSpell });
+      }
+      notifyMark(markSpell, mode);
+      // Окно закрывает spend() сам в ветке ячейки; в остальных — здесь.
+      if (!(mode === "spend" && !(markPool && markPoolLeft > 0))) onDone();
+    };
     return (
       <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
         <button
@@ -5234,8 +5407,28 @@ function SpendAction({
           style={{ alignSelf: "flex-start" }}
           onClick={() => spend(use)}
         >
-          Потратить ячейку {use + 1} круга
+          {isArcanum ? "Использовать арканум" : `Потратить ячейку ${use + 1} круга`}
         </button>
+        {markSpell && characterId != null && (
+          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              type="button"
+              className="comp-mini"
+              title="Первое наложение: трата использования или ячейки, мастеру уйдёт уведомление"
+              onClick={() => hangMark("spend")}
+            >
+              Вешаю{markPool && markPoolLeft > 0 ? " (из Избранного врага)" : ""} — заявить столу
+            </button>
+            <button
+              type="button"
+              className="comp-mini"
+              title="Цель упала — переношу метку бонусным действием, без траты"
+              onClick={() => hangMark("move")}
+            >
+              Перевесить — заявить столу
+            </button>
+          </div>
+        )}
         {others.length > 0 && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <span className="muted">другой круг:</span>
@@ -5831,6 +6024,190 @@ function DndClassSpellListModal({
           Добавить{picked.size > 0 ? ` ${picked.size}` : ""}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Пикер Таинственного арканума (тикет 03 warlock): отдельная модалка,
+ * открывается кнопкой «Арканум» при уровне колдуна 11+. Четыре секции
+ * 6/7/8/9: закрытые — серым «с N ур.», в открытой — текущий выбор и замена
+ * на месте (1 в круге, только список колдуна). Удаления нет: по книге
+ * арканум только заменяется.
+ */
+function DndArcanumPicker({
+  systemId,
+  warlockClassId,
+  warlockLevel,
+  spellsByLevel,
+  color,
+  onPick,
+  onClose,
+}: {
+  systemId: number | null;
+  warlockClassId: number | null;
+  warlockLevel: number;
+  spellsByLevel: DndSpellEntry[][];
+  color: string;
+  /** Замена арканума круга целиком; чужие строки круга не трогаем. */
+  onPick: (circleIdx0: number, entry: CompendiumEntry) => void;
+  onClose: () => void;
+}) {
+  const [pickCircle, setPickCircle] = useState<number | null>(null);
+  const [all, setAll] = useState<CompendiumEntry[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [chosen, setChosen] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!systemId) {
+      setAll([]);
+      return;
+    }
+    const ac = new AbortController();
+    loadDndSpellIndex(systemId, { signal: ac.signal })
+      .then(setAll)
+      .catch((e) => {
+        if ((e as Error)?.name !== "AbortError") setFailed(true);
+      });
+    return () => ac.abort();
+  }, [systemId]);
+
+  // Escape закрывает (крестик — для пальца), как у списка заклинаний.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (pickCircle != null) setPickCircle(null);
+        else onClose();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose, pickCircle]);
+
+  const unlocked = arcanumUnlockedCircles(warlockLevel);
+  const current = (circle: number) => spellsByLevel[circle - 1].find((s) => s.arcanum);
+  const options =
+    pickCircle == null || warlockClassId == null
+      ? []
+      : (all ?? []).filter((e) => {
+          const refs = Array.isArray(e.data?.classes) ? (e.data.classes as { id?: number }[]) : [];
+          return (e.level ?? 0) === pickCircle && refs.some((r) => r.id === warlockClassId);
+        });
+  const q = query.trim().toLowerCase();
+  const shown = q ? options.filter((e) => e.name.toLowerCase().includes(q)) : options;
+  const chosenEntry = chosen != null ? (all ?? []).find((e) => e.id === chosen) : undefined;
+
+  return (
+    <div className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Таинственный арканум">
+      <div className="dnd-spell-picker-head">
+        <div className="dnd-spell-picker-title-row">
+          <div>
+            <div className="dnd-spell-picker-title">Таинственный арканум</div>
+            <div className="dnd-spell-picker-sub">По одному заклинанию круга, 1/долгий отдых без ячейки</div>
+          </div>
+          <button type="button" className="dnd-spell-picker-close" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        {pickCircle != null && (
+          <div className="dnd-spell-picker-search">
+            <input
+              placeholder="Искать, если уже знаете название"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск заклинаний по названию"
+            />
+          </div>
+        )}
+      </div>
+      {pickCircle == null ? (
+        <div className="dnd-spell-picker-list">
+          {ARCANUM_UNLOCKS.map(({ circle, warlockLevel: need }) => {
+            const open = unlocked.includes(circle);
+            const cur = current(circle);
+            return (
+              <div key={circle} className="row sb-entry" style={{ justifyContent: "space-between" }}>
+                <span>
+                  {circle} круг · {cur ? cur.name : <span className="muted">—</span>}
+                </span>
+                {open ? (
+                  <button
+                    type="button"
+                    className="comp-mini"
+                    onClick={() => {
+                      setChosen(cur?.entryId ?? null);
+                      setQuery("");
+                      setPickCircle(circle);
+                    }}
+                  >
+                    {cur ? "Заменить" : "Выбрать"}
+                  </button>
+                ) : (
+                  <span className="muted">с {need} ур.</span>
+                )}
+              </div>
+            );
+          })}
+          {warlockClassId == null && (
+            <p className="muted">Класс без записи справочника — список колдуна не собрать.</p>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="dnd-spell-picker-list">
+            {failed && <p className="muted">Не удалось загрузить справочник заклинаний.</p>}
+            {!failed && all === null && <p className="muted">Загрузка…</p>}
+            {!failed && all !== null && shown.length === 0 && (
+              <p className="muted">В списке колдуна нет заклинаний этого круга.</p>
+            )}
+            {shown.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className={`dnd-spell-pick-row${chosen === e.id ? " is-picked" : ""}`}
+                aria-pressed={chosen === e.id}
+                onClick={() => setChosen((prev) => (prev === e.id ? null : e.id))}
+              >
+                <span
+                  className="dnd-pick-box"
+                  style={chosen === e.id ? { background: color, borderColor: color } : undefined}
+                  aria-hidden="true"
+                >
+                  {chosen === e.id && (
+                    <svg viewBox="0 0 18 18">
+                      <path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" strokeWidth="2.6" />
+                    </svg>
+                  )}
+                </span>
+                <span className="dnd-spell-pick-main">
+                  <span className="dnd-spell-pick-name">{e.name}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="dnd-spell-picker-foot">
+            <button type="button" className="comp-mini" onClick={() => setPickCircle(null)}>
+              Назад
+            </button>
+            <button
+              type="button"
+              className="primary"
+              style={{ background: color, borderColor: color }}
+              disabled={chosenEntry == null}
+              onClick={() => {
+                if (chosenEntry) {
+                  onPick(pickCircle - 1, chosenEntry);
+                  setPickCircle(null);
+                  setQuery("");
+                }
+              }}
+            >
+              Взять в арканум
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -6444,8 +6821,15 @@ function HpEditModal({
     // Урон по концентрирующемуся требует спасброска Телосложения, СЛ 10 или
     // половина урона — что больше. Лист считает СЛ, но не решает за игрока:
     // спасбросок чаще проходит, чем нет, и снимать концентрацию самому было
-    // бы враньём.
-    if (value.concentration) setConcentrationDc(Math.max(10, Math.floor(n / 2)));
+    // бы враньём. Исключение — Неустанный охотник следопыта (13 ур.): урон не
+    // прерывает концентрацию на Метке охотника, и СЛ тогда не показываем.
+    const relentlessHunter = [...value.classFeatures, ...value.speciesFeatures, ...value.feats, ...value.specialAbilities].some(
+      (f) => f.name === "Неустанный охотник"
+    );
+    const huntersMarkConc = /метка охотника/i.test(value.concentration ?? "");
+    if (value.concentration && !(relentlessHunter && huntersMarkConc)) {
+      setConcentrationDc(Math.max(10, Math.floor(n / 2)));
+    }
     setAmount("");
   }
   function applyHeal() {
@@ -7601,6 +7985,7 @@ function DndRestModal({
   pools,
   companionsAfterRest,
   shortGrants,
+  tireless,
   onQuickUpdate,
   onClose,
 }: {
@@ -7613,6 +7998,9 @@ function DndRestModal({
   /** Гранты короткого отдыха чужим пулам («Проблеск +1») — считает родитель
    *  из живых особенностей; модалка только применяет. */
   shortGrants?: { key: string; label: string; amount: number | "full" }[];
+  /** Неутомимый следопыта (10 ур.): короткий отдых снижает истощение на 1.
+   *  Считает родитель из живых особенностей; модалка только применяет. */
+  tireless?: boolean;
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
   onClose: () => void;
 }) {
@@ -7659,6 +8047,8 @@ function DndRestModal({
     .filter((g) => (value.resourceUsed[g.key] ?? 0) > 0)
     .map((g) => `${g.label} (${g.amount === "full" ? "полностью" : `+${g.amount}`})`);
   async function shortRest() {
+    // Неутомимый следопыта: каждый короткий отдых −1 истощение.
+    const tirelessDrain = tireless && value.exhaustion > 0 ? 1 : 0;
     const ok = await confirm({
       title: "Короткий отдых?",
       message: [
@@ -7666,6 +8056,7 @@ function DndRestModal({
           ? `Восстановятся ячейки договора магии и ресурсы: ${shortNames.join(", ")}.`
           : "Восстановятся ячейки договора магии. Ресурсов короткого отдыха у этого персонажа нет.",
         ...(grantLabels.length > 0 ? [`Частично восстановятся: ${grantLabels.join(", ")}.`] : []),
+        ...(tirelessDrain > 0 ? [`Истощение: ${value.exhaustion} → ${value.exhaustion - 1} (Неутомимый).`] : []),
         "Кости хитов тратятся вручную дорожкой в виталах: сколько потратили, столько и вылечили.",
       ].join("\n\n"),
       confirmLabel: "Отдохнуть",
@@ -7676,7 +8067,11 @@ function DndRestModal({
       const cur = used[g.key] ?? value.resourceUsed[g.key] ?? 0;
       used[g.key] = g.amount === "full" ? 0 : Math.max(0, cur - g.amount);
     }
-    onQuickUpdate({ pactSlotsUsed: 0, resourceUsed: used });
+    onQuickUpdate({
+      pactSlotsUsed: 0,
+      resourceUsed: used,
+      ...(tirelessDrain > 0 ? { exhaustion: Math.max(0, value.exhaustion - 1) } : {}),
+    });
     onClose();
   }
 
@@ -7724,6 +8119,9 @@ function DndRestModal({
         rationAt ? `
 
 Съеден рацион (−1).` : "",
+        swapNotes.length > 0 ? `
+
+Можно сменить: ${swapNotes.join("; ")}.` : "",
       ].join(""),
       confirmLabel: "Отдохнуть",
     });
@@ -7760,6 +8158,24 @@ function DndRestModal({
     onClose();
   }
 
+  // Напоминания о сменах на долгом отдыхе (тикет 08): книга разрешает
+  // сменить 1 освоенное оружие (Воин), оба оружейных приёма (Следопыт) и
+  // язык полиглота (Баннерет). Показываем только тем, кого касается; сами
+  // правки — руками.
+  const hasMasteredWeapons = value.masteredWeapons.length > 0;
+  const hasRangerMastery = value.classes.some((c) => nameMatches(c.className, "Следопыт"));
+  const hasBanneret = value.classes.some(
+    (c) => c.subclassName && nameMatches(c.subclassName, "Баннерет")
+  );
+  const swapNotes: string[] = [
+    // Следопыт меняет оба приёма целиком, а не 1 оружие, как Воин.
+    ...(hasRangerMastery
+      ? ["можно сменить оружейные приёмы (правка — в особенностях)"]
+      : hasMasteredWeapons
+        ? ["можно сменить 1 освоенное оружие (правка — в особенностях)"]
+        : []),
+    ...(hasBanneret ? ["можно сменить язык полиглота (владения)"] : []),
+  ];
   return (
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal">
@@ -7798,6 +8214,7 @@ function DndRestModal({
             {companionsAfterRest && " Временные тела исчезнут, защитник соберётся заново."}
             {(value.elixirs ?? []).length > 0 && " Эликсиры сгорят."}
             {neverNames.length > 0 && ` Не восстановится: ${neverNames.join(", ")}.`}
+            {swapNotes.length > 0 && ` Можно сменить: ${swapNotes.join("; ")}.`}
           </p>
           {rationTotal > 0 && (
             <label className="row" style={{ gap: 6, alignItems: "center" }}>
@@ -8142,6 +8559,30 @@ export function DndCharacterView({
   // пустотой: угол одинаково доступен, содержимое только владельцу.
   // Загрузка ленивая: угол-индикатор нужен только на первой карте.
   const [cardFlipped, setCardFlipped] = useState(false);
+  // Оракул класса: счётчик переворотов — по нему рубашка тянет новую цитату.
+  // Десктоп-панель («Карта» без переворота) счётчик не трогает: цитата там
+  // стоит, пока карту не перевернут на телефоне/мобильной вёрстке.
+  const [flipCount, setFlipCount] = useState(0);
+  const prevFlipped = useRef(cardFlipped);
+  useEffect(() => {
+    if (cardFlipped && !prevFlipped.current) setFlipCount((c) => c + 1);
+    prevFlipped.current = cardFlipped;
+  }, [cardFlipped]);
+  // Пул оракула — из записи класса с наибольшим уровнем (то же правило, что
+  // цвет карты выше). Пусто/нет записи — рубашка без листка.
+  const oracleQuotes = (() => {
+    let best: DndClassEntry | null = null;
+    for (const c of value.classes) {
+      if (!c.className?.trim()) continue;
+      if (!best || (c.level || 0) > (best.level || 0)) best = c;
+    }
+    if (!best) return [];
+    const raw = getEntry(best.classId)?.data.oracle_quotes;
+    return Array.isArray(raw) ? raw.filter((q): q is string => typeof q === "string") : [];
+  })();
+  // Визард левелапа с оборота карты (игрок своего, мастер любого): модалка
+  // живёт здесь же, применение — тем же мгновенным сохранением, что значения.
+  const [showLevelUp, setShowLevelUp] = useState(false);
   const [inbox, setInbox] = useState<CharacterInboxMessage[] | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
@@ -8372,6 +8813,21 @@ export function DndCharacterView({
   // «Карте»), но никогда разом: условия исключают друг друга. Одна функция,
   // чтобы две копии не разъехались.
   function renderCardBack() {
+    // Данные постера — снимком в момент нажатия (кнопки зовут колбэк).
+    function cardPosterData(): PosterData {
+      const classLine = value.classes.map((c) => `${c.className} ${c.level}`).join(" + ");
+      return {
+        name: value.characterName || "Без имени",
+        subtitle: [classLine, value.raceName].filter(Boolean).join(" · "),
+        hp: value.hitPointMax || "—",
+        ac: value.armorClass || "—",
+        pb: value.proficiencyBonus || "—",
+        extra: value.speed.trim() ? { label: "СКОР", value: value.speed.trim() } : undefined,
+        abilities: ABILITY_LABELS.map(({ key, label }) => ({ label, value: value.abilities[key] })),
+        portraitSrc: portraitUrl ?? null,
+        accent: cardColor,
+      };
+    }
     return (
       <DndCardBack
         characterName={value.characterName || "Без имени"}
@@ -8383,6 +8839,8 @@ export function DndCharacterView({
         notice={inboxNotice}
         busyId={inboxBusyId}
         savedIds={savedNoteIds}
+        oracleQuotes={oracleQuotes}
+        flipKey={flipCount}
         onRetry={refreshInbox}
         onRead={(id) => void handleInboxRead(id)}
         onSave={(id) => void handleInboxSave(id)}
@@ -8414,6 +8872,27 @@ export function DndCharacterView({
               refreshInbox();
             }}
             onRetry={refreshTransfers}
+          />
+        )}
+        {/* Левелап — всем, кто видит оборот (игрок своего, мастер любого):
+            применение идёт тем же мгновенным сохранением, что значения. */}
+        {onQuickUpdate && (
+          <div className="row">
+            <button type="button" className="comp-mini" onClick={() => setShowLevelUp(true)}>
+              Новый уровень
+            </button>
+          </div>
+        )}
+        {/* Постер — там же, где левелап: снимок персонажа для чата партии. */}
+        <PosterButtons
+          getData={cardPosterData}
+          fileBase={value.characterName.trim() || "personazh"}
+        />
+        {showLevelUp && (
+          <DndLevelUpWizard
+            value={value}
+            onApply={(p) => onQuickUpdate?.(p)}
+            onClose={() => setShowLevelUp(false)}
           />
         )}
       </DndCardBack>
@@ -8558,6 +9037,7 @@ export function DndCharacterView({
   // Здесь, а не рядом с местом использования: ниже по функции стоит ранний
   // возврат для compact-вида, и хук за ним вызывался бы не в каждом рендере.
   const [spellListOpen, setSpellListOpen] = useState(false);
+  const [arcanumOpen, setArcanumOpen] = useState(false);
   // Справочники грузятся только когда панель открыта — см. флаг в useDndOrigin.
   // Справочники нужны обеим панелям правки: происхождению — иерархия классов,
   // виды и предыстории, свойствам — типы урона и состояния. Грузим, когда
@@ -8699,6 +9179,27 @@ export function DndCharacterView({
   const shownSlotLevels = autoSlots
     ? Math.max(highestCircle(computedSlots.slots), value.spellSlotLevels)
     : value.spellSlotLevels;
+  // Таинственный арканум (тикет 03 warlock): уровень КОЛДУНА (не суммарный),
+  // пики — строки с меткой arcanum в кругах 6–9. Пипсы кругов с арканумом
+  // выводятся из самих пиков (1 заклинание = 1 использование) поверх обычных
+  // — тратятся и сбрасываются на долгом отдыхе общим механизмом.
+  const warlockLevel = Math.max(
+    0,
+    ...value.classes.filter((c) => nameMatches(c.className, "Колдун")).map((c) => c.level)
+  );
+  const arcanumCount = arcanumCountByCircle(value.spellsByLevel);
+  const magicPips = shownSlotPips.map((p, i) => (i >= 5 ? p + arcanumCount[i] : p));
+  const arcanumTop = arcanumTopCircle(value.spellsByLevel);
+  const magicLevels = Math.max(shownSlotLevels, arcanumTop);
+  // Подпись «Арканум» — только кругам, где ВСЕ строки арканумные: у
+  // мультикласса в 6–9 могут лежать и настоящие ячейки с обычными
+  // заклинаниями, и путать их с арканумом нельзя.
+  const arcanumTitles: Record<number, string> = {};
+  for (let i = 5; i < 9; i += 1) {
+    const rows = value.spellsByLevel[i];
+    if (rows.length > 0 && rows.every((s) => s.arcanum)) arcanumTitles[i + 1] = `Арканум (${i + 1} круг)`;
+  }
+  const arcanumLocked = new Set(Object.keys(arcanumTitles).map(Number));
   const liveFeatureGroups = [
     value.classFeatures,
     value.speciesFeatures,
@@ -8727,6 +9228,9 @@ export function DndCharacterView({
   // Именами не ищем никого — чертёж привязан к записи фичи, лимит — к нему же.
   const entryParentId = (id: number | null | undefined) => getEntry(id)?.parent_id ?? null;
   const ownedFeatureNames = liveFeatureGroups.flat().map((f) => f.name);
+  // Неутомимый следопыта (10 ур.) — модалке отдыха: короткий отдых снижает
+  // истощение на 1. Именем, как и остальные именные проверки в этом файле.
+  const tireless = liveFeatureGroups.flat().some((f) => f.name === "Неутомимость");
   const summonOptions = liveFeatureGroups
     .flat()
     .filter((f): f is DndFeature & { entryId: number } => typeof f.entryId === "number")
@@ -9005,8 +9509,9 @@ export function DndCharacterView({
                   <SpendAction
                     row={openAction}
                     value={value}
-                    slots={shownSlotPips}
+                    slots={magicPips}
                     resources={allPools}
+                    characterId={ownerCharacterId}
                     onQuickUpdate={onQuickUpdate}
                     onDone={() => setOpenAction(null)}
                   />
@@ -9076,6 +9581,31 @@ export function DndCharacterView({
               setSpellListOpen(false);
             }}
             onClose={() => setSpellListOpen(false)}
+          />
+        )}
+        {arcanumOpen && onQuickUpdate && (
+          <DndArcanumPicker
+            systemId={value.systemId}
+            warlockClassId={value.classes.find((c) => nameMatches(c.className, "Колдун"))?.classId ?? null}
+            warlockLevel={warlockLevel}
+            spellsByLevel={value.spellsByLevel}
+            color={cardColor}
+            onPick={(idx, entry) => {
+              // Замена арканума круга целиком: свои строки уходят, чужие
+              // (настоящие ячейки мультикласса) остаются. Арканум всегда
+              // подготовлен и вне лимита — иначе съест бюджет подготовки.
+              // Модалка не закрывается: на 17 уровне брать четыре штуки.
+              const next = value.spellsByLevel.map((lvl, i) =>
+                i === idx
+                  ? [
+                      ...lvl.filter((s) => !s.arcanum),
+                      { entryId: entry.id, name: entry.name, prepared: 2, outsideLimit: true, arcanum: true } as DndSpellEntry,
+                    ]
+                  : lvl
+              );
+              onQuickUpdate({ spellsByLevel: next });
+            }}
+            onClose={() => setArcanumOpen(false)}
           />
         )}
         {originEditing && onQuickUpdate && (
@@ -9186,6 +9716,7 @@ export function DndCharacterView({
             pools={pools}
             companionsAfterRest={companionsRest}
             shortGrants={shortRestGrants}
+            tireless={tireless}
             onQuickUpdate={onQuickUpdate!}
             onClose={() => setRestOpen(false)}
           />
@@ -9561,9 +10092,10 @@ export function DndCharacterView({
                   // жетон, а не в пустоту: имя и так сохранено рядом с id.
                   const bodyBlueprint =
                     c.featureEntryId != null || c.spellEntryId != null ? blueprintOfInstance(c) : null;
+                  const bodyView = resolveBlueprintVariant(bodyBlueprint, c.variant);
                   const bodyStats =
-                    bodyBlueprint != null
-                      ? companionStats(bodyBlueprint, value.classes, c.classId, value.abilities, c.spellLevel ?? 0)
+                    bodyBlueprint != null && bodyView?.hp != null
+                      ? companionStats(bodyBlueprint, value.classes, c.classId, value.abilities, c.spellLevel ?? 0, c.variant)
                       : null;
                   if (bodyBlueprint != null && bodyStats != null && onQuickUpdate) {
                     const ownerName =
@@ -9576,10 +10108,21 @@ export function DndCharacterView({
                       <CompanionBody
                         key={`body-${c.featureEntryId ?? c.spellEntryId}-${i}`}
                         companion={c}
-                        blueprint={bodyBlueprint}
+                        blueprint={{ ...bodyBlueprint, actions: bodyView?.actions ?? bodyBlueprint.actions }}
                         maxHp={bodyStats.maxHp}
                         ac={bodyStats.ac}
                         ownerFeatureName={ownerName}
+                        variants={(bodyBlueprint.variants ?? []).map((v) => v.name ?? "").filter(Boolean)}
+                        activeVariant={bodyView?.name ?? ""}
+                        onVariant={(name) =>
+                          onQuickUpdate({
+                            companions: (value.companions ?? []).map((x, j) =>
+                              j === i
+                                ? { ...x, variant: name, name, hpUsed: 0, dead: false, dismissed: false }
+                                : x
+                            ),
+                          })
+                        }
                         previewEntryId={c.featureEntryId ?? c.spellEntryId ?? c.entryId}
                         ownsDetonate={
                           !!bodyBlueprint.detonateFeature &&
@@ -9839,7 +10382,7 @@ export function DndCharacterView({
                 abilities={value.abilities}
                 resourceUsed={value.resourceUsed}
                 resourceBonus={value.resourceBonus}
-                shownSlotPips={shownSlotPips}
+                shownSlotPips={magicPips}
                 spellSlotsUsed={value.spellSlotsUsed}
                 pact={computedSlots.pact}
                 pactUsed={value.pactSlotsUsed ?? 0}
@@ -9952,6 +10495,11 @@ export function DndCharacterView({
                     Добавить
                   </button>
                 )}
+                {onQuickUpdate && warlockLevel >= 11 && (
+                  <button type="button" className="dnd-chip" onClick={() => setArcanumOpen(true)}>
+                    Арканум
+                  </button>
+                )}
                 {prefs.spellsPreparedOnly && editingSpells && (
                   <span className="muted">в правке показаны все — подготовить можно только видимое</span>
                 )}
@@ -10025,12 +10573,14 @@ export function DndCharacterView({
               <DndSpellsView
                 preparedOnly={prefs.spellsPreparedOnly}
                 cantrips={liveCantrips}
-                spellSlotLevels={shownSlotLevels}
-                spellSlotPips={shownSlotPips}
+                spellSlotLevels={magicLevels}
+                spellSlotPips={magicPips}
                 spellSlotsUsed={value.spellSlotsUsed}
                 spellsByLevel={liveSpellsByLevel}
                 edit={editingSpells}
                 systemId={value.systemId}
+                levelTitles={arcanumTitles}
+                slotsLockedCircles={arcanumLocked}
                 onUsedChange={
                   onQuickUpdate
                     ? (i, v) => {
@@ -10444,6 +10994,7 @@ export function DndCharacterView({
                   <EntryChoiceCounter
                     classes={value.classes}
                     abilities={draftFeatures.specialAbilities}
+                    feats={draftFeatures.feats}
                     systemId={value.systemId}
                   />
                   <WeaponMasteryEdit

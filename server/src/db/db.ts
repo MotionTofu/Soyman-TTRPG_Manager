@@ -20,6 +20,7 @@ import {
   migrateDndArtificerTouchups,
 } from "./dndArtificerCompanions";
 import { migrateDndArtificerReanimator } from "./dndArtificerReanimator";
+import { migrateDndArtificerOracle } from "./dndArtificerOracle";
 import {
   ensureNamedReplicaSchemes,
   migrateDndReplicaGenerics,
@@ -2540,6 +2541,7 @@ export function openDatabase(dbDir: string): Database.Database {
         if (findChild(shotGroup, "mechanic_item", name) != null) continue;
         insertEntry(mechSection, shotGroup, "mechanic_item", name, "", null, featData({ cost: shotPool }), descr);
       }
+    }
     setAppSettingFlag(database, "fighter_new_subclasses_v1");
   }
 
@@ -2612,6 +2614,33 @@ export function openDatabase(dbDir: string): Database.Database {
     setAppSettingFlag(database, "fighter_spell_choice_v1");
   }
 
+  // Исправление тикета 04 (аудит 09): заговор стрелка был посеян на
+  // Пси-воина (12959) вместо Чародейного стрелка (15874) — id перепутан.
+  // Переносим только точное наше значение; ручные правки не трогаем.
+  if (!appSettingFlag(database, "fighter_spell_choice_v2")) {    const want = [{ count: 1, level: 0, classIds: [], names: ["Искусство друидов", "Фокусы"], outsideLimit: false }];
+    for (const [id, op] of [[12959, "clear"], [15874, "set"]] as const) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (op === "clear") {
+          if (JSON.stringify(data.spell_choices) === JSON.stringify(want)) {
+            delete data.spell_choices;
+            database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+          }
+        } else if (data.spell_choices == null) {
+          data.spell_choices = want;
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_spell_choice_v2");
+  }
+
   // Выборы приёмов/выстрелов (тикет 05): лесенки дефов с minLevel на одном
   // умении, общий key копит пики. БМ «Боевое превосходство» (12059):
   // 3 +2@7 +2@10 +2@15; стрелок «Чародейный выстрел» (15876):
@@ -2654,6 +2683,31 @@ export function openDatabase(dbDir: string): Database.Database {
       }
     }
     setAppSettingFlag(database, "fighter_maneuver_choice_v1");
+  }
+
+  // Аудит 09, A5: имя умения стрелка — как в эталоне («Знания чародейных
+  // стрелков»). Только при точном совпадении.
+  if (!appSettingFlag(database, "fighter_archer_lore_rename_v1")) {
+    const row = database.prepare("SELECT name FROM compendium_entries WHERE id = 15875").get() as
+      | { name: string }
+      | undefined;
+    if (row && row.name === "Знания чародейного стрелка") {
+      database.prepare("UPDATE compendium_entries SET name = ? WHERE id = 15875").run("Знания чародейных стрелков");
+    }
+    setAppSettingFlag(database, "fighter_archer_lore_rename_v1");
+  }
+
+  // Аудит 09, A1: приём «Засада» (15889) дублирует имя действия «Засада»
+  // (12491) — поиск и mention-ссылки показывают две записи. Переименовываем
+  // приём в «Засада (приём)», только при точном совпадении.
+  if (!appSettingFlag(database, "fighter_maneuver_rename_v1")) {
+    const row = database.prepare("SELECT name FROM compendium_entries WHERE id = 15889").get() as
+      | { name: string }
+      | undefined;
+    if (row && row.name === "Засада") {
+      database.prepare("UPDATE compendium_entries SET name = ? WHERE id = 15889").run("Засада (приём)");
+    }
+    setAppSettingFlag(database, "fighter_maneuver_rename_v1");
   }
 
   // Выбор освоенного оружия (тикет 06): лесенка дефов на умении
@@ -2743,6 +2797,530 @@ export function openDatabase(dbDir: string): Database.Database {
     }
     setAppSettingFlag(database, "fighter_skill_choice_v1");
   }
+
+  // Колдун, ячейки договора (.scratch/warlock/issues/01): колонки «Кол-во
+  // ячеек»/«Уровень ячеек» жили ролями resource/stat — код договора
+  // (pactSlotsAtLevel, computeSpellSlots) их не видел, блок «Договор магии»
+  // не рисовался, а короткий отдых сбрасывал пустой pactSlotsUsed вместо
+  // ячеек. Чинится данными: роли pact_slots/pact_level; строки не трогаем,
+  // чужое (уже pact_*) не трогаем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "warlock_pact_slots_v1")) {
+    const rows = database
+      .prepare(
+        `SELECT id, data FROM compendium_entries
+          WHERE kind = 'class' AND parent_id IS NULL AND name_original = 'Warlock'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      const progression = (data.progression ?? null) as {
+        columns?: { key: string; label: string; role: string }[];
+      } | null;
+      if (!progression || !Array.isArray(progression.columns)) continue;
+      let touched = false;
+      for (const col of progression.columns) {
+        if (col == null || typeof col !== "object") continue;
+        const label = (col.label ?? "").trim();
+        if (col.role === "resource" && /^(кол-?во|количество)\s+ячеек/i.test(label)) {
+          col.role = "pact_slots";
+          touched = true;
+        } else if (col.role === "stat" && /^уровень\s+ячеек/i.test(label)) {
+          col.role = "pact_level";
+          touched = true;
+        }
+      }
+      if (!touched) continue;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Ячейки договора колдуна → pact-роли: записей: ${fixed}`);
+    setAppSettingFlag(database, "warlock_pact_slots_v1");
+  }
+
+  // Колдун, тикет 05 (.scratch/warlock/issues/05): «Магическая хитрость»
+  // (12212) и «Связь с покровителем» (12525) жили чистым текстом — в «Бой»
+  // не попадали, трека 1/долгий отдых не было. Чинится данными: обоим —
+  // свой пул uses/1/long_rest (лист читает cost живьём по entryId, замены
+  // ячеек правилом остаются текстом — восстанавливает игрок, как лечение
+  // Второго дыхания у Воина); Связи — тайминг «Иное/1 минута» (как у
+  // заклинания) и грант самого заклинания на запись класса с grantLevel 9
+  // (выдача класса читается recomputeGrantedSpells, вне лимита по
+  // умолчанию). Только недостающее, правки Мастера не перебиваем.
+  // Одноразовая (флаг).
+  if (!appSettingFlag(database, "warlock_cunning_contact_v1")) {
+    const getData = (id: number): Record<string, unknown> | null => {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(id) as
+        | { data: string }
+        | undefined;
+      if (!row) return null;
+      try {
+        return JSON.parse(row.data || "{}") as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    };
+    const saveData = (id: number, data: Record<string, unknown>): void => {
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+    };
+    const ownPool = { kind: "uses", amount: 1, per: "long_rest", ownResource: true };
+    let fixed = 0;
+    for (const id of [12212, 12525]) {
+      const data = getData(id);
+      if (!data) continue;
+      let touched = false;
+      if (data.cost == null) {
+        data.cost = { ...ownPool };
+        touched = true;
+      }
+      // У Хитрости (12212) тайминг уже стоит; Связи (12525) без времени
+      // накладывания в «Действия» не попасть.
+      if (data.casting_timing == null) {
+        data.casting_timing = "Иное";
+        data.casting_timing_other = "1 минута";
+        touched = true;
+      }
+      if (!touched) continue;
+      saveData(id, data);
+      fixed++;
+    }
+    // Заклинание для гранта — поиском по оригиналу (имена стабильнее id),
+    // запасной — известный id.
+    const contact = database
+      .prepare(
+        `SELECT id FROM compendium_entries
+          WHERE kind = 'spell' AND name_original = 'Contact Other Plane' LIMIT 1`
+      )
+      .get() as { id: number } | undefined;
+    const contactId = contact?.id ?? 14428;
+    const warlocks = database
+      .prepare(
+        `SELECT id, data FROM compendium_entries
+          WHERE kind = 'class' AND parent_id IS NULL AND name_original = 'Warlock'`
+      )
+      .all() as { id: number; data: string }[];
+    for (const row of warlocks) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (data.granted_spells != null) continue;
+      data.granted_spells = [
+        {
+          id: contactId,
+          name: "Связь с иным планом",
+          grantLevel: 9,
+          original: "Contact Other Plane",
+          // Явно: оба читателя (лист и визард) по-разному умолчают
+          // outsideLimit, а заклинание патрона/класса всегда вне лимита.
+          outsideLimit: true,
+        },
+      ];
+      saveData(row.id, data);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Хитрость и Связь колдуна (пулы+грант): записей: ${fixed}`);
+    setAppSettingFlag(database, "warlock_cunning_contact_v1");
+  }
+
+  // Колдун, тикет 04 (.scratch/warlock/issues/04): списки патронов жили
+  // одной строкой текста в описании («Заклинания архифеи» 11942 и др.) —
+  // не добавлялись сами и вбитые руками считались в лимит подготовленных.
+  // Чинится данными: всем четырём подклассам — granted_spells с grantLevel
+  // 3/5/7/9 (круги 1-2/3/4/5 — вровень с кругом договора, сверено) и явным
+  // outsideLimit (оба читателя умолчают по-разному). Id резолвятся по
+  // русскому имени на момент посева (все 43 сошлись 1:1, круги проверены),
+  // оригинал — из записи для запасного сведения по имени; ненайденное
+  // заклинание пропускаем, а не сеем мёртвый id. Только при отсутствии
+  // (правка Мастера главнее). Одноразовая (флаг).
+  if (!appSettingFlag(database, "warlock_patron_spells_v1")) {
+    // [id подкласса, id записи-списка]: список нужен только человеку —
+    // грант вешаем на подкласс (recomputeGrantedSpells читает классы,
+    // подклассы и виды, но не умения).
+    const patrons: { subclassId: number; spells: { name: string; grantLevel: number }[] }[] = [
+      {
+        subclassId: 12699,
+        spells: [
+          { name: "Умиротворение", grantLevel: 3 },
+          { name: "Огонь фей", grantLevel: 3 },
+          { name: "Туманный шаг", grantLevel: 3 },
+          { name: "Воображаемая сила", grantLevel: 3 },
+          { name: "Усыпление", grantLevel: 3 },
+          { name: "Мерцание", grantLevel: 5 },
+          { name: "Рост растений", grantLevel: 5 },
+          { name: "Подчинение зверя", grantLevel: 7 },
+          { name: "Высшая невидимость", grantLevel: 7 },
+          { name: "Подчинение личности", grantLevel: 9 },
+          { name: "Притворство", grantLevel: 9 },
+        ],
+      },
+      {
+        subclassId: 12736,
+        spells: [
+          { name: "Подмога", grantLevel: 3 },
+          { name: "Лечение ран", grantLevel: 3 },
+          { name: "Направляющий снаряд", grantLevel: 3 },
+          { name: "Малое восстановление", grantLevel: 3 },
+          { name: "Свет", grantLevel: 3 },
+          { name: "Священное пламя", grantLevel: 3 },
+          { name: "Дневной свет", grantLevel: 5 },
+          { name: "Низшее воскрешение", grantLevel: 5 },
+          { name: "Страж веры", grantLevel: 7 },
+          { name: "Стена огня", grantLevel: 7 },
+          { name: "Высшее восстановление", grantLevel: 9 },
+          { name: "Призыв духа небожителя", grantLevel: 9 },
+        ],
+      },
+      {
+        subclassId: 12772,
+        spells: [
+          { name: "Огненные ладони", grantLevel: 3 },
+          { name: "Приказ", grantLevel: 3 },
+          { name: "Палящий луч", grantLevel: 3 },
+          { name: "Внушение", grantLevel: 3 },
+          { name: "Огненный шар", grantLevel: 5 },
+          { name: "Зловонное облако", grantLevel: 5 },
+          { name: "Огненный щит", grantLevel: 7 },
+          { name: "Стена огня", grantLevel: 7 },
+          { name: "Обет", grantLevel: 9 },
+          { name: "Нашествие насекомых", grantLevel: 9 },
+        ],
+      },
+      {
+        subclassId: 12806,
+        spells: [
+          { name: "Обнаружение мыслей", grantLevel: 3 },
+          { name: "Диссонирующий шёпот", grantLevel: 3 },
+          { name: "Воображаемая сила", grantLevel: 3 },
+          { name: "Жуткий смех Таши", grantLevel: 3 },
+          { name: "Подсматривание", grantLevel: 5 },
+          { name: "Голод Хадара", grantLevel: 5 },
+          { name: "Смятение", grantLevel: 7 },
+          { name: "Призыв духа аберрации", grantLevel: 7 },
+          { name: "Изменение памяти", grantLevel: 9 },
+          { name: "Телекинез", grantLevel: 9 },
+        ],
+      },
+    ];
+    const findSpell = database.prepare(
+      `SELECT id, name_original FROM compendium_entries WHERE kind = 'spell' AND name = ? LIMIT 1`
+    );
+    let fixed = 0;
+    for (const patron of patrons) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(patron.subclassId) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (data.granted_spells != null) continue;
+      const grants: Record<string, unknown>[] = [];
+      for (const s of patron.spells) {
+        const hit = findSpell.get(s.name) as { id: number; name_original: string } | undefined;
+        if (!hit) {
+          console.log(`[db] Заклинания патрона: не найдено «${s.name}» (подкласс ${patron.subclassId})`);
+          continue;
+        }
+        grants.push({
+          id: hit.id,
+          name: s.name,
+          grantLevel: s.grantLevel,
+          original: (hit.name_original ?? "").trim(),
+          outsideLimit: true,
+        });
+      }
+      if (grants.length === 0) continue;
+      data.granted_spells = grants;
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), patron.subclassId);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Заклинания патронов колдуна: подклассов: ${fixed}`);
+    setAppSettingFlag(database, "warlock_patron_spells_v1");
+  }
+
+  // Колдун, тикет 04, догонка: гранты патронов в живой базе появились раньше
+  // миграции (заведены руками — ключей outsideLimit в них нет). Лист и так
+  // считает их вне лимита (умолчание parseGrantedSpellDefs), а визард —
+  // нет (dndGrants умолчает в false). Дописываем недостающий ключ явно,
+  // остальное не трогаем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "warlock_patron_outside_limit_v1")) {
+    let fixed = 0;
+    for (const subclassId of [12699, 12736, 12772, 12806]) {
+      const row = database.prepare("SELECT data FROM compendium_entries WHERE id = ?").get(subclassId) as
+        | { data: string }
+        | undefined;
+      if (!row) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      const grants = (data.granted_spells ?? null) as Record<string, unknown>[] | null;
+      if (!Array.isArray(grants)) continue;
+      let touched = false;
+      for (const g of grants) {
+        if (g != null && typeof g === "object" && !("outsideLimit" in g)) {
+          g.outsideLimit = true;
+          touched = true;
+        }
+      }
+      if (!touched) continue;
+      database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), subclassId);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Заклинания патронов колдуна (outsideLimit): записей: ${fixed}`);
+    setAppSettingFlag(database, "warlock_patron_outside_limit_v1");
+  }
+
+  // Колдун, тикет 02 (.scratch/warlock/issues/02): каталог Таинственных
+  // воззваний — 28 шт. по PHB 2024, имена/требования/тексты с dnd.su
+  // (https://next.dnd.su/class/warlock/invocations). Группа механик +
+  // записи mechanic_item: level = требуемый уровень колдуна (null — без
+  // требования), timing — у сотворяемого без ячейки (попадает в Действия),
+  // пул 1/долгий отдых — у Дара глубин и Дара защитников; урон, пассивки
+  // и траты ячеек (кара) — текстом, игрок применяет вручную. На умение
+  // «Таинственные воззвания» — лесенка choices по колонке c4
+  // (1@1, +2@2, +2@5, +1@7, +1@9, +1@12, +1@15, +1@18 = 10).
+  // Только недостающее (правка Мастера главнее). Одноразовая (флаг).
+  if (!appSettingFlag(database, "warlock_invocations_v1")) {
+    const warlock = database
+      .prepare(
+        `SELECT id, system_id AS sysId FROM compendium_entries
+          WHERE kind = 'class' AND parent_id IS NULL AND name_original = 'Warlock' LIMIT 1`
+      )
+      .get() as { id: number; sysId: number } | undefined;
+    const mechSection =
+      ((
+        database
+          .prepare(`SELECT id FROM system_sections WHERE system_id = ? AND kind = 'mechanics' LIMIT 1`)
+          .get(warlock?.sysId ?? -1) as { id: number } | undefined
+      )?.id ?? null) as number | null;
+    if (warlock && mechSection != null) {
+      const findEntry = (parentId: number | null, kind: string, name: string): number | null => {
+        const row = (
+          parentId == null
+            ? database
+                .prepare(
+                  "SELECT id FROM compendium_entries WHERE parent_id IS NULL AND section_id = ? AND kind = ? AND name = ?"
+                )
+                .get(mechSection, kind, name)
+            : database
+                .prepare("SELECT id FROM compendium_entries WHERE parent_id = ? AND kind = ? AND name = ?")
+                .get(parentId, kind, name)
+        ) as { id: number } | undefined;
+        return row ? row.id : null;
+      };
+      const nextPos = (parentId: number | null): number =>
+        (
+          (parentId == null
+            ? database
+                .prepare(
+                  "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE parent_id IS NULL AND section_id = ?"
+                )
+                .get(mechSection)
+            : database
+                .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS p FROM compendium_entries WHERE parent_id = ?")
+                .get(parentId)) as { p: number }
+        ).p;
+      let invGroup = findEntry(null, "mechanic_group", "Таинственные воззвания");
+      if (invGroup == null) {
+        invGroup = Number(
+          database
+            .prepare(
+              "INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, name_original, level, data, description, position) VALUES (?, ?, NULL, 'mechanic_group', 'Таинственные воззвания', 'Eldritch Invocations', NULL, '{}', ?, ?)"
+            )
+            .run(
+              warlock.sysId,
+              mechSection,
+              "Частицы запретных знаний колдуна: берутся выбором (см. умение «Таинственные воззвания»). Требования — в описании каждого.",
+              nextPos(null)
+            ).lastInsertRowid
+        );
+      }
+      const invocations: {
+        name: string;
+        original: string;
+        level: number | null;
+        timing: string | null;
+        cost: string | null;
+        type: string;
+        desc: string;
+      }[] = [
+        { name: "Мистическое копьё", original: "Eldritch Spear", level: 2, timing: null, cost: null, type: "Заговор", desc: "Требования: уровень Колдуна 2 или выше, заговор Колдуна, наносящий урон\n\nВыберите один известный вам наносящий урон заговор Колдуна; дистанция этого заговора должна быть не менее 10 футов. Когда вы сотворяете этот заговор, его дистанция увеличивается на число, равное вашему уровню Колдуна, умноженному на 30.\n\nПовторяемость. Вы можете выбирать это воззвание более одного раза. Каждый раз вы должны выбирать новый заговор, удовлетворяющий требованиям." },
+        { name: "Мучительный взрыв", original: "Agonizing Blast", level: 2, timing: null, cost: null, type: "Заговор", desc: "Требования: уровень Колдуна 2 или выше, заговор Колдуна, наносящий урон\n\nВыберите один известный вам наносящий урон заговор Колдуна. Вы можете добавлять ваш модификатор Харизмы к броскам урона этого заговора.\n\nПовторяемость. Вы можете выбирать это воззвание более одного раза. Каждый раз вы должны выбирать новый заговор, удовлетворяющий требованиям." },
+        { name: "Отталкивающий заряд", original: "Repelling Blast", level: 2, timing: null, cost: null, type: "Заговор", desc: "Требования: уровень Колдуна 2 или выше, заговор Колдуна, наносящий урон броском атаки\n\nВыберите один известный вам наносящий урон заговор Колдуна; этот заговор должен наносить урон броском атаки. Когда вы попадаете этим заговором по существу Большого размера или меньше, вы можете оттолкнуть это существо на расстояние вплоть до 10 футов прямо от вас.\n\nПовторяемость. Вы можете выбирать это воззвание более одного раза. Каждый раз вы должны выбирать новый заговор, удовлетворяющий требованиям." },
+        { name: "Доспех теней", original: "Armor of Shadows", level: null, timing: "Действие", cost: null, type: "Заклинание", desc: "Вы можете сотворять заклинание Доспех мага на себя без траты ячеек заклинаний." },
+        { name: "Потусторонний прыжок", original: "Otherworldly Leap", level: 2, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 2 или выше\n\nВы можете сотворять заклинание Прыжок на себя без траты ячеек заклинаний." },
+        { name: "Мощь Исчадия", original: "Fiendish Vigor", level: 2, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 2 или выше\n\nВы можете сотворять заклинание Псевдожизнь на себя без траты ячеек заклинаний. Когда вы сотворяете это заклинание таким образом, вы не бросаете кости для определения Временных хитов, а автоматически получаете максимальные значения костей." },
+        { name: "Восходящий шаг", original: "Ascendant Step", level: 5, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 5 или выше\n\nВы можете сотворять заклинание Левитация на себя без траты ячеек заклинаний." },
+        { name: "Маска многих лиц", original: "Mask of Many Faces", level: 2, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 2 или выше\n\nВы можете сотворять заклинание Маскировка без траты ячеек заклинаний." },
+        { name: "Мастер бесчисленных обликов", original: "Master of Myriad Forms", level: 5, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 5 или выше\n\nВы можете сотворять заклинание Смена обличия без траты ячеек заклинаний." },
+        { name: "Туманные видения", original: "Misty Visions", level: 2, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 2 или выше\n\nВы можете сотворять заклинание Безмолвный образ без траты ячеек заклинаний." },
+        { name: "Один среди теней", original: "One with Shadows", level: 5, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 5 или выше\n\nПока вы находитесь в области Тусклого света или Темноты, вы можете сотворять заклинание Невидимость на себя без траты ячеек заклинаний." },
+        { name: "Видения дальних земель", original: "Visions of Distant Realms", level: 9, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 9 или выше\n\nВы можете сотворять заклинание Магический глаз без траты ячеек заклинаний." },
+        { name: "Могильный шёпот", original: "Whispers of the Grave", level: 7, timing: "Действие", cost: null, type: "Заклинание", desc: "Требования: уровень Колдуна 7 или выше\n\nВы можете сотворять заклинание Разговор с мёртвыми без траты ячеек заклинаний." },
+        { name: "Договор клинка", original: "Pact of the Blade", level: null, timing: "Бонусное действие", cost: null, type: "Договор клинка", desc: "Бонусным действием вы можете призвать в вашу руку оружие договора – Простое или Воинское Рукопашное оружие на ваш выбор, с которым вы создаёте связь — или создать связь с магическим оружием, которого вы касаетесь; вы не можете создать связь с магическим оружием, если на него настроено другое существо или если другой Колдун создал с ним такую связь. Пока связь не прервётся, вы обладаете владением этим оружием и можете использовать его как Заклинательную фокусировку.Когда вы атакуете оружием, с которым создали такую связь, вы можете использовать для бросков атаки и урона ваш модификатор Харизмы вместо Силы или Ловкости; кроме того, наносимый вами этим оружием урон может быть не обычным типом урона оружия, а Некротическим, Психическим или уроном Излучением. Ваша связь с оружием заканчивается, если вы используете вышеописанное Бонусное действие снова, если оружие находится по меньшей мере 1 минуту дальше, чем в 5 футах от вас, или если вы умираете. Призванное оружие исчезает, когда ваша связь заканчивается." },
+        { name: "Жаждущий клинок", original: "Thirsting Blade", level: 5, timing: null, cost: null, type: "Договор клинка", desc: "Требования: уровень Колдуна 5 или выше, воззвание «Договор клинка»\n\nВы получаете умение Дополнительная атака, но только для вашего оружия договора. Когда в ваш ход вы используете действие Атака с оружием договора, вы можете совершить не одну, а две атаки." },
+        { name: "Мистическая кара", original: "Eldritch Smite", level: 5, timing: null, cost: null, type: "Договор клинка", desc: "Требования: уровень Колдуна 5 или выше, воззвание «Договор клинка»\n\nОдин раз в ход, когда вы попадаете по существу вашим оружием договора, вы можете потратить одну ячейку Магии договора, чтобы нанести 1к8 дополнительного Силового урона + ещё 1к8 дополнительного Силового урона за каждый уровень ячейки, и вы можете причинить цели состояние Опрокинутый, если она Огромного размера или меньше." },
+        { name: "Пожирающий клинок", original: "Devouring Blade", level: 12, timing: null, cost: null, type: "Договор клинка", desc: "Требования: уровень Колдуна 12 или выше, воззвание «Жаждущий клинок»\n\nВаше воззвание «Жаждущий клинок» дарует вам две дополнительные атаки, а не одну." },
+        { name: "Пьющий жизни", original: "Lifedrinker", level: 9, timing: null, cost: null, type: "Договор клинка", desc: "Требования: уровень Колдуна 9 или выше, воззвание «Договор клинка»\n\nОдин раз в ход, когда вы попадаете по существу вашим оружием договора, вы можете нанести этому существу 1к6 дополнительного урона Излучением или Некротического или Психического урона (на ваш выбор), и вы можете потратить одну вашу Кость хитов, бросить её и восстановить количество Хитов, равное результату броска + ваш модификатор Телосложения (минимум 1 Хит)." },
+        { name: "Договор гримуара", original: "Pact of the Tome", level: null, timing: null, cost: null, type: "Договор гримуара", desc: "Сплетая вместе нити теней, вы призываете в вашу руку книгу, появляющуюся в конце Короткого или Долгого отдыха. Эта Книга теней (вы определяете её внешний вид) содержит таинственную магию, доступную только вам и дарующую вам описанные ниже преимущества. Книга исчезает, если вы умираете или призываете с помощью этого воззвания другую книгу.Заговоры и Ритуалы. Когда книга появляется, выберите три заговора, и выберите два заклинания 1-го уровня, у которых есть метка Ритуал. Эти заклинания могут быть из списка заклинаний любого класса, но вы не можете выбирать уже подготовленные вами заклинания. Пока книга находится у вас, у вас подготовлены эти выбранные заклинания, и они считаются для вас заклинаниями Колдуна.Заклинательная фокусировка. Вы можете использовать эту книгу как Заклинательную фокусировку." },
+        { name: "Дар защитников", original: "Gift of the Protectors", level: 9, timing: null, cost: "pool", type: "Договор гримуара", desc: "Требования: уровень Колдуна 9 или выше, воззвание «Договор гримуара»\n\nКогда вы призываете вашу Книгу теней, теперь в ней появляется новая страница. С вашего разрешения существо может действием написать своё имя на этой странице; страница может вместить имена в количестве, равном вашему модификатору Харизмы (минимум 1 имя).Когда Хиты существа, чьё имя записано на этой странице, опускаются до 0, но оно не убито мгновенно, магическим образом Хиты существа опускаются не до 0, а только до 1. Как только эта магия сработает, ни одно существо не сможет получить её преимущество, пока вы не завершите Долгий отдых.Действием Магия вы можете коснуться страницы и стереть с неё любое из написанных имён." },
+        { name: "Договор цепи", original: "Pact of the Chain", level: null, timing: "Действие", cost: null, type: "Договор цепи", desc: "Вы выучиваете заклинание Обретение фамильяра, и вы можете сотворять его действием Магия без траты ячейки заклинаний.Когда вы сотворяете это заклинание, вы можете выбрать как одну из обычных форм фамильяров, так и одну из следующих: Бес, Квазит, Псевдодракон, Скелет, Слаад головастик, Спрайт, Сфинкс любознательности или Ядовитая змея.Кроме того, когда вы совершаете действие Атака, вы можете пожертвовать одной из ваших атак, чтобы позволить вашему фамильяру Реакцией совершить одну из его атак." },
+        { name: "Облачение хозяина цепи", original: "Investment of the Chain Master", level: 5, timing: null, cost: null, type: "Договор цепи", desc: "Требования: уровень Колдуна 5 или выше, воззвание «Договор цепи»\n\nКогда вы сотворяете Обретение фамильяра, вы усиливаете призываемого фамильяра частичкой вашей мистической силы, что даёт ему следующие преимущества:Воздушный или водный. Фамильяр получает либо Скорость полёта 40 футов, либо Скорость плавания 40 футов (на ваш выбор).Быстрая атака. Бонусным действием вы можете приказать фамильяру совершить действие Атака.Некротический урон или урон Излучением. Когда фамильяр наносит Дробящий, Колющий или Рубящий урон, по вашему выбору тип урона может быть вместо этого Некротическим уроном или уроном Излучением.Ваша сложность спасброска. Если ваш фамильяр заставляет другое существо пройти спасбросок, при этом используется ваша Сл спасброска заклинаний.Сопротивление. Когда фамильяр получает урон, вы можете Реакцией даровать Сопротивление этому урону." },
+        { name: "Взор двух умов", original: "Gaze of Two Minds", level: 5, timing: "Бонусное действие", cost: null, type: "Иное", desc: "Требования: уровень Колдуна 5 или выше\n\nВы можете Бонусным действием коснуться согласного существа и воспринимать окружение его чувствами до конца вашего следующего хода. Пока существо находится на том же плане существования, что и вы, вы можете Бонусным действием поддержать эту связь, продлив её до конца вашего следующего хода. Если вы не поддерживаете её таким образом, связь прерывается.Пока вы воспринимаете чувствами другого существа, вы получаете преимущества любых особых чувств этого существа, и, пока вы оба находитесь в пределах 60 футов друг от друга, вы можете сотворять заклинания, как будто вы находитесь в пространстве этого существа (вы по-прежнему можете сотворять заклинания из вашего пространства)." },
+        { name: "Дар глубин", original: "Gift of the Depths", level: 5, timing: "Действие", cost: "pool", type: "Иное", desc: "Требования: уровень Колдуна 5 или выше\n\nВы можете дышать под водой, и вы получаете Скорость плавания, равную вашей Скорости.Вы также можете сотворить заклинание Подводное дыхание один раз без траты ячейки заклинаний, и вы восстанавливаете способность сделать это после завершения Долгого отдыха." },
+        { name: "Уроки древних", original: "Lessons of the First Ones", level: 2, timing: null, cost: null, type: "Иное", desc: "Требования: уровень Колдуна 2 или выше\n\nВы получили знания от древней сущности мультивселенной, что позволяет вам получить одну Черту происхождения.\n\nПовторяемость. Вы можете выбирать это воззвание более одного раза. Каждый раз вы должны выбирать новую Черту происхождения." },
+        { name: "Ведьмачий взор", original: "Witch Sight", level: 15, timing: null, cost: null, type: "Иное", desc: "Требования: уровень Колдуна 15 или выше\n\nВы получаете Истинное зрение дальностью 30 футов." },
+        { name: "Дьявольское зрение", original: "Devil’s Sight", level: 2, timing: null, cost: null, type: "Иное", desc: "Требования: уровень Колдуна 2 или выше\n\nВы можете нормально видеть в Тусклом свете и Темноте (как магической, так и не магической) в пределах 120 футов от вас." },
+        { name: "Мистический разум", original: "Eldritch Mind", level: null, timing: null, cost: null, type: "Иное", desc: "Вы совершаете с Преимуществом спасброски Телосложения для поддержания Концентрации." },
+      ];
+      let made = 0;
+      for (const it of invocations) {
+        if (findEntry(invGroup, "mechanic_item", it.name) != null) continue;
+        const data: Record<string, unknown> = { checks: [], effects: [], invocation_type: it.type };
+        if (it.timing) data.casting_timing = it.timing;
+        if (it.cost === "pool") data.cost = { kind: "uses", amount: 1, per: "long_rest", ownResource: true };
+        database
+          .prepare(
+            "INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, name_original, level, data, description, position) VALUES (?, ?, ?, 'mechanic_item', ?, ?, ?, ?, ?, ?)"
+          )
+          .run(warlock.sysId, mechSection, invGroup, it.name, it.original, it.level, JSON.stringify(data), it.desc, nextPos(invGroup));
+        made++;
+      }
+      if (made > 0) console.log(`[db] Воззвания колдуна: записей: ${made}`);
+      const featRow = database
+        .prepare(
+          "SELECT id, data FROM compendium_entries WHERE parent_id = ? AND kind = 'feature' AND name = 'Таинственные воззвания' LIMIT 1"
+        )
+        .get(warlock.id) as { id: number; data: string } | undefined;
+      if (featRow) {
+        try {
+          const featData = JSON.parse(featRow.data || "{}") as Record<string, unknown>;
+          if (featData.choices == null) {
+            const ladder: [number, number][] = [
+              [1, 1],
+              [2, 2],
+              [5, 2],
+              [7, 1],
+              [9, 1],
+              [12, 1],
+              [15, 1],
+              [18, 1],
+            ];
+            featData.choices = ladder.map(([minLevel, count]) => ({
+              key: "invocations",
+              kind: "entry",
+              group: "Таинственные воззвания",
+              count,
+              minLevel,
+            }));
+            database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(featData), featRow.id);
+          }
+        } catch {
+          // Битый JSON записи — не наша авария, пропускаем.
+        }
+      }
+    }
+    setAppSettingFlag(database, "warlock_invocations_v1");
+  }
+
+  // Колдун, тикет 02, догонка: одна запись («Туманные видения») успела
+  // посеяться без timing до правки опечатки id (nisty-visions) — пропуск
+  // «только недостающее» её больше не чинит. Сверяем структурные поля всех
+  // 28 воззваний с эталоном и правим только расхождения; имена и описания
+  // (правка Мастера) не трогаем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "warlock_invocations_fix_v1")) {
+    const spec: { name: string; level: number | null; timing: string | null; pool: boolean; type: string }[] = [
+      { name: "Мистическое копьё", level: 2, timing: null, pool: false, type: "Заговор" },
+      { name: "Мучительный взрыв", level: 2, timing: null, pool: false, type: "Заговор" },
+      { name: "Отталкивающий заряд", level: 2, timing: null, pool: false, type: "Заговор" },
+      { name: "Доспех теней", level: null, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Потусторонний прыжок", level: 2, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Мощь Исчадия", level: 2, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Восходящий шаг", level: 5, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Маска многих лиц", level: 2, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Мастер бесчисленных обликов", level: 5, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Туманные видения", level: 2, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Один среди теней", level: 5, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Видения дальних земель", level: 9, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Могильный шёпот", level: 7, timing: "Действие", pool: false, type: "Заклинание" },
+      { name: "Договор клинка", level: null, timing: "Бонусное действие", pool: false, type: "Договор клинка" },
+      { name: "Жаждущий клинок", level: 5, timing: null, pool: false, type: "Договор клинка" },
+      { name: "Мистическая кара", level: 5, timing: null, pool: false, type: "Договор клинка" },
+      { name: "Пожирающий клинок", level: 12, timing: null, pool: false, type: "Договор клинка" },
+      { name: "Пьющий жизни", level: 9, timing: null, pool: false, type: "Договор клинка" },
+      { name: "Договор гримуара", level: null, timing: null, pool: false, type: "Договор гримуара" },
+      { name: "Дар защитников", level: 9, timing: null, pool: true, type: "Договор гримуара" },
+      { name: "Договор цепи", level: null, timing: "Действие", pool: false, type: "Договор цепи" },
+      { name: "Облачение хозяина цепи", level: 5, timing: null, pool: false, type: "Договор цепи" },
+      { name: "Взор двух умов", level: 5, timing: "Бонусное действие", pool: false, type: "Иное" },
+      { name: "Дар глубин", level: 5, timing: "Действие", pool: true, type: "Иное" },
+      { name: "Уроки древних", level: 2, timing: null, pool: false, type: "Иное" },
+      { name: "Ведьмачий взор", level: 15, timing: null, pool: false, type: "Иное" },
+      { name: "Дьявольское зрение", level: 2, timing: null, pool: false, type: "Иное" },
+      { name: "Мистический разум", level: null, timing: null, pool: false, type: "Иное" },
+    ];
+    const group = database
+      .prepare("SELECT id FROM compendium_entries WHERE kind = 'mechanic_group' AND name = 'Таинственные воззвания' LIMIT 1")
+      .get() as { id: number } | undefined;
+    let fixed = 0;
+    if (group) {
+      for (const s of spec) {
+        const row = database
+          .prepare("SELECT id, level, data FROM compendium_entries WHERE parent_id = ? AND kind = 'mechanic_item' AND name = ?")
+          .get(group.id, s.name) as { id: number; level: number | null; data: string } | undefined;
+        if (!row) continue;
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(row.data || "{}");
+        } catch {
+          continue;
+        }
+        let touched = false;
+        const wantCost = s.pool ? { kind: "uses", amount: 1, per: "long_rest", ownResource: true } : undefined;
+        const sameCost =
+          (wantCost == null && data.cost == null) ||
+          (wantCost != null && JSON.stringify(data.cost) === JSON.stringify(wantCost));
+        if (!sameCost) {
+          if (wantCost) data.cost = wantCost;
+          else delete data.cost;
+          touched = true;
+        }
+        const wantTiming = s.timing ?? undefined;
+        if ((data.casting_timing as string | undefined) !== wantTiming) {
+          if (wantTiming) data.casting_timing = wantTiming;
+          else delete data.casting_timing;
+          touched = true;
+        }
+        if ((data.invocation_type as string | undefined) !== s.type) {
+          data.invocation_type = s.type;
+          touched = true;
+        }
+        if ((row.level ?? null) !== s.level) {
+          database.prepare("UPDATE compendium_entries SET level = ? WHERE id = ?").run(s.level, row.id);
+          touched = true;
+        }
+        if (!touched) continue;
+        database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?").run(JSON.stringify(data), row.id);
+        fixed++;
+      }
+    }
+    if (fixed > 0) console.log(`[db] Воззвания колдуна (структура): записей: ${fixed}`);
+    setAppSettingFlag(database, "warlock_invocations_fix_v1");
   }
 
   // Монах (аудит класса, .scratch/monk/issues/01): Очки духа по PHB 2024
@@ -3174,6 +3752,396 @@ export function openDatabase(dbDir: string): Database.Database {
     }
     if (fixed > 0) console.log(`[db] СЛ Ошеломляющего (Муд): записей: ${fixed}`);
     setAppSettingFlag(database, "monk_stunning_dc_v1");
+  }
+  // Оракул Воина: пул цитат на оборот карты персонажа. Дописываем только
+  // недостающие (сверка по точному тексту); правки Мастера не трогаем.
+  // Одноразовая (флаг).
+  if (!appSettingFlag(database, "fighter_oracle_quotes_v1")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 12191").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        const have = Array.isArray(data.oracle_quotes)
+          ? (data.oracle_quotes as unknown[]).filter((q): q is string => typeof q === "string")
+          : [];
+        const want = [
+          "«Смерть — это лишь шаг к новой победе!»",
+          "«Я не ищу славы ради славы. Я сражаюсь, чтобы защитить слабых».",
+          "«В этом бою я докажу, что мой род достоин величия».",
+          "«Не важно, сколько врагов перед тобой — важно, сколько мужества в одном человеке».",
+          "«Я не боюсь боли. Я боюсь того, что будет после».",
+          "«За мной — не просто союзники, а те, кто не может постоять за себя».",
+          "«Щит и удар — вот что держит мир в равновесии».",
+          "«Доспех хранит не только от пуль, но и от сомнений».",
+          "«В этом мире слишком много зла. Я должен стоять на его пути».",
+          "«Я не боюсь смерти. Но я не могу позволить злу победить».",
+          "«Моя честь — это мой щит. И я не позволю её запятнать».",
+          "«Один удар за другим — так рождается победа».",
+          "Рыцарь Пурпурного Дракона: «Я поклялся защищать корону. И я буду совершать в бою самые смелые поступки, чтобы вести за собой остальных».",
+          "Самурай: «У врагов, вставших передо мной, два варианта: сдаться или умереть в бою».",
+          "Мистический Лучник: «Я вплету магию в каждый выстрел. Враг не переживёт этого».",
+          "«Пацан сказал — пацан ударил. Два раза. На пятом уровне — три.»",
+          "«Не важно, какой у тебя меч. Важно, кто встанет за твоей спиной.»",
+          "«Щит не для того, чтобы прятаться. Щит для того, чтобы подойти ближе.»",
+          "«Настоящий воин врагов не считает. Он считает, сколько друзей вернётся домой.»",
+          "«Доспех можно пробить. Слово пацана — нет.»",
+          "«Кто с мечом к нам придёт — тот от меча и ляжет. Дважды. Это дополнительная атака.»",
+          "«Короткий отдых — это когда пацаны присели. Длинный — когда уже победили.»",
+          "«Я не ношу тяжёлый доспех потому, что боюсь. Я ношу его потому, что лёгкий мне мал.»",
+          "«Мне не нужно второе дыхание. Это врагам нужно, чтобы я его не тратил.»",
+          "«Я не бью дважды. Я бью один раз — просто у меня есть ещё три атаки.»",
+          "«Говорят, у страха глаза велики. У моего замаха размах шире.»",
+          "«Провоцированные атаки меня не провоцируют.»",
+          "«Мой бонус владения — это не цифра в листе. Это предупреждение.»",
+          "«Я не отступаю. Я тактически сокращаю дистанцию до таверны.»",
+          "«Волк не носит доспех. Но если бы носил — только тяжёлый.»",
+          "«Волк слабее дракона. Но дракон не спускается в подземелье с партией.»",
+          "«Овцы сбиваются в стадо. Волк жмёт Второе дыхание и идёт один.»",
+          "«Волка не зовут в герои. Волк сам приходит, когда зовут на подмогу.»",
+          "«Волк не проваливает спасброски. Волк перебрасывает их с бонусом, равным уровню.»",
+          "«У волка нет подкласса. У волка есть клыки и бонусное действие.»",
+          "«Стая сильна волком. А волк силён тем, что его не надо лечить.»",
+          "«У меня не просто удары. У меня приёмы. У тебя — синяки.»",
+          "«Моя кость превосходства — к8. Твоя участь — тоже на восемь.»",
+          "«Один приём на атаку. Мне хватает.»",
+          "«Я знаю твои слабости. Ты свои — нет. Это и называется познать врага.»",
+          "«Крит на 19? Это не удача. Это я.»",
+          "«18, 19, 20 — это не броски. Это мой рабочий диапазон.»",
+          "«Меня не надо вдохновлять. Я сам себе героическое вдохновение — каждый ход.»",
+          "«Другие кидают спасброски от смерти. Я их кидаю с преимуществом.»",
+          "«Ты не можешь меня обезоружить. Оружие привязано. Я — нет.»",
+          "«Сначала заговор, потом атака. Это называется боевая магия, а не очередь.»",
+          "«Щит — это заклинание. Доспех — это заклинание. А я — заклинание с мечом.»",
+          "«Мои ячейки маленькие. Зато их четыре. На первом круге.»",
+          "«Мой разум острее твоего меча. Проверено: к10 против твоей головы.»",
+          "«Я не уклоняюсь. Я телекинетически не согласен с твоей атакой.»",
+          "«Защитное поле? Это я просто не захотел, чтобы ты попал.»",
+          "«Передвинуть тебя силой мысли — тоже ход. Магическим действием.»",
+          "«За мной идут не потому, что я силён. А потому, что я лечу на 1к4 плюс уровень.»",
+          "«Мой всплеск действий — это когда вся партия бьёт вместе со мной.»",
+          "«Союзник рядом со мной спасброски не проваливает. У меня на это Упорный.»",
+          "«Моя стрела сама находит цель. Ищущий выстрел, слышал?»",
+          "«Один выстрел — восемь вариантов. Выбирай, от чего увернуться.»",
+          "«Лук без магии — просто палка с верёвкой. У меня — не просто.»",
+          "«Моя кость выстрела уже к12. Твой доспех — всё ещё нет.»",
+          "«Второе дыхание? У меня их четыре. Все восстанавливаются на длинном.»",
+          "«Одно действие — хорошо. А два — это всплеск. А на семнадцатом — два всплеска.»",
+          "«Я не провалил проверку. Я просто ещё не добавил к10.»",
+          "«Перебросить спас с бонусом, равным уровню? Легко. У меня таких три.»",
+          "«Первый раз промахнулся — изучаю. Второй раз не промахиваюсь.»",
+          "«Три вида оружия освоено. Остальные — в процессе.»",
+          "«Толкнуть, изнурить, замедлить — выбирай. Это всё я.»",
+          "«Девятнадцатый уровень. Дальше только легенда.»",
+          "«Можно избежать драки. Но тогда зачем ты столько качался?»",
+          "«Я не агрессивный. Я просто заранее согласен на инициативу.»",
+          "«Умный отступает от боя. Воин отступает за зельем.»",
+          "«Не каждый конфликт решается мечом. Иногда нужен топор.»",
+          "«Врагов много не бывает. Бывает мало атак за ход.»",
+          "«У каждого есть план, пока воин не кинул инициативу.»",
+          "«Настоящий хищник не ждёт удобного момента. Он ждёт, пока мастер закончит описание комнаты.»",
+          "«Удача любит подготовленных. Крит любит Champion.»",
+          "«Мне не нужен особый приём. Мне нужна двадцатка.»",
+          "«Когда у тебя 1 HP — это не мало. Это достаточно.»",
+          "«Мой боевой стиль — не умирать.»",
+          "«Если броня даёт -2 к скрытности, значит, мне незачем скрываться.»",
+          "«Я не танк. Я просто стою впереди.»",
+          "«Крит — это когда мастер понял, что зря дал тебе оружие.»",
+          "«Неважно, насколько силён враг. Важно, сколько у тебя Action Surge.»",
+          "«Первое правило воина: не умереть. Второе правило: если умер — сделать вид, что это была тактика.»",
+          "«Маги изучают древние фолианты. Я изучаю расстояние до ближайшего врага.»",
+          "«Жизнь коротка. Хиты конечны. Action Surge один раз за короткий отдых. Думай.»",
+          "«Не бойся противников. Бойся момента, когда мастер достаёт d20.»",
+          "«Настоящий воин знает: иногда лучший способ пережить бой — закончить его раньше.»",
+        ];
+        const next = [...have, ...want.filter((q) => !have.includes(q))];
+        if (next.length !== have.length) {
+          data.oracle_quotes = next;
+          database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 12191").run(JSON.stringify(data));
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_oracle_quotes_v1");
+  }
+
+  // Чистка пула Воина: убираем 52 авторские цитаты (мемные и по
+  // подклассам/способностям) — в части фактические расхождения с правилами,
+  // будут сбивать с толку. Удаляем только точное совпадение; цитаты
+  // пользователя и правки Мастера не трогаем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "fighter_oracle_quotes_cleanup_v1")) {
+    const row = database.prepare("SELECT data FROM compendium_entries WHERE id = 12191").get() as
+      | { data: string }
+      | undefined;
+    if (row) {
+      try {
+        const data = JSON.parse(row.data || "{}") as Record<string, unknown>;
+        if (Array.isArray(data.oracle_quotes)) {
+          const drop = new Set([
+            "«Пацан сказал — пацан ударил. Два раза. На пятом уровне — три.»",
+            "«Не важно, какой у тебя меч. Важно, кто встанет за твоей спиной.»",
+            "«Щит не для того, чтобы прятаться. Щит для того, чтобы подойти ближе.»",
+            "«Настоящий воин врагов не считает. Он считает, сколько друзей вернётся домой.»",
+            "«Доспех можно пробить. Слово пацана — нет.»",
+            "«Кто с мечом к нам придёт — тот от меча и ляжет. Дважды. Это дополнительная атака.»",
+            "«Короткий отдых — это когда пацаны присели. Длинный — когда уже победили.»",
+            "«Я не ношу тяжёлый доспех потому, что боюсь. Я ношу его потому, что лёгкий мне мал.»",
+            "«Мне не нужно второе дыхание. Это врагам нужно, чтобы я его не тратил.»",
+            "«Я не бью дважды. Я бью один раз — просто у меня есть ещё три атаки.»",
+            "«Говорят, у страха глаза велики. У моего замаха размах шире.»",
+            "«Провоцированные атаки меня не провоцируют.»",
+            "«Мой бонус владения — это не цифра в листе. Это предупреждение.»",
+            "«Я не отступаю. Я тактически сокращаю дистанцию до таверны.»",
+            "«Волк не носит доспех. Но если бы носил — только тяжёлый.»",
+            "«Волк слабее дракона. Но дракон не спускается в подземелье с партией.»",
+            "«Овцы сбиваются в стадо. Волк жмёт Второе дыхание и идёт один.»",
+            "«Волка не зовут в герои. Волк сам приходит, когда зовут на подмогу.»",
+            "«Волк не проваливает спасброски. Волк перебрасывает их с бонусом, равным уровню.»",
+            "«У волка нет подкласса. У волка есть клыки и бонусное действие.»",
+            "«Стая сильна волком. А волк силён тем, что его не надо лечить.»",
+            "«У меня не просто удары. У меня приёмы. У тебя — синяки.»",
+            "«Моя кость превосходства — к8. Твоя участь — тоже на восемь.»",
+            "«Один приём на атаку. Мне хватает.»",
+            "«Я знаю твои слабости. Ты свои — нет. Это и называется познать врага.»",
+            "«Крит на 19? Это не удача. Это я.»",
+            "«18, 19, 20 — это не броски. Это мой рабочий диапазон.»",
+            "«Меня не надо вдохновлять. Я сам себе героическое вдохновение — каждый ход.»",
+            "«Другие кидают спасброски от смерти. Я их кидаю с преимуществом.»",
+            "«Ты не можешь меня обезоружить. Оружие привязано. Я — нет.»",
+            "«Сначала заговор, потом атака. Это называется боевая магия, а не очередь.»",
+            "«Щит — это заклинание. Доспех — это заклинание. А я — заклинание с мечом.»",
+            "«Мои ячейки маленькие. Зато их четыре. На первом круге.»",
+            "«Мой разум острее твоего меча. Проверено: к10 против твоей головы.»",
+            "«Я не уклоняюсь. Я телекинетически не согласен с твоей атакой.»",
+            "«Защитное поле? Это я просто не захотел, чтобы ты попал.»",
+            "«Передвинуть тебя силой мысли — тоже ход. Магическим действием.»",
+            "«За мной идут не потому, что я силён. А потому, что я лечу на 1к4 плюс уровень.»",
+            "«Мой всплеск действий — это когда вся партия бьёт вместе со мной.»",
+            "«Союзник рядом со мной спасброски не проваливает. У меня на это Упорный.»",
+            "«Моя стрела сама находит цель. Ищущий выстрел, слышал?»",
+            "«Один выстрел — восемь вариантов. Выбирай, от чего увернуться.»",
+            "«Лук без магии — просто палка с верёвкой. У меня — не просто.»",
+            "«Моя кость выстрела уже к12. Твой доспех — всё ещё нет.»",
+            "«Второе дыхание? У меня их четыре. Все восстанавливаются на длинном.»",
+            "«Одно действие — хорошо. А два — это всплеск. А на семнадцатом — два всплеска.»",
+            "«Я не провалил проверку. Я просто ещё не добавил к10.»",
+            "«Перебросить спас с бонусом, равным уровню? Легко. У меня таких три.»",
+            "«Первый раз промахнулся — изучаю. Второй раз не промахиваюсь.»",
+            "«Три вида оружия освоено. Остальные — в процессе.»",
+            "«Толкнуть, изнурить, замедлить — выбирай. Это всё я.»",
+            "«Девятнадцатый уровень. Дальше только легенда.»",
+          ]);
+          const have = (data.oracle_quotes as unknown[]).filter((q): q is string => typeof q === "string");
+          const next = have.filter((q) => !drop.has(q));
+          if (next.length !== have.length) {
+            data.oracle_quotes = next;
+            database.prepare("UPDATE compendium_entries SET data = ? WHERE id = 12191").run(JSON.stringify(data));
+          }
+        }
+      } catch {
+        // Битый JSON записи — не наша авария, пропускаем.
+      }
+    }
+    setAppSettingFlag(database, "fighter_oracle_quotes_cleanup_v1");
+  }
+  // Оракул класса (.scratch/class-oracle): сид пула цитат Монаха. Только если
+  // поля нет вовсе; правки Мастера не перебиваем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "monk_oracle_quotes_v1")) {
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (data.oracle_quotes != null) continue;
+      data.oracle_quotes = [
+        "Истинная сила проявляется в смирении.",
+        "Путь не в том, чтобы не падать, а в том, чтобы подниматься после каждого падения.",
+        "Концентрация рождает ясность, а ясность — победу.",
+        "Не бойся противника, бойся врага внутри.",
+        "Настоящий мастер побеждает не силой, а умением заставить противника увидеть свою ошибку.",
+      ];
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Оракул монаха: записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_oracle_quotes_v1");
+  }
+
+  // Оракул монаха, пачка 2: даосско-конфуцианские цитаты пользователя (22 шт).
+  // Только добавление недостающих: сверка по нормализованной строке (без
+  // кавычек/регистра/крайних пробелов) — правки и порядок Мастера не трогаем,
+  // дубли не плодим. Одноразовая (флаг).
+  if (!appSettingFlag(database, "monk_oracle_quotes_v2")) {
+    const QUOTES = [
+      "Мир — это наши поступки. Следуй зову судьбы, и не будет сомнений.",
+      "Кто думает, что постиг всё, тот ничего не знает.",
+      "Побеждающий других силён, но побеждающий себя самого — могуществен.",
+      "Кто знает границы своей деятельности, не приблизится к опасностям, тот будет жить долго.",
+      "Преодоление трудного начинается с лёгкого, осуществление великого начинается с малого.",
+      "Познание других — это разум; познание себя — это истинная мудрость.",
+      "Единственное, что человек делает всегда искренне, так это — заблуждается.",
+      "Если ты задаёшь вопрос, значит, ты уже знаешь половину ответа.",
+      "Не обращай внимания на то, как к тебе относятся люди — обращай внимание на то, как ты относишься к ним.",
+      "Мудрость правителя следует оценивать не по тем великим свершениям, которыми ему довелось руководить, а по тем губительным ошибкам, которых ему удалось не допустить.",
+      "Помогая ленивым людям, ты помогаешь им сесть на свою шею.",
+      "Иди против ветра… и пусть тебе плюют в спину!",
+      "Лишь то, что ничего не удерживает, ничего не теряет.",
+      "Дао смывает всё как поток, и по этой причине никто не может достичь полного удовлетворения.",
+      "Вот почему мудрый не спешит следовать велениям своего «Я», и тело само выбирает дорогу, забывает о себе и потому сам остаётся живым.",
+      "Лучше всего — быть как вода. Вода с лёгкостью дарит благо всей тьме существ и не борется.",
+      "Если любить всё, что есть в этом мире, как самого себя, можно жить беспечно, доверившись миру.",
+      "Когда тяга всё понимать иссякает, пропадают омрачённость и тоска.",
+      "Лучший путь пролегает там, где нет отпечатков колёс.",
+      "Высшая благодать — это беззаботность, она случается просто так, без причин. Дурная благодать — быть озабоченным делами, и на то всегда есть причины.",
+      "Я хорошо отношусь к тому, что добросердечен, к тому, у кого недоброе сердце, я тоже хорошо отношусь, в этом и есть истинное добросердечие.",
+      "Люди, когда рождаются, податливы и нежны, а когда становятся несгибаемо-твёрдыми, они умирают.",
+    ];
+    const norm = (s: string) => s.trim().replace(/^«+|»+$/g, "").trim().toLowerCase();
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Монах'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      const pool = Array.isArray(data.oracle_quotes)
+        ? (data.oracle_quotes as unknown[]).filter((q): q is string => typeof q === "string")
+        : [];
+      const seen = new Set(pool.map(norm));
+      let touched = false;
+      for (const q of QUOTES) {
+        if (seen.has(norm(q))) continue;
+        pool.push(q);
+        seen.add(norm(q));
+        touched = true;
+      }
+      if (!touched) continue;
+      data.oracle_quotes = pool;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Оракул монаха, пачка 2: записей: ${fixed}`);
+    setAppSettingFlag(database, "monk_oracle_quotes_v2");
+  }
+  // Оракул следопыта: цитаты пользователя (53 шт). Тот же приём, что у монаха:
+  // только добавление недостающих (сверка по нормализованной строке),
+  // правки и порядок Мастера не трогаем. Одноразовая (флаг).
+  if (!appSettingFlag(database, "ranger_oracle_quotes_v1")) {
+    const QUOTES = [
+      "Я не заблудился. Я просто проверяю альтернативный маршрут.",
+      "Следопыт не ищет дорогу. Он знает, куда ты пойдёшь.",
+      "Если я молчу — это не значит, что меня нет. Это значит, что ты меня ещё не заметил.",
+      "В лесу нет плохой погоды. Есть плохая экипировка.",
+      "Настоящий следопыт приходит первым. Даже если квест ещё не начался.",
+      "Ты можешь спрятаться. Но ты уже оставил след.",
+      "Я не преследую врага. Я просто двигаюсь в ту же сторону, только быстрее.",
+      "Самый опасный враг — тот, чей след ты потерял.",
+      "Мне не нужно знать, где ты. Мне достаточно знать, где ты был.",
+      "Если я достал лук — разговор окончен. Если я его ещё не достал — разговор уже был ошибкой.",
+      "Я не злопамятный. Я просто помечаю цели.",
+      "Некоторым людям нужен список дел. Мне нужен Hunter’s Mark.",
+      "Я не выбрал тебя целью. Ты сам оставил след.",
+      "Метка — это не приговор. Это просто очень подробное уведомление.",
+      "Если над тобой появилась метка — беги. Если следопыт улыбается — уже поздно.",
+      "Настоящая охота начинается не с выстрела. Она начинается с Hunter’s Mark.",
+      "Ты можешь убежать от меня. От метки — сложнее.",
+      "Волк знает тропу. Следопыт знает, кто по ней прошёл.",
+      "Стая идёт по следу. Следопыт идёт впереди стаи.",
+      "Волк слышит шаги. Следопыт слышит намерения.",
+      "Хищник не бросается на добычу. Он ждёт, когда добыча сама устанет убегать.",
+      "В лесу выживает не самый сильный. А тот, кто первым услышал ветку.",
+      "Меня не видно не потому, что темно. Темно потому, что меня не видно.",
+      "Некоторые боятся темноты. Я в ней работаю.",
+      "Если ты видишь меня — значит, я позволил тебе меня увидеть.",
+      "Ночь не скрывает меня. Ночь работает на меня.",
+      "Я не исчезаю в темноте. Я становлюсь её частью.",
+      "Первый удар решает многое. Поэтому я стараюсь, чтобы он был моим.",
+      "Ты думал, что мы встретились случайно. Я думал, что ты никогда меня не заметишь.",
+      "Настоящий следопыт никогда не один. Просто второй обычно на четырёх лапах.",
+      "Он не питомец. Он мой напарник.",
+      "Ты можешь победить меня. Но сначала тебе придётся объяснить это моему зверю.",
+      "У тебя есть союзники. У меня есть тот, кто никогда не задаёт лишних вопросов.",
+      "Верность не требует высокой Харизмы.",
+      "Мы не говорим перед боем. Мы оба знаем, что делать.",
+      "Некоторые приводят на битву друзей. Я привожу хищника.",
+      "Один враг — цель. Два врага — выбор. Три врага — хороший день.",
+      "Я не охочусь на монстров. Я сокращаю их популяцию.",
+      "Большая добыча требует большого лука.",
+      "Следопыт не спрашивает, насколько силён монстр. Он спрашивает, где у него уязвимое место.",
+      "Ты называешь это чудовищем. Я называю это добычей.",
+      "Если карта говорит, что здесь дороги нет — значит, будет интересно.",
+      "Я не заблудился. Это карта устарела.",
+      "Выживальщик — это когда ты взял с собой всё, кроме того, что реально понадобится.",
+      "Следопыт должен уметь всё. Поэтому я ничего не умею идеально.",
+      "Маг знает сто заклинаний. Я знаю, где он будет через пять минут.",
+      "У воина есть броня. У мага есть заклинания. У меня есть дистанция.",
+      "Если враг далеко — стреляю. Если близко — отхожу. Если догнал — это уже моя ошибка.",
+      "Природа не жестока. Она просто не делает скидок.",
+      "Лучшая ловушка — та, о которой враг узнаёт после срабатывания.",
+      "Следы говорят громче людей.",
+      "Я не избегаю цивилизации. Просто цивилизация оставляет слишком много следов.",
+      "Можно не знать, куда идёшь. Главное — знать, откуда пришёл.",
+    ];
+    const norm = (s: string) => s.trim().replace(/^«+|»+$/g, "").trim().toLowerCase();
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Следопыт'`
+      )
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      const pool = Array.isArray(data.oracle_quotes)
+        ? (data.oracle_quotes as unknown[]).filter((q): q is string => typeof q === "string")
+        : [];
+      const seen = new Set(pool.map(norm));
+      let touched = false;
+      for (const q of QUOTES) {
+        if (seen.has(norm(q))) continue;
+        pool.push(q);
+        seen.add(norm(q));
+        touched = true;
+      }
+      if (!touched) continue;
+      data.oracle_quotes = pool;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Оракул следопыта: записей: ${fixed}`);
+    setAppSettingFlag(database, "ranger_oracle_quotes_v1");
   }
   // Монах, опечатка (.scratch/monk/issues/04): в строке 1 уровня таблицы
   // развития «Боевые искуства» вместо «искусства». Только известная плохая
@@ -4651,6 +5619,7 @@ export function openDatabase(dbDir: string): Database.Database {
   migrateDndArtificerTouchups(database);
   migrateDndArtificerLevelDice(database);
   migrateDndArtificerReanimator(database);
+  migrateDndArtificerOracle(database);
   // Тиры схем по книге 2/6/10/14 вместо эвристики редкости (аудит 2026-09-07).
   migrateDndReplicaTiers(database);
   migrateDndReplicaGenerics(database);

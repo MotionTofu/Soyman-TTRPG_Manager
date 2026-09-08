@@ -26,6 +26,9 @@ export function RealtimeListener() {
     socket.on("show-image", (payload: unknown) => {
       window.dispatchEvent(new CustomEvent("show-image", { detail: payload }));
     });
+    socket.on("hunter-mark", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("hunter-mark", { detail: payload }));
+    });
 
     return () => {
       socket.disconnect();

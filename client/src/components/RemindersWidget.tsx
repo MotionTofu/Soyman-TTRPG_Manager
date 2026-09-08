@@ -18,6 +18,18 @@ export function RemindersWidget({ targetType, targetId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
   const [reminders, setReminders] = useState<GmReminder[]>([]);
   const [draft, setDraft] = useState("");
+  // Живое обновление панели пульта: игрок заявил метку/сглаз — сервер уже
+  // положил напоминалку, здесь только перечитываем и подсвечиваем новую.
+  const [flashId, setFlashId] = useState<number | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { reminderId?: number } | undefined;
+      if (detail?.reminderId != null) setFlashId(detail.reminderId);
+      refresh();
+    };
+    window.addEventListener("hunter-mark", handler);
+    return () => window.removeEventListener("hunter-mark", handler);
+  }, [targetType, targetId]);
   const basePath =
     targetType === "player"
       ? `/players/${targetId}/reminders`
@@ -45,6 +57,7 @@ export function RemindersWidget({ targetType, targetId }: Props) {
     if (!(await confirm({ message: "Удалить напоминание?", confirmLabel: "Удалить", danger: true })))
       return;
     await api.del(`${basePath}/${reminderId}`);
+    if (flashId === reminderId) setFlashId(null);
     refresh();
   }
 
@@ -57,7 +70,7 @@ export function RemindersWidget({ targetType, targetId }: Props) {
         </div>
       ) : (
         reminders.map((r) => (
-          <div key={r.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+          <div key={r.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6, ...(r.id === flashId ? { background: "var(--mark, #fff3bf)" } : {}) }}>
             <span style={{ whiteSpace: "pre-wrap", maxWidth: "62ch" }}>{r.message}</span>
             <button className="danger comp-mini" onClick={() => remove(r.id)} aria-label="Удалить">✕</button>
           </div>

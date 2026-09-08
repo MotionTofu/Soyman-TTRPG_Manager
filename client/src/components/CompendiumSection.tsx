@@ -41,6 +41,7 @@ import {
   MAGIC_ITEM_CHARGES_RECHARGE,
   MAGIC_ITEM_SOURCES,
   MAGIC_ITEM_TYPES,
+  EQUIPMENT_SOURCES,
   MECHANICS_TOOL_GROUP,
   type FieldDef,
   type MechanicsCategoryKey,
@@ -204,6 +205,9 @@ interface EditDraft {
   toolProfs: MechanicsPick[];
   skillChoiceCount: string;
   skillChoiceOptions: string[];
+  // Class-only. Оракул класса: пул цитат/подсказок на оборот карты персонажа
+  // (.scratch/class-oracle). Пустые строки вычищаются при сохранении.
+  oracleQuotes: string[];
   progressionTable: string;
   // Структурная таблица развития (см. dnd/progression.ts). progressionTable
   // выше — исходный markdown, оставленный как читаемый дубликат и источник
@@ -459,6 +463,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [filterVehicleCategory, setFilterVehicleCategory] = useState("");
   const [filterSize, setFilterSize] = useState("");
   const [filterEquipmentCategory, setFilterEquipmentCategory] = useState("");
+  const [filterEquipmentSource, setFilterEquipmentSource] = useState("");
   const [verstakOpen, setVerstakOpen] = useState(false);
   const { user } = useCurrentUser();
   const sortKey = `compendium-sort-${user?.id ?? "anon"}-${section.id}`;
@@ -878,6 +883,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       spellcastingAbility: (entry.data.spellcasting_ability as string | undefined) ?? "",
       skillChoiceCount: entry.data.skill_choice_count != null ? String(entry.data.skill_choice_count) : "",
       skillChoiceOptions: (entry.data.skill_choice_options as string[] | undefined) ?? [],
+      oracleQuotes: Array.isArray(entry.data.oracle_quotes)
+        ? (entry.data.oracle_quotes as unknown[]).filter((q): q is string => typeof q === "string")
+        : [],
       progressionTable: (entry.data.progression_table as string | undefined) ?? "",
       progression: (entry.data.progression as ClassProgression | undefined) ?? EMPTY_PROGRESSION,
       grantedSpells: (
@@ -1047,6 +1055,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data.equipment_b = editing.equipmentB;
       data.skill_choice_count = editing.skillChoiceCount ? Number(editing.skillChoiceCount) : 0;
       data.skill_choice_options = editing.skillChoiceOptions;
+      data.oracle_quotes = editing.oracleQuotes.map((q) => q.trim()).filter(Boolean);
       data.progression_table = editing.progressionTable;
       data.progression = editing.progression;
     }
@@ -1191,7 +1200,8 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       });
     if (isEquipmentSection)
       return topLevel.filter((e) => {
-        if (filterEquipmentCategory !== "" && (e.data.category as string | undefined) !== filterEquipmentCategory) return false;
+        if (filterEquipmentCategory !== "" && e.data.category !== filterEquipmentCategory) return false;
+        if (filterEquipmentSource !== "" && (e.data.source as string | undefined) !== filterEquipmentSource) return false;
         return true;
       });
     return topLevel;
@@ -1214,6 +1224,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     filterVehicleCategory,
     filterSize,
     filterEquipmentCategory,
+    filterEquipmentSource,
     classHierarchy,
   ]);
 
@@ -1527,6 +1538,16 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             {EQUIPMENT_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c}
+              </option>
+            ))}
+          </select>
+        )}
+        {isEquipmentSection && (
+          <select value={filterEquipmentSource} onChange={(e) => setFilterEquipmentSource(e.target.value)} style={{ maxWidth: 220 }}>
+            <option value="">Все источники</option>
+            {EQUIPMENT_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {s}
               </option>
             ))}
           </select>
@@ -2941,6 +2962,55 @@ function EntryNode(props: NodeProps) {
                     placeholder="Вставьте таблицу кнопкой ▦ в панели форматирования и заполните по уровням"
                   />
                 </details>
+              </details>
+            )}
+            {isClass && (
+              <details className="card">
+                <summary className="muted chevron-summary">
+                  <NavIcon name="chevron" className="chevron-icon" />
+                  Оракул класса
+                </summary>
+                <p className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                  По одной цитате или подсказке на строку блока. На обороте карты при каждом
+                  перевороте выпадает случайная.
+                </p>
+                <div className="stack">
+                  {editing.oracleQuotes.map((q, qi) => (
+                    <div className="row" key={qi}>
+                      <MentionTextarea
+                        value={q}
+                        onChange={(v) =>
+                          props.onDraftChange({
+                            ...editing,
+                            oracleQuotes: editing.oracleQuotes.map((prev, pi) => (pi === qi ? v : prev)),
+                          })
+                        }
+                        rows={2}
+                        placeholder="Цитата, напоминалка, подсказка…"
+                      />
+                      <button
+                        type="button"
+                        className="comp-mini danger"
+                        title="Убрать цитату"
+                        onClick={() =>
+                          props.onDraftChange({
+                            ...editing,
+                            oracleQuotes: editing.oracleQuotes.filter((_, pi) => pi !== qi),
+                          })
+                        }
+                      >
+                        <NavIcon name="close" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => props.onDraftChange({ ...editing, oracleQuotes: [...editing.oracleQuotes, ""] })}
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    + цитата
+                  </button>
+                </div>
               </details>
             )}
             <div className="row">

@@ -11,14 +11,22 @@ interface Props {
   // Подбор пачкой с телефона (этап 6): широкое окно вместо 420px —
   // спискам нужно место, а мишеням ширина.
   wide?: boolean;
+  // Имя диалога для AT (role=dialog без имени — безымянный для скринридера).
+  ariaLabel?: string;
 }
+
+// Стек открытых модалок: вложенная (кроп портрета внутри визарда) тоже
+// <Modal>. Обе подписки висят на document, и stopPropagation соседних
+// слушателей на том же узле не останавливает — без стека ESC при открытом
+// кропе дёргал confirm закрытия всего визарда раньше onCancel кропа.
+const modalStack: (() => void)[] = [];
 
 // Rendered via a portal into <body> so the modal never ends up nested inside
 // a surrounding <label>/<form> — e.g. a <label> wrapping a file input would
 // otherwise forward any click inside the modal (like a mouseup after
 // dragging in an image cropper) to that input, silently reopening the file
 // picker.
-export function Modal({ onClose, children, closeOnBackdropClick = true, wide }: Props) {
+export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel }: Props) {
   // A "click" only means the mousedown AND mouseup landed on the same
   // element. Selecting text inside the modal and dragging past its edge
   // before releasing ends the drag over the backdrop — the browser then
@@ -46,6 +54,8 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide }: 
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Отвечает только верхняя модалка стека: нижняя молчит.
+        if (modalStack[modalStack.length - 1] !== closeTop) return;
         e.stopPropagation();
         onCloseRef.current();
         return;
@@ -69,9 +79,13 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide }: 
         }
       }
     };
+    const closeTop = () => onCloseRef.current();
+    modalStack.push(closeTop);
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      const i = modalStack.indexOf(closeTop);
+      if (i >= 0) modalStack.splice(i, 1);
       // Возврат фокуса на триггер
       prev?.focus?.();
     };
@@ -90,7 +104,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide }: 
         mouseDownOnBackdrop.current = false;
       }}
     >
-      <div className={wide ? "modal modal-wide" : "modal"} ref={modalRef} role="dialog" aria-modal="true" tabIndex={-1}>
+      <div className={wide ? "modal modal-wide" : "modal"} ref={modalRef} role="dialog" aria-modal="true" aria-label={ariaLabel} tabIndex={-1}>
         {children}
       </div>
     </div>,

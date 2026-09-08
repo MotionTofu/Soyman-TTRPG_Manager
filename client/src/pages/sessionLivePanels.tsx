@@ -7,6 +7,7 @@ import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { LazyDetails } from "../components/LazyDetails";
 import { CampaignSecrets } from "../components/CampaignSecrets";
 import { RemindersWidget } from "../components/RemindersWidget";
+import { MarkTargetPicker } from "../components/MarkTargetPicker";
 import { EntityPreviewModal } from "../components/EntityPreviewModal";
 import { MentionText } from "../components/mentions/MentionText";
 import type { CampaignDetail, CampaignGrouped, Character, SearchResult, SessionDetail, SessionUnionRow, StorySecret } from "../types";
@@ -328,8 +329,13 @@ function SecretsContent({ campaign }: PanelProps) {
   );
 }
 
-function RemindersContent({ campaign }: PanelProps) {
-  return <RemindersWidget targetType="campaign" targetId={campaign.id} />;
+function RemindersContent({ campaign, sessionId }: PanelProps) {
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <MarkTargetPicker sessionId={sessionId} campaignId={campaign.id} />
+      <RemindersWidget targetType="campaign" targetId={campaign.id} />
+    </div>
+  );
 }
 
 function CompendiumContent({ campaign }: PanelProps) {
