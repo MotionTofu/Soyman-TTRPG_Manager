@@ -25,6 +25,7 @@ import { SettingCycles } from "../components/SettingCycles";
 import { formatEventDate } from "../inworldCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { downloadJson } from "../downloadJson";
+import { ExportProgress } from "../components/ExportProgress";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { TagChips } from "../components/TagChips";
 import { GenrePicker } from "../components/GenrePicker";
@@ -2418,18 +2419,33 @@ function SettingExportModal({
   const [includeResources, setIncludeResources] = useState(false);
   const [includeImages, setIncludeImages] = useState(false);
   const [includeAdventures, setIncludeAdventures] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function doExport() {
-    const include = [includeCalendar && "calendar", includeResources && "resources", includeImages && "images", includeAdventures && "adventures"]
-      .filter(Boolean)
-      .join(",");
-    const data = await api.get(`/settings/${settingId}/export?include=${include}`);
-    downloadJson(data, `setting-${settingName}.json`);
-    onClose();
+    // Выгрузка — один синхронный запрос без процента готовности; с картинками
+    // и приключениями может идти десятки секунд, поэтому длинный таймаут
+    // и бесконечный индикатор, чтобы не выглядело зависшим.
+    setBusy(true);
+    setError(null);
+    try {
+      const include = [includeCalendar && "calendar", includeResources && "resources", includeImages && "images", includeAdventures && "adventures"]
+        .filter(Boolean)
+        .join(",");
+      const data = await api.get(`/settings/${settingId}/export?include=${include}`, {
+        timeoutMs: 120000,
+      });
+      downloadJson(data, `setting-${settingName}.json`);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={() => { if (!busy) onClose(); }}>
       <h3>Экспорт сеттинга</h3>
       <div className="stack">
         <span className="muted">
@@ -2439,6 +2455,7 @@ function SettingExportModal({
           <input
             type="checkbox"
             checked={includeCalendar}
+            disabled={busy}
             onChange={(e) => setIncludeCalendar(e.target.checked)}
           />
           Календарь и хроника мира
@@ -2447,6 +2464,7 @@ function SettingExportModal({
           <input
             type="checkbox"
             checked={includeResources}
+            disabled={busy}
             onChange={(e) => setIncludeResources(e.target.checked)}
           />
           Артефакты и ресурсы
@@ -2455,6 +2473,7 @@ function SettingExportModal({
           <input
             type="checkbox"
             checked={includeImages}
+            disabled={busy}
             onChange={(e) => setIncludeImages(e.target.checked)}
           />
           Изображения, галереи, карты локаций (с пинами) и звуковые файлы (значительно увеличит размер файла)
@@ -2463,14 +2482,17 @@ function SettingExportModal({
           <input
             type="checkbox"
             checked={includeAdventures}
+            disabled={busy}
             onChange={(e) => setIncludeAdventures(e.target.checked)}
           />
           Приключения (сценарии, сцены, проверки, полотна)
         </label>
+        {busy && <ExportProgress label="Идёт экспорт…" />}
+        {error && !busy && <ExportProgress error={error} />}
         <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button onClick={onClose}>Отмена</button>
-          <button className="primary" onClick={doExport}>
-            Скачать
+          <button disabled={busy} onClick={onClose}>Отмена</button>
+          <button className="primary" disabled={busy} onClick={doExport}>
+            {busy ? "Экспортируем…" : "Скачать"}
           </button>
         </div>
       </div>

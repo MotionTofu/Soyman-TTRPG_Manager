@@ -8,6 +8,7 @@ import { MonsterSection } from "../components/MonsterSection";
 import { VehicleSection } from "../components/VehicleSection";
 import { MechanicsSection } from "../components/MechanicsSection";
 import { downloadJson } from "../downloadJson";
+import { ExportProgress } from "../components/ExportProgress";
 import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemGroup, SystemSection } from "../types";
 import { NavIcon } from "../components/NavIcons";
@@ -28,6 +29,8 @@ export function SystemDetailPage() {
   const [systemGroupIds, setSystemGroupIds] = useState<Set<number>>(new Set());
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [tidying, setTidying] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
@@ -144,14 +147,29 @@ export function SystemDetailPage() {
   }
 
   async function exportSystem(withImages: boolean) {
-    const data = await api.get(`/systems/${systemId}/export${withImages ? "?images=1" : ""}`);
-    downloadJson(data, `system-${system!.name}.json`);
-    setExporting(false);
+    // Сборка выгрузки — один синхронный запрос без процента готовности;
+    // с изображениями может идти десятки секунд, поэтому длинный таймаут
+    // и бесконечный индикатор, чтобы не выглядело зависшим.
+    setExportBusy(true);
+    setExportError(null);
+    try {
+      const data = await api.get(`/systems/${systemId}/export${withImages ? "?images=1" : ""}`, {
+        timeoutMs: 120000,
+      });
+      downloadJson(data, `system-${system!.name}.json`);
+      setExporting(false);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportBusy(false);
+    }
   }
 
   async function importSystem(file: File) {
-    const data = JSON.parse(await file.text());
-    const created = await api.post<System>("/systems/import", data);
+    // См. SystemOnboardingModal: большой экспорт едет файлом, не JSON-строкой.
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const created = await api.post<System>("/systems/import-file", form, { timeoutMs: 600000 });
     clearDndSystemIdCache();
     navigate(`/systems/${created.id}`);
   }
@@ -349,17 +367,19 @@ export function SystemDetailPage() {
       )}
 
       {exporting && (
-        <Modal onClose={() => setExporting(false)}>
+        <Modal onClose={() => { if (!exportBusy) { setExporting(false); setExportError(null); } }}>
           <h3>Экспорт системы</h3>
-          <label className="row" style={{ cursor: "pointer", gap: 4 }}>
-            <input type="checkbox" checked={exportImages} onChange={(e) => setExportImages(e.target.checked)} />
+          <label className="row" style={{ cursor: exportBusy ? "default" : "pointer", gap: 4 }}>
+            <input type="checkbox" checked={exportImages} disabled={exportBusy} onChange={(e) => setExportImages(e.target.checked)} />
             <span className="muted">с изображениями</span>
           </label>
+          {exportBusy && <ExportProgress label="Идёт экспорт…" />}
+          {exportError && !exportBusy && <ExportProgress error={exportError} />}
           <div className="row" style={{ marginTop: 12 }}>
-            <button className="primary" onClick={() => exportSystem(exportImages)}>
-              Экспорт
+            <button className="primary" disabled={exportBusy} onClick={() => exportSystem(exportImages)}>
+              {exportBusy ? "Экспортируем…" : "Экспорт"}
             </button>
-            <button onClick={() => setExporting(false)}>Отмена</button>
+            <button disabled={exportBusy} onClick={() => { setExporting(false); setExportError(null); }}>Отмена</button>
           </div>
         </Modal>
       )}

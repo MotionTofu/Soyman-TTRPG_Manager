@@ -8974,3 +8974,47 @@ details[open] > .res-group__band .chevron-icon {
 .campaign-actions button.primary:hover {
   background: color-mix(in oklab, var(--accent) 85%, var(--ink));
 }
+
+/* Долгий экспорт (система / сеттинг / приключение): сервер отвечает одним
+   запросом без процента готовности, так что полоса бесконечная — признак
+   «процесс жив, не зависло». Уважаем reduced-motion: без анимации полоса
+   просто залита наполовину. */
+.export-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.export-progress-bar {
+  height: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.export-progress-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: 4px;
+  background: var(--accent);
+  animation: export-progress-slide 1.2s ease-in-out infinite alternate;
+}
+.export-progress-fill.is-error {
+  animation: none;
+  width: 100%;
+  background: var(--danger-bg, #b3261e);
+}
+@keyframes export-progress-slide {
+  from { margin-left: -40%; }
+  to { margin-left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .export-progress-fill {
+    animation: none;
+    width: 50%;
+  }
+}
+.export-progress-error {
+  color: var(--danger-bg, #b3261e);
+  font-size: var(--fs-meta);
+}

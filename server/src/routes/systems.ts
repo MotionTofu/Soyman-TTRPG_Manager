@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { AuthedRequest } from "../services/auth";
 import fs from "fs";
 import multer from "multer";
+import os from "os";
 import path from "path";
 import { db } from "../db/db";
 import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../db/defaultSections";
@@ -1617,4 +1618,111 @@ systemsRouter.post("/import", async (req, res) => {
     return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
   }
   res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newSystemId));
+});
+
+// Импорт большого экспорта файлом (multipart), а не JSON-телом: 220 МБ
+// через file.text()/JSON.stringify держат всё в памяти дважды (браузер +
+// сервер) и упираются в express.json limit. Здесь multer кладёт файл на диск
+// (тот же приём, что import-backup в storages.ts, и тот же лимит 500 МБ),
+// сервер читает и парсит его один раз, временный файл удаляется в finally.
+const MAX_SYSTEM_IMPORT_BYTES = 500 * 1024 * 1024;
+const systemImportFileUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+    filename: (_req, file, cb) =>
+      cb(
+        null,
+        `rpg-system-import-${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname) || ".json"}`
+      ),
+  }),
+  limits: { fileSize: MAX_SYSTEM_IMPORT_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!file.originalname.toLowerCase().endsWith(".json")) {
+      return cb(new Error("Нужен .json экспорта системы"));
+    }
+    cb(null, true);
+  },
+});
+
+/** Читает загруженный .json с диска и удаляет временный файл. */
+function readSystemImportFile(req: { file?: { path?: string } }): SystemExportData {
+  const tmpPath = req.file?.path;
+  if (!tmpPath) throw new Error("file is required");
+  try {
+    return JSON.parse(fs.readFileSync(tmpPath, "utf8")) as SystemExportData;
+  } finally {
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {}
+  }
+}
+
+systemsRouter.post("/import-file", (req, res) => {
+  systemImportFileUpload.single("file")(req, res, async (err: unknown) => {
+    if (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const tooLarge = err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE";
+      return res.status(tooLarge ? 413 : 400).json({
+        error: tooLarge ? "Файл слишком большой — максимум 500 МБ для импорта" : msg,
+      });
+    }
+    let data: SystemExportData;
+    try {
+      data = readSystemImportFile(req as unknown as { file?: { path?: string } });
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
+    }
+    try {
+      const newSystemId = await importSystemExport(data);
+      return res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newSystemId));
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
+    }
+  });
+});
+
+// Обновление уже заведённой системы из большого файла — то же слияние, что
+// POST /:id/update, но файл едет multipart'ом (см. /import-file выше).
+systemsRouter.post("/:id/update-file", (req, res) => {
+  systemImportFileUpload.single("file")(req, res, async (err: unknown) => {
+    if (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const tooLarge = err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE";
+      return res.status(tooLarge ? 413 : 400).json({
+        error: tooLarge ? "Файл слишком большой — максимум 500 МБ для импорта" : msg,
+      });
+    }
+    const targetId = Number(req.params.id);
+    const target = db.prepare("SELECT id, name FROM systems WHERE id = ?").get(targetId) as
+      | { id: number; name: string }
+      | undefined;
+    if (!target) return res.status(404).json({ error: "not found" });
+
+    let data: SystemExportData;
+    try {
+      data = readSystemImportFile(req as unknown as { file?: { path?: string } });
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
+    }
+
+    let backup: { id: number; name: unknown };
+    try {
+      backup = await createSystemBackup(targetId, target.name);
+    } catch (e) {
+      return res.status(500).json({ error: "не удалось создать резервную копию: " + String(e) });
+    }
+
+    let summary: SystemUpdateSummary;
+    try {
+      summary = await updateSystemFromExport(targetId, data);
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
+    }
+
+    res.json({
+      system: db.prepare("SELECT * FROM systems WHERE id = ?").get(targetId),
+      backup,
+      summary,
+    });
+  });
 });

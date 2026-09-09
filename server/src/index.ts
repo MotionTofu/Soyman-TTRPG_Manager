@@ -179,13 +179,25 @@ app.use(
 // ?include=images legitimately embed base64 (opt-in) and need up to 50mb.
 // LSS character sheet JSON nests an inner JSON string (`data`) and can carry
 // several ProseMirror text blocks — up to ~2-3mb in the wild.
+//
+// NOTE: /api/systems/import и /api/settings/import везут целый экспорт
+// системы/сеттинга одним JSON (ДнД 5.5 — мегабайты и десятки мегабайт с
+// картинками). Раньше они не попадали в isImport и резались дефолтным 1mb —
+// body-parser бросал entity.too.large, а общий error-handler отдавал 500
+// «internal server error» вместо понятного 413.
 app.use((req, res, next) => {
+  const p = req.path;
   const isImport =
-    req.path.startsWith("/api/import") ||
-    req.path.startsWith("/api/system-import") ||
-    req.path.startsWith("/api/statblocks/import");
+    p.startsWith("/api/import") ||
+    p.startsWith("/api/system-import") ||
+    p.startsWith("/api/statblocks/import") ||
+    p.startsWith("/api/systems") ||
+    p.startsWith("/api/settings") ||
+    p.startsWith("/api/story") ||
+    p.startsWith("/api/modules") ||
+    p.startsWith("/api/backup");
   const limit = isImport
-    ? req.path.startsWith("/api/statblocks/import")
+    ? p.startsWith("/api/statblocks/import")
       ? "5mb"
       : "50mb"
     : "1mb";
@@ -409,6 +421,14 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
       return res.status(413).json({ error: "File too large — maximum 15 MB" });
     }
     return res.status(400).json({ error: "Upload error" });
+  }
+  // body-parser при превышении express.json({ limit }) бросает ошибку с
+  // type === 'entity.too.large' / status 413. Без этой ветки она падала в
+  // общий 500 «internal server error» — так импорт ДнД 5.5 (>1mb) выглядел
+  // как падение сервера, а не как слишком большой запрос.
+  const bodyErr = err as Error & { type?: string; status?: number };
+  if (bodyErr?.type === "entity.too.large" || bodyErr?.status === 413) {
+    return res.status(413).json({ error: "Файл слишком большой — максимум 50 МБ для импорта" });
   }
   res.status(500).json({ error: "internal server error" });
 });

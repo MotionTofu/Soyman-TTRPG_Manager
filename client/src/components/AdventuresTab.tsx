@@ -6,6 +6,7 @@ import { AdventureWizard } from "./AdventureWizard";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Modal } from "./Modal";
 import { downloadJson } from "../downloadJson";
+import { ExportProgress } from "./ExportProgress";
 import type { StoryArc } from "../types";
 
 interface ImportReply {
@@ -50,6 +51,8 @@ export function AdventuresTab({
   const [withImages, setWithImages] = useState(true);
   const [clash, setClash] = useState<{ name: string; data: unknown } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [exportingArc, setExportingArc] = useState<StoryArc | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   function refresh() {
     api.get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`).then(setArcs);
@@ -77,8 +80,18 @@ export function AdventuresTab({
   }
 
   async function exportArc(arc: StoryArc) {
-    const data = await api.get(`/story/arcs/${arc.id}/export`);
-    downloadJson(data, `adventure-${arc.name}.json`);
+    // Выгрузка — один синхронный запрос без процента готовности; книга
+    // с картинками собирается долго, поэтому модалка с бесконечным
+    // индикатором вместо тишины в контекстном меню.
+    setExportError(null);
+    setExportingArc(arc);
+    try {
+      const data = await api.get(`/story/arcs/${arc.id}/export`, { timeoutMs: 120000 });
+      downloadJson(data, `adventure-${arc.name}.json`);
+      setExportingArc(null);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   // Отправка файла идёт мимо `api.post` по двум причинам: нужен код ответа
@@ -294,6 +307,22 @@ export function AdventuresTab({
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} title={menu.arc.name} items={menuItems} onClose={() => setMenu(null)} />
+      )}
+
+      {exportingArc && (
+        <Modal onClose={() => { if (!exportError) return; setExportingArc(null); setExportError(null); }} ariaLabel="Выгрузка приключения">
+          <h3>Выгрузка «{exportingArc.name}»</h3>
+          {exportError ? (
+            <>
+              <ExportProgress error={exportError} />
+              <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
+                <button className="primary" onClick={() => { setExportingArc(null); setExportError(null); }}>Закрыть</button>
+              </div>
+            </>
+          ) : (
+            <ExportProgress label="Идёт выгрузка…" />
+          )}
+        </Modal>
       )}
 
       {wizardOpen && (

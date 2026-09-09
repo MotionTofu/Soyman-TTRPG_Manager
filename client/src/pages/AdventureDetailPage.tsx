@@ -14,6 +14,7 @@ import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { addToBag } from "../bag";
 import { useConfirm, usePrompt } from "../hooks/useConfirm";
 import { downloadJson } from "../downloadJson";
+import { ExportProgress } from "../components/ExportProgress";
 import { useLongPress } from "../hooks/useLongPress";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 
@@ -45,6 +46,8 @@ export function AdventureDetailPage() {
   const [arc, setArc] = useState<StoryArcDetail | null>(null);
   const [setting, setSetting] = useState<Setting | null>(null);
   const [tab, selectTab] = useTabState(TABS, "Обзор");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   function refresh() {
     const q = campaignId ? `?campaign_id=${campaignId}` : "";
@@ -70,6 +73,22 @@ export function AdventureDetailPage() {
       return;
     await api.del(`/story/arcs/${arcId}`);
     navigate(`/settings/${arc?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
+  }
+
+  async function exportArc() {
+    // Выгрузка — один синхронный запрос без процента готовности; кнопка
+    // дизейблится и показывает бесконечный индикатор, чтобы не выглядело зависшим.
+    if (exportBusy || !arc) return;
+    setExportBusy(true);
+    setExportError(null);
+    try {
+      const data = await api.get(`/story/arcs/${arcId}/export`, { timeoutMs: 120000 });
+      downloadJson(data, `adventure-${arc.name}.json`);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportBusy(false);
+    }
   }
 
 
@@ -109,13 +128,11 @@ export function AdventureDetailPage() {
         </div>
         <div className="entity-header-actions">
           <button
-            onClick={async () => {
-              const data = await api.get(`/story/arcs/${arcId}/export`);
-              downloadJson(data, `adventure-${arc.name}.json`);
-            }}
+            onClick={() => void exportArc()}
+            disabled={exportBusy}
             title="Сохранить приключение в файл — со сценами, вехами, тайнами и схемой"
           >
-            Выгрузить в файл
+            {exportBusy ? "Выгружаем…" : "Выгрузить в файл"}
           </button>
           {arc.is_default !== 1 && (
             <>
@@ -134,6 +151,12 @@ export function AdventureDetailPage() {
           )}
         </div>
       </div>
+
+      {(exportBusy || exportError) && (
+        <div style={{ maxWidth: 420 }}>
+          {exportBusy ? <ExportProgress label="Идёт выгрузка…" /> : <ExportProgress error={exportError} />}
+        </div>
+      )}
 
       <div className="tabs">
         {TABS.map((t) => (

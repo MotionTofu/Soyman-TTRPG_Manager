@@ -165,7 +165,7 @@ export function migrateDndArtificerCompanionActions(database: Database): void {
     const insert = database.prepare(
       `INSERT INTO compendium_entries
         (system_id, section_id, parent_id, kind, name, level, data, description, position, uid)
-       VALUES (?, 97, ?, 'feature', ?, 3, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, 'feature', ?, 3, ?, ?, ?, ?)`
     );
     const add = (
       parentId: number,
@@ -176,13 +176,14 @@ export function migrateDndArtificerCompanionActions(database: Database): void {
       if (exists.get(parentId, name)) return;
       // Родителя-подкласса может не быть (тестовые базы, частичные системы) —
       // тогда вставлять некуда, молча пропускаем, а не роняем миграцию.
-      const parent = database.prepare("SELECT system_id FROM compendium_entries WHERE id = ?").get(parentId) as
-        | { system_id: number }
+      // section_id берём у родителя: хардкод id раздела роняет чужую базу
+      // с FOREIGN KEY constraint failed, если раздела с таким id там нет.
+      const parent = database.prepare("SELECT system_id, section_id FROM compendium_entries WHERE id = ?").get(parentId) as
+        | { system_id: number; section_id: number }
         | undefined;
       if (!parent) return;
-      const systemId = parent.system_id;
       const pos = (maxPos.get(parentId) as { m: number }).m + 1;
-      insert.run(systemId, parentId, name, JSON.stringify(data), description, pos, randomUUID());
+      insert.run(parent.system_id, parent.section_id, parentId, name, JSON.stringify(data), description, pos, randomUUID());
       inserted++;
     };
 
@@ -308,13 +309,13 @@ export function migrateDndArtificerPoolRows(database: Database): void {
     const insert = database.prepare(
       `INSERT INTO compendium_entries
         (system_id, section_id, parent_id, kind, name, level, data, description, position, uid)
-       VALUES (?, 97, ?, 'feature', ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, 'feature', ?, ?, ?, ?, ?, ?)`
     );
-    const sysOf = (parentId: number): number | null => {
-      const r = database.prepare("SELECT system_id FROM compendium_entries WHERE id = ?").get(parentId) as
-        | { system_id: number }
+    const sysOf = (parentId: number): { system_id: number; section_id: number } | null => {
+      const r = database.prepare("SELECT system_id, section_id FROM compendium_entries WHERE id = ?").get(parentId) as
+        | { system_id: number; section_id: number }
         | undefined;
-      return r ? r.system_id : null;
+      return r ?? null;
     };
     const add = (
       parentId: number,
@@ -324,10 +325,10 @@ export function migrateDndArtificerPoolRows(database: Database): void {
       description: string
     ): void => {
       if (exists.get(parentId, name)) return;
-      const systemId = sysOf(parentId);
-      if (systemId == null) return;
+      const sys = sysOf(parentId);
+      if (sys == null) return;
       const pos = (maxPos.get(parentId) as { m: number }).m + 1;
-      insert.run(systemId, parentId, name, level, JSON.stringify(data), description, pos, randomUUID());
+      insert.run(sys.system_id, sys.section_id, parentId, name, level, JSON.stringify(data), description, pos, randomUUID());
       inserted++;
     };
     const setCost = (id: number, cost: Record<string, unknown> | null): void => {
@@ -564,29 +565,30 @@ export function migrateDndArtificerMasterworker(database: Database): void {
     const exists = database.prepare("SELECT id FROM compendium_entries WHERE parent_id = ? AND name = ?");
     const art = database
       .prepare(
-        `SELECT e.id, e.system_id FROM compendium_entries e
+        `SELECT e.id, e.system_id, e.section_id FROM compendium_entries e
            JOIN system_sections s ON s.id = e.section_id
           WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
       )
-      .all() as { id: number; system_id: number }[];
+      .all() as { id: number; system_id: number; section_id: number }[];
     const maxPos = database.prepare(
       "SELECT COALESCE(MAX(position), -1) AS m FROM compendium_entries WHERE parent_id = ?"
     );
     const insert = database.prepare(
       `INSERT INTO compendium_entries
         (system_id, section_id, parent_id, kind, name, level, data, description, position, uid)
-       VALUES (?, 97, ?, 'feature', ?, 6, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, 'feature', ?, 6, ?, ?, ?, ?)`
     );
     const add = (
       parentId: number,
       systemId: number,
+      sectionId: number,
       name: string,
       data: Record<string, unknown>,
       description: string
     ): void => {
       if (exists.get(parentId, name)) return;
       const pos = (maxPos.get(parentId) as { m: number }).m + 1;
-      insert.run(systemId, parentId, name, JSON.stringify(data), description, pos, randomUUID());
+      insert.run(systemId, sectionId, parentId, name, JSON.stringify(data), description, pos, randomUUID());
       inserted++;
     };
 
@@ -598,6 +600,7 @@ export function migrateDndArtificerMasterworker(database: Database): void {
       add(
         a.id,
         a.system_id,
+        a.section_id,
         "Зарядка магического предмета",
         {
           casting_timing: "Бонусное действие",
@@ -610,6 +613,7 @@ export function migrateDndArtificerMasterworker(database: Database): void {
       add(
         a.id,
         a.system_id,
+        a.section_id,
         "Поглощение магического предмета",
         {
           casting_timing: "Бонусное действие",
@@ -622,6 +626,7 @@ export function migrateDndArtificerMasterworker(database: Database): void {
       add(
         a.id,
         a.system_id,
+        a.section_id,
         "Преобразование магического предмета",
         {
           casting_timing: "Действие",

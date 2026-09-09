@@ -26,9 +26,13 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
     setError(null);
     setFileName(file.name);
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      const created = await api.post<System>("/systems/import", data);
+      // Файл едет multipart'ом, а не JSON-строкой: экспорт с картинками
+      // весит сотни мегабайт, и file.text() + JSON.stringify держали бы всё
+      // в памяти дважды. Сервер кладёт файл на диск (POST /import-file).
+      // Импорт пишет сотни записей + backfill сводок — длинный таймаут.
+      const form = new FormData();
+      form.append("file", file, file.name);
+      const created = await api.post<System>("/systems/import-file", form, { timeoutMs: 600000 });
       setSuccessId(created.id);
       setMode("success");
       onCreated();

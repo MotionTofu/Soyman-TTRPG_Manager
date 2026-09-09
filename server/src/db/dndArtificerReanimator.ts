@@ -170,10 +170,10 @@ export function migrateDndArtificerReanimator(database: Database): void {
   let created = 0;
   const run = database.transaction(() => {
     const art = database.prepare(
-      `SELECT e.id, e.system_id FROM compendium_entries e
+      `SELECT e.id, e.system_id, e.section_id FROM compendium_entries e
          JOIN system_sections s ON s.id = e.section_id
         WHERE s.kind = 'class' AND e.parent_id IS NULL AND e.name = 'Артефактор'`
-    ).all() as { id: number; system_id: number }[];
+    ).all() as { id: number; system_id: number; section_id: number }[];
     if (art.length === 0) {
       database.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, datetime('now'))").run(MIGRATION_KEY);
       return;
@@ -188,8 +188,14 @@ export function migrateDndArtificerReanimator(database: Database): void {
     const insert = database.prepare(
       `INSERT INTO compendium_entries
         (system_id, section_id, parent_id, kind, name, name_original, level, data, description, position, uid)
-       VALUES (?, 97, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
+    const sectionOf = (id: number, fallback: number): number => {
+      const r = database.prepare("SELECT section_id FROM compendium_entries WHERE id = ?").get(id) as
+        | { section_id: number }
+        | undefined;
+      return r ? r.section_id : fallback;
+    };
     for (const a of art) {
       let sub = findSub.get(a.id) as { id: number } | undefined;
       let subId: number;
@@ -198,7 +204,7 @@ export function migrateDndArtificerReanimator(database: Database): void {
       } else {
         const pos = (maxPos.get(a.id) as { m: number }).m + 1;
         const info = insert.run(
-          a.system_id, a.id, "subclass", "Реаниматор", "", null,
+          a.system_id, a.section_id, a.id, "subclass", "Реаниматор", "", null,
           JSON.stringify({ granted_spells: GRANTS }), "", pos, randomUUID()
         );
         subId = Number(info.lastInsertRowid);
@@ -229,7 +235,7 @@ export function migrateDndArtificerReanimator(database: Database): void {
       }
       for (const [i, c] of CHILDREN.entries()) {
         if (findChild.get(subId, c.name)) continue;
-        insert.run(a.system_id, subId, "feature", c.name, "", c.level, JSON.stringify(c.data), c.description, i, randomUUID());
+        insert.run(a.system_id, sectionOf(subId, a.section_id), subId, "feature", c.name, "", c.level, JSON.stringify(c.data), c.description, i, randomUUID());
         created++;
       }
     }
