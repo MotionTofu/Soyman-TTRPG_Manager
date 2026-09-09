@@ -93,7 +93,6 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
 
   const [subclassId, setSubclassId] = useState<number | null>(null);
   const [featId, setFeatId] = useState<number | null>(null);
-  const [featTouched, setFeatTouched] = useState(false);
   const [asiPrimary, setAsiPrimary] = useState<string | null>(null);
   const [asiSecondary, setAsiSecondary] = useState<string | null>(null);
 
@@ -258,23 +257,18 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   })();
 
   // Черта шага: фильтр по парсимому «Уровень N+», остальное текстом.
-  const [featDetails, setFeatDetails] = useState<Record<number, CompendiumEntry>>({});
-  useEffect(() => {
-    if (!featId || featDetails[featId]) return;
-    api
-      .get<CompendiumEntry>(`/systems/entries/${featId}`)
-      .then((e) => setFeatDetails((prev) => (prev[e.id] ? prev : { ...prev, [e.id]: e })))
-      .catch(() => undefined);
-  }, [featId, featDetails]);
+  //
+  // Требования берутся из самого списка (`prerequisite` едет в DndFeatOption).
+  // Раньше запись догружалась только для УЖЕ выбранной черты, поэтому до
+  // выбора список был полным: игрок выбирал недоступную, она исчезала из
+  // списка, селект обнулялся, а объяснением была приглушённая строка
+  // (аудит 09.09, В4). Теперь недоступного в списке нет вовсе.
   const blockedFeats = new Set(
-    featPool
-      .map((f) => ({ f, d: featDetails[f.id] }))
-      .filter(({ d }) => d && (parseFeatMinLevel(d.data.prerequisite) ?? 0) > newLevel)
-      .map(({ f }) => f.id)
+    featPool.filter((f) => (parseFeatMinLevel(f.prerequisite) ?? 0) > newLevel).map((f) => f.id)
   );
   const availableFeats = featPool.filter((f) => !blockedFeats.has(f.id));
   const chosenFeat = availableFeats.find((f) => f.id === featId) ?? null;
-  const chosenFeatEntry = featId != null ? (featDetails[featId] ?? featEntry) : null;
+  const chosenFeatEntry = featId != null ? featEntry : null;
   const isAsi = chosenFeat != null && ASI_NAMES.includes(chosenFeat.name);
 
   // ВЫН после возможного ПУХ в этом же визарде — превью честное.
@@ -285,21 +279,56 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   const hasTough =
     value.feats.some((f) => f.name.includes("Крепкий")) || (chosenFeat?.name.includes("Крепкий") ?? false);
 
-  // Движок хитов: legacy-лист (без hpRolls) живёт как lump = текущий максимум.
-  const baseLump = value.hpLump ?? (Number.parseInt(value.hitPointMax || "0", 10) || 0);
+  // Движок хитов знает две модели, и путать их нельзя.
+  //
+  // 1. Разобранный лист (визард создания, любой прошлый левелап): `hpLump` —
+  //    ТОЛЬКО кубовая часть, без ВЫН. Полный максимум собирается здесь:
+  //    lump + броски + ВЫН×уровень + прочее×уровень.
+  // 2. Легаси-лист (`hpLump` нет вовсе): импорт из LSS, ручное заведение, всё
+  //    старше реворка. В `hitPointMax` лежит ПОЛНЫЙ максимум, где ВЫН за все
+  //    прошлые уровни уже посчитан.
+  //
+  // Раньше вторая модель подставлялась в первую формулу — и ВЫН прибавлялся
+  // вторично за каждый уровень: Колдун 9 с ВЫН 16 и максимумом 81 получал
+  // «81 → 116» вместо «81 → 89» (аудит 09.09, К1). Прошлое такого листа
+  // неизвестно и восстановлению не подлежит, поэтому легаси считается
+  // дельтой: к сохранённому максимуму прибавляется только то, что даёт ЭТОТ
+  // уровень. Ретро-часть добавляется отдельно и только за то, что изменилось
+  // прямо сейчас (ПУХ в Телосложение, взятый «Крепкий», правка «прочих») —
+  // такие прибавки по правилам ложатся на все уровни разом.
+  // ВЫН и «за уровень» считаются от уровня ПЕРСОНАЖА, а не качаемой строки:
+  // хиты за Телосложение даёт каждый уровень, чей бы он ни был. С одним
+  // классом эти числа совпадают, поэтому промах был не виден; у мультикласса
+  // ап второй строки 2→3 давал «89 → 73» — минус шестнадцать хитов
+  // (найдено при проверке К2, 09.09).
+  const totalLevelBefore = value.classes.reduce((n, c) => n + (c.level || 0), 0);
+  const totalLevelAfter = value.classes.reduce(
+    (n, c, i) => n + (i === clsIdx ? newLevel : c.level || 0),
+    0
+  );
+  const isLegacyHp = value.hpLump == null;
+  const baseLump = value.hpLump ?? 0;
   const baseRolls = value.hpRolls ?? [];
   const perLevelBonus = (hasTough ? 2 : 0) + (misc || 0);
   const dieAvg = die != null ? Math.floor(die / 2) + 1 : null;
 
   const gainDie = hpMode === "roll" ? rolled : hpMode === "average" ? dieAvg : null;
+  const curMax = Number.parseInt(value.hitPointMax || "0", 10) || 0;
+  // Что у листа было до этого визарда — точка отсчёта ретро-части.
+  const conModBefore = abilityModifier(value.abilities.con ?? 10);
+  const perLevelBonusBefore =
+    (value.feats.some((f) => f.name.includes("Крепкий")) ? 2 : 0) + (value.hpMiscPerLevel ?? 0);
+  const retroPerLevel = conMod - conModBefore + (perLevelBonus - perLevelBonusBefore);
   const autoMaxRaw =
     die == null
       ? null
-      : baseLump +
-        baseRolls.reduce((a, b) => a + b, 0) +
-        (gainDie ?? 0) +
-        conMod * newLevel +
-        perLevelBonus * newLevel;
+      : isLegacyHp
+        ? curMax + (gainDie ?? 0) + conMod + perLevelBonus + retroPerLevel * totalLevelBefore
+        : baseLump +
+          baseRolls.reduce((a, b) => a + b, 0) +
+          (gainDie ?? 0) +
+          conMod * totalLevelAfter +
+          perLevelBonus * totalLevelAfter;
   // Итог хитов не может уйти в ноль/минус (отрицательный ВЫН + misc).
   const autoMax = autoMaxRaw != null ? Math.max(1, autoMaxRaw) : null;
   // Ручной итог: история бросков сносится, lump пересчитывается из математики —
@@ -308,10 +337,9 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   const manualValid = manualTotal.trim() !== "" && Number.isFinite(manualNum) && manualNum > 0;
   const manualLump =
     manualValid && die != null
-      ? manualNum - conMod * newLevel - perLevelBonus * newLevel
+      ? manualNum - (conMod + perLevelBonus) * totalLevelAfter
       : null;
   const newMax = hpMode === "manual" ? (manualValid ? manualNum : null) : autoMax;
-  const curMax = Number.parseInt(value.hitPointMax || "0", 10) || 0;
   const delta = newMax != null ? newMax - curMax : null;
 
   const STEPS = [
@@ -410,21 +438,71 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
         bump(asiPrimary, 2);
         bump(asiSecondary, 1);
       }
-      // Кость хитов строки: свой сегмент пересобираем, чужие не трогаем.
+      // Кость хитов качаемой СТРОКИ, а не «всех сегментов этой кости».
+      // Раньше выбрасывались все сегменты с текущей костью и дописывался один:
+      // у Воина 3 (к10) + Паладина 2 (к10) ап паладина превращал «3к10 + 2к10»
+      // в «3к10» — пять костей хитов молча становились тремя (аудит 09.09, К2).
       // Понимаем и кириллическую «к», и латинскую k (старые записи).
-      const segRe = /(\d+)[кk](\d+)/g;
-      const kept = [...value.hitDice.matchAll(segRe)]
-        .map((m) => m[0])
-        .filter((s) => die == null || (!s.endsWith(`к${die}`) && !s.endsWith(`k${die}`)));
-      const hitDice = die != null ? [...kept, `${newLevel}к${die}`].join(" + ") : value.hitDice;
+      const segRe = /(\d+)\s*[кk]\s*(\d+)/g;
+      const segs = [...value.hitDice.matchAll(segRe)].map((m) => ({
+        n: Number(m[1]),
+        d: Number(m[2]),
+      }));
+      let nextSegs = segs;
+      if (die != null) {
+        if (segs.length === value.classes.length) {
+          // Строка строке: сегменты собраны в порядке классов (computeHitDice),
+          // поэтому качаемый — просто свой по счёту.
+          nextSegs = segs.map((s, i) => (i === clsIdx ? { n: newLevel, d: die } : s));
+        } else {
+          // Поровну не набралось (импорт из LSS пишет одну строку, старые листы
+          // правились руками): меняем ОДИН сегмент своей кости, у которого счёт
+          // совпал со старым уровнем; не нашли — дописываем свой, чужие целы.
+          const at = segs.findIndex((s) => s.d === die && s.n === oldLevel);
+          nextSegs =
+            at >= 0
+              ? segs.map((s, i) => (i === at ? { n: newLevel, d: die } : s))
+              : [...segs, { n: newLevel, d: die }];
+        }
+      }
+      const hitDice = die != null ? nextSegs.map((s) => `${s.n}к${s.d}`).join(" + ") : value.hitDice;
+
+      const finalMax = newMax ?? curMax;
+      // Новый уровень поднимает и текущие хиты, а не только максимум: иначе
+      // персонаж, вставший на уровень целым, оказывается 81/89 (аудит 09.09, В5).
+      // Раненый лечится ровно на прибавку, а не «до полных» — уровень хиты
+      // прибавляет, но ран не залечивает.
+      const curNow = Number.parseInt(value.hitPointsCurrent || "", 10);
+      const nextCurrent = Number.isFinite(curNow)
+        ? String(Math.min(finalMax, curNow + Math.max(0, finalMax - curMax)))
+        : String(finalMax);
 
       let hpPatch: Partial<DndCharacterData>;
       if (hpMode === "manual" && manualLump != null) {
-        hpPatch = { hitPointMax: String(manualNum), hpLump: manualLump, hpRolls: [], hpMiscPerLevel: misc || 0 };
+        hpPatch = {
+          hitPointMax: String(manualNum),
+          hitPointsCurrent: nextCurrent,
+          hpLump: manualLump,
+          hpRolls: [],
+          hpMiscPerLevel: misc || 0,
+        };
+      } else if (isLegacyHp) {
+        // Легаси-лист переводится на общую модель прямо здесь: кубовую часть
+        // выводим обратной формулой из уже посчитанного честного максимума,
+        // бросок этого уровня сохраняем историей. Со следующего апа лист
+        // считается общей веткой — модель самолечится за один уровень.
+        hpPatch = {
+          hitPointMax: String(finalMax),
+          hitPointsCurrent: nextCurrent,
+          hpLump: finalMax - (gainDie ?? 0) - (conMod + perLevelBonus) * totalLevelAfter,
+          hpRolls: gainDie != null ? [gainDie] : [],
+          hpMiscPerLevel: misc || 0,
+        };
       } else {
         hpPatch = {
-          hitPointMax: String(newMax ?? curMax),
-          hpLump: value.hpLump ?? baseLump,
+          hitPointMax: String(finalMax),
+          hitPointsCurrent: nextCurrent,
+          hpLump: baseLump,
           hpRolls: [...baseRolls, ...(gainDie != null ? [gainDie] : [])],
           hpMiscPerLevel: misc || 0,
         };
@@ -515,7 +593,6 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                 setClsIdx(Number(e.target.value));
                 setSubclassId(null);
                 setFeatId(null);
-                setFeatTouched(false);
                 setAsiPrimary(null);
                 setAsiSecondary(null);
                 setRolled(null);
@@ -589,8 +666,19 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                   <span className="muted">
                     Кость {die != null ? `к${die}` : "—"} + ВЫН {formatModifier(conMod)}
                     {hasTough && " + Крепкий 2"}
-                    {misc ? ` + прочие ${misc}` : ""} за уровень
+                    {misc ? ` + прочие ${misc}` : ""}
+                    {/* Легаси-лист (импорт из LSS, ручное заведение) прибавляет
+                        за ЭТОТ уровень к сохранённому максимуму, а разобранный
+                        пересчитывает всю сумму. Формула на экране обязана
+                        называть ту, по которой считают. */}
+                    {isLegacyHp ? " за этот уровень" : " за уровень"}
                   </span>
+                  {isLegacyHp && (
+                    <span className="muted">
+                      Разбора хитов у этого листа нет — считаем от сохранённого максимума ({curMax}).
+                      После применения лист перейдёт на общий счёт.
+                    </span>
+                  )}
                   <span>
                     <strong>
                       {curMax} → {newMax ?? "—"}
@@ -666,7 +754,6 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                 <select
                   value={featId ?? ""}
                   onChange={(e) => {
-                    setFeatTouched(true);
                     setFeatId(e.target.value ? Number(e.target.value) : null);
                     setAsiPrimary(null);
                     setAsiSecondary(null);
@@ -679,8 +766,12 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                     </option>
                   ))}
                 </select>
-                {featTouched && blockedFeats.size > 0 && (
-                  <span className="muted">Часть черт скрыта: не пройден уровень из требований.</span>
+                {/* Сказать сразу, а не после неудачного выбора: список теперь
+                    честно неполон с самого начала, и молчать об этом нельзя. */}
+                {blockedFeats.size > 0 && (
+                  <span className="muted">
+                    Скрыто черт по уровню требований: {blockedFeats.size}.
+                  </span>
                 )}
                 {chosenFeatEntry?.description && <EntryBlurb text={chosenFeatEntry.description} />}
                 {isAsi && (

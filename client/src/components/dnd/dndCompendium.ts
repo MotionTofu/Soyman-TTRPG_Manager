@@ -155,6 +155,34 @@ export async function loadDndSpeciesOptions(systemId: number, opts?: LoadOpts): 
 export interface DndFeatOption {
   id: number;
   name: string;
+  /** Требования строкой («Уровень 8+», «Сила 13+»). Раньше отбрасывались, и
+   *  визард левелапа не мог отфильтровать недоступные черты до выбора: он
+   *  догружал запись только для уже выбранной, а тогда выбор просто исчезал
+   *  из списка (аудит 09.09, В4). Запись всё равно приезжает целиком —
+   *  выбрасывать поле было чистой потерей. */
+  prerequisite?: string;
+  /** Категория черты — по ней и отбирают (см. loadDndFeatsByCategory). */
+  category?: string;
+}
+
+/** Все черты системы одним списком. Отдельно от отбора по категории: импорту
+ *  из LSS надо сопоставлять имена по всему справочнику, а не по одной полке. */
+export async function loadDndFeats(systemId: number, opts?: LoadOpts): Promise<DndFeatOption[]> {
+  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
+  const featSections = sections.filter((s) => s.kind === "feat");
+  const lists = await Promise.all(
+    featSections.map((s) => get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${s.id}`, opts))
+  );
+  return lists
+    .flat()
+    .filter((e) => e.kind === "feat")
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      prerequisite: typeof e.data.prerequisite === "string" ? e.data.prerequisite : undefined,
+      category: typeof e.data.category === "string" ? e.data.category : undefined,
+    }))
+    .sort(byNameRu);
 }
 
 /** Черты заданной категории — черта происхождения для визарда, боевые
@@ -165,16 +193,7 @@ export async function loadDndFeatsByCategory(
   category: string,
   opts?: LoadOpts
 ): Promise<DndFeatOption[]> {
-  const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
-  const featSections = sections.filter((s) => s.kind === "feat");
-  const lists = await Promise.all(
-    featSections.map((s) => get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${s.id}`, opts))
-  );
-  return lists
-    .flat()
-    .filter((e) => e.kind === "feat" && e.data.category === category)
-    .map((e) => ({ id: e.id, name: e.name }))
-    .sort(byNameRu);
+  return (await loadDndFeats(systemId, opts)).filter((f) => f.category === category);
 }
 
 /** Черты происхождения — те, что визард предлагает на шаге выбора черты.

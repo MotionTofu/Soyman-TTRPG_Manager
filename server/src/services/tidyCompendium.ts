@@ -70,7 +70,9 @@ interface EntryRow {
   kind: string;
   name: string;
   data: string | null;
-  description: string;
+  // Схема разрешает NULL (TEXT DEFAULT '' без NOT NULL) — старые/импортные
+  // записи его несут, поэтому везде читается через ?? "".
+  description: string | null;
   position: number;
 }
 
@@ -133,19 +135,20 @@ const VEHICLE_FIELD_PATTERNS: { key: string; re: RegExp }[] = [
 const isBlank = (value: string) => !value || /^[—–-]+$/.test(value.trim());
 
 /** Категория — только там, где описание говорит прямо. Наземность «от обратного» не угадываем. */
-export function vehicleCategoryFrom(text: string): string {
-  const plain = text.toLowerCase();
+export function vehicleCategoryFrom(text: string | null | undefined): string {
+  const plain = (text ?? "").toLowerCase();
   if (/воздушн|небесн|летающ/.test(plain)) return "Воздушный";
   if (/корабл|лодк|баржа|судн|шлюп|галео|плот|парусн/.test(plain)) return "Водный";
   return "";
 }
 
-export function parseVehicleDescription(description: string): Record<string, string> {
+export function parseVehicleDescription(description: string | null | undefined): Record<string, string> {
   const out: Record<string, string> = {};
-  const size = vehicleTableSize(description);
+  const text = description ?? "";
+  const size = vehicleTableSize(text);
   if (size) out.size = size;
   for (const { key, re } of VEHICLE_FIELD_PATTERNS) {
-    const value = description.match(re)?.[1]?.trim() ?? "";
+    const value = text.match(re)?.[1]?.trim() ?? "";
     if (!isBlank(value)) out[key] = value;
   }
   return out;
@@ -194,8 +197,8 @@ const VEHICLE_NAME_RE = /(?<![А-Яа-яЁё])(корабл|лодк|баржа|
  * заклинание, которое «транспортирует существ», и «Сёдла и транспортные
  * средства» — общая подпись раздела снаряжения, стоящая и у корма для лошади.
  */
-function vehicleTableSize(description: string): string {
-  const head = description.trimStart().match(/^(\S+)\s+транспорт[.,\s]/i);
+function vehicleTableSize(description: string | null | undefined): string {
+  const head = (description ?? "").trimStart().match(/^(\S+)\s+транспорт[.,\s]/i);
   return head ? matchSize(head[1]) : "";
 }
 
@@ -221,6 +224,7 @@ export function moveCandidates(database: Database.Database, systemId: number): M
   for (const e of entriesOf(database, systemId)) {
     if (VEHICLE_KINDS.has(e.kind)) continue;
     const from = sections.get(e.section_id) ?? "";
+    const desc = e.description ?? "";
     if (e.kind === "monster") {
       const summary = readDndCreatureSummary(database, e.id, vocabulary);
       if (summary?.unknownType && /^объект/i.test(summary.unknownType)) {
@@ -235,12 +239,12 @@ export function moveCandidates(database: Database.Database, systemId: number): M
         continue;
       }
     }
-    if (vehicleTableSize(e.description)) {
+    if (vehicleTableSize(desc)) {
       out.push({
         id: e.id,
         name: e.name,
         from,
-        hint: e.description.slice(0, 120),
+        hint: desc.slice(0, 120),
         targetKind: "vehicle",
         suggested: true,
       });
@@ -251,7 +255,7 @@ export function moveCandidates(database: Database.Database, systemId: number): M
         id: e.id,
         name: e.name,
         from,
-        hint: e.description.slice(0, 120),
+        hint: desc.slice(0, 120),
         targetKind: "vehicle",
         suggested: false,
       });
@@ -375,12 +379,12 @@ export function applyTidy(
         if (!wanted.has(c.id)) continue;
         const row = database
           .prepare("SELECT data, description FROM compendium_entries WHERE id = ?")
-          .get(c.id) as { data: string | null; description: string };
+          .get(c.id) as { data: string | null; description: string | null };
         const data = parseData(row.data);
         // Категория снаряжения — «Прочие предметы»: в разделе транспорта это
         // поле означает среду, и старое значение туда не годится.
         if (c.targetKind === "vehicle") {
-          data.category = vehicleCategoryFrom(`${c.name} ${row.description}`);
+          data.category = vehicleCategoryFrom(`${c.name} ${row.description ?? ""}`);
           if (!data.category) delete data.category;
         } else {
           // Пост экипажа — узел судна: среды, класса опасности и
@@ -416,7 +420,7 @@ export function applyTidy(
         fields++;
       }
       if (e.kind === "vehicle" && !data.category) {
-        const category = vehicleCategoryFrom(`${e.name} ${e.description}`);
+        const category = vehicleCategoryFrom(`${e.name} ${e.description ?? ""}`);
         if (category) {
           data.category = category;
           fields++;

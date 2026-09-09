@@ -123,6 +123,12 @@ app.use(helmet({
       mediaSrc: ["'self'", "blob:", "data:"],
       connectSrc: ["'self'", "ws:", "wss:"],
       frameAncestors: ["'self'"],
+      // helmet подмешивает свои дефолты ко всем директивам выше — в том числе
+      // upgrade-insecure-requests. Из-за него Safari на iOS переписывает
+      // http-субресурсы LAN-адреса (http://192.168.x.x/*.js) в https, а TLS
+      // на сервере нет — весь JS на телефоне умирает и виден белый экран.
+      // Loopback (127.0.0.1) апгрейду не подлежит, поэтому на ПК всё работало.
+      "upgrade-insecure-requests": null,
     },
   },
   crossOriginEmbedderPolicy: false,

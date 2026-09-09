@@ -86,6 +86,7 @@ import { sheetClassColor, textOnClassColor } from "./dndClassColors";
 import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
 import { DndDie } from "./DndDie";
 import { TofuPips } from "./TofuPips";
+import { CreatureTypeBadge, creatureTypeName } from "./creatureTypeIcons";
 import {
   blueprintFromEntryData,
   companionClassId,
@@ -1512,7 +1513,13 @@ function sheetEntryIds(value: DndCharacterData): (number | null | undefined)[] {
   // заклинательной характеристики.
   const classes = value.classes.map((c) => c.classId);
   const subclasses = value.classes.map((c) => c.subclassId);
-  return [...spells, ...features, ...classes, ...subclasses, value.backgroundId];
+  // Спутники: их записи не запрашивались вовсе, хотя жетон рисует портрет из
+  // бестиария (`entry.avatar_image_url`) и теперь ещё знак типа. Без запроса
+  // `getEntry` всегда пуст — жетон навсегда оставался черепом-заглушкой.
+  // Что это было упущение, а не решение, видно по `deadLinkNames`: спутников
+  // она уже считает (найдено 09.09 при подключении знаков типов).
+  const companions = (value.companions ?? []).map((c) => c.entryId);
+  return [...spells, ...features, ...classes, ...subclasses, ...companions, value.backgroundId];
 }
 
 // Full field set shown when a spell name is clicked (requirement 2).
@@ -4584,6 +4591,8 @@ function LiveChip({
   title,
   ariaLabel,
   onClick,
+  onUndo,
+  undoLabel,
 }: {
   label: string;
   value: ReactNode;
@@ -4591,21 +4600,138 @@ function LiveChip({
   title?: string;
   ariaLabel: string;
   onClick?: () => void;
+  /** Откат на шаг назад. Истощение ходит только вверх по кругу 0…6→0, и
+   *  промах пальцем за столом стоил шести нажатий через «смерть», причём
+   *  каждое — сохранение (аудит 09.09, В7). Кнопка появляется, только когда
+   *  откатывать есть что: пустой орган управления на карте — шум (§1.11). */
+  onUndo?: () => void;
+  undoLabel?: string;
 }) {
   const cls = `dnd-live-chip${active ? " is-on" : ""}`;
+  const body = (
+    <>
+      <span className="sb-label">{label}</span>
+      <span className="sb-value">{value}</span>
+    </>
+  );
   if (!onClick) {
     return (
       <div className={cls} title={title}>
-        <span className="sb-label">{label}</span>
-        <span className="sb-value">{value}</span>
+        {body}
+      </div>
+    );
+  }
+  const main = (
+    <button type="button" className={cls} title={title} aria-label={ariaLabel} aria-pressed={active} onClick={onClick}>
+      {body}
+    </button>
+  );
+  if (!onUndo) return main;
+  return (
+    <span className="dnd-live-chip-pair">
+      {main}
+      <button
+        type="button"
+        className="dnd-live-chip-undo"
+        title={undoLabel}
+        aria-label={undoLabel ?? "Шаг назад"}
+        onClick={onUndo}
+      >
+        −
+      </button>
+    </span>
+  );
+}
+
+// Морда тофу для спасбросков от смерти. Тот же слепок маскота, что у пипсов
+// пулов (TofuPips): куб, контур, глаза — плюс рот, потому что здесь он и есть
+// смысл. Цвета канонные, вне темы: дорожка обязана читаться и на портрете, и
+// на бумаге. Отдельной графики не заводится.
+function TofuFace({ mood }: { mood: "good" | "bad" }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" className="dnd-tofu-body" />
+      <circle cx="8.6" cy="10" r="2.1" className="dnd-tofu-eye" />
+      <circle cx="15.4" cy="10" r="2.1" className="dnd-tofu-eye" />
+      <path
+        className="dnd-tofu-mouth"
+        d={mood === "good" ? "M8.2 15.4c1.5 2 6.1 2 7.6 0" : "M8.2 17.6c1.5-2 6.1-2 7.6 0"}
+      />
+    </svg>
+  );
+}
+
+// Спасброски от смерти — поверх портрета, крупно (решение владельца 09.09).
+// Раньше дорожки жили только на карте «Ресурсы», а урон вводится с «Карты»:
+// упавший на нуле игрок оказывался за шесть карт от того, чем этот ноль
+// отыгрывается (аудит 09.09, В3).
+//
+// Лист считает, но ничего не решает: три успеха — «Стабилизирован» (оверлей
+// сжимается в полоску и освобождает портрет), три провала — «Смерть» словом,
+// без единой правки данных. Судьбу персонажа объявляет стол, а не приложение
+// — тот же принцип, что у концентрации и мгновенной смерти.
+//
+// «Стабилизирован» хранится самими тремя успехами: отдельного поля в данных
+// не заводится, иначе его пришлось бы гасить в каждом месте, где меняются
+// хиты. Любое лечение с нуля обнуляет обе дорожки (см. applyHeal).
+function DeathSaveOverlay({
+  successes,
+  failures,
+  onQuickUpdate,
+}: {
+  successes: number;
+  failures: number;
+  onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+}) {
+  const stabilized = successes >= 3 && failures < 3;
+  const dead = failures >= 3;
+  function row(field: "deathSaveSuccesses" | "deathSaveFailures", filled: number, mood: "good" | "bad", label: string) {
+    return (
+      <div className="dnd-death-row" role="group" aria-label={label}>
+        {[0, 1, 2].map((i) => {
+          const on = i < filled;
+          return (
+            <button
+              key={i}
+              type="button"
+              className={`dnd-death-cell${on ? " is-on" : ""}`}
+              aria-pressed={on}
+              aria-label={`${label}: ${i + 1} из 3`}
+              disabled={!onQuickUpdate}
+              // Повторный тап по крайней снимает — тот же приём, что у
+              // PipTrack и TofuPips по всему листу: ошибочная отметка
+              // откатывается одним движением, учиться нечему.
+              onClick={onQuickUpdate ? () => onQuickUpdate({ [field]: i + 1 === filled ? i : i + 1 }) : undefined}
+            >
+              {on && <TofuFace mood={mood} />}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+  if (stabilized) {
+    return (
+      <div className="dnd-death-strip" role="status">
+        <span className="sb-label">Стабилизирован</span>
+        <button
+          type="button"
+          className="comp-mini"
+          title="Вернуть дорожки спасбросков"
+          disabled={!onQuickUpdate}
+          onClick={onQuickUpdate ? () => onQuickUpdate({ deathSaveSuccesses: 2 }) : undefined}
+        >
+          Спасброски
+        </button>
       </div>
     );
   }
   return (
-    <button type="button" className={cls} title={title} aria-label={ariaLabel} aria-pressed={active} onClick={onClick}>
-      <span className="sb-label">{label}</span>
-      <span className="sb-value">{value}</span>
-    </button>
+    <div className="dnd-death-overlay" role="group" aria-label="Спасброски от смерти">
+      <span className="dnd-death-title">{dead ? "Смерть" : "Спасброски от смерти"}</span>
+      {row("deathSaveSuccesses", successes, "good", "Успехи")}
+      {row("deathSaveFailures", failures, "bad", "Провалы")}
+    </div>
   );
 }
 
@@ -4708,8 +4834,14 @@ function CompanionToken({
   const [open, setOpen] = useState(false);
   const body = (
     <>
-      <span className="dnd-companion-face">
-        {avatar ? <img src={avatar} alt="" /> : <NavIcon name="skull" />}
+      {/* Знак типа существа — бейджем поверх лица (полотно «Подвал
+          спутников»). Лицо режет содержимое по кругу (overflow), поэтому
+          бейдж — сосед лица, а не его потомок. Нет типа — нет бейджа. */}
+      <span className="dnd-companion-portrait">
+        <span className="dnd-companion-face">
+          {avatar ? <img src={avatar} alt="" /> : <NavIcon name="skull" />}
+        </span>
+        <CreatureTypeBadge type={creatureTypeName(entry)} />
       </span>
       <span className="dnd-companion-name">{stripLatin(entry?.name || companion.name)}</span>
     </>
@@ -4786,8 +4918,12 @@ function CompanionBody({
   const [previewOpen, setPreviewOpen] = useState(false);
   const used = Math.min(companion.hpUsed ?? 0, maxHp);
   const left = maxHp - used;
+  // Знак типа и у тел по чертежу: тип берётся из самого чертежа
+  // (`companion.type` записи компендиума). Не проставлен — знака нет.
+  const typeBadge = <CreatureTypeBadge type={blueprint.type} size={17} />;
   const nameNode = previewEntryId ? (
     <>
+      {typeBadge}
       <button type="button" className="dnd-spell-name-link" onClick={() => setPreviewOpen(true)}>
         {companion.name}
       </button>
@@ -4796,7 +4932,10 @@ function CompanionBody({
       )}
     </>
   ) : (
-    <strong>{companion.name}</strong>
+    <strong className="row" style={{ gap: 5, alignItems: "center" }}>
+      {typeBadge}
+      {companion.name}
+    </strong>
   );
   if (companion.dead) {
     return (
@@ -6873,10 +7012,11 @@ function SbQuickValue({
 // rendered (even when both fields are still unset — shows "— / —") so a
 // fresh character always has a place to tap and fill these in, instead of
 // the box only appearing once a value already exists somehow.
-// On mobile, the two side-by-side number spinners are fiddly under a touch
-// keyboard and have no room for temp HP — clicking there opens the fuller
-// HpEditModal instead. Desktop keeps the original inline current/max box,
-// which is faster for a GM with a mouse.
+// Щелчок открывает HpEditModal — и на телефоне, и на десктопе. Раньше
+// десктоп правил два числа прямо в строке и модалку не открывал вовсе, а
+// значит урон, лечение, временные хиты и временный максимум были доступны
+// только с телефона: за ноутбуком их приходилось считать в уме и вписывать
+// в «текущие» руками.
 function HpQuickBox({
   value,
   onQuickUpdate,
@@ -6887,82 +7027,28 @@ function HpQuickBox({
   /** Цвет класса — заливка кости хитов. */
   accentColor?: string;
 }) {
-  const isMobile = useIsMobile();
-  const [editing, setEditing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [draftCurrent, setDraftCurrent] = useState(value.hitPointsCurrent);
-  const [draftMax, setDraftMax] = useState(value.hitPointMax);
-  function commit() {
-    onQuickUpdate?.({ hitPointsCurrent: draftCurrent, hitPointMax: draftMax });
-    setEditing(false);
-  }
-  function openEditor() {
-    if (isMobile) {
-      setModalOpen(true);
-      return;
-    }
-    setDraftCurrent(value.hitPointsCurrent);
-    setDraftMax(value.hitPointMax);
-    setEditing(true);
-  }
   return (
     <div style={{ flex: 1.2 }}>
       <div className="sb-label">Хиты</div>
-      {editing ? (
-        <span
-          className="row"
-          style={{ gap: 2, flexWrap: "nowrap" }}
-          onBlur={(e) => {
-            // relatedTarget is unreliable here — clicking the "/" separator
-            // (plain text, not focusable) between the two inputs blurs the
-            // current one with relatedTarget === null even though the user
-            // is just about to focus the other input, which closed the whole
-            // box before they could reach the max-HP field. Deferring the
-            // check to the next frame lets the new focus land first, so we
-            // only commit once focus has actually left both inputs.
-            const container = e.currentTarget;
-            requestAnimationFrame(() => {
-              if (!container.contains(document.activeElement)) commit();
-            });
-          }}
-        >
-          <input
-            autoFocus
-            type="number"
-            style={{ width: 48 }}
-            value={draftCurrent}
-            onChange={(e) => setDraftCurrent(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && commit()}
-          />
-          /
-          <input
-            type="number"
-            style={{ width: 48 }}
-            value={draftMax}
-            onChange={(e) => setDraftMax(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && commit()}
-          />
-        </span>
-      ) : (
-        <SbQuickValue
-          className="dnd-die-quick"
-          onClick={onQuickUpdate ? openEditor : undefined}
-          ariaLabel="Хиты — изменить"
-        >
-          {/* Хиты — единственная залитая кость на карте: это то, что тратится,
-              и по §6.5 заливка кодирует именно это, а не важность. */}
-          <DndDie size="lg" filled accentColor={accentColor} style={accentColor ? { color: textOnClassColor(accentColor) } : undefined}>
-            <span className="dnd-die-value">{value.hitPointsCurrent || "—"}</span>
-            <span className="dnd-die-sub">
-              из {value.hitPointMax || "—"}
-              {/* Именно по числу, а не по «строка не пустая»: и урон, и длинный
-                  отдых записывают сюда строку "0", а она истинна — после
-                  первого же попадания лист навсегда показывал «(+0)». */}
-              {Number(value.hitPointsTemp) > 0 ? ` +${value.hitPointsTemp}` : ""}
-            </span>
-          </DndDie>
-        </SbQuickValue>
-      )}
+      <SbQuickValue
+        className="dnd-die-quick"
+        onClick={onQuickUpdate ? () => setModalOpen(true) : undefined}
+        ariaLabel="Хиты — изменить"
+      >
+        {/* Хиты — единственная залитая кость на карте: это то, что тратится,
+            и по §6.5 заливка кодирует именно это, а не важность. */}
+        <DndDie size="lg" filled accentColor={accentColor} style={accentColor ? { color: textOnClassColor(accentColor) } : undefined}>
+          <span className="dnd-die-value">{value.hitPointsCurrent || "—"}</span>
+          <span className="dnd-die-sub">
+            из {value.hitPointMax || "—"}
+            {/* Именно по числу, а не по «строка не пустая»: и урон, и длинный
+                отдых записывают сюда строку "0", а она истинна — после
+                первого же попадания лист навсегда показывал «(+0)». */}
+            {Number(value.hitPointsTemp) > 0 ? ` +${value.hitPointsTemp}` : ""}
+          </span>
+        </DndDie>
+      </SbQuickValue>
       {modalOpen && onQuickUpdate && (
         <HpEditModal value={value} onQuickUpdate={onQuickUpdate} onClose={() => setModalOpen(false)} />
       )}
@@ -6970,6 +7056,21 @@ function HpQuickBox({
   );
 }
 
+const HP_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+function HpBackspaceIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M9 5h11v14H9L3 12z" />
+      <path d="M13 9.5l5 5M18 9.5l-5 5" />
+    </svg>
+  );
+}
+
+// Порядок блоков отвечает частоте: за столом окно открывают, чтобы записать
+// урон или лечение, а не чтобы поправить максимум — максимум меняет визард
+// повышения уровня. Поэтому пад и две кнопки стоят в середине, а четыре поля
+// живут под свёрткой.
 function HpEditModal({
   value,
   onQuickUpdate,
@@ -6981,6 +7082,14 @@ function HpEditModal({
 }) {
   const [amount, setAmount] = useState("");
   const [concentrationDc, setConcentrationDc] = useState<number | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  // Свёртка открывается ниже видимой части окна: содержимое с четырьмя полями
+  // выше 85vh, и без подтяжки нажатие выглядело так, будто ничего не
+  // произошло.
+  const fieldsRef = useRef<HTMLDivElement>(null);
+  // Последнее применение — для отмены. Хранятся оба поля: урон сначала съедает
+  // временные хиты, и откат, вернувший только текущие, потерял бы их.
+  const [last, setLast] = useState<{ current: string; temp: string; text: string } | null>(null);
   // Черновик четырёх полей. Раньше каждое из них звало onQuickUpdate прямо из
   // onChange — то есть на каждое нажатие клавиши пересобирался весь чарник и
   // уходил PUT: набрать «15» стоило двух запросов, а промежуточное пустое
@@ -7012,23 +7121,51 @@ function HpEditModal({
     };
   }
 
+  useEffect(() => {
+    if (manualOpen) fieldsRef.current?.scrollIntoView({ block: "nearest" });
+  }, [manualOpen]);
+
+  const curNum = Number(value.hitPointsCurrent) || 0;
+  const maxNum = Number(value.hitPointMax) || 0;
+  const tempNum = Number(value.hitPointsTemp) || 0;
+  const atZero = maxNum > 0 && curNum <= 0;
+  // Полоса: сплошное — текущие хиты, штриховка — временные, и штриховка стоит
+  // справа намеренно. Урон снимает её первой, так что полоса заодно
+  // показывает правило, а не просто заполняется.
+  const barTotal = Math.max(1, maxNum + tempNum);
+  const curPct = Math.max(0, Math.min(100, (curNum / barTotal) * 100));
+  const tempPct = Math.max(0, Math.min(100 - curPct, (tempNum / barTotal) * 100));
+
+  // Пад вместо клавиатуры: на телефоне системная клавиатура закрывала
+  // половину окна, включая кнопки «Урон» и «Лечение», ради которых его и
+  // открывали. Три цифры — потолок в 999, больше одним ударом не наносят.
+  function pressKey(d: number) {
+    setAmount((a) => {
+      const next = (a + String(d)).replace(/^0+(?=\d)/, "");
+      return next.length > 3 ? a : next;
+    });
+  }
+
   function applyDamage() {
     const n = Number(amount) || 0;
     if (n <= 0) return;
-    const tempNow = Number(value.hitPointsTemp) || 0;
-    const curNow = Number(value.hitPointsCurrent) || 0;
-    const fromTemp = Math.min(n, Math.max(0, tempNow));
+    const fromTemp = Math.min(n, Math.max(0, tempNum));
     const rest = n - fromTemp;
     // Хиты не уходят в минус: по правилам они останавливаются на нуле, а
     // «-7 хитов» на листе — это ещё и потерянный признак того, что персонаж
     // при смерти. Мгновенная смерть от превышения максимума за одно
     // попадание — решение стола, лист её не объявляет.
     const patch = {
-      hitPointsTemp: String(tempNow - fromTemp),
-      hitPointsCurrent: String(Math.max(0, curNow - rest)),
+      hitPointsTemp: String(tempNum - fromTemp),
+      hitPointsCurrent: String(Math.max(0, curNum - rest)),
     };
     onQuickUpdate(patch);
     setDraft((d) => ({ ...d, ...patch }));
+    setLast({
+      current: value.hitPointsCurrent,
+      temp: value.hitPointsTemp,
+      text: `−${n} · ${curNum} → ${patch.hitPointsCurrent}`,
+    });
     // Урон по концентрирующемуся требует спасброска Телосложения, СЛ 10 или
     // половина урона — что больше. Лист считает СЛ, но не решает за игрока:
     // спасбросок чаще проходит, чем нет, и снимать концентрацию самому было
@@ -7046,77 +7183,177 @@ function HpEditModal({
   function applyHeal() {
     const n = Number(amount) || 0;
     if (n <= 0) return;
-    const curNow = Number(value.hitPointsCurrent) || 0;
-    const cap = (Number(value.hitPointMax) || 0) + (Number(value.hitPointMaxTemp) || 0);
-    const healed = cap > 0 ? Math.min(curNow + n, cap) : curNow + n;
+    const cap = maxNum + (Number(value.hitPointMaxTemp) || 0);
+    const healed = cap > 0 ? Math.min(curNum + n, cap) : curNum + n;
     // Любое лечение с нуля поднимает на ноги: накопленные спасброски от
     // смерти сбрасываются, иначе они переживут исцеление и убьют персонажа
     // в следующем бою.
-    const revived = curNow <= 0 && healed > 0;
+    const revived = curNum <= 0 && healed > 0;
     onQuickUpdate({
       hitPointsCurrent: String(healed),
       ...(revived ? { deathSaveSuccesses: 0, deathSaveFailures: 0 } : {}),
     });
     setDraft((d) => ({ ...d, hitPointsCurrent: String(healed) }));
+    setLast({
+      current: value.hitPointsCurrent,
+      temp: value.hitPointsTemp,
+      text: `+${n} · ${curNum} → ${healed}`,
+    });
+    setConcentrationDc(null);
     setAmount("");
+  }
+  // Отмена возвращает ровно то, что было до применения. Спасброски от смерти,
+  // сброшенные лечением с нуля, она не восстанавливает: их значение — итог
+  // бросков за столом, и «вернуть как было» тут угадыванием не заменишь.
+  function undoLast() {
+    if (!last) return;
+    onQuickUpdate({ hitPointsCurrent: last.current, hitPointsTemp: last.temp });
+    setDraft((d) => ({ ...d, hitPointsCurrent: last.current, hitPointsTemp: last.temp }));
+    setLast(null);
+    setConcentrationDc(null);
   }
 
   return (
-    <Modal onClose={onClose}>
-      <div className="stack">
-        <h3 style={{ margin: 0 }}>Хиты</h3>
-        <label>
-          Текущие ХП
-          <input {...hpFieldProps("hitPointsCurrent")} />
-        </label>
-        <label>
-          Максимум ХП
-          <input {...hpFieldProps("hitPointMax")} />
-        </label>
-        <label>
-          Временные ХП
-          <input {...hpFieldProps("hitPointsTemp")} />
-        </label>
-        <label>
-          Временный максимум ХП
-          <input {...hpFieldProps("hitPointMaxTemp")} />
-        </label>
-        {/* Урон first depletes temp HP, then current — standard 5e rule.
-            Лечение caps at max + temp max, also per the rules. */}
-        <div className="row" style={{ gap: 6 }}>
-          <input
-            type="number"
-            placeholder="Количество"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <button type="button" className="primary" onClick={applyHeal}>
-            Лечение
-          </button>
-          <button type="button" className="danger" onClick={applyDamage}>
-            Урон
+    <Modal onClose={onClose} ariaLabel="Хиты" autoFocus={false}>
+      <div className="dnd-hp-modal">
+        <div className="dnd-hp-plate">
+          <span className="dnd-hp-plate-title">Хиты</span>
+          <button type="button" className="dnd-hp-close" aria-label="Закрыть" onClick={onClose}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <path d="M3 3l10 10M13 3L3 13" />
+            </svg>
           </button>
         </div>
-        {concentrationDc !== null && value.concentration && (
-          <div className="sb-entry dnd-concentration-check">
-            <span className="sb-prop-label">Концентрация</span> «{value.concentration}» — спасбросок Телосложения,
-            СЛ {concentrationDc}.{" "}
-            <button
-              type="button"
-              className="comp-mini"
-              onClick={() => {
-                onQuickUpdate({ concentration: "" });
-                setConcentrationDc(null);
-              }}
-            >
-              Сорвалась
+
+        <div className="dnd-hp-state">
+          <div className="dnd-hp-readout">
+            <span className={atZero ? "dnd-hp-cur is-down" : "dnd-hp-cur"}>{value.hitPointsCurrent || "—"}</span>
+            <span className="dnd-hp-max">/ {value.hitPointMax || "—"}</span>
+            {/* §1.11: блоку, которому нечего показать, показывать нечего. */}
+            {tempNum > 0 && <span className="dnd-hp-temp-chip">+{tempNum} врем</span>}
+          </div>
+          <div className="dnd-hp-bar">
+            <div className="dnd-hp-bar-cur" style={{ width: `${curPct}%` }} />
+            <div className="dnd-hp-bar-temp" style={{ width: `${tempPct}%` }} />
+          </div>
+        </div>
+
+        {last && (
+          <div className="dnd-hp-undo">
+            <span className="dnd-hp-undo-text">{last.text}</span>
+            <button type="button" onClick={undoLast}>
+              Отменить
             </button>
           </div>
         )}
-        <button type="button" onClick={onClose} style={{ alignSelf: "flex-end" }}>
-          Готово
+
+        {concentrationDc !== null && value.concentration && (
+          <div className="dnd-hp-conc">
+            <div className="dnd-hp-conc-text">
+              <span className="dnd-hp-caps">Концентрация</span>
+              <br />«{value.concentration}» — спасбросок Телосложения, СЛ{" "}
+              <span className="dnd-hp-conc-dc">{concentrationDc}</span>
+            </div>
+            {/* Две кнопки, а не одна: раньше лист предлагал только «Сорвалась»,
+                и после удачного спасброска подсказка висела до закрытия окна. */}
+            <div className="row" style={{ gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  onQuickUpdate({ concentration: "" });
+                  setConcentrationDc(null);
+                }}
+              >
+                Сорвалась
+              </button>
+              <button type="button" onClick={() => setConcentrationDc(null)}>
+                Устояла
+              </button>
+            </div>
+          </div>
+        )}
+
+        {atZero && (
+          <div className="dnd-hp-down">
+            Без сознания. Спасброски от смерти — на портрете. Любое лечение поднимает на ноги и сбрасывает их.
+          </div>
+        )}
+
+        <div className="dnd-hp-apply">
+          <div className="dnd-hp-amount">
+            <span className="dnd-hp-caps">Сколько</span>
+            <span className={amount === "" ? "dnd-hp-amount-value is-empty" : "dnd-hp-amount-value"}>
+              {amount === "" ? "0" : amount}
+            </span>
+          </div>
+          <div className="dnd-hp-pad">
+            {HP_KEYS.map((d) => (
+              <button type="button" key={d} className="dnd-hp-key" onClick={() => pressKey(d)}>
+                {d}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="dnd-hp-key is-aux"
+              aria-label="Стереть цифру"
+              onClick={() => setAmount((a) => a.slice(0, -1))}
+            >
+              <HpBackspaceIcon />
+            </button>
+            <button type="button" className="dnd-hp-key" onClick={() => pressKey(0)}>
+              0
+            </button>
+            <button type="button" className="dnd-hp-key is-aux is-word" onClick={() => setAmount("")}>
+              Сброс
+            </button>
+          </div>
+          <div className="dnd-hp-actions">
+            <button type="button" className="danger" onClick={applyDamage} disabled={!Number(amount)}>
+              Урон
+            </button>
+            <button type="button" className="primary" onClick={applyHeal} disabled={!Number(amount)}>
+              Лечение
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className={manualOpen ? "dnd-hp-manual is-open" : "dnd-hp-manual"}
+          aria-expanded={manualOpen}
+          onClick={() => setManualOpen((v) => !v)}
+        >
+          <span className="dnd-hp-caps">Поправить вручную</span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path d={manualOpen ? "M12 10L8 6l-4 4" : "M4 6l4 4 4-4"} />
+          </svg>
         </button>
+
+        {manualOpen && (
+          <>
+            <div className="dnd-hp-fields" ref={fieldsRef}>
+              <label>
+                <span className="dnd-hp-caps">Текущие</span>
+                <input {...hpFieldProps("hitPointsCurrent")} />
+              </label>
+              <label>
+                <span className="dnd-hp-caps">Максимум</span>
+                <input {...hpFieldProps("hitPointMax")} />
+              </label>
+              <label>
+                <span className="dnd-hp-caps">Временные</span>
+                <input {...hpFieldProps("hitPointsTemp")} />
+              </label>
+              <label>
+                <span className="dnd-hp-caps">Врем. максимум</span>
+                <input {...hpFieldProps("hitPointMaxTemp")} />
+              </label>
+            </div>
+            <p className="dnd-hp-hint">
+              Максимум обычно меняет визард повышения уровня — здесь он на случай эффектов, которых лист не знает.
+            </p>
+          </>
+        )}
       </div>
     </Modal>
   );
@@ -8738,6 +8975,16 @@ export function DndCharacterView({
   const [urlTab, setUrlTab] = useTabState<DndViewTab>(DND_VIEW_TABS, "Карта", undefined, "card");
   const tab = syncTabToUrl ? urlTab : localTab;
   const setTab = syncTabToUrl ? setUrlTab : setLocalTab;
+  // Полоска карт шире экрана (на 390px — 474 против 362), а сама к активной
+  // не подтягивалась: свайп на «Досье» или «Ресурсы» уводил подчёркнутый
+  // язычок за кадр, и единственный индикатор «на какой я карте» пропадал
+  // (аудит 09.09, В2). `inline: nearest` не дёргает полоску, когда язычок и
+  // так виден; `block: nearest` не даёт утащить страницу по вертикали.
+  const deckStripRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const active = deckStripRef.current?.querySelector<HTMLElement>("button.active");
+    active?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [tab]);
   // Живые данные компендиума для всех заклинаний и умений листа — одной
   // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
   const wantedIds = sheetEntryIds(value);
@@ -8880,7 +9127,9 @@ export function DndCharacterView({
   const lastPortraitTap = useRef<{ t: number; x: number; y: number } | null>(null);
   function onPortraitTouchEnd(e: React.TouchEvent) {
     const el = e.target as HTMLElement;
-    if (el.closest(".dnd-card-cartouche")) {
+    // Картуш — текст (дабл-тап выделяет слово), спасброски — свои кнопки:
+    // ни то, ни другое веер колоды открывать не должно.
+    if (el.closest(".dnd-card-cartouche, .dnd-death-overlay, .dnd-death-strip")) {
       lastPortraitTap.current = null;
       return;
     }
@@ -9962,7 +10211,7 @@ export function DndCharacterView({
               прокручивается вбок, текущая карта подчёркнута цветом класса, и
               Мастеру, впервые открывшему чужой лист, видно, куда нажать —
               свайпов он не знает. */}
-          <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа">
+          <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа" ref={deckStripRef}>
             {DND_VIEW_TABS.map((t) => (
               <button
                 key={t}
@@ -10045,7 +10294,7 @@ export function DndCharacterView({
                   Двойной тап по портрету разворачивает колоду веером, а в
                   ?edit=1 портрет тянется для кадрирования (см. useFrameDrag). */}
               <div
-                className={`dnd-card-portrait-zone${portraitUrl ? "" : " is-empty"}${canFrame ? " is-framing" : ""}${frame.dragging ? " is-dragging" : ""}`}
+                className={`dnd-card-portrait-zone${portraitUrl ? "" : " is-empty"}${canFrame ? " is-framing" : ""}${frame.dragging ? " is-dragging" : ""}${atZeroHp ? " has-death" : ""}`}
                 onTouchEnd={onPortraitTouchEnd}
                 onPointerDown={frame.handlers.onPointerDown}
                 onPointerMove={frame.handlers.onPointerMove}
@@ -10069,6 +10318,17 @@ export function DndCharacterView({
                     <span className="dnd-card-portrait-grain" aria-hidden="true" />
                     <span className="dnd-card-portrait-fade" aria-hidden="true" />
                   </div>
+                  )}
+                  {/* Спасброски от смерти (В3): поверх портрета, потому что
+                      ноль хитов — это ровно то, на что смотрят, и вводится он
+                      здесь же, модалкой хитов. Появляются сами и сами уходят:
+                      на здоровом персонаже их нет. */}
+                  {atZeroHp && (
+                    <DeathSaveOverlay
+                      successes={value.deathSaveSuccesses}
+                      failures={value.deathSaveFailures}
+                      onQuickUpdate={onQuickUpdate}
+                    />
                   )}
                   {/* КАРТУШ — имя стоит у нижнего края портретной половины,
                       как на макете: карта должна называть персонажа сама, а
@@ -10217,6 +10477,12 @@ export function DndCharacterView({
                 title={onQuickUpdate ? "Клик — следующий уровень истощения" : undefined}
                 ariaLabel={`Истощение ${value.exhaustion} — сменить уровень`}
                 onClick={onQuickUpdate ? () => onQuickUpdate({ exhaustion: (value.exhaustion + 1) % 7 }) : undefined}
+                onUndo={
+                  onQuickUpdate && value.exhaustion > 0
+                    ? () => onQuickUpdate({ exhaustion: value.exhaustion - 1 })
+                    : undefined
+                }
+                undoLabel={`Истощение ${value.exhaustion} → ${value.exhaustion - 1}`}
               />
             </div>
 
@@ -11057,28 +11323,15 @@ export function DndCharacterView({
                     />
                   );
                 })()}
-                <div className="stack sb-death-saves">
-                  <span className="row muted">
-                    +
-                    <PipTrack
-                      value={value.deathSaveSuccesses}
-                      label="Успехи спасбросков от смерти"
-                      max={3}
-                      size={12}
-                      onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveSuccesses: v }) : undefined}
-                    />
-                  </span>
-                  <span className="row muted">
-                    −
-                    <PipTrack
-                      value={value.deathSaveFailures}
-                      label="Провалы спасбросков от смерти"
-                      max={3}
-                      size={12}
-                      onChange={onQuickUpdate ? (v) => onQuickUpdate({ deathSaveFailures: v }) : undefined}
-                    />
-                  </span>
-                </div>
+                {/* Дорожек здесь больше нет: спасброски отмечаются поверх
+                    портрета на «Карте» (В3). Одно состояние — одно место,
+                    иначе это два места, где искать, и два, где промахиваться.
+                    Чит смерти остаётся тут: он привязан к репликам, а они
+                    живут на «Ресурсах». */}
+                <span className="muted">
+                  Успехи {value.deathSaveSuccesses} · провалы {value.deathSaveFailures} — отмечаются на карте
+                  «Карта», поверх портрета.
+                </span>
               </div>
             )}
             {/* Кости хитов и спасброски от смерти стоят здесь, а не на карте:

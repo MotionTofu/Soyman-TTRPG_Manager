@@ -97,22 +97,32 @@ export function TidyCompendiumDialog({ systemId, onClose }: { systemId: number; 
   const [report, setReport] = useState<TidyReport | null>(null);
   const [running, setRunning] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<TidyPlan>(`/systems/${systemId}/tidy`).then((p) => {
-      setPlan(p);
-      setChecked(new Set(p.candidates.filter((c) => c.suggested).map((c) => c.id)));
-    });
+    api
+      .get<TidyPlan>(`/systems/${systemId}/tidy`)
+      .then((p) => {
+        setPlan(p);
+        setChecked(new Set(p.candidates.filter((c) => c.suggested).map((c) => c.id)));
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [systemId]);
 
   async function run() {
     setRunning(true);
-    const result = await api.post<TidyReport>(`/systems/${systemId}/tidy`, {
-      move_ids: [...checked],
-    });
-    setReport(result);
-    setStep("report");
-    setRunning(false);
+    setError(null);
+    try {
+      const result = await api.post<TidyReport>(`/systems/${systemId}/tidy`, {
+        move_ids: [...checked],
+      });
+      setReport(result);
+      setStep("report");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
   }
 
   function toggle(id: number) {
@@ -128,7 +138,13 @@ export function TidyCompendiumDialog({ systemId, onClose }: { systemId: number; 
     <Modal onClose={onClose}>
       <h3>Привести справочник в порядок</h3>
 
-      {!plan && <p className="muted">Считаю…</p>}
+      {error && (
+        <p className="error" role="alert">
+          Не получилось: {error}
+        </p>
+      )}
+
+      {!plan && !error && <p className="muted">Считаю…</p>}
 
       {plan && step === "plan" && (
         <div className="stack">

@@ -27,6 +27,9 @@ export interface CompanionBlueprintVariant {
 
 export interface CompanionBlueprint {
   name?: string;
+  /** Тип существа («Конструкт», «Зверь») — под знак в подвале спутников.
+   *  Необязателен: чертёж без типа рисуется без знака (решение 09.09). */
+  type?: string;
   ac?: string;
   hp?: string;
   maxCount?: number;

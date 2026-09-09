@@ -1758,16 +1758,21 @@ body.sheet-fullscreen .app-content {
   border-radius: 0;
   cursor: pointer;
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
-  background: var(--muted);
-  opacity: 0.45;
+  /* Непрозрачный, а не приглушённый `opacity`. Разделитель подвала спутников
+     (`.dnd-companions` border-top) проходит ровно по уголку — замер на 390px:
+     линия на 743, уголок 728–772, — и сквозь полупрозрачный треугольник она
+     просвечивала, разрезая его пополам (аудит 09.09). Тон тот же, но собран
+     смешением с бумагой, поэтому линия под уголком не видна.
+     z-index — страховка порядка: уголок и так позиционирован, а подвал нет. */
+  background: color-mix(in oklab, var(--muted) 45%, var(--paper));
+  z-index: 4;
 }
 /* Десктопный угол — индикатор без клика: оборот и так в правой колонке. */
 span.dnd-card-corner {
   cursor: default;
 }
-.dnd-card-corner.has-unread {
-  opacity: 1;
-}
+/* С непрозрачными входящими цвет класса приезжает инлайном и перекрывает
+   приглушённый тон сам — гасить `opacity` больше нечего. */
 /* Блик раз в 30 секунд (таймер в DndCharacterView): пульс яркости, не тень.
    Длится 1.2с — класс glint снимается таймаутом. */
 .dnd-card-corner.glint {
@@ -2906,4 +2911,407 @@ span.dnd-tab-btn {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ——— Откат шага у плашки живого ряда (В7) ——————————————————————————— */
+/* Пара «плашка + откат» ведёт себя в ряду как одна плашка: внешняя обёртка
+   держит долю ширины, внутренняя кнопка повторяет геометрию соседей, а откат
+   стоит встык — состыкованные сегменты без щели, как у сегментных
+   переключателей системы. */
+.dnd-live-row > .dnd-live-chip-pair {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+.dnd-live-chip-pair > .dnd-live-chip {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.dnd-live-chip-undo {
+  flex: none;
+  width: 26px;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--paper);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-left-width: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+.dnd-live-chip-undo:hover {
+  color: var(--ink);
+}
+
+/* ——— Спасброски от смерти поверх портрета (В3) ————————————————————— */
+/* Оверлей закрывает низ портрета, но не картуш: имя персонажа при смерти
+   нужно не меньше. Плашка-инверсия, как шапка карточки (§1.4), радиусов и
+   теней нет. */
+.dnd-death-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 12px;
+  background: color-mix(in oklab, var(--ink) 82%, transparent);
+  color: var(--paper);
+}
+.dnd-death-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: var(--label-transform);
+  color: var(--paper);
+}
+.dnd-death-row {
+  display: flex;
+  gap: 8px;
+}
+.dnd-death-cell {
+  width: 44px;
+  height: 44px;
+  padding: 3px;
+  border: var(--card-border-width, 1px) solid var(--paper);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.dnd-death-cell:disabled {
+  cursor: default;
+}
+.dnd-death-cell svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dnd-tofu-mouth {
+  fill: none;
+  stroke: #241e18;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+/* Стабилизирован: оверлей уходит, остаётся узкая полоска — за столом важно
+   видеть, что персонаж жив, но без сознания. */
+.dnd-death-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: color-mix(in oklab, var(--ink) 82%, transparent);
+  color: var(--paper);
+}
+.dnd-death-strip .sb-label {
+  color: var(--paper);
+}
+/* Без портрета зона схлопывается по картушу — оверлею нужен свой рост, иначе
+   он ляжет на имя. */
+.dnd-card-portrait-zone.is-empty.has-death {
+  min-height: 180px;
+}
+/* Откат наследует состояние плашки: залитая плашка и бумажная кнопка рядом
+   читались как два объекта, а это один орган. Приём `:has` уже используется
+   в сплите визарда. */
+.dnd-live-chip-pair:has(.dnd-live-chip.is-on) .dnd-live-chip-undo {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* ——— Знак типа существа в подвале спутников ——————————————————————— */
+/* Лицо режет содержимое по кругу, поэтому знак — сосед лица, а не потомок;
+   обёртка задаёт систему координат. */
+.dnd-companion-portrait {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+/* Плашка-инверсия по артборду: квадрат чернилами, знак бумагой, радиуса нет
+   (тип кодируется формой — §1.7). Обводка бумагой отделяет знак от тёмного
+   портрета, на который он может лечь. */
+.dnd-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--card-border-width, 1px) solid var(--paper);
+  border-radius: 0;
+}
+.dnd-companion-portrait > .dnd-type-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+}
+
+/* ── Модалка хитов ─────────────────────────────────────────────────────────
+   Порядок блоков отвечает частоте обращения: сверху состояние, в середине
+   пад и две кнопки, четыре поля — под свёрткой. Раньше четыре поля стояли
+   первыми, а урон с лечением пятыми.
+   Пад цифр вместо числового поля: на телефоне системная клавиатура
+   закрывала половину окна вместе с кнопками, ради которых его открывали. */
+.dnd-hp-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* §1.4 — шапка карточки это плашка-инверсия, а не жирный текст. Отрицательные
+   поля выводят её в край окна поверх 20px паддинга .modal. */
+.dnd-hp-plate {
+  margin: -20px -20px 0;
+  background: var(--surface);
+  color: var(--on-surface);
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 14px;
+}
+.dnd-hp-plate-title,
+.dnd-hp-caps {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dnd-hp-caps {
+  color: var(--muted);
+}
+.dnd-hp-close {
+  width: 44px;
+  height: 44px;
+  background: none;
+  border: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.dnd-hp-close:hover {
+  border-color: transparent;
+  opacity: 0.7;
+}
+
+.dnd-hp-state {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dnd-hp-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+/* §1.5 — моноширинный только под значения. */
+.dnd-hp-cur {
+  font-family: var(--font-mono);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1;
+}
+.dnd-hp-cur.is-down {
+  color: var(--danger-bg);
+}
+.dnd-hp-max {
+  font-family: var(--font-mono);
+  font-size: var(--fs-h3);
+  color: var(--muted);
+  line-height: 1;
+}
+.dnd-hp-temp-chip {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  padding: 3px 6px;
+  color: var(--ink-2);
+}
+/* Сплошное — текущие хиты, штриховка — временные, и штриховка справа
+   намеренно: урон снимает её первой, полоса этим показывает правило.
+   Форма, а не цвет (§1.7) — читается и на чёрно-белой печати. */
+.dnd-hp-bar {
+  display: flex;
+  height: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.dnd-hp-bar-cur {
+  background: var(--ink);
+}
+.dnd-hp-bar-temp {
+  background-image: repeating-linear-gradient(45deg, var(--ink) 0 2px, transparent 2px 5px);
+}
+
+.dnd-hp-undo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  padding: 8px 10px;
+}
+.dnd-hp-undo-text {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  flex: 1;
+}
+
+.dnd-hp-conc {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dnd-hp-conc-text {
+  font-size: var(--fs-meta);
+  line-height: 1.35;
+}
+.dnd-hp-conc-dc {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.dnd-hp-down {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 10px;
+  font-size: var(--fs-meta);
+  line-height: 1.35;
+}
+
+.dnd-hp-apply {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dnd-hp-amount {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  height: 46px;
+  padding: 0 12px;
+}
+.dnd-hp-amount-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1;
+}
+.dnd-hp-amount-value.is-empty {
+  color: var(--muted);
+}
+.dnd-hp-pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+/* 48px — мишень пальцем; ниже опускаться некуда, окном пользуются в бою. */
+.dnd-hp-key {
+  height: 48px;
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dnd-hp-key.is-aux {
+  background: var(--paper-2);
+}
+.dnd-hp-key.is-word {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.dnd-hp-actions {
+  display: flex;
+  gap: 6px;
+}
+.dnd-hp-actions > button {
+  flex: 1;
+  height: 52px;
+  font-size: var(--fs-h3);
+  justify-content: center;
+}
+/* Обе кнопки гаснут одинаково, пока не набрано число: у .danger правило
+   :disabled своё, у .primary его нет вовсе — без этого «Урон» выглядел
+   выключенным, а «Лечение» рядом с ним живым, хотя не работали обе. */
+.dnd-hp-actions > button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dnd-hp-manual {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 12px;
+  background: none;
+}
+.dnd-hp-manual.is-open {
+  background: var(--surface);
+  border-color: var(--surface);
+}
+.dnd-hp-manual.is-open .dnd-hp-caps {
+  color: var(--on-surface);
+}
+.dnd-hp-manual.is-open svg {
+  color: var(--on-surface);
+}
+.dnd-hp-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.dnd-hp-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dnd-hp-fields input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-h3);
+}
+.dnd-hp-hint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: 1.35;
+  color: var(--muted);
 }

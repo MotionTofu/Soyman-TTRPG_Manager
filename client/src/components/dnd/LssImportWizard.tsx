@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { api } from "../../api/client";
 import type {
   CompendiumEntry,
@@ -19,9 +19,12 @@ import { ABILITY_LABELS, computeProficiencyBonus } from "./AbilityScores";
 import {
   findDndSystemId,
   loadDndBackgroundOptions,
+  loadDndClassFeatures,
   loadDndClassHierarchy,
   loadDndEquipmentEntries,
+  loadDndFeats,
   loadDndOriginFeats,
+  loadDndSpeciesFeatures,
   loadDndSpeciesOptions,
   loadDndSpellIndex,
   type DndBackgroundOption,
@@ -29,6 +32,7 @@ import {
   type DndFeatOption,
   type DndSpeciesOption,
 } from "./dndCompendium";
+import { featuresFromEntries } from "./dndFeatures";
 
 // Визард подтверждений импорта из Long Story Short (тикет 06): сверка
 // распознанного, а не создание с нуля (см. DndCharacterWizard). Каждый шаг —
@@ -189,6 +193,39 @@ export function LssImportWizard({
   const [spellQuery, setSpellQuery] = useState("");
   const [featChoices, setFeatChoices] = useState<Record<number, { entry: CompendiumEntry; picked: number[] }>>({});
 
+  // ——— Выдачи вместо текста (аудит 09.09, В8) ———
+  //
+  // Импорт опознаёт raceId/classId/subclassId, но умения кладёт одним комом
+  // свободного текста из LSS (`lssImport.ts` featureBlock). Текст выглядит
+  // как лист, но не работает: на `entryId` у способностей висит вся живая
+  // механика — пулы ресурсов, кубы по уровню, строки на «Действиях», чертежи
+  // спутников, а «Защита без доспехов» вообще ищется по имени способности.
+  // Поэтому здесь мы заменяем ком настоящими выдачами справочника.
+  //
+  // Исходный текст не удаляется, а уезжает в «Заметки» под маркером: в нём
+  // почти всегда есть личные пометки игрока («+заговор починка; могу создать
+  // действием предмет из списка в заметках») и хоумбрю, которых в справочнике
+  // нет и восстановить их будет неоткуда (решение владельца 09.09).
+  const [replaceGrants, setReplaceGrants] = useState(true);
+  const [grants, setGrants] = useState<{ species: DndFeature[]; cls: DndFeature[] } | null>(null);
+  const [grantsLoading, setGrantsLoading] = useState(false);
+  const [grantsError, setGrantsError] = useState<string | null>(null);
+  const [allFeats, setAllFeats] = useState<DndFeatOption[] | null>(null);
+  // Имя из текста LSS → выбранная запись черты (id) либо "text" — оставить
+  // строкой. Ключ — сырое имя: другого устойчивого у текста нет.
+  const [featPicks, setFeatPicks] = useState<Record<string, number | "text">>({});
+  // Что приехало из LSS до всякой замены. Снимок один на визард: галочку
+  // можно щёлкать туда-сюда, и текст обязан вернуться тем же.
+  const lssTextRef = useRef<{ species: DndFeature[]; cls: DndFeature[]; feats: DndFeature[] } | null>(null);
+  if (lssTextRef.current == null) {
+    const src = normalizeDndCharacter(initial);
+    lssTextRef.current = {
+      species: src.speciesFeatures,
+      cls: src.classFeatures,
+      feats: src.feats,
+    };
+  }
+
   const emptySheet = useMemo(() => isProbablyEmpty(normalizeDndCharacter(initial)), [initial]);
   const avatarUrl = rawExtras.avatarJpeg || rawExtras.avatarWebp;
   const cls: DndClassEntry = value.classes[0] ?? defaultClassEntry();
@@ -233,6 +270,149 @@ export function LssImportWizard({
       alive = false;
     };
   }, [systemId]);
+
+  // Выдачи справочника под опознанные id. Грузим лениво — только когда галочка
+  // включена: отказавшемуся от замены лишние запросы ни к чему.
+  const raceId = value.raceId ?? null;
+  const classIdForGrants = cls.classId ?? null;
+  const subclassIdForGrants = cls.subclassId ?? null;
+  const classLevel = cls.level || 1;
+  useEffect(() => {
+    if (!replaceGrants || !systemId) return;
+    if (classIdForGrants == null && raceId == null) return;
+    let alive = true;
+    setGrantsLoading(true);
+    setGrantsError(null);
+    Promise.all([
+      raceId != null ? loadDndSpeciesFeatures(systemId, raceId) : Promise.resolve([]),
+      classIdForGrants != null ? loadDndClassFeatures(systemId, classIdForGrants) : Promise.resolve([]),
+      subclassIdForGrants != null ? loadDndClassFeatures(systemId, subclassIdForGrants) : Promise.resolve([]),
+      loadDndFeats(systemId),
+    ])
+      .then(([sp, cl, sub, feats]) => {
+        if (!alive) return;
+        setGrants({
+          // У вида уровня нет — берём всё; у класса и подкласса режем по уровню.
+          species: raceId != null ? featuresFromEntries(sp, raceId, undefined) : [],
+          cls: [
+            ...(classIdForGrants != null ? featuresFromEntries(cl, classIdForGrants, classLevel) : []),
+            ...(subclassIdForGrants != null ? featuresFromEntries(sub, subclassIdForGrants, classLevel) : []),
+          ],
+        });
+        setAllFeats(feats);
+        setGrantsLoading(false);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setGrantsError("Справочник не ответил — умения останутся текстом из LSS.");
+        setGrantsLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [replaceGrants, systemId, raceId, classIdForGrants, subclassIdForGrants, classLevel]);
+
+  // Имена черт из текста LSS. В экспорте они лежат жирными строками (часто
+  // ссылкой на dnd.su), поэтому построчного разбора хватает; уточнение в
+  // скобках («Посвящённый в магию (Волшебник)») при сопоставлении отбрасываем,
+  // но в строке сохраняем — оно и есть выбор игрока.
+  const lssFeatNames = useMemo(() => {
+    const out: string[] = [];
+    for (const f of lssTextRef.current?.feats ?? []) {
+      for (const raw of `${f.description ?? ""}`.split("\n")) {
+        const line = raw.replace(/^[-–—•*\s]+/, "").trim();
+        if (line && line.length <= 120 && !out.includes(line)) out.push(line);
+      }
+    }
+    return out;
+  }, []);
+  const featMatchOf = (raw: string): DndFeatOption | null => {
+    if (!allFeats) return null;
+    const bare = norm(raw.replace(/\([^)]*\)/g, ""));
+    return allFeats.find((f) => norm(f.name) === norm(raw)) ?? allFeats.find((f) => norm(f.name) === bare) ?? null;
+  };
+  const featRows = lssFeatNames.map((raw) => {
+    const auto = featMatchOf(raw);
+    const pick = featPicks[raw];
+    const chosen = pick === "text" ? null : pick != null ? (allFeats?.find((f) => f.id === pick) ?? null) : auto;
+    return { raw, auto, chosen, asText: pick === "text" };
+  });
+  const unmatchedFeats = featRows.filter((r) => !r.chosen && !r.asText);
+
+  // Замена и возврат — одним местом, чтобы галочка была обратимой.
+  // Считаем желаемое состояние и патчим только при расхождении: эффект,
+  // который пишет в то же значение, от которого зависит, иначе зациклится.
+  const grantsReady = replaceGrants && grants != null && allFeats != null;
+  // Заменяем ТОЛЬКО то, чему нашлась замена. Класс «Изобретатель» в
+  // справочнике не значится — при слепой замене его текст уезжал в заметки, а
+  // на листе оставался ноль умений: хуже, чем было (поймано на живом прогоне
+  // фикстуры lss-filled.json, 09.09).
+  const replacedSpecies = grantsReady && raceId != null && grants!.species.length > 0;
+  const replacedCls = grantsReady && classIdForGrants != null && grants!.cls.length > 0;
+  useEffect(() => {
+    const lss = lssTextRef.current;
+    if (!lss) return;
+    const wantSpecies = replacedSpecies ? grants!.species : lss.species;
+    const wantCls = replacedCls ? grants!.cls : lss.cls;
+    const wantFeats = grantsReady
+      ? [
+          ...featRows
+            .filter((r) => r.chosen)
+            .map((r) => ({ name: r.chosen!.name, description: "", entryId: r.chosen!.id })),
+          ...featRows.filter((r) => !r.chosen).map((r) => ({ name: r.raw, description: "" })),
+        ]
+      : lss.feats;
+    const same = (a: DndFeature[], b: DndFeature[]) => JSON.stringify(a) === JSON.stringify(b);
+    setValue((v) => {
+      if (same(v.speciesFeatures, wantSpecies) && same(v.classFeatures, wantCls) && same(v.feats, wantFeats)) {
+        return v;
+      }
+      return { ...v, speciesFeatures: wantSpecies, classFeatures: wantCls, feats: wantFeats };
+    });
+    // featRows пересобирается каждый рендер — зависимости по её содержимому.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    grantsReady,
+    replacedSpecies,
+    replacedCls,
+    grants,
+    JSON.stringify(featRows.map((r) => [r.raw, r.chosen?.id ?? null, r.asText])),
+  ]);
+
+  // Текст LSS в «Заметки» под маркером: приём тот же, что у блока заметок
+  // класса на листе (upsertClassNotesBlock) — маркер делает вставку обратимой.
+  const LSS_TEXT_MARK = "— Умения из LSS (заменены выдачами 5.5) —";
+  const lssTextBlock = useMemo(() => {
+    const lss = lssTextRef.current;
+    if (!lss) return "";
+    // В заметки уходит только то, что действительно заменено: оставшийся на
+    // листе текст дублировать в заметках незачем.
+    const parts = [
+      ...(replacedSpecies ? lss.species : []),
+      ...(replacedCls ? lss.cls : []),
+      ...(grantsReady ? lss.feats : []),
+    ]
+      .map((f) => `${f.name}\n${f.description ?? ""}`.trim())
+      .filter(Boolean);
+    return parts.length > 0 ? `${LSS_TEXT_MARK}\n${parts.join("\n\n")}` : "";
+  }, [replacedSpecies, replacedCls, grantsReady]);
+  useEffect(() => {
+    setValue((v) => {
+      const has = v.notes.includes(LSS_TEXT_MARK);
+      if (lssTextBlock && !has) {
+        return { ...v, notes: v.notes.trim() ? `${v.notes.trim()}\n\n${lssTextBlock}` : lssTextBlock };
+      }
+      if (has) {
+        const cut = v.notes.indexOf(LSS_TEXT_MARK);
+        const head = v.notes.slice(0, cut).trimEnd();
+        if (!lssTextBlock) return { ...v, notes: head };
+        const rebuilt = head ? `${head}\n\n${lssTextBlock}` : lssTextBlock;
+        return rebuilt === v.notes ? v : { ...v, notes: rebuilt };
+      }
+      return v;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lssTextBlock]);
 
   async function fetchEntry(id: number): Promise<CompendiumEntry | null> {
     try {
@@ -872,6 +1052,82 @@ export function LssImportWizard({
 
       {step === "Текст" && (
         <div className="stack">
+          {/* Замена текста выдачами (В8). Галочка включена: цель импорта —
+              рабочий лист, а комом текста лист не работает. */}
+          <div className="stack sb-entry" style={{ gap: 6 }}>
+            <label className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+              <input
+                type="checkbox"
+                checked={replaceGrants}
+                onChange={(e) => setReplaceGrants(e.target.checked)}
+              />
+              <span>
+                Заменить умения выдачами ДнД 5.5
+                <br />
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                  Текст из LSS уедет в «Заметки» целиком — в нём остаются ваши пометки.
+                </span>
+              </span>
+            </label>
+            {/* Что именно не заменится — назвать поимённо. Молчаливый ноль
+                умений класса читается как потеря, а не как «класса нет в
+                справочнике». */}
+            {replaceGrants && classIdForGrants == null && (
+              <span className="muted">
+                Класс не опознан на шаге «Происхождение» — его умения останутся текстом из LSS.
+              </span>
+            )}
+            {replaceGrants && raceId == null && (
+              <span className="muted">
+                Вид не опознан на шаге «Происхождение» — видовые особенности останутся текстом из LSS.
+              </span>
+            )}
+            {replaceGrants && grantsLoading && <span className="muted">Читаю справочник…</span>}
+            {replaceGrants && grantsError && (
+              <span className="sb-save-status is-error" role="alert">{grantsError}</span>
+            )}
+            {replaceGrants && grants && (
+              <span className="muted">
+                Заменяется: {replacedSpecies ? `видовых ${grants.species.length}` : "видовых нет"},{" "}
+                {replacedCls ? `классовых и подкласса ${grants.cls.length}` : "классовых нет"}
+                {lssFeatNames.length > 0 &&
+                  `, черт опознано ${featRows.filter((r) => r.chosen).length} из ${lssFeatNames.length}`}
+                . Заменённый текст уходит в «Заметки».
+              </span>
+            )}
+            {/* Черта, которой не нашлось в справочнике: выбрать вручную или
+                оставить строкой. Угадывать за игрока нельзя — промах по имени
+                привяжет чужую механику. */}
+            {replaceGrants && allFeats && unmatchedFeats.length > 0 && (
+              <div className="stack" style={{ gap: 4 }}>
+                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                  Не нашлись в справочнике — выберите запись или оставьте текстом:
+                </span>
+                {unmatchedFeats.map((r) => (
+                  <div key={r.raw} className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ flex: "1 1 160px" }}>{r.raw}</span>
+                    <select
+                      value=""
+                      onChange={(e) =>
+                        setFeatPicks((prev) => ({
+                          ...prev,
+                          [r.raw]: e.target.value === "text" ? "text" : Number(e.target.value),
+                        }))
+                      }
+                    >
+                      <option value="">— выбрать черту —</option>
+                      <option value="text">оставить текстом</option>
+                      {allFeats.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <FeatureList title="Особенности вида" items={value.speciesFeatures} onChange={(items) => patch({ speciesFeatures: items })} />
           <FeatureList title="Умения класса" items={value.classFeatures} onChange={(items) => patch({ classFeatures: items })} />
           <FeatureList title="Черты" items={value.feats} onChange={(items) => patch({ feats: items })} />

@@ -13,6 +13,10 @@ interface Props {
   wide?: boolean;
   // Имя диалога для AT (role=dialog без имени — безымянный для скринридера).
   ariaLabel?: string;
+  // Куда встаёт фокус при открытии. По умолчанию — на первый интерактив
+  // внутри окна. false — на само окно: у модалки хитов первым интерактивом
+  // идёт цифра пада, и скринридер объявлял «кнопка 1» вместо имени диалога.
+  autoFocus?: boolean;
 }
 
 // Стек открытых модалок: вложенная (кроп портрета внутри визарда) тоже
@@ -26,7 +30,7 @@ const modalStack: (() => void)[] = [];
 // otherwise forward any click inside the modal (like a mouseup after
 // dragging in an image cropper) to that input, silently reopening the file
 // picker.
-export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel }: Props) {
+export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true }: Props) {
   // A "click" only means the mousedown AND mouseup landed on the same
   // element. Selecting text inside the modal and dragging past its edge
   // before releasing ends the drag over the backdrop — the browser then
@@ -48,7 +52,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ar
       modalRef.current?.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
-    const first = getFocusable()?.[0];
+    const first = autoFocus ? getFocusable()?.[0] : undefined;
     if (first) first.focus();
     else modalRef.current?.focus();
 
