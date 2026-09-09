@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { NavIcon } from "../components/NavIcons";
 import { SceneSwitcher } from "../components/SceneSwitcher";
+import { PresentationPanel } from "../components/presentation/PresentationPanel";
 import { SessionTimeStrip } from "../components/SessionTimeStrip";
 import { SceneJournal } from "../components/SceneJournal";
 import { InitiativeTracker } from "../components/InitiativeTracker";
@@ -199,6 +200,8 @@ ${text}` : text)
       </div>
 
       <SceneSwitcher sessionId={sessionId} onLaunched={() => setLaunches((n) => n + 1)} />
+
+      <PresentationPanel sessionId={sessionId} campaignId={campaign.id} launches={launches} />
 
       <div className="card session-live-central-tracker" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "7px 12px", background: "var(--surface)", color: "var(--on-surface)", borderBottom: "1px solid var(--surface)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Трекер инициативы</div>

@@ -383,17 +383,6 @@ export function CharacterDetailPage() {
 
       <div className="stack">
         {tab === "statblock" && (
-          <>
-            {/* Послания персонажу пишет Мастер отсюда — из карточки, открытой
-                из профиля игрока (этап 4). Игроку виджет не показывается:
-                прочтение ставит адресат на обороте карты, а не Мастер.
-                Послание приходит на оборот карты персонажа, а не на Главную. */}
-            {user?.role !== "player" && (
-              <div className="card stack">
-                <div className="player-section-header">Послания персонажу — придут на оборот его карты</div>
-                <RemindersWidget targetType="character" targetId={characterId} />
-              </div>
-            )}
             <StatblockList
               ownerType="character"
               ownerId={characterId}
@@ -404,8 +393,20 @@ export function CharacterDetailPage() {
               soleOnPage
               sheetHref={`/characters/${characterId}/sheet`}
               onPortraitRefresh={() => refresh()}
+              managerTop={
+                /* Послания персонажу пишет Мастер отсюда — из карточки, открытой
+                   из профиля игрока (этап 4). Игроку виджет не показывается:
+                   прочтение ставит адресат на обороте карты, а не Мастер.
+                   Послание приходит на оборот карты персонажа, а не на Главную.
+                   Живёт в менеджере чарников: к подготовке относится, а не к листу. */
+                user?.role !== "player" ? (
+                  <div className="card stack">
+                    <div className="player-section-header">Послания персонажу — придут на оборот его карты</div>
+                    <RemindersWidget targetType="character" targetId={characterId} />
+                  </div>
+                ) : undefined
+              }
             />
-          </>
         )}
 
         {tab === "about" && (

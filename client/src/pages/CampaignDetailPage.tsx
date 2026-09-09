@@ -76,6 +76,7 @@ import type {
   WorldExplorationEntry,
 } from "../types";
 import { Timeline } from "../components/Timeline";
+import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { sessionLabel } from "../sessionLabel";
 
 // Три вида одних и тех же событий: сетка показывает месяц, список — порядок,
@@ -2524,6 +2525,19 @@ function OverviewTab({
             {thumbCrop.modal}
           </div>
         </div>
+        </div>
+      </details>
+
+      <details className="card res-group">
+        <summary className="res-group__band">
+          <span className="res-group__title">Заглавное представление</span>
+        </summary>
+        <div className="res-group__body" style={{ padding: 12 }}>
+          <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>
+            Заглушка на второй экран: показывается до первого представления сцены и по кнопке из пульта.
+            Тот же конструктор, что у сцен, — фон, слои, переход и титр.
+          </p>
+          <PresentationEditor owner={{ kind: "campaign", campaignId: campaign.id, campaignName: campaign.name }} />
         </div>
       </details>
       {ovConfirmDialog}

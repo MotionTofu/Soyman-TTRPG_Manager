@@ -72,6 +72,14 @@ CREATE TABLE IF NOT EXISTS campaigns (
   currency TEXT DEFAULT 'RUB',
   background_image_path TEXT,
   thumbnail_image_path TEXT,
+  -- Заглавное представление кампании (показ на второй экран до первого
+  -- представления сцены): фон + слои в campaign_presentation_layers.
+  cover_background_path TEXT,
+  cover_transition TEXT NOT NULL DEFAULT 'cut', -- cut | fade | black
+  cover_transition_ms INTEGER NOT NULL DEFAULT 600,
+  cover_title TEXT NOT NULL DEFAULT '',
+  cover_title_secs INTEGER NOT NULL DEFAULT 3,
+  cover_fade_ms INTEGER NOT NULL DEFAULT 600,
   group_theme_litm TEXT, -- JSON LitMThemeCard, shared theme auto-copied into new character statblocks
   pinned_calendar_year INTEGER, -- year the campaign's in-world calendar opens to by default
   pinned_calendar_month INTEGER, -- month the campaign's in-world calendar opens to by default
@@ -641,6 +649,15 @@ CREATE TABLE IF NOT EXISTS story_scenes (
   outcomes TEXT NOT NULL DEFAULT '',
   hidden_from_players INTEGER NOT NULL DEFAULT 1,
   position INTEGER NOT NULL DEFAULT 0,
+  -- Представление сцены (показ на второй экран): фон + слои в
+  -- scene_presentation_layers, входной транзишен + титр. Наследуются
+  -- заготовкой — см. INHERITED_SCENE_FIELDS в story/library.ts.
+  presentation_background_path TEXT,
+  presentation_transition TEXT NOT NULL DEFAULT 'cut', -- cut | fade | black
+  presentation_transition_ms INTEGER NOT NULL DEFAULT 600,
+  presentation_title TEXT NOT NULL DEFAULT '',
+  presentation_title_secs INTEGER NOT NULL DEFAULT 3,
+  presentation_fade_ms INTEGER NOT NULL DEFAULT 600,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );
@@ -807,6 +824,53 @@ CREATE TABLE IF NOT EXISTS story_scene_transitions (
   UNIQUE(from_scene_id, to_scene_id, label)
 );
 CREATE INDEX IF NOT EXISTS idx_story_scene_transitions_from ON story_scene_transitions(from_scene_id);
+
+-- Слои представления сцены (показ на второй экран): картинки поверх фона,
+-- геометрия в % от кадра 16:9. Байты делят с копиями через дедуп vault —
+-- DELETE строки файл не удаляет.
+CREATE TABLE IF NOT EXISTS scene_presentation_layers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  image_path TEXT NOT NULL DEFAULT '',
+  has_button INTEGER NOT NULL DEFAULT 1,
+  visible_on_enter INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  x_pct REAL NOT NULL DEFAULT 0,
+  y_pct REAL NOT NULL DEFAULT 0,
+  w_pct REAL NOT NULL DEFAULT 100,
+  h_pct REAL NOT NULL DEFAULT 100,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_scene_presentation_layers_scene ON scene_presentation_layers(scene_id);
+
+-- Слои заглавного представления кампании — та же структура, владелец кампания.
+CREATE TABLE IF NOT EXISTS campaign_presentation_layers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  image_path TEXT NOT NULL DEFAULT '',
+  has_button INTEGER NOT NULL DEFAULT 1,
+  visible_on_enter INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  x_pct REAL NOT NULL DEFAULT 0,
+  y_pct REAL NOT NULL DEFAULT 0,
+  w_pct REAL NOT NULL DEFAULT 100,
+  h_pct REAL NOT NULL DEFAULT 100,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_presentation_layers_campaign ON campaign_presentation_layers(campaign_id);
+
+-- Состояние экрана показа: серверный источник правды (окно игроков
+-- переживает перезагрузку). Пишет только пульт. mode: black | scene | cover.
+CREATE TABLE IF NOT EXISTS session_show_state (
+  session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL DEFAULT 'black',
+  scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
+  visible_layer_ids TEXT NOT NULL DEFAULT '[]',
+  shown INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS story_arc_transitions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

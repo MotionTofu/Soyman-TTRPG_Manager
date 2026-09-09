@@ -5431,7 +5431,7 @@ details.card[open] summary {
   .card.wizard input,
   .card.wizard select,
   .card.wizard textarea {
-    font-size: 16px;
+    font-size: var(--fs-h3);
   }
 }
 .wizard-fieldset {

@@ -93,6 +93,10 @@ statblocksRouter.post("/import/preview", (req, res) => {
     characterName: parsed.characterName,
     shortText: parsed.shortText,
     warnings: parsed.warnings,
+    // Полный разбор для визарда подтверждений (тикет 04): клиент правит
+    // локально и сохраняет обычным POST /statblocks, без черновиков в БД.
+    characterData: parsed.characterData,
+    rawExtras: parsed.rawExtras,
     summary: {
       raceName: cd.raceName,
       raceId: cd.raceId,

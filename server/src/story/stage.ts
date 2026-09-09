@@ -260,6 +260,33 @@ export function launchScene(sessionId: number, sceneId: number): LaunchResult {
 
   const qty = qtyByLink(cast.map((c) => c.id));
 
+  // Представление сцены на второй экран (решения Q8/Q19): у сцены с
+  // представлением (фон или слои) запуск переводит экран на неё со слоями по
+  // умолчанию. Флаг shown при этом НЕ трогается: при запущенной трансляции
+  // кадр сменится сам, при остановленной обновится только превью пульта, а
+  // окно игроков останется чёрным до кнопки «Показать». У сцены без
+  // представления show-state не трогается вообще — висит последний кадр.
+  const presBg = (
+    db.prepare("SELECT presentation_background_path FROM story_scenes WHERE id = ?").get(contentId) as {
+      presentation_background_path: string | null;
+    }
+  ).presentation_background_path;
+  const presLayerCount = (
+    db.prepare("SELECT COUNT(*) AS n FROM scene_presentation_layers WHERE scene_id = ?").get(contentId) as {
+      n: number;
+    }
+  ).n;
+  const hasPresentation = !!presBg || presLayerCount > 0;
+  const presVisibleIds = hasPresentation
+    ? (
+        db
+          .prepare(
+            "SELECT id FROM scene_presentation_layers WHERE scene_id = ? AND (has_button = 0 OR visible_on_enter = 1) ORDER BY position, id"
+          )
+          .all(contentId) as { id: number }[]
+      ).map((r) => r.id)
+    : [];
+
   const run = db.transaction(() => {
     const gone = db
       .prepare("DELETE FROM generic_links WHERE from_type = 'session' AND from_id = ? AND origin = ?")
@@ -285,6 +312,15 @@ export function launchScene(sessionId: number, sceneId: number): LaunchResult {
     }
 
     db.prepare("INSERT INTO session_scenes (session_id, scene_id) VALUES (?, ?)").run(sessionId, sceneId);
+    if (hasPresentation) {
+      db.prepare(
+        `INSERT INTO session_show_state (session_id, mode, scene_id, visible_layer_ids, shown, updated_at)
+         VALUES (?, 'scene', ?, ?, COALESCE((SELECT shown FROM session_show_state WHERE session_id = ?), 0), datetime('now'))
+         ON CONFLICT(session_id) DO UPDATE SET
+           mode = 'scene', scene_id = excluded.scene_id,
+           visible_layer_ids = excluded.visible_layer_ids, updated_at = datetime('now')`
+      ).run(sessionId, sceneId, JSON.stringify(presVisibleIds), sessionId);
+    }
     return { added, removed: gone.changes };
   });
 

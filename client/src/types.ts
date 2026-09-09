@@ -873,6 +873,13 @@ export interface DndEquipmentItem {
   name: string;
   qty: string;
   weight: string;
+  /** Цена строкой из справочника («15 зм») — снимок на момент добавления.
+   *  В расчётах пока не участвует (купить/продать — позже), только показ. */
+  cost?: string;
+  /** Запись-расходник (стакан зелий, стрелы): повтор ложится +1 в ту же
+   *  строку во всех путях добавления, а не второй строкой. Снимок эвристики
+   *  на момент добавления — хоумбрю правится флагом вручную. */
+  stackable?: boolean;
   notes: string;
   // Set when added from the compendium (picker/drag-drop) rather than typed
   // by hand — enables click-to-view-description and, for armor/magic items,
@@ -2840,4 +2847,49 @@ export interface ScenePreview {
   checks: { what: string; dc: string; outcomes: string[] }[];
   sound: { id: number; name: string } | null;
   exits: { scene: StageScene; label: string }[];
+}
+
+/** Слой представления сцены — GET /story/scenes/:id/presentation. */
+export interface PresentationLayer {
+  id: number;
+  name: string;
+  image_path: string;
+  image_url: string;
+  has_button: number;
+  visible_on_enter: number;
+  position: number;
+  x_pct: number;
+  y_pct: number;
+  w_pct: number;
+  h_pct: number;
+}
+
+/** Представление сцены или заглавное кампании (фон + слои + вход). */
+export interface PresentationData {
+  background_path: string | null;
+  background_url: string | null;
+  transition: string;
+  transition_ms: number;
+  title: string;
+  title_secs: number;
+  fade_ms: number;
+  layers: PresentationLayer[];
+}
+
+export interface ScenePresentation extends PresentationData {
+  scene_id: number;
+  content_scene_id: number;
+}
+
+export interface CampaignCover extends PresentationData {
+  campaign_id: number;
+}
+
+/** Состояние экрана показа — GET/PUT /sessions/:id/show-state. */
+export interface ShowState {
+  session_id: number;
+  mode: "black" | "scene" | "cover";
+  scene_id: number | null;
+  visible_layer_ids: number[];
+  shown: number;
 }

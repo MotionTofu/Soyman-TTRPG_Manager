@@ -10,8 +10,12 @@ import { LazyDetails } from "../components/LazyDetails";
 import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
 import type { Setting, StoryScene, StorySceneDetail } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { PresentationEditor } from "../components/presentation/PresentationEditor";
+import { useTabState } from "../hooks/useTabState";
 import "../session.css";
 import { useConfirm } from "../hooks/useConfirm";
+
+const SCENE_TABS = ["Досье", "Наполнение", "Представление", "Входы и выходы"] as const;
 
 // Stable references — SectionDropZone is memoized and would re-render on
 // every parent render if these were inline literals.
@@ -42,6 +46,7 @@ export function SceneDetailPage() {
   const [transitionTarget, setTransitionTarget] = useState("");
   const [transitionLabel, setTransitionLabel] = useState("");
   const [siblings, setSiblings] = useState<StoryScene[]>([]);
+  const [tab, selectTab] = useTabState(SCENE_TABS, "Досье");
 
   function refresh() {
     const q = campaignId ? `?campaign_id=${campaignId}` : "";
@@ -219,6 +224,16 @@ export function SceneDetailPage() {
         )}
       </div>
 
+      <div className="tabs">
+        {SCENE_TABS.map((t) => (
+          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "Досье" && (
+        <>
       <EditableTextCard
         title="Описание для мастера"
         value={scene.summary}
@@ -263,28 +278,66 @@ export function SceneDetailPage() {
         collapsible
         defaultOpen
       />
-      <EditableTextCard
-        title="Условие входа"
-        help="Что должно произойти, чтобы сцена началась."
-        value={scene.entry_condition}
-        onSave={(v) => save({ entry_condition: v })}
-        rows={3}
-        entityType="scene"
-        entityId={sceneId}
-        defaultSettingId={scene.setting_id ?? undefined}
-        collapsible
-      />
-      <EditableTextCard
-        title="Возможные исходы"
-        value={scene.outcomes}
-        onSave={(v) => save({ outcomes: v })}
-        rows={4}
-        entityType="scene"
-        entityId={sceneId}
-        defaultSettingId={scene.setting_id ?? undefined}
-        collapsible
-      />
+        </>
+      )}
 
+      {tab === "Наполнение" && (
+        <>
+      <div className="sp-prep-row">
+        <LazyDetails
+          title="Сюжетные персонажи"
+          className="card stack sp-card--plot"
+          defaultOpen
+          style={{ flex: "1 1 280px", minWidth: 260 }}
+        >
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_plot_characters"
+            acceptTypes={PLOT_TYPES}
+            placeholder="Перетащите сюда существо или персонажа из поиска"
+          />
+        </LazyDetails>
+        <LazyDetails
+          title="Локации"
+          className="card stack sp-card--location"
+          style={{ flex: "1 1 280px", minWidth: 260 }}
+          defaultOpen
+        >
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_location"
+            acceptTypes={LOCATION_TYPES}
+            placeholder="Перетащите сюда локацию из поиска"
+          />
+        </LazyDetails>
+      </div>
+      <div className="sp-prep-row">
+        <LazyDetails title="Препятствия" className="card stack sp-card--enemies" style={{ flex: "1 1 280px", minWidth: 260 }} defaultOpen>
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_obstacles"
+            acceptTypes={OBSTACLE_TYPES}
+            placeholder="Перетащите сюда препятствие — существо, локацию, артефакт…"
+          />
+        </LazyDetails>
+        <LazyDetails
+          title="Потенциальный лут"
+          className="card stack sp-card--loot"
+          style={{ flex: "1 1 280px", minWidth: 260 }}
+          defaultOpen
+        >
+          <SectionDropZone
+            entityType="scene"
+            entityId={sceneId}
+            section="scene_loot"
+            acceptTypes={LOOT_TYPES}
+            placeholder="Перетащите сюда ресурс, артефакт или предмет из компендиума"
+          />
+        </LazyDetails>
+      </div>
       <details className="card" open>
         <summary className="campaign-overview-header">Проверки · {scene.checks.length}</summary>
         <div className="stack" style={{ marginTop: 8 }}>
@@ -358,7 +411,7 @@ export function SceneDetailPage() {
       </details>
 
       <details className="card" open>
-        <summary className="campaign-overview-header">Награды и лут · {scene.rewards.length}</summary>
+        <summary className="campaign-overview-header">Награды · {scene.rewards.length}</summary>
         <div className="stack" style={{ marginTop: 8 }}>
           {scene.rewards.map((r) => (
             <div key={r.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
@@ -420,63 +473,45 @@ export function SceneDetailPage() {
           </div>
         </div>
       </details>
+        </>
+      )}
 
-      <div className="sp-prep-row">
-        <LazyDetails
-          title="Сюжетные персонажи"
-          className="card stack sp-card--plot"
-          defaultOpen
-          style={{ flex: "1 1 280px", minWidth: 260 }}
-        >
-          <SectionDropZone
-            entityType="scene"
-            entityId={sceneId}
-            section="scene_plot_characters"
-            acceptTypes={PLOT_TYPES}
-            placeholder="Перетащите сюда существо или персонажа из поиска"
-          />
-        </LazyDetails>
-        <LazyDetails
-          title="Локации"
-          className="card stack sp-card--location"
-          style={{ flex: "1 1 280px", minWidth: 260 }}
-          defaultOpen
-        >
-          <SectionDropZone
-            entityType="scene"
-            entityId={sceneId}
-            section="scene_location"
-            acceptTypes={LOCATION_TYPES}
-            placeholder="Перетащите сюда локацию из поиска"
-          />
-        </LazyDetails>
-      </div>
-      <div className="sp-prep-row">
-        <LazyDetails title="Препятствия" className="card stack sp-card--enemies" style={{ flex: "1 1 280px", minWidth: 260 }} defaultOpen>
-          <SectionDropZone
-            entityType="scene"
-            entityId={sceneId}
-            section="scene_obstacles"
-            acceptTypes={OBSTACLE_TYPES}
-            placeholder="Перетащите сюда препятствие — существо, локацию, артефакт…"
-          />
-        </LazyDetails>
-        <LazyDetails
-          title="Потенциальный лут"
-          className="card stack sp-card--loot"
-          style={{ flex: "1 1 280px", minWidth: 260 }}
-          defaultOpen
-        >
-          <SectionDropZone
-            entityType="scene"
-            entityId={sceneId}
-            section="scene_loot"
-            acceptTypes={LOOT_TYPES}
-            placeholder="Перетащите сюда ресурс, артефакт или предмет из компендиума"
-          />
-        </LazyDetails>
-      </div>
-      <SceneAudioCard sceneId={sceneId} />
+      {tab === "Представление" && (
+        <>
+          <div className="card">
+            <div className="campaign-overview-header" style={{ marginBottom: 8 }}>Представление</div>
+            <PresentationEditor owner={{ kind: "scene", sceneId, sceneName: scene.name, campaignId }} />
+          </div>
+          <SceneAudioCard sceneId={sceneId} />
+        </>
+      )}
+
+      {tab === "Входы и выходы" && (
+        <>
+      <EditableTextCard
+        title="Условие входа"
+        help="Что должно произойти, чтобы сцена началась."
+        value={scene.entry_condition}
+        onSave={(v) => save({ entry_condition: v })}
+        rows={3}
+        entityType="scene"
+        entityId={sceneId}
+        defaultSettingId={scene.setting_id ?? undefined}
+        collapsible
+        defaultOpen
+      />
+      <EditableTextCard
+        title="Возможные исходы"
+        value={scene.outcomes}
+        onSave={(v) => save({ outcomes: v })}
+        rows={4}
+        entityType="scene"
+        entityId={sceneId}
+        defaultSettingId={scene.setting_id ?? undefined}
+        collapsible
+        defaultOpen
+      />
+      <SceneIncomingCard sceneId={sceneId} campaignId={campaignId} />
 
       <details className="card" open>
         <summary className="campaign-overview-header">Переходы · {scene.transitions.length}</summary>
@@ -530,12 +565,13 @@ export function SceneDetailPage() {
           </div>
         </div>
       </details>
+        </>
+      )}
     </div>
   );
 }
 
-function SceneAudioCard({ sceneId }: { sceneId: number }) {
-  const [sets, setSets] = useState<{ id: number; name: string }[]>([]);
+function SceneAudioCard({ sceneId }: { sceneId: number }) {  const [sets, setSets] = useState<{ id: number; name: string }[]>([]);
   const [current, setCurrent] = useState<{ id: number; name: string } | null>(null);
   useEffect(() => {
     api.get<{ id: number; name: string }[]>("/sound-sets").then(setSets).catch(() => setSets([]));
@@ -560,6 +596,56 @@ function SceneAudioCard({ sceneId }: { sceneId: number }) {
           {current && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{current.name}</span>}
         </div>
         <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
+      </div>
+    </details>
+  );
+}
+
+// Откуда сюда можно прийти: явные переходы других сцен + исходы проверок,
+// ведущие в эту. Зеркало «Переходов» (те — «куда дальше»).
+function SceneIncomingCard({ sceneId, campaignId }: { sceneId: number; campaignId: number | null }) {
+  const [data, setData] = useState<{
+    transitions: { id: number; from_scene_id: number; label: string; from_scene_name: string }[];
+    outcomes: { check_id: number; label: string; consequence: string; check_what: string; from_scene_id: number; from_scene_name: string }[];
+  } | null>(null);
+  useEffect(() => {
+    api
+      .get<{
+        transitions: { id: number; from_scene_id: number; label: string; from_scene_name: string }[];
+        outcomes: { check_id: number; label: string; consequence: string; check_what: string; from_scene_id: number; from_scene_name: string }[];
+      }>(`/story/scenes/${sceneId}/incoming`)
+      .then(setData)
+      .catch(() => setData({ transitions: [], outcomes: [] }));
+  }, [sceneId]);
+
+  const link = (id: number) => `/scenes/${id}${campaignId ? `?campaign=${campaignId}` : ""}`;
+  const total = (data?.transitions.length ?? 0) + (data?.outcomes.length ?? 0);
+
+  return (
+    <details className="card" open>
+      <summary className="campaign-overview-header">Сюда ведут · {total}</summary>
+      <div className="stack" style={{ marginTop: 8 }}>
+        {!data && <p className="muted">Загрузка…</p>}
+        {data && total === 0 && (
+          <div className="card" style={{ borderStyle: "dashed" }}>
+            <p className="muted" style={{ maxWidth: "62ch" }}>Сюда ничего не ведёт — ни переходов, ни исходов проверок. Вход только из списка «На вечер» в пульте.</p>
+          </div>
+        )}
+        {(data?.transitions ?? []).map((t) => (
+          <div key={`t${t.id}`} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+            <span style={{ maxWidth: "62ch" }}>
+              Откуда: <a href={link(t.from_scene_id)}>{t.from_scene_name}</a>
+              {t.label && <span className="muted"> — {t.label}</span>}
+            </span>
+          </div>
+        ))}
+        {(data?.outcomes ?? []).map((o, i) => (
+          <div key={`o${o.check_id}-${i}`} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+            <span style={{ maxWidth: "62ch" }}>
+              Исход «{o.label}» проверки <strong>{o.check_what || "—"}</strong> из <a href={link(o.from_scene_id)}>{o.from_scene_name}</a>
+            </span>
+          </div>
+        ))}
       </div>
     </details>
   );

@@ -43,6 +43,9 @@ export function fetchTransferParty(campaignId: number): Promise<TransferPartyMem
 export function offerItemTransfer(args: {
   senderId: number;
   recipientId: number;
+  /** Стабильный id строки — сервер ищет по нему. section/index едут рядом
+   *  для старых серверов/клиентов, где id ещё нет. */
+  itemId: string | null;
   section: number;
   index: number;
   name: string;
@@ -51,6 +54,7 @@ export function offerItemTransfer(args: {
 }): Promise<CharacterTransfer> {
   return api.post<CharacterTransfer>(`/player/characters/${args.senderId}/transfers`, {
     recipient_character_id: args.recipientId,
+    item_id: args.itemId,
     section: args.section,
     index: args.index,
     name: args.name,

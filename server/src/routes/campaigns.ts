@@ -7,7 +7,19 @@ import { db } from "../db/db";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { debtsForCampaign } from "../services/finance";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
-import { campaignFolder, toFileUrl, VAULT_ROOT, vaultAbs, writeReplacingOldFile } from "../services/filesystem";
+import { campaignFolder, toFileUrl, VAULT_ROOT, vaultAbs, vaultRel, writeReplacingOldFile } from "../services/filesystem";
+import {
+  campaignPresentationFolder,
+  cleanupUpload,
+  containFitGeometry,
+  layerFileName,
+  presentationUpload,
+  processPresentationImage,
+  readCampaignCover,
+  storePresentationFile,
+  validateLayerPatch,
+  validatePresentationPatch,
+} from "../story/presentation";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { campaignEarnings } from "../services/finance";
 import { requireAuth } from "../services/auth";
@@ -647,4 +659,174 @@ campaignsRouter.put("/:id/preproduction", (req, res) => {
   res.json(
     db.prepare("SELECT * FROM preproduction WHERE campaign_id = ?").get(req.params.id)
   );
+});
+
+// ------------------------------------------------- заглавное представление
+//
+// Та же структура, что представление сцены, но владелец — кампания: фон +
+// слои для показа на второй экран до первого представления сцены (см.
+// .scratch/presentation/spec.md). Копирования здесь нет — заглавное одно.
+
+function campaignCoverPatch(body: Record<string, unknown>): { sets: string; values: unknown[]; error: string | null } {
+  const { patch, error } = validatePresentationPatch(body);
+  if (error) return { sets: "", values: [], error };
+  const sets = Object.keys(patch)
+    .map((k) => `cover_${k} = ?`)
+    .join(", ");
+  return { sets, values: Object.values(patch), error: null };
+}
+
+campaignsRouter.get("/:id/cover", (req, res) => {
+  const data = readCampaignCover(Number(req.params.id));
+  if (!data) return res.status(404).json({ error: "not found" });
+  res.json(data);
+});
+
+campaignsRouter.put("/:id/cover", (req, res) => {
+  const exists = db.prepare("SELECT id FROM campaigns WHERE id = ?").get(req.params.id);
+  if (!exists) return res.status(404).json({ error: "not found" });
+  const { sets, values, error } = campaignCoverPatch(req.body ?? {});
+  if (error) return res.status(400).json({ error });
+  if (sets) db.prepare(`UPDATE campaigns SET ${sets} WHERE id = ?`).run(...values, req.params.id);
+  res.json(readCampaignCover(Number(req.params.id)));
+});
+
+campaignsRouter.post("/:id/cover/background", (req, res) => {
+  presentationUpload(req, res, async (err: unknown) => {
+    if (err) return res.status(400).json({ error: err instanceof Error ? err.message : "upload failed" });
+    const file = (req as unknown as { file?: Express.Multer.File }).file;
+    if (!file) return res.status(400).json({ error: "file is required" });
+    try {
+      const campaignId = Number(req.params.id);
+      const campaign = db.prepare("SELECT cover_background_path FROM campaigns WHERE id = ?").get(campaignId) as
+        | { cover_background_path: string | null }
+        | undefined;
+      if (!campaign) return res.status(404).json({ error: "not found" });
+      let folder: string;
+      try {
+        folder = campaignPresentationFolder(campaignId);
+      } catch (e) {
+        return res.status(400).json({ error: e instanceof Error ? e.message : "no folder" });
+      }
+      const { buffer, ext } = await processPresentationImage(file);
+      const dest = path.join(folder, `background${ext}`);
+      await storePresentationFile(buffer, dest, campaign.cover_background_path);
+      db.prepare("UPDATE campaigns SET cover_background_path = ? WHERE id = ?").run(vaultRel(dest), campaignId);
+      res.json(readCampaignCover(campaignId));
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "upload failed" });
+    } finally {
+      cleanupUpload(file);
+    }
+  });
+});
+
+campaignsRouter.post("/:id/cover/layers", (req, res) => {
+  presentationUpload(req, res, async (err: unknown) => {
+    if (err) return res.status(400).json({ error: err instanceof Error ? err.message : "upload failed" });
+    const file = (req as unknown as { file?: Express.Multer.File }).file;
+    if (!file) return res.status(400).json({ error: "file is required" });
+    try {
+      const campaignId = Number(req.params.id);
+      if (!db.prepare("SELECT id FROM campaigns WHERE id = ?").get(campaignId)) {
+        return res.status(404).json({ error: "not found" });
+      }
+      const body = req.body as Record<string, unknown>;
+      const { patch, error } = validateLayerPatch(body, true);
+      if (error) return res.status(400).json({ error });
+      let folder: string;
+      try {
+        folder = campaignPresentationFolder(campaignId);
+      } catch (e) {
+        return res.status(400).json({ error: e instanceof Error ? e.message : "no folder" });
+      }
+      const { buffer, ext, width, height } = await processPresentationImage(file);
+      const dest = path.join(folder, layerFileName(ext));
+      await storePresentationFile(buffer, dest, null);
+      const position = (
+        db.prepare("SELECT MAX(position) as m FROM campaign_presentation_layers WHERE campaign_id = ?").get(campaignId) as {
+          m: number | null;
+        }
+      ).m ?? -1;
+      // Как у сцен: новый слой — по размеру картинки, явно присланное главнее.
+      const fit = containFitGeometry(width, height);
+      const info = db
+        .prepare(
+          `INSERT INTO campaign_presentation_layers
+             (campaign_id, name, image_path, has_button, visible_on_enter, position, x_pct, y_pct, w_pct, h_pct)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          campaignId,
+          patch.name,
+          vaultRel(dest),
+          (patch.has_button as number | undefined) ?? 1,
+          (patch.visible_on_enter as number | undefined) ?? 0,
+          position + 1,
+          (patch.x_pct as number | undefined) ?? fit.x_pct,
+          (patch.y_pct as number | undefined) ?? fit.y_pct,
+          (patch.w_pct as number | undefined) ?? fit.w_pct,
+          (patch.h_pct as number | undefined) ?? fit.h_pct
+        );
+      const created = db.prepare("SELECT * FROM campaign_presentation_layers WHERE id = ?").get(info.lastInsertRowid) as {
+        image_path: string;
+      } & Record<string, unknown>;
+      res.status(201).json({ ...created, image_url: created.image_path ? toFileUrl(created.image_path) : "" });
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "upload failed" });
+    } finally {
+      cleanupUpload(file);
+    }
+  });
+});
+
+campaignsRouter.put("/:id/cover/layers/reorder", (req, res) => {
+  const campaignId = Number(req.params.id);
+  if (!db.prepare("SELECT id FROM campaigns WHERE id = ?").get(campaignId)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  const { order } = req.body as { order: number[] };
+  if (!Array.isArray(order) || order.length === 0 || order.length > 500) {
+    return res.status(400).json({ error: "order must be non-empty array ≤500" });
+  }
+  if (order.some((id) => typeof id !== "number" || !Number.isInteger(id) || id <= 0)) {
+    return res.status(400).json({ error: "order contains invalid id" });
+  }
+  if (new Set(order).size !== order.length) return res.status(400).json({ error: "order contains duplicates" });
+  const rows = db
+    .prepare(`SELECT id FROM campaign_presentation_layers WHERE id IN (${order.map(() => "?").join(",")}) AND campaign_id = ?`)
+    .all(...order, campaignId) as { id: number }[];
+  if (rows.length !== order.length) return res.status(400).json({ error: "all ids must belong to this campaign" });
+  const upd = db.prepare("UPDATE campaign_presentation_layers SET position = ? WHERE id = ?");
+  db.transaction((ids: number[]) => ids.forEach((id, i) => upd.run(i, id)))(order);
+  res.json(readCampaignCover(campaignId)?.layers ?? []);
+});
+
+// Литеральный reorder — строго раньше :lid, иначе "reorder" разберётся как id слоя.
+campaignsRouter.put("/:id/cover/layers/:lid", (req, res) => {
+  const campaignId = Number(req.params.id);
+  const layer = db.prepare("SELECT * FROM campaign_presentation_layers WHERE id = ?").get(req.params.lid) as
+    | { campaign_id: number }
+    | undefined;
+  if (!layer || layer.campaign_id !== campaignId) return res.status(404).json({ error: "not found" });
+  const { patch, error } = validateLayerPatch(req.body ?? {}, false);
+  if (error) return res.status(400).json({ error });
+  if (Object.keys(patch).length > 0) {
+    const sets = Object.keys(patch)
+      .map((k) => `${k} = ?`)
+      .join(", ");
+    db.prepare(`UPDATE campaign_presentation_layers SET ${sets} WHERE id = ?`).run(...Object.values(patch), req.params.lid);
+  }
+  res.json(db.prepare("SELECT * FROM campaign_presentation_layers WHERE id = ?").get(req.params.lid));
+});
+
+campaignsRouter.delete("/:id/cover/layers/:lid", (req, res) => {
+  const campaignId = Number(req.params.id);
+  const layer = db.prepare("SELECT * FROM campaign_presentation_layers WHERE id = ?").get(req.params.lid) as
+    | { campaign_id: number }
+    | undefined;
+  if (!layer || layer.campaign_id !== campaignId) return res.status(404).json({ error: "not found" });
+  // Только строка, файл остаётся (см. сцены выше).
+  db.prepare("DELETE FROM campaign_presentation_layers WHERE id = ?").run(req.params.lid);
+  res.json({ ok: true });
 });

@@ -34,6 +34,12 @@ const SoundConsolePage = lazy(() =>
 const SessionPanelPopoutPage = lazy(() =>
   import("./pages/SessionPanelPopoutPage").then((m) => ({ default: m.SessionPanelPopoutPage }))
 );
+const PresentationShowPage = lazy(() =>
+  import("./pages/PresentationShowPage").then((m) => ({ default: m.PresentationShowPage }))
+);
+const PresentationPreviewPage = lazy(() =>
+  import("./pages/PresentationPreviewPage").then((m) => ({ default: m.PresentationPreviewPage }))
+);
 const PlayersListPage = lazy(() => import("./pages/PlayersListPage").then((m) => ({ default: m.PlayersListPage })));
 const PlayerDetailPage = lazy(() => import("./pages/PlayerDetailPage").then((m) => ({ default: m.PlayerDetailPage })));
 const SettingsListPage = lazy(() => import("./pages/SettingsListPage").then((m) => ({ default: m.SettingsListPage })));
@@ -157,6 +163,12 @@ function App() {
                 (see sessionLivePanels.tsx) has no room to spare for the
                 sidebar/search/audio-bar chrome that wraps every other route. */}
             <Route path="/sessions/:id/live/panel/:panelKey" element={<SessionPanelPopoutPage />} />
+            {/* Окно показа игрокам — второй монитор: только кадр 16:9 на
+                чёрном, без chrome оболочки (см. PresentationShowPage). */}
+            <Route path="/sessions/:id/live/show" element={<PresentationShowPage />} />
+            {/* Предпросмотр черновика из редактора: та же сцена на чёрном,
+                но данные едут из окна редактора, а не из show-state. */}
+            <Route path="/presentation-preview" element={<PresentationPreviewPage />} />
             {/* Пульт звука — тоже вне <AppShell>: отдельное окно на второй
                 монитор, где сайдбар и нижняя панель только отняли бы место.
                 Своего звука у него нет — движок живёт в главном окне, см.

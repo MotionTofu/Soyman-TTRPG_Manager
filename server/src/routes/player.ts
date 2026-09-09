@@ -1172,6 +1172,24 @@ function transferItem(
   return { sec, item };
 }
 
+// Та же строка, но по стабильному id: адрес section/index протухает при
+// любом изменении списка между выбором вещи и нажатием «Передать».
+// Старые клиенты id не шлют — для них остаётся адресный путь выше.
+function transferItemById(
+  sections: EquipmentSection[],
+  id: string,
+  name: string
+): { sec: EquipmentSection; item: Record<string, unknown> } | null {
+  for (const sec of sections) {
+    const item = sec.items.find((it) => typeof it?.id === "string" && it.id === id);
+    if (item) {
+      if (typeof item.name !== "string" || item.name !== name) return null;
+      return { sec, item };
+    }
+  }
+  return null;
+}
+
 // qty вещи — строка; пустая и нечисловая означают одну штуку.
 function transferHave(item: Record<string, unknown>): number {
   const n = parseInt(String(item.qty ?? ""), 10);
@@ -1247,10 +1265,11 @@ playerRouter.get("/characters/:id/transfers", (req: AuthedRequest, res) => {
 playerRouter.post("/characters/:id/transfers", (req: AuthedRequest, res) => {
   const playerId = req.user!.playerId!;
   const senderId = Number(req.params.id);
-  const { recipient_character_id, section, index, qty, kind, coins } = req.body as {
+  const { recipient_character_id, section, index, item_id, qty, kind, coins } = req.body as {
     recipient_character_id?: number;
     section?: number;
     index?: number;
+    item_id?: unknown;
     qty?: number;
     kind?: string;
     coins?: Partial<Record<string, unknown>>;
@@ -1308,7 +1327,11 @@ playerRouter.post("/characters/:id/transfers", (req: AuthedRequest, res) => {
   const senderSheet = transferSheet(senderId);
   if (!senderSheet) return res.status(404).json({ error: "у отправителя нет чарника D&D" });
   const sections = transferSections(senderSheet.data);
-  const found = transferItem(sections, Number(section), Number(index), String((req.body as { name?: unknown }).name ?? ""));
+  const wantName = String((req.body as { name?: unknown }).name ?? "");
+  const found =
+    typeof item_id === "string" && item_id !== ""
+      ? transferItemById(sections, item_id, wantName)
+      : transferItem(sections, Number(section), Number(index), wantName);
   if (!found) return res.status(404).json({ error: "предмет не найден" });
   if (found.item.transferOut || found.item.transferIn) {
     return res.status(409).json({ error: "предмет уже в передаче" });

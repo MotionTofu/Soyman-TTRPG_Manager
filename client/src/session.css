@@ -11,6 +11,15 @@
   padding-bottom: calc(var(--player-bar-height) + 32px);
 }
 
+/* Профиль сцены: нижний запас под оверлей аудиоплеера, иначе конец
+   страницы уезжает под фиксированную плашку. */
+.scene-detail {
+  padding-bottom: 24px;
+}
+.app-content.has-player .scene-detail {
+  padding-bottom: calc(var(--player-bar-height) + 25px);
+}
+
 /* ----------------------------------------------------------- заголовок */
 
 .sp-header {

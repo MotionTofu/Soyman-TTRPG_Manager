@@ -1,6 +1,7 @@
 import { Router } from "express";
+import path from "path";
 import { db } from "../db/db";
-import { ensureSubfolder, readFileAsBase64, sanitizeName, vaultAbs, writeBase64File } from "../services/filesystem";
+import { ensureSubfolder, readFileAsBase64, sanitizeName, toFileUrl, vaultAbs, vaultRel, writeBase64File } from "../services/filesystem";
 import { storeDeduped } from "../services/vaultDedup";
 import { pruneRoutesForKeys } from "./canvas";
 import {
@@ -10,6 +11,18 @@ import {
   withLibraryContent,
 } from "../story/library";
 import { foreignLinksFor, repointSceneLink } from "../story/foreignLinks";
+import {
+  cleanupUpload,
+  containFitGeometry,
+  layerFileName,
+  presentationUpload,
+  processPresentationImage,
+  readScenePresentation,
+  scenePresentationFolder,
+  storePresentationFile,
+  validateLayerPatch,
+  validatePresentationPatch,
+} from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
 import {
   CAST_ROLE_BY_SECTION,
@@ -123,8 +136,10 @@ function cloneSceneForCampaign(sceneId: number, campaignId: number): SceneRow {
       .prepare(
         `INSERT INTO story_scenes
            (setting_id, arc_id, campaign_id, source_scene_id, name, kind, summary, read_aloud,
-            whats_happening, entry_condition, outcomes, hidden_from_players, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            whats_happening, entry_condition, outcomes, hidden_from_players, position,
+            presentation_background_path, presentation_transition, presentation_transition_ms,
+            presentation_title, presentation_title_secs, presentation_fade_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         source.setting_id,
@@ -139,7 +154,13 @@ function cloneSceneForCampaign(sceneId: number, campaignId: number): SceneRow {
         content.entry_condition,
         content.outcomes,
         content.hidden_from_players,
-        source.position
+        source.position,
+        content.presentation_background_path,
+        content.presentation_transition,
+        content.presentation_transition_ms,
+        content.presentation_title,
+        content.presentation_title_secs,
+        content.presentation_fade_ms
       );
     const newId = Number(info.lastInsertRowid);
     copySceneChildren(contentId, newId);
@@ -2364,8 +2385,10 @@ storyRouter.post("/scenes/:id/library", (req, res) => {
       .prepare(
         `INSERT INTO story_scenes
            (setting_id, in_library, name, kind, summary, read_aloud, whats_happening,
-            entry_condition, outcomes, hidden_from_players, position)
-         VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 0)`
+            entry_condition, outcomes, hidden_from_players, position,
+            presentation_background_path, presentation_transition, presentation_transition_ms,
+            presentation_title, presentation_title_secs, presentation_fade_ms)
+         VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         scene.setting_id,
@@ -2376,7 +2399,13 @@ storyRouter.post("/scenes/:id/library", (req, res) => {
         content.whats_happening,
         content.entry_condition,
         content.outcomes,
-        content.hidden_from_players
+        content.hidden_from_players,
+        content.presentation_background_path,
+        content.presentation_transition,
+        content.presentation_transition_ms,
+        content.presentation_title,
+        content.presentation_title_secs,
+        content.presentation_fade_ms
       );
     const newId = Number(info.lastInsertRowid);
     copySceneChildren(contentId, newId);
@@ -2793,4 +2822,247 @@ storyRouter.put("/scenes/:id/sound-set", (req, res) => {
     ).run(target.id, setId, SCENE_SOUND_SECTION);
   }
   res.json({ scene_id: target.id, sound: sceneSoundSet(target.id) });
+});
+
+// ------------------------------------------------- представление сцены
+//
+// Фон + послойные картинки для показа игрокам на второй экран (см.
+// .scratch/presentation/spec.md). Правки идут через resolveWritableScene:
+// первая правка из кампании клонирует/отвязывает сцену, оригинал сеттинга не
+// страдает. Чтение — сквозь заготовку и override кампании, как GET сцены.
+
+function presentationSceneId(sceneId: number, campaignId: number | null): number | null {
+  const scene = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(sceneId) as
+    | SceneRow
+    | undefined;
+  if (!scene) return null;
+  if (campaignId != null && scene.campaign_id == null && scene.setting_id != null) {
+    return overrideMap(campaignId, scene.setting_id).get(scene.id)?.id ?? scene.id;
+  }
+  return scene.id;
+}
+
+storyRouter.get("/scenes/:id/presentation", (req, res) => {
+  const campaignId = req.query.campaign_id ? Number(req.query.campaign_id) : null;
+  const shownId = presentationSceneId(Number(req.params.id), campaignId);
+  if (shownId == null) return res.status(404).json({ error: "not found" });
+  res.json(readScenePresentation(shownId));
+});
+
+storyRouter.put("/scenes/:id/presentation", (req, res) => {
+  const campaignId = req.body?.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  const { patch, error } = validatePresentationPatch(req.body ?? {});
+  if (error) return res.status(400).json({ error });
+  if (Object.keys(patch).length > 0) {
+    const sets = Object.keys(patch)
+      .map((k) => `presentation_${k} = ?`)
+      .join(", ");
+    db.prepare(`UPDATE story_scenes SET ${sets} WHERE id = ?`).run(...Object.values(patch), target.id);
+  }
+  res.json(readScenePresentation(target.id));
+});
+
+storyRouter.post("/scenes/:id/presentation/background", (req, res) => {
+  presentationUpload(req, res, async (err: unknown) => {
+    if (err) return res.status(400).json({ error: err instanceof Error ? err.message : "upload failed" });
+    const file = (req as unknown as { file?: Express.Multer.File }).file;
+    if (!file) return res.status(400).json({ error: "file is required" });
+    try {
+      const body = req.body as Record<string, unknown>;
+      const campaignId = body?.campaign_id != null ? Number(body.campaign_id) : null;
+      const target = resolveWritableScene(Number(req.params.id), campaignId);
+      if (!target) return res.status(404).json({ error: "not found" });
+      let folder: string;
+      try {
+        folder = scenePresentationFolder(target.id);
+      } catch (e) {
+        return res.status(400).json({ error: e instanceof Error ? e.message : "no folder" });
+      }
+      const { buffer, ext } = await processPresentationImage(file);
+      const current = db
+        .prepare("SELECT presentation_background_path FROM story_scenes WHERE id = ?")
+        .get(target.id) as { presentation_background_path: string | null };
+      const dest = path.join(folder, `background${ext}`);
+      await storePresentationFile(buffer, dest, current?.presentation_background_path);
+      db.prepare("UPDATE story_scenes SET presentation_background_path = ? WHERE id = ?").run(
+        vaultRel(dest),
+        target.id
+      );
+      res.json(readScenePresentation(target.id));
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "upload failed" });
+    } finally {
+      cleanupUpload(file);
+    }
+  });
+});
+
+storyRouter.post("/scenes/:id/presentation/layers", (req, res) => {
+  presentationUpload(req, res, async (err: unknown) => {
+    if (err) return res.status(400).json({ error: err instanceof Error ? err.message : "upload failed" });
+    const file = (req as unknown as { file?: Express.Multer.File }).file;
+    if (!file) return res.status(400).json({ error: "file is required" });
+    try {
+      const body = req.body as Record<string, unknown>;
+      const campaignId = body?.campaign_id != null ? Number(body.campaign_id) : null;
+      const target = resolveWritableScene(Number(req.params.id), campaignId);
+      if (!target) return res.status(404).json({ error: "not found" });
+      const { patch, error } = validateLayerPatch(body, true);
+      if (error) return res.status(400).json({ error });
+      let folder: string;
+      try {
+        folder = scenePresentationFolder(target.id);
+      } catch (e) {
+        return res.status(400).json({ error: e instanceof Error ? e.message : "no folder" });
+      }
+      const { buffer, ext, width, height } = await processPresentationImage(file);
+      const dest = path.join(folder, layerFileName(ext));
+      await storePresentationFile(buffer, dest, null);
+      const position = (
+        db.prepare("SELECT MAX(position) as m FROM scene_presentation_layers WHERE scene_id = ?").get(target.id) as {
+          m: number | null;
+        }
+      ).m ?? -1;
+      // Новый слой — по размеру картинки (contain-fit), а не на весь экран:
+      // явно присланная геометрия главнее.
+      const fit = containFitGeometry(width, height);
+      const info = db
+        .prepare(
+          `INSERT INTO scene_presentation_layers
+             (scene_id, name, image_path, has_button, visible_on_enter, position, x_pct, y_pct, w_pct, h_pct)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          target.id,
+          patch.name,
+          vaultRel(dest),
+          (patch.has_button as number | undefined) ?? 1,
+          (patch.visible_on_enter as number | undefined) ?? 0,
+          position + 1,
+          (patch.x_pct as number | undefined) ?? fit.x_pct,
+          (patch.y_pct as number | undefined) ?? fit.y_pct,
+          (patch.w_pct as number | undefined) ?? fit.w_pct,
+          (patch.h_pct as number | undefined) ?? fit.h_pct
+        );
+      const created = db.prepare("SELECT * FROM scene_presentation_layers WHERE id = ?").get(info.lastInsertRowid) as {
+        image_path: string;
+      } & Record<string, unknown>;
+      res.status(201).json({ ...created, image_url: created.image_path ? toFileUrl(created.image_path) : "" });
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "upload failed" });
+    } finally {
+      cleanupUpload(file);
+    }
+  });
+});
+
+// Слой правится на writable-строке: после первой правки из кампании id слоёв
+// уже принадлежат копии, поэтому чужой id здесь 404 — клиент перечитывает
+// представление и работает с новыми id.
+function presentationLayerOf(targetSceneId: number, layerId: number) {
+  const layer = db.prepare("SELECT * FROM scene_presentation_layers WHERE id = ?").get(layerId) as
+    | { scene_id: number }
+    | undefined;
+  if (!layer || layer.scene_id !== targetSceneId) return null;
+  return layer;
+}
+
+storyRouter.put("/scenes/:id/presentation/layers/reorder", (req, res) => {
+  const campaignId = req.body?.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  const { order } = req.body as { order: number[] };
+  if (!Array.isArray(order) || order.length === 0 || order.length > 500) {
+    return res.status(400).json({ error: "order must be non-empty array ≤500" });
+  }
+  if (order.some((id) => typeof id !== "number" || !Number.isInteger(id) || id <= 0)) {
+    return res.status(400).json({ error: "order contains invalid id" });
+  }
+  if (new Set(order).size !== order.length) return res.status(400).json({ error: "order contains duplicates" });
+  const rows = db
+    .prepare(`SELECT id FROM scene_presentation_layers WHERE id IN (${order.map(() => "?").join(",")}) AND scene_id = ?`)
+    .all(...order, target.id) as { id: number }[];
+  if (rows.length !== order.length) return res.status(400).json({ error: "all ids must belong to this scene" });
+  const upd = db.prepare("UPDATE scene_presentation_layers SET position = ? WHERE id = ?");
+  db.transaction((ids: number[]) => ids.forEach((id, i) => upd.run(i, id)))(order);
+  res.json(readScenePresentation(target.id)?.layers ?? []);
+});
+
+// Литеральный reorder — строго раньше :lid, иначе "reorder" разберётся как id слоя.
+storyRouter.put("/scenes/:id/presentation/layers/:lid", (req, res) => {
+  const campaignId = req.body?.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  if (!presentationLayerOf(target.id, Number(req.params.lid))) {
+    return res.status(404).json({ error: "layer not found — refetch presentation after first campaign edit" });
+  }
+  const { patch, error } = validateLayerPatch(req.body ?? {}, false);
+  if (error) return res.status(400).json({ error });
+  if (Object.keys(patch).length > 0) {
+    const sets = Object.keys(patch)
+      .map((k) => `${k} = ?`)
+      .join(", ");
+    db.prepare(`UPDATE scene_presentation_layers SET ${sets} WHERE id = ?`).run(
+      ...Object.values(patch),
+      req.params.lid
+    );
+  }
+  res.json(db.prepare("SELECT * FROM scene_presentation_layers WHERE id = ?").get(req.params.lid));
+});
+
+storyRouter.delete("/scenes/:id/presentation/layers/:lid", (req, res) => {
+  // campaign_id едет query (api.del тела не несёт) или телом — как удобнее.
+  const rawCampaign = (req.query.campaign_id ?? req.body?.campaign_id) as string | number | undefined;
+  const campaignId = rawCampaign != null ? Number(rawCampaign) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  if (!presentationLayerOf(target.id, Number(req.params.lid))) {
+    return res.status(404).json({ error: "layer not found — refetch presentation after first campaign edit" });
+  }
+  // Только строка: файл остаётся на диске (его могут делить копии сцен через
+  // дедуп), сироты подчищаются sweepOrphans.
+  db.prepare("DELETE FROM scene_presentation_layers WHERE id = ?").run(req.params.lid);
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------- входящие связи сцены
+//
+// «Откуда сюда можно прийти»: явные переходы других сцен + исходы проверок,
+// ведущие в эту. Зеркало exitsFrom из story/stage.ts (тот — «куда дальше»).
+// Ищем по обеим строкам (сама сцена и заготовка, сквозь которую она читается):
+// переходы и исходы кампанейских копий указывают на копии, оригинальных —
+// на оригиналы. Имена источников — как есть, тем же уговором, что у exits.
+storyRouter.get("/scenes/:id/incoming", (req, res) => {
+  const sceneId = Number(req.params.id);
+  const exists = db.prepare("SELECT id FROM story_scenes WHERE id = ?").get(sceneId);
+  if (!exists) return res.status(404).json({ error: "not found" });
+  const contentId = contentSceneId(sceneId);
+  const ids = contentId === sceneId ? [sceneId] : [sceneId, contentId];
+  const placeholders = ids.map(() => "?").join(",");
+
+  const transitions = db
+    .prepare(
+      `SELECT t.id, t.from_scene_id, t.label, s.name AS from_scene_name
+       FROM story_scene_transitions t
+       JOIN story_scenes s ON s.id = t.from_scene_id
+       WHERE t.to_scene_id IN (${placeholders}) AND s.archived_at IS NULL
+       ORDER BY s.name, t.id`
+    )
+    .all(...ids);
+
+  const outcomes = db
+    .prepare(
+      `SELECT o.check_id, o.label, o.consequence, c.what AS check_what,
+              c.scene_id AS from_scene_id, s.name AS from_scene_name
+       FROM story_check_outcomes o
+       JOIN story_scene_checks c ON c.id = o.check_id
+       JOIN story_scenes s ON s.id = c.scene_id
+       WHERE o.target_type = 'scene' AND o.target_id IN (${placeholders}) AND s.archived_at IS NULL
+       ORDER BY s.name, c.id, o.id`
+    )
+    .all(...ids);
+
+  res.json({ transitions, outcomes });
 });

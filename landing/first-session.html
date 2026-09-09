@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ru" data-skin="zine">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SoyMan — Первая сессия с нуля за 15 минут</title>
+<meta name="description" content="Пошаговый гайд: как в SoyMan создать свою первую сессию с нуля — система, сеттинг, кампания, игроки, сессия, пульт стола и закрытие вечера." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDE7D9; --paper-2:#E2DAC8; --ink:#12100E; --ink-2:#3A352E; --muted:#6E675C;
+  --accent:#D6321E; --surface:#12100E; --on-surface:#EDE7D9; --on-surface-muted:#A39A88;
+  --line:rgba(18,16,14,.22); --line-strong:#12100E;
+  --font-display:'Anton', sans-serif; --font-ui:'Oswald', sans-serif; --font-body:'Archivo', sans-serif; --font-mono:'JetBrains Mono', monospace;
+  --fs-hero: clamp(38px,6vw,72px); --fs-h1: clamp(26px,3.2vw,38px); --fs-h2:22px; --fs-body:14px; --fs-meta:12px; --fs-micro:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--paper);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.06;z-index:0;background-image:radial-gradient(rgba(18,16,14,.9) 1px, transparent 1px);background-size:3px 3px}
+.mono{font-family:var(--font-mono)}
+.caps{font-family:var(--font-ui);text-transform:uppercase;letter-spacing:.10em;font-weight:600}
+.micro{font-size:var(--fs-micro);letter-spacing:.14em;text-transform:uppercase;font-family:var(--font-ui);color:var(--muted)}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#fff;border:2px solid var(--accent);padding:13px 22px;font-family:var(--font-ui);font-size:13px;letter-spacing:.10em;text-transform:uppercase;font-weight:700;cursor:pointer;transition:transform 120ms cubic-bezier(.2,.8,.2,1)}
+.btn-primary:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+.btn-ghost{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--ink);border:2px solid var(--ink);padding:11px 18px;font-family:var(--font-ui);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.badge-rotate{display:inline-block;background:var(--accent);color:#fff;padding:3px 9px;font-family:var(--font-ui);font-size:10px;letter-spacing:.12em;text-transform:uppercase;transform:rotate(-1.2deg)}
+.stamp{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--ink);padding:4px 9px;font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;transform:rotate(-1deg)}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px;position:relative;z-index:1}
+@media(min-width:960px){.wrap{padding:0 32px}}
+.nav{position:sticky;top:0;z-index:20;background:var(--paper-2);border-bottom:2px solid var(--ink);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 20px}
+@media(min-width:1120px){.nav{padding:10px 32px}}
+.nav-logo{font-family:var(--font-display);font-size:22px;letter-spacing:-.02em;line-height:1;text-transform:uppercase}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:none;gap:20px;align-items:center}
+@media(min-width:900px){.nav-links{display:flex}}
+.nav-links a{font-family:var(--font-ui);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);opacity:.8}
+.nav-links a:hover{opacity:1;text-decoration:underline;text-underline-offset:4px}
+.nav-cta{display:flex;gap:8px;align-items:center}
+.nav-cta .btn-primary{padding:9px 16px;font-size:11px}
+/* progress */
+.progress{position:sticky;top:53px;z-index:15;background:var(--paper);border-bottom:2px solid var(--ink);padding:8px 0 10px}
+.progress-track{display:flex;gap:6px;align-items:center}
+.progress-track a{flex:1;height:8px;background:var(--paper-2);border:1px solid var(--ink);position:relative;display:block;min-width:0}
+.progress-track a.done{background:var(--ink)}
+.progress-track a.active{background:var(--accent);border-color:var(--accent)}
+.progress-labels{display:flex;gap:6px;margin-top:6px}
+.progress-labels span{flex:1;font-family:var(--font-mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* hero */
+.hero{display:grid;gap:26px;padding:32px 0 18px;grid-template-columns:1fr}
+@media(min-width:960px){.hero{grid-template-columns:1.05fr .95fr;align-items:start;padding:40px 0 24px}}
+.hero-kicker{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hero h1{margin:10px 0 12px;font-family:var(--font-display);font-size:var(--fs-hero);line-height:.88;letter-spacing:-.02em;text-transform:uppercase}
+.hero h1 .hi{background:var(--accent);color:#fff;padding:0 .22em;transform:rotate(-1deg);display:inline-block}
+.hero-lead{font-size:16px;max-width:46ch;color:var(--ink-2)}
+.hero-bullets{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.hero-bullets span{font-family:var(--font-mono);font-size:11px;border:1px solid var(--line);padding:5px 9px;background:var(--paper-2)}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.hero-note{margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+/* mock app window */
+.mock{border:2px solid var(--ink);background:var(--paper-2);overflow:hidden}
+.mock-bar{background:var(--surface);color:var(--on-surface);padding:8px 12px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.mock-bar strong{font-family:var(--font-ui);letter-spacing:.10em;text-transform:uppercase;font-size:11px}
+.mock-bar span{font-family:var(--font-mono);font-size:10px;color:var(--on-surface-muted)}
+.mock-dots{display:flex;gap:5px}
+.mock-dots i{width:9px;height:9px;border:1px solid var(--on-surface);display:block;border-radius:50%}
+.mock-body{padding:14px}
+.onboard-steps{display:grid;gap:8px;margin-top:10px}
+.onboard-steps div{border:1.5px solid var(--ink);background:var(--paper);padding:9px 11px;display:flex;gap:10px;align-items:center;font-size:13px}
+.onboard-steps b{font-family:var(--font-ui);font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--ink);color:var(--paper);padding:3px 8px;white-space:nowrap}
+.onboard-steps div.done b{background:var(--accent)}
+.onboard-steps small{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-left:auto}
+/* strip */
+.strip{border-top:2px solid var(--ink);border-bottom:2px solid var(--ink);background:var(--surface);color:var(--on-surface);display:flex;flex-wrap:wrap;gap:0;overflow:hidden}
+.strip div{flex:1 1 160px;display:flex;align-items:center;gap:10px;padding:12px 18px;border-right:1px solid rgba(237,231,217,.18);font-family:var(--font-mono);font-size:11px}
+.strip b{font-size:18px;font-family:var(--font-display);letter-spacing:-.02em}
+.strip small{color:var(--on-surface-muted);font-family:var(--font-ui);letter-spacing:.08em;text-transform:uppercase;font-size:9px;display:block}
+/* sections */
+.sec{padding:34px 0 8px}
+.sec-head{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+.sec-head h2{margin:0;font-family:var(--font-display);font-size:26px;letter-spacing:-.02em;text-transform:uppercase;line-height:.9}
+.sec-head h2 i{font-style:normal;color:var(--accent)}
+.sec-head p{margin:0;color:var(--muted);max-width:40ch;font-size:13px}
+/* steps */
+.step{border:2px solid var(--ink);background:var(--paper-2);margin-bottom:16px;display:grid;grid-template-columns:1fr;overflow:hidden}
+@media(min-width:860px){.step{grid-template-columns:300px 1fr}}
+.step-side{background:var(--surface);color:var(--on-surface);padding:18px 16px;position:relative;overflow:hidden}
+.step-side::after{content:"";position:absolute;inset:auto 0 0 0;height:44%;background:radial-gradient(currentColor 1.1px, transparent 1.3px) 0 0/6px 6px;opacity:.14;pointer-events:none}
+.step-num{font-family:var(--font-display);font-size:56px;line-height:.9;letter-spacing:-.03em}
+.step-num small{font-size:15px;vertical-align:top;letter-spacing:.1em;font-family:var(--font-ui)}
+.step-side h3{margin:8px 0 6px;font-family:var(--font-display);font-size:21px;text-transform:uppercase;letter-spacing:-.01em;line-height:.95}
+.step-side .time{font-family:var(--font-mono);font-size:11px;color:var(--on-surface-muted)}
+.step-where{margin-top:12px;display:inline-block;font-family:var(--font-mono);font-size:11px;background:var(--accent);color:#fff;padding:4px 8px;transform:rotate(-1deg)}
+.step-main{padding:16px 16px 14px}
+@media(min-width:860px){.step-main{padding:18px 20px 16px}}
+.step-main ol{margin:0;padding-left:18px;color:var(--ink-2);font-size:13.5px}
+.step-main li{margin:6px 0}
+.step-main li::marker{color:var(--accent);font-weight:700}
+.step-main code{font-family:var(--font-mono);font-size:11.5px;background:var(--paper);border:1px solid var(--line);padding:1px 6px;white-space:nowrap}
+.fields{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.fields span{font-family:var(--font-mono);font-size:10.5px;border:1px solid var(--line);background:var(--paper);padding:3px 8px}
+.trap{margin-top:10px;border:1.5px dashed var(--ink);padding:9px 11px;font-size:12.5px;background:var(--paper)}
+.trap b{font-family:var(--font-ui);letter-spacing:.06em;text-transform:uppercase;font-size:11px;color:var(--accent)}
+.example{margin-top:10px;background:var(--surface);color:var(--on-surface);padding:9px 11px;font-family:var(--font-mono);font-size:11.5px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.example small{color:var(--on-surface-muted)}
+/* trio diagram */
+.trio{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:860px){.trio{grid-template-columns:1fr 1fr 1fr}}
+.trio article{border:1.5px solid var(--ink);background:var(--paper-2);padding:0;overflow:hidden}
+.trio-head{background:var(--surface);color:var(--on-surface);padding:9px 12px;font-family:var(--font-ui);letter-spacing:.10em;text-transform:uppercase;font-size:11px;display:flex;justify-content:space-between;align-items:center}
+.trio-head span{font-family:var(--font-mono);font-size:10px;color:var(--on-surface-muted);border:1px solid rgba(237,231,217,.22);padding:2px 6px}
+.trio article p{padding:12px 14px 14px;margin:0;color:var(--ink-2);font-size:13px}
+/* checklist */
+.check{border:2px solid var(--ink);background:var(--paper-2);padding:16px}
+.check h3{margin:0 0 10px;font-family:var(--font-display);font-size:20px;text-transform:uppercase}
+.check label{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding:10px 2px;font-size:13px;cursor:pointer;color:var(--ink-2)}
+.check input{width:18px;height:18px;accent-color:var(--accent);margin-top:2px;flex:none}
+/* faq */
+.faq{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:860px){.faq{grid-template-columns:1fr 1fr}}
+.faq details{border:1.5px solid var(--ink);background:var(--paper-2);padding:0}
+.faq summary{list-style:none;cursor:pointer;padding:12px 14px;font-family:var(--font-ui);letter-spacing:.04em;font-weight:600;display:flex;justify-content:space-between;gap:12px}
+.faq summary::after{content:"+"}
+.faq details[open] summary::after{content:"—"}
+.faq .a{padding:0 14px 14px;color:var(--ink-2);font-size:13px;border-top:1px solid var(--line)}
+/* cta */
+.cta{margin:22px 0 0;border:2px solid var(--ink);background:var(--surface);color:var(--on-surface);padding:18px;display:grid;grid-template-columns:1fr;gap:16px;position:relative;overflow:hidden}
+@media(min-width:860px){.cta{grid-template-columns:1.1fr .9fr;align-items:center;padding:22px}}
+.cta::before{content:"";position:absolute;inset:auto 0 0 0;height:38%;background:radial-gradient(currentColor 1.2px, transparent 1.3px) 0 0/6px 6px;opacity:.16;pointer-events:none}
+.cta h2{margin:0;font-family:var(--font-display);font-size:28px;letter-spacing:-.02em;text-transform:uppercase;line-height:.9}
+.cta p{margin:6px 0 0;color:var(--on-surface-muted);font-size:13px}
+.cta .btn-primary{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+.cta-actions{display:flex;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
+.foot{padding:22px 0 30px;border-top:2px solid var(--ink);margin-top:28px;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+.foot-links{display:flex;gap:14px;flex-wrap:wrap}
+.foot-links a{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.die{display:inline-flex;width:44px;height:44px;align-items:center;justify-content:center;font-family:var(--font-display);font-size:20px;background:var(--accent);color:#fff;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);flex:none}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-logo">SOY<span>MAN</span> <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;color:var(--muted);margin-left:6px">FIRST SESSION GUIDE</span></div>
+  <div class="nav-links">
+    <a href="index.html">← Главная</a>
+    <a href="#shag1">Шаги</a>
+    <a href="#shema">Схема</a>
+    <a href="#checklist">Чек-лист</a>
+    <a href="#faq">FAQ</a>
+  </div>
+  <div class="nav-cta">
+    <a class="btn-primary" href="https://github.com/MotionTofu/Soyman-TTRPG_Manager/releases" target="_blank" rel="noreferrer">Скачать · Windows</a>
+  </div>
+</nav>
+
+<div class="progress">
+  <div class="wrap">
+    <div class="progress-track" id="progressTrack">
+      <a href="#shag1" title="Система и сеттинг"></a><a href="#shag2" title="Кампания"></a><a href="#shag3" title="Игроки"></a><a href="#shag4" title="Сессия"></a><a href="#shag5" title="Наполнение"></a><a href="#shag6" title="Пульт"></a><a href="#shag7" title="Финал"></a>
+    </div>
+    <div class="progress-labels"><span>01 мир</span><span>02 кампания</span><span>03 стол</span><span>04 дата</span><span>05 мясо</span><span>06 игра</span><span>07 разбор</span></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section class="hero">
+    <div>
+      <div class="hero-kicker">
+        <span class="badge-rotate">Гайд · 15 минут · с нуля до стола</span>
+        <span class="stamp">ISSUE №01 · Для нового мастера</span>
+      </div>
+      <h1>Первая <span class="hi">сессия</span><br>с нуля</h1>
+      <p class="hero-lead">В SoyMan сессия — не «событие в календаре», а дата внутри цепочки <b>Система → Сеттинг → Кампания → Игроки → Сессия</b>. Пройдёшь её один раз — дальше всё собирается за 5 минут.</p>
+      <div class="hero-bullets">
+        <span>7 шагов</span><span>~15 минут</span><span>Пример: Вотердип</span><span>Офлайн · 0₽</span>
+      </div>
+      <div class="hero-actions">
+        <a class="btn-primary" href="#shag1">Начать с шага 01 →</a>
+        <a class="btn-ghost" href="index.html">Что такое SoyMan?</a>
+      </div>
+      <div class="hero-note">Читаешь с телефона за столом? Каждый шаг — где кликнуть и что вбить. Названия кнопок — как в приложении.</div>
+    </div>
+    <div class="mock">
+      <div class="mock-bar"><div class="mock-dots"><i></i><i></i><i></i></div><strong>Главная · Твоя первая легенда</strong><span>5 шагов</span></div>
+      <div class="mock-body">
+        <div class="micro">Онбординг-герой на главной — иди по нему, не заблудишься</div>
+        <div class="onboard-steps">
+          <div class="done"><b>1 Система</b> D&D 5.5 <small>✓</small></div>
+          <div class="done"><b>2 Сеттинг</b> Вотердип <small>✓</small></div>
+          <div><b>3 Кампания</b> Драконий куш <small>→ ты здесь</small></div>
+          <div><b>4 Игроки</b> Брон, Джарольд, Зарр <small>3 за столом</small></div>
+          <div><b>5 Сессия</b> Дата + время <small>финиш</small></div>
+        </div>
+        <div class="example" style="margin-top:12px"><span class="die">d20</span><span>Правило: без системы и сеттинга кнопка «Новая кампания» заблокирована — <small>«Сначала заведи систему»</small></span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="strip">
+    <div><b>7</b><span><small>шагов</small>от пустой базы до «Состоялась»</span></div>
+    <div><b>3</b><span><small>входа</small>создать сессию: герой / календарь / кампания</span></div>
+    <div><b>2</b><span><small>вкладки</small>Обзор — факты · Подготовка — мясо</span></div>
+    <div><b>1</b><span><small>пульт</small>инициатива, звук, показ игрокам</span></div>
+  </div>
+
+  <!-- STEPS -->
+  <section class="sec" id="shagi">
+    <div class="sec-head">
+      <h2>Семь шагов — <i>по порядку</i></h2>
+      <p>Не пропускай первые три: сессия без кампании и состава — пустая дата, вести нечего.</p>
+    </div>
+
+    <article class="step" id="shag1">
+      <div class="step-side">
+        <div class="step-num">01 <small>/ 07</small></div>
+        <h3>Мир: система + сеттинг</h3>
+        <div class="time">⏱ 2 минуты · делается один раз</div><br>
+        <span class="step-where">Главная → «Твоя первая легенда»</span>
+      </div>
+      <div class="step-main">
+        <ol>
+          <li>На Главной открой герой <code>Твоя первая легенда</code> → шаг <code>1 Система</code>. Выбери <code>D&D 5.5</code> (<code>SystemOnboardingModal</code>).</li>
+          <li>Шаг <code>2 Сеттинг</code> → создай мир: например <code>Вотердип</code> (<code>SettingOnboardingModal</code>).</li>
+          <li>Проверь: шаги 1–2 стали <code>✓</code>, шаг 3 разблокировался.</li>
+        </ol>
+        <div class="fields"><span>Система = правила</span><span>Сеттинг = мир</span><span>Без них кампания пустая</span></div>
+        <div class="trap"><b>Ловушка:</b> кнопка «Новая кампания» без этого серая и пишет «Сначала заведи систему». Это не баг — так задумано.</div>
+      </div>
+    </article>
+
+    <article class="step" id="shag2">
+      <div class="step-side">
+        <div class="step-num">02 <small>/ 07</small></div>
+        <h3>Кампания: визард</h3>
+        <div class="time">⏱ 3 минуты · сердце всего</div><br>
+        <span class="step-where">Кампании → Новая кампания</span>
+      </div>
+      <div class="step-main">
+        <ol>
+          <li>Иди в <code>Кампании → Новая кампания</code> (<code>CampaignWizard</code>: <code>Основы → Оплата → Система и сеттинг → Условия</code>).</li>
+          <li>Заполни <code>Название ≤ 80</code> — например <code>Драконий куш</code>. Выбери <code>Моя роль: Я Мастер</code>, <code>Тип: кампания / ваншот</code>.</li>
+          <li>Оплата: <code>free / paid / conditional</code>. Для платной — <code>Тип ставки: с человека / со стола</code> + <code>Сумма + Валюта RUB</code>. Привяжи систему и сеттинг из шага 01.</li>
+          <li>Нажми <code>Создать и перейти в кампанию</code>.</li>
+        </ol>
+        <div class="fields"><span>name</span><span>role = gm</span><span>type</span><span>payment_type</span><span>session_rate</span><span>system_id + setting_id</span></div>
+        <div class="example">Живой пример из базы: <span>Вотердип · Эстария · Фанделвер · «Однажды в Березе» (ваншот)</span> <small>— реальные кампании, не выдумка</small></div>
+      </div>
+    </article>
+
+    <article class="step" id="shag3">
+      <div class="step-side">
+        <div class="step-num">03 <small>/ 07</small></div>
+        <h3>Стол: игроки + персонажи</h3>
+        <div class="time">⏱ 3 минуты · кто сидит за столом</div><br>
+        <span class="step-where">Кампания → вкладка Состав</span>
+      </div>
+      <div class="step-main">
+        <ol>
+          <li>Внутри кампании открой <code>Состав</code>. Нажми добавить → выбери из списка (<code>POST /campaigns/:id/roster/:playerId</code>).</li>
+          <li>Нового заведи в <code>Игроки → + Новый игрок</code> (<code>PlayerCreationModal</code>: <code>name + notes</code>).</li>
+          <li>Персонажа привяжи в карточке игрока: <code>campaign_id + player_id + character_name</code>. Иначе в пульте будет пусто в блоке «Персонажи игроков».</li>
+        </ol>
+        <div class="fields"><span>Player: name</span><span>roster</span><span>Character: character_name</span></div>
+        <div class="trap"><b>Проверка:</b> если во вкладке <code>Резюме → Игроки</code> видишь «В составе кампании нет игроков» — ростер не собран, сессию вести некому.</div>
+        <div class="example">Пример стола: <span>Брон · Джарольд · Зарр</span> <small>игроки: Саня, Лиза, Колян</small></div>
+      </div>
+    </article>
+
+    <article class="step" id="shag4">
+      <div class="step-side">
+        <div class="step-num">04 <small>/ 07</small></div>
+        <h3>Дата: создать сессию</h3>
+        <div class="time">⏱ 1 минута · три входа, форма одна</div><br>
+        <span class="step-where">Герой · Календарь · Кампания</span>
+      </div>
+      <div class="step-main">
+        <ol>
+          <li>Выбери удобный вход — форма <code>Новая сессия</code> везде одна: <code>Кампания (select) + Дата (date) + Время начала (time)</code>.</li>
+          <li>Вариант А — герой шаг <code>5 Сессия</code>: кампания подставится сама. Вариант Б — <code>Главная → Календарь → клик по дню → + Добавить сессию</code>. Вариант В — <code>Кампания → календарь → ПКМ → Создать сессию</code> (тут же <code>Статус, Оплата, Ставка, повтор</code>).</li>
+          <li>Нажми <code>Создать</code>. Серверу нужны только <code>campaign_id + date</code> — остальное допишешь в карточке. Статус по умолчанию <code>planned</code>.</li>
+        </ol>
+        <div class="fields"><span>campaign_id*</span><span>date*</span><span>start_time</span><span>status = planned</span><span>payment_override</span><span>stake_override</span></div>
+        <div class="trap"><b>Для ваншота:</b> в форме есть <code>Скопировать подготовку из прогона</code> — подтянет сцены с прошлого прогона, не пиши заново.</div>
+      </div>
+    </article>
+
+    <article class="step" id="shag5">
+      <div class="step-side">
+        <div class="step-num">05 <small>/ 07</small></div>
+        <h3>Мясо: обзор + подготовка</h3>
+        <div class="time">⏱ 4 минуты · что будет за столом</div><br>
+        <span class="step-where">Карточка /sessions/:id</span>
+      </div>
+      <div class="step-main">
+        <ol>
+          <li>Открой карточку сессии. Шапка: <code>Кампания — Сессия №N</code>, карандаш <code>Переименовать сессию</code>, полоса <code>Когда / В мире / Номер</code>.</li>
+          <li>Вкладка <code>Обзор</code> — факты: <code>Статус, Оплата (Как в кампании…), Ставка, За столом: Дата/Начало, В мире: Год/Месяц/День + дата окончания, Нераскрытые тайны</code>.</li>
+          <li>Вкладка <code>Подготовка</code> — мясо: <code>Задумка на сессию + Боевая тема</code>, дерево <code>приключение → глава → сцена</code> (<code>SessionSceneTree</code>), <code>Сюжетные персонажи, Локации, Препятствия, Потенциальный лут, Шпаргалки</code>. Файлы — во вкладке <code>Ресурсы</code>.</li>
+        </ol>
+        <div class="fields"><span>Задумка</span><span>story-tree</span><span>planned scenes</span><span>лут</span><span>шпаргалки</span><span>ресурсы</span></div>
+      </div>
+    </article>
+
+    <article class="step" id="shag6">
+      <div class="step-side">
+        <div class="step-num">06 <small>/ 07</small></div>
+        <h3>Игра: пульт стола</h3>
+        <div class="time">⏱ вечер · смотри в игроков, не в ноут</div><br>
+        <span class="step-where">Кнопка «Пульт сессии» → /live</span>
+      </div>
+      <div class="step-main">
+        <ol>
+          <li>В карточке нажми <code>Пульт сессии</code> (<code>/sessions/:id/live</code>). Это второй монитор: <code>Задумка / Основные события (Видно игрокам), SceneSwitcher (Сейчас/Дальше)</code>.</li>
+          <li>Инициатива — блок <code>Трекер инициативы</code>: кнопка <code>В инициативу</code> из карточки существа, поля <code>initiative, HP, conditions</code>, сортировка сама. Подсветка — <code>combat_active</code>. Спец-строки: <code>Действие логова (20)</code>.</li>
+          <li>Показ игрокам — <code>PresentationPanel (/live/show: black | scene | cover)</code> + <code>Боевая тема</code> (4 канала: Background / Ambient / Weather / Stingers, кроссфейд). Панели: персонажи, локации, лут, тайны, напоминания.</li>
+        </ol>
+        <div class="fields"><span>initiative-tracker</span><span>scene-switcher</span><span>show image</span><span>4ch audio</span><span>second monitor</span></div>
+        <div class="trap"><b>Полотно ≠ сессия:</b> <code>Полотно (/canvas)</code> — узловой редактор мира без даты. Сессия тянет из него сцены через <code>scene-search</code> и запускает в пульте. Не готовь в пульте — готовь в полотне.</div>
+      </div>
+    </article>
+
+    <article class="step" id="shag7">
+      <div class="step-side">
+        <div class="step-num">07 <small>/ 07</small></div>
+        <h3>Финал: состоялась + разбор</h3>
+        <div class="time">⏱ 2 минуты · деньги и память</div><br>
+        <span class="step-where">Резюме → Отметить проведённой</span>
+      </div>
+      <div class="step-main">
+        <ol>
+          <li>После игры: <code>Резюме → Отметить сессию проведённой</code> (<code>SessionOutcomeModal</code>) или <code>Главная → «Игры прошли, но не отмечены» → Разобрать</code>, или прямо в пульте <code>Сохранить и завершить сессию</code>.</li>
+          <li>Заполни таблицу: <code>Пришёл ✓, Оплачено, Ставка, Прощено → earned</code>. Напиши <code>Основные события</code> — это увидят игроки.</li>
+          <li>Статус станет <code>held</code>. В резюме появятся <code>Прошло в мире N дней · Сыграно сцен · Раскрыто тайн</code>. Незаигранные сцены сервер сам перенесёт на следующую дату.</li>
+        </ol>
+        <div class="fields"><span>status = held</span><span>пришёл / оплачено</span><span>earned</span><span>события игрокам</span></div>
+        <div class="example">Готово: <span>Сессия №1 «Драконий куш» — Состоялась · 3 пришли · 2 оплатили</span> <small>следующая дата уже ждёт сцены</small></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="sec" id="shema">
+    <div class="sec-head">
+      <h2>Не путай <i>три</i> сущности</h2>
+      <p>Новички готовят не там. Запомни схему один раз.</p>
+    </div>
+    <div class="trio">
+      <article><div class="trio-head"><strong>Полотно</strong><span>/canvas</span></div><p>Мир без даты: приключения, сцены, свободные доски, пины на карте. <b>Готовь здесь.</b> 66 досок — не список глав, а схема с переходами и проверками.</p></article>
+      <article><div class="trio-head"><strong>Сессия</strong><span>/sessions/:id</span></div><p>Дата + план на вечер: дерево сцен, лут, шпаргалки, тайны. Тянет сцены из полотна через <b>scene-search</b>. <b>Собирай здесь.</b></p></article>
+      <article><div class="trio-head"><strong>Пульт</strong><span>/live</span></div><p>Живой стол: инициатива, второй монитор, «показать картинку», звук 4 канала. <b>Веди здесь.</b> Смотри в игроков, не в ноут.</p></article>
+    </div>
+  </section>
+
+  <section class="sec" id="checklist">
+    <div class="sec-head">
+      <h2>Чек-лист <i>«готов к столу»</i></h2>
+      <p>Распечатай в голове. Кликай — галочки живут в браузере.</p>
+    </div>
+    <div class="check">
+      <h3>☐ 5 минут до выхода</h3>
+      <label><input type="checkbox"> Кампания создана, система и сеттинг привязаны</label>
+      <label><input type="checkbox"> В составе 2+ игроков, у каждого персонаж</label>
+      <label><input type="checkbox"> Сессия на нужной дате, время начала стоит</label>
+      <label><input type="checkbox"> Задумка написана одним абзацем, 2–3 сцены в плане</label>
+      <label><input type="checkbox"> Пульт открывается, трекер инициативы пуст и готов</label>
+      <label><input type="checkbox"> Боевая тема выбрана, картинка для показа загружена в Ресурсы</label>
+      <label><input type="checkbox"> Ставка и оплата проверены (кто должен — видно)</label>
+    </div>
+  </section>
+
+  <section class="sec" id="faq">
+    <div class="sec-head">
+      <h2>FAQ — <i>где все спотыкаются</i></h2>
+      <p>Четыре грабли первой сессии.</p>
+    </div>
+    <div class="faq">
+      <details open><summary>Кнопка «Новая кампания» серая. Что делать?</summary><div class="a">Заведи систему и сеттинг через герой «Твоя первая легенда» (шаги 1–2). Без них кампания заблокирована — так задумано, а не баг.</div></details>
+      <details><summary>Создал сессию, а вести нечего — пусто. Почему?</summary><div class="a">Ты пропустил шаг 03 (Состав) и 05 (Подготовка). Сессия — только дата. Наполни: ростер игроков + дерево сцен во вкладке «Подготовка».</div></details>
+      <details><summary>Где готовить приключение — в сессии или в полотне?</summary><div class="a">Готовь в Полотне (/canvas) — это мир без даты. В сессию подтягивай нужные сцены через scene-search. Пульт — только для ведения, не для подготовки.</div></details>
+      <details><summary>Как отметить, кто пришёл и кто заплатил?</summary><div class="a">Резюме → «Отметить сессию проведённой». Там таблица: Пришёл / Оплачено / Ставка / Прощено. После этого статус станет «Состоялась», а деньги посчитаются в earned.</div></details>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div>
+      <h2>Твоя первая сессия — сегодня вечером</h2>
+      <p>Скачай SoyMan (0₽, офлайн), пройди 7 шагов и открой пульт. Дальше — только стол, кости и игроки.</p>
+      <div class="mono" style="font-size:11px;margin-top:8px;color:var(--on-surface-muted)">Следующий шаг после гайда: открой «Полотно» и нарисуй первую схему приключения.</div>
+    </div>
+    <div class="cta-actions">
+      <a class="btn-primary" href="https://github.com/MotionTofu/Soyman-TTRPG_Manager/releases" style="flex:1;justify-content:center" target="_blank" rel="noreferrer">Скачать SoyMan · Windows</a>
+      <a class="btn-ghost" href="index.html" style="background:transparent;color:var(--on-surface);border-color:var(--on-surface)">← На главную лендинга</a>
+      <div class="mono" style="font-size:10px;color:var(--on-surface-muted);flex:1 1 100%">Вопросы — в Telegram. Звёздочка на GitHub — тоже помощь.</div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div>
+      <div class="mono" style="font-size:11px">© SoyMan TTRPG Manager · 2026 · Гайд «Первая сессия» · ISSUE №01</div>
+      <div class="micro" style="margin-top:4px">Система → Сеттинг → Кампания → Игроки → Сессия → Пульт → Разбор</div>
+    </div>
+    <div class="foot-links">
+      <a href="index.html">Главная</a>
+      <a href="https://github.com/MotionTofu/Soyman-TTRPG_Manager" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://t.me/brothertofu" target="_blank" rel="noreferrer">Telegram</a>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+// прогресс + плавный скролл
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{
+    const id=a.getAttribute('href'); if(!id||id==="#") return;
+    const t=document.querySelector(id); if(!t) return;
+    e.preventDefault(); t.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+});
+// чек-лист в localStorage
+document.querySelectorAll('.check input').forEach((box,i)=>{
+  const k='soyman-first-session-'+i;
+  try{ if(localStorage.getItem(k)==='1') box.checked=true; }catch{}
+  box.addEventListener('change',()=>{ try{localStorage.setItem(k,box.checked?'1':'0');}catch{} });
+});
+// подсветка прогресса по скроллу
+const links=[...document.querySelectorAll('#progressTrack a')];
+const ids=['shag1','shag2','shag3','shag4','shag5','shag6','shag7'];
+function onScroll(){
+  let cur=0;
+  ids.forEach((id,i)=>{ const el=document.getElementById(id); if(el && el.getBoundingClientRect().top<220) cur=i; });
+  links.forEach((l,i)=>{ l.classList.toggle('done',i<cur); l.classList.toggle('active',i===cur); });
+}
+document.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+</script>
+</body>
+</html>

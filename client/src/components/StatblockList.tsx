@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -9,6 +9,7 @@ import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { NavIcon } from "./NavIcons";
 import { EmptyState } from "./EmptyState";
 import { Modal } from "./Modal";
+import { ContextMenu } from "./ContextMenu";
 import type {
   Campaign,
   DndCharacterData,
@@ -37,6 +38,7 @@ import { classAndLevelSummary } from "./dnd/dndSummary";
 import { findDndSystemId } from "./dnd/dndCompendium";
 import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
 import { DndCharacterWizard } from "./dnd/DndCharacterWizard";
+import { LssImportWizard, type LssPreviewExtras } from "./dnd/LssImportWizard";
 import { DndCreatureWizard } from "./dnd/DndCreatureWizard";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -63,6 +65,26 @@ function statblockTitle(sb: Statblock): string {
       : "";
   if (named) return named;
   return sb.note?.trim() || FORMAT_LABELS[sb.format] || "Статблок";
+}
+
+// Подпись строки менеджера чарников (/sheet, первый таб): система + то, что
+// к ней уместно. Для D&D 5.5 — вид · класс [подкласс] уровень, для остальных
+// — формат + краткий/полный.
+function statblockManagerSubtitle(sb: Statblock): string {
+  if (sb.format === "dnd_character") {
+    try {
+      const data = normalizeDndCharacter(JSON.parse(sb.content || "{}"));
+      const cls = classAndLevelSummary(data.classes);
+      const line = [data.raceName, cls].filter(Boolean).join(" · ");
+      if (line) return `${FORMAT_LABELS[sb.format]} · ${line}`;
+    } catch {
+      /* битый JSON — только формат */
+    }
+    return FORMAT_LABELS[sb.format];
+  }
+  if (sb.format === "dnd_creature") return FORMAT_LABELS[sb.format];
+  const kind = KIND_LABELS[sb.kind] ?? sb.kind;
+  return `${FORMAT_LABELS[sb.format]} · ${kind}`;
 }
 const KIND_LABELS: Record<string, string> = { short: "Краткий", full: "Полный" };
 const FORMAT_LABELS: Record<StatblockFormat, string> = {
@@ -121,6 +143,10 @@ interface Props {
   onSheetBack?: () => void;
   // Портрет протух (подпись URL живёт 60 секунд): перезагрузить владельца.
   onPortraitRefresh?: () => void;
+  // Слот в шапке менеджера чарников (профиль персонажа): туда вызывающая
+  // страница кладёт своё управление, которое относится к подготовке, а не к
+  // листу — например, «Послания персонажу». В табах с чарниками не показывается.
+  managerTop?: ReactNode;
 }
 
 // «2026-09-04 08:12:33» из SQLite — в человеческое «4 сентября». Строка
@@ -153,6 +179,7 @@ export function StatblockList({
   sheetOnly,
   onSheetBack,
   onPortraitRefresh,
+  managerTop,
 }: Props) {
   const [statblocks, setStatblocks] = useState<Statblock[]>([]);
   // Удалённые статблоки владельца. До сих пор удалённый чарник исчезал
@@ -179,6 +206,9 @@ export function StatblockList({
     characterName: string;
     shortText: string;
     warnings: { field: string; message: string }[];
+    // Полный разбор для визарда подтверждений (тикет 04/06).
+    characterData: Record<string, unknown>;
+    rawExtras: LssPreviewExtras;
     summary: {
       raceName: string;
       raceId: number | null;
@@ -196,6 +226,9 @@ export function StatblockList({
     };
   }>(null);
   const [pendingJson, setPendingJson] = useState<string | null>(null);
+  // Визард подтверждений поверх превью (тикет 06): правит characterData
+  // локально, сохраняет сам; отмена возвращает в превью.
+  const [showLssWizard, setShowLssWizard] = useState(false);
   const [showDndWizard, setShowDndWizard] = useState(false);
   // Клон чарника (Волна 2, Q1–Q8): мгновенная копия данных, не префилл
   // визарда — токены визарда (навыки «группа:ключ», метки наборов, прибавка
@@ -269,6 +302,12 @@ export function StatblockList({
   const [showLitmWizard, setShowLitmWizard] = useState(false);
   const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
   const [activeStatblockId, setActiveId] = useState<number | null>(null);
+  // Профиль персонажа: первый таб — менеджер чарников, дальше по табу на
+  // чарник. По умолчанию открыт менеджер. В табах с чарниками — только сам
+  // лист, всё управление (создать, импорт из LSS, клон, корзина, удаление)
+  // живёт в менеджере. На /sheet (sheetOnly) менеджера нет — там играют.
+  const [mgrTab, setMgrTab] = useState<number | "manager">("manager");
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const isMobileSheet = useIsMobile();
   // Создание из «Чарников»: ?newSheet=1 однократно открывает визард, затем
   // параметр снимается — иначе кнопка «назад» возвращала бы в визард.
@@ -485,6 +524,9 @@ export function StatblockList({
         entityName: name,
         deleteFn: async () => {
           await api.del(`/statblocks/${id}`);
+          // Удалили открытый лист менеджера — возвращаемся в менеджер, а не
+          // висим на пустом табе.
+          if (mgrTab === id) setMgrTab("manager");
           refresh();
         },
         restoreFn: async () => {
@@ -522,6 +564,8 @@ export function StatblockList({
         characterName: string;
         shortText: string;
         warnings: { field: string; message: string }[];
+        characterData: Record<string, unknown>;
+        rawExtras: LssPreviewExtras;
         summary: {
           raceName: string;
           raceId: number | null;
@@ -565,7 +609,9 @@ export function StatblockList({
     if (!pendingJson || !preview) return;
     const hasExisting = statblocks.some((s) => s.format === "dnd_character");
     if (hasExisting) {
-      const ok = confirm("У персонажа уже есть чарник(и). Добавить ещё один?\n\nЛишний можно удалить после импорта.");
+      // confirm — промис модалки: без await условие всегда truthy и вопрос
+      // не работает (тикет 04). confirmImport уже async, ждём честно.
+      const ok = await confirm("У персонажа уже есть чарник(и). Добавить ещё один?\n\nЛишний можно удалить после импорта.");
       if (!ok) return;
     }
     setImporting(true);
@@ -706,6 +752,31 @@ export function StatblockList({
     />
   ));
 
+  // Профиль персонажа: первый таб — менеджер чарников, дальше по табу на
+  // чарник. В табах с чарниками — только сам лист, всё управление живёт в
+  // менеджере. Сущностям и записям бестиария менеджер не нужен — там прежний
+  // вид без изменений.
+  const isCharProfile = ownerType === "character";
+  const mgrActive = statblocks.find((s) => s.id === mgrTab) ?? null;
+  const showMgr = isCharProfile && (mgrTab === "manager" || mgrActive == null);
+  const mgrCards = (mgrActive ? [mgrActive] : []).map((sb) => (
+    <StatblockCard
+      key={sb.id}
+      statblock={sb}
+      ownerType={ownerType}
+      ownerId={ownerId}
+      onChange={refresh}
+      onRemove={removeStatblock}
+      campaignId={campaignId}
+      settingId={settingId}
+      soleOnPage={soleOnPage}
+      ownerPortraitUrl={ownerPortraitUrl}
+      sheetHref={sheetHref}
+      onSheetBack={onSheetBack}
+      onPortraitRefresh={onPortraitRefresh}
+    />
+  ));
+
   // Страница чарника: лист и переключатель между листами, если их несколько.
   // Визард, импорт, корзина и «добавить» остались на профиле — заполняют
   // лист там, а здесь по нему играют.
@@ -817,7 +888,118 @@ export function StatblockList({
     <div className="stack">
       {confirmDialog}
       {alertDialog}
-      {isEmpty && showLssImport && (
+      {isCharProfile && (
+        <div className="tabs sb-switcher" role="tablist" aria-label="Чарники">
+          <button
+            key="manager"
+            type="button"
+            className={showMgr ? "active" : ""}
+            onClick={() => setMgrTab("manager")}
+            role="tab"
+            aria-selected={showMgr}
+          >
+            Менеджер
+          </button>
+          {statblocks.map((sb) => (
+            <button
+              key={sb.id}
+              type="button"
+              className={!showMgr && mgrActive?.id === sb.id ? "active" : ""}
+              onClick={() => setMgrTab(sb.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setTabMenu({ x: e.clientX, y: e.clientY, id: sb.id });
+              }}
+              title="Правый клик — удалить"
+              role="tab"
+              aria-selected={!showMgr && mgrActive?.id === sb.id}
+            >
+              {statblockTitle(sb)}
+            </button>
+          ))}
+        </div>
+      )}
+      {tabMenu && isCharProfile && (() => {
+        const sb = statblocks.find((s) => s.id === tabMenu.id);
+        return (
+          <ContextMenu
+            x={tabMenu.x}
+            y={tabMenu.y}
+            title={sb ? statblockTitle(sb) : "Чарник"}
+            items={[{ label: "Удалить", danger: true, onClick: () => void removeStatblock(tabMenu.id) }]}
+            onClose={() => setTabMenu(null)}
+          />
+        );
+      })()}
+      {showMgr && (
+        <div className="stack">
+          {managerTop}
+          {isEmpty ? (
+            <div className="card stack">
+              <span className="muted">Чарников пока нет — создайте первый.</span>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <button type="button" className="primary" onClick={() => setShowDndWizard(true)}>
+                  Создать чарник
+                </button>
+                <label className="comp-mini" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <NavIcon name="upload" /> {importing ? "Импортирую…" : "Перенести из Long Story Short"}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={(e) => void importFiles(e.target.files, e.target as HTMLInputElement)}
+                  />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="stack" style={{ gap: 8 }}>
+                {statblocks.map((sb) => (
+                  <div key={sb.id} className="card row" style={{ justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                    <button
+                      type="button"
+                      onClick={() => setMgrTab(sb.id)}
+                      style={{ background: "transparent", border: 0, textAlign: "left", flex: "1 1 auto", minWidth: 0, cursor: "pointer", padding: 0 }}
+                      aria-label={`Открыть чарник: ${statblockTitle(sb)}`}
+                    >
+                      <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>{statblockTitle(sb)}</strong>
+                      <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{statblockManagerSubtitle(sb)}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="comp-mini danger"
+                      onClick={() => void removeStatblock(sb.id)}
+                      aria-label={`Удалить чарник: ${statblockTitle(sb)}`}
+                      title="Удалить чарник"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button type="button" className="primary" onClick={() => setShowDndWizard(true)}>
+                  Создать чарник
+                </button>
+                <label className="comp-mini" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <NavIcon name="upload" /> {importing ? "Импортирую…" : "Перенести из Long Story Short"}
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={(e) => void importFiles(e.target.files, e.target as HTMLInputElement)}
+                  />
+                </label>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {!isCharProfile && isEmpty && showLssImport && (
         <EmptyState
           title="Чарника нет"
           /* Главная дорога — свой визард: он спрашивает класс, вид,
@@ -851,7 +1033,7 @@ export function StatblockList({
         />
       )}
 
-      {statblocks.length > 1 && (
+      {!isCharProfile && statblocks.length > 1 && (
         <div className="tabs sb-switcher">
           {statblocks.map((sb) => (
             <button
@@ -865,8 +1047,12 @@ export function StatblockList({
           ))}
         </div>
       )}
-      {cards}
+      {isCharProfile ? (showMgr ? null : mgrCards) : cards}
 
+      {/* Управление чарниками — только в менеджере: в табах с чарниками
+          только сам лист. Сущностям и бестиарию — как было. */}
+      {(!isCharProfile || showMgr) && (
+      <>
       {/* Клон чарника — рядом с созданием, не в листе за столом (Q3).
           Оба типа владельцев: список и так ограничен владельцем (Q7). */}
       {dndCharacters.length > 0 && (
@@ -1027,10 +1213,41 @@ export function StatblockList({
             )}
             <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => { setPreview(null); setPendingJson(null); }}>Отмена</button>
-              <button className="primary" onClick={confirmImport} disabled={importing}>{importing ? "Сохраняю…" : "Импортировать"}</button>
+              <button onClick={confirmImport} disabled={importing}>{importing ? "Сохраняю…" : "Импортировать как есть"}</button>
+              <button className="primary" onClick={() => setShowLssWizard(true)} disabled={importing}>Доработать в визарде</button>
             </div>
-            <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>Создастся статблок «D&D — Персонаж». Заклинания LSS (по ID) пока переносятся вручную — см. замечания.</div>
+            <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>Визард проведёт по шагам: линки справочника, характеристики, бой, снаряжение, заклинания, текст. «Как есть» — сразу статблоком без сверки. Заклинания LSS (по ID) в обоих случаях подбираются вручную — см. замечания.</div>
           </div>
+        </Modal>
+      )}
+
+      {showLssWizard && preview && (
+        <Modal onClose={() => setShowLssWizard(false)}>
+          <LssImportWizard
+            ownerType={ownerType === "character" ? "character" : "being"}
+            ownerId={ownerId}
+            initial={preview.characterData}
+            rawExtras={preview.rawExtras}
+            warnings={preview.warnings}
+            shortText={preview.shortText}
+            existingCount={statblocks.filter((s) => s.format === "dnd_character").length}
+            onCancel={() => setShowLssWizard(false)}
+            onCreateFresh={() => {
+              setShowLssWizard(false);
+              setPreview(null);
+              setPendingJson(null);
+              if (ownerType === "character") setShowDndWizard(true);
+            }}
+            onDone={() => {
+              setShowLssWizard(false);
+              setPreview(null);
+              setPendingJson(null);
+              refresh();
+              setImportSuccess(`Импортирован ${preview.characterName ? `«${preview.characterName}»` : "персонаж"} — визард`);
+              setImportWarnings(preview.warnings);
+              setTimeout(() => setImportSuccess(""), 6000);
+            }}
+          />
         </Modal>
       )}
 
@@ -1159,6 +1376,8 @@ export function StatblockList({
             refresh();
           }}
         />
+      )}
+      </>
       )}
     </div>
   );

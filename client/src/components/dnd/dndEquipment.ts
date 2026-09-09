@@ -67,6 +67,15 @@ export async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEq
       weaponMastery: weaponMastery || undefined,
       // Категория для монашеского оружия (см. isMonkWeapon в dndMonk.ts).
       weaponCategory: typeof entry.data.category === "string" && entry.data.category ? entry.data.category : undefined,
+      // Расходник ли запись — тем же эвристическим правилом, что пикер:
+      // пути без полной записи (мешок, дроп) иначе сливать не умеют.
+      stackable: isStackableEquipmentEntry(entry) ? true : undefined,
+      // Вес и цена строкой из справочника — снимок на момент добавления.
+      // Вес сразу участвует в сводке (parseWeight понимает единицы),
+      // цена пока только показывается в строке. Пути добавления спредят
+      // мету поверх пустых значений, так что лежит само везде.
+      weight: typeof entry.data.weight === "string" && entry.data.weight.trim() ? entry.data.weight.trim() : undefined,
+      cost: typeof entry.data.cost === "string" && entry.data.cost.trim() ? entry.data.cost.trim() : undefined,
       // Снапшот магпредмета: редкость/настройка/проклятие/тип для тегов
       // строки и фильтров пикера. Ключ настройки — см.
       // entryRequiresAttunement (attunement у магпредметов,

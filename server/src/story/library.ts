@@ -6,7 +6,11 @@
 // той же логики репозиторий уже не выдержит — overrideMap продублирована в
 // canvas.ts, и это ровно тот случай, который не хочется повторять.
 
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { db } from "../db/db";
+import { ensureSubfolder, vaultAbs, vaultRel } from "../services/filesystem";
 
 /** Минимум полей, который нужен здешним функциям. */
 export interface LibraryAwareScene {
@@ -27,6 +31,14 @@ export const INHERITED_SCENE_FIELDS = [
   "entry_condition",
   "outcomes",
   "hidden_from_players",
+  // Представление сцены — содержимое, а не место: вставка читает фон, переход
+  // и титр с заготовки, пока её не тронули.
+  "presentation_background_path",
+  "presentation_transition",
+  "presentation_transition_ms",
+  "presentation_title",
+  "presentation_title_secs",
+  "presentation_fade_ms",
 ] as const;
 
 /**
@@ -121,6 +133,74 @@ export function copySceneChildren(fromId: number, toId: number): void {
      SELECT 'scene', ?, to_type, to_id, section, origin
      FROM generic_links WHERE from_type = 'scene' AND from_id = ?`
   ).run(toId, fromId);
+  // Слои представления едут тем же image_path (байты общие через дедуп
+  // vault) — удалять файл при удалении строки слоя нельзя, иначе копия
+  // потеряет свой слой. Это безопасно: файлы слоёв неизменяемы (создание +
+  // удаление строкой, замены нет). Фон, наоборот, заменяемый — его дублирует
+  // duplicateSceneBackgroundFile ниже, иначе замена фона у оригинала уронила
+  // бы фон копии.
+  db.prepare(
+    `INSERT INTO scene_presentation_layers
+       (scene_id, name, image_path, has_button, visible_on_enter, position,
+        x_pct, y_pct, w_pct, h_pct)
+     SELECT ?, name, image_path, has_button, visible_on_enter, position,
+        x_pct, y_pct, w_pct, h_pct
+     FROM scene_presentation_layers WHERE scene_id = ? ORDER BY position, id`
+  ).run(toId, fromId);
+  duplicateSceneBackgroundFile(fromId, toId);
+}
+
+/**
+ * Фон представления — свой файл у каждой строки сцены.
+ *
+ * Копия получает байты оригинала в свою папку (`Scenes/<toId>/Presentation`,
+ * жёсткая ссылка — места не занимает), а строка указывает на новый путь.
+ * Без этого замена фона у оригинала (storeDeduped отвязывает старый путь)
+ * оставляла бы копию с висячим путём.
+ *
+ * Синхронна намеренно: вызывается из copySceneChildren, который едет внутри
+ * db.transaction во всех трёх случаях (копия кампании, заготовка с полки,
+ * отвязка вставки).
+ */
+export function duplicateSceneBackgroundFile(fromId: number, toId: number): void {
+  const from = db.prepare("SELECT presentation_background_path FROM story_scenes WHERE id = ?").get(fromId) as
+    | { presentation_background_path: string | null }
+    | undefined;
+  const src = from?.presentation_background_path;
+  if (!src) return;
+  const absSrc = vaultAbs(src);
+  if (!fs.existsSync(absSrc)) return;
+  const to = db.prepare("SELECT setting_id FROM story_scenes WHERE id = ?").get(toId) as
+    | { setting_id: number | null }
+    | undefined;
+  const setting = to?.setting_id
+    ? (db.prepare("SELECT folder_path FROM settings WHERE id = ?").get(to.setting_id) as
+        | { folder_path: string | null }
+        | undefined)
+    : undefined;
+  if (!setting?.folder_path) return;
+  const dir = ensureSubfolder(setting.folder_path, `Scenes/${toId}/Presentation`);
+  const dst = path.join(dir, `background${path.extname(src) || ".jpg"}`);
+  if (vaultAbs(dst) === absSrc) return;
+  try {
+    try {
+      fs.linkSync(absSrc, vaultAbs(dst));
+    } catch {
+      fs.copyFileSync(absSrc, vaultAbs(dst));
+    }
+  } catch {
+    return;
+  }
+  const rel = vaultRel(dst);
+  db.prepare("UPDATE story_scenes SET presentation_background_path = ? WHERE id = ?").run(rel, toId);
+  try {
+    const hash = crypto.createHash("sha256").update(fs.readFileSync(vaultAbs(dst))).digest("hex");
+    const stat = fs.statSync(vaultAbs(dst));
+    db.prepare(
+      `INSERT INTO vault_files (hash, path, size) VALUES (?, ?, ?)
+       ON CONFLICT(hash) DO UPDATE SET path = excluded.path, size = excluded.size`
+    ).run(hash, rel, stat.size);
+  } catch {}
 }
 
 /**

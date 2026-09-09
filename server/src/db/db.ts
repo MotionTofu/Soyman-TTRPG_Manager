@@ -6027,6 +6027,91 @@ export function openDatabase(dbDir: string): Database.Database {
     );
   }
 
+  // Представление сцены (показ игрокам на второй экран): фон + слои,
+  // входной транзишен + титр, общий фейд слоёв. Колонки наследуются
+  // заготовкой (см. INHERITED_SCENE_FIELDS в story/library.ts) и копируются
+  // вместе со сценой (cloneSceneForCampaign, copySceneChildren) — иначе у
+  // копии кампании был бы чужой кадр.
+  for (const [col, ddl] of [
+    ["presentation_background_path", "ALTER TABLE story_scenes ADD COLUMN presentation_background_path TEXT"],
+    ["presentation_transition", "ALTER TABLE story_scenes ADD COLUMN presentation_transition TEXT NOT NULL DEFAULT 'cut'"],
+    ["presentation_transition_ms", "ALTER TABLE story_scenes ADD COLUMN presentation_transition_ms INTEGER NOT NULL DEFAULT 600"],
+    ["presentation_title", "ALTER TABLE story_scenes ADD COLUMN presentation_title TEXT NOT NULL DEFAULT ''"],
+    ["presentation_title_secs", "ALTER TABLE story_scenes ADD COLUMN presentation_title_secs INTEGER NOT NULL DEFAULT 3"],
+    ["presentation_fade_ms", "ALTER TABLE story_scenes ADD COLUMN presentation_fade_ms INTEGER NOT NULL DEFAULT 600"],
+  ] as const) {
+    if (tableExists(database, "story_scenes") && !columnExists(database, "story_scenes", col)) {
+      database.exec(ddl);
+    }
+  }
+
+  // Слои представления сцены. Байты картинки общие с оригиналом через
+  // дедуп vault (тот же image_path у копии) — DELETE строки слоя файл с диска
+  // не удаляет, иначе копия кампании потеряла бы свой слой.
+  if (!tableExists(database, "scene_presentation_layers")) {
+    database.exec(`CREATE TABLE scene_presentation_layers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scene_id INTEGER NOT NULL REFERENCES story_scenes(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT '',
+      image_path TEXT NOT NULL DEFAULT '',
+      has_button INTEGER NOT NULL DEFAULT 1,
+      visible_on_enter INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      x_pct REAL NOT NULL DEFAULT 0,
+      y_pct REAL NOT NULL DEFAULT 0,
+      w_pct REAL NOT NULL DEFAULT 100,
+      h_pct REAL NOT NULL DEFAULT 100,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(`CREATE INDEX idx_scene_presentation_layers_scene ON scene_presentation_layers(scene_id)`);
+  }
+
+  // Заглавное представление кампании — та же структура, что у сцены, но
+  // владелец кампания (наследования заготовок здесь нет — заглавное одно).
+  for (const [col, ddl] of [
+    ["cover_background_path", "ALTER TABLE campaigns ADD COLUMN cover_background_path TEXT"],
+    ["cover_transition", "ALTER TABLE campaigns ADD COLUMN cover_transition TEXT NOT NULL DEFAULT 'cut'"],
+    ["cover_transition_ms", "ALTER TABLE campaigns ADD COLUMN cover_transition_ms INTEGER NOT NULL DEFAULT 600"],
+    ["cover_title", "ALTER TABLE campaigns ADD COLUMN cover_title TEXT NOT NULL DEFAULT ''"],
+    ["cover_title_secs", "ALTER TABLE campaigns ADD COLUMN cover_title_secs INTEGER NOT NULL DEFAULT 3"],
+    ["cover_fade_ms", "ALTER TABLE campaigns ADD COLUMN cover_fade_ms INTEGER NOT NULL DEFAULT 600"],
+  ] as const) {
+    if (tableExists(database, "campaigns") && !columnExists(database, "campaigns", col)) {
+      database.exec(ddl);
+    }
+  }
+  if (!tableExists(database, "campaign_presentation_layers")) {
+    database.exec(`CREATE TABLE campaign_presentation_layers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT '',
+      image_path TEXT NOT NULL DEFAULT '',
+      has_button INTEGER NOT NULL DEFAULT 1,
+      visible_on_enter INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      x_pct REAL NOT NULL DEFAULT 0,
+      y_pct REAL NOT NULL DEFAULT 0,
+      w_pct REAL NOT NULL DEFAULT 100,
+      h_pct REAL NOT NULL DEFAULT 100,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(`CREATE INDEX idx_campaign_presentation_layers_campaign ON campaign_presentation_layers(campaign_id)`);
+  }
+
+  // Состояние экрана показа — серверный источник правды, чтобы окно игроков
+  // переживало перезагрузку. Пишет только пульт; окно и превью читают и
+  // подхватывают изменения по BroadcastChannel-пингу клиента.
+  if (!tableExists(database, "session_show_state")) {
+    database.exec(`CREATE TABLE session_show_state (
+      session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+      mode TEXT NOT NULL DEFAULT 'black',
+      scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
+      visible_layer_ids TEXT NOT NULL DEFAULT '[]',
+      shown INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+
   compactIfBloated(database);
   return database;
 }

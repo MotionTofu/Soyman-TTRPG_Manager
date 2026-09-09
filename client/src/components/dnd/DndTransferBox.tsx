@@ -57,7 +57,7 @@ export function DndTransferBox({
   notice: string | null;
   busyId: number | null;
   onAction: (id: number, action: TransferAction) => void;
-  onSendItem: (args: { recipientId: number; section: number; index: number; name: string; qty: number; kind: "item" | "replica" }) => void;
+  onSendItem: (args: { recipientId: number; itemId: string | null; section: number; index: number; name: string; qty: number; kind: "item" | "replica" }) => void;
   onSendMoney: (args: { recipientId: number; coins: { cp: number; sp: number; ep: number; gp: number; pp: number } }) => void;
   onCommitCoins: (c: DndCoins) => void;
   /** После рассылки долей из калькулятора: дотянуть списки. */
@@ -110,15 +110,17 @@ export function DndTransferBox({
   }
 
   // Отдать можно только свободную строку: уже едущая или приехавшая вещь
-  // второй раз не предлагается.
-  const freeItems: { si: number; ii: number; name: string; have: number; section: string }[] = [];
+  // второй раз не предлагается. Ключ — стабильный id строки: индексы
+  // протухают при любом изменении списка до нажатия «Передать».
+  const freeItems: { si: number; ii: number; id: string | null; name: string; have: number; section: string }[] = [];
   equipment.forEach((sec, si) =>
     sec.items.forEach((it, ii) => {
       if (it.transferOut || it.transferIn || it.pendingFrom) return;
-      freeItems.push({ si, ii, name: it.name, have: parseItemQty(it.qty), section: sec.name });
+      freeItems.push({ si, ii, id: it.id ?? null, name: it.name, have: parseItemQty(it.qty), section: sec.name });
     })
   );
-  const picked = freeItems.find((f) => `${f.si}:${f.ii}` === itemKey) ?? null;
+  const itemKeyOf = (f: { si: number; ii: number; id: string | null }) => f.id ?? `${f.si}:${f.ii}`;
+  const picked = freeItems.find((f) => itemKeyOf(f) === itemKey) ?? null;
   const qtyNum = parseInt(qtyText, 10);
   const qtyOk = picked != null && Number.isFinite(qtyNum) && qtyNum >= 1 && qtyNum <= picked.have;
   const coins = {
@@ -239,7 +241,7 @@ export function DndTransferBox({
                 >
                   <option value="">Вещь…</option>
                   {freeItems.map((f) => (
-                    <option key={`${f.si}:${f.ii}`} value={`${f.si}:${f.ii}`}>
+                    <option key={itemKeyOf(f)} value={itemKeyOf(f)}>
                       {f.name || "Без названия"} ×{f.have}
                     </option>
                   ))}
@@ -269,7 +271,7 @@ export function DndTransferBox({
                 disabled={recipientId == null || picked == null || !qtyOk || busyId != null}
                 onClick={() => {
                   if (recipientId == null || picked == null) return;
-                  onSendItem({ recipientId, section: picked.si, index: picked.ii, name: picked.name, qty: qtyNum, kind: itemKind });
+                  onSendItem({ recipientId, itemId: picked.id, section: picked.si, index: picked.ii, name: picked.name, qty: qtyNum, kind: itemKind });
                 }}
               >
                 Передать

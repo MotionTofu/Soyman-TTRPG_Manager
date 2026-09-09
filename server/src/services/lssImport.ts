@@ -12,6 +12,8 @@ interface CompendiumEntryRow {
   kind: string;
   name: string;
   data: string;
+  aliases: string;
+  name_original: string | null;
 }
 
 // Best-effort name match against the D&D 5.5 compendium, so imported
@@ -35,6 +37,32 @@ function normalizeForMatch(s: string): string {
     .trim();
 }
 
+function entryMatchesName(row: CompendiumEntryRow, target: string, targetBase: string): boolean {
+  if (normalizeForMatch(row.name) === target) return true;
+  if (targetBase !== target && normalizeForMatch(row.name) === targetBase) return true;
+  return false;
+}
+
+// Алиасы и оригинальное имя — второй круг, после прямых имён: алиас
+// никогда не перебивает запись, чьё имя совпало напрямую (тикет 03 —
+// «Изобретатель» у Артефактора против LSS-названий).
+function entryMatchesAlias(row: CompendiumEntryRow, target: string, targetBase: string): boolean {
+  const candidates: string[] = [];
+  if (row.name_original) candidates.push(row.name_original);
+  try {
+    const parsed: unknown = JSON.parse(row.aliases || "[]");
+    if (Array.isArray(parsed)) {
+      for (const a of parsed) if (typeof a === "string" && a) candidates.push(a);
+    }
+  } catch {
+    // Битые aliases — игнор, имя всё равно уже проверено выше.
+  }
+  return candidates.some((n) => {
+    const norm = normalizeForMatch(n);
+    return norm === target || (targetBase !== target && norm === targetBase);
+  });
+}
+
 function findEntryByName(
   systemId: number,
   sectionKind: string,
@@ -49,19 +77,20 @@ function findEntryByName(
   const sections = db
     .prepare("SELECT id FROM system_sections WHERE system_id = ? AND kind = ?")
     .all(systemId, sectionKind) as { id: number }[];
+  const pool: CompendiumEntryRow[] = [];
   for (const section of sections) {
     const entries = db
       .prepare(
         parentId === null
-          ? "SELECT id, parent_id, kind, name, data FROM compendium_entries WHERE section_id = ? AND kind = ? AND parent_id IS NULL"
-          : "SELECT id, parent_id, kind, name, data FROM compendium_entries WHERE section_id = ? AND kind = ? AND parent_id = ?"
+          ? "SELECT id, parent_id, kind, name, data, aliases, name_original FROM compendium_entries WHERE section_id = ? AND kind = ? AND parent_id IS NULL"
+          : "SELECT id, parent_id, kind, name, data, aliases, name_original FROM compendium_entries WHERE section_id = ? AND kind = ? AND parent_id = ?"
       )
       .all(...(parentId === null ? [section.id, entryKind] : [section.id, entryKind, parentId])) as CompendiumEntryRow[];
-    let match = entries.find((e) => normalizeForMatch(e.name) === target);
-    if (!match && targetBase !== target) match = entries.find((e) => normalizeForMatch(e.name) === targetBase);
-    if (match) return match;
+    pool.push(...entries);
   }
-  return null;
+  return pool.find((e) => entryMatchesName(e, target, targetBase))
+    ?? pool.find((e) => entryMatchesAlias(e, target, targetBase))
+    ?? null;
 }
 
 interface ProseNode {
@@ -101,6 +130,32 @@ function textBlockValue(block: unknown): string {
   // Some LSS versions store plain string directly in block
   if (typeof b.value === "string") return (b.value as string).trim();
   return "";
+}
+
+// Сколько link-marks в ProseMirror-доке: ссылки (next.dnd.su) не
+// переносятся, но молчать об их потере нельзя (тикет 02).
+function countLinkMarks(node: ProseNode | undefined): number {
+  if (!node) return 0;
+  let n = 0;
+  if (Array.isArray(node.marks)) {
+    for (const m of node.marks) {
+      if ((m as { type?: unknown } | null)?.type === "link") n++;
+    }
+  }
+  for (const c of node.content ?? []) n += countLinkMarks(c);
+  return n;
+}
+
+// Заготовка LSS, а не оружие: placebo-строки вида {name:"",dmg:""} с
+// timestamp-id отсекаются на месте (тикет 01): пустые дают "" и уходят
+// фильтром ниже — иначе пустой лист хвастается «Оружие:\n- » в shortText.
+
+// Подпись раздела: исходный customLabel LSS честнее нашего словаря —
+// «Предметы, которые могу сделать:» не должны ложиться под «Союзники».
+function blockLabel(key: string, block: unknown): string {
+  const custom = (block as Record<string, unknown> | undefined)?.customLabel;
+  if (typeof custom === "string" && custom) return custom;
+  return SECTION_LABELS[key] ?? key;
 }
 
 function safeJsonParse(raw: string, label: string): unknown {
@@ -192,6 +247,43 @@ export interface LssImportWarnings {
   message: string;
 }
 
+// Владения inner-блока `data.prof` (НЕ путать с `data.text.prof` — та идёт в
+// notes текстом). LSS-ключи → русские имена записей листа (тикет 02).
+const PROF_LABELS: Record<string, string> = {
+  "armor-light": "Лёгкие доспехи",
+  "armor-medium": "Средние доспехи",
+  "armor-heavy": "Тяжёлые доспехи",
+  shield: "Щиты",
+  "weapon-simple": "Простое оружие",
+  "weapon-martial": "Воинское оружие",
+};
+
+// Подписи структурированной внешности `subInfo` (тикет 02).
+const SUBINFO_LABELS: Record<string, string> = {
+  age: "Возраст",
+  height: "Рост",
+  weight: "Вес",
+  eyes: "Глаза",
+  skin: "Кожа",
+  hair: "Волосы",
+};
+
+export interface LssRawExtras {
+  /** Неразобранные монеты / Prepare-ID / слоты — визард показывает сырьём, не гадает. */
+  coinsRaw: unknown;
+  preparedIds: string[];
+  edition: string;
+  proficiencySource: "inner" | "outer" | "explicit" | "calculated";
+  slotsRaw: unknown;
+  spellsInfo: { baseCode: string; availableClasses: string[] };
+  sizeRaw: string;
+  avatarJpeg: string;
+  avatarWebp: string;
+  bonusesRaw: Record<string, unknown>;
+  /** Кастомные разделы без структурного дома (notes-*) — визард предлагает disposition. */
+  homelessSections: { key: string; label: string; body: string }[];
+}
+
 export interface LssImportResult {
   characterName: string;
   shortText: string;
@@ -201,6 +293,7 @@ export interface LssImportResult {
   // us. Free-text sections that have no structured home (appearance, quests,
   // background prose) are concatenated into `notes` instead of being dropped.
   characterData: Record<string, unknown>;
+  rawExtras: LssRawExtras;
   warnings: LssImportWarnings[];
 }
 
@@ -274,6 +367,43 @@ export function parseLongStoryShort(raw: string): LssImportResult {
   // Optional LSS sections that some exports carry (used in fase 2 mapping — kept here for warnings even before full support)
   const rawSpells = (data as Record<string, unknown>).spells;
   const rawInventory = (data as Record<string, unknown>).inventory;
+  const rawProfBlock = (data.prof && typeof data.prof === "object" ? data.prof : {}) as Record<string, unknown>;
+  const rawAttunements = Array.isArray(data.attunementsList) ? (data.attunementsList as unknown[]) : [];
+  const rawCoinsInner = (data.coins && typeof data.coins === "object" ? data.coins : {}) as Record<string, unknown>;
+  const rawCoinsOuter = (outerCoins && typeof outerCoins === "object" ? outerCoins : {}) as Record<string, unknown>;
+  const subInfo = (data.subInfo && typeof data.subInfo === "object" ? data.subInfo : {}) as Record<string, unknown>;
+  const spellsInfoBlock = (data.spellsInfo && typeof data.spellsInfo === "object" ? data.spellsInfo : {}) as Record<string, unknown>;
+  const avatarBlock = (outerRec.avatar && typeof outerRec.avatar === "object" ? outerRec.avatar : {}) as Record<string, unknown>;
+  // Аватар живёт то снаружи, то внутри data (Фридрих — внутри).
+  const avatarInner = (
+    (data as Record<string, unknown>).avatar && typeof (data as Record<string, unknown>).avatar === "object"
+      ? (data as Record<string, unknown>).avatar
+      : {}
+  ) as Record<string, unknown>;
+  const avatarStr = (b: Record<string, unknown>, k: string) => (typeof b[k] === "string" ? (b[k] as string) : "");
+
+  // Настроенные предметы: checked==true; плейсхолдеры (unchecked+пусто) мимо.
+  const attunedNames = rawAttunements
+    .map((a) => {
+      const rec = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+      const checked = rec.checked === true;
+      const value = typeof rec.value === "string" ? rec.value.trim() : "";
+      return checked ? value : "";
+    })
+    .filter(Boolean);
+  const attunementCount = rawAttunements.filter((a) => {
+    const rec = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+    return rec.checked === true;
+  }).length;
+
+  // Структурированная внешность довеском к text.appearance (тикет 02).
+  const subInfoBody = Object.entries(SUBINFO_LABELS)
+    .map(([k, label]) => {
+      const v = getValue(subInfo, k);
+      return v ? `${label}: ${v}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
 
   // Helpers to read .value safely without `any`
   const infoRace = getValue(info, "race");
@@ -282,6 +412,8 @@ export function parseLongStoryShort(raw: string): LssImportResult {
   const infoLevel = getValue(info, "level");
   const infoBackground = getValue(info, "background");
   const infoAlignment = getValue(info, "alignment");
+  const infoPlayerName = getValue(info, "playerName");
+  const infoSize = getValue(info, "size");
   if (!infoRace && !infoClass && !infoBackground && !name) {
     warn("info", "Поля расы/класса/предыстории пусты — проверьте, что экспорт с longstoryshort.app не обрезан.");
   }
@@ -334,11 +466,13 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     .filter(Boolean)
     .join(" · ");
 
-  const weaponLines = weapons.map((w) => {
-    const rec = w as Record<string, unknown>;
-    const bits = [getValue(rec, "name"), getValue(rec, "mod"), getValue(rec, "dmg")].filter(Boolean);
-    return "- " + bits.join(" ");
-  });
+  const weaponLines = weapons
+    .map((w) => {
+      const rec = w as Record<string, unknown>;
+      const bits = [getValue(rec, "name"), getValue(rec, "mod"), getValue(rec, "dmg")].filter(Boolean);
+      return bits.length ? "- " + bits.join(" ") : "";
+    })
+    .filter(Boolean);
 
   const shortText = [
     name,
@@ -376,11 +510,23 @@ export function parseLongStoryShort(raw: string): LssImportResult {
       if (!block) return "";
       const body = textBlockValue(block);
       if (!body) return "";
-      const label =
-        (typeof block.customLabel === "string" && block.customLabel) || SECTION_LABELS[key] || key;
-      return `## ${label}\n${body}`;
+      return `## ${blockLabel(key, block)}\n${body}`;
     })
     .filter(Boolean);
+
+  // Бесхозные разделы для шага 7 визарда: есть тело, нет структурного поля.
+  // Пятёрка из notes (appearance/quests/background/prof/allies) — не
+  // бесхозные: они уже сложены в notes выше, повторное «→ в Заметки» дало бы дубль.
+  const NOTED_KEYS = new Set(["appearance", "quests", "background", "prof", "allies"]);
+  const homelessSections = restKeys
+    .filter((key) => !NOTED_KEYS.has(key))
+    .map((key) => {
+      const block = text[key] as Record<string, unknown> | undefined;
+      if (!block) return null;
+      const body = textBlockValue(block);
+      return body ? { key, label: blockLabel(key, block), body } : null;
+    })
+    .filter((s): s is { key: string; label: string; body: string } => s !== null);
 
   const fullText = [
     shortText,
@@ -390,6 +536,16 @@ export function parseLongStoryShort(raw: string): LssImportResult {
   ]
     .filter(Boolean)
     .join("\n");
+
+  // Ссылки в тексте (обычно next.dnd.su): имена сохранились, кликабельность нет.
+  const totalLinks = (Object.values(text) as unknown[]).reduce<number>((sum, block) => {
+    const doc = (block as Record<string, unknown> | undefined)?.value as Record<string, unknown> | undefined;
+    const pm = doc?.data;
+    return sum + (pm && typeof pm === "object" ? countLinkMarks(pm as ProseNode) : 0);
+  }, 0);
+  if (totalLinks > 0) {
+    warn("links", `В тексте ${totalLinks} ссылок (следы next.dnd.su) — переносятся имена без ссылок, проверьте названия.`);
+  }
 
   const level = Number(infoLevel) || 1;
   const hitDieDigits = getVitalValue("hit-die").replace(/\D/g, "");
@@ -435,7 +591,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
 
   const featureBlock = (key: string) => {
     const body = textBlockValue(text[key]);
-    return body ? [{ name: SECTION_LABELS[key] ?? key, description: body }] : [];
+    return body ? [{ name: blockLabel(key, text[key]), description: body }] : [];
   };
   // Снаряжение: если LSS отдал ProseMirror bulletList, разбить по «- » строкам вместо одного кома
   const equipmentRawBody = textBlockValue(text.equipment);
@@ -480,14 +636,20 @@ export function parseLongStoryShort(raw: string): LssImportResult {
 
   // Free-text sections with no structured field of their own get folded into
   // notes (headed) rather than silently dropped. `allies` is a real LSS section (e.g. Эрвин — Альянс Лордов) — include it.
-  const notesSections = ["appearance", "quests", "background", "prof", "allies"]
-    .map((key) => {
-      const body = textBlockValue(text[key]);
-      if (body) return `## ${SECTION_LABELS[key] ?? key}\n${body}`;
-      // allies may be stored as text.allies with same ProseMirror shape — already handled; fallback: outer allies?
-      return "";
-    })
+  // Внешность склеивается из text.appearance + subInfo; настройка — из attunementsList.
+  const notesBodies: Record<string, string> = {};
+  for (const key of ["appearance", "quests", "background", "prof", "allies"]) {
+    notesBodies[key] = textBlockValue(text[key]);
+  }
+  if (subInfoBody) {
+    notesBodies.appearance = [notesBodies.appearance, subInfoBody].filter(Boolean).join("\n");
+  }
+  const notesSections = Object.entries(notesBodies)
+    .map(([key, body]) => (body ? `## ${blockLabel(key, text[key])}\n${body}` : ""))
     .filter(Boolean);
+  if (attunedNames.length > 0) {
+    notesSections.push(`## Настройка (${attunedNames.length})\n${attunedNames.map((n) => `- ${n}`).join("\n")}`);
+  }
   // Outer inspiration/edition hints go to notes if not otherwise visible
   if (outerSpellsPact && typeof outerSpellsPact === "object") {
     const pactSlots = (outerSpellsPact as Record<string, unknown>)["slots-3"] as Record<string, unknown> | undefined;
@@ -577,6 +739,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
   // proficiencyBonus: preference explicit value from LSS if present
   // Priority: data.proficiency (inner top-level number) → outer `proficiency` → info.proficiencyBonus → calculated
   let proficiencyBonusStr: string;
+  let proficiencySource: LssRawExtras["proficiencySource"] = "calculated";
   const innerProficiency = (data as Record<string, unknown>).proficiency;
   const profNum =
     typeof innerProficiency === "number"
@@ -586,6 +749,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
         : null;
   if (typeof profNum === "number" && profNum > 0) {
     proficiencyBonusStr = `+${profNum}`;
+    proficiencySource = typeof innerProficiency === "number" ? "inner" : "outer";
   } else {
     const explicitBonusRaw =
       getValue(info, "proficiencyBonus") ||
@@ -594,6 +758,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     if (explicitBonusRaw) {
       const n = Number(String(explicitBonusRaw).replace(/[^\d-]/g, ""));
       proficiencyBonusStr = Number.isFinite(n) && n !== 0 ? (n > 0 ? `+${n}` : String(n)) : `+${proficiencyBonusForLevel(level)}`;
+      if (Number.isFinite(n) && n !== 0) proficiencySource = "explicit";
     } else {
       proficiencyBonusStr = `+${proficiencyBonusForLevel(level)}`;
     }
@@ -616,14 +781,86 @@ export function parseLongStoryShort(raw: string): LssImportResult {
 
   const hitPointMaxStr = getVitalValue("hp-max");
   const hitPointCurrentStr = getVitalValue("hp-current");
-  const hitPointsTempStr = getVitalValue("hp-temp") || getVitalValue("tempHp") || "";
+  // Нулевые временные хиты — это «нет», а не «0»: лист показывал бы «0».
+  const hitPointsTempRaw = getVitalValue("hp-temp") || getVitalValue("tempHp") || "";
+  const hitPointsTempStr = hitPointsTempRaw && hitPointsTempRaw !== "0" ? hitPointsTempRaw : "";
   const armorClassStr = getVitalValue("ac");
   const speedStr = getVitalValue("speed");
+
+  // Владения доспехами/оружием из inner-блока data.prof (тикет 02).
+  const proficiencies: { entryId: null; name: string; abilityKey: null }[] = [];
+  for (const [k, v] of Object.entries(rawProfBlock)) {
+    const rec = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+    if (!isProfTrue(rec.value)) continue;
+    const label = PROF_LABELS[k];
+    if (label) {
+      proficiencies.push({ entryId: null, name: label, abilityKey: null });
+    } else {
+      proficiencies.push({ entryId: null, name: k, abilityKey: null });
+      warn("prof", `Неизвестное владение «${k}» сохранено сырьём — проверьте и переименуйте.`);
+    }
+  }
+
+  // Монеты: inner авторитетнее, outer — запасной (тикет 02, 156 ЗМ Фридриха).
+  function coinStr(key: string): string {
+    return getValue(rawCoinsInner, key) || getValue(rawCoinsOuter, key);
+  }
+  const coins = { cp: coinStr("cp"), sp: coinStr("sp"), ep: coinStr("ep"), gp: coinStr("gp"), pp: coinStr("pp") };
+
+  const darkvisionNum = Number(getVitalValue("darkvision"));
+  const sensesList =
+    Number.isFinite(darkvisionNum) && darkvisionNum > 0
+      ? [{ name: "Тёмное зрение", distance: `${darkvisionNum} фт.` }]
+      : [];
+
+  // Израсходованные кости хитов: уровень минус остаток (одна кость; нули опускаем).
+  const hpDiceCurrentNum = Number(getVitalValue("hp-dice-current"));
+  const hitDiceUsed: Record<string, number> =
+    hitDieDigits && Number.isFinite(hpDiceCurrentNum) && hpDiceCurrentNum >= 0 && hpDiceCurrentNum < level
+      ? { [`к${hitDieDigits}`]: level - hpDiceCurrentNum }
+      : {};
+
+  const spellcastingText = getValue(spellsInfoBlock, "base");
+  const spellDcMiscText = getValue(spellsInfoBlock, "save");
+  const spellAttackMiscText = getValue(spellsInfoBlock, "mod");
+  const spellBaseRec = (
+    spellsInfoBlock.base && typeof spellsInfoBlock.base === "object" ? spellsInfoBlock.base : {}
+  ) as Record<string, unknown>;
+  const spellAvailableRec = (
+    spellsInfoBlock.available && typeof spellsInfoBlock.available === "object" ? spellsInfoBlock.available : {}
+  ) as Record<string, unknown>;
+
+  const rawExtras: LssRawExtras = {
+    coinsRaw: (data as Record<string, unknown>).coins ?? outerCoins ?? null,
+    preparedIds: (outerPrepared ?? []).map((s) => String(s)),
+    edition: outerEdition,
+    proficiencySource,
+    slotsRaw: rawSpells && typeof rawSpells === "object" ? rawSpells : null,
+    spellsInfo: {
+      baseCode: typeof spellBaseRec.code === "string" ? spellBaseRec.code : "",
+      availableClasses: Array.isArray(spellAvailableRec.classes)
+        ? (spellAvailableRec.classes as unknown[]).filter((c): c is string => typeof c === "string")
+        : [],
+    },
+    sizeRaw: infoSize,
+    avatarJpeg: avatarStr(avatarBlock, "jpeg") || avatarStr(avatarInner, "jpeg"),
+    avatarWebp: avatarStr(avatarBlock, "webp") || avatarStr(avatarInner, "webp"),
+    homelessSections,
+    bonusesRaw: {
+      bonuses: (data as Record<string, unknown>).bonuses ?? null,
+      bonusesSkills: (data as Record<string, unknown>).bonusesSkills ?? null,
+      bonusesStats: (data as Record<string, unknown>).bonusesStats ?? null,
+      resources: (data as Record<string, unknown>).resources ?? null,
+      conditions: (data as Record<string, unknown>).conditions ?? null,
+      wizardStep: (data as Record<string, unknown>).wizardStep ?? null,
+      isDefault: (data as Record<string, unknown>).isDefault ?? null,
+    },
+  };
 
   const characterData = {
     systemId: dndSystemId,
     characterName: name,
-    playerName: "",
+    playerName: infoPlayerName,
     classes: [
       {
         classId,
@@ -652,28 +889,31 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     armorClass: armorClassStr,
     initiative: "",
     speed: speedStr,
+    sensesList,
     hitPointMax: hitPointMaxStr,
     hitPointsCurrent: hitPointCurrentStr || hitPointMaxStr,
     hitPointsTemp: hitPointsTempStr,
     hitPointMaxTemp: "",
     hitDice: hitDieDigits ? `${level}к${hitDieDigits}` : "",
+    hitDiceUsed,
     deathSaveSuccesses: 0,
     deathSaveFailures: 0,
     attacks,
     equipmentSections: equipmentItems.length ? [{ name: "Снаряжение", items: equipmentItems }] : [],
-    attunementCount: 0,
+    attunementCount,
+    coins,
     speciesFeatures: featureBlock("features"),
     classFeatures: featureBlock("traits"),
     feats: featureBlock("feats"),
     specialAbilities: [],
-    proficiencies: [],
+    proficiencies,
     personalityTraits: textBlockValue(text.personality),
     ideals: textBlockValue(text.ideals),
     bonds: textBlockValue(text.bonds),
     flaws: textBlockValue(text.flaws),
-    spellcasting: "",
-    spellDcMisc: "",
-    spellAttackMisc: "",
+    spellcasting: spellcastingText,
+    spellDcMisc: spellDcMiscText,
+    spellAttackMisc: spellAttackMiscText,
     cantrips: [],
     spellSlotLevels: 0,
     spellSlotPips: new Array(9).fill(0),
@@ -685,5 +925,5 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     resourceBonus: {},
   };
 
-  return { characterName: name, shortText, fullText, characterData, warnings };
+  return { characterName: name, shortText, fullText, characterData, rawExtras, warnings };
 }
