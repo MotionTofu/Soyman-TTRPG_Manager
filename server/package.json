@@ -5,10 +5,11 @@
   "type": "commonjs",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('src/db/schema.sql','dist/db/schema.sql')\"",
+    "build": "npm run build:shared && tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('src/db/schema.sql','dist/db/schema.sql')\"",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:shared": "npm --prefix ../shared run build"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
@@ -24,7 +25,8 @@
     "multer": "^2.2.0",
     "sharp": "^0.35.3",
     "socket.io": "^4.8.3",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@soyman/shared": "file:../shared"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",

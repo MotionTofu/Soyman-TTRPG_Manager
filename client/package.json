@@ -8,7 +8,9 @@
     "build": "node scripts/check-type-scale.mjs && tsc -b && vite build",
     "lint": "oxlint && node scripts/check-type-scale.mjs",
     "preview": "vite preview",
-    "check:scale": "node scripts/check-type-scale.mjs"
+    "check:scale": "node scripts/check-type-scale.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.3",
@@ -25,6 +27,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^4.1.11"
   }
 }

@@ -48,6 +48,14 @@
       {
         "from": "server/node_modules",
         "to": "app/server/node_modules"
+      },
+      {
+        "from": "shared/dist",
+        "to": "app/server/node_modules/@soyman/shared/dist"
+      },
+      {
+        "from": "shared/package.json",
+        "to": "app/server/node_modules/@soyman/shared/package.json"
       }
     ],
     "win": {

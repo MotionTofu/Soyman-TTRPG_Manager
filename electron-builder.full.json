@@ -23,11 +23,22 @@
     {
       "from": "seed-full",
       "to": "seed"
+    },
+    {
+      "from": "shared/dist",
+      "to": "app/server/node_modules/@soyman/shared/dist"
+    },
+    {
+      "from": "shared/package.json",
+      "to": "app/server/node_modules/@soyman/shared/package.json"
     }
   ],
   "win": {
     "icon": "build/icon.png",
-    "target": ["portable", "nsis"]
+    "target": [
+      "portable",
+      "nsis"
+    ]
   },
   "portable": {
     "artifactName": "SoyMan_ttrpg-Full-${version}.exe"

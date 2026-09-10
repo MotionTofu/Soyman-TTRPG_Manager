@@ -1,0 +1,23 @@
+{
+  // CommonJS и ES2022 — как у сервера: он импортирует собранный `dist`
+  // напрямую через `require`. Клиент берёт исходники из `src` алиасом Vite и
+  // на эту сборку не смотрит.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    // React здесь не бывает по определению: пакет общий с сервером, и любой
+    // импорт .tsx сюда — ошибка проектирования, а не неудобство.
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src"],
+  "exclude": ["**/*.test.ts"]
+}

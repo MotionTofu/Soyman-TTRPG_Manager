@@ -1,0 +1,17 @@
+{
+  "name": "@soyman/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Правила и типы, общие для клиента и сервера. Сборка в dist/ — сервер импортирует собранное, клиент бандлит исходники.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2",
+    "vitest": "^4.1.11"
+  }
+}

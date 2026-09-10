@@ -1,10 +1,19 @@
 // @ts-nocheck
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Общий с сервером пакет клиент берёт ИСХОДНИКАМИ: Vite бандлит TypeScript
+  // сам, поэтому его сборка (`shared/dist`) клиенту не нужна и забыть её
+  // нельзя. Сервер, наоборот, импортирует именно `dist`.
+  resolve: {
+    alias: {
+      '@shared': path.resolve(__dirname, '../shared/src'),
+    },
+  },
   optimizeDeps: {
     include: ["@xyflow/react", "react", "react-dom", "react-router-dom"],
   },

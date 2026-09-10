@@ -20,7 +20,15 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Общий с сервером пакет. Клиент берёт его исходниками (Vite бандлит TS
+       сам), поэтому сборка `shared/dist` клиенту не нужна и забыть её нельзя.
+       Алиас продублирован в vite.config.ts — tsc и Vite разрешают пути
+       независимо друг от друга. */
+    "paths": {
+      "@shared/*": ["../shared/src/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../shared/src"]
 }
