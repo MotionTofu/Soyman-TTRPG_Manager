@@ -27,13 +27,7 @@ for (const def of SKILL_CATALOG) SKILLS_BY_ABILITY[def.ability].push(def.name);
 
 export const ALL_SKILLS: string[] = Object.values(SKILLS_BY_ABILITY).flat();
 
-export function emptyAbilities(): DndAbilityScores {
-  return { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
-}
 
-export function emptySavingThrowProfs(): Record<DndAbilityKey, boolean> {
-  return { str: false, dex: false, con: false, int: false, wis: false, cha: false };
-}
 
 // Только для листа персонажа — и потому по английскому ключу. У существа
 // `skillProfs` другого вида (булев словарь по имени) и своим путём.
@@ -42,6 +36,8 @@ export function emptySavingThrowProfs(): Record<DndAbilityKey, boolean> {
 // оставлен: этот модуль импортируют десятки файлов листа.
 export {
   emptySkillProfs,
+  emptyAbilities,
+  emptySavingThrowProfs,
   parseBonus,
   classSkillPool,
   classSkillChoiceTotal,

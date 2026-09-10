@@ -89,9 +89,11 @@ const SKILL_ABILITY: Record<string, DndAbilityKey> = Object.fromEntries(
   Object.entries(SKILLS_BY_ABILITY).flatMap(([ability, skills]) => skills.map((s) => [s, ability as DndAbilityKey]))
 );
 
-export function emptySpeed(): DndCreatureSpeed {
-  return { walk: null, fly: null, swim: null, climb: null, burrow: null, hover: false, note: "" };
-}
+// Переехало в общий пакет: им пользуется «пустой лист» персонажа, а тот нужен
+// и серверу.
+export { emptySpeed } from "@shared/dnd/creature";
+// Реэкспорт не вводит имя в область видимости самого модуля.
+import { emptySpeed } from "@shared/dnd/creature";
 
 export function emptyHitPoints(): DndCreatureHitPoints {
   return { diceCount: null, dieSize: null, bonus: null, formula: "" };

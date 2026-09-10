@@ -102,31 +102,8 @@ export async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEq
   }
 }
 
-export const EMPTY_EQUIPMENT_ITEM: DndEquipmentItem = { name: "", qty: "", weight: "", notes: "" };
-
-// Стабильный id строки инвентаря: crypto там, где есть, иначе
-// счётчик+время — лишь бы не совпал внутри листа.
-let equipmentIdSeq = 0;
-export function makeEquipmentId(): string {
-  try {
-    const c = globalThis.crypto;
-    if (c && typeof (c as Crypto).randomUUID === "function") return (c as Crypto).randomUUID();
-  } catch { /* ниже запасной путь */ }
-  equipmentIdSeq += 1;
-  return `eq-${Date.now().toString(36)}-${equipmentIdSeq.toString(36)}-${Math.floor(Math.random() * 0xffffff).toString(36)}`;
-}
-
-/** Добить id строкам, пришедшим без него (старые листы): без этого ключи
- *  React снова свалятся на индекс. */
-export function ensureEquipmentIds(items: DndEquipmentItem[]): DndEquipmentItem[] {
-  let changed = false;
-  const next = items.map((it) => {
-    if (it.id) return it;
-    changed = true;
-    return { ...it, id: makeEquipmentId() };
-  });
-  return changed ? next : items;
-}
+// Чистая часть переехала в общий пакет: ею пользуется нормализация листа.
+export { EMPTY_EQUIPMENT_ITEM, makeEquipmentId, ensureEquipmentIds, carryCapacityLb } from "@shared/dnd/equipment";
 
 // Настройка в записях справочника: у магпредметов это `data.attunement`
 // (чекбокс), у казначейских артефактов — `data.requires_attunement`.
@@ -135,12 +112,6 @@ export function entryRequiresAttunement(data: Record<string, unknown> | undefine
   if (!data) return false;
   if (data.attunement) return true;
   return data.requires_attunement === true || data.requires_attunement === 1;
-}
-
-/** Грузоподъёмность в фунтах: СИЛ × 15 × 2^(удвоения). */
-export function carryCapacityLb(strScore: number, doublings: number): number {
-  const str = Number.isFinite(strScore) && strScore > 0 ? strScore : 10;
-  return str * 15 * 2 ** Math.max(0, doublings);
 }
 
 // Удвоения грузоподъёмности ищутся по именам умений — источника-структуры
