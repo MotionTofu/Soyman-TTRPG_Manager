@@ -6,6 +6,7 @@ import path from "path";
 import crypto from "crypto";
 import sharp from "sharp";
 import { db } from "../db/db";
+import { SATELLITE_OWNERS, requireKind } from "../db/entityKinds";
 import { ensureSubfolder, toFileUrl } from "../services/filesystem";
 import { resizeImageBuffer } from "../services/imageResize";
 import { storeDeduped, removeOrArchive } from "../services/vaultDedup";
@@ -39,14 +40,13 @@ function cleanupFile(file: Express.Multer.File | undefined) {
   if (p) try { fs.unlinkSync(p); } catch {}
 }
 
-const OWNER_TABLES: Record<string, string> = {
-  character: "characters",
-  being: "setting_beings",
-  location: "setting_locations",
-  community: "setting_communities",
-  campaign_player_section: "campaign_player_sections",
-  artifact: "artifacts",
-};
+// Кто владеет картинками галереи — фасет `owns: ["gallery_images"]` в реестре
+// видов. Ровно этот список раньше расходился с уборкой сирот: здесь было шесть
+// видов, а подметались двое, так что картинки локаций, общин, артефактов и
+// секций игрока не убирались никогда.
+const OWNER_TABLES: Record<string, string> = Object.fromEntries(
+  SATELLITE_OWNERS.gallery_images.map((kind) => [kind, requireKind(kind).table])
+);
 
 function withUrl<T extends { image_path: string }>(row: T) {
   return { ...row, image_url: toFileUrl(row.image_path) };

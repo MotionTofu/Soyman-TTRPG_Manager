@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { ENTITY_KINDS } from "../db/entityKinds";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import {
   MENTIONABLE,
@@ -17,26 +18,20 @@ function assertSafeIdent(kind: string, value: string): asserts value is string {
   if (!SAFE_IDENTIFIER.test(value)) throw new Error(`Unsafe SQL identifier (${kind}): "${value}"`);
 }
 
-// archivable: false — у таблицы нет колонки archived_at (записи компендиума
-// удаляются насовсем), и запрос узлов не должен по ней фильтровать.
-const NODE_TABLES: Record<string, { table: string; nameCol: string; archivable?: boolean }> = {
-  campaign: { table: "campaigns", nameCol: "name" },
-  setting: { table: "settings", nameCol: "name" },
-  player: { table: "players", nameCol: "name" },
-  character: { table: "characters", nameCol: "character_name" },
-  location: { table: "setting_locations", nameCol: "name" },
-  being: { table: "setting_beings", nameCol: "name" },
-  artifact: { table: "artifacts", nameCol: "name" },
-  community: { table: "setting_communities", nameCol: "name" },
-  resource: { table: "resources", nameCol: "name" },
-  mastering: { table: "mastering_notes", nameCol: "title" },
-  scene: { table: "story_scenes", nameCol: "name" },
-  adventure: { table: "story_arcs", nameCol: "name" },
-  // entity_relations умеет ссылаться на записи компендиума («тот же монстр,
-  // что в бестиарии»), и без этой строки такие связи молча пропадали из
-  // графа: track() отбрасывал неизвестный тип вместе с ребром.
-  compendium_entry: { table: "compendium_entries", nameCol: "name", archivable: false },
-};
+/**
+ * Виды, которые рисуются узлами графа. Фасет `graphNode` в реестре; таблица,
+ * колонка имени и наличие `archived_at` — оттуда же.
+ *
+ * `hasArchivedAt: false` у записей компендиума не случайность: колонки нет
+ * (записи удаляются насовсем), и запрос узлов не должен по ней фильтровать.
+ */
+const NODE_TABLES: Record<string, { table: string; nameCol: string; archivable?: boolean }> =
+  Object.fromEntries(
+    ENTITY_KINDS.filter((k) => k.graphNode).map((k) => [
+      k.kind,
+      { table: k.table, nameCol: k.nameCol as string, archivable: k.hasArchivedAt },
+    ])
+  );
 
 // Mirror of client/src/graphTypes.ts:GraphNode — keep in sync.
 interface GraphNode {

@@ -36,29 +36,14 @@
 
 import crypto from "crypto";
 import { db } from "../db/db";
+import { MENTIONABLE_TABLE, TRANSFERABLE_KINDS } from "../db/entityKinds";
 
 /**
  * Всё, на что можно сослаться из текста, и где оно лежит. Список ведёт себя
  * как источник истины для uid: у каждого типа отсюда есть колонка `uid`,
  * и по ней сущность опознаётся между устройствами.
  */
-export const MENTIONABLE: Record<string, string> = {
-  campaign: "campaigns",
-  setting: "settings",
-  player: "players",
-  character: "characters",
-  location: "setting_locations",
-  being: "setting_beings",
-  community: "setting_communities",
-  artifact: "artifacts",
-  resource: "resources",
-  mastering: "mastering_notes",
-  adventure: "story_arcs",
-  scene: "story_scenes",
-  session: "sessions",
-  compendium_entry: "compendium_entries",
-  setting_event: "setting_calendar_events",
-};
+export const MENTIONABLE: Record<string, string> = MENTIONABLE_TABLE;
 
 /**
  * Что вообще ездит между устройствами: содержимое сеттингов и систем. На
@@ -67,17 +52,7 @@ export const MENTIONABLE: Record<string, string> = {
  * поставишь модуль» будет ложным. Такие ссылки при экспорте схлопываются в
  * обычный текст.
  */
-export const TRANSFERABLE = new Set([
-  "setting",
-  "location",
-  "being",
-  "community",
-  "artifact",
-  "adventure",
-  "scene",
-  "compendium_entry",
-  "setting_event",
-]);
+export const TRANSFERABLE: ReadonlySet<string> = TRANSFERABLE_KINDS;
 
 /**
  * Таблицы, чьи тексты трогать нельзя, даже если в них попался токен.

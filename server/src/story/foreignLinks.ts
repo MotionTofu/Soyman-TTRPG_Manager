@@ -21,18 +21,28 @@ import {
   sourceCodeOf,
   formatRef,
 } from "../services/mentions";
+import { ENTITY_KINDS } from "../db/entityKinds";
 
 /**
  * Типы, у которых есть однозначный дом-сеттинг. Записи компендиума сюда не
  * входят намеренно: они принадлежат СИСТЕМЕ, а не миру, и «Гоблин» из
  * бестиария D&D одинаково уместен в любом сеттинге, где играют по D&D.
  */
-const SETTING_ENTITIES: Record<string, { table: string; label: string }> = {
-  being: { table: "setting_beings", label: "Личность" },
-  community: { table: "setting_communities", label: "Сообщество" },
-  location: { table: "setting_locations", label: "Локация" },
-  artifact: { table: "artifacts", label: "Предмет" },
+// Подписи — решение интерфейса и потому живут здесь, а не в реестре; таблицы
+// и состав набора — фасет `belongsTo === "world"` (совпадает точно).
+const SETTING_ENTITY_LABELS: Record<string, string> = {
+  being: "Личность",
+  community: "Сообщество",
+  location: "Локация",
+  artifact: "Предмет",
 };
+
+const SETTING_ENTITIES: Record<string, { table: string; label: string }> = Object.fromEntries(
+  ENTITY_KINDS.filter((k) => k.belongsTo === "world" && SETTING_ENTITY_LABELS[k.kind]).map((k) => [
+    k.kind,
+    { table: k.table, label: SETTING_ENTITY_LABELS[k.kind] },
+  ])
+);
 
 // Текстовые поля сцены, в которых живут упоминания вида [[being@8f3c1a2e|wdh|гоблин]].
 const SCENE_TEXT_FIELDS = [

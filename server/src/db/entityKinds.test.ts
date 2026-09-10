@@ -12,6 +12,7 @@ import {
   ARCHIVE_KEYS,
   sweepableSatellitePairs,
   endpointTableOf,
+  EXPLICIT_SETS,
 } from "./entityKinds";
 
 /**
@@ -22,13 +23,14 @@ import {
  * которая не умеет падать, хуже отсутствующей.
  */
 let tables: Set<string>;
+let db: import("better-sqlite3").Database;
 const columns = new Map<string, Set<string>>();
 
 beforeAll(async () => {
   // DB_DIR выставляется ДО импорта db (побочный эффект — открытие базы).
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "entity-kinds-"));
   process.env.DB_DIR = tmpDir;
-  const { db } = await import("./db");
+  ({ db } = await import("./db"));
 
   tables = new Set(
     (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[])
@@ -100,6 +102,47 @@ describe("реестр видов сущностей согласован со �
     expect(bad).toEqual([]);
   });
 
+  it("в явных наборах нет опечаток", () => {
+    // GRAPH_NODES и прочие перечисляют КЛЮЧИ. Опечатка там не сломает
+    // компиляцию и не даст ошибки SQL — вид просто молча выпадет из графа
+    // или из состава сцены.
+    const known = new Set(ENTITY_KINDS.map((k) => k.kind));
+    const bad: string[] = [];
+    for (const [name, set] of Object.entries(EXPLICIT_SETS)) {
+      for (const kind of set) if (!known.has(kind)) bad.push(`${name}: ${kind}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("hasShortName и hasAliases соответствуют схеме", () => {
+    const bad: string[] = [];
+    for (const k of ENTITY_KINDS) {
+      const real = colsOf(k.table);
+      if (real.has("short_name") !== k.hasShortName) {
+        bad.push(`${k.kind}: short_name в базе ${real.has("short_name")}, в реестре ${k.hasShortName}`);
+      }
+      if (real.has("aliases") !== k.hasAliases) {
+        bad.push(`${k.kind}: aliases в базе ${real.has("aliases")}, в реестре ${k.hasAliases}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("у вида с именем колонка имени читается, а не только объявлена", () => {
+    // Ровно этот дефект жил в SHORT_NAME_MAP: запись компендиума читалась по
+    // колонке `title`, которой у неё нет, и первый же пин свалил бы запрос.
+    const bad: string[] = [];
+    for (const k of ENTITY_KINDS) {
+      if (!k.nameCol) continue;
+      try {
+        db.prepare(`SELECT ${k.nameCol} AS name FROM ${k.table} LIMIT 1`).all();
+      } catch (e) {
+        bad.push(`${k.kind}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
   it("каждая таблица спутника существует и полиморфна", () => {
     for (const sat of SATELLITE_TABLES) {
       expect(tables.has(sat), `нет таблицы ${sat}`).toBe(true);
@@ -148,6 +191,48 @@ describe("производные карты вычисляются, а не пи
         else expect(swept.has(key), `${key} не подметается`).toBe(true);
       }
     }
+  });
+
+  /**
+   * Наборы, которые до реестра были литералами в своих файлах. Здесь они
+   * зафиксированы такими, какими были, — чтобы правка фасета не расширила
+   * молча то, что Мастер видит на экране. Проверка не круговая: слева
+   * вычисление из фасетов, справа — прежнее содержимое карты.
+   */
+  it("выведенные наборы совпадают с прежними литералами", () => {
+    const kinds = (pred: (k: (typeof ENTITY_KINDS)[number]) => boolean) =>
+      ENTITY_KINDS.filter(pred).map((k) => k.kind).sort();
+
+    // routes/gallery.ts OWNER_TABLES
+    expect(kinds((k) => k.owns.includes("gallery_images"))).toEqual(
+      ["artifact", "being", "campaign_player_section", "character", "community", "location"]
+    );
+    // story/foreignLinks.ts SETTING_ENTITIES (сущности мира с подписью)
+    expect(kinds((k) => k.belongsTo === "world" && k.hasAliases)).toEqual(
+      ["artifact", "being", "community", "location"]
+    );
+    // import/apply.ts ALIAS_TABLES — тот же признак
+    expect(kinds((k) => k.hasAliases && k.belongsTo === "world")).toEqual(
+      ["artifact", "being", "community", "location"]
+    );
+    // routes/search.ts SATELLITE_OWNERS
+    expect(
+      kinds(
+        (k) =>
+          k.searchable &&
+          !!k.nameCol &&
+          k.belongsTo !== "system" &&
+          (k.owns.includes("statblocks") || k.owns.includes("gallery_images"))
+      )
+    ).toEqual(["artifact", "being", "character", "community", "location"]);
+    // routes/links.ts NODE_TABLES — тот же набор, что TYPE_LABELS у клиента
+    expect(kinds((k) => k.graphNode)).toEqual(
+      [
+        "adventure", "artifact", "being", "campaign", "character", "community",
+        "compendium_entry", "location", "mastering", "player", "resource",
+        "scene", "setting",
+      ]
+    );
   });
 
   it("исключение из уборки всегда объяснено", () => {

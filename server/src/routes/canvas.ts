@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { kindOf, requireKind } from "../db/entityKinds";
+import { entityNames } from "../services/entityNames";
 import { withLibraryContent } from "../story/library";
 import { foreignLinkCount } from "../story/foreignLinks";
 import {
@@ -182,38 +184,39 @@ function overrideMap(campaignId: number, settingId: number): Map<number, SceneRo
 
 // ------------------------------------------- ноды сущностей и наборов
 
-// Где искать имя и портрет каждого вида ноды. Тот же список, что у графа
-// связей (routes/links.ts), плюс наборы, которых в графе нет: набор — часть
-// схемы, а не сущность мира.
-const ENTITY_NODES: Record<string, { table: string; nameCol: string; thumbCol?: string; kindCol?: string; roleCol?: string }> = {
-  being: {
-    table: "setting_beings",
-    nameCol: "name",
-    thumbCol: "thumbnail_image_path",
-    kindCol: "category",
-  },
+/**
+ * Колонки превью для нод сущностей. В реестр видов они не идут: это не
+ * «вид → таблица», а то, чем холст рисует конкретную ноду. Таблица и колонка
+ * имени, наоборот, берутся из реестра — их здесь была ещё одна копия.
+ */
+const NODE_PREVIEW: Record<string, { thumbCol?: string; kindCol?: string; roleCol?: string }> = {
+  being: { thumbCol: "thumbnail_image_path", kindCol: "category" },
   // Вес локации едет чипом ноды (план «Зоны», этап 10): точка красится
   // иначе, чем город.
-  location: { table: "setting_locations", nameCol: "name", thumbCol: "thumbnail_image_path", roleCol: "role" },
-  artifact: { table: "artifacts", nameCol: "name", thumbCol: "avatar_image_path" },
-  community: { table: "setting_communities", nameCol: "name", thumbCol: "thumbnail_image_path" },
-  compendium_entry: { table: "compendium_entries", nameCol: "name", kindCol: "kind" },
+  location: { thumbCol: "thumbnail_image_path", roleCol: "role" },
+  artifact: { thumbCol: "avatar_image_path" },
+  community: { thumbCol: "thumbnail_image_path" },
+  compendium_entry: { kindCol: "kind" },
   // Персонаж игрока (блок G7). Единственный кампанийный вид на холсте: он и
   // есть то, вокруг чего Мастер тянет нити на доске кампании. Портрет берём
   // уменьшенный — на холсте нода опознаётся, а не рассматривается.
-  character: {
-    table: "characters",
-    nameCol: "character_name",
-    thumbCol: "thumbnail_image_path",
-  },
+  character: { thumbCol: "thumbnail_image_path" },
   // События хроники мира и расписания кампании — тоже ноды: связь «эта сцена
   // сдвигает это событие» рисуется стрелкой, а не отдельным полем, и потому
   // переживает переименование.
-  setting_event: { table: "setting_calendar_events", nameCol: "title" },
-  campaign_event: { table: "campaign_calendar_events", nameCol: "title" },
-  sound_set: { table: "sound_sets", nameCol: "name" },
-  playlist: { table: "playlists", nameCol: "name" },
+  setting_event: {},
+  campaign_event: {},
+  sound_set: {},
+  playlist: {},
 };
+
+const ENTITY_NODES: Record<string, { table: string; nameCol: string; thumbCol?: string; kindCol?: string; roleCol?: string }> =
+  Object.fromEntries(
+    Object.entries(NODE_PREVIEW).map(([kind, extra]) => {
+      const k = requireKind(kind);
+      return [kind, { table: k.table, nameCol: k.nameCol as string, ...extra }];
+    })
+  );
 
 interface PlacedNode {
   id: number;
@@ -392,17 +395,7 @@ function boardRoutes(boardId: number, saved: PlacedNode[]) {
 
   // Имя узла по ключу — для тела рераута «A → B» (у cast/исхода/нити имена
   // соседей дороже, чем плейсхолдер). Посторонний ключ (чужой доски) называем
-  // ключом — такой сосед на этот холст не приезжает. Таблицы имён по типу:
-  // каждый вид существа лежит в своей таблице (см. MENTION_TABLES в db.ts),
-  // а не в одной setting_beings.
-  const NAME_TABLES: Record<string, string> = {
-    scene: "story_scenes",
-    being: "setting_beings",
-    location: "setting_locations",
-    community: "setting_communities",
-    artifact: "artifacts",
-    campaign: "campaigns",
-  };
+  // ключом — такой сосед на этот холст не приезжает.
   // Бач строк ключей (не отдельных нод): собираем все имена разом, а не
   // по одному SELECT на соседа (на 20 рераутах были бы 40 запросов).
   const idsByType = new Map<string, number[]>();
@@ -411,7 +404,7 @@ function boardRoutes(boardId: number, saved: PlacedNode[]) {
       if (!key) continue;
       const [type, raw] = splitNodeKey(key);
       const id = Number(raw);
-      if (id && NAME_TABLES[type]) {
+      if (id && kindOf(type)?.nameCol) {
         if (!idsByType.has(type)) idsByType.set(type, []);
         idsByType.get(type)!.push(id);
       }
@@ -421,16 +414,13 @@ function boardRoutes(boardId: number, saved: PlacedNode[]) {
     collectKeys([r.from_key, r.to_key]);
     collectKeys((r.outputs ?? []).map((o) => o.to_key));
   }
-  const nameByKey = new Map<string, string>();
-  for (const [type, ids] of idsByType) {
-    const table = NAME_TABLES[type];
-    if (!table || ids.length === 0) continue;
-    const ph = ids.map(() => "?").join(",");
-    const rowsT = db
-      .prepare(`SELECT id, name FROM ${table} WHERE id IN (${ph})`)
-      .all(...(ids as number[])) as { id: number; name: string }[];
-    for (const r of rowsT) nameByKey.set(`${type}:${r.id}`, r.name);
-  }
+  // Имена соседей — общим модулем: он и раскладывает по видам, и режет на
+  // части под лимит параметров SQLite. Здесь лежала своя карта на шесть видов,
+  // и запрос всегда читал колонку `name` — для сцены и кампании это верно, а
+  // добавь сюда вид с колонкой `title`, и имя молча пропало бы.
+  const nameByKey = entityNames(
+    [...idsByType].flatMap(([type, ids]) => ids.map((id) => ({ kind: type, id })))
+  );
   const nameOf = (key: string): string => {
     const hit = nameByKey.get(key);
     if (hit !== undefined) return hit;
@@ -2165,7 +2155,10 @@ canvasRouter.get("/free-boards", (_req, res) => {
 // Владелец свободной доски (блок D1). Тип проверяется по белому списку, а не
 // берётся из тела как есть: строка отсюда попадает в запросы и в интерфейс.
 // Пустой владелец (`null`) — доска ничья, это законное состояние, а не ошибка.
-const BOARD_OWNERS: Record<string, string> = { setting: "settings", campaign: "campaigns" };
+const BOARD_OWNER_KINDS = ["setting", "campaign"] as const;
+const BOARD_OWNERS: Record<string, string> = Object.fromEntries(
+  BOARD_OWNER_KINDS.map((kind) => [kind, requireKind(kind).table])
+);
 
 function readOwner(body: unknown): { type: string | null; id: number | null } | "bad" {
   const b = (body ?? {}) as { owner_type?: unknown; owner_id?: unknown };

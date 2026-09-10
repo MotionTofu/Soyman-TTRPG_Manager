@@ -3,6 +3,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { db } from "../db/db";
+import { entityNames, refKey } from "../services/entityNames";
+import { kindOf } from "../db/entityKinds";
 import {
   locationFolder,
   settingGeographyRoot,
@@ -1038,14 +1040,6 @@ settingLocationsRouter.post("/resolve-labels", (req, res) => {
 
   const results: { target_type: string; target_id: number; label: string }[] = [];
 
-  const SHORT_NAME_MAP: Record<string, { table: string; nameCol: string }> = {
-    being: { table: "setting_beings", nameCol: "name" },
-    character: { table: "characters", nameCol: "character_name" },
-    location: { table: "setting_locations", nameCol: "name" },
-    artifact: { table: "artifacts", nameCol: "name" },
-    compendium_entry: { table: "compendium_entries", nameCol: "title" },
-  };
-
   const grouped = new Map<string, { target_type: string; target_id: number }[]>();
   for (const pin of pins) {
     const key = pin.target_type;
@@ -1053,30 +1047,26 @@ settingLocationsRouter.post("/resolve-labels", (req, res) => {
     grouped.get(key)!.push(pin);
   }
 
+  // Подписи меток — общим модулем имён: он делает один запрос на вид и умеет
+  // предпочитать `short_name`. Здесь лежала своя карта, и в ней запись
+  // компендиума читалась по колонке `title`, которой у неё нет вовсе, — первый
+  // же пин на запись компендиума свалил бы запрос.
+  const nameMap = entityNames(
+    [...grouped].flatMap(([type, items]) => items.map((i) => ({ kind: type, id: i.target_id }))),
+    { preferShort: true }
+  );
   for (const [type, items] of grouped) {
-    const mapping = SHORT_NAME_MAP[type];
-    if (!mapping) {
-      for (const item of items) {
-        results.push({ target_type: type, target_id: item.target_id, label: `${type} #${item.target_id}` });
-      }
-      continue;
-    }
-
-    const ids = [...new Set(items.map((i) => i.target_id))];
-    const placeholders = ids.map(() => "?").join(",");
-    const rows = db
-      .prepare(`SELECT id, short_name, ${mapping.nameCol} FROM ${mapping.table} WHERE id IN (${placeholders})`)
-      .all(...ids) as { id: number; short_name: string | null; [key: string]: unknown }[];
-
-    const rowMap = new Map(rows.map((r) => [r.id, r]));
+    // Вид, которого нет в реестре, и живая запись без имени — разные беды, и
+    // подписи у них разные: вторая говорит Мастеру, что метка указывает в
+    // никуда.
+    const known = kindOf(type)?.nameCol != null;
     for (const item of items) {
-      const row = rowMap.get(item.target_id);
-      if (!row) {
-        results.push({ target_type: type, target_id: item.target_id, label: `${type} #${item.target_id} (не найдено)` });
-        continue;
-      }
-      const label = row.short_name || String(row[mapping.nameCol] ?? item.target_id);
-      results.push({ target_type: type, target_id: item.target_id, label });
+      const label = nameMap.get(refKey(type, item.target_id));
+      results.push({
+        target_type: type,
+        target_id: item.target_id,
+        label: label ?? `${type} #${item.target_id}${known ? " (не найдено)" : ""}`,
+      });
     }
   }
 

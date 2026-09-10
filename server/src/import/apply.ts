@@ -11,6 +11,7 @@
 // сослаться на локацию, объявленную ниже по файлу.
 
 import { db } from "../db/db";
+import { ENTITY_KINDS, requireKind } from "../db/entityKinds";
 import {
   settingFolder,
   settingGeographyRoot,
@@ -98,6 +99,11 @@ interface Ref {
 }
 
 /** Тип сущности → таблица, из которой её удаляет откат. */
+// entity-kinds: локальная копия намеренно — это виды ЗАПИСИ ИМПОРТА, а не виды
+// сущности мира. Рядом с `being` и `location` тут стоят `milestone`, `secret`,
+// `reward`, `relation`, `link`, `important_date` и `statblock`: журнал отката
+// перечисляет то, что откатывать, а не то, что живёт в реестре. Затащить их в
+// реестр видов сущностей значит завести фасеты, у половины видов бессмысленные.
 export const ROLLBACK_TABLES: Record<string, string> = {
   setting: "settings",
   location: "setting_locations",
@@ -124,13 +130,14 @@ export const ROLLBACK_TABLES: Record<string, string> = {
   compendium_entry: "compendium_entries",
 };
 
-/** Типы, у которых есть поле «Другие названия»: только им можно дописать синоним. */
-const ALIAS_TABLES: Record<string, string> = {
-  location: "setting_locations",
-  being: "setting_beings",
-  community: "setting_communities",
-  artifact: "artifacts",
-};
+/**
+ * Типы, у которых есть поле «Другие названия»: только им можно дописать
+ * синоним. Колонка `aliases` есть и у записи компендиума, но синонимы ей
+ * ставит система, а не приключение, — отсюда `belongsTo === "world"`.
+ */
+const ALIAS_TABLES: Record<string, string> = Object.fromEntries(
+  ENTITY_KINDS.filter((k) => k.hasAliases && k.belongsTo === "world").map((k) => [k.kind, k.table])
+);
 
 /**
  * Что дозаливается в уже существующую сущность, если у той поле пусто.
@@ -1487,14 +1494,19 @@ function sweepDangling(): number {
   return removed;
 }
 
-/** Тип сущности → где взять её имя для справочника ключей. */
+/**
+ * Тип сущности → где взять её имя для справочника ключей. Виды сущностей —
+ * из реестра (перечислены только ключи, таблица и колонка приходят оттуда),
+ * веха и тайна — записи приключения, своих видов в реестре у них нет.
+ */
+const KEY_NAME_KINDS = ["location", "being", "community", "artifact", "adventure", "scene"];
 const KEY_NAMES: Record<string, { table: string; column: string }> = {
-  location: { table: "setting_locations", column: "name" },
-  being: { table: "setting_beings", column: "name" },
-  community: { table: "setting_communities", column: "name" },
-  artifact: { table: "artifacts", column: "name" },
-  adventure: { table: "story_arcs", column: "name" },
-  scene: { table: "story_scenes", column: "name" },
+  ...Object.fromEntries(
+    KEY_NAME_KINDS.map((kind) => {
+      const k = requireKind(kind);
+      return [kind, { table: k.table, column: k.nameCol as string }];
+    })
+  ),
   milestone: { table: "story_milestones", column: "title" },
   secret: { table: "story_secrets", column: "title" },
 };

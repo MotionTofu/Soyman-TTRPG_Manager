@@ -1,6 +1,8 @@
 import { Router } from "express";
 import path from "path";
 import { db } from "../db/db";
+import { kindOf } from "../db/entityKinds";
+import { entityNames, refKey } from "../services/entityNames";
 import { ensureSubfolder, readFileAsBase64, sanitizeName, toFileUrl, vaultAbs, vaultRel, writeBase64File } from "../services/filesystem";
 import { storeDeduped } from "../services/vaultDedup";
 import { pruneRoutesForKeys } from "./canvas";
@@ -525,16 +527,21 @@ function collectCast(arcId: number, sceneIds: number[]) {
     string,
     { type: string; id: number; name: string; sections: string[]; scenes: string[] }
   >();
-  for (const r of rows) {
-    const table = NODE_NAME_TABLES[r.to_type];
-    if (!table) continue;
+  // Имена — одним запросом на вид, а не запросом на строку: сводка состава
+  // открывается за столом, и раньше каждая строка ходила в базу отдельно.
+  const castRows = rows.filter((r) => kindOf(r.to_type)?.sceneCastKind);
+  const nameMap = entityNames(castRows.map((r) => ({ kind: r.to_type, id: r.to_id })));
+  for (const r of castRows) {
     const key = `${r.to_type}:${r.to_id}`;
     let entry = byKey.get(key);
     if (!entry) {
-      const row = db
-        .prepare(`SELECT ${table.nameCol} as name FROM ${table.table} WHERE id = ?`)
-        .get(r.to_id) as { name: string } | undefined;
-      entry = { type: r.to_type, id: r.to_id, name: row?.name ?? `#${r.to_id}`, sections: [], scenes: [] };
+      entry = {
+        type: r.to_type,
+        id: r.to_id,
+        name: nameMap.get(refKey(r.to_type, r.to_id)) ?? `#${r.to_id}`,
+        sections: [],
+        scenes: [],
+      };
       byKey.set(key, entry);
     }
     if (r.section && !entry.sections.includes(r.section)) entry.sections.push(r.section);
@@ -542,19 +549,6 @@ function collectCast(arcId: number, sceneIds: number[]) {
   }
   return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
-
-// Name lookup for cast rows. Deliberately a local copy of links.ts's
-// NODE_TABLES rather than an import: this one only needs the types a scene
-// can actually link to, and must not grow a dependency on the graph module.
-const NODE_NAME_TABLES: Record<string, { table: string; nameCol: string }> = {
-  location: { table: "setting_locations", nameCol: "name" },
-  being: { table: "setting_beings", nameCol: "name" },
-  community: { table: "setting_communities", nameCol: "name" },
-  character: { table: "characters", nameCol: "character_name" },
-  artifact: { table: "artifacts", nameCol: "name" },
-  resource: { table: "resources", nameCol: "name" },
-  compendium_entry: { table: "compendium_entries", nameCol: "name" },
-};
 
 storyRouter.post("/arcs", (req, res) => {
   const { setting_id, parent_id, name, description, campaign_id } = req.body as {

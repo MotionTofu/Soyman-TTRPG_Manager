@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import fs from "fs";
+import { MENTIONABLE_TABLE } from "./entityKinds";
 import path from "path";
 import { entryImageFolder, systemFolder, vaultAbs } from "../services/filesystem";
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
@@ -68,24 +69,13 @@ function columnIsNotNull(database: Database.Database, table: string, column: str
 // в базу через прокси `db`, который во время openDatabase указывает ещё на
 // прежнее подключение, — поэтому разовый проход знает грамматику сам.
 
-/** Типы, на которые можно сослаться, и их таблицы. Совпадает с MENTIONABLE. */
-const MENTION_TABLES: Record<string, string> = {
-  campaign: "campaigns",
-  setting: "settings",
-  player: "players",
-  character: "characters",
-  location: "setting_locations",
-  being: "setting_beings",
-  community: "setting_communities",
-  artifact: "artifacts",
-  resource: "resources",
-  mastering: "mastering_notes",
-  adventure: "story_arcs",
-  scene: "story_scenes",
-  session: "sessions",
-  compendium_entry: "compendium_entries",
-  setting_event: "setting_calendar_events",
-};
+/**
+ * Типы, на которые можно сослаться, и их таблицы. Берётся из реестра видов:
+ * раньше здесь лежал побайтовый двойник `MENTIONABLE` из services/mentions.ts,
+ * и жили они раздельно только из-за цикла импортов. Реестр ни от чего не
+ * зависит и в базу не ходит, поэтому цикла с ним нет.
+ */
+const MENTION_TABLES: Record<string, string> = MENTIONABLE_TABLE;
 
 /** Тексты, которые нельзя трогать. Совпадает с NEVER_REWRITE. */
 const MENTION_FROZEN = new Set([

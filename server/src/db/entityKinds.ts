@@ -56,6 +56,18 @@ export interface EntityKind {
   table: string;
   /** Колонка с человеческим именем; `null` — имени нет (преподготовка). */
   nameCol: string | null;
+  /**
+   * У таблицы есть колонка `short_name` — короткое имя, которым Мастер
+   * подписывает метки на карте и в составе сцены. Где она есть, она главнее
+   * полного имени.
+   */
+  hasShortName: boolean;
+  /**
+   * У таблицы есть колонка `aliases` — «Другие названия». Импорт дописывает
+   * синоним только сущностям мира: у записи компендиума колонка тоже есть, но
+   * синонимы ей ставит система, а не приключение.
+   */
+  hasAliases: boolean;
   belongsTo: BelongsTo;
 
   /** У таблицы есть колонка `archived_at` (мягкое удаление возможно). */
@@ -76,6 +88,37 @@ export interface EntityKind {
   linkEndpoint: boolean;
   /** Вид бывает концом `entity_relations`. */
   relationEndpoint: boolean;
+
+  /**
+   * Вид рисуется узлом в графе связей. Тринадцать видов; сессии и события
+   * хроники исключены согласованно с клиентом (`client/src/graphTypes.ts`,
+   * `TYPE_LABELS` — тот же набор строка в строку).
+   */
+  graphNode: boolean;
+
+  /** Вид может быть целью связи из состава сцены (`story/cast.ts`). */
+  sceneLinkTarget: boolean;
+
+  /**
+   * Вид попадает в сводку состава по сценам (`routes/story.ts`).
+   *
+   * Набор НЕ совпадает с `sceneLinkTarget`, и это зафиксированное расхождение,
+   * а не описка: сводка знает персонажа и ресурс, но не знает набор узлового
+   * редактора, набор звука, плейлист и события — хотя в состав сцены они
+   * втыкаются наравне с существом (см. комментарий в `story/cast.ts`). Похоже
+   * на тот же дрейф, что мы чиним, но это решение об экране, который Мастер
+   * открывает за столом, поэтому поведение сохранено как было.
+   */
+  sceneCastKind: boolean;
+
+  /**
+   * Из этого вида Мастер вправе СОЗДАТЬ отношение (`routes/entityRelations.ts`).
+   * Уже, чем `relationEndpoint`: тот говорит «вид встречается концом в базе» и
+   * нужен уборке, а этот — «вид предлагается в интерфейсе». Смешивать нельзя:
+   * в `entity_relations` живут строки семнадцати видов, а создавать
+   * разрешается четырнадцать.
+   */
+  relationCreatable: boolean;
 
   /**
    * Таблица, против которой разрешается конец связи, если это не `table`.
@@ -104,9 +147,49 @@ export interface EntityKind {
   };
 }
 
-const K = (k: EntityKind): EntityKind => k;
+/** Запись реестра без вычисляемых фасетов. */
+type EntityKindBase = Omit<EntityKind, "graphNode" | "sceneLinkTarget" | "relationCreatable" | "hasShortName" | "sceneCastKind" | "hasAliases">;
 
-export const ENTITY_KINDS: readonly EntityKind[] = [
+const K = (k: EntityKindBase): EntityKindBase => k;
+
+/**
+ * Наборы, которые не выводятся из остальных фасетов и потому перечислены явно.
+ * Это списки КЛЮЧЕЙ, а не карты «вид → таблица»: таблица по-прежнему живёт
+ * ровно в одном месте, и разойтись этим спискам не с чем — тест проверяет,
+ * что каждый ключ здесь известен реестру.
+ */
+/** Таблицы с колонкой `aliases` — проверяется тестом против базы. */
+const ALIAS_KINDS = new Set([
+  "location", "being", "community", "artifact", "compendium_entry",
+]);
+
+/** Таблицы с колонкой `short_name` — проверяется тестом против базы. */
+const SHORT_NAME_KINDS = new Set([
+  "character", "location", "being", "artifact", "compendium_entry",
+]);
+
+const GRAPH_NODES = new Set([
+  "campaign", "setting", "player", "character", "location", "being", "artifact",
+  "community", "resource", "mastering", "scene", "adventure", "compendium_entry",
+]);
+
+const RELATION_CREATABLE = new Set([
+  "being", "character", "community", "compendium_entry", "location", "artifact",
+  "setting", "campaign", "setting_event", "resource", "mastering", "scene",
+  "adventure", "player",
+]);
+
+const SCENE_CAST_KINDS = new Set([
+  "location", "being", "community", "character", "artifact", "resource",
+  "compendium_entry",
+]);
+
+const SCENE_LINK_TARGETS = new Set([
+  "being", "location", "artifact", "community", "compendium_entry",
+  "bundle", "sound_set", "playlist", "setting_event", "campaign_event",
+]);
+
+const RAW_KINDS: EntityKindBase[] = [
   K({
     kind: "campaign", table: "campaigns", nameCol: "name", belongsTo: "campaign",
     hasArchivedAt: true, archivable: true, archiveKey: "id",
@@ -287,6 +370,26 @@ export const ENTITY_KINDS: readonly EntityKind[] = [
     linkEndpoint: false, relationEndpoint: false, owns: [], detailPrefix: null,
   }),
 ];
+
+export const ENTITY_KINDS: readonly EntityKind[] = RAW_KINDS.map((k) => ({
+  ...k,
+  graphNode: GRAPH_NODES.has(k.kind),
+  sceneLinkTarget: SCENE_LINK_TARGETS.has(k.kind),
+  relationCreatable: RELATION_CREATABLE.has(k.kind),
+  hasShortName: SHORT_NAME_KINDS.has(k.kind),
+  sceneCastKind: SCENE_CAST_KINDS.has(k.kind),
+  hasAliases: ALIAS_KINDS.has(k.kind),
+}));
+
+/** Ключи из явных наборов — для проверки, что там нет опечаток. */
+export const EXPLICIT_SETS: Record<string, ReadonlySet<string>> = {
+  GRAPH_NODES,
+  SCENE_LINK_TARGETS,
+  RELATION_CREATABLE,
+  SHORT_NAME_KINDS,
+  SCENE_CAST_KINDS,
+  ALIAS_KINDS,
+};
 
 const BY_KIND: ReadonlyMap<string, EntityKind> = new Map(
   ENTITY_KINDS.map((k) => [k.kind, k])

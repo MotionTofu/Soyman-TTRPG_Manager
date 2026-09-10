@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { ENTITY_KINDS } from "../db/entityKinds";
+import { entityNames, refKey } from "../services/entityNames";
 import { graphCache } from "./links";
 
 export const entityRelationsRouter = Router();
@@ -7,65 +9,21 @@ export const entityRelationsRouter = Router();
 // Unified entity types — covers both the original RelationsTab (beings,
 // characters, communities) and the former LinkDropZone use cases (settings,
 // campaigns, events, sessions, etc.).
-const ENTITY_TABLES: Record<string, { table: string; nameCol: string }> = {
-  being: { table: "setting_beings", nameCol: "name" },
-  character: { table: "characters", nameCol: "character_name" },
-  community: { table: "setting_communities", nameCol: "name" },
-  compendium_entry: { table: "compendium_entries", nameCol: "name" },
-  location: { table: "setting_locations", nameCol: "name" },
-  artifact: { table: "artifacts", nameCol: "name" },
-  setting: { table: "settings", nameCol: "name" },
-  campaign: { table: "campaigns", nameCol: "name" },
-  // Таблицы `setting_events` не существует — событие хроники живёт в
-  // `setting_calendar_events`. С опечаткой имя события в связях не
-  // разрешалось никогда: `resolveName` молча возвращал null.
-  setting_event: { table: "setting_calendar_events", nameCol: "title" },
-  resource: { table: "resources", nameCol: "name" },
-  mastering: { table: "mastering_notes", nameCol: "title" },
-  scene: { table: "story_scenes", nameCol: "name" },
-  adventure: { table: "story_arcs", nameCol: "name" },
-  player: { table: "players", nameCol: "name" },
-};
+/**
+ * Из каких видов Мастер вправе создать отношение. Фасет `relationCreatable`
+ * в реестре: он уже, чем «вид встречается концом в базе», и специально —
+ * в `entity_relations` живут строки семнадцати видов, а предлагать в
+ * интерфейсе нужно четырнадцать.
+ *
+ * Таблицы и колонки имён отсюда ушли в реестр, а сам резолв имени — в
+ * services/entityNames.ts: этот файл держал шестую по счёту копию одного и
+ * того же, включая пакетный вариант, который теперь общий.
+ */
+const RELATION_KINDS: ReadonlySet<string> = new Set(
+  ENTITY_KINDS.filter((k) => k.relationCreatable).map((k) => k.kind)
+);
 
 const VALID_TONES = new Set(["positive", "negative", "neutral", "mixed"]);
-
-function resolveName(type: string, id: number): string | null {
-  const def = ENTITY_TABLES[type];
-  if (!def) return null;
-  const row = db.prepare(`SELECT ${def.nameCol} as name FROM ${def.table} WHERE id = ?`).get(id) as
-    | { name: string }
-    | undefined;
-  return row?.name ?? null;
-}
-
-function batchResolveNames(pairs: { type: string; id: number }[]): Map<string, string | null> {
-  const map = new Map<string, string | null>();
-  const byType = new Map<string, Set<number>>();
-  for (const p of pairs) {
-    if (!ENTITY_TABLES[p.type]) {
-      map.set(`${p.type}:${p.id}`, null);
-      continue;
-    }
-    const set = byType.get(p.type) ?? new Set<number>();
-    set.add(p.id);
-    byType.set(p.type, set);
-  }
-  for (const [type, ids] of byType) {
-    const def = ENTITY_TABLES[type]!;
-    const list = [...ids];
-    // SQLite limit — chunk by 500
-    for (let i = 0; i < list.length; i += 500) {
-      const chunk = list.slice(i, i + 500);
-      const placeholders = chunk.map(() => "?").join(",");
-      const rows = db
-        .prepare(`SELECT id, ${def.nameCol} as name FROM ${def.table} WHERE id IN (${placeholders})`)
-        .all(...chunk) as { id: number; name: string }[];
-      const found = new Map(rows.map((r) => [r.id, r.name]));
-      for (const id of chunk) map.set(`${type}:${id}`, found.get(id) ?? null);
-    }
-  }
-  return map;
-}
 
 interface RelationRow {
   id: number;
@@ -103,7 +61,7 @@ entityRelationsRouter.get("/", (req, res) => {
   const allPairs: { type: string; id: number }[] = [];
   for (const r of outgoing) allPairs.push({ type: r.to_type, id: r.to_id });
   for (const r of incoming) allPairs.push({ type: r.from_type, id: r.from_id });
-  const nameMap = batchResolveNames(allPairs);
+  const nameMap = entityNames(allPairs.map((p) => ({ kind: p.type, id: p.id })));
   const withNames = (rows: RelationRow[], otherKey: "to" | "from") =>
     rows.map((r) => {
       const ot = otherKey === "to" ? r.to_type : r.from_type;
@@ -112,7 +70,7 @@ entityRelationsRouter.get("/", (req, res) => {
         ...r,
         other_type: ot,
         other_id: oi,
-        other_name: nameMap.get(`${ot}:${oi}`) ?? null,
+        other_name: nameMap.get(refKey(ot, oi)) ?? null,
       };
     });
 
@@ -172,7 +130,7 @@ entityRelationsRouter.post("/", (req, res) => {
   };
   if (!from_type || !from_id || !to_type || !to_id)
     return res.status(400).json({ error: "from_type, from_id, to_type, to_id are required" });
-  if (!ENTITY_TABLES[from_type] || !ENTITY_TABLES[to_type])
+  if (!RELATION_KINDS.has(from_type) || !RELATION_KINDS.has(to_type))
     return res.status(400).json({ error: "unsupported entity type" });
   if (tone && !VALID_TONES.has(tone)) return res.status(400).json({ error: "invalid tone" });
   const created = createRelation(
@@ -240,14 +198,14 @@ entityRelationsRouter.post("/batch", (req, res) => {
     };
   if (!entity_type || !entity_id || !Array.isArray(targets) || targets.length === 0)
     return res.status(400).json({ error: "entity_type, entity_id and targets are required" });
-  if (!ENTITY_TABLES[entity_type]) return res.status(400).json({ error: "unsupported entity type" });
+  if (!RELATION_KINDS.has(entity_type)) return res.status(400).json({ error: "unsupported entity type" });
   if (tone && !VALID_TONES.has(tone)) return res.status(400).json({ error: "invalid tone" });
 
   let created = 0;
   let skipped = 0;
   const batchTx = db.transaction(() => {
     for (const target of targets) {
-      if (!ENTITY_TABLES[target.type]) continue;
+      if (!RELATION_KINDS.has(target.type)) continue;
       const outgoing: RelationEnds = {
         from_type: entity_type,
         from_id: entity_id,

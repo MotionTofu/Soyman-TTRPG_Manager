@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { ENTITY_KINDS } from "../db/entityKinds";
 
 export const searchRouter = Router();
 
@@ -575,13 +576,22 @@ searchRouter.get("/", (req, res) => {
   //
   // Имена таблиц берутся из этого списка, а не из запроса, — как в
   // `ARCHIVE_TABLES`, чтобы подстановка в `${}` оставалась безопасной.
-  const SATELLITE_OWNERS: { type: string; table: string; nameCol: string }[] = [
-    { type: "being", table: "setting_beings", nameCol: "name" },
-    { type: "community", table: "setting_communities", nameCol: "name" },
-    { type: "location", table: "setting_locations", nameCol: "name" },
-    { type: "character", table: "characters", nameCol: "character_name" },
-    { type: "artifact", table: "artifacts", nameCol: "name" },
-  ];
+  // Владельцы спутников, которых имеет смысл искать: те, кто владеет
+  // статблоками или картинками галереи И участвует в общем поиске. Раньше
+  // список был набран руками и разошёлся с уборкой — в нём был артефакт,
+  // которого уборка не знала.
+  const SATELLITE_OWNERS: { type: string; table: string; nameCol: string }[] = ENTITY_KINDS
+    // `belongsTo !== "system"` отсекает записи компендиума: у них свой блок
+    // поиска выше (см. wantsType("compendium_entry")), который уже читает и
+    // статблок, — общий проход дал бы вторую выдачу той же записи.
+    .filter(
+      (k) =>
+        k.searchable &&
+        k.nameCol &&
+        k.belongsTo !== "system" &&
+        (k.owns.includes("statblocks") || k.owns.includes("gallery_images"))
+    )
+    .map((k) => ({ type: k.kind, table: k.table, nameCol: k.nameCol as string }));
 
   const pushOwnerHits = (
     owner: { type: string; table: string; nameCol: string },

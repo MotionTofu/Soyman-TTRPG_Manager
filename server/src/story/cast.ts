@@ -5,6 +5,8 @@
 // надо»), а локация — и местом сцены, и предметом разговора.
 
 import { db } from "../db/db";
+import { kindOf } from "../db/entityKinds";
+import { entityName } from "../services/entityNames";
 
 /**
  * Разъёмы состава. Названия — ровно те же, что у панелей пульта сессии:
@@ -78,27 +80,11 @@ export function qtyByLink(linkIds: number[]): Map<number, string> {
   return new Map(rows.map((r) => [r.link_id, r.qty]));
 }
 
-// Куда ведёт связь, по-человечески. Тот же список видов, что у графа связей;
-// набор добавлен потому, что в состав сцены он втыкается наравне с существом.
-const TARGET_TABLES: Record<string, { table: string; nameCol: string }> = {
-  being: { table: "setting_beings", nameCol: "name" },
-  location: { table: "setting_locations", nameCol: "name" },
-  artifact: { table: "artifacts", nameCol: "name" },
-  community: { table: "setting_communities", nameCol: "name" },
-  compendium_entry: { table: "compendium_entries", nameCol: "name" },
-  bundle: { table: "canvas_bundles", nameCol: "name" },
-  sound_set: { table: "sound_sets", nameCol: "name" },
-  playlist: { table: "playlists", nameCol: "name" },
-  setting_event: { table: "setting_calendar_events", nameCol: "title" },
-  campaign_event: { table: "campaign_calendar_events", nameCol: "title" },
-};
-
 /** Имя цели связи. «#37» — если запись исчезла, а связь осталась висеть. */
 export function linkTargetName(type: string, id: number): string {
-  const spec = TARGET_TABLES[type];
-  if (!spec) return `#${id}`;
-  const row = db.prepare(`SELECT ${spec.nameCol} AS name FROM ${spec.table} WHERE id = ?`).get(id) as
-    | { name: string }
-    | undefined;
-  return row?.name ?? `#${id}`;
+  // Куда ведёт связь, по-человечески. Виды — фасет `sceneLinkTarget` в реестре
+  // (набор узлового редактора и набор звука в состав сцены втыкаются наравне с
+  // существом), имя — общий модуль имён.
+  if (!kindOf(type)?.sceneLinkTarget) return `#${id}`;
+  return entityName(type, id) ?? `#${id}`;
 }
