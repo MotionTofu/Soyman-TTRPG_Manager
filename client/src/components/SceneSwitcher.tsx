@@ -46,8 +46,15 @@ export function SceneSwitcher({
   const [busy, setBusy] = useState(false);
   const sound = useSoundEngineOptional();
 
+  const [stageError, setStageError] = useState(false);
+  // Без .catch сбой оставлял переключатель невидимым — главный орган пульта
+  // молча исчезал с экрана, и понять, что случилось, было не по чему.
   const refresh = useCallback(() => {
-    api.get<SessionStage>(`/sessions/${sessionId}/stage`).then(setStage);
+    setStageError(false);
+    api
+      .get<SessionStage>(`/sessions/${sessionId}/stage`)
+      .then(setStage)
+      .catch(() => setStageError(true));
   }, [sessionId]);
   useEffect(refresh, [refresh]);
 
@@ -114,6 +121,13 @@ export function SceneSwitcher({
     return () => window.removeEventListener("keydown", onKey);
   }, [stage, picked]);
 
+  if (stageError)
+    return (
+      <div className="card row" style={{ gap: 8, alignItems: "center" }} role="alert">
+        <span>Сцены вечера не прочитались.</span>
+        <button onClick={refresh}>Повторить</button>
+      </div>
+    );
   if (!stage) return null;
   const isPreview = picked != null && picked.id !== stage.current?.id;
 

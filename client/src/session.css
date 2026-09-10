@@ -1075,91 +1075,11 @@ details.sp-card--loot > .drop-zone:empty {
   margin: 12px;
 }
 
-.session-live {
-  gap: var(--sp-5);
-  padding-bottom: 25px;
-}
-.session-live .stack {
-  gap: 10px;
-}
-.app-content.has-player .session-live {
-  padding-bottom: calc(var(--player-bar-height) + 25px);
-}
-.session-live-idea-events {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-items: start;
-}
-@media (max-width: 860px) {
-  .session-live-idea-events {
-    grid-template-columns: 1fr;
-  }
-}
-.session-live-central-tracker {
-  display: none;
-}
-@media (max-width: 860px) {
-  .session-live-central-tracker {
-    display: block;
-  }
-}
+/* Вёрстка пульта (.session-live*, body.live-hide-*) переехала целиком в
+   cockpit.css: тот же блок лежал в обоих файлах слово в слово, и правка
+   одного молча расходилась бы со вторым. Здесь остаётся только то, что
+   пульт делит с профилем сессии, — цвета панелей sp-card--* ниже. */
 
-/* Кнопки скрыть/показать боковые панели пульта — как иконки в ПОЛОТНЕ */
-body.live-hide-search .search-panel-slot,
-body.live-hide-search .search-panel {
-  display: none !important;
-}
-body.live-hide-dock .preview-dock,
-body.live-hide-dock .app-nav {
-  display: none !important;
-}
-body.live-hide-search .app-shell {
-  grid-template-columns: var(--app-nav-width) 1fr !important;
-}
-body.live-hide-search .app-shell-live {
-  grid-template-columns: var(--app-dock-width) 1fr !important;
-}
-body.live-hide-dock .app-shell {
-  grid-template-columns: 1fr var(--app-search-width) !important;
-}
-body.live-hide-dock .app-shell-live {
-  grid-template-columns: 1fr var(--app-search-width) !important;
-}
-body.live-hide-search.live-hide-dock .app-shell,
-body.live-hide-search.live-hide-dock .app-shell-live {
-  grid-template-columns: 1fr !important;
-}
-body.live-hide-search.live-hide-dock .app-content {
-  max-width: none;
-}
-.live-hide-search .app-shell {
-  grid-template-columns: var(--app-nav-width) 1fr !important;
-}
-.live-hide-search .app-shell-live {
-  grid-template-columns: var(--app-dock-width) 1fr !important;
-}
-.live-hide-dock .app-shell {
-  grid-template-columns: 1fr var(--app-search-width) !important;
-}
-.live-hide-dock .app-shell-live {
-  grid-template-columns: 1fr var(--app-search-width) !important;
-}
-.live-hide-search.live-hide-dock .app-shell,
-.live-hide-search.live-hide-dock .app-shell-live {
-  grid-template-columns: 1fr !important;
-}
-.live-hide-search.live-hide-dock .app-content {
-  max-width: none;
-}
-@media (max-width: 700px) {
-  .session-live-panels {
-    flex-direction: column;
-  }
-  .session-live-panels > .stack {
-    min-width: 0 !important;
-  }
-}
 
 /* Пульт сессии — те же 4 цвета что в профиле, для узнаваемости (заказ владельца, волна 2) */
 details.sp-card--plot,

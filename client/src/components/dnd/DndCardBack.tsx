@@ -69,7 +69,7 @@ export function DndCardBack({
       className="dnd-card-back"
       style={{ borderLeftColor: color, borderRightColor: color }}
       role="region"
-      aria-label="Оборот карты: входящие"
+      aria-label="Оборот карты: входящие, передачи, постер"
     >
       <div className="dnd-card-back-head">
         <span className="dnd-card-back-title">Входящие</span>

@@ -247,10 +247,17 @@ sessionsRouter.put("/:id", (req, res) => {
 // COALESCE pattern above), since Старт/Следующий/Предыдущий always know the
 // exact target state rather than "leave unspecified fields alone".
 sessionsRouter.put("/:id/combat", (req, res) => {
-  const { active, turn_entry_id } = req.body as { active: boolean; turn_entry_id: number | null };
-  db.prepare("UPDATE sessions SET combat_active = ?, combat_turn_entry_id = ? WHERE id = ?").run(
+  const { active, turn_entry_id, round } = req.body as {
+    active: boolean;
+    turn_entry_id: number | null;
+    round?: number;
+  };
+  db.prepare(
+    "UPDATE sessions SET combat_active = ?, combat_turn_entry_id = ?, combat_round = ? WHERE id = ?"
+  ).run(
     active ? 1 : 0,
     turn_entry_id ?? null,
+    active ? Math.max(1, Math.floor(round ?? 1)) : 0,
     req.params.id
   );
   res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(req.params.id));

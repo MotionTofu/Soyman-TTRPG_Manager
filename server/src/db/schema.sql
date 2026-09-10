@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   folder_path TEXT,
   combat_active INTEGER NOT NULL DEFAULT 0,
   combat_turn_entry_id INTEGER REFERENCES initiative_entries(id) ON DELETE SET NULL,
+  combat_round INTEGER NOT NULL DEFAULT 0,
   battle_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL,
   cheatsheet_data TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

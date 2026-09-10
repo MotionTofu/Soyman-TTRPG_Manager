@@ -345,10 +345,14 @@ export function checkLabel(check: DndCheck): string {
 }
 
 // Short ability abbreviation used in the compact chip summary, so a chip
-// reads "Урон · 8d6 огнём · пров. Лвк" instead of wrapping onto three lines.
+// reads "Урон · 8d6 огнём · пров. Лов" instead of wrapping onto three lines.
+// Буквы — те же, что на костях характеристик (`AbilityScores.tsx`): раньше
+// Ловкость сокращалась здесь в «Лвк», а на кости — в «ЛОВ», и на «Карте» оба
+// написания видны разом. Регистр остаётся разным намеренно: это разные
+// голоса (§1.5) — капс-подпись на кости и проза в чипе.
 const ABILITY_KEY_ABBR: Record<string, string> = {
   str: "Сил",
-  dex: "Лвк",
+  dex: "Лов",
   con: "Тел",
   int: "Инт",
   wis: "Мдр",
@@ -356,7 +360,7 @@ const ABILITY_KEY_ABBR: Record<string, string> = {
 };
 const ABILITY_ABBR: Record<string, string> = {
   Сила: "Сил",
-  Ловкость: "Лвк",
+  Ловкость: "Лов",
   Телосложение: "Тел",
   Интеллект: "Инт",
   Мудрость: "Мдр",

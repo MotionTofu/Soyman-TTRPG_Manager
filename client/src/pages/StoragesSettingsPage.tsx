@@ -20,7 +20,7 @@ import {
 } from "../themes";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
-import { loadCoverDuotone, saveCoverDuotone } from "../imagePrefs";
+import { loadImageTreatment, saveImageTreatment } from "../imagePrefs";
 import { loadHideFinance, saveHideFinance } from "../financePrivacy";
 import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
@@ -52,7 +52,7 @@ export function StoragesSettingsPage() {
   // Appearance state moved from AppearanceSettingsPage
   const [prefs, setPrefs] = useState(loadThemePrefs());
   const [radius, setRadius] = useState(() => loadRadiusOverride() ?? 0);
-  const [duotone, setDuotone] = useState(loadCoverDuotone);
+  const [imageTreatment, setImageTreatment] = useState(loadImageTreatment);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [uploadingHomeBg, setUploadingHomeBg] = useState(false);
   const [hideFinance, setHideFinance] = useState(loadHideFinance);
@@ -449,7 +449,7 @@ export function StoragesSettingsPage() {
       {fromAppearance && (
         <div className="card" role="status" style={{ borderLeft: "1px solid var(--accent)", background: "var(--paper-2)" }}>
           <span style={{ fontWeight: 600 }}>Внешний вид переехал в Настройки → Интерфейс</span>
-          <div className="muted" style={{ marginTop: 4 }}>Старая закладка <code>/appearance</code> теперь здесь. Темы, скругление и дуотон — во вкладке «Интерфейс».</div>
+          <div className="muted" style={{ marginTop: 4 }}>Старая закладка <code>/appearance</code> теперь здесь. Темы, скругление и обработка изображений — во вкладке «Интерфейс».</div>
         </div>
       )}
       {toast && (
@@ -688,17 +688,17 @@ export function StoragesSettingsPage() {
               <span className="res-group__count">{themes.length}</span>
             </summary>
             <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
-              <p className="muted" style={{ margin: 0, maxWidth: "62ch" }}>Тема применяется мгновенно. Скругление и дуотон — общие для всех тем.</p>
+              <p className="muted" style={{ margin: 0, maxWidth: "62ch" }}>Тема применяется мгновенно. Скругление и обработка изображений — общие для всех тем.</p>
               <label className="stack" style={{ maxWidth: 420, gap: 4 }}>
                 Скругление внешнего угла карточки: {radius}px
                 <input type="range" min={0} max={28} value={radius} onChange={(e) => changeRadius(Number(e.target.value))} />
                 <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>Действует только на внешний угол карточки; плашки, чипы и бейджи внутри остаются прямоугольными (§4).</span>
               </label>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", maxWidth: 420 }}>
-                <input type="checkbox" checked={duotone} onChange={(e) => { setDuotone(e.target.checked); saveCoverDuotone(e.target.checked); }} />
+                <input type="checkbox" checked={imageTreatment} onChange={(e) => { setImageTreatment(e.target.checked); saveImageTreatment(e.target.checked); }} />
                 <span className="stack" style={{ gap: 2 }}>
-                  Обрабатывать обложки под тему
-                  <span className="muted" style={{ maxWidth: "62ch" }}>Обложки и фон перекрашиваются в два цвета темы.</span>
+                  Обработка изображений
+                  <span className="muted" style={{ maxWidth: "62ch" }}>Обложки, фоны и портреты на картах приглушаются и получают зерно, чтобы разные по стилистике арты читались одним экраном. Галерея, лайтбокс и карты локаций не трогаются никогда.</span>
                 </span>
               </label>
               <div className="grid-cards" style={{ marginTop: 6 }}>

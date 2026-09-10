@@ -4419,6 +4419,12 @@ export function openDatabase(dbDir: string): Database.Database {
       "ALTER TABLE sessions ADD COLUMN combat_turn_entry_id INTEGER REFERENCES initiative_entries(id) ON DELETE SET NULL"
     );
   }
+  // Номер раунда боя. 0 — боя нет; «Старт» ставит 1, круг по очереди
+  // прибавляет единицу. Живёт рядом с combat_active по той же причине:
+  // активный бой у сессии один.
+  if (!columnExists(database, "sessions", "combat_round")) {
+    database.exec("ALTER TABLE sessions ADD COLUMN combat_round INTEGER NOT NULL DEFAULT 0");
+  }
   if (!columnExists(database, "sessions", "battle_playlist_id")) {
     database.exec(
       "ALTER TABLE sessions ADD COLUMN battle_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL"

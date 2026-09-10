@@ -127,12 +127,19 @@ function AbilityBox({
   isSaveProficient,
   primary,
   accentColor,
+  exhaustionPenalty = 0,
 }: {
   label: string;
   score: number;
   mod: number;
   save: string;
   isSaveProficient: boolean;
+  // Штраф истощения. Обе грани кости отвечают на один вопрос — «сколько
+  // прибавить к к20», — и до этой правки грань «спас» штраф учитывала, а
+  // лицевая нет: одна и та же кость показывала +3 и +1 в зависимости от
+  // стороны. Само значение характеристики штраф не трогает: истощение бьёт
+  // по броскам, а не по силе персонажа.
+  exhaustionPenalty?: number;
   // Какое число крупное — модификатор или само значение. Настройка сквозная
   // (dndPrefs), общая со статблоком существа: «+3» здесь при «16» там было бы
   // расхождением, а не гибкостью.
@@ -154,10 +161,10 @@ function AbilityBox({
     >
       <DndDie size="sm" edge={isSaveProficient} accentColor={accentColor}>
         <span className="dnd-die-value">
-          {showSave ? save : primary === "score" ? score : formatModifier(mod)}
+          {showSave ? save : primary === "score" ? score : formatModifier(mod - exhaustionPenalty)}
         </span>
         <span className="dnd-die-sub">
-          {showSave ? "спас" : primary === "score" ? formatModifier(mod) : score}
+          {showSave ? "спас" : primary === "score" ? formatModifier(mod - exhaustionPenalty) : score}
         </span>
       </DndDie>
       <span className="dnd-ability-label">{label}</span>
@@ -193,6 +200,7 @@ export function AbilitySavesSkillsView({
               isSaveProficient={savingThrowProfs[key]}
               primary={prefs.abilityPrimary}
               accentColor={accentColor}
+              exhaustionPenalty={exhaustionPenalty}
             />
           );
         })}

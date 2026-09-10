@@ -55,8 +55,6 @@
   padding: 6px 8px;
   border: var(--card-border-width, 1px) solid var(--line);
   border-top: none;
-  border-bottom-left-radius: var(--card-radius);
-  border-bottom-right-radius: var(--card-radius);
 }
 .dnd-effect-body input,
 .dnd-effect-body select {
@@ -96,7 +94,6 @@
   gap: 3px;
   padding: 5px;
   border: var(--card-border-width, 1px) dashed var(--line);
-  border-radius: var(--card-radius);
 }
 .dnd-effect-type-menu button {
   font-size: var(--fs-meta);
@@ -215,7 +212,6 @@
   padding: 8px 4px;
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: var(--card-radius);
 }
 /* Character/creature wizards and the character-sheet accordion all wrap
    this tile in `.card` — flatten there so the tile doesn't draw a second
@@ -428,7 +424,6 @@
   color: var(--accent);
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: var(--card-radius);
 }
 .dnd-ability-col {
   display: flex;
@@ -442,7 +437,6 @@
   padding: 6px 4px;
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: var(--card-radius);
 }
 .dnd-save-row {
   display: flex;
@@ -520,7 +514,6 @@
 .dnd-save-row.skill-source-class,
 .dnd-save-row.skill-source-background,
 .dnd-save-row.skill-source-both {
-  border-radius: var(--card-radius);
   color: var(--skill-source-ink);
 }
 .dnd-save-row.skill-source-class .muted,
@@ -941,7 +934,6 @@
 
 .dnd-proficiency-dropzone {
   border: var(--card-border-width, 1px) dashed var(--line);
-  border-radius: var(--card-radius);
   padding: 8px;
   min-height: 36px;
 }
@@ -976,7 +968,7 @@
   align-items: center;
   gap: 6px;
   background: transparent;
-  border: 1.5px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 0;
   padding: 5px 6px 5px 9px;
   font-family: var(--font-ui);
@@ -1042,7 +1034,7 @@
   position: relative;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: 1px solid transparent;
   border-radius: 0;
   padding: 6px 0;
   margin-bottom: -1px;
@@ -1058,7 +1050,7 @@
   color: var(--ink);
   font-weight: 600;
   /* Цвет подчёркивания приходит инлайном — он свой у каждого класса. */
-  border-bottom-width: 2px;
+  border-bottom-width: 1px;
   border-bottom-style: solid;
 }
 .dnd-deck-strip button:hover {
@@ -1094,20 +1086,38 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  /* Базовая обработка кадра. Обесцвечивание по истощению добавляется
-     инлайном из листа — оно зависит от данных, а не от темы. */
-  filter: saturate(0.88) contrast(1.04);
+}
+/* Тон эталона (§3). Приезжает переменной, а не правилом, потому что весь
+   `filter` картинки задаётся инлайном из листа: к тону там дописывается
+   обесцвечивание по истощению, а оно зависит от данных, а не от темы, и
+   тумблеру не подчиняется. Выключенная обработка даёт тождество, а не `none`:
+   `filter: none grayscale(17%)` — невалидная запись, и картинка потеряла бы
+   заодно истощение. */
+.dnd-card-portrait {
+  --portrait-tone: saturate(1) contrast(1);
+}
+[data-image-treatment] .dnd-card-portrait {
+  --portrait-tone: saturate(0.88) contrast(1.04);
 }
 /* То же зерно, что у бумаги листа: без него фотография выпадает из зина
-   отдельным глянцевым пятном (дизайн-система §5.1). */
+   отдельным глянцевым пятном (дизайн-система §5.1). Шаг и доля — те же, что
+   у эталона обработки (zine.css): карта персонажа и есть образец, с которого
+   он списан. */
 .dnd-card-portrait-grain {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(rgba(0, 0, 0, 0.22) 1px, transparent 1px);
+}
+[data-image-treatment] .dnd-card-portrait-grain {
+  background-image: radial-gradient(color-mix(in srgb, var(--ink) 22%, transparent) 1px, transparent 1px);
   background-size: 3px 3px;
   mix-blend-mode: multiply;
   opacity: 0.38;
+}
+/* Цвет точки всегда --ink; в тёмных режимах он сам светлый, и меняется
+   только режим наложения (см. тот же приём в zine.css). */
+[data-image-treatment][data-theme-mode="dark"] .dnd-card-portrait-grain {
+  mix-blend-mode: screen;
 }
 /* Уход в бумагу — не в ноль, а до силы отражения (7%), чтобы на стыке не
    было шва. */
@@ -1173,9 +1183,9 @@
   font-size: var(--fs-h1);
   font-weight: 700;
   line-height: 0.96;
-  /* Тень бумагой, а не чернилами: имя стоит на месте, где портрет уже
-     растворился, и подсветка снизу отделяет его от остатков картинки. */
-  text-shadow: 0 1px 0 var(--paper);
+  /* Тени здесь больше нет (§1.2). Она подсвечивала имя бумагой снизу, но
+     портрет к этому месту и так растворён в бумагу, и на снимке до/после
+     разницы в читаемости не видно — а тень оставалась единственной на листе. */
 }
 .dnd-card-cartouche-class {
   display: flex;
@@ -1190,6 +1200,29 @@
   font-weight: 700;
   padding: 1px 7px;
   flex: none;
+}
+/* Цифра уровня как вход в визард повышения. Внешне не меняется — это тот же
+   жетон цвета класса; кнопкой она становится только там, где лист вообще
+   правится (onQuickUpdate). Мишень расширена невидимой областью, а не
+   размером жетона: увеличить сам жетон значило бы двигать строку класса
+   в картуше каждый раз, когда уровень двузначный. */
+button.dnd-card-level {
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  position: relative;
+}
+button.dnd-card-level::after {
+  /* Замерено в браузере: жетон 21×18, при этих отступах мишень выходит
+     43×43 — норма 44×44 с точностью до пикселя, дальше расширять некуда,
+     область упрётся в строку класса. */
+  content: "";
+  position: absolute;
+  inset: -12px -11px;
+}
+button.dnd-card-level:hover {
+  border-color: transparent;
+  opacity: 0.85;
 }
 .dnd-card-cartouche-classline,
 .dnd-card-cartouche-origin {
@@ -1224,7 +1257,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--ink);
   background: var(--paper);
   color: var(--ink);
   cursor: pointer;
@@ -1633,7 +1666,7 @@ body.sheet-fullscreen .app-content {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--ink);
   /* Бумага, а не поверхность: на тёмном --surface силуэт чернилами внутри
      сливался с фоном, и жетон без портрета читался чёрным кругом. */
   background: var(--paper-2);
@@ -1678,7 +1711,7 @@ body.sheet-fullscreen .app-content {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper-2);
   color: var(--ink);
   display: flex;
@@ -1793,8 +1826,8 @@ span.dnd-card-corner {
   color: var(--on-surface);
   border-left: 5px solid var(--line);
   border-right: 5px solid var(--line);
-  border-top: 2px solid var(--surface);
-  border-bottom: 2px solid var(--surface);
+  border-top: 1px solid var(--surface);
+  border-bottom: 1px solid var(--surface);
   padding: 14px 14px 60px;
   display: flex;
   flex-direction: column;
@@ -1827,7 +1860,7 @@ span.dnd-card-corner {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  border-bottom: 1.5px solid var(--line);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 10px;
 }
 .dnd-card-back-title {
@@ -1951,7 +1984,7 @@ span.dnd-card-corner {
 /* Инструмент передач — тот же оборот, та же рубашка: светлого здесь нет,
 // всё наследует цвета .dnd-card-back. Подзаголовки секций — капсом. */
 .dnd-transfer-box {
-  border-top: 1.5px solid var(--line);
+  border-top: 1px solid var(--line);
   padding-top: 10px;
   gap: 10px;
 }
@@ -2303,7 +2336,7 @@ span.dnd-card-corner {
 .dnd-spell-picker-head {
   flex: none;
   padding: 16px 16px 12px;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
 }
 .dnd-spell-picker-title-row {
   display: flex;
@@ -2340,7 +2373,7 @@ span.dnd-card-corner {
 }
 .dnd-spell-picker-search {
   margin-top: 12px;
-  border-bottom: 2px solid var(--line);
+  border-bottom: 1px solid var(--line);
   padding: 4px 0 6px;
 }
 .dnd-spell-picker-search input {
@@ -2371,7 +2404,7 @@ span.dnd-card-corner {
   letter-spacing: 0.1em;
   text-transform: var(--label-transform);
   padding: 5px 9px;
-  border: 1.5px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   color: var(--muted);
@@ -2435,7 +2468,7 @@ span.dnd-card-corner {
   width: 22px;
   height: 22px;
   flex: none;
-  border: 2px solid var(--ink);
+  border: 1px solid var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2477,7 +2510,7 @@ span.dnd-card-corner {
 }
 .dnd-spell-picker-foot {
   flex: none;
-  border-top: 2px solid var(--ink);
+  border-top: 1px solid var(--ink);
   background: var(--paper);
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   display: flex;
@@ -2743,7 +2776,7 @@ span.dnd-tab-btn {
 .dnd-deck-fan-close {
   flex: none;
   background: transparent;
-  border: 1.5px solid rgba(232, 228, 218, 0.45);
+  border: 1px solid rgba(232, 228, 218, 0.45);
   border-radius: 0;
   color: #e8e4da;
   width: 32px;
@@ -2774,8 +2807,8 @@ span.dnd-tab-btn {
 .dnd-deck-fan-card {
   background: #e8e4da;
   color: #1c1c1c;
-  border-top: 2px solid #1c1c1c;
-  border-bottom: 2px solid #1c1c1c;
+  border-top: 1px solid #1c1c1c;
+  border-bottom: 1px solid #1c1c1c;
   border-left: 4px solid #1c1c1c;
   border-right: 4px solid #1c1c1c;
   border-radius: 0;
@@ -3314,4 +3347,20 @@ span.dnd-tab-btn {
   font-size: var(--fs-meta);
   line-height: 1.35;
   color: var(--muted);
+}
+
+/* Счётчик в заголовке круга заклинаний: сколько в круге всего и сколько
+   подготовлено. Без него свёрнутый круг не отвечал даже на «есть ли там
+   что-нибудь» — пипсы в заголовке говорят только про ячейки. */
+.dnd-spell-level-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.dnd-spell-level-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  white-space: nowrap;
 }

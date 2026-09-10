@@ -7,7 +7,6 @@ import { SceneSwitcher } from "../components/SceneSwitcher";
 import { PresentationPanel } from "../components/presentation/PresentationPanel";
 import { SessionTimeStrip } from "../components/SessionTimeStrip";
 import { SceneJournal } from "../components/SceneJournal";
-import { InitiativeTracker } from "../components/InitiativeTracker";
 import {
   LocationsPanel,
   PlotCharactersPanel,
@@ -19,16 +18,29 @@ import {
   CompendiumPanel,
 } from "./sessionLivePanels";
 import type { CampaignDetail, Character, Playlist, SessionDetail, SessionUnionRow } from "../types";
+// session.css нужен пульту не меньше cockpit.css: цвета панелей
+// (sp-card--plot/location/enemies/loot) и вид их шапок живут там, рядом с
+// профилем сессии. Обе страницы — ленивые чанки, поэтому без этой строки
+// пульт, открытый напрямую (кнопкой в навигаторе, закладкой, перезагрузкой),
+// приезжал без панельных стилей — они появлялись, только если Мастер до
+// этого заходил на страницу сессии.
+import "../session.css";
 import "../cockpit.css";
 import { sessionLabel } from "../sessionLabel";
 import { loadPultFinishAction } from "../pultPrefs";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
+
+function errorText(e: unknown, fallback: string): string {
+  const message = e instanceof Error ? e.message : "";
+  return message || fallback;
+}
 
 export function SessionLivePage() {
   const { id } = useParams();
   const sessionId = Number(id);
 
   const [session, setSession] = useState<SessionDetail | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -43,15 +55,21 @@ export function SessionLivePage() {
 
   const refresh = useCallback(() => {
     let cancelled = false;
+    setLoadError(null);
     api
       .get<SessionDetail>(`/sessions/${sessionId}`)
       .then((s) => {
         if (cancelled) return;
         setSession(s);
-        api.get<CampaignDetail>(`/campaigns/${s.campaign_id}`).then((c) => { if (!cancelled) setCampaign(c); }).catch(() => {});
+        api
+          .get<CampaignDetail>(`/campaigns/${s.campaign_id}`)
+          .then((c) => { if (!cancelled) setCampaign(c); })
+          .catch((e) => { if (!cancelled) setLoadError(errorText(e, "Кампания сессии не читается.")); });
         api.get<Character[]>(`/characters?campaign_id=${s.campaign_id}`).then((ch) => { if (!cancelled) setCharacters(ch); }).catch(() => {});
       })
-      .catch(() => {});
+      .catch((e) => {
+        if (!cancelled) setLoadError(errorText(e, "Сессия не найдена или сервер не отвечает."));
+      });
     return () => { cancelled = true; };
   }, [sessionId]);
 
@@ -104,7 +122,26 @@ export function SessionLivePage() {
     refresh();
   }
 
-  if (!session || !campaign) return null;
+  // Немой `return null` оставлял пустую страницу навсегда — и при неверном id,
+  // и при упавшем сервере: за столом это белый экран без единого слова.
+  if (loadError) {
+    return (
+      <div className="stack session-live">
+        <div className="card stack" role="alert">
+          <strong>Пульт не открылся</strong>
+          <span className="muted">{loadError}</span>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="primary" onClick={refresh}>
+              Попробовать снова
+            </button>
+            <Link to={`/sessions/${sessionId}`}>К странице сессии</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session || !campaign) return <span className="muted">Открываем пульт…</span>;
 
   const panelProps = { sessionId, session, campaign, characters, launches, union, onChanged: refresh };
 
@@ -124,15 +161,22 @@ export function SessionLivePage() {
         </div>
       </div>
 
-      {/* Порядок вечера сверху вниз: где мы во времени → с чем сели играть →
-          что запускаем → чем пользуемся → что записали. «Основные события»
-          внизу потому, что это итог, а не начало: их заполняют под конец. */}
+      {/* Порядок вечера сверху вниз: где мы во времени → что запускаем → что
+          на экране у игроков → с чем сели играть → чем пользуемся.
+          Переключатель сцен стоит первым потому, что это главный орган пульта:
+          ради него сюда и смотрят, и искать его прокруткой посреди игры
+          некогда. Задумка, боевая тема и «Основные события» — под ним: их
+          читают редко, а пишут в них под конец. */}
       <SessionTimeStrip
         session={session}
         settingId={campaign.setting_id}
         campaignId={campaign.id}
         onChanged={refresh}
       />
+
+      <SceneSwitcher sessionId={sessionId} onLaunched={() => setLaunches((n) => n + 1)} />
+
+      <PresentationPanel sessionId={sessionId} campaignId={campaign.id} launches={launches} />
 
       <div className="card row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span className="sp-idea-battle__label">Боевая тема</span>
@@ -154,6 +198,7 @@ export function SessionLivePage() {
         <EditableTextCard
           key={`idea-${session.id}`}
           title="Задумка на сессию"
+          draftKey={`session-idea-${sessionId}`}
           value={session.idea_notes}
           onSave={saveIdea}
           entityType="session"
@@ -164,6 +209,7 @@ export function SessionLivePage() {
         <EditableTextCard
           key={`events-${session.id}`}
           title="Основные события сессии"
+          draftKey={`session-main-events-${sessionId}`}
           value={session.main_events}
           onSave={saveMainEvents}
           entityType="session"
@@ -199,16 +245,12 @@ ${text}` : text)
         </EditableTextCard>
       </div>
 
-      <SceneSwitcher sessionId={sessionId} onLaunched={() => setLaunches((n) => n + 1)} />
-
-      <PresentationPanel sessionId={sessionId} campaignId={campaign.id} launches={launches} />
-
-      <div className="card session-live-central-tracker" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "7px 12px", background: "var(--surface)", color: "var(--on-surface)", borderBottom: "1px solid var(--surface)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Трекер инициативы</div>
-        <div style={{ padding: 12 }}>
-          <InitiativeTracker sessionId={sessionId} />
-        </div>
-      </div>
+      {/* Трекер инициативы живёт в правой панели (SearchPanel) и только там.
+          Здесь стояла его вторая копия: на широком экране она пряталась через
+          display:none, а на узком показывалась — и обе висели в DOM
+          одновременно, с независимым состоянием. Правка хитов в одной во
+          второй не появлялась, подсветка текущего хода расходилась. На узком
+          экране панель открывается кнопкой поиска в шапке (или «]»). */}
 
       <div className="stack" style={{ gap: 12 }}>
         <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>

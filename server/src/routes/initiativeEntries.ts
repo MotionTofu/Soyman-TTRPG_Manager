@@ -60,9 +60,11 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
     dead?: boolean;
     conditions?: string[];
   };
+  // initiative через CASE, а не COALESCE: стирание числа шлёт null, и
+  // COALESCE молча оставлял бы прежнее — Мастер стирает, а число возвращается.
   db.prepare(
     `UPDATE initiative_entries SET
-       initiative = COALESCE(?, initiative),
+       initiative = CASE WHEN ? THEN ? ELSE initiative END,
        name = COALESCE(?, name),
        max_hp = CASE WHEN ? THEN ? ELSE max_hp END,
        current_hp = CASE WHEN ? THEN ? ELSE current_hp END,
@@ -71,6 +73,7 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
        conditions = CASE WHEN ? THEN ? ELSE conditions END
      WHERE id = ?`
   ).run(
+    initiative !== undefined ? 1 : 0,
     initiative ?? null,
     name ?? null,
     max_hp !== undefined ? 1 : 0,

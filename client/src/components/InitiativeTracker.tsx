@@ -59,6 +59,23 @@ function parseConditions(raw: string): string[] {
   }
 }
 
+// Порядок хода: инициатива, при равенстве — ловкость, затем имя и id.
+//
+// Finite sentinel, not -Infinity: subtracting two -Infinity values (both
+// entries with no initiative set yet) produces NaN, and Array.sort treats a
+// NaN comparator result as "equal", silently skipping the dex/name
+// tie-breakers below and leaving entries in insertion order.
+const NO_INITIATIVE = -1_000_000;
+function byInitiative(a: InitiativeEntry, b: InitiativeEntry): number {
+  const initDiff = (b.initiative ?? NO_INITIATIVE) - (a.initiative ?? NO_INITIATIVE);
+  if (initDiff !== 0) return initDiff;
+  const dexDiff = b.dex_modifier - a.dex_modifier;
+  if (dexDiff !== 0) return dexDiff;
+  const nameDiff = a.name.localeCompare(b.name, "ru");
+  if (nameDiff !== 0) return nameDiff;
+  return a.id - b.id;
+}
+
 function isDead(entry: InitiativeEntry): boolean {
   return entry.dead === true || entry.dead === 1;
 }
@@ -87,6 +104,7 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [customInit, setCustomInit] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [rollingId, setRollingId] = useState<number | null>(null);
+  const [rollingInitiative, setRollingInitiative] = useState(false);
   const [hpErrorId, setHpErrorId] = useState<number | null>(null);
   const [confirmRerollId, setConfirmRerollId] = useState<number | null>(null);
   const [hpEditId, setHpEditId] = useState<number | null>(null);
@@ -236,7 +254,23 @@ export function InitiativeTracker({ sessionId }: Props) {
     load();
   }
 
+  // Очистка спрашивает, в отличие от снятия галочки у логова: за строками
+  // стоят брошенные хиты, набранные состояния и отметки мёртвых, и вернуть
+  // их нечем. Заодно гасит бой — иначе сессия остаётся с combat_active при
+  // пустой очереди, кнопка предлагает «Завершить», а боевая тема играет.
   async function clearAll() {
+    if (
+      !(await confirm({
+        message: "Очистить очередь хода? Хиты, состояния и отметки мёртвых пропадут.",
+        confirmLabel: "Очистить",
+        danger: true,
+      }))
+    )
+      return;
+    if (session?.combat_active) {
+      await setCombat(false, null);
+      sound?.exitCombat();
+    }
     await api.del(`/initiative-entries?session_id=${sessionId}`);
     load();
   }
@@ -272,6 +306,35 @@ export function InitiativeTracker({ sessionId }: Props) {
     setCustomInit("");
     setAddingCustom(false);
     load();
+  }
+
+  /**
+   * Бросок инициативы за НПС — к20 плюс ловкость, всем, у кого числа ещё нет.
+   *
+   * Строки игроков не трогаем: инициативу за столом называют сами игроки, и
+   * подставленное за них число пришлось бы искать и стирать. Уже заполненные
+   * тоже не перебрасываем — иначе одна кнопка ломала бы половину очереди.
+   * Логово, окружение и своё событие идут по своим числам, к костям
+   * отношения не имеющим.
+   */
+  const rollable = entries.filter(
+    (e) => e.kind === "creature" && e.entity_type !== "character" && e.initiative == null
+  );
+
+  async function rollInitiativeForNpcs() {
+    if (rollable.length === 0 || rollingInitiative) return;
+    setRollingInitiative(true);
+    try {
+      for (const e of rollable) {
+        const mod = e.dex_modifier ?? 0;
+        const value = rollDiceFormula(`1к20${mod >= 0 ? "+" : ""}${mod}`);
+        if (value == null) continue;
+        await api.put(`/initiative-entries/${e.id}`, { initiative: value });
+      }
+      load();
+    } finally {
+      setRollingInitiative(false);
+    }
   }
 
   async function rerollHp(entry: InitiativeEntry) {
@@ -344,35 +407,26 @@ export function InitiativeTracker({ sessionId }: Props) {
   }
 
   const sorted = useMemo(() => {
-    // Finite sentinel, not -Infinity: subtracting two -Infinity values (both
-    // entries with no initiative set yet) produces NaN, and Array.sort
-    // treats a NaN comparator result as "equal", silently skipping the
-    // dex/name tie-breakers below and leaving entries in insertion order.
-    const NO_INITIATIVE = -1_000_000;
-    function cmp(a: InitiativeEntry, b: InitiativeEntry) {
-      const initDiff = (b.initiative ?? NO_INITIATIVE) - (a.initiative ?? NO_INITIATIVE);
-      if (initDiff !== 0) return initDiff;
-      const dexDiff = b.dex_modifier - a.dex_modifier;
-      if (dexDiff !== 0) return dexDiff;
-      const nameDiff = a.name.localeCompare(b.name, "ru");
-      if (nameDiff !== 0) return nameDiff;
-      return a.id - b.id;
-    }
-    const alive = entries.filter((e) => !isDead(e)).sort(cmp);
-    const dead = entries.filter((e) => isDead(e)).sort(cmp);
+    const alive = entries.filter((e) => !isDead(e)).sort(byInitiative);
+    const dead = entries.filter((e) => isDead(e)).sort(byInitiative);
     return [...alive, ...dead];
   }, [entries]);
 
   const aliveSorted = useMemo(() => sorted.filter((e) => !isDead(e)), [sorted]);
 
-  async function setCombat(active: boolean, turnEntryId: number | null) {
-    await api.put(`/sessions/${sessionId}/combat`, { active, turn_entry_id: turnEntryId });
+  // Порядок хода с мёртвыми НА СВОИХ МЕСТАХ. `sorted` сдвигает их в конец —
+  // по нему нельзя понять, кто ходит после погибшего, а именно это и нужно,
+  // когда бойца убили в его же ход.
+  const turnOrder = useMemo(() => [...entries].sort(byInitiative), [entries]);
+
+  async function setCombat(active: boolean, turnEntryId: number | null, round?: number) {
+    await api.put(`/sessions/${sessionId}/combat`, { active, turn_entry_id: turnEntryId, round });
     loadSession();
   }
 
   async function startCombat() {
     if (aliveSorted.length === 0) return;
-    await setCombat(true, aliveSorted[0].id);
+    await setCombat(true, aliveSorted[0].id, 1);
     // Переключение идёт через движок пульта, а не напрямую в плеер: он
     // запоминает, что играло до боя, и показывает в пульте, что Бэкграунд
     // сменил трекер инициативы, а не Мастер.
@@ -388,12 +442,31 @@ export function InitiativeTracker({ sessionId }: Props) {
     sound?.exitCombat();
   }
 
+  // Шаг по очереди хода. Считаем от места текущего в ПОЛНОМ порядке, а не
+  // среди живых: убитый в свой же ход из списка живых выпадает, и поиск по
+  // нему давал −1 — «Следующий» отдавал второго в очереди, а не того, кто
+  // идёт за погибшим.
   function step(delta: 1 | -1) {
     if (aliveSorted.length === 0) return;
-    const i = aliveSorted.findIndex((e) => e.id === session?.combat_turn_entry_id);
-    const from = i === -1 ? 0 : i;
-    const next = aliveSorted[(from + delta + aliveSorted.length) % aliveSorted.length];
-    setCombat(true, next.id);
+    const current = session?.combat_turn_entry_id ?? null;
+    const from = current == null ? -1 : turnOrder.findIndex((e) => e.id === current);
+    // Строку удалили целиком — места в порядке не осталось, начинаем с края.
+    if (from === -1) {
+      setCombat(true, (delta === 1 ? aliveSorted[0] : aliveSorted[aliveSorted.length - 1]).id);
+      return;
+    }
+    const n = turnOrder.length;
+    const round = session?.combat_round || 1;
+    for (let k = 1; k <= n; k++) {
+      const raw = from + delta * k;
+      const candidate = turnOrder[((raw % n) + n) % n];
+      if (isDead(candidate)) continue;
+      // Раунд считается по переходу через край очереди, а не по числу шагов:
+      // мёртвые пропускаются, и «сколько ходов прошло» с раундом не совпадает.
+      const wrapped = raw < 0 || raw >= n;
+      setCombat(true, candidate.id, wrapped ? Math.max(1, round + delta) : round);
+      return;
+    }
   }
 
   return (
@@ -409,11 +482,26 @@ export function InitiativeTracker({ sessionId }: Props) {
       {confirmDialog}
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <strong>Трекер инициативы</strong>
-        {entries.length > 0 && (
-          <button type="button" className="comp-mini" onClick={clearAll}>
-            Очистить
-          </button>
-        )}
+        <span className="row" style={{ gap: 4 }}>
+          {/* Кнопка появляется, только когда есть кому бросать: пустая
+              кнопка на пульте — лишний орган управления. */}
+          {rollable.length > 0 && (
+            <button
+              type="button"
+              className="comp-mini"
+              disabled={rollingInitiative}
+              title="Бросить к20 + ловкость всем НПС без числа. Персонажей игроков не трогает."
+              onClick={rollInitiativeForNpcs}
+            >
+              {rollingInitiative ? "…" : `Бросить за НПС · ${rollable.length}`}
+            </button>
+          )}
+          {entries.length > 0 && (
+            <button type="button" className="comp-mini" onClick={clearAll}>
+              Очистить
+            </button>
+          )}
+        </span>
       </div>
       <div className="row" style={{ justifyContent: "center", gap: 4 }}>
         <button
@@ -443,6 +531,16 @@ export function InitiativeTracker({ sessionId }: Props) {
         >
           <NavIcon name="arrowRight" />
         </button>
+        {/* Номер раунда — только пока бой идёт, и только числом: за столом его
+            читают, а не правят. */}
+        {!!session?.combat_active && (
+          <span
+            className="muted"
+            style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", marginLeft: 4 }}
+          >
+            Раунд {session.combat_round || 1}
+          </span>
+        )}
       </div>
       {/* Логово и окружение — галочками, потому что решение про них бинарно:
           они в этом бою или их нет. Своё событие — плюсиком: у него надо

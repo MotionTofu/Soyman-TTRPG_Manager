@@ -1721,12 +1721,43 @@ function DndSpellLevelSection({
   const sorted = preparedOnly && !edit ? ordered.filter((sp) => sp.prepared > 0) : ordered;
   const hiddenCount = ordered.length - sorted.length;
   const label = title ?? (level === 0 ? "Заговоры" : `${level} круг`);
+  // Счётчик считает по всему кругу, а не по видимому: фильтр «только
+  // подготовленные» не должен занижать «сколько у меня всего в круге».
+  const preparedCount = ordered.filter((sp) => sp.prepared > 0).length;
+
+  // Круг, в котором что-то есть, открыт с самого начала. Раскрытие ставится
+  // ровно один раз при монтировании и дальше не трогается: заклинатель 9
+  // уровня открывал «Магию» и видел шесть пустых заголовков, но управлять
+  // раскрытием после этого — его дело, и повторный `open` из рендера отменял
+  // бы каждое его сворачивание. Памяти между уходами с карты не заводим —
+  // вкладка размонтируется, и восстанавливать нечего.
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const openedOnce = useRef(false);
+  useEffect(() => {
+    if (openedOnce.current) return;
+    openedOnce.current = true;
+    if (detailsRef.current && ordered.length > 0) detailsRef.current.open = true;
+  }, [ordered.length]);
 
   return (
-    <details className="dnd-spell-level-card">
+    <details className="dnd-spell-level-card" ref={detailsRef}>
       {confirmDialog}
       <summary className="row dnd-spell-level-summary" style={{ justifyContent: "space-between" }}>
-        <span>{label}</span>
+        <span className="dnd-spell-level-label">
+          {label}
+          {/* §1.11: кругу, в котором ничего нет, счётчик показывать нечем. */}
+          {ordered.length > 0 && (
+            <span className="dnd-spell-level-count">
+              {ordered.length}
+              {/* «подг. N» — только когда оно отличается от общего числа.
+                  У колдуна с пятью заклинаниями, все из которых подготовлены,
+                  приписка «· подг. 5» повторяет соседнее число и ничего не
+                  добавляет; вопрос, ради которого счётчик заводился, — это
+                  «12 известно, 6 подготовлено». */}
+              {preparedCount > 0 && preparedCount < ordered.length && ` · подг. ${preparedCount}`}
+            </span>
+          )}
+        </span>
         {showSlots && (
           // Clicking a pip must not also toggle the <details> open/closed.
           // stopPropagation alone doesn't suppress that — <summary>'s toggle
@@ -5637,6 +5668,7 @@ function SpendAction({
   row,
   value,
   slots,
+  pact,
   resources,
   characterId,
   onQuickUpdate,
@@ -5645,6 +5677,8 @@ function SpendAction({
   row: AttackRow;
   value: DndCharacterData;
   slots: number[];
+  /** Договор магии колдуна: отдельная дорожка, в slots её нет вовсе. */
+  pact: { count: number; circle: number } | null;
   resources: DndResourceDef[];
   /** Id персонажа — для сигнала мастеру (метка/сглаз). Без него кнопок нет. */
   characterId?: number | null;
@@ -5657,6 +5691,13 @@ function SpendAction({
     // Арканум колдуна (тикет 03 warlock): ячейки нет, есть 1 использование
     // на долгий отдых — трек тот же (пипсы круга), подпись честная.
     const isArcanum = row.source.spell.arcanum === true;
+    // Договор магии колдуна в slots не входит вовсе (своя дорожка, свой
+    // счётчик, возврат коротким отдыхом). Для траты он равен ячейке круга
+    // pact.circle: колдун всегда кастует своим кругом. У чистого колдуна
+    // это единственный источник — без этой ветки лист говорил «свободных
+    // ячеек нет» при полном треке договора.
+    const pactUsed = value.pactSlotsUsed ?? 0;
+    const pactFree = pact != null && pact.count > pactUsed && pact.circle >= level;
     // Ищем ближайший круг с непотраченной ячейкой, начиная со своего.
     let use = -1;
     for (let i = level - 1; i < slots.length; i++) {
@@ -5665,10 +5706,20 @@ function SpendAction({
         break;
       }
     }
-    if (use < 0)
+    // Основная кнопка — самый дешёвый круг; при равном круге выигрывает
+    // договор (возвращается коротким отдыхом, а обычная ячейка — долгим).
+    const usePact = pactFree && (use < 0 || pact!.circle <= use + 1);
+    if (use < 0 && !pactFree)
       return (
         <span className="muted">
-          {isArcanum ? "Арканум уже использован — вернётся долгим отдыхом." : `Свободных ячеек ${level} круга и выше нет.`}
+          {isArcanum
+            ? "Арканум уже использован — вернётся долгим отдыхом."
+            : pact != null && pact.circle >= level && !slots.some((n, i) => i >= level - 1 && n > 0)
+              ? // Чистый колдун: обычных ячеек у него нет вовсе, и говорить
+                // про их круги бессмысленно — кончился именно договор. У
+                // мультикласса ячейки есть, и там честнее общая формулировка.
+                "Ячейки договора кончились — вернутся коротким отдыхом."
+              : `Свободных ячеек ${level} круга и выше нет.`}
         </span>
       );
     // Вниз кастовать нельзя (только вверх), поэтому другие круги — тоже
@@ -5682,10 +5733,17 @@ function SpendAction({
       onQuickUpdate({ spellSlotsUsed: next });
       onDone();
     };
+    const spendPact = () => {
+      onQuickUpdate({ pactSlotsUsed: pactUsed + 1 });
+      onDone();
+    };
+    const spendPrimary = () => (usePact ? spendPact() : spend(use));
     const others: number[] = [];
     for (let i = level - 1; i < slots.length; i++) {
-      if (i !== use && (slots[i] ?? 0) > (value.spellSlotsUsed[i] ?? 0)) others.push(i);
+      if ((usePact || i !== use) && (slots[i] ?? 0) > (value.spellSlotsUsed[i] ?? 0)) others.push(i);
     }
+    // Договор во втором ряду — когда основной кнопкой стала обычная ячейка.
+    const pactOther = pactFree && !usePact;
     // Сигнал мастеру о метке/сглазе (и «вешаю», и «перевешиваю»): стол
     // устный, а кнопка — фиксация. Тихо при офлайне: игра идёт словами.
     const notifyMark = (spell: string, mode: "spend" | "move") => {
@@ -5718,7 +5776,7 @@ function SpendAction({
             concentration: markSpell,
           });
         } else {
-          spend(use);
+          spendPrimary();
           onQuickUpdate({ concentration: markSpell });
         }
       } else {
@@ -5734,9 +5792,13 @@ function SpendAction({
           type="button"
           className="primary"
           style={{ alignSelf: "flex-start" }}
-          onClick={() => spend(use)}
+          onClick={spendPrimary}
         >
-          {isArcanum ? "Использовать арканум" : `Потратить ячейку ${use + 1} круга`}
+          {isArcanum
+            ? "Использовать арканум"
+            : usePact
+              ? `Потратить ячейку договора (${pact!.circle} круг)`
+              : `Потратить ячейку ${use + 1} круга`}
         </button>
         {markSpell && characterId != null && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -5758,7 +5820,7 @@ function SpendAction({
             </button>
           </div>
         )}
-        {others.length > 0 && (
+        {(others.length > 0 || pactOther) && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <span className="muted">другой круг:</span>
             {others.map((i) => (
@@ -5766,6 +5828,11 @@ function SpendAction({
                 {i + 1}й
               </button>
             ))}
+            {pactOther && (
+              <button type="button" className="comp-mini" onClick={spendPact}>
+                договор ({pact!.circle}й)
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -5875,7 +5942,26 @@ function SpendAction({
         else rest.push(i);
       }
     }
-    if (first < 0) {
+    // Договор магии тут тоже годится: для умения важно, что ячейка есть, а
+    // не какого она круга. Кнопкой он идёт последним — круг у него высокий.
+    const pactUsed = value.pactSlotsUsed ?? 0;
+    const pactFree = pact != null && pact.count > pactUsed;
+    const spendPact = () => {
+      onQuickUpdate({ pactSlotsUsed: pactUsed + 1 });
+      onDone();
+    };
+    if (first < 0 && pactFree) {
+      blocks.push(
+        <button
+          key="slot-pact"
+          type="button"
+          style={{ alignSelf: "flex-start" }}
+          onClick={spendPact}
+        >
+          Потратить ячейку договора ({pact!.circle} круг)
+        </button>
+      );
+    } else if (first < 0) {
       blocks.push(<span key="slot-empty" className="muted">Свободных ячеек нет.</span>);
     } else {
       const spendSlot = (circle: number) => {
@@ -5889,7 +5975,7 @@ function SpendAction({
           <button type="button" style={{ alignSelf: "flex-start" }} onClick={() => spendSlot(first)}>
             Потратить ячейку {first + 1} круга
           </button>
-          {rest.length > 0 && (
+          {(rest.length > 0 || pactFree) && (
             <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <span className="muted">другой круг:</span>
               {rest.map((i) => (
@@ -5897,6 +5983,11 @@ function SpendAction({
                   {i + 1}й
                 </button>
               ))}
+              {pactFree && (
+                <button type="button" className="comp-mini" onClick={spendPact}>
+                  договор ({pact!.circle}й)
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -9334,27 +9425,14 @@ export function DndCharacterView({
             onRetry={refreshTransfers}
           />
         )}
-        {/* Левелап — всем, кто видит оборот (игрок своего, мастер любого):
-            применение идёт тем же мгновенным сохранением, что значения. */}
-        {onQuickUpdate && (
-          <div className="row">
-            <button type="button" className="comp-mini" onClick={() => setShowLevelUp(true)}>
-              Новый уровень
-            </button>
-          </div>
-        )}
-        {/* Постер — там же, где левелап: снимок персонажа для чата партии. */}
+        {/* Постер — снимок персонажа для чата партии. Левелап отсюда убран:
+            вход в него — цифра уровня в картуше на лицевой стороне. Здесь он
+            висел под отказом «оборот читает владелец персонажа», то есть
+            мастеру предлагался ровно там, где ему только что отказали. */}
         <PosterButtons
           getData={cardPosterData}
           fileBase={value.characterName.trim() || "personazh"}
         />
-        {showLevelUp && (
-          <DndLevelUpWizard
-            value={value}
-            onApply={(p) => onQuickUpdate?.(p)}
-            onClose={() => setShowLevelUp(false)}
-          />
-        )}
       </DndCardBack>
     );
   }
@@ -9430,6 +9508,26 @@ export function DndCharacterView({
     DndCharacterData,
     "personalityTraits" | "ideals" | "bonds" | "flaws"
   > | null>(null);
+  // Уход с карты закрывает правку «Досье» и «Особенностей» — и **сохраняет**
+  // набранное, а не выбрасывает. Черновики этих двух вкладок жили дольше
+  // самой вкладки: вернувшись, попадаешь сразу в форму там, где ждал показ.
+  // Просто обнулить их нельзя — они, в отличие от всего остального листа,
+  // фиксируются не на каждое нажатие, а кнопкой, и сброс молча съел бы
+  // набранный текст. Поэтому уход равен нажатию «готово»; «Отмена» остаётся
+  // на самой вкладке.
+  const prevTab = useRef(tab);
+  useEffect(() => {
+    if (prevTab.current === tab) return;
+    prevTab.current = tab;
+    if (draftFeatures) {
+      onQuickUpdate?.(draftFeatures);
+      setDraftFeatures(null);
+    }
+    if (draftDossier) {
+      onQuickUpdate?.(draftDossier);
+      setDraftDossier(null);
+    }
+  }, [tab, draftFeatures, draftDossier, onQuickUpdate]);
   // `MentionTextarea` — memo, но пока onChange создавался заново на каждый
   // рендер, мемоизация не работала вовсе: нажатие клавиши в «Идеалах»
   // перерисовывало и «Черты характера», и «Привязанности», и «Слабости».
@@ -9650,7 +9748,10 @@ export function DndCharacterView({
   const arcanumCount = arcanumCountByCircle(value.spellsByLevel);
   const magicPips = shownSlotPips.map((p, i) => (i >= 5 ? p + arcanumCount[i] : p));
   const arcanumTop = arcanumTopCircle(value.spellsByLevel);
-  const magicLevels = Math.max(shownSlotLevels, arcanumTop);
+  // Круги договора магии тоже разворачиваются: у чистого колдуна обычных
+  // ячеек нет вовсе, и без этого раздел «Магия» не показывал бы ни одной
+  // секции — заклинаниям негде было бы лежать.
+  const magicLevels = Math.max(shownSlotLevels, arcanumTop, computedSlots.pact?.circle ?? 0);
   // Подпись «Арканум» — только кругам, где ВСЕ строки арканумные: у
   // мультикласса в 6–9 могут лежать и настоящие ячейки с обычными
   // заклинаниями, и путать их с арканумом нельзя.
@@ -9970,6 +10071,7 @@ export function DndCharacterView({
                     row={openAction}
                     value={value}
                     slots={magicPips}
+                    pact={computedSlots.pact}
                     resources={allPools}
                     characterId={ownerCharacterId}
                     onQuickUpdate={onQuickUpdate}
@@ -10307,7 +10409,7 @@ export function DndCharacterView({
                     <img
                       src={portraitUrl}
                       alt=""
-                      style={{ objectPosition: portraitPosition, filter: `saturate(0.88) contrast(1.04) grayscale(${portraitDrain})` }}
+                      style={{ objectPosition: portraitPosition, filter: `var(--portrait-tone) grayscale(${portraitDrain})` }}
                       // Подписанные URL файлов живут 60 секунд: посидев на
                       // другой карте дольше, возвращаемся к протухшей ссылке.
                       // Прячем битую картинку и один раз просим свежий URL —
@@ -10349,11 +10451,28 @@ export function DndCharacterView({
                     )}
                     <div className="dnd-card-cartouche-name">{value.characterName || "Без имени"}</div>
                     <div className="dnd-card-cartouche-class">
-                      {totalLevel > 0 && (
-                        <span className="dnd-card-level" style={{ background: cardColor, color: textOnClassColor(cardColor) }}>
-                          {totalLevel}
-                        </span>
-                      )}
+                      {/* Цифра уровня — вход в визард повышения. Она уже стоит
+                          на лицевой стороне и означает ровно то, что визард
+                          меняет; отдельной кнопки для этого заводить не нужно.
+                          Раньше единственным входом был тап по неподписанному
+                          загнутому уголку — то есть повышение уровня нельзя
+                          было найти, не зная про жест. */}
+                      {totalLevel > 0 &&
+                        (onQuickUpdate ? (
+                          <button
+                            type="button"
+                            className="dnd-card-level"
+                            style={{ background: cardColor, color: textOnClassColor(cardColor) }}
+                            aria-label={`Уровень ${totalLevel} — повысить`}
+                            onClick={() => setShowLevelUp(true)}
+                          >
+                            {totalLevel}
+                          </button>
+                        ) : (
+                          <span className="dnd-card-level" style={{ background: cardColor, color: textOnClassColor(cardColor) }}>
+                            {totalLevel}
+                          </span>
+                        ))}
                       <span className="dnd-card-cartouche-classline">{classLine}</span>
                     </div>
                     {originLine && <div className="dnd-card-cartouche-origin">{originLine}</div>}
@@ -10789,8 +10908,8 @@ export function DndCharacterView({
                   }}
                   aria-label={
                     unreadTotal > 0
-                      ? `Перевернуть карту: ${unreadTotal} новых входящих`
-                      : "Перевернуть карту: входящие"
+                      ? `Перевернуть карту: входящие, передачи, постер; ${unreadTotal} новых входящих`
+                      : "Перевернуть карту: входящие, передачи, постер"
                   }
                 />
               )}
@@ -11617,6 +11736,16 @@ export function DndCharacterView({
         </div>
       </div>
     </div>
+    {/* Визард повышения уровня — на верхнем уровне листа, а не внутри
+        оборота карты: вход в него теперь цифра уровня в картуше, и открыт он
+        должен быть с любой карты, а не только пока карта перевёрнута. */}
+    {showLevelUp && onQuickUpdate && (
+      <DndLevelUpWizard
+        value={value}
+        onApply={(p) => onQuickUpdate(p)}
+        onClose={() => setShowLevelUp(false)}
+      />
+    )}
   </div>
   );
 }

@@ -2597,7 +2597,10 @@ h4 { font-size: var(--fs-h3); }
   background-size: cover;
   background-position: center;
   opacity: 0.13;
-  filter: grayscale(0.13);
+  /* Своего обесцвечивания здесь больше нет: тон даёт эталон обработки
+     (zine.css), и он выключается тумблером — а это правило не выключалось
+     ничем, то есть «не перекрашивай мои арты» на фоновом слое не работало.
+     Непрозрачность 0.13 остаётся: это композиция, а не обработка. */
   z-index: -1;
   pointer-events: none;
 }
@@ -2645,8 +2648,8 @@ h4 { font-size: var(--fs-h3); }
   background: linear-gradient(180deg, transparent 25%, color-mix(in srgb, var(--scrim) 95%, transparent) 100%);
 }
 /* Карты, P0-3: превью карты — изображение-содержимое (§1.13, §7): показывается
-   как есть, без дуотона/халфтона. Классы cover-photo/cover-halftone сюда не
-   вешаются — под [data-cover-duotone] они перекрасили бы террейн. */
+   как есть, без обработки и халфтона. Классы cover-photo/cover-halftone сюда
+   не вешаются — под [data-image-treatment] они замутили бы террейн. */
 .map-tile-art {
   position: absolute;
   inset: 0;
@@ -8341,10 +8344,12 @@ details[open] > .res-group__band .chevron-icon {
   object-fit: cover;
   border: var(--card-border-width, 1px) solid var(--line);
 }
-/* Превью подчиняется общему тумблеру «не перекрашивай мои арты» (§3): в
-   28 px полный дуотон не читается, поэтому только обесцвечивание. */
-[data-cover-duotone] .res-row__thumb {
-  filter: grayscale(0.3) contrast(1.01);
+/* Превью подчиняется общему тумблеру «не перекрашивай мои арты» (§3), но
+   берёт от эталона только ТОН: зерно с шагом 3 px на картинке 28 px — точка
+   на каждый девятый пиксель, то есть рябь, а не фактура. Порог примерно
+   64 px. */
+[data-image-treatment] .res-row__thumb {
+  filter: saturate(0.88) contrast(1.04);
 }
 /* Имя — само действие «открыть»: у ресурса это главное, и отдельной
    строкой-ссылкой «Открыть файл» под каждым названием оно разрывало

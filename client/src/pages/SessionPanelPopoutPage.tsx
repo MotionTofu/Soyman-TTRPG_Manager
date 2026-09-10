@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { onDataChangedElsewhere } from "../dataSync";
 import { SESSION_PANEL_CONTENT, SESSION_PANEL_TITLES, type SessionPanelKey } from "./sessionLivePanels";
+import "../session.css";
 import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
 
 // Rendered outside <AppShell> (see App.tsx) — no sidebar/search/audio-bar

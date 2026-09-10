@@ -458,22 +458,10 @@
     grid-template-columns: 1fr;
   }
 }
-.session-live-central-tracker {
-  display: none;
-}
-@media (max-width: 860px) {
-  .session-live-central-tracker {
-    display: block;
-  }
-}
-@media (max-width: 700px) {
-  .session-live-panels {
-    flex-direction: column;
-  }
-  .session-live-panels > .stack {
-    min-width: 0 !important;
-  }
-}
+/* Здесь стояли `.session-live-central-tracker` (вторая копия трекера в колонке —
+   убрана вместе с разметкой) и `.session-live-panels` — класса с таким именем в
+   разметке нет вовсе, ряды панелей верстаются инлайном и переносятся сами по
+   `min-width: 260px`. Оба правила ничего не делали. */
 
 /* Скрытие боковых панелей пульта — глобально, как иконки в ПОЛОТНЕ */
 body.live-hide-search .search-panel-slot,

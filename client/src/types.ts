@@ -1280,6 +1280,8 @@ export interface SessionDetail extends SessionSummary {
   main_events_visible: number;
   combat_active: number;
   combat_turn_entry_id: number | null;
+  /** Номер раунда идущего боя; 0 — боя нет. */
+  combat_round: number;
   battle_playlist_id: number | null;
   folder_path: string | null;
   campaign_payment_type: PaymentType;

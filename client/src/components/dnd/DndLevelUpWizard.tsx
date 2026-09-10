@@ -89,7 +89,11 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   const [hpMode, setHpMode] = useState<HpMode>("average");
   const [rolled, setRolled] = useState<number | null>(null);
   const [manualTotal, setManualTotal] = useState("");
-  const [misc, setMisc] = useState(value.hpMiscPerLevel ?? 0);
+  // Черновиком-строкой, а не числом: `Number(...) || 0` не давал ни очистить
+  // поле, ни начать набор с минуса — и «», и «-» на первом же нажатии
+  // превращались в 0, который тут же возвращался в поле.
+  const [miscText, setMiscText] = useState(String(value.hpMiscPerLevel ?? 0));
+  const misc = Number(miscText) || 0;
 
   const [subclassId, setSubclassId] = useState<number | null>(null);
   const [featId, setFeatId] = useState<number | null>(null);
@@ -658,8 +662,8 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                   <input
                     type="number"
                     className="wizard-level-input"
-                    value={misc}
-                    onChange={(e) => setMisc(Number(e.target.value) || 0)}
+                    value={miscText}
+                    onChange={(e) => setMiscText(e.target.value)}
                   />
                 </label>
                 <div className="stack" style={{ gap: "var(--sp-1)" }}>

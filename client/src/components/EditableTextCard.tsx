@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
+import { clearFieldDraft, loadFieldDraft, saveFieldDraft } from "../fieldDrafts";
 import {
   EntityFieldInputs,
   hasEmptyRequired,
@@ -41,6 +42,12 @@ interface Props {
   // сохранила бы прошлую версию текста.
   extraAction?: { label: string; onAct: (draft: string) => Promise<unknown> };
   inlineFooter?: ReactNode;
+  // Ключ черновика. Задан — набранное переживает уход со страницы, закрытую
+  // вкладку и перезагрузку: оно пишется в localStorage на каждое нажатие и
+  // подхватывается при возврате. Включается там, где пишут посреди игры
+  // (поля пульта), а не во всём приложении: иначе в хранилище копился бы
+  // мусор по каждой сущности сеттинга.
+  draftKey?: string;
 }
 
 export function EditableTextCard({
@@ -59,9 +66,28 @@ export function EditableTextCard({
   onSaveFields,
   extraAction,
   inlineFooter,
+  draftKey,
 }: Props) {
-  const [editMode, setEditMode] = useState(() => !value);
-  const [draft, setDraft] = useState(value);
+  // Черновик, оставшийся с прошлого захода: он и открывает карточку в правке,
+  // иначе набранный текст лежал бы невидимым под кнопкой «Редактировать».
+  const [restored] = useState<string | null>(() => {
+    if (!draftKey) return null;
+    const stored = loadFieldDraft(draftKey);
+    return stored != null && stored !== value ? stored : null;
+  });
+  const [draftRestored, setDraftRestored] = useState(restored != null);
+  const [editMode, setEditMode] = useState(() => restored != null || !value);
+  const [draftText, setDraftText] = useState(restored ?? value);
+  const draft = draftText;
+
+  // Единственная точка записи черновика: и ввод, и «Отмена», и открытие
+  // правки идут через неё, поэтому хранилище не расходится с полем.
+  function setDraft(next: string) {
+    setDraftText(next);
+    if (!draftKey) return;
+    if (next === value) clearFieldDraft(draftKey);
+    else saveFieldDraft(draftKey, next);
+  }
   const [fieldValues, setFieldValues] = useState<EntityFieldValues>(() =>
     toFieldValues(fields ?? [])
   );
@@ -81,12 +107,15 @@ export function EditableTextCard({
   });
 
   function startEdit() {
+    setDraftRestored(false);
     setDraft(value);
     setFieldValues(toFieldValues(fields ?? []));
     setEditMode(true);
   }
 
   function cancelEdit() {
+    setDraftRestored(false);
+    if (draftKey) clearFieldDraft(draftKey);
     setDraft(value);
     setFieldValues(toFieldValues(fields ?? []));
     setEditMode(false);
@@ -97,6 +126,8 @@ export function EditableTextCard({
     await onSave(draft);
     if (entityType && entityId) syncMentionLinks(entityType, entityId, value, draft);
     await extraAction.onAct(draft);
+    if (draftKey) clearFieldDraft(draftKey);
+    setDraftRestored(false);
     setEditMode(false);
   }
 
@@ -110,12 +141,19 @@ export function EditableTextCard({
     if (entityType && entityId) {
       syncMentionLinks(entityType, entityId, value, draft);
     }
+    if (draftKey) clearFieldDraft(draftKey);
+    setDraftRestored(false);
     setEditMode(false);
   }
 
   const body = (
     <>
       {help && <span className="muted">{help}</span>}
+      {draftRestored && editMode && (
+        <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
+          Черновик восстановлен — он не сохранён, пока не нажать «Сохранить».
+        </span>
+      )}
       {editMode ? (
         <>
           {fields && fields.length > 0 && (
@@ -188,7 +226,7 @@ export function EditableTextCard({
 
   if (collapsible) {
     return (
-      <details className="card" open={defaultOpen}>
+      <details className="card" open={defaultOpen || draftRestored}>
         <summary className="campaign-overview-header">{title}</summary>
         <div className="stack" style={{ marginTop: 8 }}>
           {body}
