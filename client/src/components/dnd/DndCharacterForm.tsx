@@ -166,6 +166,7 @@ import { useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { CompendiumEntryPicker } from "../MonsterTemplatePicker";
 import { classAndLevelSummary } from "./dndSummary";
+import { deriveSheet } from "@shared/dnd/derive";
 import { NavIcon } from "../NavIcons";
 
 const SPELL_LEVELS = 9;
@@ -6727,22 +6728,10 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
 // Compact GM/player summary card — same content, .card-mini layout.
 function DndCharacterViewMini({ value }: { value: DndCharacterData }) {
   const classLine = classAndLevelSummary(value.classes);
-  // Защита без доспехов идёт плюсом поверх computeArmorClass: базовая формула
-  // про умение ничего не знает, а менять её сигнатуру ради двух классов —
-  // значит трогать и существ, и шпаргалку. Бонус уже с гейтом «без доспеха».
-  const computedAc =
-    computeArmorClass(
-      abilityModifier(value.abilities.dex),
-      value.equipmentSections,
-      parseBonus(value.manualAcBonus)
-    ) +
-    unarmoredDefenseBonus(
-      value.classFeatures,
-      value.classes,
-      abilityModifier(value.abilities.wis),
-      abilityModifier(value.abilities.con),
-      value.equipmentSections
-    ).bonus;
+  // КЗ собирает общий модуль: сборка «формула + защита без доспехов» была
+  // здесь, в основном виде листа и в шпаргалках — тремя посимвольно
+  // одинаковыми копиями.
+  const computedAc = deriveSheet(value).armorClass.value;
   return (
     <div className="sb-scope">
       <div className="sb-card card-mini">
@@ -9623,17 +9612,20 @@ export function DndCharacterView({
     }
     return null;
   }
+  // Производные числа листа считает общий модуль (@shared/dnd/derive): здесь
+  // они были константами в теле компонента, вызвать их было нельзя, а бонус
+  // мастерства читался из сохранённой строки — и устаревал молча при любой
+  // правке класса или уровня.
+  const derived = deriveSheet(value);
   const spellAbilityMod = spellAbilityKey ? abilityModifier(value.abilities[spellAbilityKey]) : 0;
-  const spellProfBonus = parseBonus(value.proficiencyBonus);
-  const spellAttackBonus =
-    spellAbilityMod + spellProfBonus + parseBonus(value.spellAttackMisc) - value.exhaustion * 2;
-  const spellDc = 8 + spellAbilityMod + spellProfBonus + parseBonus(value.spellDcMisc);
-  const perceptionProf = value.skillProfs["Perception"] ?? 0;
-  const passivePerception =
-    10 +
-    abilityModifier(value.abilities.wis) +
-    parseBonus(value.proficiencyBonus) * perceptionProf -
-    value.exhaustion * 2;
+  const spellProfBonus = derived.proficiencyBonus.value;
+  const spellAttackBonus = derived.spellcasting
+    ? derived.spellcasting.attackBonus.value
+    : spellAbilityMod + spellProfBonus + parseBonus(value.spellAttackMisc) - value.exhaustion * 2;
+  const spellDc = derived.spellcasting
+    ? derived.spellcasting.saveDc.value
+    : 8 + spellAbilityMod + spellProfBonus + parseBonus(value.spellDcMisc);
+  const passivePerception = derived.passivePerception.value;
   // Картуш на портрете: то же, что в шапке листа, но своими строками и без
   // ссылок — на карте это подпись под именем, а не список источников.
   const totalLevel = value.classes.reduce((sum, c) => sum + (c.level || 0), 0);
@@ -9781,12 +9773,9 @@ export function DndCharacterView({
     abilityModifier(value.abilities.con),
     value.equipmentSections
   );
-  const computedAc =
-    computeArmorClass(
-      abilityModifier(value.abilities.dex),
-      value.equipmentSections,
-      parseBonus(value.manualAcBonus)
-    ) + unarmored.bonus;
+  // Число берём из общего модуля; `unarmored` рядом остаётся ради подписи
+  // «откуда прибавка» — это уже разметка, а не расчёт.
+  const computedAc = derived.armorClass.value;
   // Подпись под костью КЗ — откуда прибавка, если защита без доспехов активна.
   const unarmoredHint = unarmored.source;
   return (
@@ -10352,7 +10341,7 @@ export function DndCharacterView({
             {editFromUrl && onQuickUpdate ? (
               <AbilitySavesSkillsEdit
                 abilities={value.abilities}
-                proficiencyBonus={value.proficiencyBonus}
+                proficiencyBonus={formatModifier(derived.proficiencyBonus.value)}
                 savingThrowProfs={value.savingThrowProfs}
                 skillProfs={value.skillProfs}
                 classSkillPool={classSkillPool(value.classes)}
@@ -10367,7 +10356,7 @@ export function DndCharacterView({
                 accentColor={cardColor}
                 exhaustionPenalty={exhaustionPenalty}
                 abilities={value.abilities}
-                proficiencyBonus={value.proficiencyBonus}
+                proficiencyBonus={formatModifier(derived.proficiencyBonus.value)}
                 savingThrowProfs={value.savingThrowProfs}
                 skillProfs={value.skillProfs}
                 classSkillPool={classSkillPool(value.classes)}
@@ -10963,7 +10952,7 @@ export function DndCharacterView({
               exhaustionPenalty={exhaustionPenalty}
               highlight={highlight}
               abilities={value.abilities}
-              proficiencyBonus={value.proficiencyBonus}
+              proficiencyBonus={formatModifier(derived.proficiencyBonus.value)}
               skillProfs={value.skillProfs}
               classSkillPool={classSkillPool(value.classes)}
               backgroundSkillNames={value.backgroundSkillNames}

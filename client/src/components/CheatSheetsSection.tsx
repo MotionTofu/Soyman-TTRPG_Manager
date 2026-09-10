@@ -4,6 +4,8 @@ import { api } from "../api/client";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { abilityModifier, parseBonus } from "./dnd/AbilityScores";
 import { SKILL_CATALOG } from "./dnd/skillCatalog";
+import { deriveSheet } from "@shared/dnd/derive";
+import { normalizeDndCharacter } from "@shared/dnd/normalize";
 import { computeArmorClass, unarmoredDefenseBonus } from "./dnd/armorClass";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -130,30 +132,18 @@ async function loadCharacterCards(campaignId: number): Promise<CharacterCardData
         if (!row) return null;
         let data: DndCharacterData;
         try {
-          data = JSON.parse(row.content);
+          data = normalizeDndCharacter(JSON.parse(row.content));
         } catch {
           return null;
         }
-      const dexMod = abilityModifier(data.abilities.dex);
-      const ac =
-        computeArmorClass(dexMod, data.equipmentSections, parseBonus(data.manualAcBonus)) +
-        unarmoredDefenseBonus(
-          data.classFeatures ?? [],
-          data.classes ?? [],
-          abilityModifier(data.abilities.wis),
-          abilityModifier(data.abilities.con),
-          data.equipmentSections
-        ).bonus;
-      const profBonus = parseBonus(data.proficiencyBonus);
-      const wisMod = abilityModifier(data.abilities.wis);
-      // Ключ владения — английский `original` (см. dnd/skillCatalog.ts).
-      // Шпаргалка читает сохранённый JSON напрямую, мимо
-      // `normalizeDndCharacter`, поэтому сводит имя сама: лист, ещё не
-      // пересохранённый после перехода на новый ключ, иначе показал бы
-      // пассивное восприятие без учёта владения.
-      const perceptionLevel =
-        data.skillProfs["Perception"] ?? data.skillProfs["Внимание/восприятие"] ?? 0;
-      const passivePerception = 10 + wisMod + profBonus * perceptionLevel;
+      // Все производные числа — из общего модуля. Здесь лежала своя сборка
+      // КЗ (посимвольно та же, что в листе, третьей копией) и свой расчёт
+      // пассивного восприятия — БЕЗ штрафа истощения, в отличие от листа.
+      // Заодно ушёл разбор JSON мимо нормализации: он требовал руками сводить
+      // старый русский ключ навыка, и это было записано прямо в комментарии.
+      const sheet = deriveSheet(data);
+      const ac = sheet.armorClass.value;
+      const passivePerception = sheet.passivePerception.value;
       const { className, subclassName } = classAndSubclassSummary(data.classes);
       const skills = SKILL_CATALOG.filter(
         (def) => (data.skillProfs[def.original] ?? data.skillProfs[def.name] ?? 0) > 0

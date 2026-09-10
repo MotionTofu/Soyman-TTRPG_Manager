@@ -25,6 +25,7 @@
 import type {
   DndAbilityKey,
   DndCharacterData,
+  DndEquipmentSection,
   DndSkillProfLevel,
 } from "./types";
 import {
@@ -34,7 +35,7 @@ import {
   totalCharacterLevel,
 } from "./abilities";
 import { SKILL_CATALOG } from "./skillCatalog";
-import { computeArmorClass, unarmoredDefenseBonus } from "./armorClass";
+import { computeArmorClass, equippedItems, unarmoredDefenseBonus } from "./armorClass";
 import { carryCapacityLb } from "./equipment";
 
 /** Одно слагаемое производной величины. */
@@ -150,6 +151,33 @@ function maxHitPoints(c: DndCharacterData, conMod: number, level: number): Deriv
   return sum(parts, { min: 1 });
 }
 
+/**
+ * КЗ: вычисленное — или сохранённое, если вычислять не из чего.
+ *
+ * У листа, импортированного из Long Story Short, снаряжение не отмечено
+ * надетым, и вычисление честно даёт голые 10 — при том что импорт сохранил
+ * настоящие 15 в свободном поле `armorClass`. Показать 10 значит молча
+ * ухудшить то, что Мастер видит в списке персонажей, ради согласованности.
+ * Поэтому здесь так же, как с хитами: отдаём сохранённое и говорим, почему
+ * оно не пересчитано. Корень (импорт должен отмечать снаряжение надетым)
+ * чинится отдельно.
+ */
+function armorClassOf(
+  c: DndCharacterData,
+  sections: DndEquipmentSection[],
+  computedParts: Part[]
+): Derived {
+  const computed = sum(computedParts);
+  const stored = Number.parseInt((c.armorClass ?? "").trim(), 10);
+  const nothingWorn = equippedItems(sections).length === 0;
+  if (nothingWorn && Number.isFinite(stored) && stored !== computed.value) {
+    return sum([{ label: "Сохранено на листе", value: stored }], {
+      stale: "В инвентаре ничего не надето — вычислять не из чего, показано сохранённое значение",
+    });
+  }
+  return computed;
+}
+
 /** Пешая скорость: структура скоростей главнее legacy-строки. */
 function walkSpeed(c: DndCharacterData, exhaustion: number): Derived {
   const base = c.speeds?.walk ?? 0;
@@ -214,6 +242,7 @@ export function deriveSheet(c: DndCharacterData): Sheet {
   );
   const acParts: Part[] = [{ label: "Доспех и Ловкость", value: acBase }];
   if (unarmored.bonus) acParts.push({ label: unarmored.source ?? "Защита без доспехов", value: unarmored.bonus });
+  const armorClass = armorClassOf(c, sections, acParts);
 
   // Пассивное восприятие: 10 + навык. Штраф истощения сюда входит, потому что
   // пассивное значение — это тот же бросок, только без кубика. В шпаргалках
@@ -247,7 +276,7 @@ export function deriveSheet(c: DndCharacterData): Sheet {
     abilityModifiers: mods,
     saves,
     skills,
-    armorClass: sum(acParts),
+    armorClass,
     maxHitPoints: maxHitPoints(c, mods.con.value, level),
     passivePerception: sum(passiveParts),
     exhaustionPenalty: { value: penalty, parts: [{ label: `Истощение ${exhaustion}`, value: penalty }] },

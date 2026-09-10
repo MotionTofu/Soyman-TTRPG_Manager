@@ -176,10 +176,31 @@ describe("класс защиты", () => {
     expect(deriveSheet(c).armorClass.value).toBe(10 + 2 + 2 + 3);
   });
 
-  it("сохранённое поле armorClass не читается", () => {
-    // Оно свободный текст, его пишет импорт, и оно устаревает молча.
-    const c = character({ armorClass: "99", abilities: { str: 10, dex: 12, con: 10, int: 10, wis: 10, cha: 10 } });
-    expect(deriveSheet(c).armorClass.value).toBe(11);
+  it("сохранённое поле armorClass не читается, пока есть что надето", () => {
+    const c = character({
+      armorClass: "99",
+      abilities: { str: 10, dex: 12, con: 10, int: 10, wis: 10, cha: 10 },
+      equipmentSections: [{ name: "Общее", items: [item({ name: "Кожаный", armorType: "Лёгкий", ac: "11" })] }],
+    });
+    expect(deriveSheet(c).armorClass.value).toBe(11 + 1);
+    expect(deriveSheet(c).armorClass.stale).toBeUndefined();
+  });
+
+  it("если не надето ничего, а сохранённое есть — показывается сохранённое", () => {
+    // Лист, импортированный из Long Story Short: снаряжение не отмечено
+    // надетым, и вычисление даёт голые 10 при настоящих 15. Показывать 10
+    // значит молча ухудшить то, что Мастер видит.
+    const c = character({ armorClass: "15", abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } });
+    const ac = deriveSheet(c).armorClass;
+    expect(ac.value).toBe(15);
+    expect(ac.stale).toBeTruthy();
+  });
+
+  it("пустое сохранённое поле не мешает вычислению", () => {
+    const c = character({ armorClass: "", abilities: { str: 10, dex: 16, con: 10, int: 10, wis: 10, cha: 10 } });
+    const ac = deriveSheet(c).armorClass;
+    expect(ac.value).toBe(13);
+    expect(ac.stale).toBeUndefined();
   });
 });
 

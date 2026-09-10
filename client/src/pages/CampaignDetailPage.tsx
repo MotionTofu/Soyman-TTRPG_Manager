@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { deriveSheet } from "@shared/dnd/derive";
+import { normalizeDndCharacter } from "@shared/dnd/normalize";
 import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
@@ -1673,9 +1675,20 @@ function CampaignSquadSummary({ characters }: { characters: Character[] }) {
           const sbs = await api.get<{ content: string; format: string }[]>(`/statblocks?owner_type=character&owner_id=${c.id}`);
           const dnd = sbs.find((s) => s.format === "dnd_character");
           if (!dnd) { out.push({ id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" }); continue; }
-          const data = JSON.parse(dnd.content || "{}") as { armorClass?: string; hitPointMax?: string; speed?: string; speeds?: { walk?: number|null }; classes?: { level: number }[] };
-          const lvl = (data.classes ?? []).reduce((s, cl) => s + (cl.level || 0), 0) || "—";
-          out.push({ id: c.id, name: c.character_name, level: String(lvl), ac: data.armorClass?.trim() || "—", hp: data.hitPointMax?.trim() || "—", speed: data.speed?.trim() || (data.speeds?.walk ? String(data.speeds.walk) : "—") });
+          // «Сводка отряда» читала сохранённые поля листа как есть — а они
+          // свободный текст, который пишет импорт и который устаревает при
+          // любой правке класса или снаряжения. Теперь числа те же, что на
+          // самом чарнике: один модуль на оба экрана.
+          const sheet = deriveSheet(normalizeDndCharacter(JSON.parse(dnd.content || "{}")));
+          const lvl = sheet.level.value || "—";
+          out.push({
+            id: c.id,
+            name: c.character_name,
+            level: String(lvl),
+            ac: String(sheet.armorClass.value),
+            hp: sheet.maxHitPoints.value ? String(sheet.maxHitPoints.value) : "—",
+            speed: sheet.walkSpeed.value ? String(sheet.walkSpeed.value) : "—",
+          });
         } catch { out.push({ id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" }); }
       }
       if (!cancelled) setRows(out);
