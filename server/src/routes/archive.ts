@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { sweepOrphans } from "../services/orphans";
+import {
+  ARCHIVE_TABLES as REGISTRY_ARCHIVE_TABLES,
+  ARCHIVE_KEYS as REGISTRY_ARCHIVE_KEYS,
+} from "../db/entityKinds";
 import { deleteVaultFolder } from "../services/filesystem";
 
 export const archiveRouter = Router();
@@ -366,27 +370,11 @@ archiveRouter.get("/:type/:id/impact", (req, res) => {
 // fixed whitelist (never from the request), so `${table}` is injection-safe.
 // FK cascades (schema.sql) drop child rows; polymorphic satellites
 // (statblocks/gallery_images/important_dates) are cleaned up separately.
-const ARCHIVE_TABLES: Record<string, string> = {
-  campaign: "campaigns",
-  system: "systems",
-  setting: "settings",
-  player: "players",
-  character: "characters",
-  session: "sessions",
-  resource: "resources",
-  mastering: "mastering_notes",
-  location: "setting_locations",
-  being: "setting_beings",
-  artifact: "artifacts",
-  community: "setting_communities",
-  canvas_board: "canvas_boards",
-};
-
-// Столбец, по которому тип адресуется, когда это не `id`. Свободная доска
-// везде — и в маршрутах Полотна, и в ссылке `?free_id=` — адресуется своим
-// `scope_id`; заводить в архиве второй способ назвать ту же доску значит
-// гарантировать путаницу. Как и имена таблиц, берётся из белого списка.
-const ARCHIVE_KEYS: Record<string, string> = { canvas_board: "scope_id" };
+// Что архивируется и чем адресуется — фасеты `archivable`/`archiveKey` в
+// реестре видов. Имена таблиц по-прежнему приходят фиксированными литералами
+// (никогда из запроса), поэтому `${table}` безопасен для подстановки.
+const ARCHIVE_TABLES = REGISTRY_ARCHIVE_TABLES;
+const ARCHIVE_KEYS = REGISTRY_ARCHIVE_KEYS;
 
 archiveRouter.delete("/:type/:id", (req, res) => {
   const table = ARCHIVE_TABLES[req.params.type];

@@ -16,7 +16,10 @@ const ENTITY_TABLES: Record<string, { table: string; nameCol: string }> = {
   artifact: { table: "artifacts", nameCol: "name" },
   setting: { table: "settings", nameCol: "name" },
   campaign: { table: "campaigns", nameCol: "name" },
-  setting_event: { table: "setting_events", nameCol: "title" },
+  // Таблицы `setting_events` не существует — событие хроники живёт в
+  // `setting_calendar_events`. С опечаткой имя события в связях не
+  // разрешалось никогда: `resolveName` молча возвращал null.
+  setting_event: { table: "setting_calendar_events", nameCol: "title" },
   resource: { table: "resources", nameCol: "name" },
   mastering: { table: "mastering_notes", nameCol: "title" },
   scene: { table: "story_scenes", nameCol: "name" },

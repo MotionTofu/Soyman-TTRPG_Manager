@@ -11,7 +11,7 @@
     "build": "npm run build:server && npm run build:client",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3 --module-dir=server",
     "restore:native": "cd server/node_modules/better-sqlite3 && node ../prebuild-install/bin.js",
-    "build-seed": "node scripts/build-seed.js",
+    "build-seed": "cd server && npx tsx src/scripts/buildSeed.ts",
     "licenses": "node scripts/collect-licenses.js",
     "dist": "npm run build && npm run rebuild:native && electron-builder && npm run restore:native",
     "dist:empty": "npm run build && npm run rebuild:native && electron-builder --config electron-builder.empty.json && npm run restore:native",

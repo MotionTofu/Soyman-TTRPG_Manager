@@ -338,9 +338,9 @@ settingsRouter.get("/:id/important-dates", (req, res) => {
        WHERE l.setting_id = ? AND l.archived_at IS NULL
        UNION ALL
        SELECT d.*, NULL as owner_name FROM important_dates d
-       WHERE d.owner_type = 'setting' AND d.owner_id = 0`
+       WHERE d.owner_type = 'setting' AND d.owner_id = ?`
     )
-    .all(req.params.id, req.params.id, req.params.id);
+    .all(req.params.id, req.params.id, req.params.id, req.params.id);
   res.json(rows);
 });
 
@@ -350,7 +350,11 @@ settingsRouter.post("/:id/important-dates", (req, res) => {
     return res.status(400).json({ error: "title and day are required" });
   }
   const safeOwnerType = owner_type || "setting";
-  const safeOwnerId = owner_type === "setting" ? 0 : (owner_id || 0);
+  // Общесеттинговая дата принадлежит ЭТОМУ сеттингу, а не «сеттингу вообще».
+  // Раньше здесь стоял ноль, и выборка выше искала тоже по нулю — то есть
+  // праздники одного мира показывались в календаре всех остальных, а уборка
+  // сирот снесла бы их как принадлежащие несуществующему сеттингу №0.
+  const safeOwnerId = safeOwnerType === "setting" ? Number(req.params.id) : (owner_id || 0);
   const info = db.prepare(
     `INSERT INTO important_dates (owner_type, owner_id, title, description, date_type, color, recurrence, year, month, day, custom_rule)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`

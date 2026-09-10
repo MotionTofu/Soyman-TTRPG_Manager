@@ -4,7 +4,13 @@ import path from "path";
 import { db } from "../db/db";
 import { ensureSubfolder, sanitizeName, vaultAbs, VAULT_ROOT, vaultRel } from "../services/filesystem";
 import { findMissingFiles, relinkResource } from "../services/fileHealth";
-import { sweepOrphans, getLastOrphanBackup, restoreLastOrphanBackup } from "../services/orphans";
+import { kindOf } from "../db/entityKinds";
+import {
+  sweepOrphans,
+  getLastOrphanBackup,
+  restoreLastOrphanBackup,
+  countOrphans as countOrphansFromRegistry,
+} from "../services/orphans";
 import { openInFileExplorer } from "../services/filesystem";
 import rateLimit from "express-rate-limit";
 import { MENTIONABLE, mentionTextColumns, scanMentions, exists, rewriteAllMentions, idOfUid, normUid, rewriteMentions, prefixOf, sourceCodeOf, formatRef, type Mention, type RefMention, type LegacyMention } from "../services/mentions";
@@ -86,61 +92,11 @@ function scanBrokenPaths(): { entries: { table: string; column: string; id: numb
   return { entries: out, total, truncated: total > out.length };
 }
 
+// Уборка сирот и её подсчёт — одно и то же правило, поэтому карты видов
+// больше не дублируются здесь: раньше в этой функции лежали побайтовые копии
+// четырёх карт из services/orphans.ts, и они разошлись.
 function countOrphans(): Record<string, number> {
-  const counts: Record<string, number> = {};
-  const OWNER_TABLE: Record<string, string> = {
-    character: "characters",
-    being: "setting_beings",
-    community: "setting_communities",
-    location: "setting_locations",
-    compendium_entry: "compendium_entries",
-  };
-  const SATELLITES: { table: string; ownerTypes: string[] }[] = [
-    { table: "statblocks", ownerTypes: ["character", "being", "compendium_entry"] },
-    { table: "gallery_images", ownerTypes: ["character", "being"] },
-    { table: "important_dates", ownerTypes: ["being", "community", "location", "character"] },
-  ];
-  for (const { table, ownerTypes } of SATELLITES) {
-    for (const ownerType of ownerTypes) {
-      const ownerTable = OWNER_TABLE[ownerType];
-      try {
-        const row = db.prepare(`SELECT count(*) as c FROM ${table} WHERE owner_type = ? AND owner_id NOT IN (SELECT id FROM ${ownerTable})`).get(ownerType) as { c: number };
-        if (row.c > 0) counts[`${table}:${ownerType}`] = row.c;
-      } catch {}
-    }
-  }
-  const LINK_ENDPOINT_TABLE: Record<string, string> = {
-    campaign: "campaigns", setting: "settings", player: "players", character: "characters",
-    location: "setting_locations", being: "setting_beings", artifact: "artifacts",
-    community: "setting_communities", resource: "resources", mastering: "mastering_notes",
-    session: "sessions", compendium_entry: "compendium_entries", playlist: "playlists",
-    scene: "story_scenes", adventure: "story_arcs", bundle: "canvas_bundles", sound_set: "sound_sets",
-  };
-  for (const [type, table] of Object.entries(LINK_ENDPOINT_TABLE)) {
-    try {
-      const c1 = (db.prepare(`SELECT count(*) as c FROM generic_links WHERE from_type = ? AND from_id NOT IN (SELECT id FROM ${table})`).get(type) as { c: number }).c;
-      const c2 = (db.prepare(`SELECT count(*) as c FROM generic_links WHERE to_type = ? AND to_id NOT IN (SELECT id FROM ${table})`).get(type) as { c: number }).c;
-      if (c1) counts[`generic_links:from:${type}`] = c1;
-      if (c2) counts[`generic_links:to:${type}`] = c2;
-    } catch {}
-  }
-  const RELATION_ENDPOINT_TABLE: Record<string, string> = {
-    being: "setting_beings", character: "characters", community: "setting_communities",
-    compendium_entry: "compendium_entries", location: "setting_locations", artifact: "artifacts",
-  };
-  for (const [type, table] of Object.entries(RELATION_ENDPOINT_TABLE)) {
-    try {
-      const c1 = (db.prepare(`SELECT count(*) as c FROM entity_relations WHERE from_type = ? AND from_id NOT IN (SELECT id FROM ${table})`).get(type) as { c: number }).c;
-      const c2 = (db.prepare(`SELECT count(*) as c FROM entity_relations WHERE to_type = ? AND to_id NOT IN (SELECT id FROM ${table})`).get(type) as { c: number }).c;
-      if (c1) counts[`entity_relations:from:${type}`] = c1;
-      if (c2) counts[`entity_relations:to:${type}`] = c2;
-    } catch {}
-  }
-  try {
-    const c = (db.prepare(`SELECT count(*) as c FROM canvas_boards WHERE scope_type = 'arc' AND scope_id NOT IN (SELECT id FROM story_arcs)`).get() as { c: number }).c;
-    if (c) counts["canvas_boards:arc"] = c;
-  } catch {}
-  return counts;
+  return countOrphansFromRegistry();
 }
 
 function seqDrift(): { table: string; seq: number; maxId: number | null; drift: number }[] {
@@ -318,17 +274,15 @@ function resolveHost(table: string, id: number): { route: string | null; label: 
     if (table === "statblocks" || table === "gallery_images" || table === "important_dates") {
       const row = db.prepare(`SELECT owner_type, owner_id FROM ${table} WHERE id = ?`).get(id) as { owner_type: string; owner_id: number } | undefined;
       if (row?.owner_type && row.owner_id) {
-        const prefixMap: Record<string, string> = { character: "/characters", being: "/beings", community: "/communities", location: "/locations", compendium_entry: "/compendium" };
-        const routePrefix = prefixMap[row.owner_type];
-        if (routePrefix) {
-          const ownerTableMap: Record<string, string> = { character: "characters", being: "setting_beings", community: "setting_communities", location: "setting_locations", compendium_entry: "compendium_entries" };
-          const ownerTable = ownerTableMap[row.owner_type];
+        // Куда ведёт владелец спутника и как он называется — знает реестр
+        // видов; здесь была пятая и шестая копии тех же карт.
+        const owner = kindOf(row.owner_type);
+        if (owner?.detailPrefix) {
           let lb: string | null = null;
-          if (ownerTable) {
-            const col = row.owner_type === "character" ? "character_name" : "name";
-            try { lb = (db.prepare(`SELECT ${col} as name FROM ${ownerTable} WHERE id = ?`).get(row.owner_id) as { name: string } | undefined)?.name ?? null; } catch {}
+          if (owner.nameCol) {
+            try { lb = (db.prepare(`SELECT ${owner.nameCol} as name FROM ${owner.table} WHERE id = ?`).get(row.owner_id) as { name: string } | undefined)?.name ?? null; } catch {}
           }
-          return { route: `${routePrefix}/${row.owner_id}`, label: lb ?? `${row.owner_type} #${row.owner_id}` };
+          return { route: `${owner.detailPrefix}/${row.owner_id}`, label: lb ?? `${row.owner_type} #${row.owner_id}` };
         }
       }
     }

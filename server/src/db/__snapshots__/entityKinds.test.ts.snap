@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`реестр видов сущностей согласован со схемой > каждая полиморфная пара *_type/*_id в базе кем-то обслуживается 1`] = `
+[
+  "archived_files.original_owner_type",
+  "artifacts.owner_type",
+  "campaign_setting_entities.entity_type",
+  "canvas_nodes.node_type",
+  "gallery_image_undo.owner_type",
+  "gm_reminders.target_type",
+  "import_records.entity_type",
+  "initiative_entries.entity_type",
+  "location_pins.target_type",
+  "map_bindings.target_type",
+  "player_visibility_grants.target_type",
+  "resource_setting_links.owner_type",
+  "scene_hint_dismissals.entity_type",
+  "setting_hint_mutes.entity_type",
+  "story_check_outcomes.target_type",
+]
+`;

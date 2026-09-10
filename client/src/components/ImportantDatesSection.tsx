@@ -182,7 +182,9 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
       day: Number(draft.day),
       custom_rule: draft.recurrence === "custom" ? JSON.stringify(draft.custom_rule) : "",
       owner_type: draft.owner_type || "setting",
-      owner_id: draft.owner_type === "setting" ? 0 : draft.owner_id,
+      // Дата «всего сеттинга» принадлежит текущему сеттингу, а не нулю: с нулём
+      // она попадала в календарь каждого мира сразу.
+      owner_id: (draft.owner_type || "setting") === "setting" ? settingId : draft.owner_id,
     };
     if (editingId) {
       await api.put(`/settings/important-dates/${editingId}`, payload);
