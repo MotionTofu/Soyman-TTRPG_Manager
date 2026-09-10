@@ -8,4 +8,6 @@ export * from "./dnd/skillCatalog";
 export * from "./dnd/effects";
 export * from "./dnd/creature";
 export * from "./dnd/equipment";
+export * from "./dnd/armorClass";
+export * from "./dnd/derive";
 export * from "./dnd/normalize";
