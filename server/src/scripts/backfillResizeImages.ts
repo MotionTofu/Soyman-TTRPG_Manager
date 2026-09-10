@@ -8,7 +8,10 @@ import fs from "fs";
 import sharp from "sharp";
 import { applyActiveStorageEnv } from "../services/storages";
 applyActiveStorageEnv();
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 import { IMAGE_SIZE_PRESETS, resizeImageBuffer, type ImageSizePreset } from "../services/imageResize";
 
 interface Target {

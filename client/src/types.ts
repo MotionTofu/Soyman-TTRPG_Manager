@@ -1081,6 +1081,8 @@ export interface StoryArc {
   // The setting's single auto-created "Сцены вне приключений" bucket: can't
   // be renamed or archived.
   is_default: number;
+  /** Избранное: такие приключения идут первыми в списке сеттинга. */
+  is_favorite: number;
   position: number;
   /** Сцены дуги вместе со сценами её глав. */
   scene_count: number;
@@ -1154,6 +1156,8 @@ export interface StoryArcDetail extends StoryArc {
   secrets: StorySecret[];
   rewards: (SceneReward & { scene_name: string | null; arc_id: number | null })[];
   cast: CastMember[];
+  /** Ключевые и влиятельные НПЦ из состава приключения — для превью в списке. */
+  key_npcs: { id: number; name: string; category: string }[];
 }
 
 export interface StoryScene {

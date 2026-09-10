@@ -6,7 +6,10 @@
 //
 // Пишет в базу, поэтому запускать только на отдельной папке, не на рабочей.
 
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 import { validateSystemImport } from "../import/systemValidate";
 import { applySystemImport, knownSystemKeys, rollbackSystemBatch } from "../import/systemApply";
 

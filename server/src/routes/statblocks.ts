@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import { db } from "../db/db";
+import { mirrorSheetRollToQueue } from "../services/initiativeSync";
 import { parseLongStoryShort } from "../services/lssImport";
 import { broadcastCharacterUpdate } from "../services/realtime";
 import { syncCreatureDataFromStatblock } from "../services/monsterSummary";
@@ -316,7 +317,11 @@ statblocksRouter.put("/:id", (req, res) => {
     res.status(404).json({ error: "Статблок не найден" });
     return;
   }
-  if (updated.owner_type === "character") broadcastCharacterUpdate(updated.owner_id);
+  if (updated.owner_type === "character") {
+    broadcastCharacterUpdate(updated.owner_id);
+    // Брошенная инициатива на листе — зеркалом в очередь боя Мастера.
+    if (updated.format === "dnd_character") mirrorSheetRollToQueue(updated.owner_id);
+  }
   // Правка dnd-статблока монстра синхронизируется со сводкой записи — новое
   // значение КО/размера видно в разделе сразу, без переимпорта.
   if (updated.owner_type === "compendium_entry" && updated.format === "dnd_creature") {

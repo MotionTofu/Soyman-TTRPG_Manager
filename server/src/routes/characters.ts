@@ -5,6 +5,7 @@ import fs from "fs";
 import { db } from "../db/db";
 import { characterFolder, ensureSubfolder, toFileUrl, vaultAbs, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 import { broadcastCharacterUpdate } from "../services/realtime";
+import { queueStanding, setCharacterRoll } from "../services/initiativeSync";
 
 export const charactersRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -155,6 +156,30 @@ charactersRouter.delete("/important-dates/:dateId", (req, res) => {
 // 2026-09-04). Адресат именно персонаж, а не игрок: у игрока их бывает
 // несколько, и «твой амулет теплеет» принадлежит одному из них. Мастер
 // пишет и удаляет, прочтение ставит сам игрок (см. player.ts).
+// Своя инициатива и своё место в очереди — для строки-напоминания на листе.
+//
+// Живёт здесь, а не в `/api/player/*`, потому что лист персонажа один на две
+// роли: Мастер открывает тот же чарник. `/characters/:id` игроку уже разрешён
+// с проверкой владения (`services/playerAccess.ts`), так что отдельного права
+// заводить не нужно.
+charactersRouter.get("/:id/initiative", (req, res) => {
+  res.json(queueStanding(Number(req.params.id)));
+});
+
+// Игрок отправил бросок (или сбросил его). Пишется в лист, зеркалится в
+// очередь — см. `services/initiativeSync.ts`. Тем же маршрутом пользуется
+// Мастер, открывший чужой чарник: лист один на две роли.
+charactersRouter.put("/:id/initiative", (req, res) => {
+  const { initiative } = req.body as { initiative?: number | null };
+  // `null` — сброс. Ноль сбросом не является: инициатива 0 законна, и проверка
+  // на ложность съела бы её вместе с «не бросал».
+  if (initiative !== null && (typeof initiative !== "number" || !Number.isFinite(initiative))) {
+    return res.status(400).json({ error: "initiative должен быть числом или null" });
+  }
+  setCharacterRoll(Number(req.params.id), initiative);
+  res.json(queueStanding(Number(req.params.id)));
+});
+
 charactersRouter.get("/:id/reminders", (req, res) => {
   const rows = db
     .prepare(

@@ -241,6 +241,9 @@ function AdventureBlock({
               <button className="primary" onClick={startEdit}>
                 Редактировать
               </button>
+              <Link to={`/adventures/${arc.id}?campaign=${campaignId}`}>
+                Открыть полностью →
+              </Link>
               {arc.is_override && <button onClick={revert}>Вернуть как в сеттинге</button>}
               <button onClick={() => onDetach(arc)}>
                 Убрать из кампании

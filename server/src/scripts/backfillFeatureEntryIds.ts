@@ -11,7 +11,10 @@
 // имена умений уникальны. Умения, вписанные руками (без sourceParentId),
 // не трогаем — им не на что ссылаться.
 
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 
 const APPLY = process.argv.includes("--apply");
 

@@ -1,13 +1,9 @@
 // Круг «выгрузка → разворот» для весов локаций (план «Зоны локаций»,
 // этап 9): role, наполнение и origin едут в файле и пересчитываются.
-// Временная база И временное хранилище (DB_DIR и VAULT_ROOT выставляются ДО
-// импорта модулей — у них побочный эффект открытия базы): живая база и
-// живое хранилище не затрагиваются никак.
+// Временную базу И временное хранилище заводит общий для всех тестов
+// src/test/setupTempDb.ts: живая база и живое хранилище не затрагиваются.
 
 import { describe, it, expect, beforeAll } from "vitest";
-import fs from "fs";
-import os from "os";
-import path from "path";
 
 let db: {
   prepare: (sql: string) => {
@@ -33,9 +29,6 @@ let srcSettingId = 0;
 let oldRoomId = 0;
 
 beforeAll(async () => {
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "zones-roundtrip-"));
-  process.env.DB_DIR = path.join(tmpRoot, "db");
-  process.env.VAULT_ROOT = path.join(tmpRoot, "vault");
   ({ db } = await import("../db/db"));
   ({ buildSettingExportData, importSettingExport, updateSettingFromExport } =
     await import("./settings"));

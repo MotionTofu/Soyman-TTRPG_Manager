@@ -486,6 +486,22 @@ storyRouter.get("/arcs/:id", (req, res) => {
   ];
 
   const overrides = campaignId != null ? arcOverrideMap(campaignId, arc.setting_id) : null;
+  const cast = collectCast(arc.id, sceneIds);
+  // Ключевые и влиятельные НПЦ состава — для превью приключения в списке.
+  // Имена уже посчитаны в cast, здесь только фильтр по категории.
+  const beingIds = cast.filter((c) => c.type === "being").map((c) => c.id);
+  const key_npcs =
+    beingIds.length > 0
+      ? (db
+          .prepare(
+            `SELECT id, name, category FROM setting_beings
+             WHERE setting_id = ? AND archived_at IS NULL
+               AND category IN ('key_figure', 'influential')
+               AND id IN (${beingIds.map(() => "?").join(",")})
+             ORDER BY name`
+          )
+          .all(arc.setting_id, ...beingIds) as unknown[])
+      : [];
   res.json({
     ...applyArcOverride(arc as unknown as Record<string, unknown>, overrides?.get(arc.id)),
     chapters: chapters.map((c) =>
@@ -495,7 +511,8 @@ storyRouter.get("/arcs/:id", (req, res) => {
     milestones,
     secrets,
     rewards,
-    cast: collectCast(arc.id, sceneIds),
+    cast,
+    key_npcs,
   });
 });
 
@@ -683,6 +700,32 @@ storyRouter.delete("/arcs/:id", (req, res) => {
 storyRouter.put("/arcs/:id/restore", (req, res) => {
   db.prepare("UPDATE story_arcs SET archived_at = NULL WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// Избранное приключения — ось сортировки списка сеттинга (избранное первым,
+// дальше по алфавиту). Живёт на оригинале сеттинга: копии кампаний сюда не
+// допускаются, это не тексты.
+storyRouter.put("/arcs/:id/favorite", (req, res) => {
+  const favorite = req.body?.favorite ? 1 : 0;
+  db.prepare("UPDATE story_arcs SET is_favorite = ? WHERE id = ? AND campaign_id IS NULL").run(
+    favorite,
+    req.params.id
+  );
+  res.json({ ok: true, is_favorite: favorite });
+});
+
+// Кампании, в которые привязано приключение — для превью в списке сеттинга
+// и строки «Используется в кампаниях» в профиле.
+storyRouter.get("/arcs/:id/campaigns", (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name FROM campaigns c
+       JOIN campaign_adventures ca ON ca.campaign_id = c.id
+       WHERE ca.arc_id = ? AND c.archived_at IS NULL
+       ORDER BY c.name`
+    )
+    .all(req.params.id);
+  res.json(rows);
 });
 
 // ------------------------------------------- приключения кампании (привязка)

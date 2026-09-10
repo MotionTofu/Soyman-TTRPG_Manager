@@ -38,6 +38,81 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- ПРОБА «газета»: газетный халфтон по Маллани/Инес (точка разного
+         размера по яркости фото). Скрытые дефсы общего фильтра — CSS
+         ссылается на него через filter:url(#soy-halftone), вход у всех
+         один (SourceGraphic), поэтому фильтр один на все обложки.
+         feImage+feTile с фрагментами документа — приём хромовый;
+         десктоп — Electron (Chromium), там работает. -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <circle id="soy-ht-1" cx="2.5" cy="2.5" r="0.7" fill="#141210" />
+        <circle id="soy-ht-2" cx="2.5" cy="2.5" r="1.1" fill="#141210" />
+        <circle id="soy-ht-3" cx="2.5" cy="2.5" r="1.5" fill="#141210" />
+        <circle id="soy-ht-4" cx="2.5" cy="2.5" r="1.9" fill="#141210" />
+        <circle id="soy-ht-5" cx="2.5" cy="2.5" r="2.2" fill="#141210" />
+        <circle id="soy-ht-6" cx="2.5" cy="2.5" r="2.5" fill="#141210" />
+        <filter id="soy-halftone" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+          <feImage href="#soy-ht-1" x="0" y="0" width="5" height="5" />
+          <feTile result="dot1" />
+          <feImage href="#soy-ht-2" x="0" y="0" width="5" height="5" />
+          <feTile result="dot2" />
+          <feImage href="#soy-ht-3" x="0" y="0" width="5" height="5" />
+          <feTile result="dot3" />
+          <feImage href="#soy-ht-4" x="0" y="0" width="5" height="5" />
+          <feTile result="dot4" />
+          <feImage href="#soy-ht-5" x="0" y="0" width="5" height="5" />
+          <feTile result="dot5" />
+          <feImage href="#soy-ht-6" x="0" y="0" width="5" height="5" />
+          <feTile result="dot6" />
+          <feColorMatrix in="SourceGraphic" type="luminanceToAlpha" result="lum" />
+          <feComponentTransfer in="lum" result="neg">
+            <feFuncA type="table" tableValues="1 0" />
+          </feComponentTransfer>
+          <feComponentTransfer in="neg" result="band1">
+            <feFuncA type="discrete" tableValues="1 0 0 0 0 0" />
+          </feComponentTransfer>
+          <feComponentTransfer in="neg" result="band2">
+            <feFuncA type="discrete" tableValues="0 1 0 0 0 0" />
+          </feComponentTransfer>
+          <feComponentTransfer in="neg" result="band3">
+            <feFuncA type="discrete" tableValues="0 0 1 0 0 0" />
+          </feComponentTransfer>
+          <feComponentTransfer in="neg" result="band4">
+            <feFuncA type="discrete" tableValues="0 0 0 1 0 0" />
+          </feComponentTransfer>
+          <feComponentTransfer in="neg" result="band5">
+            <feFuncA type="discrete" tableValues="0 0 0 0 1 0" />
+          </feComponentTransfer>
+          <feComponentTransfer in="neg" result="band6">
+            <feFuncA type="discrete" tableValues="0 0 0 0 0 1" />
+          </feComponentTransfer>
+          <feComposite in="band1" in2="dot1" operator="in" result="lev1" />
+          <feComposite in="band2" in2="dot2" operator="in" result="lev2" />
+          <feComposite in="band3" in2="dot3" operator="in" result="lev3" />
+          <feComposite in="band4" in2="dot4" operator="in" result="lev4" />
+          <feComposite in="band5" in2="dot5" operator="in" result="lev5" />
+          <feComposite in="band6" in2="dot6" operator="in" result="lev6" />
+          <feMerge result="dots">
+            <feMergeNode in="lev6" />
+            <feMergeNode in="lev5" />
+            <feMergeNode in="lev4" />
+            <feMergeNode in="lev3" />
+            <feMergeNode in="lev2" />
+            <feMergeNode in="lev1" />
+          </feMerge>
+          <!-- ПРОБА: точки на 15 % поверх фото, а не вместо него. -->
+          <feComponentTransfer in="dots" result="dots-faint">
+            <feFuncA type="linear" slope="0.15" intercept="0" />
+          </feComponentTransfer>
+          <feComposite in="dots-faint" in2="SourceGraphic" operator="in" result="dots-clipped" />
+          <feMerge>
+            <feMergeNode in="SourceGraphic" />
+            <feMergeNode in="dots-clipped" />
+          </feMerge>
+        </filter>
+      </defs>
+    </svg>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

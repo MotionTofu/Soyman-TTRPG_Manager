@@ -29,6 +29,13 @@ export function RealtimeListener() {
     socket.on("hunter-mark", (payload: unknown) => {
       window.dispatchEvent(new CustomEvent("hunter-mark", { detail: payload }));
     });
+    // Игрок назвал или сбросил свою инициативу. Событие уходит окном, а не
+    // пропсом: трекер смонтирован дважды (колонка пульта и поисковая панель),
+    // и оба экземпляра должны перезагрузиться, иначе Мастер увидит число в
+    // одном месте и не увидит в другом.
+    socket.on("initiative-updated", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("initiative-updated", { detail: payload }));
+    });
 
     return () => {
       socket.disconnect();

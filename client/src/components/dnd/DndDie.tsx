@@ -28,23 +28,35 @@ export function DndDie({
   filled,
   accentColor,
   edge,
+  textured,
   className,
   style,
   children,
 }: {
   size?: "sm" | "lg";
-  /** Заливка цветом класса — для того, что тратится (хиты). */
+  /** Заливка цветом класса — для того, что тратится (хиты). В паре с
+   *  textured на экране не заливает (текстура вместо неё), а работает только
+   *  в печатном векторном фолбэке. */
   filled?: boolean;
   accentColor?: string;
   /** Подсветить верхние рёбра цветом класса (владение спасброском). */
   edge?: boolean;
+  /** Растровая подложка (res/dice.png → /textures/dice-d20.png) вместо
+   *  векторного контура: контур остаётся в DOM, но на экране гасится CSS, а
+   *  на печати возвращается (фон при печати обычно не печатается). */
+  textured?: boolean;
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
 }) {
   const lg = size === "lg";
   return (
-    <span className={`dnd-die dnd-die-${size}${filled ? " is-filled" : ""}${className ? ` ${className}` : ""}`} style={style}>
+    <span
+      className={`dnd-die dnd-die-${size}${filled ? " is-filled" : ""}${textured ? " is-textured" : ""}${className ? ` ${className}` : ""}`}
+      // --die-accent везёт цвет класса в CSS: тонирование залитой кости и
+      // рёбра владения поверх текстуры (см. .dnd-die.is-textured).
+      style={{ ...(accentColor ? ({ "--die-accent": accentColor } as CSSProperties) : null), ...style }}
+    >
       <svg viewBox={lg ? DIE_LG_VIEWBOX : DIE_SM_VIEWBOX} aria-hidden="true">
         <path
           className="dnd-die-outline"

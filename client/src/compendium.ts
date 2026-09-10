@@ -79,14 +79,14 @@ export const MECHANICS_WEAPON_MASTERY_GROUP = MECHANICS_GROUPS[11];
 export const MECHANICS_ALIGNMENT_GROUP = MECHANICS_GROUPS[12];
 
 // 6 категорий справочника (44 списка) — группировка для UI.
-// Порядок — как показываем в разделе: Магия → Персонаж → Мир → Механики → Снаряжение → Опасности.
+// Порядок — как показываем в разделе: Механики → Персонаж → Снаряжение → Опасности → Магия → Мир.
 export const MECHANICS_CATEGORIES = [
-  { key: "magic", label: "Магические эффекты" },
-  { key: "character", label: "Навыки и Владения" },
-  { key: "world", label: "Мироустройство" },
   { key: "mechanics", label: "Базовые Механики" },
+  { key: "character", label: "Навыки и Владения" },
   { key: "equipment", label: "Снаряжение и Экономика" },
   { key: "hazards", label: "Опасности и Окружение" },
+  { key: "magic", label: "Магические эффекты" },
+  { key: "world", label: "Мироустройство" },
 ] as const;
 export type MechanicsCategoryKey = (typeof MECHANICS_CATEGORIES)[number]["key"];
 

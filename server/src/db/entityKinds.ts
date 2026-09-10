@@ -381,6 +381,102 @@ export const ENTITY_KINDS: readonly EntityKind[] = RAW_KINDS.map((k) => ({
   hasAliases: ALIAS_KINDS.has(k.kind),
 }));
 
+/**
+ * Полиморфные пары `*_type`/`*_id`, которые уборка сирот НЕ обслуживает.
+ *
+ * До этого списка они существовали как снимок из пятнадцати строк без единого
+ * слова о том, чем они друг от друга отличаются, — а отличаются они сильно, и
+ * `addressingAudit.ts` это показал. Есть три разных случая, и мерить их одной
+ * меркой нельзя:
+ *
+ *   - `registry` — колонка говорит на языке реестра, и это настоящая ссылка на
+ *     сущность. Уборки нет; стоит ли её заводить, решается для каждой пары
+ *     отдельно (осиротевшая отметка инициативы видна за столом, а погашенная
+ *     подсказка удалённой сцены — нет).
+ *   - `dialect` — колонка говорит про те же виды, но своими словами
+ *     (`setting_location` вместо `location`). Реестр её не понимает, значит не
+ *     понимает и уборка.
+ *   - `own` — колонка вообще не про виды сущностей. Уборка ей не нужна и не
+ *     будет нужна.
+ *
+ * Новая пара, которой здесь нет, роняет тест: описать её — дешевле, чем через
+ * год гадать, почему связь никем не подметается.
+ */
+export type PairVocabulary = "registry" | "dialect" | "own";
+
+export interface UnsweptPair {
+  vocabulary: PairVocabulary;
+  /** Почему уборки нет и чем это грозит. */
+  why: string;
+}
+
+export const UNSWEPT_PAIRS: Readonly<Record<string, UnsweptPair>> = {
+  "archived_files.original_owner_type": {
+    vocabulary: "own",
+    why: "виды ФАЙЛОВ (`location_map`, `gallery_image`), а не сущностей",
+  },
+  "artifacts.owner_type": {
+    vocabulary: "registry",
+    why: "артефакт при существе; осиротевший артефакт остаётся в списке мира",
+  },
+  "campaign_setting_entities.entity_type": {
+    vocabulary: "dialect",
+    why: "`setting_location`/`setting_being`/… — свой словарь, зашитый в CHECK (db.ts)",
+  },
+  "canvas_boards.scope_type": {
+    vocabulary: "own",
+    why: "область полотна: `arc` и `free` наравне с `campaign` и `setting`. Не ссылка на сущность, а вопрос «чьё это полотно»",
+  },
+  "canvas_nodes.node_type": {
+    vocabulary: "own",
+    why: "смешанная: виды УЗЛОВ (check, chapter, pin, frame, image, route) наравне с видами сущностей. Те значения, что совпадают с видами реестра, сверка адресации всё равно проверяет — так и нашёлся узел на удалённую запись компендиума. Уборки нет намеренно: узел на полотне видит Мастер, и стирать его за него — не мне",
+  },
+  "gallery_image_undo.owner_type": {
+    vocabulary: "registry",
+    why: "журнал отмены; строки короткоживущие, сироты в нём безвредны",
+  },
+  "gm_reminders.target_type": {
+    vocabulary: "registry",
+    why: "напоминание на кампанию или игрока; удаление того и другого — редкость",
+  },
+  "import_records.entity_type": {
+    vocabulary: "own",
+    why: "смешанная: виды ЗАПИСЕЙ ИМПОРТА (link, field, statblock, alias, relation, secret, milestone, calendar_event, reward) наравне с видами сущностей. Это журнал прошлого импорта — он и должен помнить то, чего уже нет",
+  },
+  "initiative_entries.entity_type": {
+    vocabulary: "registry",
+    why: "строка трекера инициативы на удалённое существо видна Мастеру прямо в бою — самый весомый кандидат на уборку",
+  },
+  "location_pins.target_type": {
+    vocabulary: "registry",
+    why: "метка на карте; осиротевшая метка остаётся висеть без имени",
+  },
+  "map_bindings.target_type": {
+    vocabulary: "registry",
+    why: "привязка карты к сущности",
+  },
+  "player_visibility_grants.target_type": {
+    vocabulary: "dialect",
+    why: "тот же словарь, что у campaign_setting_entities; 20 живых строк выдач видимости никем не подметаются",
+  },
+  "resource_setting_links.owner_type": {
+    vocabulary: "registry",
+    why: "ресурс, продвинутый в сеттинг",
+  },
+  "scene_hint_dismissals.entity_type": {
+    vocabulary: "registry",
+    why: "погашенная подсказка удалённой сцены никому не видна",
+  },
+  "setting_hint_mutes.entity_type": {
+    vocabulary: "registry",
+    why: "то же, что scene_hint_dismissals",
+  },
+  "story_check_outcomes.target_type": {
+    vocabulary: "registry",
+    why: "исход проверки в сцене; сцена удаляется вместе с приключением редко",
+  },
+};
+
 /** Ключи из явных наборов — для проверки, что там нет опечаток. */
 export const EXPLICIT_SETS: Record<string, ReadonlySet<string>> = {
   GRAPH_NODES,

@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { deriveSheet, proficiencyBonusForLevel } from "./derive";
+import { deriveSheet, proficiencyBonusForLevel, creatureInitiativeModifier } from "./derive";
 import { emptyDndCharacter } from "./normalize";
 import type { DndCharacterData, DndClassEntry, DndEquipmentItem, DndFeature } from "./types";
+import type { DndEffect } from "./effects";
 import { resolveSkillOriginal } from "./skillCatalog";
 
 /**
@@ -288,6 +289,22 @@ describe("максимум хитов", () => {
     });
     expect(deriveSheet(c).maxHitPoints.value).toBe(1);
   });
+
+  it("временный максимум работает и в минус", () => {
+    // Похищение жизни и т.п.: временная поправка отрицательная, итог ниже
+    // складского, а разбор честно показывает слагаемое минусом.
+    const c = character({
+      classes: [cls({ level: 3 })],
+      abilities: { str: 10, dex: 10, con: 14, int: 10, wis: 10, cha: 10 },
+      hpLump: 20,
+      hpRolls: [5, 5],
+      hitPointMaxTemp: "-7",
+    });
+    const hp = deriveSheet(c).maxHitPoints;
+    expect(hp.value).toBe(20 + 10 + 2 * 3 - 7);
+    expect(hp.parts.some((p) => p.label === "Временный предел" && p.value === -7)).toBe(true);
+    partsAddUp(hp);
+  });
 });
 
 describe("пассивное восприятие, заклинательство и скорость", () => {
@@ -340,6 +357,233 @@ describe("пассивное восприятие, заклинательств�
   it("скорость не уходит в минус", () => {
     const c = character({ speeds: { ...emptyDndCharacter().speeds, walk: 20 }, exhaustion: 6 });
     expect(deriveSheet(c).walkSpeed.value).toBe(0);
+  });
+});
+
+describe("пассивные проницательность и анализ", () => {
+  it("считаются по тому же правилу, что и восприятие", () => {
+    const c = character({
+      classes: [cls({ level: 5 })],
+      abilities: { str: 10, dex: 10, con: 10, int: 14, wis: 16, cha: 10 },
+      skillProfs: { Insight: 1 },
+    });
+    const sheet = deriveSheet(c);
+    // Проницательность — Мудрость (+3) плюс владение (+3).
+    expect(sheet.passiveInsight.value).toBe(10 + 3 + 3);
+    // Анализ — Интеллект (+2), владения нет.
+    expect(sheet.passiveInvestigation.value).toBe(10 + 2);
+  });
+});
+
+describe("грузоподъёмность", () => {
+  it("без удвоений — Сила ×15", () => {
+    const c = character({ abilities: { str: 16, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } });
+    expect(deriveSheet(c).carryCapacity.value).toBe(16 * 15);
+  });
+
+  it("«Мощное телосложение» удваивает — раньше модуль этого не знал", () => {
+    const c = character({
+      abilities: { str: 16, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+      speciesFeatures: [feature("Мощное телосложение")],
+    });
+    const carry = deriveSheet(c).carryCapacity;
+    expect(carry.value).toBe(16 * 15 * 2);
+    expect(carry.parts.map((p) => p.label)).toContain("Мощное телосложение");
+  });
+
+  it("удвоения ищутся во всех четырёх списках умений и не складываются дважды", () => {
+    const c = character({
+      abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+      speciesFeatures: [feature("Мощное телосложение")],
+      feats: [feature("Мощное телосложение")],
+      specialAbilities: [feature("Увеличение")],
+    });
+    // Одно и то же имя дважды — одно удвоение; «Увеличение» — второе.
+    expect(deriveSheet(c).carryCapacity.value).toBe(10 * 15 * 4);
+  });
+});
+
+describe("бонус инициативы", () => {
+  /** Умение с размеченной прибавкой к инициативе. */
+  function initFeature(name: string, over: Partial<DndEffect>): DndFeature {
+    return {
+      name,
+      description: "",
+      effects: [{ id: "e1", type: "roll_modifier", when: "always", appliesTo: "initiative", ...over }],
+    } as DndFeature;
+  }
+
+  it("без умений — чистая Ловкость", () => {
+    const c = character({ abilities: { str: 10, dex: 16, con: 10, int: 10, wis: 10, cha: 10 } });
+    expect(deriveSheet(c).initiative.value).toBe(3);
+  });
+
+  it("сохранённое поле листа не читается", () => {
+    // До этого модуля в `initiative` лежал вписанный руками модификатор,
+    // устаревавший при любой правке Ловкости. Теперь это брошенное число, и
+    // производная величина о нём знать не должна — иначе бросок сложится с
+    // модификатором.
+    const c = character({
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      initiative: 17,
+    });
+    expect(deriveSheet(c).initiative.value).toBe(2);
+  });
+
+  it("«Мастер на все руки» даёт половину бонуса мастерства вниз", () => {
+    // На 5-м уровне бонус мастерства +3, половина вниз — +1.
+    const c = character({
+      classes: [cls({ className: "Бард", level: 5 })],
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      classFeatures: [initFeature("Мастер на все руки", { proficiency: "half" })],
+    });
+    const init = deriveSheet(c).initiative;
+    expect(init.value).toBe(2 + 1);
+    expect(init.parts.map((p) => p.label)).toContain("Мастер на все руки");
+  });
+
+  it("«Бдительный» даёт полный бонус мастерства", () => {
+    const c = character({
+      classes: [cls({ level: 5 })],
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      feats: [initFeature("Бдительный", { proficiency: "full" })],
+    });
+    expect(deriveSheet(c).initiative.value).toBe(2 + 3);
+  });
+
+  it("половина бонуса мастерства не складывается с полным", () => {
+    // Бард с «Бдительным»: полный бонус уже посчитан, и «Мастер на все руки»
+    // сверху не идёт — так и читается его формулировка («к проверке, которая
+    // иным образом не использует ваш бонус мастерства»). Сложить оба значит
+    // показать за столом число на 1-3 больше настоящего.
+    const c = character({
+      classes: [cls({ className: "Бард", level: 9 })], // бонус мастерства +4
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      classFeatures: [initFeature("Мастер на все руки", { proficiency: "half" })],
+      feats: [initFeature("Бдительный", { proficiency: "full" })],
+    });
+    const init = deriveSheet(c).initiative;
+    expect(init.value).toBe(2 + 4);
+    expect(init.parts.map((p) => p.label)).toContain("Бдительный");
+    expect(init.parts.map((p) => p.label)).not.toContain("Мастер на все руки");
+  });
+
+  it("плоская прибавка складывается с бонусом мастерства", () => {
+    // Непересечение — только про доли бонуса мастерства. Кольцо +1 идёт своим
+    // слагаемым и ни с чем не конфликтует.
+    const c = character({
+      classes: [cls({ className: "Бард", level: 9 })],
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      classFeatures: [initFeature("Мастер на все руки", { proficiency: "half" })],
+      specialAbilities: [initFeature("Страж", { flat: 2 })],
+    });
+    // 2 (Ловкость) + 2 (половина от +4) + 2 (плоская) = 6.
+    expect(deriveSheet(c).initiative.value).toBe(6);
+  });
+
+  it("надетая вещь прибавляет, снятая — нет", () => {
+    const ring = (equipped: boolean) =>
+      item({
+        name: "Кольцо расторопности",
+        equipped,
+        effects: [
+          { id: "e1", type: "roll_modifier", when: "always", appliesTo: "initiative", flat: 1 },
+        ],
+      });
+    const withItem = (equipped: boolean) =>
+      character({
+        abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+        equipmentSections: [{ name: "Общее", items: [ring(equipped)] }],
+      });
+    expect(deriveSheet(withItem(true)).initiative.value).toBe(3);
+    expect(deriveSheet(withItem(false)).initiative.value).toBe(2);
+  });
+
+  it("эффект по другому броску в инициативу не лезет", () => {
+    const c = character({
+      classes: [cls({ level: 5 })],
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      feats: [initFeature("Меткий охотник", { appliesTo: "attack", proficiency: "full" })],
+    });
+    expect(deriveSheet(c).initiative.value).toBe(2);
+  });
+
+  it("неразмеченный эффект со свободным текстом не считается", () => {
+    // Три живые записи справочника держат цель в тексте («1к4 к броскам атаки
+    // или спасброскам»). Читать его — значит выдумывать число за Мастера.
+    const c = character({
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      specialAbilities: [
+        {
+          name: "Благословение",
+          description: "",
+          effects: [
+            { id: "i1", type: "roll_modifier", when: "always", modifier: "1к4 к броскам атаки или спасброскам" },
+          ],
+        } as DndFeature,
+      ],
+    });
+    expect(deriveSheet(c).initiative.value).toBe(2);
+  });
+
+  it("ручная поправка складывается, истощение вычитается", () => {
+    const c = character({
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 },
+      initiativeMisc: "+2",
+      exhaustion: 1,
+    });
+    // 2 (Ловкость) + 2 (прочее) − 2 (истощение) = 2.
+    expect(deriveSheet(c).initiative.value).toBe(2);
+  });
+
+  it("слагаемые складываются ровно в число", () => {
+    const c = character({
+      classes: [cls({ className: "Бард", level: 9 })],
+      abilities: { str: 10, dex: 18, con: 10, int: 10, wis: 10, cha: 10 },
+      classFeatures: [initFeature("Мастер на все руки", { proficiency: "half" })],
+      initiativeMisc: "-1",
+      exhaustion: 2,
+    });
+    partsAddUp(deriveSheet(c).initiative);
+  });
+});
+
+describe("модификатор инициативы существа", () => {
+  function creature(over: Record<string, unknown> = {}) {
+    return {
+      abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+      initiativeBonus: null,
+      ...over,
+    } as unknown as Parameters<typeof creatureInitiativeModifier>[0];
+  }
+
+  it("объявленный бонус побеждает Ловкость", () => {
+    // Существо с Ловкостью 10 (модификатор 0) и объявленным «Инициатива +5».
+    // До этой правки трекер брал 0 и бросал по Ловкости, игнорируя
+    // заполненное поле.
+    expect(creatureInitiativeModifier(creature({ initiativeBonus: 5 }))).toBe(5);
+  });
+
+  it("без объявленного бонуса — модификатор Ловкости", () => {
+    expect(
+      creatureInitiativeModifier(
+        creature({ abilities: { str: 10, dex: 16, con: 10, int: 10, wis: 10, cha: 10 } })
+      )
+    ).toBe(3);
+  });
+
+  it("ноль — это «плюс ноль», а не «не задано»", () => {
+    // Проверка на ложность съела бы законный ноль у неповоротливого существа
+    // и подставила бы модификатор Ловкости.
+    expect(
+      creatureInitiativeModifier(
+        creature({ initiativeBonus: 0, abilities: { str: 10, dex: 18, con: 10, int: 10, wis: 10, cha: 10 } })
+      )
+    ).toBe(0);
+  });
+
+  it("отрицательный бонус сохраняется", () => {
+    expect(creatureInitiativeModifier(creature({ initiativeBonus: -2 }))).toBe(-2);
   });
 });
 

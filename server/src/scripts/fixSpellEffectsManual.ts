@@ -8,7 +8,10 @@
 // Повторный запуск безопасен: правка ищет заклинание по имени и переписывает
 // его effects целиком, а не дописывает.
 
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 
 const APPLY = process.argv.includes("--apply");
 

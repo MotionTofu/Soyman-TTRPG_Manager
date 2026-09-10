@@ -11,7 +11,10 @@
 // схем изучено), автоматика отличить не может — они перечислены в отчёте
 // отдельно, и роль у них правится в редакторе класса одним нажатием.
 
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 import type { ClassProgression } from "../../../client/src/components/dnd/progression";
 
 const APPLY = process.argv.includes("--apply");

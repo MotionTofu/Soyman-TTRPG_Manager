@@ -887,7 +887,10 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     savingThrowProfs,
     skillProfs,
     armorClass: armorClassStr,
-    initiative: "",
+    // Брошенного числа у импортированного листа быть не может — его называют
+    // за столом. Ручная поправка к бонусу пустая: бонус считается сам.
+    initiative: null,
+    initiativeMisc: "",
     speed: speedStr,
     sensesList,
     hitPointMax: hitPointMaxStr,

@@ -41,3 +41,24 @@ export function carryCapacityLb(strScore: number, doublings: number): number {
   return str * 15 * 2 ** Math.max(0, doublings);
 }
 
+
+/**
+ * Умения, удваивающие грузоподъёмность («Мощное телосложение», увеличение
+ * размера). Структурного источника у них нет — в листе это просто строки
+ * названий, поэтому поиск идёт регулярным выражением по имени.
+ *
+ * Живёт здесь, а не рядом с сетевым кодом чарника, потому что от этого
+ * зависит `carryCapacity` в `deriveSheet`: пока функция лежала в клиенте,
+ * модуль считал грузоподъёмность без удвоений и врал вдвое у любого, у кого
+ * есть «Мощное телосложение».
+ */
+const CARRY_DOUBLE_RE = /мощное телосложение|powerful build|увеличени|enlarge|гигантск|мощь велика/i;
+
+export function findCarryDoublings(features: { name?: string }[]): string[] {
+  const out: string[] = [];
+  for (const f of features) {
+    const name = (f?.name ?? "").trim();
+    if (name && CARRY_DOUBLE_RE.test(name) && !out.includes(name)) out.push(name);
+  }
+  return out;
+}

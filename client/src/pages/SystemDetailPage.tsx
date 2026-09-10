@@ -13,6 +13,7 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemGroup, SystemSection } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
+import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { clearDndSystemIdCache } from "../components/dnd/dndCompendium";
@@ -45,6 +46,9 @@ export function SystemDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("section") ?? "overview";
   const focusEntryId = searchParams.get("entry") ? Number(searchParams.get("entry")) : undefined;
+  // Сколько записей в каждом разделе — строка «Классы: 13» в хиро-карточке
+  // «Обзора». Считает сервер одним запросом, без вытягивания самих записей.
+  const [sectionCounts, setSectionCounts] = useState<Record<number, number>>({});
 
   function refreshSystem() {
     api.get<System>(`/systems/${systemId}`).then(setSystem);
@@ -67,6 +71,21 @@ export function SystemDetailPage() {
     api.get<Campaign[]>(`/campaigns?system_id=${systemId}`).then(setCampaigns);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemId]);
+
+  useEffect(() => {
+    if (activeTab !== "overview" || sections.length === 0) return;
+    let cancelled = false;
+    api
+      .get<{ section_id: number; count: number }[]>(`/systems/${systemId}/entry-counts`)
+      .then((rows) => {
+        if (cancelled) return;
+        setSectionCounts(Object.fromEntries(rows.map((r) => [r.section_id, r.count])));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [systemId, activeTab, sections, tidyRun]);
 
   async function handleThumbnailChange(file: File | null) {
     if (!file) return;
@@ -177,9 +196,10 @@ export function SystemDetailPage() {
   const currentSection = sections.find((s) => String(s.id) === activeTab) ?? null;
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ position: "relative" }}>
+      <SectionBackground />
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1>
+        <h1 className="sys-title">
           <button type="button" className="entity-title-link" onClick={() => selectTab("overview")} title="К обзору">
             {system.name}
           </button>
@@ -227,98 +247,118 @@ export function SystemDetailPage() {
         <div className="stack">
           {confirmDialog}
           {alertDialog}
-          <section className="sys-card">
-            <div className="sys-card-head">Тамбнейл — 16×10</div>
-            <div className="sys-card-body">
-              <div className="entity-image-slots">
-                <EntityImageSlot
-                  title="Тамбнейл системы"
-                  hint="Карточка в списке систем. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF."
-                  url={system.thumbnail_image_url}
-                  uploading={uploadingThumbnail}
-                  onSelect={thumbnailCrop.onSelect}
-                  onDelete={system.thumbnail_image_url ? deleteThumbnail : undefined}
-                />
+          <section className="sys-hero">
+            <div className="sys-hero-body">
+              <div className="sys-hero-thumb">
+                <div className="entity-image-slots">
+                  <EntityImageSlot
+                    title="Тамбнейл системы"
+                    hint="Карточка в списке систем. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF."
+                    url={system.thumbnail_image_url}
+                    uploading={uploadingThumbnail}
+                    onSelect={thumbnailCrop.onSelect}
+                    onDelete={system.thumbnail_image_url ? deleteThumbnail : undefined}
+                  />
+                </div>
+                {thumbnailCrop.modal}
               </div>
-              {thumbnailCrop.modal}
+              <div className="sys-hero-main stack">
+                <EditableTextCard
+                  key={`desc-${system.id}`}
+                  title="Описание системы"
+                  value={system.description}
+                  onSave={saveDescription}
+                  rows={6}
+                  entityType="system"
+                  entityId={systemId}
+                  fields={[
+                    { key: "name", label: "Название системы", value: system.name, required: true },
+                    {
+                      key: "code",
+                      label: "Код",
+                      value: system.code ?? "",
+                      placeholder: "phb",
+                      pattern: "^[a-z0-9-]{2,8}$",
+                      title: 'Пример: phb → Player’s Handbook. Короткое сокращение для ссылок [[phb:…]]. Латиница, 2–8 символов.',
+                    },
+                  ]}
+                  onSaveFields={(v) => saveName(v.name, v.code)}
+                />
+                <div className="sys-hero-meta">
+                  <span className="sys-hero-meta-label">Состав справочника</span>
+                  {sections.length === 0 ? (
+                    <span className="muted">Разделов пока нет.</span>
+                  ) : (
+                    <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
+                      {sections.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className="sys-hero-count"
+                          title={`Перейти в раздел «${s.name}»`}
+                          onClick={() => selectTab(String(s.id))}
+                        >
+                          {s.name}: {sectionCounts[s.id] ?? "…"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="sys-hero-meta">
+                  <span className="sys-hero-meta-label">Группы</span>
+                  {allGroups.length > 0 ? (
+                    <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
+                      {allGroups.map((g) => {
+                        const isIn = systemGroupIds.has(g.id);
+                        return (
+                          <label key={g.id} className={`campaign-group-chip${isIn ? " selected" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={isIn}
+                              onChange={async () => {
+                                if (isIn) {
+                                  await api.del(`/system-groups/${g.id}/members?systemIds=${systemId}`);
+                                } else {
+                                  await api.post(`/system-groups/${g.id}/members`, { systemIds: [systemId] });
+                                }
+                                refreshGroups();
+                              }}
+                            />
+                            {g.name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="muted">Групп пока нет — создайте на странице систем.</div>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
-          <EditableTextCard
-            key={`desc-${system.id}`}
-            title="Описание системы"
-            help="Что за система, ключевые механики, чем отличается от других."
-            value={system.description}
-            onSave={saveDescription}
-            rows={6}
-            entityType="system"
-            entityId={systemId}
-            fields={[
-              { key: "name", label: "Название системы", value: system.name, required: true },
-              {
-                key: "code",
-                label: "Код",
-                value: system.code ?? "",
-                placeholder: "phb",
-                pattern: "^[a-z0-9-]{2,8}$",
-                title: 'Пример: phb → Player’s Handbook. Короткое сокращение для ссылок [[phb:…]]. Латиница, 2–8 символов.',
-              },
-            ]}
-            onSaveFields={(v) => saveName(v.name, v.code)}
-           />
-           {/* Визард ссылок для системы скрыт до тех пор, пока в нём не появится
-               нужда: у систем нет прозы, которую стоило бы прочёсывать, и кнопка
-               обещала искать «в текстах системы», а сканировать нечего. Код оставлен
-               по решению владельца — см. ToDo.md П1.10. */}
-           {/* <CrossLinksWizard
-              ownerKind="system"
-              ownerId={systemId}
-              help="Ищет имена сущностей сеттинга и записей компендиума в текстах системы — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
-            /> */}
-            <div className="card">
-              <div className="campaign-overview-header">Группы</div>
-              <div style={{ padding: "8px 0" }}>
-                {allGroups.length > 0 ? (
-                  <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
-                    {allGroups.map((g) => {
-                      const isIn = systemGroupIds.has(g.id);
-                      return (
-                        <label key={g.id} className={`campaign-group-chip${isIn ? " selected" : ""}`}>
-                          <input
-                            type="checkbox"
-                            checked={isIn}
-                            onChange={async () => {
-                              if (isIn) {
-                                await api.del(`/system-groups/${g.id}/members?systemIds=${systemId}`);
-                              } else {
-                                await api.post(`/system-groups/${g.id}/members`, { systemIds: [systemId] });
-                              }
-                              refreshGroups();
-                            }}
-                          />
-                          {g.name}
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 4 }}>Групп пока нет — создайте на странице систем.</div>
-                )}
-              </div>
-            </div>
-            <details className="sys-card">
-             <summary className="sys-card-head">Кампании с этой системой ({campaigns.length})</summary>
-            <div className="sys-card-body">
+            {/* Визард ссылок для системы скрыт до тех пор, пока в нём не появится
+                нужда: у систем нет прозы, которую стоило бы прочёсывать, и кнопка
+                обещала искать «в текстах системы», а сканировать нечего. Код оставлен
+                по решению владельца — см. ToDo.md П1.10. */}
+            {/* <CrossLinksWizard
+               ownerKind="system"
+               ownerId={systemId}
+               help="Ищет имена сущностей сеттинга и записей компендиума в текстах системы — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+             /> */}
+            <section>
+             <div className="sys-card-head">Кампании с этой системой ({campaigns.length})</div>
+            <div className="sys-campaigns-body">
               <div className="grid-cards">
                 {campaigns.map((c) => (
                   <Link key={c.id} to={`/campaigns/${c.id}`} className="card">
                     <h3>{c.name}</h3>
-                    <div className="muted">{c.setting_name ?? "Сеттинг не указан"}</div>
+                    <div className="sys-card-meta">{c.setting_name ?? "Сеттинг не указан"}</div>
                   </Link>
                 ))}
                 {campaigns.length === 0 && <p className="muted">Пока нет кампаний с этой системой.</p>}
               </div>
             </div>
-          </details>
+          </section>
         </div>
       )}
 

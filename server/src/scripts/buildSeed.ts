@@ -69,11 +69,10 @@ async function main() {
   // Порядок важен: сначала миграции, потом чистка. Наоборот — и миграция
   // допишет обратно то, что чистка только что убрала (так в сид уезжали
   // семьдесят пять строк app_settings, восстановленных значениями по
-  // умолчанию уже после `DELETE`). DB_DIR выставляется ДО импорта модуля базы:
-  // у него побочный эффект — открытие и миграция, — поэтому импорт
-  // динамический.
-  process.env.DB_DIR = outDataDir;
-  const { db } = await import("../db/db");
+  // умолчанию уже после `DELETE`). Импорт модуля базы её больше не открывает,
+  // поэтому каталог задаётся аргументом initDatabase, а не переменной среды.
+  const { db, initDatabase } = await import("../db/db");
+  initDatabase(outDataDir);
   const { sweepOrphans, getLastSweepProblems } = await import("../services/orphans");
 
   db.pragma("foreign_keys = ON");

@@ -6,6 +6,7 @@ import { db } from "../db/db";
 import { playerFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { unpaidSessionsForPlayer } from "../services/finance";
+import { normalizeDndCharacter } from "@soyman/shared";
 
 export const playersRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -160,17 +161,16 @@ function summarizeCharacterSheet(
   let system_info: string | null = null;
   if (parsed) {
     if (primary.format === "dnd_character") {
-      const race = typeof parsed.raceName === "string" ? parsed.raceName.trim() : "";
-      const classes = Array.isArray(parsed.classes)
-        ? (parsed.classes as { className?: unknown; subclassName?: unknown; level?: unknown }[])
-        : [];
-      const classSummary = classes
-        .filter((c) => typeof c.className === "string" && (c.className as string).trim())
+      // Разбор листа — общей нормализацией: свой был четвёртым по счёту и
+      // отличался от соседнего в `player.ts` мелочами вроде обрезки пробелов.
+      const d = normalizeDndCharacter(parsed);
+      const race = (d.raceName ?? "").trim();
+      const classSummary = d.classes
+        .filter((c) => (c.className ?? "").trim())
         .map((c) => {
-          const cls = (c.className as string).trim();
-          const sub =
-            typeof c.subclassName === "string" ? (c.subclassName as string).trim() : "";
-          const lvl = typeof c.level === "number" && Number.isFinite(c.level) ? ` ${c.level}` : "";
+          const cls = (c.className ?? "").trim();
+          const sub = (c.subclassName ?? "").trim();
+          const lvl = Number.isFinite(c.level) && c.level ? ` ${c.level}` : "";
           return `${[cls, sub].filter(Boolean).join(" — ")}${lvl}`;
         })
         .join(" / ");

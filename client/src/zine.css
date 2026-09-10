@@ -251,14 +251,17 @@
  * поднят: арт остаётся собой, но перестаёт быть глянцевым пятном среди
  * бумаги. */
 [data-image-treatment] .cover-photo .cover-art-image {
-  filter: saturate(0.88) contrast(1.04);
+  /* ПРОБА «газета»: живой халфтон (дефсы в client/index.html) вместо фото.
+   * Тон эталона тоже выключен — фильтр и так перестраивает картинку. */
+  filter: url(#soy-halftone);
 }
 /* ЗЕРНО. Тот же шаг 3 px, что у бумаги страницы, и та же доля 0.38, что на
  * карте персонажа. Селектор потомка, а не ребёнка: на плитке кампании
  * .cover-art-image лежит внутри .cover-art.cover-photo, а на фоновом слое —
  * прямо в .campaign-bg-layer.cover-photo. */
 [data-image-treatment] .cover-photo .cover-art-image::after {
-  content: "";
+  /* ПРОБА «газета»: зерно эталона выключено — работает фильтр url(#soy-halftone). */
+  content: none;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -275,18 +278,28 @@
 [data-image-treatment][data-theme-mode="dark"] .cover-photo .cover-art-image::after {
   mix-blend-mode: screen;
 }
-
-/* Растр поверх тона — только верхняя треть. §5.2 запрещает халфтон под
- * текстом, а подпись обложки лежит внизу: сплошной растр читался бы сквозь
- * название. Вешается на РАМКУ обложки, не на слой картинки, чтобы не попасть
- * под её grayscale. */
-[data-image-treatment] .cover-halftone:has(.cover-photo)::before {
-  content: "";
+/* SVG-ОВЕРЛЕЙ (проба f7uba5) ВЫКЛЮЧЕН на время пробы «газета»: вердикт
+ * владельца — «так себе». Файл textures/image-treatment-f7uba5.svg оставлен,
+ * правило погашено одной строкой. */
+[data-image-treatment] .cover-photo .cover-art-image::before {
+  content: none;
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 38%;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("/textures/image-treatment-f7uba5.svg");
+  background-size: cover;
+  background-position: center;
+  mix-blend-mode: overlay;
+  opacity: 0.3;
+}
+
+/* Растр ВЫКЛЮЧЕН на время пробы «газета» (до этого был на всё изображение).
+ * Правило погашено одной строкой, параметры шага/доли оставлены для отката. */
+[data-image-treatment] .cover-halftone:has(.cover-photo)::before {
+  /* ПРОБА «газета»: растр выключен — вместо него фильтр url(#soy-halftone). */
+  content: none;
+  position: absolute;
+  inset: 0;
   z-index: 1;
   pointer-events: none;
   background-image: radial-gradient(var(--ink) 1.1px, transparent 1.2px);

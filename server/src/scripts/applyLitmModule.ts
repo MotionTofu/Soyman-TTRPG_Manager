@@ -5,7 +5,10 @@
 
 import { readFileSync } from "node:fs";
 import { updateSystemFromExport } from "../routes/systems";
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 
 const [file, idRaw] = process.argv.slice(2);
 if (!file || !idRaw) {

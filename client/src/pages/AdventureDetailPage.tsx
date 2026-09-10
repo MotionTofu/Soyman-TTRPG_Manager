@@ -45,6 +45,7 @@ export function AdventureDetailPage() {
 
   const [arc, setArc] = useState<StoryArcDetail | null>(null);
   const [setting, setSetting] = useState<Setting | null>(null);
+  const [arcCampaigns, setArcCampaigns] = useState<{ id: number; name: string }[]>([]);
   const [tab, selectTab] = useTabState(TABS, "Обзор");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -60,6 +61,14 @@ export function AdventureDetailPage() {
     if (arc) api.get<Setting>(`/settings/${arc.setting_id}`).then(setSetting);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arc?.setting_id]);
+
+  useEffect(() => {
+    api
+      .get<{ id: number; name: string }[]>(`/story/arcs/${arcId}/campaigns`)
+      .then(setArcCampaigns)
+      .catch(() => setArcCampaigns([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arcId]);
 
   if (!arc) return <p className="muted">Загрузка…</p>;
 
@@ -124,6 +133,17 @@ export function AdventureDetailPage() {
             {arc.is_default === 1 && <span className="badge tag">стандартное</span>}
             {arc.recommended_level && <span className="muted">{arc.recommended_level}</span>}
             {arc.duration && <span className="muted">{arc.duration}</span>}
+            {arcCampaigns.length > 0 && (
+              <span className="muted">
+                В кампаниях:{" "}
+                {arcCampaigns.map((c, i) => (
+                  <span key={c.id}>
+                    {i > 0 && ", "}
+                    <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
+                  </span>
+                ))}
+              </span>
+            )}
           </div>
         </div>
         <div className="entity-header-actions">
@@ -302,6 +322,12 @@ function ChaptersAndScenes({
     });
   }
 
+  function setAllCollapsed(collapse: boolean) {
+    const next = collapse ? [arc.id, ...arc.chapters.map((c) => c.id)] : [];
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    setCollapsed(next);
+  }
+
   async function createChapter() {
     if (!chapterName.trim()) return;
     await api.post("/story/arcs", {
@@ -415,6 +441,7 @@ function ChaptersAndScenes({
                     {s.name}
                   </Link>
                   <span className="muted">{SCENE_KINDS.find((k) => k.key === s.kind)?.label}</span>
+                  <SegmentFullness scene={s} />
                   {s.is_override && <span className="badge tag">изменено в кампании</span>}
                   {s.campaign_only && <span className="badge tag">только в кампании</span>}
                   <span className="entity-row-actions">
@@ -484,6 +511,12 @@ function ChaptersAndScenes({
       <span className="muted">
         Сцены перетаскиваются внутри главы, главы двигаются стрелками и сворачиваются.
       </span>
+      {(arc.chapters.length > 0 || direct.length > 0) && (
+        <div className="row">
+          <button onClick={() => setAllCollapsed(true)}>Свернуть все</button>
+          <button onClick={() => setAllCollapsed(false)}>Развернуть все</button>
+        </div>
+      )}
       {renderGroup(arc.chapters.length > 0 ? "Без главы" : "Сцены", arc.id, direct)}
       {arc.chapters.map((c) =>
         renderGroup(
@@ -637,10 +670,25 @@ function Milestones({
           />
           <select value={sceneId} onChange={(e) => setSceneId(e.target.value)}>
             <option value="">Без привязки к сцене</option>
-            {arc.scenes.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
+            <optgroup label={arc.chapters.length > 0 ? "Без главы" : "Сцены"}>
+              {arc.scenes
+                .filter((s) => s.arc_id === arc.id)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+            </optgroup>
+            {arc.chapters.map((c) => (
+              <optgroup key={c.id} label={c.name}>
+                {arc.scenes
+                  .filter((s) => s.arc_id === c.id)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
           </select>
           <button className="primary" onClick={add}>
@@ -734,6 +782,34 @@ function Secrets({
         </div>
       )}
     </div>
+  );
+}
+
+// Наполнение сцены: в каких текстовых сегментах уже что-то есть. Не оценка
+// «готово/не готово» (её приложение за Мастера не выдумывает), а факты:
+// пустая строка показывает, что дописать. Полностью заполненные сцены
+// маркера не несут — им нечего сказать.
+const SCENE_SEGMENTS = [
+  { key: "summary", label: "Описание" },
+  { key: "read_aloud", label: "Зачитать" },
+  { key: "whats_happening", label: "Что происходит" },
+  { key: "entry_condition", label: "Вход" },
+  { key: "outcomes", label: "Исходы" },
+] as const;
+
+function SegmentFullness({ scene }: { scene: StoryScene }) {
+  const filled = SCENE_SEGMENTS.filter((seg) =>
+    (scene[seg.key] as string | null)?.trim()
+  ).map((seg) => seg.label);
+  if (filled.length >= SCENE_SEGMENTS.length) return null;
+  return (
+    <span
+      className="muted"
+      title={filled.length > 0 ? `Наполнено: ${filled.join(", ")}` : "Пустая сцена — ни один сегмент не заполнен"}
+      style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}
+    >
+      {filled.length}/{SCENE_SEGMENTS.length}
+    </span>
   );
 }
 

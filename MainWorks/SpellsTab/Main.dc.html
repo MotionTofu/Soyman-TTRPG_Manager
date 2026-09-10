@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    /* Токены — из client/src/index.css :root («Соевый нуар», тема по умолчанию).
+       Ничего нового не заводится: бумага, чернила, приглушённый, линейка. */
+    body { margin: 0; background: #e8e4da; color: #1c1c1c; font-family: 'Archivo', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1c1c1c; } a:hover { color: #63625f; }
+
+    .sheet { padding: 22px 26px 30px; }
+
+    /* Подпись раздела листа — .sb-section один в один: Oswald 10, трекинг
+       .12em, верхняя линейка. Её трогать не нужно, она уже работает. */
+    .sb-section { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; border-top: 1px solid #2a2a2a; padding-top: 8px; margin: 0; }
+
+    /* ЯКОРЬ КРУГА. Число и слово разведены: число — моно, в полный голос,
+       слово — тихий Oswald капсом. Линейка сверху и 28 px воздуха над ней
+       превращают список в оглавление гримуара, а не в шапку таблицы. */
+    .anchor { display: flex; align-items: baseline; gap: 11px; border-top: 1px solid #2a2a2a; padding-top: 9px; margin: 28px 0 2px; }
+    .anchor-first { margin-top: 14px; }
+    .anchor-no { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 700; font-size: 17px; line-height: 1; letter-spacing: .01em; }
+    .anchor-word { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #63625f; flex: 1 1 auto; }
+    /* «Заговоры» числа не имеют — слово встаёт на место числа и берёт его вес. */
+    .anchor-word-solo { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: #1c1c1c; line-height: 1; flex: 1 1 auto; }
+    .anchor-count { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #63625f; white-space: nowrap; }
+    .anchor-slots { display: flex; align-items: center; gap: 8px; }
+    .slots-lbl { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #63625f; }
+    .slots { display: flex; gap: 4px; }
+    .slot { width: 10px; height: 10px; border: 1px solid #1c1c1c; box-sizing: border-box; display: inline-block; }
+    .slot-full { background: #1c1c1c; }
+
+    /* СТРОКА. Две ступени вместо одной ленты: имя — объект, параметры —
+       подпись. Разделительных линеек между строками нет: иерархия уже
+       развела текст, линейки вернули бы ощущение таблицы. */
+    .list { margin: 0; }
+    .sp { display: flex; align-items: flex-start; gap: 12px; padding: 11px 10px 12px; margin: 0 -10px; }
+    .sp:hover { background: #ddd9cf; }
+    .sp-prep { background: rgba(28,28,28,.055); border-left: 3px solid #1c1c1c; padding-left: 7px; }
+    .sp-main { min-width: 0; flex: 1 1 auto; }
+    .sp-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+    /* Cormorant SC — тот же --font-display, что и сейчас у .comp-name;
+       изменился только кегль: 12 → 19. Шрифт нигде не уменьшался. */
+    .sp-name { font-family: 'Cormorant SC', 'Cormorant Garamond', serif; font-weight: 700; font-size: 19px; line-height: 1.1; letter-spacing: -.005em; }
+    .sp-en { font-size: 11px; line-height: 1.2; color: #8b8983; letter-spacing: .01em; }
+    .sp-inf { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #63625f; }
+    /* Приглушённая подпись: те же данные, что были в строке, но серым и
+       на 12 px — Body/Data по шкале, ниже не опускаемся. */
+    .sp-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 5px; font-size: 12px; line-height: 1.3; color: #63625f; }
+    .sp-meta .sep { color: #aeaba3; }
+    /* Школа — маленькая аккуратная категория, а не первое слово серой ленты.
+       Плашка бумагой на тон темнее, без контура, ноль скругления, капс
+       Oswald: ритм появляется, цирка не появляется. Заливка держится и на
+       строке подготовленного (та подложена чернилами на 5,5 %), и на
+       наведении — обе светлее плашки. */
+    .school { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .11em; text-transform: uppercase; color: #1c1c1c; background: #d5d1c6; padding: 2px 7px 3px; line-height: 1.15; white-space: nowrap; }
+    .flag { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .11em; text-transform: uppercase; color: #1c1c1c; }
+    .star { flex: none; margin-top: 3px; width: 15px; height: 15px; color: #1c1c1c; }
+  </style>
+</helmet>
+<div class="sheet">
+  <div class="sb-section">Заклинания</div>
+
+  <div class="anchor anchor-first">
+    <span class="anchor-word-solo">Заговоры</span>
+    <span class="anchor-count">4</span>
+  </div>
+  <div class="list">
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Луч холода</span><span class="sp-en">Ray of Frost</span></div>
+        <div class="sp-meta"><span class="school">Воплощение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>Дальняя атака</span><span class="sep">·</span><span>1к8 холодом</span></div>
+      </div>
+    </div>
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Огненный снаряд</span><span class="sp-en">Fire Bolt</span></div>
+        <div class="sp-meta"><span class="school">Воплощение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>Дальняя атака</span><span class="sep">·</span><span>1к10 огнём</span></div>
+      </div>
+    </div>
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Малая иллюзия</span><span class="sp-en">Minor Illusion</span></div>
+        <div class="sp-meta"><span class="school">Иллюзия</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>СМ</span><span class="sep">·</span><span>1 минута</span></div>
+      </div>
+    </div>
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Защита от оружия</span><span class="sp-en">Blade Ward</span></div>
+        <div class="sp-meta"><span class="school">Ограждение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span class="flag">Концентрация</span><span class="sep">·</span><span>до 1 минуты</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="anchor">
+    <span class="anchor-no">1</span>
+    <span class="anchor-word">круг</span>
+    <span class="anchor-count">5 · подг. 3</span>
+    <span class="anchor-slots">
+      <span class="slots-lbl">ячейки</span>
+      <span class="slots"><i class="slot slot-full"></i><i class="slot slot-full"></i><i class="slot"></i><i class="slot"></i></span>
+    </span>
+  </div>
+  <div class="list">
+    <div class="sp sp-prep">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Волшебная стрела</span><span class="sp-en">Magic Missile</span></div>
+        <div class="sp-meta"><span class="school">Воплощение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>3 × 1к4+1 силовым</span></div>
+      </div>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="sp sp-prep">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Щит</span><span class="sp-en">Shield</span></div>
+        <div class="sp-meta"><span class="school">Ограждение</span><span class="sep">·</span><span>Реакция</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>+5 КЗ до начала след. хода</span></div>
+      </div>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="sp sp-prep">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Обнаружение магии</span><span class="sp-en">Detect Magic</span><span class="sp-inf" title="Не в счёт подготовленных">∞</span></div>
+        <div class="sp-meta"><span class="school">Прорицание</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span class="flag">Ритуал</span><span class="sep">·</span><span class="flag">Концентрация</span></div>
+      </div>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Огненные ладони</span><span class="sp-en">Burning Hands</span></div>
+        <div class="sp-meta"><span class="school">Воплощение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>Спасбросок Ловкости</span><span class="sep">·</span><span>3к6 огнём</span></div>
+      </div>
+    </div>
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Доспехи мага</span><span class="sp-en">Mage Armor</span></div>
+        <div class="sp-meta"><span class="school">Ограждение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВСМ</span><span class="sep">·</span><span>8 часов</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="anchor">
+    <span class="anchor-no">2</span>
+    <span class="anchor-word">круг</span>
+    <span class="anchor-count">3</span>
+    <span class="anchor-slots">
+      <span class="slots-lbl">ячейки</span>
+      <span class="slots"><i class="slot slot-full"></i><i class="slot slot-full"></i><i class="slot slot-full"></i></span>
+    </span>
+  </div>
+  <div class="list">
+    <div class="sp sp-prep">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Туманный шаг</span><span class="sp-en">Misty Step</span></div>
+        <div class="sp-meta"><span class="school">Вызов</span><span class="sep">·</span><span>Бонусное действие</span><span class="sep">·</span><span>В</span><span class="sep">·</span><span>Телепорт 9 м</span></div>
+      </div>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Паутина</span><span class="sp-en">Web</span></div>
+        <div class="sp-meta"><span class="school">Вызов</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВСМ</span><span class="sep">·</span><span class="flag">Концентрация</span><span class="sep">·</span><span>Спасбросок Ловкости</span></div>
+      </div>
+    </div>
+    <div class="sp">
+      <div class="sp-main">
+        <div class="sp-title"><span class="sp-name">Невидимость</span><span class="sp-en">Invisibility</span></div>
+        <div class="sp-meta"><span class="school">Иллюзия</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВСМ</span><span class="sep">·</span><span class="flag">Концентрация</span><span class="sep">·</span><span>до 1 часа</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

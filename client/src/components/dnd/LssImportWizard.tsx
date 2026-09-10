@@ -934,7 +934,11 @@ export function LssImportWizard({
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             <label>КЗ<input value={value.armorClass} style={{ width: 70 }} onChange={(e) => patch({ armorClass: e.target.value })} /></label>
             <label>+КЗ вручную<input value={value.manualAcBonus} style={{ width: 70 }} onChange={(e) => patch({ manualAcBonus: e.target.value })} /></label>
-            <label>Инициатива<input value={value.initiative} style={{ width: 70 }} onChange={(e) => patch({ initiative: e.target.value })} placeholder="пусто в LSS" /></label>
+            {/* Бонус инициативы считается сам (Ловкость + умения); руками
+                задаётся только поправка — как «+КЗ вручную» слева. Поля под
+                брошенное число здесь нет: бросок называют за столом, а не
+                при импорте. */}
+            <label>+Иниц. вручную<input value={value.initiativeMisc} style={{ width: 70 }} onChange={(e) => patch({ initiativeMisc: e.target.value })} /></label>
             <label>Скорость<input value={value.speed} style={{ width: 90 }} onChange={(e) => patch({ speed: e.target.value })} /></label>
           </div>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>

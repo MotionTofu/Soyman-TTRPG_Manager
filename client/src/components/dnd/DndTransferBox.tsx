@@ -24,6 +24,7 @@ const COIN_FIELDS = [
 ] as const;
 
 export function DndTransferBox({
+  initialItemKey,
   color,
   campaignId,
   characterId,
@@ -47,6 +48,9 @@ export function DndTransferBox({
   campaignId: number | null | undefined;
   characterId: number;
   characterName?: string;
+  /** Предмет, выбранный из меню строки инвентаря: из строки он уже выбран,
+   *  и второй раз спрашивать «что передать» незачем. */
+  initialItemKey?: string;
   equipment: DndEquipmentSection[];
   /** Свой кошелёк — для калькулятора монет. */
   ownCoins: DndCoins;
@@ -85,7 +89,7 @@ export function DndTransferBox({
 
   // Форма отправки: кому — одно на вещь и деньги; что и сколько — отдельно.
   const [recipientId, setRecipientId] = useState<number | null>(null);
-  const [itemKey, setItemKey] = useState("");
+  const [itemKey, setItemKey] = useState(initialItemKey ?? "");
   const [qtyText, setQtyText] = useState("1");
   const [itemKind, setItemKind] = useState<"item" | "replica">("item");
   const [coinTexts, setCoinTexts] = useState<Record<string, string>>({ cp: "", sp: "", ep: "", gp: "", pp: "" });

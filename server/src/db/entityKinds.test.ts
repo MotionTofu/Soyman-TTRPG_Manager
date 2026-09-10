@@ -13,6 +13,7 @@ import {
   sweepableSatellitePairs,
   endpointTableOf,
   EXPLICIT_SETS,
+  UNSWEPT_PAIRS,
 } from "./entityKinds";
 
 /**
@@ -151,25 +152,120 @@ describe("реестр видов сущностей согласован со �
     }
   });
 
-  it("каждая полиморфная пара *_type/*_id в базе кем-то обслуживается", () => {
-    // Не требование, а сигнал: список пар, которые реестр пока не описывает.
-    // Уборка знает про спутники, generic_links, entity_relations и полотна;
-    // остальные пары живут своей жизнью, и об этом надо знать явно.
+  it("каждая полиморфная пара *_type/*_id либо обслуживается, либо объявлена", () => {
+    // Раньше здесь стоял снимок из пятнадцати строк. Снимок фиксировал, что
+    // пар пятнадцать, но ни слова не говорил, чем они друг от друга
+    // отличаются, — а отличаются они сильно: одни говорят на языке реестра,
+    // другие своим диалектом, третьи вообще не про сущности. Поэтому теперь
+    // не снимок, а требование: новая пара обязана быть описана в
+    // UNSWEPT_PAIRS с причиной.
+    // Считается по ПАРАМ, а не по таблицам: у `canvas_boards` уборка знает
+    // `owner_type`, но не `scope_type`, и при счёте по таблицам вторая пара
+    // молча пряталась за первой.
     const known = new Set([
-      ...SATELLITE_TABLES,
-      "generic_links", "entity_relations", "canvas_boards",
+      ...SATELLITE_TABLES.map((t) => `${t}.owner_type`),
+      "generic_links.from_type", "generic_links.to_type",
+      "entity_relations.from_type", "entity_relations.to_type",
+      "canvas_boards.owner_type",
     ]);
     const unmanaged: string[] = [];
     for (const [t, cols] of columns) {
-      if (known.has(t)) continue;
       for (const c of cols) {
-        if (c.endsWith("_type") && cols.has(c.replace(/_type$/, "_id"))) unmanaged.push(`${t}.${c}`);
+        if (!c.endsWith("_type") || !cols.has(c.replace(/_type$/, "_id"))) continue;
+        if (known.has(`${t}.${c}`)) continue;
+        unmanaged.push(`${t}.${c}`);
       }
     }
-    // Зафиксировано как есть на 2026-09-10. Рост списка означает новую
-    // полиморфную связь без уборки — её нужно либо описать, либо внести сюда
-    // осознанно.
-    expect(unmanaged.sort()).toMatchSnapshot();
+    const undeclared = unmanaged.filter((pair) => !UNSWEPT_PAIRS[pair]).sort();
+    expect(
+      undeclared,
+      "новая полиморфная пара без уборки — опиши её в UNSWEPT_PAIRS"
+    ).toEqual([]);
+  });
+
+  it("в UNSWEPT_PAIRS нет записей про исчезнувшие пары", () => {
+    // Обратная сторона: колонку могли переименовать или убрать, и объяснение
+    // осталось бы висеть, описывая то, чего нет.
+    const stale = Object.keys(UNSWEPT_PAIRS).filter((pair) => {
+      const [table, col] = pair.split(".");
+      const cols = colsOf(table);
+      return !cols.has(col) || !cols.has(col.replace(/_type$/, "_id"));
+    });
+    expect(stale).toEqual([]);
+  });
+
+  it("у каждой объявленной пары есть внятная причина", () => {
+    for (const [pair, info] of Object.entries(UNSWEPT_PAIRS)) {
+      expect(info.why.length, `${pair}: причина пустая`).toBeGreaterThan(20);
+    }
+  });
+});
+
+/**
+ * Реестр объявляет фасет `graphNode` со словами «тот же набор строка в строку»
+ * про `client/src/graphTypes.ts`. До этого теста «строка в строку» держалось
+ * на честном слове: файлы лежат в разных проектах, общего кода у них нет, и
+ * разъехаться они могли молча — вид, добавленный на сервере, просто не
+ * нарисовался бы на графе.
+ */
+describe("граф связей: сервер и клиент знают одни виды", () => {
+  const graphTypesPath = path.join(__dirname, "..", "..", "..", "client", "src", "graphTypes.ts");
+
+  /** Ключи объекта `NAME: Record<string, …> = { … }` из исходника клиента. */
+  function mapKeys(source: string, name: string): string[] {
+    const start = source.indexOf(`export const ${name}`);
+    if (start < 0) return [];
+    const open = source.indexOf("{", start);
+    const close = source.indexOf("\n};", open);
+    if (open < 0 || close < 0) return [];
+    const body = source.slice(open + 1, close);
+    return [...body.matchAll(/^\s{2}([a-z_]+):/gm)].map((m) => m[1]);
+  }
+
+  /** Пары `ключ: "значение"` того же объекта. */
+  function mapValues(source: string, name: string): Record<string, string> {
+    const start = source.indexOf(`export const ${name}`);
+    if (start < 0) return {};
+    const open = source.indexOf("{", start);
+    const close = source.indexOf("\n};", open);
+    if (open < 0 || close < 0) return {};
+    const body = source.slice(open + 1, close);
+    return Object.fromEntries(
+      [...body.matchAll(/^\s{2}([a-z_]+):\s*"([^"]*)"/gm)].map((m) => [m[1], m[2]])
+    );
+  }
+
+  let source = "";
+  beforeAll(() => {
+    source = fs.readFileSync(graphTypesPath, "utf-8");
+  });
+
+  it("файл клиента прочитался и разобрался — проверка умеет падать", () => {
+    // Первая версия соседнего теста разбирала schema.sql регулярками, находила
+    // ноль колонок и проходила вхолостую. Поэтому сначала — что разбор нашёл
+    // хоть что-то осмысленное.
+    expect(source.length).toBeGreaterThan(1000);
+    expect(mapKeys(source, "TYPE_LABELS").length).toBeGreaterThan(10);
+  });
+
+  it("набор узлов графа совпадает с TYPE_LABELS клиента", () => {
+    const server = ENTITY_KINDS.filter((k) => k.graphNode).map((k) => k.kind).sort();
+    expect(mapKeys(source, "TYPE_LABELS").sort()).toEqual(server);
+  });
+
+  it("маршруты клиента не расходятся с detailPrefix реестра", () => {
+    // TYPE_ROUTES клиента — четвёртая копия того же знания. Сверяются только
+    // виды с детальной страницей: у ресурса и мастерения её нет вовсе, и
+    // щелчок по узлу ведёт в список раздела — это не расхождение, а разные
+    // вопросы. Требовать совпадения там значило бы записать в реестр неправду.
+    const routes = mapValues(source, "TYPE_ROUTES");
+    expect(Object.keys(routes).length).toBeGreaterThan(10);
+    const wrong: string[] = [];
+    for (const [kind, route] of Object.entries(routes)) {
+      const prefix = requireKind(kind).detailPrefix;
+      if (prefix && prefix !== route) wrong.push(`${kind}: клиент ${route}, реестр ${prefix}`);
+    }
+    expect(wrong).toEqual([]);
   });
 });
 

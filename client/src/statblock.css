@@ -253,14 +253,18 @@ summary.sb-section {
 .dnd-spell-level-card {
   margin: 0;
 }
+/* Отбивка круга — единственная линейка в разделе (между строками их больше
+   нет), поэтому над ней стоит воздух: 18 px сверх зазора стопки. Сам
+   заголовок при этом не вырос. */
 .dnd-spell-level-summary {
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.12em;
   color: var(--ink);
   border-top: var(--card-border-width, 1px) solid var(--line);
-  padding-top: 8px;
-  margin-bottom: 8px;
+  padding-top: 9px;
+  margin-top: 18px;
+  margin-bottom: 6px;
   text-transform: var(--section-transform);
   font-weight: 400;
   cursor: pointer;

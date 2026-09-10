@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    /* КАК СЕЙЧАС. Снято со стилей приложения значение в значение:
+       .dnd-spell-level-summary (Oswald 10, трекинг .12em, линейка сверху),
+       .comp-row + .dnd-spell-row (padding 3/6, кегль 12),
+       .comp-name (Cormorant SC 700, кегль 12 — то есть имя и подпись
+       одного размера), .dnd-spell-meta (--muted, 12.2), .is-prepared
+       (заливка чернилами 16 %, полоса слева 3 px, вес 600). */
+    body { margin: 0; background: #e8e4da; color: #1c1c1c; font-family: 'Archivo', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1c1c1c; } a:hover { color: #63625f; }
+    .sheet { padding: 22px 26px 26px; }
+    .lvl { display: flex; align-items: baseline; justify-content: space-between; font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; border-top: 1px solid #2a2a2a; padding-top: 8px; margin: 0 0 8px; }
+    .lvl-label { display: inline-flex; align-items: baseline; gap: 8px; }
+    .lvl-count { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #63625f; text-transform: none; letter-spacing: 0; }
+    .used { display: flex; align-items: center; gap: 6px; color: #63625f; font-family: 'Archivo', sans-serif; font-size: 12px; letter-spacing: 0; text-transform: none; }
+    .slots { display: flex; gap: 4px; }
+    .slot { width: 10px; height: 10px; border: 1px solid #1c1c1c; box-sizing: border-box; display: inline-block; }
+    .slot-full { background: #1c1c1c; }
+    .row { display: flex; align-items: baseline; gap: 12px; padding: 3px 6px; margin: 0 -6px; font-size: 12px; }
+    .row-prep { background: rgba(28,28,28,.16); border-left: 3px solid #1c1c1c; padding-left: 3px; font-weight: 600; }
+    .nm { font-family: 'Cormorant SC', 'Cormorant Garamond', serif; font-weight: 700; font-size: 12px; letter-spacing: -.01em; line-height: 1.1; }
+    .meta { color: #63625f; font-size: 12.2px; font-weight: 400; }
+    .star { flex: none; margin-left: auto; width: 13px; height: 13px; color: #1c1c1c; }
+  </style>
+</helmet>
+<div class="sheet">
+  <div class="lvl">
+    <span class="lvl-label">1 круг<span class="lvl-count">5 · подг. 3</span></span>
+    <span class="used">исп.<span class="slots"><i class="slot slot-full"></i><i class="slot slot-full"></i><i class="slot"></i><i class="slot"></i></span></span>
+  </div>
+  <div>
+    <div class="row row-prep">
+      <span class="nm">Волшебная стрела [Magic Missile]</span>
+      <span class="meta">Воплощение | Действие | ВС | 3 × 1к4+1 силовым</span>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="row row-prep">
+      <span class="nm">Щит [Shield]</span>
+      <span class="meta">Ограждение | Реакция | ВС | +5 КЗ до начала след. хода</span>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="row row-prep">
+      <span class="nm">Обнаружение магии [Detect Magic]</span>
+      <span class="meta">Прорицание | Действие | ВС | Ритуал | Концентрация</span>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="row">
+      <span class="nm">Огненные ладони [Burning Hands]</span>
+      <span class="meta">Воплощение | Действие | ВС | Спасбросок Ловкости | 3к6 огнём</span>
+    </div>
+    <div class="row">
+      <span class="nm">Доспехи мага [Mage Armor]</span>
+      <span class="meta">Ограждение | Действие | ВСМ | 8 часов</span>
+    </div>
+  </div>
+
+  <div class="lvl" style="margin-top: 14px;">
+    <span class="lvl-label">2 круг<span class="lvl-count">3</span></span>
+    <span class="used">исп.<span class="slots"><i class="slot slot-full"></i><i class="slot slot-full"></i><i class="slot slot-full"></i></span></span>
+  </div>
+  <div>
+    <div class="row row-prep">
+      <span class="nm">Туманный шаг [Misty Step]</span>
+      <span class="meta">Вызов | Бонусное действие | В | Телепорт 9 м</span>
+      <svg class="star" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14.6 9.4l6.4.6-4.9 4.2 1.5 6.3-5.6-3.4-5.6 3.4 1.5-6.3-4.9-4.2 6.4-.6L12 3.5Z" /></svg>
+    </div>
+    <div class="row">
+      <span class="nm">Паутина [Web]</span>
+      <span class="meta">Вызов | Действие | ВСМ | Концентрация | Спасбросок Ловкости</span>
+    </div>
+    <div class="row">
+      <span class="nm">Невидимость [Invisibility]</span>
+      <span class="meta">Иллюзия | Действие | ВСМ | Концентрация | до 1 часа</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

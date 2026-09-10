@@ -159,7 +159,7 @@ function AbilityBox({
       onClick={() => setShowSave((v) => !v)}
       title="Клик — переключить характеристику/спасбросок"
     >
-      <DndDie size="sm" edge={isSaveProficient} accentColor={accentColor}>
+      <DndDie size="sm" textured edge={isSaveProficient} accentColor={accentColor}>
         <span className="dnd-die-value">
           {showSave ? save : primary === "score" ? score : formatModifier(mod - exhaustionPenalty)}
         </span>

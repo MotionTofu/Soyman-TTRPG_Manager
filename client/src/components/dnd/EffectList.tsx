@@ -5,6 +5,8 @@ import {
   COST_KIND_LABELS,
   COST_PERIOD_LABELS,
   EFFECT_TYPE_LABELS,
+  ROLL_TARGET_LABELS,
+  PROFICIENCY_SHARE_LABELS,
   EFFECT_TYPE_ORDER,
   EFFECT_WHEN_LABELS,
   EMPTY_COST,
@@ -30,6 +32,8 @@ import {
   type DndEffectWhen,
   type DndMechanicsRef,
   type DndMovementKind,
+  type DndRollTarget,
+  type DndProficiencyShare,
 } from "./effects";
 import { loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { ABILITY_LABELS } from "./AbilityScores";
@@ -200,12 +204,63 @@ function EffectFields({
         </>
       );
     case "roll_modifier":
+      // Свободный текст остаётся: им описываются условные и кубиковые
+      // модификаторы («1к4 к броскам атаки или спасброскам»), которые в число
+      // не сводятся. Три поля справа — машинная разметка: только размеченное
+      // доходит до производных величин листа. Не размечено — модификатор
+      // просто показывается текстом, как показывался всегда.
       return (
-        <input
-          placeholder="Модификатор, напр. +1d4"
-          value={effect.modifier ?? ""}
-          onChange={(e) => onChange({ modifier: e.target.value })}
-        />
+        <>
+          <input
+            placeholder="Модификатор, напр. +1к4"
+            value={effect.modifier ?? ""}
+            onChange={(e) => onChange({ modifier: e.target.value })}
+          />
+          <select
+            value={effect.appliesTo ?? ""}
+            title="К какому броску применяется — чтобы лист мог посчитать"
+            onChange={(e) =>
+              onChange({ appliesTo: e.target.value ? (e.target.value as DndRollTarget) : undefined })
+            }
+          >
+            <option value="">не размечено</option>
+            {(Object.keys(ROLL_TARGET_LABELS) as DndRollTarget[]).map((t) => (
+              <option key={t} value={t}>
+                {ROLL_TARGET_LABELS[t]}
+              </option>
+            ))}
+          </select>
+          {effect.appliesTo && (
+            <>
+              <input
+                type="number"
+                style={{ width: 56 }}
+                placeholder="+N"
+                title="Плоская прибавка"
+                value={effect.flat ?? ""}
+                onChange={(e) =>
+                  onChange({ flat: e.target.value === "" ? undefined : Number(e.target.value) })
+                }
+              />
+              <select
+                value={effect.proficiency ?? ""}
+                title="Прибавка бонусом мастерства"
+                onChange={(e) =>
+                  onChange({
+                    proficiency: e.target.value ? (e.target.value as DndProficiencyShare) : undefined,
+                  })
+                }
+              >
+                <option value="">без бонуса мастерства</option>
+                {(Object.keys(PROFICIENCY_SHARE_LABELS) as DndProficiencyShare[]).map((v) => (
+                  <option key={v} value={v}>
+                    {PROFICIENCY_SHARE_LABELS[v]}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+        </>
       );
     default:
       return null;

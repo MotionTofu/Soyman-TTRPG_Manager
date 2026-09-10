@@ -195,6 +195,22 @@ systemsRouter.get("/:id/sections", (req, res) => {
   );
 });
 
+// Сколько записей в каждом разделе системы — для хиро-карточки «Обзора»
+// (строка «Классы: 13» под описанием). Одним запросом, без вытягивания
+// самих записей.
+systemsRouter.get("/:id/entry-counts", (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT s.id AS section_id, COUNT(e.id) AS count
+       FROM system_sections s
+       LEFT JOIN compendium_entries e ON e.section_id = s.id
+       WHERE s.system_id = ?
+       GROUP BY s.id`
+    )
+    .all(req.params.id) as { section_id: number; count: number }[];
+  res.json(rows.map((r) => ({ section_id: Number(r.section_id), count: Number(r.count) })));
+});
+
 systemsRouter.post("/:id/sections", (req, res) => {
   const { name, kind } = req.body as { name: string; kind?: string };
   if (!name) return res.status(400).json({ error: "name is required" });

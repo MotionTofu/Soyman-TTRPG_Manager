@@ -497,6 +497,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const isFeatSection = section.kind === "feat";
   // Мультивыбор для печати / показа игрокам (только для справочника)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Режим массового выбора: только в нём видны чекбоксы (строки, шапки
+  // категорий, «выбрать всё»). Выключен по умолчанию — список спокойнее.
+  const [bulkSelect, setBulkSelect] = useState(false);
+  function toggleBulkSelect() {
+    setBulkSelect((prev) => {
+      if (prev) setSelectedIds(new Set());
+      return !prev;
+    });
+  }
   const isMechanicsSection = section.kind === "mechanics";
   // Фильтр по категории справочника: пусто — показывать все шесть.
   const [mechanicsCategoryFilter, setMechanicsCategoryFilter] = useState<MechanicsCategoryKey | "">("");
@@ -1252,6 +1261,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     onToggleFavourite: toggleFavourite,
     selectedIds,
     onToggleSelect: toggleSelect,
+    bulkSelect,
   };
 
   const magicItemGroups: [string, CompendiumEntry[]][] | null = !isMagicItemSection
@@ -1296,22 +1306,13 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     const blocks = activeCategoryLabel ? allBlocks.filter(([label]) => label === activeCategoryLabel) : allBlocks;
     return (
       <div className="stack">
-          {/* Сверка имён навыков — только там, где есть группа «Навыки»:
-              в LitM или «Золоте и прахе» этому экрану нечего показывать.
-              Стоит первым: пока имя не сведено, выданное под ним владение не
-              ставится, и это важнее порядка сортировки групп. */}
-          {entries.some((e) => e.parent_id === null && e.name === "Навыки") && (
-            <DndSkillNamesPanel systemId={systemId} />
-          )}
-          <div className="card stack">
-            <div className="row sort-toggle" style={{ gap: 4 }}>
+        <div className="card stack">
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <span className="muted">Сортировка:</span>
               <button className={sortMode === "alpha" ? "active-sort" : ""} onClick={() => changeSortMode("alpha")} title={sortMode === "alpha" ? (sortDir === "asc" ? "А-Я (повтор — Я-А)" : "Я-А (повтор — А-Я)") : "А-Я"}>
                 {sortMode === "alpha" ? (sortDir === "asc" ? "А-Я ↑" : "Я-А ↓") : "А-Я"}
               </button>
               <button className={sortMode === "manual" ? "active-sort" : ""} onClick={() => changeSortMode("manual")}>Вручную</button>
-            </div>
-            <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <input type="text" placeholder="Поиск по названию…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ maxWidth: 260 }} />
               {searchQuery !== "" && (
                 <button type="button" className="comp-mini" title="Очистить поиск" onClick={() => setSearchQuery("")}>
@@ -1319,6 +1320,16 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                 </button>
               )}
               {topLevel.length > 0 && (
+                <button
+                  type="button"
+                  className={bulkSelect ? "active-sort" : ""}
+                  onClick={toggleBulkSelect}
+                  title="Показать чекбоксы для массового выбора"
+                >
+                  Массовый выбор
+                </button>
+              )}
+              {bulkSelect && topLevel.length > 0 && (
                 <>
                   <label className="row" style={{ gap: 6, cursor: "pointer", marginLeft: 4 }}>
                     <input type="checkbox" checked={selectedIds.size === entries.filter((e) => e.kind === "mechanic_item").length && entries.filter((e) => e.kind === "mechanic_item").length > 0} onChange={(e) => { if (e.target.checked) setSelectedIds(new Set(entries.filter((en) => en.kind === "mechanic_item").map((en) => en.id))); else setSelectedIds(new Set()); }} />
@@ -1364,8 +1375,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             <EmptyState title="Справочник пуст" hint="Заведите списки — типы существ, школы магии, свойства оружия и другие — чтобы пикера классов и заклинаний заработали." action={<button className="primary" onClick={() => addEntry(null, rootKind)}>+ Добавить {kindLabel(rootKind).toLowerCase()}</button>} />
           )}
         </div>
-        {favouriteEntries.length > 0 && (
-          <details className="card stack" open>
+        {(favouriteEntries.length > 0 || blocks.length > 0) && (
+          <div className="card stack comp-categories">
+            {favouriteEntries.length > 0 && (
+              <details className="comp-category" open>
             <summary className="card-header--inverted is-themed chevron-summary" style={{ cursor: "pointer", listStyle: "none" }}>
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
                 <NavIcon name="chevron" className="chevron-icon" />
@@ -1380,9 +1393,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                 </SortableRow>
               ))}
             </div>
-          </details>
-        )}
-        {blocks.length === 0 && topLevel.length > 0 && <div className="card stack"><p className="muted">В этой категории пока пусто.</p></div>}
+              </details>
+            )}
+            {blocks.length === 0 && topLevel.length > 0 && <p className="muted">В этой категории пока пусто.</p>}
         {blocks.map(([label, list]) => {
           // чекбокс раздела — выбирает всё внутри раздела (все группы категории + их потомки)
           const getAllIds = () => {
@@ -1411,12 +1424,12 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           const catChecked = allSelected;
           const catIndeterminate = !allSelected && someSelected;
           return (
-          <details key={label} className="card stack" open>
+          <details key={label} className="comp-category" open>
             <summary className="card-header--inverted is-themed chevron-summary" style={{ cursor: "pointer", listStyle: "none" }}>
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
-                <input type="checkbox" checked={catChecked} ref={(el) => { if (el) el.indeterminate = catIndeterminate; }} onChange={() => toggleCategorySelection(list)} onClick={(e) => e.stopPropagation()} aria-label={`Выбрать ${label}`} title="Выбрать всё в разделе" />
                 <NavIcon name="chevron" className="chevron-icon" />
                 <span className="card-header--inverted-label">{label}</span>
+                {bulkSelect && <input type="checkbox" checked={catChecked} ref={(el) => { if (el) el.indeterminate = catIndeterminate; }} onChange={() => toggleCategorySelection(list)} onClick={(e) => e.stopPropagation()} aria-label={`Выбрать ${label}`} title="Выбрать всё в разделе" />}
               </span>
               <span className="card-header--inverted-count">{list.length}</span>
             </summary>
@@ -1430,6 +1443,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           </details>
           );
         })}
+          </div>
+        )}
+        {/* Сверка имён навыков — только там, где есть группа «Навыки»:
+            в LitM или «Золоте и прахе» этому экрану нечего показывать.
+            Живёт в самом низу: рабочий список — категории выше, сверка —
+            редкое обслуживание. */}
+        {entries.some((e) => e.parent_id === null && e.name === "Навыки") && (
+          <DndSkillNamesPanel systemId={systemId} />
+        )}
         {verstakOpen && <Verstak entries={entries} selectedIds={selectedIds} onPrint={handlePrint} onShow={handleShowToPlayers} forceOpen onClose={() => setVerstakOpen(false)} onRemove={(id) => setSelectedIds((prev) => { const n = new Set(prev); // удаляем группу вместе с потомками
                 const byParent = new Map<number | null, number[]>();
                 for (const e of entries) { const k = e.parent_id; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k)!.push(e.id); }
@@ -1899,6 +1921,7 @@ interface NodeProps {
   onToggleFavourite?: (entry: CompendiumEntry, favourite: boolean) => void;
   selectedIds?: Set<number>;
   onToggleSelect?: (id: number) => void;
+  bulkSelect?: boolean;
 }
 
 // Drop target for one row when the section is in manual sort mode — shared
@@ -2117,7 +2140,8 @@ function EntryNode(props: NodeProps) {
         <span className={`comp-toggle${canToggle ? "" : " comp-toggle-disabled"}`} aria-hidden="true">
           <NavIcon name="chevron" className={`chevron-icon${isOpen || isEditing ? " is-open" : ""}`} />
         </span>
-        {props.selectedIds && (entry.kind === "mechanic_item" || entry.kind === "mechanic_group") && (() => {
+        <span className="comp-name">{entry.name || <em className="muted">Без названия</em>}</span>
+        {props.bulkSelect && props.selectedIds && (entry.kind === "mechanic_item" || entry.kind === "mechanic_group") && (() => {
           const isGroup = entry.kind === "mechanic_group";
           let checked = props.selectedIds!.has(entry.id);
           let indeterminate = false;
@@ -2168,7 +2192,6 @@ function EntryNode(props: NodeProps) {
             ⠿
           </span>
         )}
-        <span className="comp-name">{entry.name || <em className="muted">Без названия</em>}</span>
         {litmMight && (
           <span className="comp-badge litm-power-chip">
             {litmMight === "origin" ? "Происх." : litmMight === "adventure" ? "Приключ." : litmMight === "greatness" ? "Величие" : "Перем."}

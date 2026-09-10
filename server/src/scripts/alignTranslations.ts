@@ -12,7 +12,10 @@
 
 import fs from "fs";
 import path from "path";
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 import { normalizeName } from "../import/names";
 
 const args = process.argv.slice(2);

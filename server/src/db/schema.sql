@@ -576,6 +576,7 @@ CREATE TABLE IF NOT EXISTS story_arcs (
   -- bucket, so a scene never has to live outside an adventure. It can't be
   -- renamed or archived.
   is_default INTEGER NOT NULL DEFAULT 0,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT

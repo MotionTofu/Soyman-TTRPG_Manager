@@ -37,7 +37,8 @@
   .row .ctrl{flex:1; display:flex; align-items:center; gap:4px;}
   .row input[type=range]{flex:1;}
   .row select,.row input[type=color]{flex:1;}
-  .row .val{flex:0 0 42px; text-align:right; font-family:"Courier New",monospace;}
+  .row .val{flex:0 0 58px; width:58px; font-family:"Courier New",monospace; text-align:right;
+    border:1px solid var(--dark); background:#fff; padding:1px 2px;}
   .group{border:1px solid var(--dark); margin:4px 0; padding:3px;}
   .group>.ghead{background:var(--gray); padding:1px 4px; font-weight:bold; border:1px solid var(--dark); margin:-8px 0 4px 6px; display:inline-block;}
   .presetbar{display:flex; flex-wrap:wrap; gap:3px; padding:3px;}
@@ -151,12 +152,19 @@ const t = k => (I18N[LANG]&&I18N[LANG][k])||k;
 /* ---------------- state ---------------- */
 const baseCfg = {
   type:"fractalNoise", freqX:0.05, freqY:0.05, link:true, octaves:3, seed:7, stitch:true,
+  base:"noise", structSize:24, structAngle:0,
+  posterize:false, posterSteps:5, contours:false,
+  convolve:false, convolvePreset:"emboss",
+  moire:false, moireFreq:0.05, moireMix:50,
+  aberr:false, aberrShift:3,
+  lightX:960, lightY:540, lightZ:300,
   displace:0, blur:0, morph:false, morphOp:"dilate", morphRadius:1,
   light:false, lightType:"diffuse", lightColor:"#ffffff", surface:4, blend:false, blendMode:"screen",
   advTone:false, curve:[{x:0,y:0},{x:.25,y:.25},{x:.5,y:.5},{x:.75,y:.75},{x:1,y:1}],
+  levels:false, blackPt:0.35, whitePt:0.65,
   contrast:0, brightness:0, saturation:100, colorMode:"color",
   duoShadow:"#1a1206", duoHigh:"#e8d9a8",
-  tile:256, repeat:true, bg:"#ffffff", transparent:false, pngScale:1, halftone:false
+  tile:1920, tileH:1080, repeat:true, bg:"#ffffff", transparent:false, pngScale:1, halftone:false
 };
 let S = structuredClone(baseCfg);
 
@@ -166,13 +174,17 @@ const PRESETS = {
   "Металл":     {type:"fractalNoise",freqX:0.08,freqY:0.08,octaves:2,blur:0.3,light:true,lightType:"diffuse",lightColor:"#cfcfcf",surface:6,blend:true,blendMode:"screen",colorMode:"color",saturation:0},
   "Бумага":     {type:"fractalNoise",freqX:0.9,freqY:0.9,octaves:2,colorMode:"color",saturation:0,contrast:-15,brightness:45,bg:"#f0e6d2"},
   "Плазма":     {type:"turbulence",freqX:0.03,freqY:0.03,octaves:4,blur:0.5,displace:30,colorMode:"color",saturation:200},
-  "Террейн":    {type:"fractalNoise",freqX:0.012,freqY:0.012,octaves:6,light:true,lightType:"diffuse",lightColor:"#ffffff",surface:9,blend:true,blendMode:"multiply",colorMode:"duotone",duoShadow:"#241405",duoHigh:"#d8c89a"},
+  "Террейн":    {type:"fractalNoise",freqX:0.012,freqY:0.012,octaves:6,light:true,lightType:"diffuse",lightColor:"#ffffff",surface:9,blend:true,blendMode:"multiply",levels:true,colorMode:"duotone",duoShadow:"#241405",duoHigh:"#d8c89a"},
   "Космос":     {type:"turbulence",freqX:0.02,freqY:0.02,octaves:4,displace:20,colorMode:"color",saturation:150,bg:"#05030f"},
   "Войлок":     {type:"turbulence",freqX:0.6,freqY:0.6,octaves:3,morph:true,morphOp:"dilate",morphRadius:1,blur:0.2,colorMode:"color",saturation:0,contrast:5},
   "Халфтон":    {halftone:true,freqX:0.05,freqY:0.05,octaves:2,displace:18,colorMode:"color",saturation:0,bg:"#ffffff"},
   "Царапины":   {type:"fractalNoise",freqX:0.005,freqY:0.5,link:false,octaves:2,colorMode:"color",saturation:0,advTone:true,curve:[{x:0,y:0},{x:.36,y:0},{x:.5,y:0},{x:.62,y:0},{x:1,y:1}],morph:true,morphOp:"erode",morphRadius:1,bg:"#141414"},
   "Волосы":     {type:"fractalNoise",freqX:0.35,freqY:0.04,link:false,octaves:3,blur:0.15,colorMode:"color",saturation:0,advTone:true,curve:[{x:0,y:0},{x:.4,y:0},{x:.5,y:0},{x:.6,y:0},{x:1,y:1}],bg:"#241a22"},
-  "Звёзды":     {type:"fractalNoise",freqX:0.2,freqY:0.2,octaves:1,colorMode:"color",saturation:0,advTone:true,curve:[{x:0,y:0},{x:.9,y:0},{x:.94,y:0},{x:.97,y:0},{x:1,y:1}],bg:"#000000"}
+  "Звёзды":     {type:"fractalNoise",freqX:0.2,freqY:0.2,octaves:1,colorMode:"color",saturation:0,advTone:true,curve:[{x:0,y:0},{x:.9,y:0},{x:.94,y:0},{x:.97,y:0},{x:1,y:1}],bg:"#000000"},
+  "Топо":       {base:"noise",type:"fractalNoise",freqX:0.02,freqY:0.02,link:true,octaves:5,posterize:true,posterSteps:6,contours:true,levels:true,colorMode:"duotone",duoShadow:"#1c2b1a",duoHigh:"#e6dfc2",bg:"#f4efe0"},
+  "Гравюра":     {base:"stripes",structSize:10,structAngle:15,type:"fractalNoise",freqX:0.05,freqY:0.05,octaves:3,displace:22,convolve:true,convolvePreset:"emboss",colorMode:"grayscale",contrast:20},
+  "Плитка":      {base:"checker",structSize:32,type:"turbulence",freqX:0.03,freqY:0.03,octaves:2,displace:14,blur:0.4,levels:true,colorMode:"duotone",duoShadow:"#20242c",duoHigh:"#d9cfae"},
+  "Кольца":      {base:"rings",structSize:30,type:"turbulence",freqX:0.04,freqY:0.04,octaves:3,displace:36,colorMode:"color",saturation:0,posterize:true,posterSteps:4}
 };
 
 /* ---------------- helpers ---------------- */
@@ -199,41 +211,87 @@ function buildSVG(){
   } else {
     const f=[];
     f.push(`<feTurbulence type="${c.type}" baseFrequency="${fb}" numOctaves="${c.octaves}" seed="${c.seed}" stitchTiles="${c.stitch?'stitch':'noStitch'}" result="n"/>`);
-    let cur="n";
+    // --- structure base: geometry pattern modulated by noise, or pure noise ---
+    let baseDef="";
+    let cur;
+    if(!c.base || c.base==="noise"){
+      cur="n";
+    } else {
+      const sz=Math.max(4,c.structSize||24);
+      const ang=c.structAngle||0;
+      const pid=`${fid}_base`;
+      if(c.base==="stripes"){
+        baseDef=`<pattern id="${pid}" width="${sz}" height="${sz}" patternUnits="userSpaceOnUse" patternTransform="rotate(${ang} ${sz/2} ${sz/2})"><rect width="${sz}" height="${sz}" fill="#ffffff"/><rect width="${sz/2}" height="${sz}" fill="#000000"/></pattern>`;
+      } else if(c.base==="grid"){
+        baseDef=`<pattern id="${pid}" width="${sz}" height="${sz}" patternUnits="userSpaceOnUse" patternTransform="rotate(${ang} ${sz/2} ${sz/2})"><rect width="${sz}" height="${sz}" fill="#ffffff"/><path d="M0 0H${sz}M0 0V${sz}" stroke="#000000" stroke-width="2"/></pattern>`;
+      } else if(c.base==="dots"){
+        baseDef=`<pattern id="${pid}" width="${sz}" height="${sz}" patternUnits="userSpaceOnUse"><rect width="${sz}" height="${sz}" fill="#ffffff"/><circle cx="${sz/2}" cy="${sz/2}" r="${(sz/2-1).toFixed(1)}" fill="#000000"/></pattern>`;
+      } else if(c.base==="checker"){
+        baseDef=`<pattern id="${pid}" width="${sz}" height="${sz}" patternUnits="userSpaceOnUse"><rect width="${sz}" height="${sz}" fill="#ffffff"/><rect width="${sz/2}" height="${sz/2}" fill="#000000"/><rect x="${sz/2}" y="${sz/2}" width="${sz/2}" height="${sz/2}" fill="#000000"/></pattern>`;
+      } else if(c.base==="rings"){
+        baseDef=`<pattern id="${pid}" width="${sz}" height="${sz}" patternUnits="userSpaceOnUse"><rect width="${sz}" height="${sz}" fill="#ffffff"/><circle cx="${sz/2}" cy="${sz/2}" r="${(sz/2-1).toFixed(1)}" fill="none" stroke="#000000" stroke-width="2"/><circle cx="${sz/2}" cy="${sz/2}" r="${(sz/4).toFixed(1)}" fill="#000000"/></pattern>`;
+      }
+      cur="SourceGraphic";
+    }
     if(c.displace>0){f.push(`<feDisplacementMap in="${cur}" in2="n" scale="${c.displace}" xChannelSelector="R" yChannelSelector="G" result="d"/>`);cur="d";}
     if(c.blur>0){f.push(`<feGaussianBlur in="${cur}" stdDeviation="${c.blur}" result="b"/>`);cur="b";}
     if(c.morph){f.push(`<feMorphology in="${cur}" operator="${c.morphOp}" radius="${c.morphRadius}" result="m"/>`);cur="m";}
+    if(c.moire){
+      f.push(`<feTurbulence type="${c.type}" baseFrequency="${c.moireFreq}" numOctaves="2" seed="${((c.seed|0)+31)%100}" stitchTiles="${c.stitch?'stitch':'noStitch'}" result="n2"/>`);
+      const mx=Math.max(0,Math.min(100,c.moireMix|0))/100;
+      f.push(`<feComposite in="${cur}" in2="n2" operator="arithmetic" k1="0" k2="${mx.toFixed(3)}" k3="${(1-mx).toFixed(3)}" k4="0" result="mx"/>`);cur="mx";
+    }
+    if(c.convolve){
+      const K={
+        emboss:{m:"-2 -1 0 -1 1 1 0 1 2",bias:"0.5",div:"1"},
+        edges:{m:"-1 -1 -1 -1 8 -1 -1 -1 -1",bias:"0",div:"1"},
+        sharpen:{m:"0 -1 0 -1 5 -1 0 -1 0",bias:"0",div:"1"},
+        blur3:{m:"1 1 1 1 1 1 1 1 1",bias:"0",div:"9"}
+      }[c.convolvePreset]||{m:"-2 -1 0 -1 1 1 0 1 2",bias:"0.5",div:"1"};
+      f.push(`<feConvolveMatrix in="${cur}" order="3" kernelMatrix="${K.m}" divisor="${K.div}" bias="${K.bias}" preserveAlpha="true" result="cv"/>`);cur="cv";
+    }
     if(c.light){
-      if(c.lightType==="diffuse")
-        f.push(`<feDiffuseLighting in="${cur}" lighting-color="${c.lightColor}" surfaceScale="${c.surface}" diffuseConstant="1" result="lit"><feDistantLight azimuth="45" elevation="50"/></feDiffuseLighting>`);
+      const le = c.lightType==="point"
+        ? `<fePointLight x="${c.lightX}" y="${c.lightY}" z="${c.lightZ}"/>`
+        : `<feDistantLight azimuth="45" elevation="50"/>`;
+      if(c.lightType==="specular")
+        f.push(`<feSpecularLighting in="${cur}" lighting-color="${c.lightColor}" surfaceScale="${c.surface}" specularConstant="1" specularExponent="20" result="lit">${le}</feSpecularLighting>`);
       else
-        f.push(`<feSpecularLighting in="${cur}" lighting-color="${c.lightColor}" surfaceScale="${c.surface}" specularConstant="1" specularExponent="20" result="lit"><feDistantLight azimuth="45" elevation="50"/></feSpecularLighting>`);
+        f.push(`<feDiffuseLighting in="${cur}" lighting-color="${c.lightColor}" surfaceScale="${c.surface}" diffuseConstant="1" result="lit">${le}</feDiffuseLighting>`);
       if(c.blend){f.push(`<feBlend in="${cur}" in2="lit" mode="${c.blendMode}" result="bl"/>`);cur="bl";}
       else cur="lit";
     }
-    if(c.advTone){
-      const tv=sampleCurve(c.curve,9).join(" ");
-      f.push(`<feComponentTransfer in="${cur}" result="t"><funcR type="table" tableValues="${tv}"/><funcG type="table" tableValues="${tv}"/><funcB type="table" tableValues="${tv}"/></feComponentTransfer>`);cur="t";
-    } else {
-      const slope=(1+c.contrast/100).toFixed(3);
-      const inter=(c.brightness/100*0.5).toFixed(3);
-      f.push(`<feComponentTransfer in="${cur}" result="t"><funcR type="linear" slope="${slope}" intercept="${inter}"/><funcG type="linear" slope="${slope}" intercept="${inter}"/><funcB type="linear" slope="${slope}" intercept="${inter}"/></feComponentTransfer>`);cur="t";
+    if(c.posterize){
+      const n=Math.max(2,Math.min(12,c.posterSteps|0||5));
+      const tv=[];for(let i=0;i<n;i++)tv.push((i/(n-1)).toFixed(3));
+      const ts=tv.join(" ");
+      f.push(`<feComponentTransfer in="${cur}" result="p"><funcR type="discrete" tableValues="${ts}"/><funcG type="discrete" tableValues="${ts}"/><funcB type="discrete" tableValues="${ts}"/></feComponentTransfer>`);cur="p";
     }
-    if(c.colorMode==="grayscale"){
-      f.push(`<feColorMatrix in="${cur}" type="saturate" values="0" result="col"/>`);cur="col";
-    } else if(c.colorMode==="duotone"){
-      f.push(`<feColorMatrix in="${cur}" type="saturate" values="0" result="g"/>`);
-      const s=hexToRgb(c.duoShadow),h=hexToRgb(c.duoHigh);
-      const m=[(h.r-s.r),0,0,0,s.r,(h.g-s.g),0,0,0,s.g,(h.b-s.b),0,0,0,s.b,0,0,0,1,0].map(v=>v.toFixed(3));
-      f.push(`<feColorMatrix in="g" type="matrix" values="${m.join(" ")}" result="col"/>`);cur="col";
-    } else {
-      f.push(`<feColorMatrix in="${cur}" type="saturate" values="${(c.saturation/100).toFixed(3)}" result="col"/>`);cur="col";
+    if(c.contours){
+      f.push(`<feConvolveMatrix in="${cur}" order="3" kernelMatrix="-1 -1 -1 -1 8 -1 -1 -1 -1" preserveAlpha="true" result="e"/>`);
+      f.push(`<feBlend in="${cur}" in2="e" mode="multiply" result="ce"/>`);cur="ce";
     }
-    inner=`<filter id="${fid}" x="0" y="0" width="100%" height="100%">${f.join("")}</filter>`;
-    body=`<rect width="100%" height="100%" filter="url(#${fid})"/>`;
+    if(c.aberr){
+      const sh=c.aberrShift||0;
+      f.push(`<feColorMatrix in="${cur}" type="matrix" values="1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="chr"/>`);
+      f.push(`<feColorMatrix in="${cur}" type="matrix" values="0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0" result="chg"/>`);
+      f.push(`<feColorMatrix in="${cur}" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0" result="chb"/>`);
+      f.push(`<feOffset in="chg" dx="${sh}" dy="0" result="chgo"/>`);
+      f.push(`<feOffset in="chb" dx="${-sh}" dy="0" result="chbo"/>`);
+      f.push(`<feBlend in="chr" in2="chgo" mode="screen" result="chm1"/>`);
+      f.push(`<feBlend in="chm1" in2="chbo" mode="screen" result="chm"/>`);cur="chm";
+    }
+    if(!c.transparent){
+      f.push(`<feComponentTransfer in="${cur}" result="opaque"><funcA type="linear" slope="0" intercept="1"/></feComponentTransfer>`);cur="opaque";
+    }
+    inner=`<filter id="${fid}" x="0" y="0" width="100%" height="100%">${f.join("")}</filter>${baseDef}`;
+    body = baseDef
+      ? `<rect width="100%" height="100%" fill="url(#${fid}_base)" filter="url(#${fid})"/>`
+      : `<rect width="100%" height="100%" filter="url(#${fid})"/>`;
   }
   const bg = c.transparent ? "" : `<rect width="100%" height="100%" fill="${c.bg}"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${c.tile}" height="${c.tile}" viewBox="0 0 ${c.tile} ${c.tile}"><defs>${inner}</defs>${bg}${body}</svg>`;
+  const W=c.tile, H=(c.tileH||c.tile);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${inner}</defs>${bg}${body}</svg>`;
 }
 
 /* ---------------- render ---------------- */
@@ -244,7 +302,7 @@ function render(){
   const url="data:image/svg+xml;utf8,"+encodeURIComponent(svg);
   if(S.repeat){
     preview.style.backgroundImage=`url("${url}")`;
-    preview.style.backgroundSize=S.tile+"px "+S.tile+"px";
+    preview.style.backgroundSize=S.tile+"px "+(S.tileH||S.tile)+"px";
     preview.style.backgroundRepeat="repeat";
   } else {
     preview.style.backgroundImage=`url("${url}")`;
@@ -253,7 +311,7 @@ function render(){
     preview.style.backgroundPosition="center";
   }
   code.value=svg;
-  stat.textContent=S.tile+"px · "+(svg.length)+"b";
+  stat.textContent=S.tile+"×"+(S.tileH||S.tile)+" · "+(svg.length)+"b";
   syncHash();
 }
 function syncHash(){ location.hash = "p="+btoa(unescape(encodeURIComponent(JSON.stringify(S)))); }
@@ -269,6 +327,19 @@ const SCHEMA=[
     {k:"seed",kind:"range",min:0,max:100,step:1,label:"c_seed"},
     {k:"stitch",kind:"check",label:"c_stitch"},
   ]},
+  {g:"g_struct",items:[
+    {k:"base",kind:"select",label:"c_base",opts:[["noise","c_base_noise"],["stripes","c_base_stripes"],["grid","c_base_grid"],["dots","c_base_dots"],["checker","c_base_checker"],["rings","c_base_rings"]]},
+    {k:"structSize",kind:"range",min:4,max:128,step:1,label:"c_structSize",hideIf:s=>!s.base||s.base==="noise"},
+    {k:"structAngle",kind:"range",min:0,max:90,step:1,label:"c_structAngle",hideIf:s=>!(s.base==="stripes"||s.base==="grid")},
+    {k:"posterize",kind:"check",label:"c_posterize"},
+    {k:"posterSteps",kind:"range",min:2,max:12,step:1,label:"c_posterSteps",hideIf:s=>!s.posterize},
+    {k:"contours",kind:"check",label:"c_contours"},
+    {k:"convolve",kind:"check",label:"c_convolve"},
+    {k:"convolvePreset",kind:"select",label:"c_convolvePreset",opts:[["emboss","c_cv_emboss"],["edges","c_cv_edges"],["sharpen","c_cv_sharpen"],["blur3","c_cv_blur"]],hideIf:s=>!s.convolve},
+    {k:"moire",kind:"check",label:"c_moire"},
+    {k:"moireFreq",kind:"range",min:0.001,max:1,step:0.001,label:"c_moireFreq",hideIf:s=>!s.moire},
+    {k:"moireMix",kind:"range",min:0,max:100,step:1,label:"c_moireMix",hideIf:s=>!s.moire},
+  ]},
   {g:"g_extra",items:[
     {k:"displace",kind:"range",min:0,max:200,step:1,label:"c_displace"},
     {k:"blur",kind:"range",min:0,max:20,step:0.1,label:"c_blur"},
@@ -276,24 +347,21 @@ const SCHEMA=[
     {k:"morphOp",kind:"select",opts:[["dilate","c_mop_d"],["erode","c_mop_e"]],hideIf:s=>!s.morph},
     {k:"morphRadius",kind:"range",min:0,max:20,step:0.5,label:"c_morphRadius",hideIf:s=>!s.morph},
     {k:"light",kind:"check",label:"c_light"},
-    {k:"lightType",kind:"select",opts:[["diffuse","c_lt_d"],["specular","c_lt_s"]],hideIf:s=>!s.light},
+    {k:"lightType",kind:"select",opts:[["diffuse","c_lt_d"],["specular","c_lt_s"],["point","c_lt_p"]],hideIf:s=>!s.light},
+    {k:"lightX",kind:"range",min:0,max:1920,step:1,label:"c_lightX",hideIf:s=>!(s.light&&s.lightType==="point")},
+    {k:"lightY",kind:"range",min:0,max:1080,step:1,label:"c_lightY",hideIf:s=>!(s.light&&s.lightType==="point")},
+    {k:"lightZ",kind:"range",min:1,max:1000,step:1,label:"c_lightZ",hideIf:s=>!(s.light&&s.lightType==="point")},
     {k:"lightColor",kind:"color",label:"c_lightColor",hideIf:s=>!s.light},
     {k:"surface",kind:"range",min:0,max:20,step:0.5,label:"c_surface",hideIf:s=>!s.light},
     {k:"blend",kind:"check",label:"c_blend",hideIf:s=>!s.light},
     {k:"blendMode",kind:"select",opts:[["screen","screen"],["multiply","multiply"],["overlay","overlay"],["darken","darken"],["lighten","lighten"]],hideIf:s=>!(s.light&&s.blend)},
+    {k:"aberr",kind:"check",label:"c_aberr"},
+    {k:"aberrShift",kind:"range",min:0,max:50,step:0.5,label:"c_aberrShift",hideIf:s=>!s.aberr},
     {k:"halftone",kind:"check",label:"c_halftone"},
   ]},
-  {g:"g_tone",items:[
-    {k:"colorMode",kind:"select",opts:[["color","c_cm_c"],["grayscale","c_cm_g"],["duotone","c_cm_d"]]},
-    {k:"saturation",kind:"range",min:0,max:200,step:1,label:"c_saturation",hideIf:s=>s.colorMode!=="color"},
-    {k:"duoShadow",kind:"color",label:"c_duoShadow",hideIf:s=>s.colorMode!=="duotone"},
-    {k:"duoHigh",kind:"color",label:"c_duoHigh",hideIf:s=>s.colorMode!=="duotone"},
-    {k:"advTone",kind:"check",label:"c_advTone"},
-    {k:"contrast",kind:"range",min:-100,max:100,step:1,label:"c_contrast",hideIf:s=>s.advTone},
-    {k:"brightness",kind:"range",min:-100,max:100,step:1,label:"c_brightness",hideIf:s=>s.advTone},
-  ]},
   {g:"g_export",items:[
-    {k:"tile",kind:"range",min:16,max:1024,step:1,label:"c_tile"},
+    {k:"tile",kind:"range",min:16,max:2048,step:1,label:"c_tile"},
+    {k:"tileH",kind:"range",min:16,max:2048,step:1,label:"c_tileH"},
     {k:"repeat",kind:"check",label:"c_repeat"},
     {k:"bg",kind:"color",label:"c_bg",hideIf:s=>s.transparent},
     {k:"transparent",kind:"check",label:"c_transparent"},
@@ -302,11 +370,35 @@ const SCHEMA=[
 ];
 // extended i18n keys used in schema opts
 Object.assign(I18N.ru,{
+  g_struct:"Структура",
+  c_base:"Основа",c_structSize:"Ячейка",c_structAngle:"Угол",
+  c_posterize:"Постеризация",c_posterSteps:"Ступени",c_contours:"Контуры (топо)",
+  c_convolve:"Свёртка",c_convolvePreset:"Ядро",
+  c_moire:"Интерференция",c_moireFreq:"Частота 2-го шума",c_moireMix:"Баланс",
+  c_aberr:"RGB-разводка",c_aberrShift:"Сдвиг каналов",
+  c_lt_p:"точечный",c_lightX:"Свет X",c_lightY:"Свет Y",c_lightZ:"Свет Z",
+  c_tile:"Ширина",c_tileH:"Высота",
+  c_levels:"Уровни",c_blackPt:"Чёрная точка",c_whitePt:"Белая точка",
+  c_base_noise:"шум",c_base_stripes:"полосы",c_base_grid:"сетка",
+  c_base_dots:"точки",c_base_checker:"шахматы",c_base_rings:"кольца",
+  c_cv_emboss:"тиснение",c_cv_edges:"границы",c_cv_sharpen:"резкость",c_cv_blur:"мягкое",
   c_type_f:"фрактал",c_type_t:"турбулентность",c_freq_y:"Частота Y",
   c_mop_d:"наращивание",c_mop_e:"эрозия",c_lt_d:"диффузное",c_lt_s:"зеркальное",
   c_cm_c:"цветной",c_cm_g:"серый",c_cm_d:"дуотон"
 });
 Object.assign(I18N.en,{
+  g_struct:"Structure",
+  c_base:"Base",c_structSize:"Cell",c_structAngle:"Angle",
+  c_posterize:"Posterize",c_posterSteps:"Steps",c_contours:"Contours (topo)",
+  c_convolve:"Convolve",c_convolvePreset:"Kernel",
+  c_moire:"Interference",c_moireFreq:"2nd noise freq",c_moireMix:"Balance",
+  c_aberr:"RGB split",c_aberrShift:"Channel shift",
+  c_lt_p:"point",c_lightX:"Light X",c_lightY:"Light Y",c_lightZ:"Light Z",
+  c_tile:"Width",c_tileH:"Height",
+  c_levels:"Levels",c_blackPt:"Black point",c_whitePt:"White point",
+  c_base_noise:"noise",c_base_stripes:"stripes",c_base_grid:"grid",
+  c_base_dots:"dots",c_base_checker:"checker",c_base_rings:"rings",
+  c_cv_emboss:"emboss",c_cv_edges:"edges",c_cv_sharpen:"sharpen",c_cv_blur:"soft",
   c_type_f:"fractal",c_type_t:"turbulence",c_freq_y:"Freq Y",
   c_mop_d:"dilate",c_mop_e:"erode",c_lt_d:"diffuse",c_lt_s:"specular",
   c_cm_c:"color",c_cm_g:"gray",c_cm_d:"duotone"
@@ -323,10 +415,11 @@ function buildControls(){
       const lab=document.createElement("label"); lab.dataset.i18n=it.label; lab.textContent=t(it.label);
       const ctrl=document.createElement("div"); ctrl.className="ctrl";
       if(it.kind==="range"){
-        const inp=document.createElement("input"); inp.type="range"; inp.min=it.min; inp.max=it.max; inp.step=it.step; inp.dataset.key=it.k;
-        const val=document.createElement("span"); val.className="val"; val.dataset.val=it.k;
+        const inp=document.createElement("input"); inp.type="range"; inp.min=it.min; inp.max=it.max; inp.step=it.step; inp.dataset.key=it.k; inp.dataset.slider="1";
+        const num=document.createElement("input"); num.type="number"; num.min=it.min; num.max=it.max; num.step=it.step; num.dataset.key=it.k; num.dataset.num="1"; num.className="val"; num.title=t(it.label);
         inp.addEventListener("input",onCtrl);
-        ctrl.appendChild(inp); ctrl.appendChild(val);
+        num.addEventListener("change",onCtrl);
+        ctrl.appendChild(inp); ctrl.appendChild(num);
       } else if(it.kind==="select"){
         const sel=document.createElement("select"); sel.dataset.key=it.k;
         for(const [v,lk] of it.opts){const o=document.createElement("option");o.value=v;o.dataset.i18n=lk;o.textContent=t(lk);sel.appendChild(o);}
@@ -342,22 +435,18 @@ function buildControls(){
     }
     root.appendChild(g);
   }
-  // tone curve editor
-  const g2=document.createElement("div"); g2.className="group";
-  const h2=document.createElement("div"); h2.className="ghead"; h2.dataset.i18n="g_tonecurve"; h2.textContent=t("g_tonecurve");
-  g2.appendChild(h2);
-  const cv=document.createElement("canvas"); cv.id="curve"; cv.width=300; cv.height=120;
-  g2.appendChild(cv);
-  g2.insertAdjacentHTML("beforeend",`<div class="row"><button id="curveReset" data-i18n="c_advTone">Сброс</button><span class="spacer"></span><span class="stat">drag = правка кривой тона</span></div>`);
-  root.appendChild(g2);
-  $("#curveReset").onclick=()=>{S.curve=[{x:0,y:0},{x:.25,y:.25},{x:.5,y:.5},{x:.75,y:.75},{x:1,y:1}];drawCurve();render();};
-  initCurve();
 }
 function onCtrl(e){
   const el=e.target; const k=el.dataset.key;
   if(!k) return;
   if(el.type==="checkbox") S[k]=el.checked;
   else if(el.type==="range") S[k]=parseFloat(el.value);
+  else if(el.type==="number"){
+    const v=parseFloat(el.value);
+    if(!isFinite(v)){syncControls();return;}
+    const lo=parseFloat(el.min), hi=parseFloat(el.max);
+    S[k]=isFinite(lo)&&isFinite(hi)?Math.max(lo,Math.min(hi,v)):v;
+  }
   else if(el.type==="color") S[k]=el.value;
   else S[k]=el.value;
   syncControls(); render();
@@ -379,48 +468,19 @@ function syncControls(){
 function findItem(k){for(const g of SCHEMA)for(const it of g.items)if(it.k===k)return it;return null;}
 function fmt(v){return (typeof v==="number")?(v%1===0?v:v.toFixed(3)):v;}
 
-/* ---------------- tone curve editor ---------------- */
-let dragIdx=-1;
-function initCurve(){
-  const cv=$("#curve"); const ctx=cv.getContext("2d");
-  const W=cv.width,H=cv.height,pad=6;
-  cv.onmousedown=e=>{const p=pos(e);dragIdx=nearest(p);};
-  cv.onmousemove=e=>{if(dragIdx<0)return;const p=pos(e);const x=clamp((p.x-pad)/(W-2*pad),0,1);const y=clamp(1-(p.y-pad)/(H-2*pad),0,1);
-    if(dragIdx>0&&dragIdx<S.curve.length-1){S.curve[dragIdx].x=clamp(x,S.curve[dragIdx-1].x+0.02,S.curve[dragIdx+1].x-0.02);}
-    else if(dragIdx===0)S.curve[0].x=0; else S.curve[S.curve.length-1].x=1;
-    S.curve[dragIdx].y=y; drawCurve(); render();};
-  window.addEventListener("mouseup",()=>dragIdx=-1);
-  drawCurve();
-}
-function pos(e){const r=$("#curve").getBoundingClientRect();return {x:(e.clientX-r.left)*(300/r.width),y:(e.clientY-r.top)*(120/r.height)};}
-function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-function nearest(p){let bi=0,bd=1e9;S.curve.forEach((pt,i)=>{const qx=pad+(pt.x)*(W-2*pad),qy=pad+(1-pt.y)*(H-2*pad);const d=Math.hypot(qx-p.x,qy-p.y);if(d<bd){bd=d;bi=i;}});return bi;}
-let W=300,H=120,pad=6;
-function drawCurve(){
-  const cv=$("#curve"); if(!cv)return; const ctx=cv.getContext("2d");
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle="#c0c0c0";ctx.strokeRect(0,0,W,H);
-  ctx.strokeStyle="#000";ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
-  ctx.strokeStyle="#000080";ctx.beginPath();
-  for(let i=0;i<=40;i++){const x=i/40;let a=S.curve[0],b=S.curve[S.curve.length-1];for(let k=0;k<S.curve.length-1;k++){if(S.curve[k].x<=x&&S.curve[k+1].x>=x){a=S.curve[k];b=S.curve[k+1];break;}}const d=(b.x-a.x)||1;const y=a.y+(b.y-a.y)*((x-a.x)/d);
-    const px=pad+x*(W-2*pad),py=pad+(1-y)*(H-2*pad);i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);}
-  ctx.stroke();
-  ctx.fillStyle="#ff0000";S.curve.forEach(pt=>{const px=pad+pt.x*(W-2*pad),py=pad+(1-pt.y)*(H-2*pad);ctx.beginPath();ctx.arc(px,py,3,0,7);ctx.fill();});
-}
-
 /* ---------------- presets ---------------- */
 function buildPresetBar(){
   const bar=$("#presets"); bar.innerHTML="";
   for(const name of Object.keys(PRESETS)){
     const b=document.createElement("button"); b.className="pill"; b.textContent=name;
-    b.onclick=()=>{S=Object.assign(structuredClone(baseCfg),structuredClone(PRESETS[name]));syncControls();drawCurve();render();};
+    b.onclick=()=>{S=Object.assign(structuredClone(baseCfg),structuredClone(PRESETS[name]));syncControls();render();};
     bar.appendChild(b);
   }
   const sep=document.createElement("span");sep.style.flexBasis="100%";sep.style.height="1px";bar.appendChild(sep);
   const rh=document.createElement("span");rh.dataset.i18n="load_recent";rh.textContent=t("load_recent");rh.style.alignSelf="center";bar.appendChild(rh);
   const recent=loadRecent();
   recent.forEach((r,i)=>{const b=document.createElement("button");b.className="pill";b.textContent=r.name;b.title=JSON.stringify(r.cfg).slice(0,60);
-    b.onclick=()=>{S=Object.assign(structuredClone(baseCfg),structuredClone(r.cfg));syncControls();drawCurve();render();};bar.appendChild(b);});
+    b.onclick=()=>{S=Object.assign(structuredClone(baseCfg),structuredClone(r.cfg));syncControls();render();};bar.appendChild(b);});
   if(recent.length){const cl=document.createElement("button");cl.className="pill";cl.dataset.i18n="clear_recent";cl.textContent=t("clear_recent");cl.onclick=()=>{localStorage.removeItem("soysvg_recent");buildPresetBar();};bar.appendChild(cl);}
 }
 function loadRecent(){try{return JSON.parse(localStorage.getItem("soysvg_recent")||"[]");}catch(e){return[];}}
@@ -431,13 +491,13 @@ function svgDataUrl(){return "data:image/svg+xml;utf8,"+encodeURIComponent(build
 async function copySVG(){try{await navigator.clipboard.writeText(buildSVG());flash(t("copied"));}catch(e){code.select();document.execCommand("copy");flash(t("copied"));}}
 function dlSVG(){const a=document.createElement("a");a.href=svgDataUrl();a.download="soysvg_"+Date.now()+".svg";a.click();}
 function dlPNG(){
-  const scale=parseInt(S.pngScale,10)||1; const size=S.tile*scale;
+  const scale=parseInt(S.pngScale,10)||1; const sizeW=S.tile*scale, sizeH=(S.tileH||S.tile)*scale;
   const img=new Image();
   img.onload=()=>{
-    const cv=document.createElement("canvas");cv.width=size;cv.height=size;
+    const cv=document.createElement("canvas");cv.width=sizeW;cv.height=sizeH;
     const ctx=cv.getContext("2d");
-    if(!S.transparent){ctx.fillStyle=S.bg;ctx.fillRect(0,0,size,size);}
-    ctx.drawImage(img,0,0,size,size);
+    if(!S.transparent){ctx.fillStyle=S.bg;ctx.fillRect(0,0,sizeW,sizeH);}
+    ctx.drawImage(img,0,0,sizeW,sizeH);
     cv.toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="soysvg_"+Date.now()+".png";a.click();});
   };
   img.src=svgDataUrl();
@@ -448,13 +508,15 @@ function flash(msg){const s=$("#stat");const old=s.textContent;s.textContent=msg
 function applyLang(){
   document.querySelectorAll("[data-i18n]").forEach(el=>{const k=el.dataset.i18n;if(I18N[LANG][k]!==undefined)el.textContent=I18N[LANG][k];});
   $("#langBtn").textContent=LANG==="ru"?"RU":"EN";
-  buildControls(); syncControls(); drawCurve(); buildPresetBar();
+  buildControls(); syncControls(); buildPresetBar();
 }
 
 /* ---------------- init ---------------- */
 function fromHash(){
   if(location.hash.startsWith("#p=")){
-    try{const o=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(3)))));S=Object.assign(structuredClone(baseCfg),o);}catch(e){}
+    try{const o=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(3)))));
+      if(o.tile!==undefined&&o.tileH===undefined)o.tileH=o.tile; // старые квадратные ссылки
+      S=Object.assign(structuredClone(baseCfg),o);}catch(e){}
   }
 }
 function randomize(){
@@ -463,13 +525,27 @@ function randomize(){
   if(!S.link)S.freqY=+(0.005+Math.random()*0.4).toFixed(3);
   S.octaves=1+Math.floor(Math.random()*6);
   S.seed=Math.floor(Math.random()*100);
-  S.colorMode=["color","grayscale","duotone"][Math.floor(Math.random()*3)];
-  S.saturation=Math.floor(Math.random()*200);
-  syncControls();drawCurve();render();
+  const r=Math.random();
+  S.base = r<0.55 ? "noise" : ["stripes","grid","dots","checker","rings"][Math.floor(Math.random()*5)];
+  if(S.base!=="noise"){
+    S.structSize=8+Math.floor(Math.random()*40);
+    S.structAngle=Math.floor(Math.random()*90);
+    S.displace=8+Math.floor(Math.random()*40);
+  }
+  S.posterize=Math.random()<0.25;
+  if(S.posterize)S.posterSteps=3+Math.floor(Math.random()*6);
+  S.contours=S.posterize&&Math.random()<0.5;
+  S.convolve=Math.random()<0.25;
+  if(S.convolve)S.convolvePreset=["emboss","edges","sharpen","blur3"][Math.floor(Math.random()*4)];
+  S.moire=Math.random()<0.2;
+  if(S.moire){S.moireFreq=+(0.005+Math.random()*0.2).toFixed(3);S.moireMix=20+Math.floor(Math.random()*60);}
+  S.aberr=Math.random()<0.15;
+  if(S.aberr)S.aberrShift=+(1+Math.random()*8).toFixed(1);
+  syncControls();render();
 }
 
 fromHash();
-buildControls(); syncControls(); drawCurve(); buildPresetBar(); render();
+buildControls(); syncControls(); buildPresetBar(); render();
 
 $("#langBtn").onclick=()=>{LANG=LANG==="ru"?"en":"ru";applyLang();};
 $("#saveBtn").onclick=()=>{const name=prompt(t("confirm_save"),"preset");if(name){saveRecent(name,structuredClone(S));buildPresetBar();flash(t("saved"));}};

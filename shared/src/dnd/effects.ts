@@ -58,6 +58,20 @@ export type DndEffectType =
 // outcome and are only valid alongside a checkId.
 export type DndEffectWhen = "always" | "hit" | "miss" | "save_fail" | "save_success";
 
+/**
+ * Бросок, по которому бьёт `roll_modifier`.
+ *
+ * Держится закрытым списком, а не ссылкой на статью справочника: «Инициатива»
+ * там есть, но лежит в глоссарии рядом с «Классом доспеха» и
+ * «Грузоподъёмностью», то есть это статья для чтения, а не машинная цель.
+ * Ссылка на неё открыла бы словарь: вторая заведённая «Инициатива» разошлась
+ * бы с первой молча.
+ */
+export type DndRollTarget = "initiative" | "attack" | "save" | "ability_check";
+
+/** Доля бонуса мастерства: полный или половина с округлением вниз. */
+export type DndProficiencyShare = "full" | "half";
+
 export type DndMovementKind = "push" | "pull" | "teleport" | "speed";
 
 // A reference into a "Справочник" mechanics group (damage types, conditions)
@@ -121,6 +135,33 @@ export interface DndEffect {
 
   // roll_modifier
   modifier?: string; // "+1d4", "помеха"
+  /**
+   * По какому броску бьёт модификатор.
+   *
+   * Словарь закрытый и короткий намеренно. До него «к чему» лежало в
+   * свободном тексте `modifier`, и три живые записи справочника дали три
+   * разные формулировки: «+1к4 к выбранной проверке характеристики с
+   * использованием выбранного навыка», «1к4 к броскам атаки или спасброскам»,
+   * «Броски атаки по существу под вашей Меткой охотника». Прочитать такое
+   * машиной нельзя, а закрытый словарь нельзя написать с опечаткой.
+   *
+   * Пустое поле — «модификатор описан текстом, машине не адресован»: так и
+   * остаются те три записи, пока их не разметят руками.
+   */
+  appliesTo?: DndRollTarget;
+  /**
+   * Плоская прибавка («Бдительный» в предметном виде, кольцо +1).
+   *
+   * Вместе с `proficiency` заменяет разбор формулы строкой. Строка-формула
+   * («½БМ») здесь была бы тем же разбором свободного текста, из-за которого
+   * инициатива и жила свободным полем.
+   */
+  flat?: number;
+  /**
+   * Прибавка бонусом мастерства: полным («Бдительный») или половинным с
+   * округлением вниз («Мастер на все руки» барда).
+   */
+  proficiency?: DndProficiencyShare;
 
   // summon / transform / create_object / defense / special, and free-form
   // detail for any of the above.
@@ -188,6 +229,20 @@ export interface DndCost {
 }
 
 export const EMPTY_COST: DndCost = { kind: "none" };
+
+/** Подписи целей модификатора — для редактора записи справочника. */
+export const ROLL_TARGET_LABELS: Record<DndRollTarget, string> = {
+  initiative: "к инициативе",
+  attack: "к броскам атаки",
+  save: "к спасброскам",
+  ability_check: "к проверкам характеристик",
+};
+
+/** Подписи долей бонуса мастерства. */
+export const PROFICIENCY_SHARE_LABELS: Record<DndProficiencyShare, string> = {
+  full: "бонус мастерства",
+  half: "половина бонуса мастерства",
+};
 
 export const EFFECT_TYPE_LABELS: Record<DndEffectType, string> = {
   damage: "Урон",
@@ -455,12 +510,30 @@ export function checksLabel(
 // состояния и зоны в этой колонке не помещаются и живут в описании.
 // checks нужны нечисловым эффектам: иначе «притягивание при провале» теряет
 // способность сейва («пров.» без «Сил»).
+// «Особое» несёт свободный текст, и в справочнике он бывает длиной в целое
+// предложение. В компактной подписи (строка заклинания, колонка «Действия»)
+// такой текст съедает всю строку и обрывается на середине слова, вытесняя
+// то, ради чего подпись заводилась, — школу, время, компоненты, бросок.
+// Поэтому здесь от него берутся два первых слова: этого хватает, чтобы
+// узнать эффект, а полный текст — в раскрытии строки и в окне заклинания.
+// В редакторе эффектов (EffectList) укорачивания нет: там показывают
+// ровно то, что набрано.
+const SPECIAL_TEXT_WORDS = 2;
+
+function trimSpecialText(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= SPECIAL_TEXT_WORDS) return words.join(" ");
+  return `${words.slice(0, SPECIAL_TEXT_WORDS).join(" ")}…`;
+}
+
 export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = []): string {
   if (!effects || effects.length === 0) return "—";
   const numeric = effects.filter((e) => e.type === "damage" || e.type === "heal" || e.type === "temp_hp");
   if (numeric.length === 0) {
     // Ничего числового — показываем типы, чтобы строка не была пустой.
-    return effects.map((e) => effectSummary(e, checks)).join("; ");
+    return effects
+      .map((e) => effectSummary(e.text ? { ...e, text: trimSpecialText(e.text) } : e, checks))
+      .join("; ");
   }
   return numeric
     .map((e) => {

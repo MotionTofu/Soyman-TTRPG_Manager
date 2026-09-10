@@ -125,7 +125,25 @@ export interface DndCharacterData {
   skillProfs: Record<string, DndSkillProfLevel>;
 
   armorClass: string;
-  initiative: string;
+  /**
+   * БРОШЕННОЕ число инициативы — то, что игрок назвал за столом, записанное,
+   * «чтобы помнить». Не модификатор: модификатор производный и живёт в
+   * `deriveSheet(...).initiative`.
+   *
+   * Смысл сменился 2026-09-10. До этого здесь лежал вписанный руками
+   * модификатор, который устаревал при любой правке Ловкости молча: у одного
+   * живого листа стояло «0» при Ловкости 14. Тип тогда же стал числом — это
+   * число уезжает Мастеру в очередь боя, а очередь держит `number | null`.
+   */
+  initiative: number | null;
+  /**
+   * Ручная поправка к бонусу инициативы — «прочее, чего модуль не знает».
+   *
+   * Названа по образцу `spellDcMisc`, а не `manualAcBonus`: смысл тот же, а
+   * третьей манеры именования одного и того же в листе быть не должно.
+   * Сам бонус инициативы НЕ хранится: он производный (`deriveSheet`).
+   */
+  initiativeMisc: string;
   speed: string;
   // Structured speeds (walk/fly/swim/climb/burrow), same shape as
   // DndCreatureSpeed — added alongside the legacy free-text `speed` above
@@ -334,6 +352,15 @@ export interface DndEquipmentItem {
   // `dex_bonus: false` — без него Латы давали 18 + Ловкость.
   dexBonus?: boolean;
   acBonus?: string;
+  /**
+   * Эффекты записи справочника, снятые при добавлении, — тем же приёмом, что
+   * `ac`/`acBonus` выше: `deriveSheet` читает их без похода в сеть.
+   *
+   * Нужны надетым предметам, дающим прибавку к броску (кольцо на инициативу).
+   * У живых предметов пока не заполнены: разметка записей идёт отдельным
+   * шагом.
+   */
+  effects?: DndEffect[];
   // Same idea, for weapons — set only when the compendium entry has a
   // damage value, so an equipped item can be told apart from armor/plain
   // gear without a separate "is this a weapon" flag.
@@ -436,6 +463,12 @@ export interface DndProficiencyEntry {
 export interface DndSpellEntry {
   entryId: number | null;
   name: string;
+  // Оригинальное (английское) название — снимок `name_original` записи
+  // компендиума, вторичный опознаватель в строке списка и в окне (тот же
+  // приём, что у плиток бестиария, .monster-tile__en). Пусто у листов,
+  // записанных до появления поля, и у заклинаний, вписанных руками: строка
+  // тогда показывает одно русское имя, как показывала всегда.
+  nameOriginal?: string;
   // Структурные броски и эффекты, снятые с записи компендиума (см.
   // components/dnd/effects.ts). Поля category/attackSave/damage/healing ниже
   // — то, чем это было раньше; они сохраняются только для листов, записанных

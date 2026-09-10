@@ -1,0 +1,189 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; background: #e8e4da; color: #1c1c1c; }
+    a { color: #c2410c; } a:hover { color: #92310a; }
+    .lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .sec { font-family: 'Oswald', system-ui, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; color: #1c1c1c; line-height: 1; }
+    .sec-bar { height: 3px; background: #c2410c; margin-top: 5px; }
+    .note { font-size: 11px; line-height: 1.35; color: #6f6d68; margin-top: 7px; }
+    /* Лента пула в натуральную ширину тела карты: 374 px за вычетом
+       боковых кромок. Всё, что не влезло, обрезается так же, как обрежет
+       телефон — в этом и смысл сравнения. */
+    .band { width: 364px; background: #1c1c1c; color: #e8e4da; padding: 9px 12px; display: flex; align-items: center; gap: 9px; box-sizing: border-box; overflow: hidden; }
+    .band-lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; flex: none; }
+    .pips { display: flex; gap: 4px; flex: none; }
+    .pips-5 { display: flex; gap: 9px; flex: none; }
+    .pips-5 > span { display: flex; gap: 3px; }
+    /* Числовая лента: остаток — единственное, что читается издалека,
+       максимум стоит рядом мелко и не спорит с ним. */
+    .stepper { flex: none; width: 22px; height: 22px; border: 1.5px solid rgba(232,228,218,.45); display: flex; align-items: center; justify-content: center; color: #e8e4da; box-sizing: border-box; }
+    .big { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 21px; font-weight: 700; line-height: 1; color: #e8e4da; }
+    .of { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #a3a099; }
+    .scale { position: relative; flex: 1 1 auto; min-width: 40px; height: 10px; background: rgba(232,228,218,.16); }
+    .scale-fill { position: absolute; left: 0; top: 0; bottom: 0; background: #c2410c; }
+    .tick { position: absolute; top: -2px; bottom: -2px; width: 1px; background: rgba(28,28,28,.85); }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 900px; background: #e8e4da; background-image: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px); background-size: 3px 3px; padding: 14px 13px; box-sizing: border-box; display: flex; flex-direction: column; gap: 0">
+
+  <div style="flex: none">
+    <div style="display: inline-block">
+      <div class="sec">Лента пула · большой максимум</div>
+      <div class="sec-bar"></div>
+    </div>
+    <div class="note">Очков чародейства с предметами набирается 20+. Головы тофу считаются глазом до десятка, дальше превращаются в работу — а лента нужна тому, кто смотрит на экран урывками.</div>
+  </div>
+
+  <!-- ================= А. КАК СЕЙЧАС ================= -->
+  <div style="flex: none; margin-top: 18px">
+    <div class="lbl" style="color: #63625f">А · Сейчас — головы тофу</div>
+    <div class="band" style="margin-top: 7px">
+      <div class="band-lbl">Очки чародейства</div>
+      <div class="pips">
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+      </div>
+      <div class="num" style="font-size: 12px; color: #a3a099; flex: 1 1 auto">3 из 5</div>
+      <div class="lbl" style="color: #a3a099; flex: none">Долгий отдых</div>
+    </div>
+    <div class="note">Пять — идеально: голова = один клик, считать нечего.</div>
+
+    <div class="band" style="margin-top: 10px">
+      <div class="band-lbl">Очки чародейства</div>
+      <div class="pips">
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/><circle cx="6.5" cy="8" r="2.2" fill="#e8e4da"/><circle cx="11.5" cy="8" r="2.2" fill="#e8e4da"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+        <svg viewBox="0 0 18 18" style="width: 18px; height: 18px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2"/></svg>
+      </div>
+      <div class="num" style="font-size: 12px; color: #a3a099; flex: 1 1 auto">17 из 23</div>
+      <div class="lbl" style="color: #a3a099; flex: none">Долгий отдых</div>
+    </div>
+    <div class="note">Двадцать три головы — 500 px в ленте шириной 364. Число и условие восстановления уезжают за край первыми, то есть теряется ровно то, ради чего лента и всплывает.</div>
+  </div>
+
+  <!-- ================= Б. ПЯТЁРКАМИ ================= -->
+  <div style="flex: none; margin-top: 18px">
+    <div class="lbl" style="color: #63625f">Б · Мельче и группами по пять</div>
+    <div class="band" style="margin-top: 7px">
+      <div class="band-lbl">Очки чародейства</div>
+      <div class="pips-5">
+        <span>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+        </span>
+        <span>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+        </span>
+        <span>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+        </span>
+        <span>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="#c2410c"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2.5"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2.5"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2.5"/></svg>
+        </span>
+        <span>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2.5"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2.5"/></svg>
+          <svg viewBox="0 0 18 18" style="width: 10px; height: 10px"><rect x="1.5" y="1.5" width="15" height="15" fill="none" stroke="rgba(232,228,218,.5)" stroke-width="2.5"/></svg>
+        </span>
+      </div>
+      <div class="num" style="font-size: 12px; color: #a3a099; flex: 1 1 auto; text-align: right">17/23</div>
+    </div>
+    <div class="note">Влезает, но платит дважды: голова тофу в 10 px перестаёт быть тофу (глаза не рисуются), а мишень в 10 px не нажать. И всё равно нужно считать пятёрки.</div>
+  </div>
+
+  <!-- ================= В. ЧИСЛО ВЕДЁТ ================= -->
+  <div style="flex: none; margin-top: 18px">
+    <div class="lbl" style="color: #c2410c">В · Число ведёт, шкала с засечками — предложение</div>
+
+    <div class="band" style="margin-top: 7px">
+      <div class="band-lbl">Очки чародейства</div>
+      <div class="stepper"><svg viewBox="0 0 24 24" style="width: 14px; height: 14px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></div>
+      <div style="flex: none; display: flex; align-items: baseline; gap: 2px">
+        <span class="big">17</span><span class="of">/23</span>
+      </div>
+      <div class="stepper"><svg viewBox="0 0 24 24" style="width: 14px; height: 14px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>
+      <div class="scale">
+        <div class="scale-fill" style="width: 73.9%"></div>
+        <div class="tick" style="left: 21.7%"></div>
+        <div class="tick" style="left: 43.5%"></div>
+        <div class="tick" style="left: 65.2%"></div>
+        <div class="tick" style="left: 87.0%"></div>
+      </div>
+      <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; flex: none; color: #a3a099" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+    </div>
+    <div class="note">Остаток крупной моноширинной — единственное, что читается с метра. Максимум рядом мелко. Шкала тянется по остатку ленты и делится засечками по пять: «чуть меньше трёх четвертей» видно, не считая. Луна вместо слов «долгий отдых» — она же на «Ресурсах».</div>
+
+    <div class="band" style="margin-top: 12px">
+      <div class="band-lbl">Ярость</div>
+      <div class="stepper"><svg viewBox="0 0 24 24" style="width: 14px; height: 14px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></div>
+      <div style="flex: none; display: flex; align-items: baseline; gap: 2px">
+        <span class="big">2</span><span class="of">/40</span>
+      </div>
+      <div class="stepper"><svg viewBox="0 0 24 24" style="width: 14px; height: 14px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>
+      <div class="scale">
+        <div class="scale-fill" style="width: 5%"></div>
+        <div class="tick" style="left: 25%"></div>
+        <div class="tick" style="left: 50%"></div>
+        <div class="tick" style="left: 75%"></div>
+      </div>
+      <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; flex: none; color: #a3a099" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+    </div>
+    <div class="note">Сорок ведёт себя так же — засечки разрежаются до десятков, когда их набирается больше восьми. Ничего не настраивается: и порог, и шаг засечки выводятся из максимума.</div>
+  </div>
+
+  <div style="flex: none; margin-top: auto; border-top: 1.5px solid rgba(28,28,28,.28); padding-top: 9px">
+    <div class="note" style="margin-top: 0; color: #42413f">Порог — десять. До него лента остаётся ровно такой, как сейчас: головы тофу, клик по голове. Выше — форма В. Маскот остаётся там, где он работает, и не мельчает ради арифметики.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

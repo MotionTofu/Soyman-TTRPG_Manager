@@ -17,10 +17,16 @@
  *    тесту: он отличает «сумма сошлась» от «щит учтён дважды, а доспех не
  *    учтён». Показывать разбор никто не обязан — `value` читается как обычное
  *    число.
- * 3. **Эффекты собираются, но не применяются.** `effects.ts` моделирует их
- *    честно, но ни один потребитель до сих пор не доводил эффект до КЗ, хитов
- *    и скорости. Включение изменит числа на живых листах, поэтому идёт
- *    отдельным решением — здесь эффекты только перечисляются.
+ * 3. **Из эффектов применяется только размеченное.** Эффект доходит до числа,
+ *    если у него проставлены `appliesTo` и величина (`flat`/`proficiency`).
+ *    Пока таких не было, правило звучало как «эффекты не применяются вовсе»;
+ *    2026-09-10 первым размеченную прибавку начал читать бонус инициативы.
+ *
+ *    До КЗ, хитов и скорости эффекты по-прежнему не доходят, и это не
+ *    забывчивость: применять там нечего. У `defense` в живом справочнике нет
+ *    ни одного числового поля — только текст («уменьшить дробящий урон на
+ *    1к10 + мод. Лов + уровень монаха»), а `temp_hp` и `heal` держат броски,
+ *    а не слагаемые максимума. Сначала разметка, потом применение.
  */
 import type {
   DndAbilityKey,
@@ -36,7 +42,9 @@ import {
 } from "./abilities";
 import { SKILL_CATALOG } from "./skillCatalog";
 import { computeArmorClass, equippedItems, unarmoredDefenseBonus } from "./armorClass";
-import { carryCapacityLb } from "./equipment";
+import { carryCapacityLb, findCarryDoublings } from "./equipment";
+import type { DndEffect, DndProficiencyShare, DndRollTarget } from "./effects";
+import type { DndCreatureData } from "./types";
 
 /** Одно слагаемое производной величины. */
 export interface Part {
@@ -66,8 +74,24 @@ export interface Sheet {
   /** Навыки по английскому ключу каталога. */
   skills: Record<string, Derived>;
   armorClass: Derived;
+  /**
+   * Бонус инициативы — модификатор, а НЕ брошенное число.
+   *
+   * Брошенное живёт в `initiative` листа: его туда вписывает игрок после
+   * броска, и оно уезжает Мастеру в очередь боя. Модуль его не читает и не
+   * считает — кубик бросает игрок.
+   */
+  initiative: Derived;
   maxHitPoints: Derived;
   passivePerception: Derived;
+  /**
+   * Пассивные проницательность и анализ. Считаются по тому же правилу, что и
+   * восприятие (10 + навык), и раньше не считались нигде: на экране было
+   * только восприятие, хотя за столом Мастер бросает скрытые проверки всех
+   * трёх.
+   */
+  passiveInsight: Derived;
+  passiveInvestigation: Derived;
   /** Штраф истощения к любому броску к20 (5.5: −2 за уровень). */
   exhaustionPenalty: Derived;
   /** Пешая скорость в футах. */
@@ -188,6 +212,106 @@ function walkSpeed(c: DndCharacterData, exhaustion: number): Derived {
 }
 
 /**
+ * Модификатор инициативы существа.
+ *
+ * В 5.5 статблок объявляет инициативу своим числом («Инициатива +5 (15)»), и
+ * оно не обязано равняться модификатору Ловкости: у существа могут быть черты,
+ * учтённые в готовом числе. `initiativeBonus` в статблоке для этого и заведён,
+ * но до 2026-09-10 его не читал никто — трекер бросал `1к20 + Ловкость` и
+ * молча игнорировал заполненное поле.
+ *
+ * Ноль — законное значение, поэтому проверка на `null`, а не на ложность:
+ * `initiativeBonus: 0` у неповоротливого существа означает «плюс ноль», а не
+ * «не задано».
+ */
+export function creatureInitiativeModifier(c: DndCreatureData): number {
+  if (c.initiativeBonus != null && Number.isFinite(c.initiativeBonus)) return c.initiativeBonus;
+  return abilityModifier(c.abilities?.dex ?? 10);
+}
+
+/**
+ * Прибавки к одному броску, собранные из эффектов умений и надетых вещей.
+ *
+ * Читается только размеченное: у эффекта должен стоять `appliesTo`, а величина
+ * — `flat` и/или `proficiency`. Свободный текст `modifier` («+1к4 к выбранной
+ * проверке») сюда не попадает намеренно: разбирать его регулярным выражением
+ * значит начать ловить любое «внимательный» и «настороже» в описании умения, а
+ * врущее число за столом хуже пустого поля.
+ *
+ * Кубиковые прибавки (`+1к4` картографа) величиной не выражаются вовсе —
+ * производное число держит число, а не бросок. Они показываются отдельно.
+ *
+ * Умения приходят с уже подставленными эффектами: сам лист их не хранит,
+ * `resolveFeature` подмешивает их из записи справочника перед отрисовкой. Это
+ * то же правило, что у выдач вида и класса, — модуль синхронный, в сеть не
+ * ходит (правило 1 наверху файла). Не подставили — прибавки просто нет.
+ */
+function rollBonusParts(c: DndCharacterData, target: DndRollTarget, pb: number): Part[] {
+  const parts: Part[] = [];
+  const carriers: { name: string; effects?: DndEffect[] }[] = [
+    ...(c.speciesFeatures ?? []),
+    ...(c.classFeatures ?? []),
+    ...(c.feats ?? []),
+    ...(c.specialAbilities ?? []),
+    // Вещь даёт прибавку, только пока надета — то же правило, что у КЗ.
+    // Второго правила «когда предмет работает» в листе быть не должно.
+    ...(c.equipmentSections ?? []).flatMap((sec) => sec.items ?? []).filter((it) => it.equipped),
+  ];
+  const matched: { name: string; flat: number; share?: DndProficiencyShare }[] = [];
+  for (const carrier of carriers) {
+    for (const eff of carrier.effects ?? []) {
+      if (eff.type !== "roll_modifier" || eff.appliesTo !== target) continue;
+      matched.push({
+        name: (carrier.name || "Умение").trim(),
+        flat: typeof eff.flat === "number" && Number.isFinite(eff.flat) ? eff.flat : 0,
+        share: eff.proficiency,
+      });
+    }
+  }
+
+  // Половина бонуса мастерства не складывается с полным. Так읽 читается сама
+  // формулировка «Мастера на все руки»: половина добавляется к проверке, «в
+  // которой у вас нет владения навыком и которая иным образом не использует
+  // ваш бонус мастерства». У барда с «Бдительным» полный бонус уже посчитан —
+  // прибавить сверху половину значит показать за столом число на 1-3 больше
+  // настоящего.
+  const hasFull = matched.some((m) => m.share === "full");
+  for (const m of matched) {
+    const share = m.share === "half" && hasFull ? undefined : m.share;
+    const fromPb = share === "full" ? pb : share === "half" ? Math.floor(pb / 2) : 0;
+    const value = m.flat + fromPb;
+    if (value === 0) continue;
+    parts.push({ label: m.name, value });
+  }
+  return parts;
+}
+
+/**
+ * Грузоподъёмность с удвоениями.
+ *
+ * Удвоение («Мощное телосложение», увеличение размера) ищется по названиям
+ * умений всех четырёх списков листа — так же, как это делает чарник. Пока
+ * поиск жил в клиенте, модуль считал базовую величину и врал вдвое.
+ */
+function carryCapacity(c: DndCharacterData): Derived {
+  const str = c.abilities?.str ?? 10;
+  const doublings = findCarryDoublings([
+    ...(c.speciesFeatures ?? []),
+    ...(c.classFeatures ?? []),
+    ...(c.feats ?? []),
+    ...(c.specialAbilities ?? []),
+  ]);
+  const base = carryCapacityLb(str, 0);
+  const parts: Part[] = [{ label: `Сила ${str} ×15`, value: base }];
+  let value = base;
+  for (const name of doublings) {
+    parts.push({ label: name, value });
+    value *= 2;
+  }
+  return { value, parts };
+}
+
+/**
  * Лист персонажа → все производные числа.
  *
  * Вход — сохранённый лист (уже нормализованный: `normalizeDndCharacter`).
@@ -247,9 +371,18 @@ export function deriveSheet(c: DndCharacterData): Sheet {
   // Пассивное восприятие: 10 + навык. Штраф истощения сюда входит, потому что
   // пассивное значение — это тот же бросок, только без кубика. В шпаргалках
   // истощение раньше не вычиталось — расхождение сведено сюда.
-  const perceptionKey = SKILL_CATALOG.find((d) => d.original === "Perception")?.original ?? "Perception";
-  const perception = skills[perceptionKey];
-  const passiveParts: Part[] = [{ label: "База", value: 10 }, ...(perception?.parts ?? [])];
+  const passive = (skillKey: string): Derived =>
+    sum([{ label: "База", value: 10 }, ...(skills[skillKey]?.parts ?? [])]);
+
+  // Инициатива: проверка Ловкости. Сохранённое `initiative` НЕ читается — до
+  // этого модуля там лежал вписанный руками модификатор, и он устаревал при
+  // любой правке Ловкости молча. Теперь то поле означает брошенное число.
+  const initiative = sum([
+    { label: "Ловкость", value: mods.dex.value },
+    ...rollBonusParts(c, "initiative", pb),
+    { label: "Прочее", value: parseBonus(c.initiativeMisc || "") },
+    ...(penalty ? [{ label: `Истощение ${exhaustion}`, value: -penalty }] : []),
+  ]);
 
   const spellAbility = characterSpellcastingAbility(c.classes ?? []);
   const spellcasting = spellAbility
@@ -277,14 +410,14 @@ export function deriveSheet(c: DndCharacterData): Sheet {
     saves,
     skills,
     armorClass,
+    initiative,
     maxHitPoints: maxHitPoints(c, mods.con.value, level),
-    passivePerception: sum(passiveParts),
+    passivePerception: passive("Perception"),
+    passiveInsight: passive("Insight"),
+    passiveInvestigation: passive("Investigation"),
     exhaustionPenalty: { value: penalty, parts: [{ label: `Истощение ${exhaustion}`, value: penalty }] },
     walkSpeed: walkSpeed(c, exhaustion),
-    carryCapacity: {
-      value: carryCapacityLb(c.abilities?.str ?? 10, 0),
-      parts: [{ label: `Сила ${c.abilities?.str ?? 10} ×15`, value: carryCapacityLb(c.abilities?.str ?? 10, 0) }],
-    },
+    carryCapacity: carryCapacity(c),
     spellcasting,
   };
 }

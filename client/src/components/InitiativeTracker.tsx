@@ -10,6 +10,7 @@ import { rollDiceFormula } from "./dnd/diceRoll";
 import { findDndSystemId, loadDndMechanicsGroup } from "./dnd/dndCompendium";
 import { fetchCreatureCard } from "./CreatureCard";
 import { loadUseEpithets, INITIATIVE_EPITHETS } from "../initiativeTrackerPrefs";
+import { deriveSheet, creatureInitiativeModifier } from "@shared/dnd/derive";
 import { useConfirm } from "../hooks/useConfirm";
 import type {
   InitiativeKind,
@@ -96,6 +97,7 @@ interface Props {
 
 export function InitiativeTracker({ sessionId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
+  const [resettingRolls, setResettingRolls] = useState(false);
   const [entries, setEntries] = useState<InitiativeEntry[]>([]);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -122,6 +124,23 @@ export function InitiativeTracker({ sessionId }: Props) {
   }
   useEffect(load, [sessionId]);
   useEffect(loadSession, [sessionId]);
+  // Игрок назвал или сбросил свою инициативу — очередь перечитывается.
+  //
+  // Подписка внутри компонента, а не снаружи пропсом: трекер смонтирован
+  // дважды (карточка в колонке пульта и панель поиска, находка №4 аудита
+  // пульта), состояние у экземпляров независимое. Событие окна получают оба,
+  // и разойтись им нечем — независимо от того, починят ли двойное
+  // монтирование.
+  useEffect(() => {
+    function onUpdated(e: Event) {
+      const detail = (e as CustomEvent<{ sessionId?: number }>).detail;
+      if (detail?.sessionId != null && detail.sessionId !== sessionId) return;
+      load();
+    }
+    window.addEventListener("initiative-updated", onUpdated);
+    return () => window.removeEventListener("initiative-updated", onUpdated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
   useEffect(() => {
     findDndSystemId().then((systemId) => {
       if (!systemId) return;
@@ -166,29 +185,47 @@ export function InitiativeTracker({ sessionId }: Props) {
   }, [entries]);
 
   // Resolves everything a dropped/re-rolled entity needs from its dnd
-  // statblock in one fetch — dex modifier (for tie-breaking) and hit points
-  // (creatures roll from hit-dice fields via diceRoll.ts; characters already
-  // carry a flat max-HP number, nothing to roll).
+  // statblock in one fetch — the initiative modifier (roll, tie-break and the
+  // number shown next to the row) and hit points (creatures roll from
+  // hit-dice fields via diceRoll.ts; characters already carry a flat max-HP
+  // number, nothing to roll).
+  //
+  // Модификатор инициативы, а НЕ голая Ловкость. У существа 5.5 инициатива
+  // объявлена своим числом («Инициатива +5 (15)»), и оно не обязано совпадать
+  // с модификатором Ловкости: `initiativeBonus` в статблоке для этого и
+  // заведён, но до сих пор не читался ни здесь, ни где-либо ещё — трекер
+  // бросал по Ловкости и молча игнорировал заполненное поле. У персонажа
+  // число берётся из общего правила листа (`deriveSheet`), а не считается
+  // здесь заново.
   async function resolveStatblockInfo(
     type: string,
     id: number
-  ): Promise<{ dexModifier: number; maxHp: number | null; currentHp: number | null }> {
-    if (type !== "being" && type !== "character" && type !== "compendium_entry")
-      return { dexModifier: 0, maxHp: null, currentHp: null };
+  ): Promise<{ initiativeModifier: number; maxHp: number | null; currentHp: number | null }> {
+    const empty = { initiativeModifier: 0, maxHp: null, currentHp: null };
+    if (type !== "being" && type !== "character" && type !== "compendium_entry") return empty;
     try {
       const rows = await api.get<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`);
       const dnd = rows.find((s) => s.format === "dnd_character" || s.format === "dnd_creature");
-      if (!dnd) return { dexModifier: 0, maxHp: null, currentHp: null };
+      if (!dnd) return empty;
       const parsed = parseDndStatblock(dnd);
-      const dexModifier = abilityModifier(parsed.abilities.dex);
       if (dnd.format === "dnd_creature") {
-        const max = rollCreatureHp((parsed as DndCreatureData).hitPoints);
-        return { dexModifier, maxHp: max, currentHp: max };
+        const creature = parsed as DndCreatureData;
+        const initiativeModifier = creatureInitiativeModifier(creature);
+        const max = rollCreatureHp(creature.hitPoints);
+        return { initiativeModifier, maxHp: max, currentHp: max };
       }
-      const max = Number((parsed as DndCharacterData).hitPointMax) || null;
-      return { dexModifier, maxHp: max, currentHp: max };
+      const character = parsed as DndCharacterData;
+      // Прибавки от умений сюда не доедут: лист хранит у умения только имя и
+      // `entryId`, а эффекты подставляет справочник при отрисовке чарника
+      // (`resolveFeature`). Трекер справочник не грузит, поэтому число здесь —
+      // Ловкость с ручной поправкой и истощением. Сегодня это точно (записей
+      // с разметкой под инициативу в справочнике ноль); когда разметка
+      // появится, за числом придётся идти на сервер.
+      const initiativeModifier = deriveSheet(character).initiative.value;
+      const max = Number(character.hitPointMax) || null;
+      return { initiativeModifier, maxHp: max, currentHp: max };
     } catch {
-      return { dexModifier: 0, maxHp: null, currentHp: null };
+      return empty;
     }
   }
 
@@ -220,7 +257,10 @@ export function InitiativeTracker({ sessionId }: Props) {
       entity_type: result.type,
       entity_id: result.id,
       name,
-      dex_modifier: info.dexModifier,
+      // Колонка называется `dex_modifier` исторически, а держит теперь
+      // итоговый модификатор инициативы. Переименование колонки — миграция
+      // ради имени; смысл записан здесь и в resolveStatblockInfo выше.
+      dex_modifier: info.initiativeModifier,
       max_hp: info.maxHp,
       current_hp: info.currentHp,
     });
@@ -276,6 +316,38 @@ export function InitiativeTracker({ sessionId }: Props) {
   }
 
   /**
+   * «Новый бой»: гасит числа, оставляя бойцов, хиты, состояния и отметки
+   * мёртвых. Соседняя «Очистить» сносит очередь целиком — это разные кнопки и
+   * разные жесты.
+   *
+   * Подтверждение спрашивается только посреди боя. В начале боя это ровно то,
+   * зачем кнопку нажимают, и лишний вопрос там — помеха: Мастер жмёт её,
+   * когда за столом уже ждут. А вот случайное нажатие при идущем бое стирает
+   * порядок хода, и вернуть его нечем.
+   */
+  const rolled = entries.filter((e) => e.initiative != null);
+
+  async function resetRolls() {
+    if (rolled.length === 0 || resettingRolls) return;
+    if (
+      session?.combat_active &&
+      !(await confirm({
+        message: "Идёт бой. Сбросить все брошенные числа и начать очередь заново?",
+        confirmLabel: "Сбросить",
+        danger: true,
+      }))
+    )
+      return;
+    setResettingRolls(true);
+    try {
+      await api.post(`/initiative-entries/reset-rolls?session_id=${sessionId}`, {});
+      load();
+    } finally {
+      setResettingRolls(false);
+    }
+  }
+
+  /**
    * Галочка особой строки. Снятая галочка убирает строку без подтверждения —
    * в отличие от «Убрать» у бойца: там за строкой стоят брошенные хиты и
    * набранные состояния, а здесь только имя и число.
@@ -326,7 +398,7 @@ export function InitiativeTracker({ sessionId }: Props) {
     setRollingInitiative(true);
     try {
       for (const e of rollable) {
-        const mod = e.dex_modifier ?? 0;
+        const mod = e.dex_modifier ?? 0; // модификатор инициативы, см. resolveStatblockInfo
         const value = rollDiceFormula(`1к20${mod >= 0 ? "+" : ""}${mod}`);
         if (value == null) continue;
         await api.put(`/initiative-entries/${e.id}`, { initiative: value });
@@ -494,6 +566,19 @@ export function InitiativeTracker({ sessionId }: Props) {
               onClick={rollInitiativeForNpcs}
             >
               {rollingInitiative ? "…" : `Бросить за НПС · ${rollable.length}`}
+            </button>
+          )}
+          {/* Появляется, только когда есть что гасить: пустая кнопка на
+              пульте — лишний орган управления, как и у броска за НПС выше. */}
+          {rolled.length > 0 && (
+            <button
+              type="button"
+              className="comp-mini"
+              disabled={resettingRolls}
+              title="Погасить все брошенные числа, оставив бойцов, хиты и состояния."
+              onClick={resetRolls}
+            >
+              {resettingRolls ? "…" : `Новый бой · ${rolled.length}`}
             </button>
           )}
           {entries.length > 0 && (

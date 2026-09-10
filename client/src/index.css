@@ -2094,6 +2094,52 @@ h4 { font-size: var(--fs-h3); }
   border-color: var(--accent);
 }
 
+/* Приключения сеттинга: две колонки — список слева, превью выбранного
+   справа. Одна рамка на область: колонки делит линия, а не вторая карточка. */
+.adventures-split {
+  display: grid;
+  grid-template-columns: minmax(240px, 5fr) minmax(0, 7fr);
+  gap: 12px;
+  align-items: start;
+}
+.adventures-list {
+  min-width: 0;
+}
+.adventures-preview {
+  min-width: 0;
+  border-left: var(--card-border-width, 1px) solid var(--line);
+  padding-left: 12px;
+}
+.entity-row.selected {
+  background: var(--paper-2);
+  outline: 1px solid var(--line);
+  outline-offset: -1px;
+}
+/* Избранное — отметка состояния, а не горячий объект: приглушённая звезда,
+   залитая чернилами, когда включена. */
+.fav-star {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 1;
+}
+.fav-star.on {
+  color: var(--ink);
+}
+@media (max-width: 900px) {
+  .adventures-split {
+    grid-template-columns: 1fr;
+  }
+  .adventures-preview {
+    border-left: none;
+    padding-left: 0;
+    border-top: var(--card-border-width, 1px) solid var(--line);
+    padding-top: 12px;
+  }
+}
+
 /* Faction/group section — a plain header + its rows, no card box around
    the whole group (that read as visual clutter/extra dividers). */
 .entity-group {
@@ -6607,24 +6653,80 @@ input.litm-theme-title {
   background: var(--bg-elevated);
   border-radius: var(--card-radius);
 }
+/* Строка заклинания в две ступени: имя — объект, параметры — подпись под
+   ним. До этого имя и подпись стояли в строку одним кеглем (12) и глаз
+   читал всё подряд. Разделительных линеек между строками нет намеренно:
+   их работу делает воздух (10/11 px вместо 3), и единственной линейкой в
+   разделе остаётся отбивка круга — поэтому она и работает как якорь. */
 .dnd-spell-row {
   font-size: var(--fs-meta);
 }
 .dnd-spell-row.comp-row {
-  padding: 3px 6px;
-  margin: 0 -6px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 11px;
+  margin: 0 -8px;
 }
+/* Три состояния подготовки различаются подложкой и полосой, а не жирностью:
+   имя и так набрано дисплейным 700, и «жирнее» ему уже некуда — прежний
+   font-weight: 600 на всей строке заодно утяжелял серую подпись. */
 .dnd-spell-row.is-prepared {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
   border-left: 3px solid var(--accent);
   padding-left: 5px;
-  font-weight: 600;
 }
 .dnd-spell-row.is-prepared-once {
-  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
+/* align-items оставлен растягивающим намеренно: при flex-start дети
+   колонки получают ширину по содержимому, и подпись вылезала за карточку
+   вместо переноса (проверено на листе с 33 заклинаниями). */
+.dnd-spell-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+/* Имя и оригинал на одной строке — одинаково и у кнопки (заклинание можно
+   использовать), и у простого span (нельзя). */
+.dnd-spell-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+  /* Как и у подписи: имя тоже лежит внутри кнопки, а у кнопки nowrap. */
+  white-space: normal;
+}
+/* Имя переносится, а не уезжает за край: у самодельных записей оно бывает
+   длинным («Волна пламени [Flame Wave] HB HB:MHH»), а колонка листа узкая. */
 .dnd-spell-name {
+  font-size: var(--fs-h3);
+  line-height: 1.15;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Пунктир принадлежит имени, а не всей кнопке: иначе он тянулся бы и под
+   оригинал, а text-decoration потомок отменить не может. */
+.dnd-spell-title.dnd-spell-name-link {
+  text-decoration: none;
+}
+.dnd-spell-title.dnd-spell-name-link .dnd-spell-name {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+/* Оригинальное название — тем же голосом, что у плиток бестиария
+   (.monster-tile__en): проза приглушённым цветом. */
+.dnd-spell-en {
+  font-family: var(--font-body);
+  font-weight: 400;
   font-size: var(--fs-meta);
+  letter-spacing: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 /* SbFeatureGroup: each feature is a click-to-open row (opens its
    description in a popup, see .dnd-spell-modal) instead of an inline
@@ -6649,10 +6751,52 @@ input.litm-theme-title {
 .dnd-feature-row-link:hover {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
 }
+/* Подпись строится инлайном, а не флексом: «Особое» у части заклинаний
+   тянет целое предложение (в живом листе попалось 6300 px в одну строку),
+   и флексовый кусок с min-width: auto не ужимался, а уезжал за край карты.
+
+   white-space: normal обязателен и не декоративен: подпись лежит внутри
+   <button>, а базовое правило кнопки — nowrap, и оно наследуется внутрь.
+   Пока его не снять, текст не переносится вовсе, только обрезается по
+   краю карточки — ради этого прежняя вёрстка и держала обрезку.
+
+   Лимит — две строки, дальше режется: полный текст в одном шаге, по тапу
+   на эту же подпись. */
 .dnd-spell-meta {
   color: var(--sb-muted);
-  font-size: calc(var(--fs, 15px) * 0.87);
+  font-size: var(--fs-meta);
   font-weight: 400;
+  line-height: 1.3;
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-height: 2.6em;
+  overflow: hidden;
+}
+.dnd-spell-meta-text {
+  display: inline;
+}
+.dnd-spell-meta-sep {
+  margin: 0 5px;
+  color: color-mix(in srgb, var(--sb-muted) 55%, transparent);
+}
+/* Школа — маленькая категория, а не первое слово серой ленты: между
+   «Воплощением», «Иллюзией» и «Ограждением» в столбце строк появляется
+   ритм. Плашка бумагой на тон темнее, без контура и скругления; она
+   светлее подложки подготовленной строки (6 %) и подложки наведения (8 %),
+   поэтому читается на любой из них. */
+.dnd-spell-school {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--sb-paper) 88%, var(--sb-ink));
+  padding: 2px 7px 3px;
+  margin-right: 1px;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 /* Кнопка, а не span: название заклинания открывает описание, и до этого
    его нельзя было ни взять табом, ни нажать с клавиатуры. Сбрасывается
@@ -6675,6 +6819,57 @@ input.litm-theme-title {
   color: var(--sb-muted);
   padding: 4px 8px 8px;
   white-space: pre-wrap;
+}
+/* Характеристики заклинания парой колонок: подписи слева, значения ровным
+   левым краем. Раньше они шли списком «Подпись: значение», и левый край
+   значений скакал вслед за длиной подписи. Своя сетка, а не общая
+   .comp-fields: та стоит ещё в десятке мест компендиума. Линейка снизу —
+   разрыв между параметрами и текстом, без неё описание начиналось впритык. */
+.dnd-spell-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 14px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
+  white-space: normal;
+}
+.dnd-spell-field {
+  display: contents;
+}
+.dnd-spell-field-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dnd-spell-field-value {
+  font-size: var(--fs-meta);
+  line-height: 1.3;
+  color: var(--ink);
+}
+/* Окно заклинания: русское имя в полный голос дисплейным шрифтом,
+   оригинал под ним тихой подписью. В скобках рядом он спорил с именем. */
+.dnd-spell-modal-title h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.dnd-spell-modal-en {
+  font-size: var(--fs-meta);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 4px;
+}
+/* В окне характеристики отбиты линейкой и сверху — заголовок там крупный и
+   стоит отдельным блоком. В раскрытии под строкой верхней линейки нет
+   намеренно: она читалась бы как разделитель строк списка. */
+.dnd-spell-modal .dnd-spell-fields {
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
 }
 .dnd-equipment-tags {
   font-size: var(--fs-meta);
@@ -6709,6 +6904,9 @@ input.litm-theme-title {
 .dnd-prepared-badge {
   color: var(--accent);
   margin-left: auto;
+  /* Строка теперь выровнена по верху (две ступени), поэтому звёздочку
+     приходится опускать на пиксель-другой к базовой линии имени. */
+  margin-top: 2px;
 }
 .dnd-spell-add {
   position: relative;
@@ -7426,7 +7624,7 @@ button.mention-link:focus-visible {
   border-bottom: var(--card-border-width, 1px) solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 .comp-node--group {
-  border-bottom: var(--card-border-width, 1px) solid var(--line);
+  border-bottom: var(--card-border-width, 1px) solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 .comp-row {
   display: flex;
@@ -7438,43 +7636,53 @@ button.mention-link:focus-visible {
   font-size: var(--text-name);
 }
 .comp-row--group {
-  margin: 6px -14px 0;
-  padding: 8px 12px;
-  background: var(--surface);
-  color: var(--on-surface);
-  border-bottom: var(--card-border-width, 1px) solid var(--line);
-  font-family: var(--font-ui);
-  font-size: var(--fs-meta);
+  margin: 0 -8px;
+  padding: 6px 8px;
+  background: none;
+  color: var(--ink);
+  border-bottom: none;
+  font-family: var(--font-body);
+  font-size: var(--text-name-sub);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.4;
   gap: 8px;
 }
 .comp-row--group .comp-name {
-  color: var(--on-surface);
-  font-family: var(--font-ui);
-  font-size: var(--fs-meta);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--text-name-sub);
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
 }
 .comp-row--group .comp-toggle,
 .comp-row--group .comp-badge,
 .comp-row--group .comp-level {
-  color: var(--on-surface-muted);
-}
-.comp-row--group .comp-actions button,
-.comp-row--group .comp-mini {
-  border-color: var(--on-surface);
-  color: var(--on-surface);
-  background: transparent;
+  color: var(--muted);
 }
 .comp-row--group:hover {
-  background: var(--surface);
+  background: color-mix(in oklab, var(--sb-paper) 84%, var(--sb-ink));
 }
 .comp-row:hover {
-  background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
+  background: color-mix(in oklab, var(--sb-paper) 84%, var(--sb-ink));
+}
+/* Чекбоксы выбора в строках справочника и шапках категорий — визуально
+   тише: меньше, в цвете мета. Прямые потомки, чтобы не задеть чекбоксы
+   форм правки внутри развёрнутых записей. */
+.comp-row > input[type="checkbox"],
+summary.card-header--inverted input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  accent-color: var(--muted);
+  opacity: 0.65;
+  cursor: pointer;
+}
+.comp-row > input[type="checkbox"]:hover,
+summary.card-header--inverted input[type="checkbox"]:hover {
+  opacity: 1;
 }
 
 /* Shared "click almost anywhere to expand" header row, used by card-based
@@ -7571,7 +7779,8 @@ details[open] > summary.chevron-summary .chevron-icon,
 }
 .comp-children .comp-name {
   font-family: var(--font-body);
-  font-weight: 600;
+  font-weight: 400;
+  font-size: var(--fs-meta);
   letter-spacing: 0;
   line-height: 1.2;
 }
@@ -7686,19 +7895,38 @@ details[open] > summary.chevron-summary .chevron-icon,
   justify-content: space-between;
 }
 .card-header--inverted-label {
-  font-weight: 400;
+  font-weight: 600;
+  font-size: var(--fs-h3);
 }
 .card-header--inverted-count {
   font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: var(--fs-meta);
-  opacity: 0.7;
+  font-weight: 400;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 1px 6px;
 }
-/* Тематическая плашка справочника — фон темы, текст акцент (§ по просьбе: 6 блоков). */
+/* Тематическая шапка категории справочника — без инверсии: бумага, акцентный
+   заголовок, тонкий разделитель. Hover — чуть заметнее. */
 .card-header--inverted.is-themed {
   background: var(--paper);
   color: var(--accent);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+summary.card-header--inverted.is-themed:hover {
+  background: color-mix(in oklab, var(--paper) 90%, var(--ink));
+}
+/* Подраздел внутри общей рамки категорий — своей рамки нет, от соседей
+   отделяет только воздух стека. Шапка не вылезает на края общей рамки:
+   в одиночной карточке ей это давали отрицательные отступы, здесь они
+   складывались бы друг на друга. */
+.comp-category {
+  min-width: 0;
+}
+.comp-categories .card-header--inverted {
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 .comp-category summary.comp-level-label {
   cursor: pointer;
@@ -8046,15 +8274,15 @@ body.printing-cheatsheet #root {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  background: var(--ink);
-  color: var(--paper);
+  background: none;
+  color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   line-height: 1.25;
   padding: 7px 12px;
-  cursor: pointer;
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .sys-card-body {
   padding: var(--sp-3);
@@ -8067,6 +8295,82 @@ body.printing-cheatsheet #root {
   max-width: 300px;
   width: 100%;
   height: auto;
+}
+/* Хиро «Обзора» системы: бескаркасная секция — слева тамбнейл в своём
+   фрейме, справа описание своей карточкой; внешние рамки сняты, чтобы не
+   дублировать внутренние («одна рамка на область»). На узких экранах
+   складывается в столбец. */
+.sys-hero-body {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  align-content: start;
+}
+.sys-hero-thumb {
+  min-width: 0;
+}
+.sys-hero-thumb .entity-image-slots {
+  gap: 0;
+}
+.sys-hero-main {
+  min-width: 0;
+}
+/* Плитки кампаний — бескаркасная секция с капс-заголовком (§4.3):
+   рамку держат сами плитки, снаружи только отступ от заголовка. */
+.sys-campaigns-body {
+  padding-top: var(--sp-3);
+}
+.sys-hero-meta {
+  display: grid;
+  gap: 6px;
+}
+.sys-hero-meta-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sys-hero-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.sys-hero-count:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+@media (max-width: 900px) {
+  .sys-hero-body {
+    grid-template-columns: 1fr;
+  }
+}
+/* Типографика страницы системы (§4.1): название — крупное, характерное
+   (Display-голос); заголовки секций — компактный капс (см. .sys-card-head и
+   .sys-hero-meta-label выше); обычный текст — спокойный Body; метаданные —
+   мелкие, приглушённые. Класс фиксирует намерение именно для этой страницы,
+   значения повторяют глобальную шкалу. */
+.sys-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  letter-spacing: -0.01em;
+  line-height: .92;
+}
+/* Обычный текст хиро — спокойный, с воздушным интерлиньяжем. Прямые правила
+   h3/кнопок свои line-height сохраняют — наследуется только проза и мета. */
+.sys-hero-main {
+  line-height: 1.6;
+}
+/* Метаданные хиро и плиток — мелкие, приглушённые. */
+.sys-card-meta {
+  font-size: var(--fs-micro);
+  color: var(--muted);
 }
 .sys-stamp {
   font-family: var(--font-mono);

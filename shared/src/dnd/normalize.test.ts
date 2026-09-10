@@ -143,3 +143,36 @@ describe("нормализация листа не теряет данные с�
     expect(twice).toEqual(once);
   });
 });
+
+describe("инициатива: строка-модификатор становится числом-броском", () => {
+  // Поле сменило и тип, и смысл 2026-09-10: было строкой с вписанным руками
+  // модификатором, стало числом с брошенным значением. Старые листы обязаны
+  // открыться, а не свалиться на первом же чтении.
+  it("строка, которая читается числом, переносится", () => {
+    expect(normalizeDndCharacter({ initiative: "17" }).initiative).toBe(17);
+    expect(normalizeDndCharacter({ initiative: "+2" }).initiative).toBe(2);
+    expect(normalizeDndCharacter({ initiative: "-1" }).initiative).toBe(-1);
+    // Ноль — законное число, а не «пусто».
+    expect(normalizeDndCharacter({ initiative: "0" }).initiative).toBe(0);
+  });
+
+  it("пустая строка и не-число дают «броска нет»", () => {
+    expect(normalizeDndCharacter({ initiative: "" }).initiative).toBe(null);
+    expect(normalizeDndCharacter({ initiative: "  " }).initiative).toBe(null);
+    // «+2 (Ловкость)» — не число: выдумывать за Мастера, что он имел в виду,
+    // модуль не должен.
+    expect(normalizeDndCharacter({ initiative: "+2 (Ловкость)" }).initiative).toBe(null);
+  });
+
+  it("лист без поля открывается", () => {
+    expect(normalizeDndCharacter({}).initiative).toBe(null);
+    expect(normalizeDndCharacter({ initiative: null }).initiative).toBe(null);
+  });
+
+  it("ручная поправка к бонусу — строка и по умолчанию пустая", () => {
+    expect(normalizeDndCharacter({}).initiativeMisc).toBe("");
+    expect(normalizeDndCharacter({ initiativeMisc: "+1" }).initiativeMisc).toBe("+1");
+    // Число вместо строки пришло бы из чужого формата — не роняем разбор.
+    expect(normalizeDndCharacter({ initiativeMisc: 3 }).initiativeMisc).toBe("");
+  });
+});

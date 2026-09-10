@@ -13,7 +13,34 @@
     a { color: #c2410c; } a:hover { color: #92310a; }
     .lbl { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
     .num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
-    .grp { font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #63625f; }
+    /* Заголовок раздела: слово чернилами в полный голос и короткая
+       подчёркивающая планка цветом класса ровно по ширине слова.
+       Разделительных линеек в списке больше нет — раздел отбивается
+       воздухом и этим заголовком. */
+    .sec { font-family: 'Oswald', system-ui, sans-serif; font-size: 16px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; color: #1c1c1c; line-height: 1; }
+    .sec-bar { height: 3px; background: #c2410c; margin-top: 6px; }
+    /* Строка действия. Линий нет, вертикального воздуха вдвое больше:
+       глаз идёт по столбцу имён, а не по решётке. */
+    .row { display: flex; align-items: center; gap: 12px; padding: 13px 12px; min-height: 60px; box-sizing: border-box; }
+    .row-spend { background: #e0dcd2; border-left: 3px solid #c2410c; padding-left: 9px; }
+    /* Значок слева — тип действия (заклинание, оружие, способность,
+       прочее). Он же мишень закладки: залитый значок = строка вынесена
+       на первую карту, всё равно, руками или сама. */
+    .chip { flex: none; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(28,28,28,.25); color: rgba(28,28,28,.72); box-sizing: border-box; }
+    .chip-on { background: #c2410c; border-color: #c2410c; color: #e8e4da; }
+    .chip svg { width: 19px; height: 19px; }
+    .nm { font-size: 15px; font-weight: 600; line-height: 1.2; letter-spacing: -.005em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* То, что в справочнике стоит в скобках, и всё уточняющее — одной
+       тихой строкой под именем: контраст между главным и вторым текстом
+       делает список читаемым быстрее, чем любая линейка. */
+    .sub { font-size: 11px; line-height: 1.25; color: #8a8781; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Правый столбец фиксированной ширины: верхняя клетка всегда про то,
+       чем платишь (СЛ, АТК, цена пула), нижняя — всегда про исход (урон,
+       эффект). Пустая клетка остаётся пустой и не сдвигает соседей. */
+    .rt { flex: none; width: 100px; text-align: right; }
+    .rt-top { height: 18px; line-height: 18px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; font-weight: 700; color: #1c1c1c; }
+    .rt-bot { height: 15px; line-height: 15px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #6f6d68; margin-top: 3px; }
+    .cost { display: inline-block; background: #c2410c; color: #e8e4da; font-family: 'Oswald', system-ui, sans-serif; font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; padding: 3px 7px; line-height: 12px; }
   </style>
 </helmet>
 
@@ -55,82 +82,133 @@
         <div class="lbl" style="border: 1.5px solid rgba(28,28,28,.4); color: #63625f; padding: 5px 8px; flex: none">Правка</div>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px; flex: none">
-        <div class="grp">Действие</div>
-        <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
-      </div>
-
-      <div style="display: flex; flex-direction: column; padding: 0 12px; flex: none">
-        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
-          <div style="flex: 1 1 auto; min-width: 0">
-            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Огненный шар</div>
-            <div class="lbl" style="color: #63625f; margin-top: 2px">3 круг · сфера 20 фт · 150 фт</div>
-          </div>
-          <div style="text-align: right; flex: none">
-            <div class="num" style="font-size: 13px; font-weight: 700; line-height: 1">Слж 15</div>
-            <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">8к6 огонь</div>
-          </div>
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
-          <div style="flex: 1 1 auto; min-width: 0">
-            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Огненный снаряд</div>
-            <div class="lbl" style="color: #63625f; margin-top: 2px">Заговор · 120 фт</div>
-          </div>
-          <div style="text-align: right; flex: none">
-            <div class="num" style="font-size: 17px; font-weight: 700; line-height: 1">+7</div>
-            <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">2к10 огонь</div>
-          </div>
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
-          <div style="flex: 1 1 auto; min-width: 0">
-            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Обжигающий луч</div>
-            <div class="lbl" style="color: #63625f; margin-top: 2px">2 круг · три луча · 120 фт</div>
-          </div>
-          <div style="text-align: right; flex: none">
-            <div class="num" style="font-size: 17px; font-weight: 700; line-height: 1">+7</div>
-            <div class="num" style="font-size: 11px; color: #42413f; margin-top: 2px">3 × 2к6</div>
-          </div>
+      <div style="flex: none; padding: 20px 12px 8px">
+        <div style="display: inline-block">
+          <div class="sec">Действие</div>
+          <div class="sec-bar"></div>
         </div>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px; flex: none">
-        <div class="grp">Бонусное действие</div>
-        <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
-      </div>
-
-      <div style="display: flex; flex-direction: column; padding: 0 12px; flex: none">
-        <!-- строка, из-за которой лента очков и всплыла -->
-        <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(28,28,28,.2); background: #e0dcd2; margin: 0 -12px; padding: 9px 12px; border-left: 3px solid #c2410c">
-          <div style="flex: 1 1 auto; min-width: 0">
-            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Ускоренное заклинание</div>
-            <div class="lbl" style="color: #63625f; margin-top: 2px">Метамагия · заговор бонусным действием</div>
+      <div style="flex: none">
+        <!-- вынесено на первую карту: значок залит -->
+        <div class="row">
+          <div class="chip chip-on">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c0 4 1.6 6 5.5 6-3.9 0-5.5 2-5.5 6 0-4-1.6-6-5.5-6 3.9 0 5.5-2 5.5-6Z"/><path d="M18.6 15.6c0 1.8.8 2.6 2.4 2.6-1.6 0-2.4.8-2.4 2.6 0-1.8-.8-2.6-2.4-2.6 1.6 0 2.4-.8 2.4-2.6Z"/></svg>
           </div>
-          <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 4px 7px; flex: none">−2 очка</div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div class="nm">Огненный шар</div>
+            <div class="sub">3 круг · сфера 20 фт · 150 фт</div>
+          </div>
+          <div class="rt">
+            <div class="rt-top">СЛ 15</div>
+            <div class="rt-bot">8к6 огонь</div>
+          </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(28,28,28,.2); background: #e0dcd2; margin: 0 -12px; padding: 9px 12px; border-left: 3px solid #c2410c">
-          <div style="flex: 1 1 auto; min-width: 0">
-            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Усиленное заклинание</div>
-            <div class="lbl" style="color: #63625f; margin-top: 2px">Метамагия · перебросить до 5 костей урона</div>
+        <!-- скобочная часть имени («Кинжал (метательный)») ушла в подпись -->
+        <div class="row">
+          <div class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.3 17.6 3.5 6.8V3.8h3l11 10.8"/><path d="M12.8 19.1 18.6 13.3"/><path d="M15.8 16.1 19.6 19.9"/><path d="M18.8 21 20.7 19.1"/></svg>
           </div>
-          <div class="lbl" style="background: #c2410c; color: #e8e4da; padding: 4px 7px; flex: none">−1 очко</div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div class="nm">Кинжал</div>
+            <div class="sub">метательный · 20/60 фт</div>
+          </div>
+          <div class="rt">
+            <div class="rt-top">+7</div>
+            <div class="rt-bot">1к4+4 колющий</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="chip chip-on">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c0 4 1.6 6 5.5 6-3.9 0-5.5 2-5.5 6 0-4-1.6-6-5.5-6 3.9 0 5.5-2 5.5-6Z"/><path d="M18.6 15.6c0 1.8.8 2.6 2.4 2.6-1.6 0-2.4.8-2.4 2.6 0-1.8-.8-2.6-2.4-2.6 1.6 0 2.4-.8 2.4-2.6Z"/></svg>
+          </div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div class="nm">Огненный снаряд</div>
+            <div class="sub">Заговор · 120 фт</div>
+          </div>
+          <div class="rt">
+            <div class="rt-top">+7</div>
+            <div class="rt-bot">2к10 огонь</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c0 4 1.6 6 5.5 6-3.9 0-5.5 2-5.5 6 0-4-1.6-6-5.5-6 3.9 0 5.5-2 5.5-6Z"/><path d="M18.6 15.6c0 1.8.8 2.6 2.4 2.6-1.6 0-2.4.8-2.4 2.6 0-1.8-.8-2.6-2.4-2.6 1.6 0 2.4-.8 2.4-2.6Z"/></svg>
+          </div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div class="nm">Обжигающий луч</div>
+            <div class="sub">2 круг · три луча · 120 фт</div>
+          </div>
+          <div class="rt">
+            <div class="rt-top">+7</div>
+            <div class="rt-bot">3 × 2к6</div>
+          </div>
         </div>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px; flex: none">
-        <div class="grp">Реакция</div>
-        <div style="flex: 1 1 auto; height: 1px; background: rgba(28,28,28,.28)"></div>
+      <div style="flex: none; padding: 20px 12px 8px">
+        <div style="display: inline-block">
+          <div class="sec">Бонусное действие</div>
+          <div class="sec-bar"></div>
+        </div>
       </div>
 
-      <div style="display: flex; flex-direction: column; padding: 0 12px; flex: none">
-        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(28,28,28,.2)">
-          <div style="flex: 1 1 auto; min-width: 0">
-            <div style="font-size: 14px; font-weight: 600; line-height: 1.2">Щит</div>
-            <div class="lbl" style="color: #63625f; margin-top: 2px">1 круг · когда по тебе попадают</div>
+      <div style="flex: none">
+        <!-- строка, из-за которой лента очков и всплыла: цена стоит в той же
+             верхней клетке, где у остальных СЛ и бонус к атаке -->
+        <div class="row row-spend">
+          <div class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 21.2 12 12 21.2 2.8 12 12 2.8Z"/><path d="M12 8.2 15.8 12 12 15.8 8.2 12 12 8.2Z"/></svg>
           </div>
-          <div class="num" style="font-size: 15px; font-weight: 700; flex: none">+5 КЗ</div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div class="nm">Ускоренное заклинание</div>
+            <div class="sub">Метамагия · заговор бонусным действием</div>
+          </div>
+          <div class="rt">
+            <div class="rt-top"><span class="cost">−2 очка</span></div>
+            <div class="rt-bot"></div>
+          </div>
+        </div>
+
+        <div class="row row-spend">
+          <div class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 21.2 12 12 21.2 2.8 12 12 2.8Z"/><path d="M12 8.2 15.8 12 12 15.8 8.2 12 12 8.2Z"/></svg>
+          </div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div class="nm">Усиленное заклинание</div>
+            <div class="sub">Метамагия · перебросить до 5 костей урона</div>
+          </div>
+          <div class="rt">
+            <div class="rt-top"><span class="cost">−1 очко</span></div>
+            <div class="rt-bot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex: none; padding: 20px 12px 8px">
+        <div style="display: inline-block">
+          <div class="sec">Реакция</div>
+          <div class="sec-bar"></div>
+        </div>
+      </div>
+
+      <div style="flex: none">
+        <!-- бросать нечего: верхняя клетка пуста, но своё место держит -->
+        <div class="row">
+          <div class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c0 4 1.6 6 5.5 6-3.9 0-5.5 2-5.5 6 0-4-1.6-6-5.5-6 3.9 0 5.5-2 5.5-6Z"/><path d="M18.6 15.6c0 1.8.8 2.6 2.4 2.6-1.6 0-2.4.8-2.4 2.6 0-1.8-.8-2.6-2.4-2.6 1.6 0 2.4-.8 2.4-2.6Z"/></svg>
+          </div>
+          <div style="flex: 1 1 auto; min-width: 0">
+            <div class="nm">Щит</div>
+            <div class="sub">1 круг · когда по тебе попадают</div>
+          </div>
+          <div class="rt">
+            <div class="rt-top"></div>
+            <div class="rt-bot">+5 КЗ до начала хода</div>
+          </div>
         </div>
       </div>
 

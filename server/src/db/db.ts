@@ -347,11 +347,15 @@ function fixResidualLegacyMentions(database: Database.Database): void {
 // it up to the current schema. Used both at startup and whenever the active
 // storage profile changes, so it must be safe to run repeatedly and against
 // any dbDir — no dependency on module-level state.
-export function openDatabase(dbDir: string): Database.Database {
+export function openDatabase(dbDir: string, opts: { migrate?: boolean } = {}): Database.Database {
   fs.mkdirSync(dbDir, { recursive: true });
   const database = new Database(path.join(dbDir, "app.db"));
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
+  // Ревизии и сверки открывают чужие (часто старые) снимки, чтобы в них
+  // ЗАГЛЯНУТЬ. Прогон миграций такой снимок переписывает необратимо, поэтому
+  // «посмотреть» и «обновить» — разные намерения, а не одно по умолчанию.
+  if (opts.migrate === false) return database;
   // 3.3 — integrity_check не блокирует старт: уходим в фон через 2с после открытия
   setTimeout(() => {
     try {
@@ -359,6 +363,16 @@ export function openDatabase(dbDir: string): Database.Database {
       if (row && row.integrity_check !== "ok") console.error(`[db] integrity_check: ${row.integrity_check}`);
     } catch {}
   }, 2000);
+  migrateDatabase(database, dbDir);
+  return database;
+}
+
+// Вся накопленная история изменений схемы и разовых починок данных, по порядку.
+// Идемпотентна: каждый шаг сам проверяет, нужен ли он, — поэтому её гоняют на
+// каждом открытии, и она обязана быть безопасна на базе ЛЮБОГО возраста.
+// Схлопывать историю в baseline нельзя: приложение уехало наружу, и там лежат
+// базы неизвестного возраста, которые некому чинить.
+function migrateDatabase(database: Database.Database, dbDir: string): void {
 
   // Migrate the old `player_characters` table (pre-characters-feature) into
   // `characters` before schema.sql creates the new table, so existing data survives.
@@ -4628,6 +4642,7 @@ export function openDatabase(dbDir: string): Database.Database {
       tags TEXT NOT NULL DEFAULT '',
       thumbnail_image_path TEXT,
       is_default INTEGER NOT NULL DEFAULT 0,
+      is_favorite INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       archived_at TEXT
@@ -4713,6 +4728,7 @@ export function openDatabase(dbDir: string): Database.Database {
     ["tags", "ALTER TABLE story_arcs ADD COLUMN tags TEXT NOT NULL DEFAULT ''"],
     ["thumbnail_image_path", "ALTER TABLE story_arcs ADD COLUMN thumbnail_image_path TEXT"],
     ["is_default", "ALTER TABLE story_arcs ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0"],
+    ["is_favorite", "ALTER TABLE story_arcs ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0"],
   ] as const) {
     if (tableExists(database, "story_arcs") && !columnExists(database, "story_arcs", col)) {
       database.exec(ddl);
@@ -6109,7 +6125,6 @@ export function openDatabase(dbDir: string): Database.Database {
   }
 
   compactIfBloated(database);
-  return database;
 }
 
 /**
@@ -6240,16 +6255,49 @@ export function compactIfBloated(database: Database.Database, force = false): bo
   }
 }
 
-const initialDbDir = process.env.DB_DIR || path.join(__dirname, "..", "..", "data");
-let current = openDatabase(initialDbDir);
+/** Каталог рабочей базы: заданный через DB_DIR (Electron, тесты) или дефолтный. */
+export function defaultDbDir(): string {
+  return process.env.DB_DIR || path.join(__dirname, "..", "..", "data");
+}
+
+let current: Database.Database | null = null;
+
+/**
+ * Открывает рабочую базу — единственная точка, после которой `db` оживает.
+ *
+ * Раньше открытие стояло на верхнем уровне модуля, и база открывалась и
+ * мигрировала от одного лишь `import`. Любой скрипт, который упоминал `db` в
+ * коде — даже чтобы не трогать её, а посмотреть на копию, — необратимо
+ * переписывал РАБОЧУЮ базу владельца; в `runPendingMigrations.ts` это было
+ * записано предупреждением капслоком вместо починки. Теперь базу открывает
+ * тот, кто её попросил, а забывший получает ошибку, а не чужой файл.
+ *
+ * Повторный вызов — не ошибка и не переоткрытие: смена базы делается
+ * `switchToDatabase`.
+ */
+export function initDatabase(dbDir?: string): Database.Database {
+  if (!current) current = openDatabase(dbDir ?? defaultDbDir());
+  return current;
+}
+
+function activeDatabase(): Database.Database {
+  if (!current) {
+    throw new Error(
+      "База не открыта: вызовите initDatabase(dbDir) до первого обращения к db " +
+        "(сервер — в src/index.ts, скрипты и тесты — у себя в начале)."
+    );
+  }
+  return current;
+}
 
 // Every route file does `import { db } from "../db/db"` and calls
 // `db.prepare(...)` directly. A Proxy lets us swap the underlying connection
 // (see switchToDatabase) without touching any of those call sites.
 export const db = new Proxy({} as Database.Database, {
-  get(_target, prop, receiver) {
-    const value = Reflect.get(current, prop, current);
-    return typeof value === "function" ? value.bind(current) : value;
+  get(_target, prop) {
+    const active = activeDatabase();
+    const value = Reflect.get(active, prop, active);
+    return typeof value === "function" ? value.bind(active) : value;
   },
 });
 
@@ -6257,5 +6305,5 @@ export function switchToDatabase(dbDir: string): void {
   const next = openDatabase(dbDir);
   const old = current;
   current = next;
-  old.close();
+  old?.close();
 }

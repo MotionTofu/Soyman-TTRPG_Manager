@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { mirrorQueueRollToSheet } from "../services/initiativeSync";
 
 export const initiativeEntriesRouter = Router();
 
@@ -88,12 +89,40 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
     conditions ? JSON.stringify(conditions) : null,
     req.params.id
   );
+  // Мастер поправил вслух названное число — возвращаем его на лист игрока.
+  // Зеркало работает в обе стороны, иначе у одного числа два хранилища.
+  // Молчит само, если строка не персонажа или число не менялось.
+  if (initiative !== undefined) mirrorQueueRollToSheet(Number(req.params.id));
   res.json(db.prepare("SELECT * FROM initiative_entries WHERE id = ?").get(req.params.id));
 });
 
 initiativeEntriesRouter.delete("/:id", (req, res) => {
   db.prepare("DELETE FROM initiative_entries WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// «Новый бой»: гасит числа у всех строк, оставляя бойцов, их хиты, состояния
+// и отметки мёртвых. Это НЕ «Очистить» — та сносит очередь целиком.
+//
+// Отдельная ручка, а не цикл PUT со стороны клиента: строк бывает под десяток,
+// и десять запросов подряд в момент, когда за столом ждут, — это заметно. Плюс
+// зеркало: у строк персонажей число гаснет и на листах игроков, иначе игрок
+// увидит на чарнике бросок прошлого боя.
+initiativeEntriesRouter.post("/reset-rolls", (req, res) => {
+  const { session_id } = req.query as { session_id?: string };
+  if (!session_id) return res.status(400).json({ error: "session_id is required" });
+  const rows = db
+    .prepare("SELECT id FROM initiative_entries WHERE session_id = ? AND initiative IS NOT NULL")
+    .all(session_id) as { id: number }[];
+  const clear = db.prepare("UPDATE initiative_entries SET initiative = NULL WHERE id = ?");
+  const clearAll = db.transaction((ids: number[]) => {
+    for (const id of ids) clear.run(id);
+  });
+  clearAll(rows.map((r) => r.id));
+  // Зеркалим после транзакции: каждое зеркало пишет чужую таблицу и шлёт
+  // событие, и держать это внутри транзакции незачем.
+  for (const r of rows) mirrorQueueRollToSheet(r.id);
+  res.json({ ok: true, cleared: rows.length });
 });
 
 // Bulk clear — the "Очистить" button between fights. Query-param scoped

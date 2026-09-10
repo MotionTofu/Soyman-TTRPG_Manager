@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    /* ОКНО ЗАКЛИНАНИЯ КРУГА — та же раскладка, что и у заговора,
+       но с подвалом, ради которого окно и открывают: потратить ячейку.
+       Кнопки — как в приложении: главная залитая на ближайший свободный
+       круг, остальные круги мелкими рядом. Второго окна выбор не стоит. */
+    body { margin: 0; background: #e8e4da; color: #1c1c1c; font-family: 'Archivo', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1c1c1c; } a:hover { color: #63625f; }
+
+    .stage { padding: 34px; box-sizing: border-box; }
+    .modal { width: 460px; box-sizing: border-box; background: #e0dcd2; border: 1px solid #2a2a2a; padding: 20px; margin: 0 auto; }
+    .head { display: flex; align-items: flex-start; gap: 12px; }
+    .title { font-family: 'Cormorant SC', 'Cormorant Garamond', serif; font-weight: 700; font-size: 27px; line-height: 1.05; letter-spacing: -.01em; margin: 0; }
+    .title-en { font-size: 12px; letter-spacing: .05em; color: #7e7c76; margin-top: 5px; }
+    .close { flex: none; margin-left: auto; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2a2a2a; color: #1c1c1c; cursor: pointer; padding: 0; }
+    .close svg { width: 13px; height: 13px; }
+
+    .rule { border: 0; border-top: 1px solid rgba(42,42,42,.3); margin: 16px 0; }
+    .fields { display: grid; grid-template-columns: 116px 1fr; row-gap: 6px; column-gap: 14px; align-items: baseline; }
+    .f-lbl { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #7e7c76; }
+    .f-val { font-size: 13px; line-height: 1.3; }
+    .desc { font-size: 13px; line-height: 1.55; }
+    .desc p { margin: 0 0 10px; }
+    .desc p:last-child { margin-bottom: 0; }
+
+    .foot { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(42,42,42,.3); display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+    .btn-primary { background: #1c1c1c; border: 1px solid #1c1c1c; color: #ffffff; font-family: 'Archivo', sans-serif; font-weight: 600; font-size: 12px; padding: 8px 14px; cursor: pointer; }
+    .others { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #63625f; }
+    .btn-mini { background: #dad6cd; border: 1px solid #2a2a2a; color: #1c1c1c; font-family: 'Archivo', sans-serif; font-size: 12px; line-height: 1.4; padding: 1px 8px; cursor: pointer; }
+  </style>
+</helmet>
+<div class="stage">
+  <div class="modal">
+    <div class="head">
+      <div>
+        <h3 class="title">Огненные ладони</h3>
+        <div class="title-en">Burning Hands</div>
+      </div>
+      <button type="button" class="close" aria-label="Закрыть">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+      </button>
+    </div>
+
+    <hr class="rule">
+
+    <div class="fields">
+      <div class="f-lbl">Школа</div><div class="f-val">Воплощение</div>
+      <div class="f-lbl">Круг</div><div class="f-val">1</div>
+      <div class="f-lbl">Накладывание</div><div class="f-val">Действие</div>
+      <div class="f-lbl">Дистанция</div><div class="f-val">На себя (конус 4,5 м)</div>
+      <div class="f-lbl">Компоненты</div><div class="f-val">ВС</div>
+      <div class="f-lbl">Длительность</div><div class="f-val">Мгновенная</div>
+    </div>
+
+    <hr class="rule">
+
+    <div class="desc">
+      <p>Каждое существо в конусе совершает спасбросок Ловкости. При провале существо получает 3к6 урона огнём, при успехе — половину этого урона.</p>
+      <p>Легковоспламеняющиеся предметы в области, которые никто не несёт и не носит, загораются.</p>
+      <p>Если наложить заклинание ячейкой 2 круга или выше, урон возрастает на 1к6 за каждый круг выше первого.</p>
+    </div>
+
+    <div class="foot">
+      <button type="button" class="btn-primary">Потратить ячейку 1 круга</button>
+      <div class="others">
+        <span>или другим кругом:</span>
+        <button type="button" class="btn-mini">2й</button>
+        <button type="button" class="btn-mini">3й</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

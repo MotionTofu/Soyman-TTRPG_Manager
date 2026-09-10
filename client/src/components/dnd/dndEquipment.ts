@@ -103,7 +103,7 @@ export async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEq
 }
 
 // Чистая часть переехала в общий пакет: ею пользуется нормализация листа.
-export { EMPTY_EQUIPMENT_ITEM, makeEquipmentId, ensureEquipmentIds, carryCapacityLb } from "@shared/dnd/equipment";
+export { EMPTY_EQUIPMENT_ITEM, makeEquipmentId, ensureEquipmentIds, carryCapacityLb, findCarryDoublings } from "@shared/dnd/equipment";
 
 // Настройка в записях справочника: у магпредметов это `data.attunement`
 // (чекбокс), у казначейских артефактов — `data.requires_attunement`.
@@ -112,19 +112,6 @@ export function entryRequiresAttunement(data: Record<string, unknown> | undefine
   if (!data) return false;
   if (data.attunement) return true;
   return data.requires_attunement === true || data.requires_attunement === 1;
-}
-
-// Удвоения грузоподъёмности ищутся по именам умений — источника-структуры
-// нет; найденное перечисляется в подсказке, а не молчится.
-const CARRY_DOUBLE_RE = /мощное телосложение|powerful build|увеличени|enlarge|гигантск|мощь велика/i;
-
-export function findCarryDoublings(features: { name: string }[]): string[] {
-  const out: string[] = [];
-  for (const f of features) {
-    const name = (f.name ?? "").trim();
-    if (name && CARRY_DOUBLE_RE.test(name) && !out.includes(name)) out.push(name);
-  }
-  return out;
 }
 
 // Расходник ли запись компендиума: вторую склянку берут как `qty+1` в ту же

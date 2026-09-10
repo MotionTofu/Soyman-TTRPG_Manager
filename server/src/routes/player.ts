@@ -11,6 +11,8 @@ import {
 import { unpaidSessionsForPlayer } from "../services/finance";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { mergeContentPatch } from "../db/statblockContent";
+import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
+import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
 
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
 const upload = multer({
@@ -106,19 +108,18 @@ playerRouter.get("/me", (req: AuthedRequest, res) => {
     let summary: { format: string; race: string; class: string; subclass: string; level: number } | null = null;
     if (sheet.format === "dnd_character") {
       try {
-        const d = JSON.parse(sheet.content || "{}") as {
-          raceName?: string;
-          classes?: { className?: string; subclassName?: string; level?: number }[];
-        };
-        const classes = Array.isArray(d.classes) ? d.classes : [];
-        const main = [...classes].sort((a, b) => (b.level || 0) - (a.level || 0))[0];
-        const total = classes.reduce((n, cl) => n + (cl.level || 0), 0);
+        // Через общую нормализацию и `deriveSheet`, а не своим разбором JSON:
+        // суммарный уровень — производная величина, и считать его здесь
+        // третьим способом значит ровно то расхождение, ради которого модуль
+        // и заводили.
+        const d = normalizeDndCharacter(JSON.parse(sheet.content || "{}"));
+        const main = [...d.classes].sort((a, b) => (b.level || 0) - (a.level || 0))[0];
         summary = {
           format: sheet.format,
-          race: typeof d.raceName === "string" ? d.raceName : "",
-          class: typeof main?.className === "string" ? main.className : "",
-          subclass: typeof main?.subclassName === "string" ? main.subclassName : "",
-          level: total,
+          race: d.raceName ?? "",
+          class: main?.className ?? "",
+          subclass: main?.subclassName ?? "",
+          level: deriveSheet(d).level.value,
         };
       } catch {
         summary = null;
@@ -460,6 +461,31 @@ playerRouter.put("/characters/:id/chapters/:chapterId", (req: AuthedRequest, res
 
 // "Залить чарник нового уровня" — the player edits their own statblock's
 // content, same table/shape the GM app already reads (StatblockList).
+// Брошенное число инициативы: игрок называет своё и стирает своё.
+//
+// Отдельная узкая ручка, а не доступ к `/initiative-entries`: та отдаёт
+// очередь целиком — хиты врагов, состояния, отметки мёртвых, — и один запрос
+// показал бы игроку весь бой. Здесь игрок шлёт только число и id своего
+// персонажа, всё остальное решает сервер (`services/initiativeSync.ts`).
+playerRouter.put("/initiative", (req: AuthedRequest, res) => {
+  const { character_id, initiative } = req.body as {
+    character_id?: number;
+    initiative?: number | null;
+  };
+  if (typeof character_id !== "number") {
+    return res.status(400).json({ error: "character_id is required" });
+  }
+  // `null` — сброс. Ноль сбросом не является: инициатива 0 законна, и
+  // проверка на ложность съела бы её вместе с «не бросал».
+  if (initiative !== null && (typeof initiative !== "number" || !Number.isFinite(initiative))) {
+    return res.status(400).json({ error: "initiative должен быть числом или null" });
+  }
+  if (!requireOwnCharacter(req.user!.playerId!, character_id)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  res.json(setCharacterRoll(character_id, initiative));
+});
+
 playerRouter.put("/statblocks/:id", (req: AuthedRequest, res) => {
   const statblock = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(req.params.id) as
     | { id: number; owner_type: string; owner_id: number }
@@ -494,6 +520,10 @@ playerRouter.put("/statblocks/:id", (req: AuthedRequest, res) => {
     "UPDATE statblocks SET content = COALESCE(?, content), theme = COALESCE(?, theme), density = COALESCE(?, density), updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?"
   ).run(nextContent, theme ?? null, density ?? null, req.params.id);
   broadcastCharacterUpdate(statblock.owner_id);
+  // Брошенная инициатива на листе — зеркалом в очередь боя Мастера. Здесь, а
+  // не только в узкой ручке `/initiative`: лист игрок сохраняет и обычным
+  // путём, и зеркало должно работать от любого сохранения.
+  mirrorSheetRollToQueue(statblock.owner_id);
   res.json(db.prepare("SELECT * FROM statblocks WHERE id = ?").get(req.params.id));
 });
 

@@ -1,13 +1,12 @@
 // Сквозной тест API представления: настоящий роутер + временная база.
-// DB_DIR и VAULT_ROOT выставляются ДО импорта db (побочный эффект —
-// открытие базы), поэтому импорты — динамические внутри beforeAll.
+// Временную базу и временное хранилище заводит общий для всех тестов
+// src/test/setupTempDb.ts — здесь про DB_DIR/VAULT_ROOT думать не нужно.
 // Живая база и живой vault не затрагиваются никак.
 
 import { describe, it, expect, beforeAll } from "vitest";
 import express from "express";
 import request from "supertest";
 import fs from "fs";
-import os from "os";
 import path from "path";
 
 let app: express.Express;
@@ -22,9 +21,6 @@ const PNG = Buffer.from(
 );
 
 beforeAll(async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "presentation-api-test-"));
-  process.env.DB_DIR = tmpDir;
-  process.env.VAULT_ROOT = path.join(tmpDir, "vault");
   const { storyRouter } = await import("./story");
   const { campaignsRouter } = await import("./campaigns");
   const { sessionsRouter } = await import("./sessions");

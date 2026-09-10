@@ -3,8 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, getAuthToken } from "../api/client";
 import { chapterWord, sceneWord } from "../sceneKinds";
 import { AdventureWizard } from "./AdventureWizard";
+import { AdventurePreview } from "./AdventurePreview";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Modal } from "./Modal";
+import { EmptyState } from "./EmptyState";
 import { downloadJson } from "../downloadJson";
 import { ExportProgress } from "./ExportProgress";
 import type { StoryArc } from "../types";
@@ -19,14 +21,14 @@ interface ImportReply {
   updated_scenes?: number;
   kept_local_scenes?: number;
 }
-import { NavIcon } from "./NavIcons";
 import { useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useLongPress } from "../hooks/useLongPress";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 
-// "Приключения" — the index of a setting's prepared story blocks. Everything
-// inside one (chapters, scenes, milestones, secrets) lives on the adventure's
-// own profile page, so this stays a short list instead of an endless scroll.
+// "Приключения" — the index of a setting's prepared story blocks. Two
+// columns: the list on the left, a read-only preview of the selected
+// adventure on the right. Everything inside one (chapters, scenes,
+// milestones, secrets) lives on the adventure's own profile page.
 // Rendered on the setting profile only: a campaign shows the adventures it is
 // linked to in its own sections instead.
 export function AdventuresTab({
@@ -41,8 +43,9 @@ export function AdventuresTab({
   const { deleteWithUndo } = useUndoDelete();
   const navigate = useNavigate();
   const [arcs, setArcs] = useState<StoryArc[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [dragId, setDragId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; arc: StoryArc } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Картинки книги весят больше всего остального вместе взятого, и раскладывать
@@ -55,7 +58,11 @@ export function AdventuresTab({
   const [exportError, setExportError] = useState<string | null>(null);
 
   function refresh() {
-    api.get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`).then(setArcs);
+    setLoadError(null);
+    api
+      .get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`)
+      .then(setArcs)
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refresh, [settingId]);
@@ -77,6 +84,16 @@ export function AdventuresTab({
     if (!name?.trim() || name.trim() === arc.name) return;
     await api.put(`/story/arcs/${arc.id}`, { name: name.trim() });
     refresh();
+  }
+
+  async function toggleFavorite(arc: StoryArc) {
+    const favorite = arc.is_favorite === 1 ? 0 : 1;
+    setArcs((prev) => prev.map((a) => (a.id === arc.id ? { ...a, is_favorite: favorite } : a)));
+    try {
+      await api.put(`/story/arcs/${arc.id}/favorite`, { favorite });
+    } catch {
+      refresh();
+    }
   }
 
   async function exportArc(arc: StoryArc) {
@@ -176,21 +193,32 @@ export function AdventuresTab({
     setMenu({ x: at.clientX, y: at.clientY, arc });
   }, []);
 
-  // Only top-level adventures are listed; chapters belong to the profile.
-  const adventures = arcs.filter((a) => a.parent_id == null);
-
-  async function reorder(draggedId: number, targetId: number) {
-    if (draggedId === targetId) return;
-    const ids = adventures.map((a) => a.id);
-    const from = ids.indexOf(draggedId);
-    const to = ids.indexOf(targetId);
-    if (from === -1 || to === -1) return;
-    ids.splice(to, 0, ...ids.splice(from, 1));
-    const order = new Map(ids.map((id, i) => [id, i]));
-    setArcs((prev) => [...prev].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)));
-    await api.put("/story/arcs/reorder", { order: ids });
-    refresh();
+  function openAdventure(arc: StoryArc) {
+    navigate(`/adventures/${arc.id}${campaignId ? `?campaign=${campaignId}` : ""}`);
   }
+
+  // Only top-level adventures are listed; chapters belong to the profile.
+  // Избранное — первым, дальше по алфавиту: свой порядок перетаскиванием
+  // убран, список читается сам.
+  const adventures = arcs
+    .filter((a) => a.parent_id == null)
+    .sort(
+      (a, b) =>
+        (b.is_favorite ?? 0) - (a.is_favorite ?? 0) || a.name.localeCompare(b.name, "ru")
+    );
+
+  useEffect(() => {
+    if (adventures.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (selectedId == null || !adventures.some((a) => a.id === selectedId)) {
+      setSelectedId(adventures[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arcs]);
+
+  const selected = adventures.find((a) => a.id === selectedId) ?? null;
 
   // Внутри кампании список показывает приключения сеттинга только для чтения:
   // переименование и архивация отсюда тронули бы оригинал и все остальные
@@ -198,7 +226,7 @@ export function AdventuresTab({
   const editable = !campaignId && menu?.arc.is_default !== 1;
   const menuItems: ContextMenuItem[] = menu
     ? [
-        { label: "Открыть", onClick: () => navigate(`/adventures/${menu.arc.id}${campaignId ? `?campaign=${campaignId}` : ""}`) },
+        { label: "Открыть", onClick: () => openAdventure(menu.arc) },
         { label: "Выгрузить в файл", onClick: () => void exportArc(menu.arc) },
         ...(editable
           ? [
@@ -239,47 +267,82 @@ export function AdventuresTab({
         </div>
       )}
 
-      <p className="muted">
-        Приключение — блок подготовленного сюжета внутри сеттинга (книга, ваншот, арка). Внутри
-        него главы, сцены, вехи, тайны и зацепки.{" "}
-        {campaignId
-          ? "Кампания видит приключения сеттинга: правка сцены создаёт копию только для этой кампании, оригинал не меняется."
-          : "Кампании наследуют эти приключения и могут править сцены у себя, не трогая оригинал."}
-      </p>
+      {loadError && (
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <span>Не удалось загрузить приключения: {loadError}</span>
+          <button className="primary" onClick={refresh}>
+            Повторить
+          </button>
+        </div>
+      )}
 
-      <div className="entity-row-list">
-        {adventures.map((a) => (
-          <AdventureRow
-            key={a.id}
-            arc={a}
-            draggable={!campaignId}
-            onDragStart={() => setDragId(a.id)}
-            onDrop={() => dragId != null && reorder(dragId, a.id)}
-            onMenu={openMenu}
-          >
-            <Link
-              to={`/adventures/${a.id}${campaignId ? `?campaign=${campaignId}` : ""}`}
-              className="entity-row-name"
-            >
-              {a.name}
-            </Link>
-            <span className="muted">
-              {!!a.chapter_count && `${a.chapter_count} ${chapterWord(a.chapter_count)} · `}
-              {a.scene_count} {sceneWord(a.scene_count)}
-              {a.recommended_level && ` · ${a.recommended_level}`}
-            </span>
-            {a.is_default === 1 && <span className="badge tag">стандартное</span>}
-            {!campaignId && a.is_default !== 1 && (
-              <span className="entity-row-actions">
-                <button className="danger" onClick={() => archive(a)}>
-                  <NavIcon name="archive" /> Архивировать
-                </button>
-              </span>
+      {adventures.length === 0 && !loadError ? (
+        <EmptyState
+          title="Приключений пока нет"
+          hint="Приключение — блок подготовленного сюжета внутри сеттинга (книга, ваншот, арка). Внутри него главы, сцены, вехи, тайны и зацепки. Кампании наследуют эти приключения и могут править сцены у себя, не трогая оригинал."
+          action={
+            !campaignId ? (
+              <button className="primary" onClick={() => setWizardOpen(true)}>
+                + Приключение
+              </button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="adventures-split">
+          <div className="adventures-list entity-row-list">
+            {adventures.map((a) => (
+              <AdventureRow
+                key={a.id}
+                arc={a}
+                selected={a.id === selectedId}
+                onSelect={() => setSelectedId(a.id)}
+                onMenu={openMenu}
+              >
+                {!campaignId && a.is_default !== 1 && (
+                  <button
+                    type="button"
+                    className={`fav-star${a.is_favorite === 1 ? " on" : ""}`}
+                    title={a.is_favorite === 1 ? "Убрать из избранного" : "В избранное"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggleFavorite(a);
+                    }}
+                  >
+                    ★
+                  </button>
+                )}
+                <Link
+                  to={`/adventures/${a.id}${campaignId ? `?campaign=${campaignId}` : ""}`}
+                  className="entity-row-name"
+                  onClick={() => setSelectedId(a.id)}
+                >
+                  {a.name}
+                </Link>
+                <span className="muted">
+                  {!!a.chapter_count && `${a.chapter_count} ${chapterWord(a.chapter_count)} · `}
+                  {a.scene_count} {sceneWord(a.scene_count)}
+                  {a.recommended_level && ` · ${a.recommended_level}`}
+                </span>
+                {a.is_default === 1 && <span className="badge tag">стандартное</span>}
+              </AdventureRow>
+            ))}
+          </div>
+          <div className="adventures-preview">
+            {selected && (
+              <AdventurePreview
+                key={selected.id}
+                arc={selected}
+                editable={!campaignId && selected.is_default !== 1}
+                onOpen={() => openAdventure(selected)}
+                onRename={() => rename(selected)}
+                onArchive={() => archive(selected)}
+                onExport={() => void exportArc(selected)}
+              />
             )}
-          </AdventureRow>
-        ))}
-        {adventures.length === 0 && <p className="muted">Приключений пока нет.</p>}
-      </div>
+          </div>
+        </div>
+      )}
 
       {clash && (
         <Modal onClose={() => setClash(null)}>
@@ -342,27 +405,22 @@ export function AdventuresTab({
 // строке, потому что на планшете правой кнопки нет.
 function AdventureRow({
   arc,
-  draggable,
-  onDragStart,
-  onDrop,
+  selected,
+  onSelect,
   onMenu,
   children,
 }: {
   arc: StoryArc;
-  draggable: boolean;
-  onDragStart: () => void;
-  onDrop: () => void;
+  selected: boolean;
+  onSelect: () => void;
   onMenu: (arc: StoryArc, at: { clientX: number; clientY: number }) => void;
   children: ReactNode;
 }) {
   const longPress = useLongPress(useCallback((at) => onMenu(arc, at), [onMenu, arc]));
   return (
     <div
-      className="entity-row"
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
+      className={`entity-row${selected ? " selected" : ""}`}
+      onClick={onSelect}
       onContextMenu={(e) => {
         e.preventDefault();
         onMenu(arc, { clientX: e.clientX, clientY: e.clientY });

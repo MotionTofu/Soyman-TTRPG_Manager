@@ -9,7 +9,10 @@
 // Исходный текст остаётся: он читается лучше любого списка ссылок, а всё,
 // что не опозналось, только в нём и хранится.
 
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 
 const APPLY = process.argv.includes("--apply");
 

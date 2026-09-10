@@ -54,7 +54,8 @@ export function emptyDndCharacter(): DndCharacterData {
     savingThrowProfs: emptySavingThrowProfs(),
     skillProfs: emptySkillProfs(),
     armorClass: "",
-    initiative: "",
+    initiative: null,
+    initiativeMisc: "",
     speed: "",
     speeds: emptySpeed(),
     sensesList: [],
@@ -247,6 +248,20 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
   merged.spellSlotLevels = Math.min(SPELL_LEVELS, Math.max(0, Number(r.spellSlotLevels) || 0));
   merged.cantrips = Array.isArray(r.cantrips) ? (r.cantrips as DndSpellEntry[]).map(normalizeSpellEntry) : [];
   merged.manualAcBonus = typeof merged.manualAcBonus === "string" ? merged.manualAcBonus : "";
+  // Листы, сохранённые до появления поправки, приходят без неё, а спред кладёт
+  // undefined поверх умолчания — и `parseBonus(undefined)` уронил бы разбор.
+  merged.initiativeMisc = typeof merged.initiativeMisc === "string" ? merged.initiativeMisc : "";
+  // `initiative` до 2026-09-10 был строкой и означал модификатор. Строка,
+  // которая читается числом («0», «+2»), переносится как есть: это ровно тот
+  // случай, когда игрок вписал туда своё число и хочет его видеть. Всё
+  // остальное («+2 (Ловкость)», пустая строка) — не число, и выдумывать за
+  // Мастера нечего.
+  if (typeof merged.initiative === "string") {
+    const n = Number(String(merged.initiative).replace("+", "").trim());
+    merged.initiative = (merged.initiative as string).trim() !== "" && Number.isFinite(n) ? n : null;
+  } else if (typeof merged.initiative !== "number" || !Number.isFinite(merged.initiative)) {
+    merged.initiative = null;
+  }
   merged.hitPointMaxTemp = typeof merged.hitPointMaxTemp === "string" ? merged.hitPointMaxTemp : "";
   merged.resourceUsed = merged.resourceUsed && typeof merged.resourceUsed === "object" ? merged.resourceUsed : {};
   merged.resourceBonus = merged.resourceBonus && typeof merged.resourceBonus === "object" ? merged.resourceBonus : {};

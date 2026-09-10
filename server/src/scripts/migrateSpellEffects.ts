@@ -12,7 +12,10 @@
 // Повторный запуск безопасен: записи, у которых уже есть effects, не
 // трогаются вовсе — иначе второй прогон удвоил бы им эффекты.
 
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 
 const APPLY = process.argv.includes("--apply");
 

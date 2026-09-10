@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Archivo:wght@400;500;600&family=Oswald:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap">
+  <style>
+    /* ОКНО ЗАКЛИНАНИЯ — характеристики выровненной парой колонок.
+       Коробка окна не переизобретается: .modal как есть — бумага --paper-2,
+       рамка 1 px --line, ноль скругления, поля 20 px, ширина 420 (здесь 460:
+       выровненные колонки просят чуть больше места). */
+    body { margin: 0; background: #e8e4da; color: #1c1c1c; font-family: 'Archivo', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1c1c1c; } a:hover { color: #63625f; }
+
+    .stage { position: relative; height: 100%; box-sizing: border-box; }
+    /* Список за окном — тот же новый список, приглушённый подложкой. */
+    .behind { padding: 22px 26px; filter: saturate(.9); }
+    .veil { position: absolute; inset: 0; background: rgba(28,28,28,.5); }
+    .anchor { display: flex; align-items: baseline; gap: 11px; border-top: 1px solid #2a2a2a; padding-top: 9px; margin: 0 0 2px; }
+    .anchor-word-solo { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; line-height: 1; flex: 1 1 auto; }
+    .anchor-count { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #63625f; }
+    .sp { padding: 11px 0 12px; }
+    .sp-title { display: flex; align-items: baseline; gap: 8px; }
+    .sp-name { font-family: 'Cormorant SC', 'Cormorant Garamond', serif; font-weight: 700; font-size: 19px; line-height: 1.1; }
+    .sp-en { font-size: 11px; color: #8b8983; }
+    .sp-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 5px; font-size: 12px; color: #63625f; }
+    .sep { color: #aeaba3; }
+    .school { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .11em; text-transform: uppercase; color: #1c1c1c; background: #d5d1c6; padding: 2px 7px 3px; line-height: 1.15; white-space: nowrap; }
+
+    /* ОКНО */
+    .modal { position: absolute; left: 50%; top: 46px; transform: translateX(-50%); width: 460px; box-sizing: border-box; background: #e0dcd2; border: 1px solid #2a2a2a; padding: 20px; }
+    .head { display: flex; align-items: flex-start; gap: 12px; }
+    /* Название — главный объект окна. Русское имя в полный голос дисплейным
+       шрифтом, английское под ним тихой подписью: это идентификатор, а не
+       часть названия, и в скобках рядом оно спорило с именем за внимание. */
+    .title { font-family: 'Cormorant SC', 'Cormorant Garamond', serif; font-weight: 700; font-size: 27px; line-height: 1.05; letter-spacing: -.01em; margin: 0; }
+    .title-en { font-size: 12px; letter-spacing: .05em; color: #7e7c76; margin-top: 5px; }
+    .close { flex: none; margin-left: auto; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #2a2a2a; color: #1c1c1c; cursor: pointer; padding: 0; }
+    .close svg { width: 13px; height: 13px; }
+
+    .rule { border: 0; border-top: 1px solid rgba(42,42,42,.3); margin: 16px 0; }
+
+    /* Характеристики: подпись и значение стоят в колонках, а не липнут
+       через двоеточие. Глазу достаётся ровный левый край значений. */
+    .fields { display: grid; grid-template-columns: 116px 1fr; row-gap: 6px; column-gap: 14px; align-items: baseline; }
+    .f-lbl { font-family: 'Oswald', sans-serif; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #7e7c76; }
+    .f-val { font-size: 13px; line-height: 1.3; }
+
+    .desc { font-size: 13px; line-height: 1.55; }
+    .desc p { margin: 0 0 10px; }
+    .desc p:last-child { margin-bottom: 0; }
+    /* Подвал окна — то же, что показывает лист сейчас: у заговора тратить
+       нечего, у круга здесь встают кнопки ячеек. */
+    .foot { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(42,42,42,.3); font-size: 12px; color: #63625f; }
+  </style>
+</helmet>
+<div class="stage">
+  <div class="behind">
+    <div class="anchor"><span class="anchor-word-solo">Заговоры</span><span class="anchor-count">4</span></div>
+    <div class="sp">
+      <div class="sp-title"><span class="sp-name">Луч холода</span><span class="sp-en">Ray of Frost</span></div>
+      <div class="sp-meta"><span class="school">Воплощение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>1к8 холодом</span></div>
+    </div>
+    <div class="sp">
+      <div class="sp-title"><span class="sp-name">Малая иллюзия</span><span class="sp-en">Minor Illusion</span></div>
+      <div class="sp-meta"><span class="school">Иллюзия</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>СМ</span><span class="sep">·</span><span>1 минута</span></div>
+    </div>
+    <div class="sp">
+      <div class="sp-title"><span class="sp-name">Защита от оружия</span><span class="sp-en">Blade Ward</span></div>
+      <div class="sp-meta"><span class="school">Ограждение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>Концентрация</span></div>
+    </div>
+    <div class="sp">
+      <div class="sp-title"><span class="sp-name">Огненный снаряд</span><span class="sp-en">Fire Bolt</span></div>
+      <div class="sp-meta"><span class="school">Воплощение</span><span class="sep">·</span><span>Действие</span><span class="sep">·</span><span>ВС</span><span class="sep">·</span><span>1к10 огнём</span></div>
+    </div>
+  </div>
+  <div class="veil"></div>
+
+  <div class="modal">
+    <div class="head">
+      <div>
+        <h3 class="title">Защита от оружия</h3>
+        <div class="title-en">Blade Ward</div>
+      </div>
+      <button type="button" class="close" aria-label="Закрыть">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+      </button>
+    </div>
+
+    <hr class="rule">
+
+    <div class="fields">
+      <div class="f-lbl">Школа</div><div class="f-val">Ограждение</div>
+      <div class="f-lbl">Накладывание</div><div class="f-val">Действие</div>
+      <div class="f-lbl">Дистанция</div><div class="f-val">На себя</div>
+      <div class="f-lbl">Компоненты</div><div class="f-val">ВС</div>
+      <div class="f-lbl">Длительность</div><div class="f-val">Концентрация, до 1 минуты</div>
+    </div>
+
+    <hr class="rule">
+
+    <div class="desc">
+      <p>Каждый раз, когда существо совершает атаку по вам до окончания длительности заклинания, атакующий вычитает 1к4 из броска атаки.</p>
+    </div>
+
+    <div class="foot">Заговор — тратить нечего.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

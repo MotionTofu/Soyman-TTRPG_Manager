@@ -9,7 +9,10 @@
 // Записи, у которых время уже проставлено, не трогаются: ручная правка важнее
 // догадки по тексту.
 
-import { db } from "../db/db";
+import { db, initDatabase } from "../db/db";
+
+// База открывается явно: импорт модуля её больше не открывает.
+initDatabase();
 
 const APPLY = process.argv.includes("--apply");
 

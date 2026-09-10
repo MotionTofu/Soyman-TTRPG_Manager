@@ -11,8 +11,15 @@ import { initRealtime } from "./services/realtime";
 import { applyActiveStorageEnv } from "./services/storages";
 // Resolve which storage profile is active and point DB_DIR/VAULT_ROOT at it
 // before anything below opens a database connection or touches the vault.
+import { db, initDatabase } from "./db/db";
+// Разрешить активный профиль хранилища и навести DB_DIR/VAULT_ROOT на него
+// нужно ДО открытия базы. Раньше это держалось порядком строк относительно
+// `import { db }` (побочный эффект импорта) — и работало лишь потому, что
+// сборка идёт в CommonJS: в ESM импорты поднимаются наверх, и база открылась
+// бы не в том каталоге. Теперь порядок задан вызовами, а не расстановкой
+// импортов, и переезд на ESM его не сломает.
 applyActiveStorageEnv();
-import { db } from "./db/db";
+initDatabase();
 import { initVault, VAULT_ROOT, vaultAbs } from "./services/filesystem";
 import { storagesRouter } from "./routes/storages";
 import { appSettingsRouter } from "./routes/appSettings";
