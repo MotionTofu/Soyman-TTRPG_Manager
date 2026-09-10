@@ -261,7 +261,9 @@ export function StatblockList({
     setCloning(true);
     setCloneError("");
     try {
-      const data = JSON.parse(src.content) as DndCharacterData;
+      // Клон нормализуется: иначе копия старого листа уносит его старый
+      // формат дальше, и миграции приходится проходить заново уже у неё.
+      const data = normalizeDndCharacter(JSON.parse(src.content));
       if (!data || typeof data !== "object" || Array.isArray(data)) {
         throw new Error("Статблок-источник не похож на персонажа.");
       }
