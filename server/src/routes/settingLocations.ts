@@ -356,6 +356,52 @@ settingLocationsRouter.get("/:id", (req, res) => {
     .prepare("SELECT * FROM important_dates WHERE owner_type = 'location' AND owner_id = ?")
     .all(req.params.id);
 
+  const locationIdNum = Number(req.params.id);
+
+  // Выходы (решения 2026-09-11, §4): начинающиеся здесь и двусторонние,
+  // ведущие сюда. Одностороннего «только туда» у цели нет. Конец в архиве —
+  // выход не показывается.
+  const exits = db
+    .prepare(
+      `SELECT e.id, e.how, e.travel_time, e.one_way, e.secret, e.note,
+              CASE WHEN e.from_location_id = @id THEN 'out' ELSE 'in' END AS direction,
+              o.id AS other_id, o.name AS other_name, o.role AS other_role,
+              p.name AS other_parent_name
+         FROM location_exits e
+         JOIN setting_locations o
+           ON o.id = CASE WHEN e.from_location_id = @id THEN e.to_location_id ELSE e.from_location_id END
+         LEFT JOIN setting_locations p ON p.id = o.parent_id
+        WHERE (e.from_location_id = @id OR (e.to_location_id = @id AND e.one_way = 0))
+          AND o.archived_at IS NULL
+        ORDER BY o.name`
+    )
+    .all({ id: locationIdNum });
+
+  // Артефакты, лежащие здесь, — блок «Артефакты здесь» карточки места
+  // (решения 2026-09-11, §2). С ?nested=1 — и лежащие во вложенных местах,
+  // с именем места, как у жителей.
+  const artifacts =
+    req.query.nested === "1"
+      ? db
+          .prepare(
+            `WITH RECURSIVE places(id) AS (
+               SELECT ?
+               UNION ALL
+               SELECT sl.id FROM setting_locations sl JOIN places p ON sl.parent_id = p.id
+               WHERE sl.archived_at IS NULL
+             )
+             SELECT a.id, a.name, CASE WHEN a.location_id = ? THEN NULL ELSE l.name END AS location_name
+             FROM artifacts a JOIN setting_locations l ON l.id = a.location_id
+             WHERE a.location_id IN (SELECT id FROM places) AND a.archived_at IS NULL
+             ORDER BY a.name`
+          )
+          .all(locationIdNum, locationIdNum)
+      : db
+          .prepare(
+            "SELECT id, name, NULL AS location_name FROM artifacts WHERE location_id = ? AND archived_at IS NULL ORDER BY name"
+          )
+          .all(locationIdNum);
+
   // Локации, рождённые из этой точки кнопкой «сделать локацией» (этап 8).
   const promotedLocations = db
     .prepare(
@@ -376,6 +422,8 @@ settingLocationsRouter.get("/:id", (req, res) => {
     inhabitant_communities: inhabitantCommunities,
     nested_inhabitant_communities: nestedInhabitantCommunities,
     important_dates: importantDates,
+    artifacts,
+    exits,
   });
 });
 
@@ -703,6 +751,61 @@ settingLocationsRouter.put("/content/:contentId", (req, res) => {
 
 settingLocationsRouter.delete("/content/:contentId", (req, res) => {
   db.prepare("DELETE FROM location_content WHERE id = ?").run(req.params.contentId);
+  res.json({ ok: true });
+});
+
+import { parseExitFields } from "../services/locationExits";
+
+// Выходы между местами (решения 2026-09-11, §4). Цель не меняется правкой:
+// другой путь — это удалить и завести новый.
+settingLocationsRouter.post("/:id/exits", (req, res) => {
+  const from = db
+    .prepare("SELECT id, setting_id, archived_at FROM setting_locations WHERE id = ?")
+    .get(req.params.id) as { id: number; setting_id: number; archived_at: string | null } | undefined;
+  if (!from || from.archived_at) return res.status(404).json({ error: "not found" });
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const toId = Number(body.to_location_id);
+  if (!Number.isInteger(toId) || toId <= 0) return res.status(400).json({ error: "to_location_id is required" });
+  if (toId === from.id) return res.status(400).json({ error: "exit must lead to another place" });
+  const to = db
+    .prepare("SELECT id, setting_id, archived_at FROM setting_locations WHERE id = ?")
+    .get(toId) as { id: number; setting_id: number; archived_at: string | null } | undefined;
+  if (!to || to.archived_at) return res.status(400).json({ error: "target place not found" });
+  // Выход в другой сеттинг оставил бы висящий конец в выгрузке одного мира.
+  if (to.setting_id !== from.setting_id) return res.status(400).json({ error: "target place is in another setting" });
+  const parsed = parseExitFields(body, false);
+  if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+  const f = parsed.fields as Required<typeof parsed.fields>;
+  const duplicate = db
+    .prepare("SELECT 1 FROM location_exits WHERE from_location_id = ? AND to_location_id = ? AND how = ?")
+    .get(from.id, to.id, f.how);
+  if (duplicate) return res.status(409).json({ error: "such exit already exists" });
+  const info = db
+    .prepare(
+      `INSERT INTO location_exits (from_location_id, to_location_id, how, travel_time, one_way, secret, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(from.id, to.id, f.how, f.travel_time, f.one_way, f.secret, f.note);
+  res.status(201).json(db.prepare("SELECT * FROM location_exits WHERE id = ?").get(info.lastInsertRowid));
+});
+
+settingLocationsRouter.put("/exits/:exitId", (req, res) => {
+  const existing = db.prepare("SELECT id FROM location_exits WHERE id = ?").get(req.params.exitId);
+  if (!existing) return res.status(404).json({ error: "not found" });
+  const parsed = parseExitFields((req.body ?? {}) as Record<string, unknown>, true);
+  if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+  const entries = Object.entries(parsed.fields);
+  if (entries.length > 0) {
+    db.prepare(`UPDATE location_exits SET ${entries.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).run(
+      ...entries.map(([, v]) => v),
+      req.params.exitId
+    );
+  }
+  res.json(db.prepare("SELECT * FROM location_exits WHERE id = ?").get(req.params.exitId));
+});
+
+settingLocationsRouter.delete("/exits/:exitId", (req, res) => {
+  db.prepare("DELETE FROM location_exits WHERE id = ?").run(req.params.exitId);
   res.json({ ok: true });
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../api/client";
+import { write } from "../../data/hooks";
+import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { Modal } from "../Modal";
 import { NavIcon } from "../NavIcons";
 import { useImageCrop } from "../../hooks/useImageCrop";
@@ -654,11 +655,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return;
     }
     const ac = new AbortController();
-    api
-      .get<CompendiumEntry>(`/systems/entries/${classId}`, { signal: ac.signal })
-      .then(setClassEntry)
+    readResource<CompendiumEntry>(`/systems/entries/${classId}`)
+      .then((entry) => {
+        if (!ac.signal.aborted) setClassEntry(entry);
+      })
       .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
+        if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
       });
     return () => ac.abort();
   }, [classId]);
@@ -669,11 +671,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return;
     }
     const ac = new AbortController();
-    api
-      .get<CompendiumEntry>(`/systems/entries/${subclassId}`, { signal: ac.signal })
-      .then(setSubclassEntry)
+    readResource<CompendiumEntry>(`/systems/entries/${subclassId}`)
+      .then((entry) => {
+        if (!ac.signal.aborted) setSubclassEntry(entry);
+      })
       .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
+        if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
       });
     return () => ac.abort();
   }, [subclassId]);
@@ -684,11 +687,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return;
     }
     const ac = new AbortController();
-    api
-      .get<CompendiumEntry>(`/systems/entries/${backgroundId}`, { signal: ac.signal })
-      .then(setBackgroundEntry)
+    readResource<CompendiumEntry>(`/systems/entries/${backgroundId}`)
+      .then((entry) => {
+        if (!ac.signal.aborted) setBackgroundEntry(entry);
+      })
       .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
+        if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
       });
     return () => ac.abort();
   }, [backgroundId]);
@@ -701,11 +705,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return;
     }
     const ac = new AbortController();
-    api
-      .get<CompendiumEntry>(`/systems/entries/${speciesId}`, { signal: ac.signal })
-      .then(setSpeciesEntry)
+    readResource<CompendiumEntry>(`/systems/entries/${speciesId}`)
+      .then((entry) => {
+        if (!ac.signal.aborted) setSpeciesEntry(entry);
+      })
       .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
+        if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
       });
     return () => ac.abort();
   }, [speciesId]);
@@ -887,11 +892,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return;
     }
     const ac = new AbortController();
-    api
-      .get<CompendiumEntry>(`/systems/entries/${effectiveFeatId}`, { signal: ac.signal })
-      .then(setFeatEntry)
+    readResource<CompendiumEntry>(`/systems/entries/${effectiveFeatId}`)
+      .then((entry) => {
+        if (!ac.signal.aborted) setFeatEntry(entry);
+      })
       .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
+        if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
       });
     return () => ac.abort();
   }, [effectiveFeatId]);
@@ -932,7 +938,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (styleFeatEntries[id] || styleInflight.current.has(id)) return;
     styleInflight.current.add(id);
     try {
-      const entry = await api.get<CompendiumEntry>(`/systems/entries/${id}`);
+      const entry = await readResource<CompendiumEntry>(`/systems/entries/${id}`);
       setStyleFeatEntries((prev) => (prev[id] ? prev : { ...prev, [id]: entry }));
     } catch {
       /* офлайн — выбор живёт без описания */
@@ -1508,7 +1514,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       character.backgroundSkillNames = backgroundSkills;
       if (backgroundId) {
         try {
-          const entry = await api.get<CompendiumEntry>(`/systems/entries/${backgroundId}`);
+          const entry = await readResource<CompendiumEntry>(`/systems/entries/${backgroundId}`);
           const tools = typeof entry.data.tools === "string" ? entry.data.tools : "";
           if (tools) character.proficiencies = [...character.proficiencies, { entryId: null, name: tools, abilityKey: null }];
         } catch {
@@ -1546,7 +1552,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       let entry: CompendiumEntry | undefined = styleFeatEntries[id];
       if (!entry) {
         try {
-          entry = await api.get<CompendiumEntry>(`/systems/entries/${id}`);
+          entry = await readResource<CompendiumEntry>(`/systems/entries/${id}`);
         } catch {
           entry = undefined;
         }
@@ -1691,7 +1697,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     // Повтор после «создался, а фото нет» статблок не дублирует.
     if (!createdRef.current) {
       try {
-        await api.post("/statblocks", {
+        // Список владельца обновит onDone → StatblockList.refresh.
+        await write.post("/statblocks", {
           owner_type: ownerType,
           owner_id: ownerId,
           format: "dnd_character",
@@ -1720,7 +1727,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           ownerType === "character" ? `/characters/${ownerId}/avatar` : `/setting-beings/${ownerId}/avatar`;
         // Заливка фото до 15МБ на дефолтных 10с стабильно уходила в таймаут
         // на медленной связи — даём минуту, это не управляющий запрос.
-        await api.post(path, form, { timeoutMs: 60000 });
+        await write.post(path, form, { timeoutMs: 60000 });
+        afterWriteAnywhere([{ kind: ownerType === "character" ? "character" : "being", id: ownerId }]);
       } catch (e) {
         setSaveError(
           e instanceof Error && e.message

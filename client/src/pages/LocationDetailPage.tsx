@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { useUnloadTarget } from "../unloadTargets";
-import { AliasesCard } from "../components/AliasesCard";
+import { MentionTextarea } from "../components/mentions/MentionTextarea";
+import { MentionText } from "../components/mentions/MentionText";
+import { syncMentionLinks } from "../mentions";
 import { LocationMap } from "../components/LocationMap";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
@@ -26,7 +28,6 @@ import { NavIcon } from "../components/NavIcons";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useConfirm } from "../hooks/useConfirm";
 import { BEING_CATEGORIES } from "../beingCategories";
-import { EditableTextCard } from "../components/EditableTextCard";
 import { LocationImportantDatesTab } from "../components/LocationImportantDatesTab";
 import { LocationContent } from "../components/LocationContent";
 import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
@@ -171,6 +172,11 @@ export function LocationDetailPage() {
   const [sortMode, setSortMode] = useState<"name" | "category">("name");
   const [communityName, setCommunityName] = useState("");
   const [communitySaving, setCommunitySaving] = useState(false);
+  // Черновики строчек «Описание» и «Другие названия» внутри карточки
+  // «Основное»: правятся одной кнопкой вместе с остальными полями.
+  const [mainDescDraft, setMainDescDraft] = useState("");
+  const [mainAliasesDraft, setMainAliasesDraft] = useState("");
+  const [mainOriginalDraft, setMainOriginalDraft] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmDialog, confirm] = useConfirm();
@@ -421,23 +427,35 @@ export function LocationDetailPage() {
   }
   if (!location) return <div className="stack"><div className="card" style={{ padding: 24 }}><p className="muted" aria-busy="true">Загрузка…</p></div></div>;
 
-  async function saveNameKind(values: { name: string; role?: string; kind: string; short_name: string }) {
+  function toAliasesList(value: string[] | string | null | undefined): string[] {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function saveMain(values: { name: string; role?: string; kind: string; short_name: string }) {
+    if (!location) return;
+    const aliases = mainAliasesDraft
+      .split(",")
+      .map((a) => a.trim())
+      .filter(Boolean);
+    const prevDesc = location.description ?? "";
     try {
       await api.put(`/setting-locations/${locationId}`, {
         name: values.name,
         role: values.role,
         kind: values.kind,
         short_name: values.short_name.trim(),
+        description: mainDescDraft,
+        aliases,
+        name_original: mainOriginalDraft.trim(),
       });
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
-    }
-  }
-
-  async function saveDescription(value: string) {
-    try {
-      await api.put(`/setting-locations/${locationId}`, { description: value });
+      syncMentionLinks("location", locationId, prevDesc, mainDescDraft);
       refresh();
     } catch (e) {
       setLoadError(String(e instanceof Error ? e.message : e));
@@ -719,6 +737,7 @@ export function LocationDetailPage() {
         <div className="stack">
           <EntityFieldsCard
             key={`fields-${location.id}`}
+            inverted={false}
             fields={[
               { key: "name", label: "Имя", value: location.name, required: true },
               {
@@ -745,19 +764,84 @@ export function LocationDetailPage() {
                 title: "Показывается вместо полного имени в подписи пина на карте локации",
               },
             ]}
-            onSave={(v) => saveNameKind({ name: v.name, role: v.role, kind: v.kind, short_name: v.short_name })}
-          />
-          <EditableTextCard
-            title="Описание"
-            help="Короткая сводка о локации — что это за место, чем примечательно."
-            value={location.description}
-            onSave={saveDescription}
-            rows={4}
-            entityType="location"
-            entityId={locationId}
-            defaultSettingId={location.setting_id}
-            collapsible
-            defaultOpen
+            onEditStart={() => {
+              setMainDescDraft(location.description ?? "");
+              setMainAliasesDraft(toAliasesList(location.aliases).join(", "));
+              setMainOriginalDraft(location.name_original ?? "");
+            }}
+            onSave={(v) => saveMain({ name: v.name, role: v.role, kind: v.kind, short_name: v.short_name })}
+            viewExtras={
+              <>
+                <div className="entity-field-row">
+                  <span className="muted">Описание</span>
+                  <span style={{ whiteSpace: "pre-wrap", flex: 1, minWidth: 0 }}>
+                    {location.description ? (
+                      <MentionText text={location.description} />
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </span>
+                </div>
+                <div className="entity-field-row">
+                  <span className="muted">Другие названия</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {(() => {
+                      const list = toAliasesList(location.aliases);
+                      if (list.length === 0 && !location.name_original) {
+                        return <span className="muted">—</span>;
+                      }
+                      return (
+                        <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                          {list.map((alias) => (
+                            <span key={alias} className="badge tag">
+                              {alias}
+                            </span>
+                          ))}
+                          {location.name_original && (
+                            <span className="muted">в оригинале: {location.name_original}</span>
+                          )}
+                        </span>
+                      );
+                    })()}
+                  </span>
+                </div>
+              </>
+            }
+            editExtras={
+              <>
+                <label className="stack editable-card-field">
+                  <span>Описание</span>
+                  <MentionTextarea
+                    value={mainDescDraft}
+                    onChange={setMainDescDraft}
+                    rows={4}
+                    defaultSettingId={location.setting_id}
+                  />
+                  <span className="muted" style={{ fontSize: "var(--fs-micro)", lineHeight: "1.3" }}>
+                    Короткая сводка о локации — что это за место, чем примечательно.
+                  </span>
+                </label>
+                <label className="stack editable-card-field">
+                  <span>Другие названия</span>
+                  <input
+                    value={mainAliasesDraft}
+                    onChange={(e) => setMainAliasesDraft(e.target.value)}
+                    placeholder="Синонимы через запятую"
+                  />
+                  <span className="muted" style={{ fontSize: "var(--fs-micro)", lineHeight: "1.3" }}>
+                    Другие переводы и написания имени — по ним работает поиск и сверка при импорте книги.
+                  </span>
+                </label>
+                <label className="stack editable-card-field">
+                  <span>Название в оригинале</span>
+                  <input
+                    value={mainOriginalDraft}
+                    onChange={(e) => setMainOriginalDraft(e.target.value)}
+                    placeholder="Sea Ward"
+                  />
+                </label>
+              </>
+            }
           />
           {locationRoleOf(location) === "spot" && (
             <div className="card stack" style={{ gap: 8 }}>
@@ -789,15 +873,6 @@ export function LocationDetailPage() {
               )}
             </div>
           )}
-          <AliasesCard
-            aliases={location.aliases ?? []}
-            nameOriginal={location.name_original ?? ""}
-            help="Другие переводы и написания имени — по ним работает поиск и сверка при импорте книги."
-            onSave={async (aliases, name_original) => {
-              await api.put(`/setting-locations/${locationId}`, { aliases, name_original });
-              refresh();
-            }}
-          />
         <ChapterList
           ownerId={locationId}
           ownerType="location"

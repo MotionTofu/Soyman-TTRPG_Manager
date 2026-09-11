@@ -1,4 +1,7 @@
-import { api } from "../../api/client";
+import { write } from "../../data/hooks";
+import { afterWriteAnywhere, readResource } from "../../data/imperative";
+import type { Affect } from "../../data/entities";
+import { statblockAffects } from "../../data/statblocks";
 
 // Передачи вещей между персонажами игроков (этап 4б). Посредник — сервер:
 // игрок в чужой лист писать не может, поэтому оффер, проверки наличия и
@@ -30,17 +33,24 @@ export interface TransferPartyMember {
 
 export type TransferAction = "accept" | "decline" | "return" | "claim";
 
+// Передача пишет в оба листа сразу: задеты чарники и передачи обоих.
+function transferAffects(...characterIds: number[]): Affect[] {
+  return characterIds.flatMap((id) => [...statblockAffects("character", id), { path: `/player/characters/${id}/transfers` }]);
+}
+
+// Опрос оборота по таймеру — поэтому мимо свежести кэша.
 export function fetchTransfers(characterId: number): Promise<{ incoming: CharacterTransfer[]; outgoing: CharacterTransfer[] }> {
-  return api.get<{ incoming: CharacterTransfer[]; outgoing: CharacterTransfer[] }>(
-    `/player/characters/${characterId}/transfers`
+  return readResource<{ incoming: CharacterTransfer[]; outgoing: CharacterTransfer[] }>(
+    `/player/characters/${characterId}/transfers`,
+    { fresh: true }
   );
 }
 
 export function fetchTransferParty(campaignId: number): Promise<TransferPartyMember[]> {
-  return api.get<TransferPartyMember[]>(`/player/campaigns/${campaignId}/party`);
+  return readResource<TransferPartyMember[]>(`/player/campaigns/${campaignId}/party`);
 }
 
-export function offerItemTransfer(args: {
+export async function offerItemTransfer(args: {
   senderId: number;
   recipientId: number;
   /** Стабильный id строки — сервер ищет по нему. section/index едут рядом
@@ -52,7 +62,7 @@ export function offerItemTransfer(args: {
   qty: number;
   kind: "item" | "replica";
 }): Promise<CharacterTransfer> {
-  return api.post<CharacterTransfer>(`/player/characters/${args.senderId}/transfers`, {
+  const transfer = await write.post<CharacterTransfer>(`/player/characters/${args.senderId}/transfers`, {
     recipient_character_id: args.recipientId,
     item_id: args.itemId,
     section: args.section,
@@ -61,22 +71,28 @@ export function offerItemTransfer(args: {
     qty: args.qty,
     kind: args.kind,
   });
+  afterWriteAnywhere(transferAffects(args.senderId, args.recipientId));
+  return transfer;
 }
 
-export function offerMoneyTransfer(args: {
+export async function offerMoneyTransfer(args: {
   senderId: number;
   recipientId: number;
   coins: { cp: number; sp: number; ep: number; gp: number; pp: number };
 }): Promise<CharacterTransfer> {
-  return api.post<CharacterTransfer>(`/player/characters/${args.senderId}/transfers`, {
+  const transfer = await write.post<CharacterTransfer>(`/player/characters/${args.senderId}/transfers`, {
     recipient_character_id: args.recipientId,
     kind: "money",
     coins: args.coins,
   });
+  afterWriteAnywhere(transferAffects(args.senderId, args.recipientId));
+  return transfer;
 }
 
-export function transferAction(id: number, action: TransferAction): Promise<CharacterTransfer> {
-  return api.post<CharacterTransfer>(`/player/transfers/${id}/${action}`);
+export async function transferAction(id: number, action: TransferAction): Promise<CharacterTransfer> {
+  const transfer = await write.post<CharacterTransfer>(`/player/transfers/${id}/${action}`);
+  afterWriteAnywhere(transferAffects(transfer.sender_character_id, transfer.recipient_character_id));
+  return transfer;
 }
 
 // qty вещи — строка; пустая означает одну штуку. Нужно и пику количества,

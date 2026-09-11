@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
 import { StatblockList } from "../components/StatblockList";
+import { useEntity } from "../data/hooks";
 import type { Character } from "../types";
 
 /**
@@ -20,32 +20,15 @@ export function CharacterSheetPage() {
   const { id } = useParams();
   const characterId = Number(id);
   const navigate = useNavigate();
-  const [character, setCharacter] = useState<Character | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .get<Character>(`/characters/${characterId}`)
-      .then((c) => {
-        if (alive) setCharacter(c);
-      })
-      .catch(() => {
-        if (alive) setLoadError("Персонаж не найден");
-      });
-    return () => {
-      alive = false;
-    };
-  }, [characterId]);
+  // Карточка персонажа — из кэша слоя данных: тот же ключ у профиля, и переход
+  // «профиль → лист» её не перезапрашивает.
+  const { data: character, error, reload } = useEntity<Character>("character", characterId);
+  // Ошибка перечитывания поверх уже загруженного персонажа лист не прячет.
+  const loadError = error && !character ? "Персонаж не найден" : null;
 
   // Подпись URL портрета живёт 60 секунд: протухшую картинку лист прячет сам
   // и зовёт сюда за свежей ссылкой (см. onPortraitRefresh в DndCharacterView).
-  function refreshPortrait() {
-    api
-      .get<Character>(`/characters/${characterId}`)
-      .then(setCharacter)
-      .catch(() => {});
-  }
+  const refreshPortrait = reload;
 
   // Панели приложения прячутся на время: чарник занимает весь экран, у него
   // снизу свои дела (лента ресурсов, свайп между картами), а нижняя

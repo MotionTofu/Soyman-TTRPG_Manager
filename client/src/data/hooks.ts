@@ -32,7 +32,7 @@ export interface DataState<T> {
   reload: () => void;
 }
 
-function errorText(error: unknown): string {
+export function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error ?? "");
 }
@@ -94,16 +94,33 @@ export function useEntityList<T>(kind: EntityKind, scope: ListScope | null): Dat
   };
 }
 
+/** Что можно передать записи: таймаут дольше обычного — для загрузки файлов. */
+export interface WriteOptions {
+  timeoutMs?: number;
+}
+
 /** Записи слоя: мимо широковещания транспорта, адресный сигнал шлёт сам слой. */
 export const write = {
-  put: <R>(path: string, body?: unknown) => api.put<R>(path, body, { broadcast: false }),
-  post: <R>(path: string, body?: unknown) => api.post<R>(path, body, { broadcast: false }),
-  del: <R>(path: string) => api.del<R>(path, { broadcast: false }),
+  put: <R>(path: string, body?: unknown, options?: WriteOptions) =>
+    api.put<R>(path, body, { ...options, broadcast: false }),
+  post: <R>(path: string, body?: unknown, options?: WriteOptions) =>
+    api.post<R>(path, body, { ...options, broadcast: false }),
+  del: <R>(path: string, options?: WriteOptions) => api.del<R>(path, { ...options, broadcast: false }),
 };
 
-function afterWrite(client: ReturnType<typeof useQueryClient>, affects: readonly Affect[]): void {
+/** После записи: обновить задетое в этом окне и сказать о нём остальным. */
+export function afterWrite(client: ReturnType<typeof useQueryClient>, affects: readonly Affect[]): void {
   void invalidateAffects(client, affects);
   notifyDataChanged(affects);
+}
+
+/**
+ * `afterWrite` для страницы, которая показывает ошибку записи сама — в форме,
+ * рядом с набранным (поле имени, конфликт версии), а не плашкой.
+ */
+export function useAfterWrite(): (affects: readonly Affect[]) => void {
+  const client = useQueryClient();
+  return useCallback((affects: readonly Affect[]) => afterWrite(client, affects), [client]);
 }
 
 /**

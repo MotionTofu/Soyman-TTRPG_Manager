@@ -3,7 +3,7 @@ import type { CompendiumEntry, DndFeature, SearchResult } from "../../types";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
-import { api } from "../../api/client";
+import { readResource } from "../../data/imperative";
 import { NavIcon } from "../NavIcons";
 import { useConfirm } from "../../hooks/useConfirm";
 
@@ -107,7 +107,7 @@ export const FeatureListEdit = memo(function FeatureListEdit({
     if (valuesRef.current.some((f) => f.name === result.title)) return;
     let description = "";
     try {
-      const entry = await api.get<CompendiumEntry>(`/systems/entries/${result.id}`);
+      const entry = await readResource<CompendiumEntry>(`/systems/entries/${result.id}`);
       description = entry.description || "";
     } catch {
       /* entry missing — leave description blank */
@@ -226,7 +226,7 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
     if (valuesRef.current.some((f) => f.name === result.title)) return;
     let description = "";
     try {
-      const entry = await api.get<CompendiumEntry>(`/systems/entries/${result.id}`);
+      const entry = await readResource<CompendiumEntry>(`/systems/entries/${result.id}`);
       description = entry.description || "";
     } catch {
       /* feat entry missing — leave description blank */

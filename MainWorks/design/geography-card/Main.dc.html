@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&amp;family=Cormorant+SC:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;family=Oswald:wght@500;600&amp;display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #092328; color: #CEDAD0; font-family: 'Archivo', system-ui, sans-serif; font-size: 12px; }
+    a { color: #8BBB92; text-decoration: none; }
+    a:hover { color: #CEDAD0; text-decoration: underline; }
+    .ic { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+    .micro { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: #8BBB92; }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: #22393e; border: 1px solid #12544F; color: #d5e0d7; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+    .btn.primary { background: #0E3C3C; border-color: #0E3C3C; color: #ffffff; font-weight: 600; }
+
+    .shell { display: grid; grid-template-columns: 200px minmax(0, 1fr) 320px; width: 1440px; height: 900px; overflow: hidden; background-color: #092328; background-image: radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px); background-size: 3px 3px; }
+    .nav { background: #183035; border-right: 1px solid #12544F; padding: 16px 10px; display: flex; flex-direction: column; gap: 4px; }
+    .brand { font-family: 'Cormorant SC', Georgia, serif; font-size: 26px; font-weight: 700; color: #d5e0d7; padding: 2px 10px 14px; }
+    .nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; color: #CEDAD0; font-family: 'Cormorant SC', Georgia, serif; font-size: 16px; }
+    .nav a.on { background: #22393e; color: #8BBB92; font-weight: 600; }
+    .main { display: flex; flex-direction: column; gap: 10px; padding: 22px 24px 16px; min-width: 0; min-height: 0; }
+    .page { margin: 0 0 2px; font-family: 'Cormorant SC', Georgia, serif; font-size: 40px; font-weight: 600; line-height: .92; letter-spacing: -.01em; color: #CEDAD0; }
+    .tabs { display: flex; box-shadow: inset 0 -1px 0 #12544F; }
+    .tabs span { padding: 6px 14px; color: #8BBB92; font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; border: 1px solid transparent; border-bottom: 1px solid #12544F; white-space: nowrap; }
+    .tabs span.on { color: #CEDAD0; border-color: #12544F; border-bottom-color: #092328; background: #092328; }
+    .tabs .beta { font-size: 10px; padding: 1px 6px; margin-left: 4px; background: #22393e; box-shadow: inset 0 0 0 1px #12544F; letter-spacing: .1em; }
+
+    .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #12544F; border-radius: 999px; padding: 6px 12px; font-size: 12px; color: #CEDAD0; white-space: nowrap; }
+    .chip.on { background: #071E22; color: #F0F5F0; border-color: #CEDAD0; font-weight: 700; }
+    .chip .ic { width: 13px; height: 13px; }
+    .rootthumb { width: 72px; height: 44px; flex: none; background-color: #183035; background-image: repeating-linear-gradient(135deg, rgba(139,187,146,.12) 0 1px, transparent 1px 8px); border: 1px solid #12544F; }
+    .crumbs { display: flex; align-items: baseline; gap: 2px; font-size: 12px; }
+    .crumbs span { padding: 2px 4px; color: #8BBB92; }
+    .crumbs span.cur { color: #CEDAD0; font-weight: 700; }
+
+    .col { flex: none; display: flex; flex-direction: column; border-left: 1px solid #12544F; padding-left: 12px; min-height: 0; }
+    .col.first { border-left: none; padding-left: 0; }
+    .col.act { background: #183035; padding: 0 10px 4px 12px; }
+    .coltitle { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 2px; color: #8BBB92; font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; white-space: nowrap; }
+    .coltitle .cnt { font-family: 'JetBrains Mono', monospace; font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .col.rail .coltitle { writing-mode: vertical-rl; justify-content: flex-start; padding: 10px 6px; gap: 6px; }
+    .colbody { display: flex; flex-direction: column; gap: 6px; padding: 2px; overflow: hidden; }
+    .item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-left: 3px solid transparent; color: #CEDAD0; font-size: 12px; }
+    .item .ic { color: #8BBB92; }
+    .item.on { background: #071E22; color: #F0F5F0; border-left-color: #8BBB92; box-shadow: 0 1px 0 #12544F; }
+    .item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .item-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-badge { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: #8BBB92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item.on .item-badge { color: #A8CDB0; }
+    .sec { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: #8BBB92; padding: 10px 10px 0; }
+
+    .search { background: #183035; border-left: 1px solid #12544F; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .input { display: flex; align-items: center; gap: 8px; background: #092328; border: 1px solid #12544F; padding: 7px 8px; color: #8BBB92; font-size: 12px; }
+
+    .pc { background: #092328; display: flex; flex-direction: column; min-height: 0; }
+    .pc-scroll { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 14px 16px 16px; }
+    .pc-head { display: flex; flex-direction: column; gap: 6px; }
+    .pc-name { font-family: 'Cormorant SC', Georgia, serif; font-size: 26px; font-weight: 600; line-height: 1.05; color: #d5e0d7; margin: 0; }
+    .pc-path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 5px; font-size: 12px; color: #8BBB92; }
+    .pc-party { display: flex; align-items: center; gap: 8px; background: #8BBB922a; color: #CEDAD0; padding: 7px 10px; font-size: 12px; }
+    .pc-party .ic { color: #8BBB92; }
+    .pc-desc { margin: 0; font-size: 12px; line-height: 1.45; color: #CEDAD0; }
+    .pc-sec { display: flex; flex-direction: column; gap: 6px; }
+    .pc-sech { display: flex; align-items: center; gap: 8px; padding-bottom: 5px; border-bottom: 1px solid #12544F; }
+    .pc-sech .cnt { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8BBB92; }
+    .pc-add { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: #8BBB92; font-size: 12px; }
+    .pc-add .ic { width: 12px; height: 12px; }
+    .pc-row { display: flex; align-items: baseline; gap: 8px; font-size: 12px; line-height: 1.35; min-width: 0; }
+    .pc-row .ic { align-self: center; color: #8BBB92; }
+    .pc-row b { font-weight: 600; color: #CEDAD0; white-space: nowrap; }
+    .pc-row .note { color: #8BBB92; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc-row .end { margin-left: auto; padding-left: 8px; font-family: 'JetBrains Mono', monospace; color: #8BBB92; white-space: nowrap; }
+    .pc-tag { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8BBB92; white-space: nowrap; }
+    .pc-sub { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: #adcbb1; padding-top: 2px; }
+    .pc-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #12544F; background: #092328; }
+    .pc-open { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: #071E22; color: #F0F5F0; padding: 10px 12px; font-weight: 700; font-size: 12px; }
+  </style>
+</helmet>
+
+<div class="shell">
+  <aside class="nav">
+    <div class="brand">SoyMan</div>
+    <a>Главная</a>
+    <a>Кампании</a>
+    <a class="on">Сеттинги</a>
+    <a>Системы</a>
+    <a>Игроки</a>
+    <a>Мастеринг</a>
+    <a>Ресурсы</a>
+    <a>Полотно</a>
+    <a>Граф</a>
+    <a>Хранилища</a>
+  </aside>
+
+  <main class="main">
+    <h1 class="page">Вотердип</h1>
+    <div class="tabs">
+      <span>Обзор</span>
+      <span class="on">География</span>
+      <span>Население</span>
+      <span>Граф связей</span>
+      <span>Сокровищница</span>
+      <span>Календарь</span>
+      <span>Хроника мира</span>
+      <span>Заметки</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div class="tabs" style="box-shadow: none;">
+        <span class="on">Колонки</span>
+        <span>Список</span>
+        <span>Дерево <span class="beta">beta</span></span>
+      </div>
+      <div style="flex: 1;"></div>
+      <span style="color: #8BBB92;">внутрь «Склепа Гостов»</span>
+      <span class="btn primary"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Создать</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="micro" style="margin-right: 4px;">Мир</span>
+      <span class="chip on"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5S9.4 5.9 12 3.5Z"></path></svg>Вотердип</span>
+      <span class="chip"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5S9.4 5.9 12 3.5Z"></path></svg>Шунак</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 2px 0 2px;">
+      <div class="rootthumb"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-family: 'Cormorant SC', Georgia, serif; font-size: 26px; font-weight: 600; line-height: 1.05; color: #d5e0d7;">Вотердип</div>
+        <div style="font-size: 12px; color: #8BBB92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Город · Самый большой город на Побережье Мечей, состоящий из множества районов, каждый из которых размером с большой город.</div>
+      </div>
+      <div class="mono" style="font-size: 12px; color: #8BBB92; white-space: nowrap;">91 локация · 28 точек</div>
+    </div>
+
+    <nav class="crumbs">
+      <span>Вотердип</span><span>/</span><span>Город Мёртвых</span><span>/</span><span class="cur">Склеп Гостов</span>
+    </nav>
+
+    <div style="flex: 1; min-height: 0; display: flex; gap: 20px;">
+      <div style="flex: 1; min-width: 0; display: flex; gap: 20px; align-items: stretch;">
+        <div class="col first rail" style="width: 52px;">
+          <div class="coltitle"><span>Вотердип</span><span class="cnt">19 локаций</span></div>
+        </div>
+
+        <div class="col" style="width: 200px;">
+          <div class="coltitle"><span>Город Мёртвых</span><span class="cnt">4 локации</span></div>
+          <div class="colbody">
+            <div class="item">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>
+              <span class="item-body"><span class="item-name">Гиблые Поля</span><span class="item-badge">Поля · 1</span></span>
+              <svg class="ic" viewBox="0 0 24 24"><path d="M4.5 12h14"></path><path d="M13 6.5 19 12l-6 5.5"></path></svg>
+            </div>
+            <div class="item">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>
+              <span class="item-body"><span class="item-name">Мавзолей</span><span class="item-badge">Локация</span></span>
+            </div>
+            <div class="item on">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>
+              <span class="item-body"><span class="item-name">Склеп Гостов</span><span class="item-badge">Склеп · 9</span></span>
+              <svg class="ic" viewBox="0 0 24 24" style="color: #8BBB92;"><path d="M6 20.5V4"></path><path d="M6 4.5h11.5l-2.8 4 2.8 4H6"></path></svg>
+            </div>
+            <div class="item">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>
+              <span class="item-body"><span class="item-name">Статуя-указатель</span><span class="item-badge">Статуя</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="col act" style="width: 240px;">
+          <div class="coltitle"><span>Склеп Гостов</span><span class="cnt">9 локаций</span></div>
+          <div class="colbody">
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Гробница аристократа</span><span class="item-badge">Зал</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Гробница героев</span><span class="item-badge">Зал</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Зал с ловушками</span><span class="item-badge">Коридор</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Коридор секретов</span><span class="item-badge">Коридор</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Крысиные бега</span><span class="item-badge">Коридор</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Логово Артора Морлина</span><span class="item-badge">Логово</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Недоброжелательный комитет</span><span class="item-badge">Зал</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">Пахнет Крысами</span><span class="item-badge">Зал</span></span></div>
+            <div class="item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg><span class="item-body"><span class="item-name">У дверей смерти</span><span class="item-badge">Зал</span></span></div>
+          </div>
+        </div>
+      </div>
+
+      <section class="pc" style="flex: none; width: 320px; border: 1px solid #12544F;">
+        <div class="pc-scroll">
+          <div class="pc-head">
+            <div class="micro" style="display: flex; align-items: center; gap: 6px;"><svg class="ic" viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>Склеп · Локация</div>
+            <h2 class="pc-name">Склеп Гостов</h2>
+            <div class="pc-path"><a>Вотердип</a><span>/</span><a>Город Мёртвых</a></div>
+          </div>
+          <div class="pc-party"><svg class="ic" viewBox="0 0 24 24"><path d="M6 20.5V4"></path><path d="M6 4.5h11.5l-2.8 4 2.8 4H6"></path></svg><span><b style="font-weight: 600;">Партия здесь</b> · Однажды в Вотердипе</span></div>
+          <p class="pc-desc">Мраморный склеп размером 10 на 15 футов, возведённый по подобию величественного дома… <a>ещё</a></p>
+
+          <div class="pc-sec">
+            <div class="pc-sech"><span class="micro">Кто здесь</span><span class="cnt">3</span></div>
+            <div class="pc-row"><b>Артор Морлин</b><span class="note">(Логово Артора Морлина)</span></div>
+            <div class="pc-row"><b>Перита</b><span class="note">(Крысиные бега)</span></div>
+            <div class="pc-row"><b>Сури</b><span class="note">(Пахнет Крысами)</span></div>
+          </div>
+
+          <div class="pc-sec">
+            <div class="pc-sech"><span class="micro">Что здесь</span><span class="cnt">2</span><span class="pc-add"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Добавить</span></div>
+            <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="10" r="2"></circle><path d="M11 12 10.3 16h3.4L13 12"></path></svg><span class="pc-tag">Секрет</span><span style="min-width: 0;">За северной статуей — проход</span></div>
+            <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M12 4 20.5 19H3.5L12 4Z"></path><path d="M12 10v4M12 16.8h.01"></path></svg><span class="pc-tag">Ловушка</span><span style="min-width: 0;">Перед двойной дверью коридора</span></div>
+          </div>
+
+          <div class="pc-sec">
+            <div class="pc-sech"><span class="micro">Выходы</span><span class="cnt">3</span><span class="pc-add"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Добавить</span></div>
+            <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19"></path></svg><b>Статуя-указатель</b><span class="note">тропа</span><span class="end">5 минут</span></div>
+            <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19"></path></svg><b>Гиблые Поля</b><span class="note">через ограду</span></div>
+            <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M4.5 12h14"></path><path d="M13 6.5 19 12l-6 5.5"></path></svg><b>Секретная гробница</b><span class="note">подземный ход</span><span class="end pc-tag" style="font-family: 'Oswald', 'Arial Narrow', sans-serif;">тайный</span></div>
+          </div>
+
+          <div class="pc-sec">
+            <div class="pc-sech"><span class="micro">Что здесь было</span></div>
+            <div class="pc-sub">Впереди</div>
+            <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5-10-6.5Z"></path></svg><b>Одной ногой в могиле</b><span class="end">сцена</span></div>
+            <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5-10-6.5Z"></path></svg><b>Призыв к действию</b><span class="end">сцена</span></div>
+          </div>
+        </div>
+        <div class="pc-foot">
+          <span class="pc-open">Открыть локацию<svg class="ic" viewBox="0 0 24 24"><path d="M4.5 12h14"></path><path d="M13 6.5 19 12l-6 5.5"></path></svg></span>
+          <span class="btn"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Вложенная</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <aside class="search">
+    <div class="input"><svg class="ic" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"></circle><path d="M14.5 14.5 20 20"></path></svg>Например: Гоблин (/)</div>
+    <div class="micro" style="padding-top: 8px;">Мешок</div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;">
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+      <div style="aspect-ratio: 1; border: 1px dashed #12544F;"></div>
+    </div>
+    <div class="micro" style="padding-top: 8px;">Закреплённые</div>
+    <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+      <span style="color: #CEDAD0;">Вотердип · сеттинг</span>
+      <span style="color: #CEDAD0;">Пульт · 12 сентября</span>
+    </div>
+  </aside>
+</div>
+</x-dc>
+</body>
+</html>

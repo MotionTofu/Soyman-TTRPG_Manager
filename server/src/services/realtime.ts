@@ -66,13 +66,19 @@ export function broadcastToGm(event: string, payload: unknown): void {
 // player:<id> room for a standalone character with no campaign) and every
 // connected GM instance (the "gm" room) — a GM desktop app has no single
 // campaign scope to join, so it just gets everything and filters by id itself.
-export function broadcastCharacterUpdate(characterId: number): void {
+//
+// `scope` — что изменилось: `sheet` — только статблоки персонажа (быстрая правка
+// листа, импорт, аватар статблока), `card` — сама карточка (поля, главы,
+// инициатива). Слой данных клиента перечитывает по нему ровно задетое: без
+// различения каждая правка хитов тянула бы ещё и карточку персонажа
+// (client/src/data/syncAffects.ts). Клиент, не знающий поля, читает всё.
+export function broadcastCharacterUpdate(characterId: number, scope: "card" | "sheet" = "card"): void {
   if (!io) return;
   const row = db
     .prepare("SELECT campaign_id, player_id FROM characters WHERE id = ?")
     .get(characterId) as { campaign_id: number | null; player_id: number } | undefined;
   if (!row) return;
-  const payload = { characterId };
+  const payload = { characterId, scope };
   if (row.campaign_id != null) {
     io.to(`campaign:${row.campaign_id}`).emit("character-updated", payload);
   } else {

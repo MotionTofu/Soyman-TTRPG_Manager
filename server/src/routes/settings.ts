@@ -1187,6 +1187,33 @@ function linkImportedSetting(
   return;
 }
 
+import { parseExitFields } from "../services/locationExits";
+
+/**
+ * Выходы из файла — по пересчитанным id мест. Слияние зовут повторно, поэтому
+ * путь, который уже есть (те же концы и то же «как»), второй раз не заводится.
+ */
+function linkLocationExits(body: SettingExportData, locationIdMap: Map<number, number>): void {
+  if (!body.exits?.length) return;
+  const exists = db.prepare(
+    "SELECT 1 FROM location_exits WHERE from_location_id = ? AND to_location_id = ? AND how = ?"
+  );
+  const insert = db.prepare(
+    `INSERT INTO location_exits (from_location_id, to_location_id, how, travel_time, one_way, secret, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const e of body.exits) {
+    const from = locationIdMap.get(e.from_id);
+    const to = locationIdMap.get(e.to_id);
+    if (!from || !to || from === to) continue;
+    const parsed = parseExitFields(e as unknown as Record<string, unknown>, false);
+    if ("error" in parsed) continue;
+    const f = parsed.fields as Required<typeof parsed.fields>;
+    if (exists.get(from, to, f.how)) continue;
+    insert.run(from, to, f.how, f.travel_time, f.one_way, f.secret, f.note);
+  }
+}
+
 /** Раскладывает галереи по хранилищу и заводит записи. */
 async function insertGalleries(
   body: SettingExportData,
@@ -1410,6 +1437,23 @@ function attachChapters(
  * получателя нет, восстановить не по чему — в отличие от меншена, у
  * `entity_relations` нет подписи, которая осталась бы читаемой прозой.
  */
+function collectExits(payload: SettingExportData, settingId: number | string): NonNullable<SettingExportData["exits"]> {
+  const ids = new Set(payload.locations.map((l) => l.id));
+  if (ids.size === 0) return [];
+  const rows = db
+    .prepare(
+      `SELECT e.from_location_id AS from_id, e.to_location_id AS to_id,
+              e.how, e.travel_time, e.one_way, e.secret, e.note
+         FROM location_exits e
+         JOIN setting_locations l ON l.id = e.from_location_id
+        WHERE l.setting_id = ?
+        ORDER BY e.id`
+    )
+    .all(settingId) as NonNullable<SettingExportData["exits"]>;
+  // Выгружаются только неархивные места — выход с концом в архиве остаётся дома.
+  return rows.filter((r) => ids.has(r.from_id) && ids.has(r.to_id));
+}
+
 function collectRelations(payload: SettingExportData): SettingExportData["relations"] {
   const scope = new Map<string, Set<number>>([
     ["location", new Set(payload.locations.map((l) => l.id))],
@@ -1634,6 +1678,11 @@ export function buildSettingExportData(
   // половина отношения на чужом устройстве это связь в никуда.
   payload.relations = collectRelations(payload);
 
+  // Выходы между местами (решения 2026-09-11, §4) — по тому же правилу: оба
+  // конца в файле. Пустой список не пишем.
+  const exits = collectExits(payload, settingId);
+  if (exits.length > 0) payload.exits = exits;
+
   // Ссылки внутри текстов переводятся в глобальную форму: локальный id в
   // файле означал бы на чужом устройстве другую сущность (services/mentions.ts).
   return rewritePayload(payload, exportMention);
@@ -1783,6 +1832,16 @@ export interface SettingExportData {
     tone: string;
     label: string;
     description: string;
+  }[];
+  /** Выходы между местами; оба конца внутри файла — см. collectExits. */
+  exits?: {
+    from_id: number;
+    to_id: number;
+    how: string;
+    travel_time: string;
+    one_way: number;
+    secret: number;
+    note: string;
   }[];
   resources?: {
     uid?: string;
@@ -2141,6 +2200,7 @@ export async function importSettingExport(
   const maps = { locationIdMap, beingIdMap, communityIdMap, newSettingId };
   linkImportedSetting(body, maps);
   linkRelationsAndCalendar(body, maps);
+  linkLocationExits(body, locationIdMap);
   if (withImages) await insertGalleries(body, folder, maps);
 
   imported.resolve();
@@ -2588,6 +2648,7 @@ export async function updateSettingFromExport(
   const mergeMaps = { locationIdMap, beingIdMap, communityIdMap, newSettingId: targetSettingId };
   linkImportedSetting(body, mergeMaps);
   linkRelationsAndCalendar(body, mergeMaps);
+  linkLocationExits(body, locationIdMap);
 
   imported.resolve();
   return summary;

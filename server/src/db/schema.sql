@@ -415,6 +415,24 @@ CREATE TABLE IF NOT EXISTS location_content (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Выходы между местами (решения 2026-09-11, §4): «куда отсюда можно пойти».
+-- Одна запись на путь, видна с обоих концов; one_way — только со стороны
+-- from. Конец в архиве — выход скрыт, но не удалён; удаление места уносит
+-- выход каскадом. Оба конца в одном сеттинге — проверяет маршрут.
+CREATE TABLE IF NOT EXISTS location_exits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+  to_location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+  how TEXT NOT NULL DEFAULT '', -- «дорога», «тайный ход»: свободный текст с подсказками
+  travel_time TEXT NOT NULL DEFAULT '', -- «полдня»: строка, не число
+  one_way INTEGER NOT NULL DEFAULT 0,
+  secret INTEGER NOT NULL DEFAULT 0, -- заранее, под будущий показ игрокам
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_location_exits_from ON location_exits(from_location_id);
+CREATE INDEX IF NOT EXISTS idx_location_exits_to ON location_exits(to_location_id);
+
 -- Pins placed on a location's map image, linking to any entity (usually a
 -- child location, but any type from the search panel can be dropped here).
 CREATE TABLE IF NOT EXISTS location_pins (  id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -2,10 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type SaveStatus = "idle" | "saving" | "error";
 
+export interface QueuedSaveOptions {
+  delayMs?: number;
+  /** Отправка упала: неотправленное осталось в очереди. */
+  onError?: (error: unknown) => void;
+  /** Очередь опустела после удачной отправки — прежний сбой больше не актуален. */
+  onIdle?: () => void;
+}
+
 /**
  * Очередь сохранения для правок «на месте» — там, где каждое действие
  * пользователя (пипс, галочка, цифра в поле) обязано сохраниться само, без
- * кнопки «Сохранить».
+ * кнопки «Сохранить». Переехала в слой данных из hooks/ (docs/adr/0001, п. 8)
+ * без смены поведения.
  *
  * Зачем очередь, а не `await api.put(...)` на каждое действие:
  *
@@ -23,14 +32,19 @@ export type SaveStatus = "idle" | "saving" | "error";
  * `payload` — уже готовая строка (обычно JSON): очередь не знает, что внутри,
  * и хранит только последнюю.
  */
-export function useQueuedSave(save: (payload: string) => Promise<void>, delayMs = 400) {
+export function useQueuedSave(save: (payload: string) => Promise<void>, options?: QueuedSaveOptions) {
+  const delayMs = options?.delayMs ?? 400;
   const [status, setStatus] = useState<SaveStatus>("idle");
 
   // Ref обновляется в эффекте, а не в теле компонента: запись в ref во время
   // рендера ломается при двойном рендере StrictMode и в конкурентном режиме.
   const saveRef = useRef(save);
+  const onErrorRef = useRef(options?.onError);
+  const onIdleRef = useRef(options?.onIdle);
   useEffect(() => {
     saveRef.current = save;
+    onErrorRef.current = options?.onError;
+    onIdleRef.current = options?.onIdle;
   });
 
   const pendingRef = useRef<string | null>(null);
@@ -47,16 +61,22 @@ export function useQueuedSave(save: (payload: string) => Promise<void>, delayMs 
         pendingRef.current = null;
         try {
           await saveRef.current(payload);
-        } catch {
+        } catch (error) {
           // Пока запрос летел, пользователь мог успеть ещё что-то поправить —
           // тогда в очереди уже лежит более свежее состояние, и возвращать
           // туда старое нельзя.
           pendingRef.current = pendingRef.current ?? payload;
-          if (mountedRef.current) setStatus("error");
+          if (mountedRef.current) {
+            setStatus("error");
+            onErrorRef.current?.(error);
+          }
           return;
         }
       }
-      if (mountedRef.current) setStatus("idle");
+      if (mountedRef.current) {
+        setStatus("idle");
+        onIdleRef.current?.();
+      }
     } finally {
       inFlightRef.current = false;
     }

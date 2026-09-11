@@ -1,5 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
-import { api } from "../../api/client";
+import { useAction, useResource, write } from "../../data/hooks";
+import { afterWriteAnywhere, readResource } from "../../data/imperative";
+import { showSaveError } from "../../data/notices";
+import { statblockAffects, statblockListPath } from "../../data/statblocks";
 import type {
   CompendiumEntry,
   DndAbilityKey,
@@ -540,16 +543,15 @@ function EntryChoiceCounter({
       return;
     }
     const ac = new AbortController();
-    const opts = { signal: ac.signal };
     Promise.all(
       ids.map((id) =>
-        api
-          .get<CompendiumEntry>(`/systems/entries/${id}`, opts)
+        readResource<CompendiumEntry>(`/systems/entries/${id}`)
           .then((e) => choicesFromEntries([e], false))
           .catch(() => [] as ChoiceDef[])
       )
     )
       .then((lists) => {
+        if (ac.signal.aborted) return;
         setFeatDefs(lists.flat().filter((d) => d.kind === "entry" && d.group));
       })
       .catch(() => {
@@ -1140,7 +1142,7 @@ async function fetchGrantedSpells(
   for (const g of grantedSpells) {
     let full: CompendiumEntry | undefined;
     try {
-      full = await api.get<CompendiumEntry>(`/systems/entries/${g.id}`);
+      full = await readResource<CompendiumEntry>(`/systems/entries/${g.id}`);
     } catch {
       full = undefined;
     }
@@ -1209,7 +1211,7 @@ export async function recomputeGrantedSpells(
 
   async function grantFrom(entryId: number, characterLevel: number) {
     try {
-      const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
+      const entry = await readResource<CompendiumEntry>(`/systems/entries/${entryId}`);
       const eligible = parseGrantedSpellDefs(entry).filter((d) => d.grantLevel <= characterLevel);
       if (eligible.length === 0) return;
       const granted = await fetchGrantedSpells(eligible, entryId, value.systemId);
@@ -2995,11 +2997,11 @@ function DndEquipmentQuickView({
   // сеть, а пишут поверх того, что было на клик. useEvent свеж только на
   // входе — чтение после await идёт через реф (см. доку useLatest).
   const sectionsRef = useLatest(sections);
-  async function transferAction(id: number, action: "return" | "claim") {
+  async function settleTransfer(id: number, action: "return" | "claim") {
     setTransferBusy(id);
     setTransferError(null);
     try {
-      await api.post(`/player/transfers/${id}/${action}`);
+      await transferAction(id, action);
     } catch (e) {
       setTransferError(`Не вышло: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -3292,7 +3294,9 @@ function DndEquipmentQuickView({
       return next;
     });
     try {
-      const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`, { signal: controller.signal });
+      // Отмена здесь — отказ от ответа, а не от запроса: запись справочника
+      // ложится в кэш слоя, и повторный тап возьмёт её оттуда.
+      const entry = await readResource<CompendiumEntry>(`/systems/entries/${entryId}`);
       if (controller.signal.aborted) return;
       setDescriptions((d) => ({ ...d, [entryId]: entry.description || "Нет описания." }));
     } catch (e) {
@@ -3646,7 +3650,7 @@ function DndEquipmentQuickView({
                             type="button"
                             className="comp-mini"
                             disabled={transferBusy === item.transferIn.id}
-                            onClick={() => void transferAction(item.transferIn!.id, "return")}
+                            onClick={() => void settleTransfer(item.transferIn!.id, "return")}
                           >
                             Вернуть
                           </button>
@@ -3654,7 +3658,7 @@ function DndEquipmentQuickView({
                             type="button"
                             className="comp-mini"
                             disabled={transferBusy === item.transferIn.id}
-                            onClick={() => void transferAction(item.transferIn!.id, "claim")}
+                            onClick={() => void settleTransfer(item.transferIn!.id, "claim")}
                           >
                             Сделать своим
                           </button>
@@ -3960,7 +3964,7 @@ function useDndOrigin(
       };
       if (classId && opt && value.systemId) {
         try {
-          const entry = await api.get<CompendiumEntry>(`/systems/entries/${classId}`);
+          const entry = await readResource<CompendiumEntry>(`/systems/entries/${classId}`);
           notes = upsertClassNotesBlock(notes, opt.name, buildClassNotesBlock(opt.name, entry.data));
           nextClasses[i] = {
             ...nextClasses[i],
@@ -3994,7 +3998,7 @@ function useDndOrigin(
             const abilityKeys = await Promise.all(
               newTools.map(async (t) => {
                 try {
-                  const toolEntry = await api.get<CompendiumEntry>(`/systems/entries/${t.id}`);
+                  const toolEntry = await readResource<CompendiumEntry>(`/systems/entries/${t.id}`);
                   const ability = typeof toolEntry.data.ability === "string" ? toolEntry.data.ability : "";
                   return ability ? ABILITY_NAME_TO_KEY[ability] ?? null : null;
                 } catch {
@@ -4070,7 +4074,7 @@ function useDndOrigin(
         // и ручные), инструменты — строками (способность подтягивается с
         // записи, как при смене класса).
         try {
-          const entry = await api.get<CompendiumEntry>(`/systems/entries/${subclassId}`);
+          const entry = await readResource<CompendiumEntry>(`/systems/entries/${subclassId}`);
           const grantedSkills = (Array.isArray(entry.data.skills) ? (entry.data.skills as unknown[]) : [])
             .filter((s): s is string => typeof s === "string" && !!s.trim())
             .map((s) => skillsRef.current.resolve(s) ?? s.trim());
@@ -4087,7 +4091,7 @@ function useDndOrigin(
             const abilityKeys = await Promise.all(
               newTools.map(async (t) => {
                 try {
-                  const toolEntry = await api.get<CompendiumEntry>(`/systems/entries/${t.id}`);
+                  const toolEntry = await readResource<CompendiumEntry>(`/systems/entries/${t.id}`);
                   const ability = typeof toolEntry.data.ability === "string" ? toolEntry.data.ability : "";
                   return ability ? ABILITY_NAME_TO_KEY[ability] ?? null : null;
                 } catch {
@@ -4219,11 +4223,12 @@ function useDndOrigin(
   useEffect(() => {
     if (!enabled) return;
     const ac = new AbortController();
-    api
-      .get<System[]>("/systems", { signal: ac.signal })
-      .then(setSystems)
+    readResource<System[]>("/systems")
+      .then((list) => {
+        if (!ac.signal.aborted) setSystems(list);
+      })
       .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
+        if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
       });
     return () => ac.abort();
   }, [enabled, reloadKey]);
@@ -4350,7 +4355,7 @@ function useDndOrigin(
     const patch: Partial<DndCharacterData> = { backgroundId: id, backgroundName: opt?.name ?? "", backgroundSkillNames: [] };
     if (id) {
       try {
-        const entry = await api.get<CompendiumEntry>(`/systems/entries/${id}`);
+        const entry = await readResource<CompendiumEntry>(`/systems/entries/${id}`);
         // Ключами, а не именами. Здесь и жил дефект: владение ставилось
         // только `if (s in nextSkillProfs)`, то есть если имя из компендиума
         // дословно совпало с именем в листе. По базе владельца из 72 выдач
@@ -4375,7 +4380,7 @@ function useDndOrigin(
         if (originFeat && !base.feats.some((f) => f.name === originFeat.name)) {
           let description = "";
           try {
-            const featEntry = await api.get<CompendiumEntry>(`/systems/entries/${originFeat.id}`);
+            const featEntry = await readResource<CompendiumEntry>(`/systems/entries/${originFeat.id}`);
             description = featEntry.description || "";
           } catch {
             /* feat entry missing — leave description blank */
@@ -5917,8 +5922,11 @@ function SpendAction({
     // устный, а кнопка — фиксация. Тихо при офлайне: игра идёт словами.
     const notifyMark = (spell: string, mode: "spend" | "move") => {
       if (characterId == null) return;
-      api
+      write
         .post(`/player/characters/${characterId}/mark`, { spell, mode })
+        // Метка кладёт напоминалку кампании и отмечает цель в очереди — то же,
+        // что задевает событие hunter-mark (data/syncAffects.ts).
+        .then(() => afterWriteAnywhere([{ path: "/campaigns" }, { path: "/players" }, { path: "/initiative-entries" }]))
         .catch(() => {
           /* офлайн — мастер услышал вслух */
         });
@@ -7656,32 +7664,14 @@ function HpEditModal({
 // видно, из чего складывается бонус, и там же считается сумма. Второе поле
 // ввода для одного числа означало бы два места, где его правят.
 function InitiativeReminder({ characterId }: { characterId?: number | null }) {
-  const [standing, setStanding] = useState<{ initiative: number | null; place: number | null } | null>(null);
-
-  useEffect(() => {
-    if (characterId == null) return;
-    let cancelled = false;
-    function refresh() {
-      api
-        .get<{ initiative: number | null; place: number | null }>(`/characters/${characterId}/initiative`)
-        .then((r) => {
-          if (!cancelled) setStanding(r);
-        })
-        .catch(() => {
-          // Персонажа могли не звать в бой, сессии может не быть вовсе —
-          // строка просто не показывается, ошибку тут показывать нечего.
-          if (!cancelled) setStanding(null);
-        });
-    }
-    refresh();
-    // Мастер поправил число в очереди — строка обновляется тем же событием,
-    // которым обновляется весь лист.
-    window.addEventListener("character-updated", refresh);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("character-updated", refresh);
-    };
-  }, [characterId]);
+  // Мастер поправил число в очереди — строка обновляется тем же событием,
+  // которым обновляется весь лист: character-updated задевает карточку
+  // персонажа, а с ней и этот путь (data/syncAffects.ts). Не прочиталось —
+  // персонажа могли не звать в бой, сессии может не быть вовсе: строка просто
+  // не показывается, ошибку тут показывать нечего.
+  const standing = useResource<{ initiative: number | null; place: number | null }>(
+    characterId != null ? `/characters/${characterId}/initiative` : null
+  ).data;
 
   if (!standing || standing.place == null) return null;
   return (
@@ -7755,15 +7745,15 @@ function InitiativeRollModal({
   const [die, setDie] = useState("");
   const [miscDraft, setMiscDraft] = useState(misc);
   const [sending, setSending] = useState(false);
-  const [standing, setStanding] = useState<{ initiative: number | null; place: number | null } | null>(null);
-
-  useEffect(() => {
-    if (characterId == null) return;
-    api
-      .get<{ initiative: number | null; place: number | null }>(`/characters/${characterId}/initiative`)
-      .then(setStanding)
-      .catch(() => setStanding(null));
-  }, [characterId]);
+  const initiativePath = characterId != null ? `/characters/${characterId}/initiative` : null;
+  const standing =
+    useResource<{ initiative: number | null; place: number | null }>(initiativePath).data ?? null;
+  const run = useAction();
+  // Брошенное число меняет место в очереди боя Мастера — задеты оба.
+  const initiativeAffects = [
+    ...(initiativePath ? [{ path: initiativePath }] : []),
+    { path: "/initiative-entries" },
+  ];
 
   const bonus = derived.value;
   const dieNum = die.trim() === "" ? null : Number(die.trim());
@@ -7778,7 +7768,14 @@ function InitiativeRollModal({
     if (!dieValid || characterId == null || sending) return;
     setSending(true);
     try {
-      await api.put(`/characters/${characterId}/initiative`, { initiative: total });
+      const sent = await run(
+        async () => {
+          await write.put(`/characters/${characterId}/initiative`, { initiative: total });
+          return true;
+        },
+        { affects: initiativeAffects }
+      );
+      if (!sent) return;
       onQuickUpdate?.({ initiative: total });
       onClose();
     } finally {
@@ -7790,7 +7787,14 @@ function InitiativeRollModal({
     if (characterId == null || sending) return;
     setSending(true);
     try {
-      await api.put(`/characters/${characterId}/initiative`, { initiative: null });
+      const sent = await run(
+        async () => {
+          await write.put(`/characters/${characterId}/initiative`, { initiative: null });
+          return true;
+        },
+        { affects: initiativeAffects }
+      );
+      if (!sent) return;
       onQuickUpdate?.({ initiative: null });
       onClose();
     } finally {
@@ -8267,26 +8271,26 @@ function DndReplicaHandover({
   onDone: () => void;
   onClose: () => void;
 }) {
-  const [targets, setTargets] = useState<{ id: number; character_name: string; player_name: string }[] | null>(null);
+  const party = useResource<{ id: number; character_name: string; player_name: string }[]>(
+    campaignId ? `/characters?campaign_id=${campaignId}` : null
+  );
+  // null — список ещё грузится; не загрузился — передавать некому, как раньше.
+  const targets = !campaignId
+    ? []
+    : party.data
+    ? party.data.filter((c) => c.id !== ownerCharacterId)
+    : party.error
+    ? []
+    : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!campaignId) {
-      setTargets([]);
-      return;
-    }
-    api
-      .get<{ id: number; character_name: string; player_name: string }[]>(`/characters?campaign_id=${campaignId}`)
-      .then((list) => setTargets(list.filter((c) => c.id !== ownerCharacterId)))
-      .catch(() => setTargets([]));
-  }, [campaignId, ownerCharacterId]);
 
   async function give(target: { id: number; character_name: string }) {
     setBusy(true);
     setError("");
     try {
-      const sheets = await api.get<Statblock[]>(`/statblocks?owner_type=character&owner_id=${target.id}`);
+      // Чужой лист — свежим: поверх него сразу пишется раздел снаряжения.
+      const sheets = await readResource<Statblock[]>(statblockListPath("character", target.id), { fresh: true });
       const sheet = sheets.find((s) => s.format === "dnd_character");
       if (!sheet) {
         setError(`У «${target.character_name}» нет чарника D&D — передать некуда.`);
@@ -8306,11 +8310,12 @@ function DndReplicaHandover({
         notes: `реплика от «${giverName}»`,
         pendingFrom: giverName,
       };
-      await api.put(`/statblocks/${sheet.id}`, {
+      await write.put(`/statblocks/${sheet.id}`, {
         contentPatch: {
           equipmentSections: sections.map((sec, i) => (i === 0 ? { ...sec, items: [...sec.items, row] } : sec)),
         },
       });
+      afterWriteAnywhere(statblockAffects("character", target.id));
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -9489,8 +9494,13 @@ export function DndCharacterView({
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/characters/${ownerCharacterId}/avatar`, form);
+      await write.post(`/characters/${ownerCharacterId}/avatar`, form, { timeoutMs: 60_000 });
+      afterWriteAnywhere([{ kind: "character", id: ownerCharacterId }]);
       onPortraitRefresh?.();
+    } catch (e) {
+      // Раньше падение загрузки уходило в никуда: кнопка гасла, портрет
+      // оставался прежним, и было не понять, что файл не принят.
+      showSaveError(`Портрет не загрузился: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setAvatarUploading(false);
     }

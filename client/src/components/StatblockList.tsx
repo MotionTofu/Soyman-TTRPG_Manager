@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { useQueuedSave } from "../hooks/useQueuedSave";
-import { topLevelPatch } from "./statblockPatch";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { showSaveError } from "../data/notices";
+import {
+  applySavedStatblock,
+  archivedStatblockListPath,
+  statblockAffects,
+  statblockListPath,
+  useStatblockQueue,
+} from "../data/statblocks";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useConfirm } from "../hooks/useConfirm";
 import { NavIcon } from "./NavIcons";
 import { EmptyState } from "./EmptyState";
 import { Modal } from "./Modal";
@@ -45,6 +53,9 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 
 const TEMPLATE_TYPE = "statblock_template";
+// Пока список грузится — пустой, и один и тот же массив: новый на каждой
+// отрисовке сбивал бы мемоизацию всего, что от списка зависит.
+const NO_STATBLOCKS: Statblock[] = [];
 
 // Имя статблока для модалки удаления и тоста отмены: «ЭТО» из прежнего
 // confirm() не называло, что именно сносится.
@@ -181,12 +192,18 @@ export function StatblockList({
   onPortraitRefresh,
   managerTop,
 }: Props) {
-  const [statblocks, setStatblocks] = useState<Statblock[]>([]);
+  // Список владельца — из кэша слоя данных (docs/adr/0001): тот же ключ читает
+  // вкладка «Имущество» профиля, правки извне обновляет DataLayerSync.
+  const statblocks = useResource<Statblock[]>(statblockListPath(ownerType, ownerId)).data ?? NO_STATBLOCKS;
   // Удалённые статблоки владельца. До сих пор удалённый чарник исчезал
   // навсегда: вернуть его можно было только тостом «Отменить», жившим восемь
   // секунд, а дальше он молча лежал в базе вместе с портретом на диске.
-  const [archived, setArchived] = useState<Statblock[]>([]);
-  const [templates, setTemplates] = useState<Resource[]>([]);
+  // Корзина — тот же запрос с флагом и тот же префикс ключа: восстановленный
+  // статблок не окажется разом и в списке, и в корзине.
+  const archived = useResource<Statblock[]>(archivedStatblockListPath(ownerType, ownerId)).data ?? NO_STATBLOCKS;
+  const allTemplates = useResource<Resource[]>(`/resources?scope=global&type=${TEMPLATE_TYPE}`).data;
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const [adding, setAdding] = useState(false);
   const [format, setFormat] = useState<StatblockFormat>("text");
   const [templateId, setTemplateId] = useState("");
@@ -283,7 +300,7 @@ export function StatblockList({
         concentration: "",
         inspiration: false,
       };
-      await api.post("/statblocks", {
+      await write.post("/statblocks", {
         owner_type: ownerType,
         owner_id: ownerId,
         format: "dnd_character",
@@ -331,49 +348,32 @@ export function StatblockList({
   // Создание чарника с таббара (только десктоп, решение владельца 2026-09-06):
   // undefined — нет, null — выбор системы, number — визард с этой системой.
   const [creatingSystem, setCreatingSystem] = useState<number | null | undefined>(undefined);
-  const [createSystems, setCreateSystems] = useState<{ id: number; name: string }[]>([]);
+  // Системы нужны только выбору при создании — и грузятся, только когда он открыт.
+  const createSystems =
+    useResource<{ id: number; name: string }[]>(creatingSystem !== undefined ? "/systems" : null).data ?? [];
   const [createSystemId, setCreateSystemId] = useState("");
   function startSheetCreate() {
     setCreateSystemId("");
     setCreatingSystem(null);
-    if (createSystems.length === 0) {
-      api
-        .get<{ id: number; name: string }[]>("/systems")
-        .then(setCreateSystems)
-        .catch(() => {});
-    }
   }
   const [confirmDialog, confirm] = useConfirm();
-  const [alertDialog, showAlert] = useAlert();
   const { deleteWithUndo } = useUndoDelete();
 
   const litmFormat: StatblockFormat = ownerType === "character" ? "litm_character" : "litm_challenge";
   const dndFormat: StatblockFormat = ownerType === "character" ? "dnd_character" : "dnd_creature";
 
+  // Статблоки владельца изменились (визард, импорт, клон сохранили своё):
+  // обновить списки и сказать другим окнам. Первичную загрузку и правки
+  // извне берёт на себя слой данных.
   function refresh() {
-    api
-      .get<Statblock[]>(`/statblocks?owner_type=${ownerType}&owner_id=${ownerId}`)
-      .then(setStatblocks);
-    // Корзина тянется тем же запросом, только с флагом: держать её отдельным
-    // состоянием и обновлять по своему поводу значит однажды показать
-    // восстановленный статблок и в списке, и в корзине разом.
-    api
-      .get<Statblock[]>(`/statblocks?owner_type=${ownerType}&owner_id=${ownerId}&archived=1`)
-      .then(setArchived)
-      .catch(() => setArchived([]));
+    afterWrite(statblockAffects(ownerType, ownerId));
   }
-  useEffect(refresh, [ownerType, ownerId]);
 
   // Восстановление и окончательное удаление — поштучно. Массового «очистить
   // корзину» нет намеренно: удалять навсегда несколько чарников одним нажатием
   // — ровно тот промах, из-за которого мягкое удаление и появилось.
   async function restoreArchived(sb: Statblock) {
-    try {
-      await api.put(`/statblocks/${sb.id}/restore`);
-      refresh();
-    } catch (e) {
-      showAlert(`Не удалось восстановить: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    await run(() => write.put(`/statblocks/${sb.id}/restore`), { affects: statblockAffects(ownerType, ownerId) });
   }
   async function purgeArchived(sb: Statblock) {
     const name = statblockTitle(sb);
@@ -384,53 +384,41 @@ export function StatblockList({
       danger: true,
     });
     if (!ok) return;
-    try {
-      await api.del(`/statblocks/${sb.id}/forever`);
-      refresh();
-    } catch (e) {
-      showAlert(`Не удалось удалить «${name}»: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    await run(() => write.del(`/statblocks/${sb.id}/forever`), {
+      affects: statblockAffects(ownerType, ownerId),
+      retry: false,
+    });
   }
 
-  // Live sync — a statblock save from player-app (or another open GM
-  // instance) pushes here via RealtimeListener's "character-updated" event.
-  useEffect(() => {
-    if (ownerType !== "character") return;
-    function onCharacterUpdated(e: Event) {
-      const detail = (e as CustomEvent<{ characterId: number }>).detail;
-      if (detail?.characterId === ownerId) refresh();
-    }
-    window.addEventListener("character-updated", onCharacterUpdated);
-    return () => window.removeEventListener("character-updated", onCharacterUpdated);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerType, ownerId]);
-
-  useEffect(() => {
-    api
-      .get<Resource[]>(`/resources?scope=global&type=${TEMPLATE_TYPE}`)
-      .then((all) =>
-        setTemplates(
-          all.filter(
-            (t) =>
-              !t.template_format ||
-              t.template_format === "text" ||
-              t.template_format === litmFormat ||
-              t.template_format === dndFormat ||
-              t.template_format === "zip_character" ||
-              t.template_format === "zip_creature"
-          )
-        )
-      );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [litmFormat, dndFormat]);
+  const templates = useMemo(
+    () =>
+      (allTemplates ?? []).filter(
+        (t) =>
+          !t.template_format ||
+          t.template_format === "text" ||
+          t.template_format === litmFormat ||
+          t.template_format === dndFormat ||
+          t.template_format === "zip_character" ||
+          t.template_format === "zip_creature"
+      ),
+    [allTemplates, litmFormat, dndFormat]
+  );
 
   async function addStatblock() {
+    // Создание не повторяется кнопкой плашки: ответ мог потеряться уже после
+    // того, как сервер статблок завёл, и повтор сделал бы второй.
+    const create = (body: { format: StatblockFormat; content: string; kind?: string }) =>
+      run(
+        () => write.post<{ id: number }>("/statblocks", { owner_type: ownerType, owner_id: ownerId, kind: "full", ...body }),
+        { affects: statblockAffects(ownerType, ownerId), retry: false }
+      );
+
     if (format === "litm_character") {
       const character = emptyCharacter();
       character.characterName = ownerName ?? "";
       if (campaignId) {
         try {
-          const campaign = await api.get<Campaign>(`/campaigns/${campaignId}`);
+          const campaign = await readResource<Campaign>(`/campaigns/${campaignId}`);
           if (campaign.group_theme_litm) {
             character.fellowshipTheme = normalizeTheme(JSON.parse(campaign.group_theme_litm));
           }
@@ -438,71 +426,42 @@ export function StatblockList({
           // no campaign group theme available — leave the empty default
         }
       }
-      const res = await api.post<{ id: number }>("/statblocks", {
-        owner_type: ownerType,
-        owner_id: ownerId,
-        format,
-        kind: "full",
-        content: JSON.stringify(character),
-      });
+      const res = await create({ format, content: JSON.stringify(character) });
+      if (!res) return;
       setLitmWizardStatblockId(res.id);
       setShowLitmWizard(true);
       return;
-    } else if (format === "litm_challenge") {
-      await api.post("/statblocks", {
-        owner_type: ownerType,
-        owner_id: ownerId,
-        format,
-        kind: "full",
-        content: JSON.stringify(emptyChallenge()),
-      });
+    }
 
-        } else if (format === "zip_character") {
+    let created: { id: number } | undefined;
+    if (format === "litm_challenge") {
+      created = await create({ format, content: JSON.stringify(emptyChallenge()) });
+    } else if (format === "zip_character") {
       const character = emptyZipCharacter();
       character.characterName = ownerName ?? "";
       if (ownerType === "character") character.playerName = ownerPlayerName ?? "";
-      await api.post("/statblocks", {
-        owner_type: ownerType,
-        owner_id: ownerId,
-        format,
-        kind: "full",
-        content: JSON.stringify(character),
-      });
+      created = await create({ format, content: JSON.stringify(character) });
     } else if (format === "zip_creature") {
-      await api.post("/statblocks", {
-        owner_type: ownerType,
-        owner_id: ownerId,
-        format,
-        kind: "full",
-        content: JSON.stringify(emptyZipCreature()),
-      });
+      created = await create({ format, content: JSON.stringify(emptyZipCreature()) });
     } else if (format === "dnd_character") {
       const character = emptyDndCharacter();
       character.characterName = ownerName ?? "";
       if (ownerType === "character") character.playerName = ownerPlayerName ?? "";
       character.systemId = await findDndSystemId();
-      await api.post("/statblocks", {
-        owner_type: ownerType,
-        owner_id: ownerId,
-        format,
-        kind: "full",
-        content: JSON.stringify(character),
-      });
+      created = await create({ format, content: JSON.stringify(character) });
     } else {
       const template = templates.find((t) => String(t.id) === templateId);
-      const templateFormat = template?.template_format || "text";
-      await api.post("/statblocks", {
-        owner_type: ownerType,
-        owner_id: ownerId,
-        format: templateFormat,
+      created = await create({
+        format: (template?.template_format || "text") as StatblockFormat,
         kind: template?.template_kind ?? newKind,
         content: template?.notes ?? "",
       });
     }
+    // Не создалось — форма остаётся открытой с выбранным, ошибка на плашке.
+    if (!created) return;
     setAdding(false);
     setTemplateId("");
     setFormat("text");
-    refresh();
   }
 
   // Чарник — часы работы или импорт из LSS, а сносился он по одному
@@ -525,19 +484,19 @@ export function StatblockList({
       await deleteWithUndo({
         entityName: name,
         deleteFn: async () => {
-          await api.del(`/statblocks/${id}`);
+          await write.del(`/statblocks/${id}`);
           // Удалили открытый лист менеджера — возвращаемся в менеджер, а не
           // висим на пустом табе.
           if (mgrTab === id) setMgrTab("manager");
           refresh();
         },
         restoreFn: async () => {
-          await api.put(`/statblocks/${id}/restore`);
+          await write.put(`/statblocks/${id}/restore`);
           refresh();
         },
       });
     } catch (e) {
-      showAlert(`Не удалось удалить «${name}»: ${e instanceof Error ? e.message : String(e)}`);
+      showSaveError(`Не удалось удалить «${name}»: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -561,8 +520,9 @@ export function StatblockList({
       } catch {
         throw new Error("Файл не похож на JSON — убедитесь, что это экспорт с longstoryshort.app (Long Story Short)");
       }
-      // Preview first — no DB write yet
-      const previewRes = await api.post<{
+      // Preview first — no DB write yet. Через `write`: разбор ничего не пишет,
+      // и транспорт не должен объявлять его правкой другим окнам.
+      const previewRes = await write.post<{
         characterName: string;
         shortText: string;
         warnings: { field: string; message: string }[];
@@ -619,7 +579,7 @@ export function StatblockList({
     setImporting(true);
     setImportError("");
     try {
-      const res = await api.post<{ characterName: string; warnings: { field: string; message: string }[]; shortText: string; statblock: Statblock }>(
+      const res = await write.post<{ characterName: string; warnings: { field: string; message: string }[]; shortText: string; statblock: Statblock }>(
         "/statblocks/import",
         { owner_type: ownerType, owner_id: ownerId, json: pendingJson }
       );
@@ -696,11 +656,11 @@ export function StatblockList({
         } catch {
           throw new Error("Файл не похож на JSON — нужен экспорт с longstoryshort.app");
         }
-        const pv = await api.post<{ characterName: string; warnings: { field: string; message: string }[] }>(
+        const pv = await write.post<{ characterName: string; warnings: { field: string; message: string }[] }>(
           "/statblocks/import/preview",
           { owner_type: ownerType, owner_id: ownerId, json }
         );
-        const res = await api.post<{ characterName: string; warnings: { field: string; message: string }[] }>(
+        const res = await write.post<{ characterName: string; warnings: { field: string; message: string }[] }>(
           "/statblocks/import",
           { owner_type: ownerType, owner_id: ownerId, json }
         );
@@ -742,7 +702,6 @@ export function StatblockList({
       statblock={sb}
       ownerType={ownerType}
       ownerId={ownerId}
-      onChange={refresh}
       onRemove={removeStatblock}
       campaignId={campaignId}
       settingId={settingId}
@@ -767,7 +726,6 @@ export function StatblockList({
       statblock={sb}
       ownerType={ownerType}
       ownerId={ownerId}
-      onChange={refresh}
       onRemove={removeStatblock}
       campaignId={campaignId}
       settingId={settingId}
@@ -786,7 +744,6 @@ export function StatblockList({
     return (
       <div className="stack">
         {confirmDialog}
-        {alertDialog}
         {/* Десктоп: чарники всегда в таббаре, создание — табом [+]
             (решение владельца 2026-09-06). На телефоне как было: табы только
             при нескольких, создание — на профиле. */}
@@ -889,7 +846,6 @@ export function StatblockList({
   return (
     <div className="stack">
       {confirmDialog}
-      {alertDialog}
       {isCharProfile && (
         <div className="tabs sb-switcher" role="tablist" aria-label="Чарники">
           <button
@@ -1351,9 +1307,10 @@ export function StatblockList({
             onComplete={(data) => {
               setShowLitmWizard(false);
               if (litmWizardStatblockId) {
-                api.put(`/statblocks/${litmWizardStatblockId}`, {
-                  content: JSON.stringify(data),
-                }).then(() => refresh());
+                void run(
+                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { content: JSON.stringify(data) }),
+                  { affects: statblockAffects(ownerType, ownerId) }
+                );
               }
             }}
             onCancel={() => setShowLitmWizard(false)}
@@ -1389,7 +1346,6 @@ function StatblockCard({
   statblock,
   ownerType,
   ownerId,
-  onChange,
   onRemove,
   campaignId,
   settingId,
@@ -1402,7 +1358,6 @@ function StatblockCard({
   statblock: Statblock;
   ownerType: "character" | "being" | "compendium_entry";
   ownerId: number;
-  onChange: () => void;
   onRemove: (id: number) => void;
   campaignId?: number;
   settingId?: number;
@@ -1487,6 +1442,17 @@ function StatblockCard({
   // окне». Раньше `await api.put(...)` без catch давал unhandled rejection,
   // а форма закрывалась как ни в чём не бывало.
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Версия, от которой начата правка в полной форме. Пока форма открыта, она
+  // не обновляется: чужая правка приходит сигналом, список перечитывается, и
+  // свежий `updated_at` из пропа выдал бы снимок формы за сделанный поверх
+  // чужого — сервер принял бы его, и чужая правка тихо пропала бы (найдено
+  // проверкой 2026-09-11; до перевода на слой было так же). Вне формы версия
+  // идёт за пропом.
+  const editBaseRef = useRef(statblock.updated_at ?? null);
+  useEffect(() => {
+    if (editMode) return;
+    editBaseRef.current = statblock.updated_at ?? null;
+  }, [editMode, statblock.updated_at]);
   // Mirrors the <details> element's own open/closed state — native <summary>
   // clicks toggle the DOM directly (uncontrolled), so this needs an onToggle
   // handler to stay in sync rather than being driven only by editMode. Used
@@ -1502,36 +1468,23 @@ function StatblockCard({
   // slot (separate from whatever avatar the owning being/character has).
   const [avatarUrl, setAvatarUrl] = useState(statblock.avatar_image_url);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  // Что лежит на сервере — точка отсчёта для патча. Обновляется только по
-  // факту записи (и при приёме чужого обновления ниже), а не при каждой
-  // правке: иначе следующая правка сравнивалась бы сама с собой.
-  const savedRef = useRef(statblock.content);
-  const queue = useQueuedSave(
-    useCallback(
-      async (json: string) => {
-        // Патч изменённых полей вместо снимка целиком: правка соседнего поля
-        // из другого окна больше не пропадает. Разобрать не вышло (или формат
-        // не JSON) — уходит снимок, как раньше.
-        const patch = isJsonFormat ? topLevelPatch(savedRef.current, json) : null;
-        const body = patch ? { contentPatch: patch } : { content: json };
-        if (patch && Object.keys(patch).length === 0) return;
-        await api.put(`/statblocks/${statblock.id}`, body);
-        savedRef.current = json;
-      },
-      [statblock.id, isJsonFormat]
-    )
-  );
+  const client = useQueryClient();
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  // Быстрые правки: дебаунс, один запрос в полёте, патч полей, сбой —
+  // плашкой (data/statblocks.ts).
+  const queue = useStatblockQueue(statblock, isJsonFormat);
 
   async function uploadAvatar(file: File) {
     setAvatarUploading(true);
     try {
       const form = new FormData();
       form.append("file", file);
-      const updated = await api.post<{ avatar_image_url: string | null }>(
-        `/statblocks/${statblock.id}/avatar`,
-        form
+      const updated = await run(
+        () => write.post<{ avatar_image_url: string | null }>(`/statblocks/${statblock.id}/avatar`, form, { timeoutMs: 60_000 }),
+        { affects: statblockAffects(statblock.owner_type, statblock.owner_id) }
       );
-      setAvatarUrl(updated.avatar_image_url);
+      if (updated) setAvatarUrl(updated.avatar_image_url);
     } finally {
       setAvatarUploading(false);
     }
@@ -1549,7 +1502,7 @@ function StatblockCard({
   useEffect(() => {
     if (statblock.content === content) return;
     if (editMode || queue.hasPending()) return;
-    savedRef.current = statblock.content;
+    queue.markSaved(statblock.content);
     setContent(statblock.content);
     if (isLitm) setLitmValue(parseLitm(statblock.content));
     if (isDnd) setDndValue(parseDnd(statblock.content));
@@ -1562,11 +1515,16 @@ function StatblockCard({
     // поле лежит набранный текст. Версия страхует именно этот путь: если
     // статблок успели изменить в другом окне, сервер отвечает 409, форма
     // остаётся открытой и набранное никуда не девается.
+    //
+    // Ошибка остаётся текстом в форме, а не плашкой (решение 2026-09-11):
+    // «Повторить» на плашке отправило бы тот же снимок и получило бы тот же
+    // 409 — решать, чья правка важнее, может только человек у формы.
+    let row: Statblock;
     try {
-      await api.put(`/statblocks/${statblock.id}`, {
+      row = await write.put<Statblock>(`/statblocks/${statblock.id}`, {
         content,
         note,
-        baseUpdatedAt: statblock.updated_at ?? null,
+        baseUpdatedAt: editBaseRef.current,
       });
     } catch (e) {
       setSaveError(
@@ -1576,12 +1534,13 @@ function StatblockCard({
       return;
     }
     setSaveError(null);
-    savedRef.current = content;
+    queue.markSaved(content);
+    applySavedStatblock(client, { ...row, content });
+    afterWrite(statblockAffects(statblock.owner_type, statblock.owner_id));
     // [[type:id|Label]] mention tokens survive JSON-encoding as plain
     // substrings, so this diffs correctly for LitM (JSON) content too.
     syncMentionLinks(statblock.owner_type, statblock.owner_id, statblock.content, content);
     setEditMode(false);
-    onChange();
   }
 
   // Lets tag add/remove in the collapsed view persist immediately, without
@@ -1641,20 +1600,12 @@ function StatblockCard({
 
   // Быстрые правки уходят молча, и до сих пор при отвале сети на экране всё
   // выглядело сохранённым. Индикатор показывает очередь: «сохраняю…» и
-  // «не сохранено» с повтором.
+  // «не сохранено». Кнопка повтора — на плашке сбоку: она видна, даже когда
+  // шапка статблока уехала за экран (решение 2026-09-11).
   const saveIndicator =
     queue.status === "idle" ? null : (
       <span className={`sb-save-status is-${queue.status}`} role="status" aria-live="polite">
-        {queue.status === "saving" ? (
-          "сохраняю…"
-        ) : (
-          <>
-            не сохранено
-            <button type="button" className="comp-mini" onClick={() => void queue.flush()}>
-              Повторить
-            </button>
-          </>
-        )}
+        {queue.status === "saving" ? "сохраняю…" : "не сохранено"}
       </span>
     );
 

@@ -519,7 +519,7 @@ playerRouter.put("/statblocks/:id", (req: AuthedRequest, res) => {
   db.prepare(
     "UPDATE statblocks SET content = COALESCE(?, content), theme = COALESCE(?, theme), density = COALESCE(?, density), updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?"
   ).run(nextContent, theme ?? null, density ?? null, req.params.id);
-  broadcastCharacterUpdate(statblock.owner_id);
+  broadcastCharacterUpdate(statblock.owner_id, "sheet");
   // Брошенная инициатива на листе — зеркалом в очередь боя Мастера. Здесь, а
   // не только в узкой ручке `/initiative`: лист игрок сохраняет и обычным
   // путём, и зеркало должно работать от любого сохранения.

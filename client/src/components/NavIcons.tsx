@@ -83,7 +83,14 @@ export type NavIconName =
   | "health"
   | "spark"
   | "rune"
-  | "dots";
+  | "dots"
+  | "pin"
+  | "sector"
+  | "spot"
+  | "flag"
+  | "secret"
+  | "loot"
+  | "twoWay";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -638,6 +645,45 @@ const PATHS: Record<NavIconName, ReactNode> = {
       <path d="M9 4h6v6h6v6h-6v6H9v-6H3v-6h6V4Z" />
     </>
   ),
+  // Роли мест в проводнике географии — вместо глифов ◉◆◇▣• (решения
+  // 2026-09-11): корень — globe, сектор — уголки рамки («область»), локация —
+  // булавка, точка — мишень. Флажок — «партия здесь».
+  pin: (
+    <>
+      <path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z" />
+      <circle cx="12" cy="10" r="2.3" />
+    </>
+  ),
+  sector: <path d="M4.5 8.5v-4h4M15.5 4.5h4v4M19.5 15.5v4h-4M8.5 19.5h-4v-4" />,
+  spot: (
+    <>
+      <circle cx="12" cy="12" r="6.5" />
+      <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" />
+    </>
+  ),
+  flag: (
+    <>
+      <path d="M6 20.5V4" />
+      <path d="M6 4.5h11.5l-2.8 4 2.8 4H6" />
+    </>
+  ),
+  // Наполнение места: секрет — замочная скважина, лут — стопка монет.
+  // Ловушка и особенность берут warning и spark.
+  secret: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="10" r="2" />
+      <path d="M11 12 10.3 16h3.4L13 12" />
+    </>
+  ),
+  loot: (
+    <>
+      <ellipse cx="12" cy="7" rx="6.5" ry="2.5" />
+      <path d="M5.5 7v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5V7M5.5 12v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-5" />
+    </>
+  ),
+  // Двусторонний выход; односторонний — arrowRight.
+  twoWay: <path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19" />,
 };
 
 export function NavIcon({

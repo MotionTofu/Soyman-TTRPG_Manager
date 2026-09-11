@@ -7,16 +7,19 @@ import type { Affect } from "./entities";
  * перезапускает весь модуль.
  */
 export function affectsForWindowEvent(type: string, detail: unknown): Affect[] | null {
-  const d = (detail ?? {}) as { characterId?: number; sessionId?: number };
+  const d = (detail ?? {}) as { characterId?: number; sessionId?: number; scope?: string };
   switch (type) {
-    case "character-updated":
-      return d.characterId != null
-        ? [
-            { kind: "character", id: d.characterId },
-            { path: `/statblocks?owner_type=character&owner_id=${d.characterId}` },
-            { path: `/player/characters/${d.characterId}` },
-          ]
-        : [{ kind: "character" }, { path: "/statblocks" }];
+    case "character-updated": {
+      if (d.characterId == null) return [{ kind: "character" }, { path: "/statblocks" }];
+      const sheet: Affect[] = [
+        { path: `/statblocks?owner_type=character&owner_id=${d.characterId}` },
+        { path: `/player/characters/${d.characterId}` },
+      ];
+      // Сохранён только лист (server/src/services/realtime.ts): карточку
+      // персонажа не перечитываем — иначе каждая быстрая правка хитов тянула бы
+      // лишний запрос. Старый сервер поля не шлёт — тогда задето всё.
+      return d.scope === "sheet" ? sheet : [{ kind: "character", id: d.characterId }, ...sheet];
+    }
     case "initiative-updated":
       return [{ path: d.sessionId != null ? `/initiative-entries?session_id=${d.sessionId}` : "/initiative-entries" }];
     case "hunter-mark":

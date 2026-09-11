@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&amp;family=Cormorant+SC:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;family=Oswald:wght@500;600&amp;display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #092328; color: #CEDAD0; font-family: 'Archivo', system-ui, sans-serif; font-size: 12px; }
+    a { color: #8BBB92; text-decoration: none; }
+    a:hover { color: #CEDAD0; text-decoration: underline; }
+    .ic { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+    .micro { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: #8BBB92; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: #22393e; border: 1px solid #12544F; color: #d5e0d7; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+    .btn.primary { background: #0E3C3C; border-color: #0E3C3C; color: #ffffff; font-weight: 600; }
+    .pc { width: 360px; height: 700px; background: #092328; border: 1px solid #12544F; display: flex; flex-direction: column; }
+    .pc-scroll { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 14px 16px 16px; }
+    .pc-head { display: flex; flex-direction: column; gap: 6px; }
+    .pc-name { font-family: 'Cormorant SC', Georgia, serif; font-size: 26px; font-weight: 600; line-height: 1.05; color: #d5e0d7; margin: 0; }
+    .pc-path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 5px; font-size: 12px; color: #8BBB92; }
+    .pc-quick { display: flex; gap: 16px; border-top: 1px solid #12544F; padding-top: 10px; }
+    .pc-quick span { display: inline-flex; align-items: center; gap: 4px; color: #8BBB92; font-size: 12px; }
+    .pc-quick span.on { color: #CEDAD0; font-weight: 600; }
+    .pc-quick .ic { width: 12px; height: 12px; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .inp { display: flex; align-items: center; gap: 8px; background: #092328; border: 1px solid #12544F; padding: 6px 8px; font-size: 12px; color: #CEDAD0; }
+    .inp.focus { border-color: #8BBB92; }
+    .inp .ph { color: #8BBB92; }
+    .drop { border: 1px solid #12544F; border-top: none; background: #183035; display: flex; flex-direction: column; }
+    .opt { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; }
+    .opt.on { background: #071E22; color: #F0F5F0; }
+    .opt .p { color: #8BBB92; font-size: 12px; }
+    .opt.on .p { color: #A8CDB0; }
+    .sugg { display: flex; flex-wrap: wrap; gap: 6px; }
+    .sugg span { border: 1px solid #12544F; border-radius: 999px; padding: 3px 10px; font-size: 12px; color: #CEDAD0; }
+    .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+    .box { width: 14px; height: 14px; border: 1px solid #12544F; background: #092328; flex: none; }
+    .pc-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #12544F; }
+    .pc-open { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: #071E22; color: #F0F5F0; padding: 10px 12px; font-weight: 700; font-size: 12px; }
+  </style>
+</helmet>
+
+<section class="pc">
+  <div class="pc-scroll">
+    <div class="pc-head">
+      <div class="micro" style="display: flex; align-items: center; gap: 6px;"><svg class="ic" viewBox="0 0 24 24" style="width: 12px; height: 12px;"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>Локация</div>
+      <h2 class="pc-name">Мавзолей</h2>
+      <div class="pc-path"><a>Вотердип</a><span>/</span><a>Город Мёртвых</a></div>
+    </div>
+
+    <div class="pc-quick">
+      <span><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Что здесь</span>
+      <span class="on"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Выход</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div class="field">
+        <span class="micro">Куда</span>
+        <div>
+          <div class="inp focus"><span>гроб</span><span style="flex: 1;"></span><svg class="ic" viewBox="0 0 24 24" style="color: #8BBB92;"><circle cx="10" cy="10" r="6"></circle><path d="M14.5 14.5 20 20"></path></svg></div>
+          <div class="drop">
+            <div class="opt on"><span style="font-weight: 600;">Секретная гробница</span><span class="p">Город Мёртвых / Гиблые Поля</span></div>
+            <div class="opt"><span style="font-weight: 600;">Гробница аристократа</span><span class="p">Город Мёртвых / Склеп Гостов</span></div>
+            <div class="opt"><span style="font-weight: 600;">Гробница героев</span><span class="p">Город Мёртвых / Склеп Гостов</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="micro">Как</span>
+        <div class="inp"><span class="ph">дорога, тайный ход, портал…</span></div>
+        <div class="sugg"><span>дорога</span><span>тропа</span><span>тайный ход</span><span>портал</span><span>дверь</span><span>вода</span></div>
+      </div>
+
+      <div class="field">
+        <span class="micro">Время в пути</span>
+        <div class="inp"><span class="ph">например, полдня</span></div>
+      </div>
+
+      <div style="display: flex; gap: 18px;">
+        <span class="check"><span class="box"></span>Только туда</span>
+        <span class="check"><span class="box"></span>Тайный</span>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <span class="btn primary">Добавить выход</span>
+        <span class="btn">Отмена</span>
+      </div>
+    </div>
+  </div>
+  <div class="pc-foot">
+    <span class="pc-open">Открыть локацию<svg class="ic" viewBox="0 0 24 24"><path d="M4.5 12h14"></path><path d="M13 6.5 19 12l-6 5.5"></path></svg></span>
+    <span class="btn"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Вложенная</span>
+  </div>
+</section>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&amp;family=Cormorant+SC:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;family=Oswald:wght@500;600&amp;display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #092328; color: #CEDAD0; font-family: 'Archivo', system-ui, sans-serif; font-size: 12px; }
+    a { color: #8BBB92; text-decoration: none; }
+    a:hover { color: #CEDAD0; text-decoration: underline; }
+    .ic { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+    .micro { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: #8BBB92; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: #22393e; border: 1px solid #12544F; color: #d5e0d7; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+    .btn.primary { background: #0E3C3C; border-color: #0E3C3C; color: #ffffff; font-weight: 600; }
+
+    .shell { display: grid; grid-template-columns: 320px minmax(0, 1fr) 320px; width: 1440px; height: 900px; overflow: hidden; background-color: #092328; background-image: radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px); background-size: 3px 3px; }
+    .side { background: #183035; padding: 16px 10px; display: flex; flex-direction: column; gap: 4px; }
+    .main { display: flex; flex-direction: column; gap: 12px; padding: 22px 24px 16px; min-width: 0; min-height: 0; overflow: hidden; }
+    .card { background-color: #183035; background-image: radial-gradient(rgba(139,187,146,.04) 1px, transparent 1px); background-size: 3px 3px; border: 1px solid #12544F; padding: 14px; }
+    .lrow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 12px; border-left: 3px solid transparent; }
+    .lrow .ic { color: #8BBB92; }
+    .lrow.open { background: #071E22; color: #F0F5F0; border-left-color: #8BBB92; }
+    .input { display: flex; align-items: center; gap: 8px; background: #092328; border: 1px solid #12544F; padding: 7px 8px; color: #8BBB92; font-size: 12px; }
+
+    .dock-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding: 4px 6px 8px; border-bottom: 1px solid #12544F; margin-bottom: 8px; }
+    .mini { padding: 1px 6px; font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; line-height: 1.4; background: #22393e; border: 1px solid #12544F; color: #d5e0d7; white-space: nowrap; }
+    .x { padding: 1px 6px; font-size: 12px; line-height: 1.4; background: #22393e; border: 1px solid #12544F; color: #d5e0d7; }
+    .dcard { background-color: #183035; background-image: radial-gradient(rgba(139,187,146,.04) 1px, transparent 1px); background-size: 3px 3px; border: 1px solid #12544F; padding: 10px; display: flex; flex-direction: column; gap: 12px; }
+    .dcard.fresh { border-color: #8BBB92; }
+    .plate { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .plate-l { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .typechip { display: inline-block; padding: 2px 8px; font-size: 12px; font-weight: 600; background: #22393e; border: 1px solid #12544F; color: #CEDAD0; white-space: nowrap; }
+    .plate strong { font-weight: 700; color: #d5e0d7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plate-r { display: flex; align-items: center; gap: 4px; color: #8BBB92; }
+
+    .pc-path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 5px; font-size: 12px; color: #8BBB92; }
+    .pc-desc { margin: 0; font-size: 12px; line-height: 1.45; color: #CEDAD0; }
+    .pc-sec { display: flex; flex-direction: column; gap: 6px; }
+    .pc-sech { display: flex; align-items: center; gap: 8px; padding-bottom: 5px; border-bottom: 1px solid #12544F; }
+    .pc-sech .cnt { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8BBB92; }
+    .pc-add { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: #8BBB92; font-size: 12px; }
+    .pc-add .ic { width: 12px; height: 12px; }
+    .pc-row { display: flex; align-items: baseline; gap: 8px; font-size: 12px; line-height: 1.35; min-width: 0; }
+    .pc-row .ic { align-self: center; color: #8BBB92; }
+    .pc-row b { font-weight: 600; color: #CEDAD0; white-space: nowrap; }
+    .pc-row .note { color: #8BBB92; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc-row .end { margin-left: auto; padding-left: 8px; color: #8BBB92; white-space: nowrap; }
+    .pc-tag { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8BBB92; white-space: nowrap; }
+  </style>
+</helmet>
+
+<div class="shell">
+  <aside class="side" style="border-right: 1px solid #12544F;">
+    <div class="dock-head"><span>Докстанция превью</span><span class="mini">Свернуть всё</span></div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div class="dcard fresh">
+        <div class="plate">
+          <div class="plate-l"><span class="typechip">Локация</span><strong>Секретная гробница</strong></div>
+          <div class="plate-r"><span>−</span><span class="x">✕</span></div>
+        </div>
+        <div class="pc-path"><span>Город Мёртвых</span><span>/</span><span>Гиблые Поля</span><span style="margin-left: auto;" class="pc-tag">Гробница</span></div>
+        <p class="pc-desc">Скрытая гробница с рычагом, сдвигающим её и открывающим лестницу на юг к Гробнице героев… <a>ещё</a></p>
+
+        <div class="pc-sec">
+          <div class="pc-sech"><span class="micro">Что здесь</span><span class="cnt">1</span><span class="pc-add"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Добавить</span></div>
+          <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="10" r="2"></circle><path d="M11 12 10.3 16h3.4L13 12"></path></svg><span class="pc-tag">Секрет</span><span>Рычаг сдвигает гробницу</span></div>
+        </div>
+
+        <div class="pc-sec">
+          <div class="pc-sech"><span class="micro">Выходы</span><span class="cnt">2</span><span class="pc-add"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Добавить</span></div>
+          <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19"></path></svg><b>Гиблые Поля</b><span class="note">лаз наверх</span></div>
+          <div class="pc-row"><svg class="ic" viewBox="0 0 24 24"><path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19"></path></svg><b>Гробница героев</b><span class="note">лестница на юг</span><span class="end pc-tag">тайный</span></div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="btn primary" style="flex: 1; padding: 9px 12px;"><svg class="ic" viewBox="0 0 24 24"><path d="M6 20.5V4"></path><path d="M6 4.5h11.5l-2.8 4 2.8 4H6"></path></svg>Мы здесь</span>
+          <a style="white-space: nowrap;">Открыть полностью →</a>
+        </div>
+      </div>
+
+      <div class="dcard">
+        <div class="plate">
+          <div class="plate-l"><span class="typechip">Локация</span><strong>Склеп Гостов</strong><svg class="ic" viewBox="0 0 24 24" style="color: #8BBB92;"><path d="M6 20.5V4"></path><path d="M6 4.5h11.5l-2.8 4 2.8 4H6"></path></svg></div>
+          <div class="plate-r"><span>+</span><span class="x">✕</span></div>
+        </div>
+      </div>
+
+      <div class="dcard">
+        <div class="plate">
+          <div class="plate-l"><span class="typechip">Существо</span><strong>Артор Морлин</strong></div>
+          <div class="plate-r"><span>+</span><span class="x">✕</span></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h1 style="margin: 0; font-family: 'Cormorant SC', Georgia, serif; font-size: 40px; font-weight: 600; line-height: .92; letter-spacing: -.01em;"><a style="color: #8BBB92;">Однажды в Вотердипе</a> — 12 сентября</h1>
+        <span style="align-self: flex-start; padding: 3px 10px; font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 12px; font-weight: 600; background: #1A3A36; color: #8BBB92;">planned</span>
+      </div>
+      <a style="white-space: nowrap; padding-top: 6px;">← К странице сессии</a>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; background: #071E22; border: 1px solid #12544F; padding: 10px 14px; color: #F0F5F0;">
+      <svg class="ic" viewBox="0 0 24 24" style="width: 18px; height: 18px; color: #8BBB92;"><path d="M6 20.5V4"></path><path d="M6 4.5h11.5l-2.8 4 2.8 4H6"></path></svg>
+      <span class="micro" style="color: #A8CDB0;">Партия здесь</span>
+      <span style="display: flex; align-items: baseline; gap: 5px; min-width: 0; font-size: 12px;">
+        <span style="color: #A8CDB0;">Вотердип</span><span style="color: #A8CDB0;">/</span><span style="color: #A8CDB0;">Город Мёртвых</span><span style="color: #A8CDB0;">/</span>
+        <span style="font-family: 'Cormorant SC', Georgia, serif; font-size: 16px; font-weight: 700; color: #F0F5F0;">Склеп Гостов</span>
+      </span>
+      <span style="color: #A8CDB0; white-space: nowrap;">· из сцены «Одной ногой в могиле»</span>
+      <span style="flex: 1;"></span>
+      <span style="color: #A8CDB0; white-space: nowrap;">также в сцене: <span style="color: #F0F5F0; text-decoration: underline; text-decoration-color: #12544F;">Статуя-указатель</span></span>
+    </div>
+
+    <div class="card" style="display: flex; align-items: center; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span class="micro">Сейчас</span>
+        <span style="font-family: 'Cormorant SC', Georgia, serif; font-size: 16px; font-weight: 700; color: #d5e0d7;">Одной ногой в могиле</span>
+      </div>
+      <span style="flex: 1;"></span>
+      <span style="color: #8BBB92;">Дальше:</span>
+      <span class="btn">Призыв к действию</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+      <div class="card" style="display: flex; flex-direction: column; gap: 6px;">
+        <span class="micro">Сюжетные персонажи</span>
+        <div class="lrow">Артор Морлин</div>
+        <div class="lrow">Перита</div>
+        <div class="lrow">Сури</div>
+      </div>
+      <div class="card" style="display: flex; flex-direction: column; gap: 6px;">
+        <span class="micro">Локации</span>
+        <div class="lrow"><svg class="ic" viewBox="0 0 24 24"><path d="M6 20.5V4"></path><path d="M6 4.5h11.5l-2.8 4 2.8 4H6"></path></svg>Склеп Гостов</div>
+        <div class="lrow open"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>Секретная гробница<span style="margin-left: auto; font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #A8CDB0;">в доке</span></div>
+        <div class="lrow"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>Гиблые Поля</div>
+      </div>
+      <div class="card" style="display: flex; flex-direction: column; gap: 6px;">
+        <span class="micro">Препятствия</span>
+        <div class="lrow">Зал с ловушками</div>
+      </div>
+      <div class="card" style="display: flex; flex-direction: column; gap: 6px;">
+        <span class="micro">Лут</span>
+        <div style="padding: 6px 8px; color: #8BBB92;">Перетащите сюда предмет из поиска</div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="side" style="border-left: 1px solid #12544F; padding: 16px; gap: 10px;">
+    <div class="input"><svg class="ic" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"></circle><path d="M14.5 14.5 20 20"></path></svg>Например: Гоблин (/)</div>
+    <div class="micro" style="padding-top: 8px;">Инициатива</div>
+    <div style="border: 1px dashed #12544F; padding: 16px; color: #8BBB92; text-align: center;">Боя нет</div>
+  </aside>
+</div>
+</x-dc>
+</body>
+</html>

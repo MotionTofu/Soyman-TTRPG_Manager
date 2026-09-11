@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Affect } from "./data/entities";
+import { isMigratedRoute } from "./data/migratedRoutes";
 
 // Окна приложения смотрят в один сервер и одну базу, но каждое держит свою
 // копию уже загруженных данных: добавил жителя в локацию в одном окне — второе
@@ -99,11 +100,27 @@ export function isBusyEditing(): boolean {
 export function useCrossWindowDataSync(): { stale: boolean; refresh: () => void } {
   const [stale, setStale] = useState(false);
 
-  useEffect(() => onDataChangedElsewhere(() => setStale(true)), []);
+  // Страница, переведённая на слой данных, обновляет задетое сама
+  // (data/DataLayerSync.tsx) — перезагружать её незачем. Перезагрузка остаётся
+  // для непереведённых: иначе они не увидели бы правку из другого окна
+  // (data/migratedRoutes.ts, решение 2026-09-11).
+  useEffect(
+    () =>
+      onDataChangedElsewhere(() => {
+        if (!isMigratedRoute(window.location.pathname)) setStale(true);
+      }),
+    []
+  );
 
   useEffect(() => {
     if (!stale) return;
     const reloadIfIdle = () => {
+      // Сигнал пришёл на непереведённой странице, а вернулись уже на
+      // переведённую: слой её данные уже пометил, перезагрузка не нужна.
+      if (isMigratedRoute(window.location.pathname)) {
+        setStale(false);
+        return;
+      }
       if (!isBusyEditing()) window.location.reload();
     };
     if (document.hasFocus() || document.visibilityState === "visible") reloadIfIdle();

@@ -1,28 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { invalidateAffects } from "../data/entities";
 import { EmptyState } from "./EmptyState";
 import { NavIcon } from "./NavIcons";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Modal } from "./Modal";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { EntityWizard } from "./entityWizard/EntityWizard";
-import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
+import { PlaceCard } from "./PlaceCard";
+import { plainMentions } from "../utils/plainMentions";
+import { LOCATION_ROLE_LABELS, locationRoleIcon, locationRoleOf } from "../locationRoles";
 import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import type { SettingLocation } from "../types";
-
-interface LocationDetailLite {
-  id: number;
-  thumbnail_image_url?: string | null;
-  avatar_image_url?: string | null;
-  inhabitant_beings: { id: number }[];
-  nested_inhabitant_beings: { id: number }[];
-  inhabitant_communities: { id: number }[];
-  chapters: { id: number }[];
-}
 
 function pathKey(settingId: number): string {
   return `geography-millerpath-${settingId}`;
@@ -49,6 +43,14 @@ function plural(n: number, one: string, few: string, many: string): string {
 const COL_FULL = 240;
 const COL_MIN = 52;
 const COL_RAIL = 140;
+const COL_GAP = 20;
+// Карточка справа постоянной ширины и в аккордеон колонок не входит.
+const CARD_W = 320;
+// Уже этого — одна колонка (или карточка) на всю ширину с «Назад».
+const NARROW_MAX = 640;
+// Чипов корней в строке; остальные — под «ещё N». Корней на сеттинг обычно
+// 1–4 (данные 2026-09-11), предел для плоских импортов.
+const ROOT_CHIPS = 6;
 
 /** Ширины аккордеона водопадом: активная зафиксирована на полной ширине
  * всегда, дальние складываются в минимум по очереди — [[|[||[||||]||]|]. */
@@ -72,22 +74,27 @@ function millerWidths(n: number, active: number, capacity: number): number[] {
   return w;
 }
 
-/** Колонки Миллера: виден один путь — братья | дети | внуки + превью.
- * Аккордеон: места мало — дальние от активной схлопываются первыми. */
+type MenuState =
+  | { x: number; y: number; id: number }
+  | { x: number; y: number; createParent: number | null }
+  | { x: number; y: number; roots: true };
+
+/** Проводник географии (решения 2026-09-11, §1): корни мира — чипами сверху,
+ * колонки Миллера — от детей выбранного корня, справа — карточка места.
+ * Аккордеон: места мало — дальние от активной колонки схлопываются первыми. */
 export function LocationMiller({ settingId }: { settingId: number }) {
   const [locations, setLocations] = useState<SettingLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [path, setPath] = useState<number[]>(() => loadPath(settingId));
   const [activeCol, setActiveCol] = useState(0);
-  const [wrapW, setWrapW] = useState(0);
+  const [workW, setWorkW] = useState(0);
   const [creating, setCreating] = useState(false);
   const [wizardParentId, setWizardParentId] = useState<number | null>(null);
-  const [menu, setMenu] = useState<
-    { x: number; y: number; id: number } | { x: number; y: number; createParent: number | null } | null
-  >(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [dragOverRoots, setDragOverRoots] = useState(false);
   const [moveId, setMoveId] = useState<number | null>(null);
   const [moveParent, setMoveParent] = useState<number | null>(null);
   const [confirmDialog, confirm] = useConfirm();
@@ -95,20 +102,22 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
   const navigate = useNavigate();
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const workRef = useRef<HTMLDivElement>(null);
 
-  // Без массива зависимостей сознательно: колонки монтируются позже скелетона,
-  // одноразовый эффект на монтировании рефа бы не нашёл и ширина осталась бы 0.
+  // Без массива зависимостей сознательно: рабочая область монтируется позже
+  // скелетона, одноразовый эффект на монтировании рефа бы не нашёл и ширина
+  // осталась бы 0.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const el = wrapRef.current;
+    const el = workRef.current;
     if (!el) return;
     const ro = new ResizeObserver((es) => {
       const w = es[0].contentRect.width;
-      setWrapW((prev) => (prev === w ? prev : w));
+      setWorkW((prev) => (prev === w ? prev : w));
     });
     ro.observe(el);
-    setWrapW(el.clientWidth);
+    setWorkW(el.clientWidth);
     return () => ro.disconnect();
   });
 
@@ -127,8 +136,11 @@ export function LocationMiller({ settingId }: { settingId: number }) {
         setLoadError(String(e instanceof Error ? e.message : e));
         setLoading(false);
       });
+    // Карточка места читает деталь через слой данных: переименование,
+    // перенос и новое вложенное задевают и её.
+    void invalidateAffects(queryClient, [{ kind: "location" }]);
     return () => controller.abort();
-  }, [settingId]);
+  }, [settingId, queryClient]);
   useEffect(() => {
     const cleanup = refresh();
     return cleanup;
@@ -154,6 +166,13 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     }
     return m;
   }, [locations]);
+  // Дети, по которым ведут колонки: точки всегда листья и живут в карточке
+  // (план «Зоны локаций», этап 3).
+  const navKidsOf = useMemo(() => {
+    const m = new Map<number | null, SettingLocation[]>();
+    for (const [pid, list] of kidsOf) m.set(pid, list.filter((k) => locationRoleOf(k) !== "spot"));
+    return m;
+  }, [kidsOf]);
 
   // Чиним хвост пути: битые id отваливаются.
   const cleanPath = useMemo(() => {
@@ -170,163 +189,78 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     return out;
   }, [path, byId]);
 
-  // Колонки данных: ведут только сквозь не-точки (локации и секторы).
-  // Точки — всегда листья: колонок не создают, живут списком в превью
-  // (план «Зоны локаций», этап 3). Пустые детские не показываем — их дело
-  // берёт превью.
-  const columns: { parent: SettingLocation | null; items: SettingLocation[] }[] = useMemo(() => {
-    const nav = (kids: SettingLocation[]) => kids.filter((k) => locationRoleOf(k) !== "spot");
-    const cols = [{ parent: null as SettingLocation | null, items: nav(kidsOf.get(null) ?? []) }];
-    for (const id of cleanPath) {
-      const kids = nav(kidsOf.get(id) ?? []);
-      if (kids.length > 0) cols.push({ parent: byId.get(id) ?? null, items: kids });
+  const roots = useMemo(() => kidsOf.get(null) ?? [], [kidsOf]);
+  // Вход в раздел — последний выбранный корень (он первым лежит в пути),
+  // иначе первый по алфавиту.
+  const rootId = cleanPath[0] ?? roots[0]?.id ?? null;
+  const root = rootId != null ? (byId.get(rootId) ?? null) : null;
+  const effPath = useMemo(
+    () => (cleanPath.length > 0 ? cleanPath : rootId != null ? [rootId] : []),
+    [cleanPath, rootId]
+  );
+
+  const columns = useMemo(() => {
+    const cols: { parent: SettingLocation; items: SettingLocation[] }[] = [];
+    for (const id of effPath) {
+      const parent = byId.get(id);
+      const items = navKidsOf.get(id) ?? [];
+      if (parent && items.length > 0) cols.push({ parent, items });
     }
     return cols;
-  }, [kidsOf, cleanPath, byId]);
+  }, [effPath, byId, navKidsOf]);
 
-  const focus: SettingLocation | null =
-    cleanPath.length > 0 ? (byId.get(cleanPath[cleanPath.length - 1]) ?? null) : null;
-  const focusId = focus?.id ?? null;
+  const focus: SettingLocation | null = effPath.length > 0 ? (byId.get(effPath[effPath.length - 1]) ?? null) : null;
 
-  // Деталь фокуса для карточки: тамбнейл + счётчики как в Списке.
-  const [focusDetail, setFocusDetail] = useState<LocationDetailLite | null>(null);
-  const [focusLoading, setFocusLoading] = useState(false);
-  useEffect(() => {
-    if (focusId == null) return;
-    const controller = new AbortController();
-    setFocusLoading(true);
-    api
-      .get<LocationDetailLite>(`/setting-locations/${focusId}?nested=1`, {
-        signal: controller.signal,
-      })
-      .then((d) => {
-        if (controller.signal.aborted) return;
-        setFocusDetail(d);
-        setFocusLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setFocusLoading(false);
-      });
-    return () => controller.abort();
-  }, [focusId]);
-
-  // Потомки фокуса по весам: секторы / локации / точки (план «Зоны
-  // локаций», этап 3). Раньше был один счётчик на всех — данж на 25 комнат
-  // показывал «Вложенных: 26» и пугал.
-  const focusDescByRole = useMemo(() => {
-    const out = { sector: 0, location: 0, spot: 0 };
-    if (focus == null) return out;
-    const stack = (kidsOf.get(focus.id) ?? []).map((l) => l.id);
-    const seen = new Set<number>([focus.id]);
+  // Счёт корня: места и точки всей ветки.
+  const rootTotals = useMemo(() => {
+    const out = { places: 0, spots: 0 };
+    if (rootId == null) return out;
+    const stack = (kidsOf.get(rootId) ?? []).map((l) => l.id);
+    const seen = new Set<number>([rootId]);
     while (stack.length) {
       const id = stack.pop()!;
       if (seen.has(id)) continue;
       seen.add(id);
       const loc = byId.get(id);
-      if (loc && !loc.archived_at) out[locationRoleOf(loc)] += 1;
+      if (loc && !loc.archived_at) {
+        if (locationRoleOf(loc) === "spot") out.spots += 1;
+        else out.places += 1;
+      }
       for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
     }
     return out;
-  }, [focus, kidsOf, byId]);
+  }, [rootId, kidsOf, byId]);
 
-  // Точки фокуса — прямыми детьми: compact-список «План» в превью.
-  const focusSpots = useMemo(() => {
-    if (focus == null) return [] as SettingLocation[];
-    return (kidsOf.get(focus.id) ?? []).filter((l) => locationRoleOf(l) === "spot");
-  }, [focus, kidsOf]);
-
-  // Карта-проводник: герой — корень текущей ветки (первый элемент цепочки
-  // фокуса), под ним чипами его прямые дети-районы, счёт — все потомки.
-  const roots = useMemo(() => kidsOf.get(null) ?? [], [kidsOf]);
-  const heroRoot: SettingLocation | null = useMemo(() => {
-    if (focus) return byId.get(chainFor(focus.id)[0]) ?? null;
-    return roots.length === 1 ? roots[0] : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus, byId, roots]);
-  const heroKids = useMemo(() => {
-    if (heroRoot) return (kidsOf.get(heroRoot.id) ?? []).filter((l) => locationRoleOf(l) !== "spot");
-    return roots;
-  }, [heroRoot, kidsOf, roots]);
-  const heroTotal = useMemo(() => {
-    if (!heroRoot) return locations.filter((l) => !l.archived_at).length;
-    let n = 0;
-    const stack = (kidsOf.get(heroRoot.id) ?? []).map((l) => l.id);
-    const seen = new Set<number>([heroRoot.id]);
-    while (stack.length) {
-      const id = stack.pop()!;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const loc = byId.get(id);
-      if (loc && !loc.archived_at && locationRoleOf(loc) !== "spot") n += 1;
-      for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
-    }
-    return n;
-  }, [heroRoot, kidsOf, byId, locations]);
-  const heroSpotTotal = useMemo(() => {
-    if (!heroRoot) return 0;
-    let n = 0;
-    const stack = (kidsOf.get(heroRoot.id) ?? []).map((l) => l.id);
-    const seen = new Set<number>([heroRoot.id]);
-    while (stack.length) {
-      const id = stack.pop()!;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const loc = byId.get(id);
-      if (loc && !loc.archived_at && locationRoleOf(loc) === "spot") n += 1;
-      for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
-    }
-    return n;
-  }, [heroRoot, kidsOf, byId]);
-  // Второй breadcrumb: кликабельный путь внутри мира.
   const crumbs = useMemo(
-    () => (focus ? chainFor(focus.id).map((id) => byId.get(id)).filter((l): l is SettingLocation => !!l) : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [focus, byId]
+    () => effPath.map((id) => byId.get(id)).filter((l): l is SettingLocation => !!l),
+    [effPath, byId]
   );
-  const focusParent = focus?.parent_id != null ? (byId.get(focus.parent_id) ?? null) : null;
 
-  const shownDetail = focusDetail && focus && focusDetail.id === focus.id ? focusDetail : null;
-  const focusThumb = shownDetail
-    ? (shownDetail.thumbnail_image_url || shownDetail.avatar_image_url || null)
-    : null;
-  const focusSafeThumb = focusThumb && isSafeImageUrl(focusThumb) ? focusThumb : null;
-  const focusPopulation =
-    (shownDetail?.inhabitant_beings.length ?? 0) + (shownDetail?.nested_inhabitant_beings.length ?? 0);
+  // Строка чипов одной высоты при любом мире: выбранный корень виден всегда.
+  const { shownRoots, hiddenRoots } = useMemo(() => {
+    if (roots.length <= ROOT_CHIPS + 1) return { shownRoots: roots, hiddenRoots: [] as SettingLocation[] };
+    const shown = roots.slice(0, ROOT_CHIPS);
+    if (rootId != null && !shown.some((r) => r.id === rootId)) {
+      const picked = roots.find((r) => r.id === rootId);
+      if (picked) shown[ROOT_CHIPS - 1] = picked;
+    }
+    const shownIds = new Set(shown.map((r) => r.id));
+    return { shownRoots: shown, hiddenRoots: roots.filter((r) => !shownIds.has(r.id)) };
+  }, [roots, rootId]);
 
-  // Провал — фокус на свежую колонку; клик по шапке — просто посмотреть
-  // (фокус ставится прямо в pick, без эффекта).
-
-  const totalCols = columns.length + (focus ? 1 : 0);
-  const active = Math.min(Math.max(activeCol, 0), Math.max(totalCols - 1, 0));
+  const colCount = columns.length;
+  const narrow = workW > 0 && workW < NARROW_MAX;
+  // Индекс colCount в узком режиме — экран карточки.
+  const active = Math.min(Math.max(activeCol, 0), narrow ? colCount : Math.max(colCount - 1, 0));
   const widths = useMemo(
-    // Ёмкость минус щели между колонками (12px каждая) — иначе скрип скролла.
-    () => millerWidths(totalCols, active, wrapW - 12 * Math.max(totalCols - 1, 0)),
-    [totalCols, active, wrapW]
+    () =>
+      millerWidths(
+        colCount,
+        Math.min(active, colCount - 1),
+        workW - CARD_W - COL_GAP - COL_GAP * Math.max(colCount - 1, 0)
+      ),
+    [colCount, active, workW]
   );
-  // Drill-down: узко — одна активная колонка на всю ширину + «Назад».
-  const narrow = wrapW > 0 && wrapW < 560;
-
-  function goBack() {
-    if (active >= columns.length && focus) {
-      setActiveCol(columns.length - 1);
-      return;
-    }
-    const next = cleanPath.slice(0, -1);
-    let cols = 1;
-    for (const pid of next) {
-      if ((kidsOf.get(pid) ?? []).length > 0) cols += 1;
-    }
-    setPath(next);
-    setActiveCol(cols - 1);
-  }
-
-  const backLabel =
-    active >= columns.length
-      ? "К списку"
-      : active > 0
-        ? (columns[active].parent ? `‹ ${columns[active].parent!.name}` : "‹ Мир")
-        : null;
 
   // Цепочка предков + сам: путь собирается без подсчёта индексов колонок.
   function chainFor(id: number): number[] {
@@ -343,13 +277,9 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     return chain;
   }
 
-  // Сколько колонок данных даст путь (превью — следующая за ними).
-  function dataColsFor(chain: number[]): number {
-    let cols = 1;
-    for (const pid of chain) {
-      if ((kidsOf.get(pid) ?? []).length > 0) cols += 1;
-    }
-    return cols;
+  // Сколько колонок даст путь: по одной на каждое место с навигационными детьми.
+  function colsFor(chain: number[]): number {
+    return chain.filter((pid) => (navKidsOf.get(pid) ?? []).length > 0).length;
   }
 
   function isDescendantOf(ancestorId: number, maybeDescendantId: number): boolean {
@@ -365,17 +295,29 @@ export function LocationMiller({ settingId }: { settingId: number }) {
 
   function pick(id: number) {
     const chain = chainFor(id);
-    const cols = dataColsFor(chain);
-    const leaf = (kidsOf.get(id) ?? []).length === 0;
+    const cols = colsFor(chain);
+    const leaf = (navKidsOf.get(id) ?? []).length === 0;
     setPath(chain);
-    setActiveCol(leaf ? cols : cols - 1);
+    setActiveCol(leaf ? cols : Math.max(cols - 1, 0));
   }
 
-  function showCard(id: number) {
-    const chain = chainFor(id);
-    setPath(chain);
-    setActiveCol(dataColsFor(chain)); // индекс превью
+  function goBack() {
+    if (active >= colCount && colCount > 0) {
+      setActiveCol(colCount - 1);
+      return;
+    }
+    if (cleanPath.length <= 1) return;
+    const next = cleanPath.slice(0, -1);
+    setPath(next);
+    setActiveCol(Math.max(colsFor(next) - 1, 0));
   }
+
+  const backLabel =
+    active >= colCount && colCount > 0
+      ? "К списку"
+      : cleanPath.length > 1
+        ? `‹ ${byId.get(cleanPath[cleanPath.length - 2])?.name ?? "Назад"}`
+        : null;
 
   async function rename(id: number) {
     const loc = byId.get(id);
@@ -435,6 +377,10 @@ export function LocationMiller({ settingId }: { settingId: number }) {
         showAlert("Нельзя вложить локацию в саму себя или в своего же потомка.");
         return;
       }
+      if (locationRoleOf(byId.get(targetParent) ?? {}) === "spot") {
+        showAlert("Точка ничего не содержит — вложить в неё нельзя.");
+        return;
+      }
     }
     try {
       await api.put(`/setting-locations/${dragged}/parent`, { parent_id: targetParent });
@@ -446,6 +392,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     } finally {
       setDraggedId(null);
       setDragOverId(null);
+      setDragOverRoots(false);
     }
   }
 
@@ -464,34 +411,27 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   }
 
   function menuItems(id: number): ContextMenuItem[] {
-    return [
+    const items: ContextMenuItem[] = [
       { label: "Переименовать", onClick: () => rename(id) },
       { label: "Открыть", onClick: () => navigate(`/locations/${id}`) },
-      { label: "Карточка", onClick: () => showCard(id) },
+      { label: "Карточка", onClick: () => pick(id) },
       { label: "Переместить", onClick: () => openMove(id) },
       { label: "Удалить", danger: true, onClick: () => archive(id) },
     ];
+    if (locationRoleOf(byId.get(id) ?? {}) !== "spot") {
+      items.splice(3, 0, { label: "Создать внутри", onClick: () => setWizardParentId(id) });
+    }
+    return items;
   }
 
-  // Карточка-проводник вместо строки БД: глиф роли + имя, тип — маленьким
-  // бейджем «РАЙОН · 4», счётчик только по навигационным детям, у листа
-  // с точками вместо стрелки подпись «N точек».
-  function roleGlyph(l: SettingLocation): string {
-    const role = locationRoleOf(l);
-    if (role === "spot") return "•";
-    if (role === "sector") return "◇";
-    const hasKids = (kidsOf.get(l.id) ?? []).length > 0;
-    if (l.parent_id == null) return "◉";
-    return hasKids ? "◆" : "▣";
+  function badgeFor(l: SettingLocation): string {
+    return l.kind?.trim() || LOCATION_ROLE_LABELS[locationRoleOf(l)];
   }
-  function typeBadge(l: SettingLocation): string {
-    return (l.kind?.trim() || LOCATION_ROLE_LABELS[locationRoleOf(l)]).toUpperCase();
-  }
+
   function renderMillerRow(l: SettingLocation, activeId: number | null) {
     const kids = kidsOf.get(l.id) ?? [];
-    const kidRoles = kids.map((k) => locationRoleOf(k));
-    const navKids = kidRoles.filter((r) => r !== "spot").length;
-    const spotKids = kidRoles.length - navKids;
+    const navKids = (navKidsOf.get(l.id) ?? []).length;
+    const spotKids = kids.length - navKids;
     const isActive = l.id === activeId;
     const isOver = dragOverId === l.id && draggedId !== l.id;
     const hasMap = !!(l.map_image_path || l.map_image_url);
@@ -507,6 +447,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
         onDragEnd={() => {
           setDraggedId(null);
           setDragOverId(null);
+          setDragOverRoots(false);
         }}
         onDragOver={(e) => {
           e.preventDefault();
@@ -523,11 +464,11 @@ export function LocationMiller({ settingId }: { settingId: number }) {
           setMenu({ x: e.clientX, y: e.clientY, id: l.id });
         }}
       >
-        <span className="miller-item__glyph" aria-hidden="true">{roleGlyph(l)}</span>
+        <NavIcon name={locationRoleIcon(l)} className="miller-item__icon" />
         <span className="miller-item__body">
           <span className="miller-item__name">{l.name}</span>
           <span className="miller-item__badge">
-            {typeBadge(l)}
+            {badgeFor(l)}
             {navKids > 0 ? ` · ${navKids}` : spotKids > 0 ? ` · ${plural(spotKids, "точка", "точки", "точек")}` : ""}
             {hasMap ? " · карта" : ""}
           </span>
@@ -544,12 +485,17 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     e.dataTransfer.setData("text/plain", String(id));
   }
 
+  function droppedId(e: DragEvent<HTMLElement>): number | null {
+    const raw = e.dataTransfer.getData("text/plain");
+    return draggedId ?? (raw ? Number(raw) : null);
+  }
+
   function handleItemDrop(e: DragEvent<HTMLElement>, targetId: number) {
     e.preventDefault();
     e.stopPropagation();
     setDragOverId(null);
-    const raw = e.dataTransfer.getData("text/plain");
-    const dragged = draggedId ?? (raw ? Number(raw) : null);
+    setDragOverRoots(false);
+    const dragged = droppedId(e);
     if (dragged == null || dragged === targetId) {
       setDraggedId(null);
       return;
@@ -557,11 +503,11 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     void moveTo(dragged, targetId);
   }
 
-  function handleColDrop(e: DragEvent<HTMLElement>, parentId: number | null) {
+  function handleAreaDrop(e: DragEvent<HTMLElement>, parentId: number | null) {
     e.preventDefault();
     e.stopPropagation();
-    const raw = e.dataTransfer.getData("text/plain");
-    const dragged = draggedId ?? (raw ? Number(raw) : null);
+    setDragOverRoots(false);
+    const dragged = droppedId(e);
     if (dragged == null) {
       setDraggedId(null);
       return;
@@ -578,6 +524,12 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     );
   }
 
+  const rootThumb = root ? root.thumbnail_image_url || root.avatar_image_url : null;
+  const rootSafeThumb = rootThumb && isSafeImageUrl(rootThumb) ? rootThumb : null;
+  const rootSub = root
+    ? [root.kind?.trim(), plainMentions(root.description ?? "").replace(/\s+/g, " ").trim()].filter(Boolean).join(" · ")
+    : "";
+
   return (
     <div className="stack geography-miller">
       <div className="row geography-miller__toolbar">
@@ -586,78 +538,125 @@ export function LocationMiller({ settingId }: { settingId: number }) {
             {backLabel}
           </button>
         )}
-        <span className="muted miller-legend" title="◉ корень · ◆ ветвь · ◇ сектор · ▣ локация · • точка">
-          ◉ ◆ ◇ ▣ •
-        </span>
         <span style={{ flex: 1 }} />
-        <button className="primary" onClick={() => setCreating(true)}>
+        {focus && locationRoleOf(focus) !== "spot" && (
+          <span className="muted geography-miller__target" title="Новое место появится внутри выбранного">
+            внутрь: {focus.name}
+          </span>
+        )}
+        <button
+          className="primary"
+          onClick={() =>
+            focus && locationRoleOf(focus) !== "spot" ? setWizardParentId(focus.id) : setCreating(true)
+          }
+        >
           <NavIcon name="plus" /> Создать
         </button>
       </div>
-      {columns[0].items.length > 0 && !loadError && (
-        <section className="miller-hero" aria-label="Карта мира">
-          <div className="miller-hero__eyebrow">◉ Мир</div>
-          <h2 className="miller-hero__title" onClick={() => heroRoot && pick(heroRoot.id)} style={heroRoot ? { cursor: "pointer" } : undefined} title={heroRoot ? "Перейти к корню" : undefined}>
-            {(heroRoot?.name ?? "Мир").toUpperCase()}
-          </h2>
-          {(heroRoot?.kind || heroRoot?.description) && (
-            <div className="muted miller-hero__sub">
-              {heroRoot?.kind ? `${heroRoot.kind} · ` : ""}{heroRoot?.description ? (heroRoot.description.length > 140 ? `${heroRoot.description.slice(0, 140).replace(/\s+\S*$/, "")}…` : heroRoot.description) : ""}
-            </div>
-          )}
-          {heroKids.length > 0 && (
-            <>
-              <div className="miller-hero__label">Районы</div>
-              <div className="miller-hero__chips">
-                {heroKids.map((k) => {
-                  const inPath = cleanPath.includes(k.id);
-                  return (
-                    <button
-                      key={k.id}
-                      className={`miller-chip${inPath ? " is-active" : ""}`}
-                      onClick={() => pick(k.id)}
-                      title={k.name}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setMenu({ x: e.clientX, y: e.clientY, id: k.id });
-                      }}
-                    >
-                      <span aria-hidden="true">{roleGlyph(k)}</span> {k.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-          <div className="muted miller-hero__count">
-            {plural(heroTotal, "локация", "локации", "локаций")}
-            {heroSpotTotal > 0 ? ` · ${plural(heroSpotTotal, "точка", "точки", "точек")}` : ""}
+
+      {roots.length > 0 && !loadError && (
+        <>
+          <div
+            className={`miller-roots${dragOverRoots ? " drag-over" : ""}`}
+            role="toolbar"
+            aria-label="Корни мира"
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (draggedId != null) setDragOverRoots(true);
+            }}
+            onDragLeave={(e) => {
+              const rt = e.relatedTarget as Node | null;
+              if (rt && e.currentTarget.contains(rt)) return;
+              setDragOverRoots(false);
+            }}
+            onDrop={(e) => handleAreaDrop(e, null)}
+            onContextMenu={(e) => {
+              if ((e.target as HTMLElement).closest(".miller-chip")) return;
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, createParent: null });
+            }}
+            title="Бросьте сюда место, чтобы сделать его корнем мира"
+          >
+            <span className="miller-roots__label">Мир</span>
+            {shownRoots.map((k) => {
+              const isOver = dragOverId === k.id && draggedId !== k.id;
+              return (
+                <button
+                  key={k.id}
+                  className={`miller-chip${k.id === rootId ? " is-active" : ""}${isOver ? " drag-over" : ""}`}
+                  aria-pressed={k.id === rootId}
+                  onClick={() => pick(k.id)}
+                  title={k.name}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (draggedId == null || draggedId === k.id || isDescendantOf(draggedId, k.id)) return;
+                    setDragOverRoots(false);
+                    setDragOverId(k.id);
+                  }}
+                  onDragLeave={() => setDragOverId((prev) => (prev === k.id ? null : prev))}
+                  onDrop={(e) => handleItemDrop(e, k.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenu({ x: e.clientX, y: e.clientY, id: k.id });
+                  }}
+                >
+                  <NavIcon name="globe" /> {k.name}
+                </button>
+              );
+            })}
+            {hiddenRoots.length > 0 && (
+              <button
+                className="miller-chip miller-chip--more"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setMenu({ x: r.left, y: r.bottom + 4, roots: true });
+                }}
+              >
+                ещё {hiddenRoots.length} ▾
+              </button>
+            )}
           </div>
-        </section>
+
+          {root && (
+            <section className="miller-root" aria-label="Корень мира">
+              {rootSafeThumb && <img src={rootSafeThumb} alt="" className="miller-root__thumb" />}
+              <div className="miller-root__body">
+                <button className="miller-root__title" onClick={() => pick(root.id)} title="Карточка корня">
+                  {root.name}
+                </button>
+                {rootSub && <div className="muted miller-root__sub">{rootSub}</div>}
+              </div>
+              <div className="muted miller-root__count">
+                {plural(rootTotals.places, "локация", "локации", "локаций")}
+                {rootTotals.spots > 0 ? ` · ${plural(rootTotals.spots, "точка", "точки", "точек")}` : ""}
+              </div>
+            </section>
+          )}
+
+          {crumbs.length > 1 && (
+            <nav className="miller-crumbs" aria-label="Путь в мире">
+              {crumbs.map((c, idx) => {
+                const last = idx === crumbs.length - 1;
+                return (
+                  <span key={c.id} className="miller-crumb__seg">
+                    {idx > 0 && <span className="miller-crumb__sep" aria-hidden="true"> / </span>}
+                    {last ? (
+                      <span className="miller-crumb is-current" aria-current="page">{c.name}</span>
+                    ) : (
+                      <button className="miller-crumb" onClick={() => pick(c.id)} title={`Перейти: ${c.name}`}>
+                        {c.name}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </nav>
+          )}
+        </>
       )}
-      {crumbs.length > 0 && (
-        <nav className="miller-crumbs" aria-label="Путь в мире">
-          <button className="miller-crumb" onClick={() => { setPath([]); setActiveCol(0); }} title="К корням мира">
-            Мир
-          </button>
-          {crumbs.map((c, idx) => {
-            const last = idx === crumbs.length - 1;
-            return (
-              <span key={c.id} className="miller-crumb__seg">
-                <span className="miller-crumb__sep" aria-hidden="true"> / </span>
-                {last ? (
-                  <span className="miller-crumb is-current" aria-current="page">{c.name}</span>
-                ) : (
-                  <button className="miller-crumb" onClick={() => pick(c.id)} title={`Перейти: ${c.name}`}>
-                    {c.name}
-                  </button>
-                )}
-              </span>
-            );
-          })}
-        </nav>
-      )}
+
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)" }}>
           Не удалось загрузить географию: {loadError}{" "}
@@ -692,20 +691,22 @@ export function LocationMiller({ settingId }: { settingId: number }) {
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          title={
-            menu.createParent != null
-              ? (byId.get(menu.createParent)?.name ?? "Локация")
-              : "Мир"
-          }
+          title={menu.createParent != null ? (byId.get(menu.createParent)?.name ?? "Локация") : "Мир"}
           items={[
             {
-              label: "Создать локацию",
-              onClick: () =>
-                menu.createParent != null
-                  ? setWizardParentId(menu.createParent)
-                  : setCreating(true),
+              label: menu.createParent != null ? "Создать локацию здесь" : "Создать корень мира",
+              onClick: () => (menu.createParent != null ? setWizardParentId(menu.createParent) : setCreating(true)),
             },
           ]}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      {menu && "roots" in menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          title="Корни мира"
+          items={hiddenRoots.map((r) => ({ label: r.name, onClick: () => pick(r.id) }))}
           onClose={() => setMenu(null)}
         />
       )}
@@ -741,7 +742,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
           </div>
         </Modal>
       )}
-      {columns[0].items.length === 0 && !loadError ? (
+      {roots.length === 0 && !loadError ? (
         <EmptyState
           title="Пока пусто"
           hint="Создайте первую локацию — она станет корнем."
@@ -752,124 +753,73 @@ export function LocationMiller({ settingId }: { settingId: number }) {
           }
         />
       ) : (
-        <div className="miller-cols" ref={wrapRef} role="list" aria-label="Колонки локаций">
-          {columns.map((col, i) => {
-            if (narrow && i !== active) return null;
-            const parentIdx = col.parent ? cleanPath.indexOf(col.parent.id) : -1;
-            const activeId = cleanPath[parentIdx + 1] ?? null;
-            const rail = !narrow && (widths[i] ?? COL_FULL) < COL_RAIL;
-            return (
-              <div
-                className={`miller-col${i === active ? " is-active-col" : ""}${rail ? " is-rail" : ""}`}
-                style={{ width: narrow ? "100%" : (widths[i] ?? COL_FULL) }}
-                key={col.parent ? col.parent.id : "root"}
-                role="listitem"
-                aria-label={col.parent ? col.parent.name : "Верхний уровень"}
-              >
-                <button
-                  className="miller-col__title"
-                  onClick={() => setActiveCol(i)}
-                  title={col.parent ? `${col.parent.name} — развернуть колонку` : "Мир — развернуть колонку"}
-                >
-                  <span>{col.parent ? `◆ ${col.parent.name}` : "◉ Мир"}</span>
-                  <span className="miller-col__count">{plural(col.items.length, "локация", "локации", "локаций")}</span>
-                </button>
-                <div
-                  className="miller-col__body"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleColDrop(e, col.parent ? col.parent.id : null)}
-                  onContextMenu={(e) => {
-                    if ((e.target as HTMLElement).closest(".miller-item")) return;
-                    e.preventDefault();
-                    const pid = col.parent ? col.parent.id : null;
-                    setMenu({ x: e.clientX, y: e.clientY, id: pid ?? -1 });
-                  }}
-                >
-                  {(() => {
-                    // Секторы отдельно от локаций; заголовки — только когда
-                    // обе секции непусты, иначе это шум (этап 3).
-                    const sectors = col.items.filter((l) => locationRoleOf(l) === "sector");
-                    const places = col.items.filter((l) => locationRoleOf(l) !== "sector");
-                    const showHeads = sectors.length > 0 && places.length > 0;
-                    return (
-                      <>
-                        {showHeads && <div className="miller-sec">Секторы</div>}
-                        {sectors.map((l) => renderMillerRow(l, activeId))}
-                        {showHeads && <div className="miller-sec">Локации</div>}
-                        {places.map((l) => renderMillerRow(l, activeId))}
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            );
-          })}
-          {focus && (!narrow || active === columns.length) && (
-            <div
-              className={`miller-col miller-preview${active === columns.length ? " is-active-col" : ""}${!narrow && (widths[columns.length] ?? COL_FULL) < COL_RAIL ? " is-rail" : ""}`}
-              style={{ width: narrow ? "100%" : (widths[columns.length] ?? COL_FULL) }}
-              role="listitem"
-              aria-label={`Карточка: ${focus.name}`}
-            >
-              <button
-                className="miller-col__title"
-                onClick={() => setActiveCol(columns.length)}
-                title="Выбранное — развернуть колонку"
-              >
-                <span>▣ Выбрано</span>
-              </button>
-              <div className="miller-col__body miller-preview__body">
-                {focusSafeThumb && (
-                  <img src={focusSafeThumb} alt="" className="miller-preview__hero" />
-                )}
-                <div className="miller-preview__badge">
-                  {typeBadge(focus)}
-                  {(focusDescByRole.sector + focusDescByRole.location) > 0
-                    ? ` · ${plural(focusDescByRole.sector + focusDescByRole.location, "локация", "локации", "локаций")}`
-                    : ""}
-                </div>
-                <strong className="miller-preview__name">{focus.name}</strong>
-                {focusParent && (
-                  <button className="miller-preview__parent" onClick={() => pick(focusParent.id)} title={`Перейти: ${focusParent.name}`}>
-                    📍 {focusParent.name}
-                  </button>
-                )}
-                <div className="muted miller-preview__compact">
-                  {focusLoading && !shownDetail ? "…" : (
-                    <>
-                      👤 {plural(focusPopulation, "житель", "жителя", "жителей")}
-                      {" · "}📍 {plural(focusDescByRole.spot, "точка", "точки", "точек")}
-                      {" · "}📄 {plural(shownDetail?.chapters.length ?? 0, "статья", "статьи", "статей")}
-                    </>
-                  )}
-                </div>
-                {(focus.map_image_path || focus.map_image_url) && (
-                  <div className="muted miller-preview__map">🗺 Есть карта — откроется внутри локации</div>
-                )}
-                {focus.description && (
-                  <p className="miller-preview__desc">{focus.description.length > 220 ? `${focus.description.slice(0, 220).replace(/\s+\S*$/, "")}…` : focus.description}</p>
-                )}
-                {focusSpots.length > 0 && (
-                  <div className="miller-spots">
-                    <div className="miller-sec">Точки · {focusSpots.length}</div>
-                    {focusSpots.map((s) => renderMillerRow(s, focusId))}
+        <div className={`miller-work${narrow ? " is-narrow" : ""}`} ref={workRef}>
+          {colCount > 0 && (!narrow || active < colCount) && (
+            <div className="miller-cols" role="list" aria-label="Колонки локаций">
+              {columns.map((col, i) => {
+                if (narrow && i !== active) return null;
+                const parentIdx = effPath.indexOf(col.parent.id);
+                const activeId = effPath[parentIdx + 1] ?? null;
+                const rail = !narrow && (widths[i] ?? COL_FULL) < COL_RAIL;
+                return (
+                  <div
+                    className={`miller-col${i === active ? " is-active-col" : ""}${rail ? " is-rail" : ""}`}
+                    style={{ width: narrow ? "100%" : (widths[i] ?? COL_FULL) }}
+                    key={col.parent.id}
+                    role="listitem"
+                    aria-label={col.parent.name}
+                  >
+                    <button
+                      className="miller-col__title"
+                      onClick={() => setActiveCol(i)}
+                      title={`${col.parent.name} — развернуть колонку`}
+                    >
+                      <span>{col.parent.name}</span>
+                      <span className="miller-col__count">{plural(col.items.length, "локация", "локации", "локаций")}</span>
+                    </button>
+                    <div
+                      className="miller-col__body"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => handleAreaDrop(e, col.parent.id)}
+                      onContextMenu={(e) => {
+                        if ((e.target as HTMLElement).closest(".miller-item")) return;
+                        e.preventDefault();
+                        setMenu({ x: e.clientX, y: e.clientY, createParent: col.parent.id });
+                      }}
+                    >
+                      {(() => {
+                        // Секторы отдельно от локаций; заголовки — только когда
+                        // обе секции непусты, иначе это шум (этап 3).
+                        const sectors = col.items.filter((l) => locationRoleOf(l) === "sector");
+                        const places = col.items.filter((l) => locationRoleOf(l) !== "sector");
+                        const showHeads = sectors.length > 0 && places.length > 0;
+                        return (
+                          <>
+                            {showHeads && <div className="miller-sec">Секторы</div>}
+                            {sectors.map((l) => renderMillerRow(l, activeId))}
+                            {showHeads && <div className="miller-sec">Локации</div>}
+                            {places.map((l) => renderMillerRow(l, activeId))}
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
-                )}
-                <div className="miller-preview__actions">
-                  <Link className="miller-preview__open" to={`/locations/${focus.id}`}>Открыть локацию</Link>
-                  <button onClick={() => setWizardParentId(focus.id)}>
-                    <NavIcon name="plus" /> Вложенная
-                  </button>
-                </div>
-              </div>
+                );
+              })}
             </div>
+          )}
+          {focus && (!narrow || active >= colCount) && (
+            <aside className="miller-card" aria-label={`Карточка: ${focus.name}`}>
+              <PlaceCard
+                key={focus.id}
+                locationId={focus.id}
+                onPick={pick}
+                onAddChild={(id) => setWizardParentId(id)}
+              />
+            </aside>
           )}
         </div>
       )}
-      <p className="muted geography-root__hint">
-        Колонки: клик проваливается внутрь. Активная — самая широкая, дальние схлопываются
-        первыми; клик по шапке разворачивает колонку. Справа — карточка выбранного.
-      </p>
     </div>
   );
 }

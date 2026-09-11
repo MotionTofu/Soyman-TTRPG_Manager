@@ -1363,43 +1363,102 @@ h4 { font-size: var(--fs-h3); }
   gap: 8px;
   align-items: center;
 }
-/* Карта-проводник: крупный корень мира, чипы районов, счёт — без рамок. */
-.miller-hero {
-  padding: 4px 2px 0;
-}
-.miller-hero__eyebrow {
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--muted);
-}
-.miller-hero__title {
-  font-family: var(--font-display);
-  font-size: var(--fs-h2);
-  line-height: 1.05;
-  margin: 2px 0 0;
-  letter-spacing: 0.01em;
-  overflow-wrap: break-word;
-}
-.miller-hero__sub {
+.geography-miller__target {
   font-size: var(--fs-meta);
-  margin-top: 4px;
-  max-width: 70ch;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.miller-hero__label {
+/* Корни мира чипами: колонка «Мир» ушла сюда (решения 2026-09-11, §1). Строка
+   одной высоты при любом числе корней — лишние под «ещё N». */
+.miller-roots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  padding: 2px 0;
+}
+.miller-roots.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+.miller-roots__label {
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--muted);
-  margin-top: 12px;
+  margin-right: 4px;
 }
-.miller-hero__chips {
+.miller-chip .nav-icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  vertical-align: -2px;
+}
+.miller-chip.drag-over {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.miller-chip--more {
+  flex: none;
+}
+/* Шапка выбранного корня: имя, строка описания, счёт — компактно. */
+/* Узко счёт уходит под имя, а не наезжает на него: имя корня — часто одно
+   длинное слово, которое не переносится. */
+.miller-root {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  align-items: center;
+  gap: 4px 14px;
+  min-width: 0;
+  padding: 2px 0;
+}
+.miller-root__thumb {
+  width: 72px;
+  height: 44px;
+  flex: none;
+  object-fit: cover;
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+}
+.miller-root__body {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.miller-root__title {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1.05;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+.miller-root__title:hover {
+  text-decoration: underline;
+}
+.miller-root__sub {
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.miller-root__count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
 }
 .miller-chip {
   border: 1px solid var(--line);
@@ -1422,11 +1481,6 @@ h4 { font-size: var(--fs-h3); }
   color: var(--on-surface);
   border-color: var(--ink);
   font-weight: 700;
-}
-.miller-hero__count {
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  margin-top: 10px;
 }
 /* Второй breadcrumb: кликабельный путь внутри мира. */
 .miller-crumbs {
@@ -1456,11 +1510,19 @@ button.miller-crumb:hover {
 .miller-crumb__sep {
   color: var(--muted);
 }
-.miller-legend {
-  font-size: var(--fs-meta);
-  letter-spacing: 0.2em;
+/* Рабочая область: колонки слева, карточка места справа вне аккордеона. */
+.miller-work {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+  min-height: 0;
+}
+.miller-work.is-narrow {
+  flex-direction: column;
 }
 .miller-cols {
+  flex: 1;
+  min-width: 0;
   display: flex;
   gap: 20px;
   overflow-x: auto;
@@ -1583,14 +1645,13 @@ button.miller-crumb:hover {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.miller-item__glyph {
+.miller-item__icon {
   flex: none;
+  width: 14px;
+  height: 14px;
   color: var(--muted);
-  font-size: var(--fs-meta);
-  width: 1.2em;
-  text-align: center;
 }
-.miller-item.is-active .miller-item__glyph {
+.miller-item.is-active .miller-item__icon {
   color: var(--accent);
 }
 .miller-item__body {
@@ -1635,96 +1696,264 @@ button.miller-crumb:hover {
   color: var(--muted);
   padding: 10px 10px 0;
 }
-/* Выбранное — настоящий объект: превью сверху, бейдж, компактная строка. */
-.miller-preview {
+/* Карточка места в Географии: постоянная ширина справа. */
+.miller-card {
+  flex: none;
+  width: 320px;
+  max-height: 70vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--paper);
   border: var(--card-border-width) solid var(--line);
 }
-.miller-preview.is-active-col {
-  background: var(--paper);
-  border: var(--card-border-width) solid var(--ink);
-  padding: 0;
-}
-.miller-preview__body {
-  gap: 8px;
-  padding: 0 0 10px;
-}
-.miller-preview__hero {
-  display: block;
+.miller-work.is-narrow .miller-card {
   width: 100%;
+  max-height: none;
+}
+/* Карточка места (решения 2026-09-11, §2): одна раскладка в Географии и в
+   доке пульта, порядок блоков фиксированный, пустой блок не рисуется. */
+.place-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.place-card__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 16px 16px;
+}
+.place-card__hero {
+  display: block;
+  width: calc(100% + 32px);
+  margin: -14px -16px 0;
   aspect-ratio: 16 / 9;
   object-fit: cover;
   background: var(--paper-2);
+  flex: none;
 }
-.miller-preview__badge {
+.place-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.place-card__badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted);
-  padding: 10px 12px 0;
 }
-.miller-preview__name {
+.place-card__badge .nav-icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+.place-card__name {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: var(--fs-h3);
-  line-height: 1.1;
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1.05;
   overflow-wrap: break-word;
-  padding: 0 12px;
 }
-.miller-preview__parent {
+.place-card__path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 5px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.place-card__path button {
   background: none;
   border: none;
-  padding: 0 12px;
-  text-align: left;
+  padding: 0;
   color: var(--muted);
-  cursor: pointer;
   font-size: var(--fs-meta);
+  cursor: pointer;
 }
-button.miller-preview__parent:hover {
+.place-card__path button:hover {
   color: var(--ink);
   text-decoration: underline;
 }
-.miller-preview__compact {
-  font-size: var(--fs-meta);
-  padding: 0 12px;
-}
-.miller-preview__map {
-  font-size: var(--fs-meta);
-  padding: 0 12px;
-}
-.miller-preview__desc {
+.place-card__desc {
   font-size: var(--fs-meta);
   line-height: 1.45;
-  margin: 0;
-  padding: 0 12px;
   overflow-wrap: break-word;
 }
-.miller-preview__actions {
+.place-card__desc.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.place-card__more {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.place-card__sec {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 0 12px;
+  gap: 6px;
 }
-.miller-preview__open {
-  display: block;
-  text-align: center;
+.place-card__sech {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 5px;
+  border-bottom: var(--card-border-width) solid var(--line);
+}
+.place-card__title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.place-card__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.place-card__add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.place-card__add:hover {
+  color: var(--ink);
+}
+.place-card__add .nav-icon {
+  width: 12px;
+  height: 12px;
+}
+.place-card__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--fs-meta);
+  line-height: 1.35;
+}
+.place-card__row > .nav-icon {
+  align-self: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+.place-card__row-name {
+  flex: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--ink);
+}
+button.place-card__row-name {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.place-card__row-name:hover {
+  text-decoration: underline;
+}
+.place-card__note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.place-card__tag {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.place-card__text {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.place-card__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.place-card__form input {
+  flex: 1;
+  min-width: 120px;
+}
+.place-card__quick {
+  display: flex;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: var(--card-border-width) solid var(--line);
+}
+.place-card__quick .place-card__add {
+  margin-left: 0;
+}
+.place-card__foot {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: var(--card-border-width) solid var(--line);
+}
+.place-card__open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
   background: var(--surface);
   color: var(--on-surface);
-  padding: 10px 12px;
   font-weight: 700;
   text-decoration: none;
 }
-.miller-preview__actions button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+.place-card__open:hover {
+  text-decoration: none;
+  opacity: 0.92;
 }
-.miller-preview__actions .nav-icon {
+.place-card__foot .nav-icon {
   width: 14px;
   height: 14px;
+}
+.place-card__foot button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 /* Боковая карточка Списка: тамбнейл + имя + счётчики. */
 .location-sidecard {

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useEntity, useResource, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { statblockAffects, statblockListPath } from "../data/statblocks";
 import { RelationsTab } from "../components/RelationsTab";
 import { StatblockList } from "../components/StatblockList";
 import { ChapterList } from "../components/ChapterList";
@@ -10,7 +12,6 @@ import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { useAlert } from "../hooks/useConfirm";
 import { useCurrentUser } from "../api/currentUser";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { formatImportantDate } from "../inworldCalendar";
@@ -45,10 +46,16 @@ export function CharacterDetailPage() {
   const characterId = Number(id);
   const navigate = useNavigate();
 
-  const [character, setCharacter] = useState<Character | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [alertDialog, showAlert] = useAlert();
-  const [notFound, setNotFound] = useState(false);
+  // Карточка — из кэша слоя данных (docs/adr/0001): тот же ключ у чарника на
+  // весь экран, правки игроков и других окон обновляет DataLayerSync.
+  const characterState = useEntity<Character>("character", characterId);
+  const character = characterState.data ?? null;
+  // Ошибка перечитывания поверх уже загруженного персонажа страницу не прячет.
+  const readError = character ? null : characterState.error;
+  const notFound = readError != null && /404|not found|не найден/i.test(readError);
+  const loadError = readError != null && !notFound ? readError : null;
+  const refresh = characterState.reload;
+  const afterWrite = useAfterWrite();
   const [tab, selectTab] = useTabState(TAB_KEYS, "statblock");
   const { user } = useCurrentUser();
   const [editingName, setEditingName] = useState(false);
@@ -73,29 +80,13 @@ export function CharacterDetailPage() {
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
   const { deleteWithUndo } = useUndoDelete();
 
-  function refresh(signal?: AbortSignal) {
-    setLoadError(null);
-    setNotFound(false);
-    api
-      .get<Character>(`/characters/${characterId}`, signal ? { signal } : undefined)
-      .then((c) => {
-        setCharacter(c);
-        setNameDraft(c.character_name);
-        setShortNameDraft(c.short_name ?? "");
-      })
-      .catch((e) => {
-        if ((e as Error).name === "AbortError") return;
-        const msg = String(e instanceof Error ? e.message : e);
-        if (msg.includes("404") || msg.toLowerCase().includes("not found")) setNotFound(true);
-        else setLoadError(msg);
-      });
-  }
+  // Черновики имени — из карточки, пока имя не правят: перечитывание посреди
+  // правки набранное не затирает.
   useEffect(() => {
-    const ctrl = new AbortController();
-    refresh(ctrl.signal);
-    return () => ctrl.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterId]);
+    if (!character || editingName) return;
+    setNameDraft(character.character_name);
+    setShortNameDraft(character.short_name ?? "");
+  }, [character, editingName]);
   // сброс черновиков при смене id — C-P1-1
   useEffect(() => {
     setEditingName(false);
@@ -138,25 +129,6 @@ export function CharacterDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingName, nameDraft, shortNameDraft, characterId]);
 
-  // Live sync — player-app editing this same character (or another open GM
-  // instance) pushes here via RealtimeListener's "character-updated" event.
-  // Debounced (300ms) to avoid double refresh when both CharacterDetailPage and StatblockList listen.
-  useEffect(() => {
-    let t: number | null = null;
-    function onCharacterUpdated(e: Event) {
-      const detail = (e as CustomEvent<{ characterId: number }>).detail;
-      if (detail?.characterId !== characterId) return;
-      if (t != null) window.clearTimeout(t);
-      t = window.setTimeout(() => { t = null; refresh(); }, 300);
-    }
-    window.addEventListener("character-updated", onCharacterUpdated);
-    return () => {
-      window.removeEventListener("character-updated", onCharacterUpdated);
-      if (t != null) window.clearTimeout(t);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterId]);
-
   if (notFound) {
     return (
       <div className="stack" style={{ padding: 24 }}>
@@ -184,12 +156,12 @@ export function CharacterDetailPage() {
     setNameError(null);
     setNameSaving(true);
     try {
-      await api.put(`/characters/${characterId}`, {
+      await write.put(`/characters/${characterId}`, {
         character_name: trimmed,
         short_name: shortNameDraft.trim(),
       });
       setEditingName(false);
-      refresh();
+      afterWrite([{ kind: "character", id: characterId }]);
     } catch (e) {
       setNameError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -206,11 +178,17 @@ export function CharacterDetailPage() {
     try {
       await deleteWithUndo({
         entityName: name,
-        deleteFn: () => api.del(`/characters/${characterId}`),
-        restoreFn: () => api.put(`/characters/${characterId}/restore`),
+        deleteFn: async () => {
+          await write.del(`/characters/${characterId}`);
+          afterWrite([{ kind: "character" }]);
+        },
+        restoreFn: async () => {
+          await write.put(`/characters/${characterId}/restore`);
+          afterWrite([{ kind: "character" }]);
+        },
       });
     } catch (e) {
-      showAlert(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
+      showSaveError(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
     navigate(`/campaigns/${character.campaign_id}`);
@@ -225,8 +203,8 @@ export function CharacterDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/characters/${characterId}/avatar`, form);
-      refresh();
+      await write.post(`/characters/${characterId}/avatar`, form, { timeoutMs: 60_000 });
+      afterWrite([{ kind: "character", id: characterId }]);
     } catch (e) {
       setAvatarError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -243,8 +221,8 @@ export function CharacterDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/characters/${characterId}/thumbnail`, form);
-      refresh();
+      await write.post(`/characters/${characterId}/thumbnail`, form, { timeoutMs: 60_000 });
+      afterWrite([{ kind: "character", id: characterId }]);
     } catch (e) {
       setAvatarError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -265,7 +243,7 @@ export function CharacterDetailPage() {
     }
     setDateSaving(true);
     try {
-      await api.post(`/characters/${characterId}/important-dates`, {
+      await write.post(`/characters/${characterId}/important-dates`, {
         title: t,
         recurrence: dateRecurrence,
         year: dateRecurrence === "once" ? (dateYear ? Number(dateYear) : null) : null,
@@ -276,7 +254,7 @@ export function CharacterDetailPage() {
       setDateYear("");
       setDateMonth("");
       setDateDay("");
-      refresh();
+      afterWrite([{ kind: "character", id: characterId }]);
     } catch (e) {
       setDateError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -289,8 +267,8 @@ export function CharacterDetailPage() {
     const id = pendingDateDeleteId;
     setPendingDateDeleteId(null);
     try {
-      await api.del(`/characters/important-dates/${id}`);
-      refresh();
+      await write.del(`/characters/important-dates/${id}`);
+      afterWrite([{ kind: "character", id: characterId }]);
     } catch (e) {
       setDateError(String(e instanceof Error ? e.message : e));
     }
@@ -569,18 +547,12 @@ export function CharacterDetailPage() {
           onConfirm={archiveCharacter}
         />
       )}
-      {alertDialog}
     </div>
   );
 }
 
 function CharacterRelationsPreview({ characterId, characterName }: { characterId: number; characterName: string }) {
-  const [data, setData] = useState<EntityRelationsResponse | null>(null);
-  useEffect(() => {
-    const ctrl = new AbortController();
-    api.get<EntityRelationsResponse>(`/entity-relations?entity_type=character&entity_id=${characterId}`, { signal: ctrl.signal }).then(setData).catch(() => {});
-    return () => ctrl.abort();
-  }, [characterId]);
+  const data = useResource<EntityRelationsResponse>(`/entity-relations?entity_type=character&entity_id=${characterId}`).data ?? null;
   const all = [...(data?.outgoing ?? []), ...(data?.incoming ?? [])].slice(0, 3);
   if (!data || all.length === 0) return null;
   return (
@@ -608,19 +580,13 @@ function CharacterInventoryTab({
   character: Character;
   onRefresh: () => void;
 }) {
-  const [statblocks, setStatblocks] = useState<Statblock[] | null>(null);
-  const [invError, setInvError] = useState<string | null>(null);
+  // Тот же ключ кэша, что у листа на вкладке «Чарник»: переключение вкладок не
+  // перезапрашивает чарник, а правка листа видна здесь сразу.
+  const listState = useResource<Statblock[]>(statblockListPath("character", characterId));
+  const statblocks = listState.data ?? (listState.error ? [] : null);
+  const invError = listState.data ? null : listState.error;
+  const run = useAction();
   const invChapters = (character.chapters ?? []).filter((c) => c.section === "inventory");
-  useEffect(() => {
-    const ctrl = new AbortController();
-    setInvError(null);
-    api.get<Statblock[]>(`/statblocks?owner_type=character&owner_id=${characterId}`, { signal: ctrl.signal }).then(setStatblocks).catch((e) => {
-      if ((e as Error).name === "AbortError") return;
-      setInvError(String(e instanceof Error ? e.message : e));
-      setStatblocks([]);
-    });
-    return () => ctrl.abort();
-  }, [characterId]);
   const dnd = statblocks?.find((s) => s.format === "dnd_character");
   let data: ReturnType<typeof normalizeDndCharacter> | null = null;
   let dataParseError: string | null = null;
@@ -654,9 +620,9 @@ function CharacterInventoryTab({
       // Патчем, а не снимком: перенос трогает только разделы снаряжения, и
       // остальной чарник (в том числе правки, сделанные из другого окна,
       // пока шёл перенос) остаётся нетронутым.
-      await api.put(`/statblocks/${dnd.id}`, { contentPatch: { equipmentSections: nextSectionList } });
-      onRefresh();
-      api.get<Statblock[]>(`/statblocks?owner_type=character&owner_id=${characterId}`).then(setStatblocks);
+      await run(() => write.put(`/statblocks/${dnd.id}`, { contentPatch: { equipmentSections: nextSectionList } }), {
+        affects: statblockAffects("character", characterId),
+      });
     } finally {
       setMigrateSaving(false);
     }
@@ -666,7 +632,7 @@ function CharacterInventoryTab({
     return (
       <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <span>Не удалось загрузить инвентарь: {invError}</span>
-        <button className="primary" onClick={() => { setStatblocks(null); api.get<Statblock[]>(`/statblocks?owner_type=character&owner_id=${characterId}`).then(setStatblocks).catch(() => setStatblocks([])); }}>Повторить</button>
+        <button className="primary" onClick={listState.reload}>Повторить</button>
       </div>
     );
   }

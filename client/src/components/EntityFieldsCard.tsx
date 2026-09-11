@@ -90,6 +90,7 @@ export function EntityFieldsCard({
   viewExtras,
   onEditStart,
   hideEmptyInView = false,
+  inverted = true,
 }: {
   title?: string;
   fields: EntityField[];
@@ -105,6 +106,9 @@ export function EntityFieldsCard({
   // in the Mist. Там, где набор полей общий на все системы, незаполненное
   // честнее не показывать.
   hideEmptyInView?: boolean;
+  // Без инверсии: обычный <h3> вместо тёмной плашки (профиль локации,
+  // вкладка «Информация о локации» — карточка «Основное»).
+  inverted?: boolean;
 }) {
   const [editMode, setEditMode] = useState(false);
   const [values, setValues] = useState<EntityFieldValues>(() => toFieldValues(fields));
@@ -123,9 +127,13 @@ export function EntityFieldsCard({
 
   return (
     <div className="card stack">
-      <div className="card-header--inverted">
-        <span className="card-header--inverted-label">{title}</span>
-      </div>
+      {inverted ? (
+        <div className="card-header--inverted">
+          <span className="card-header--inverted-label">{title}</span>
+        </div>
+      ) : (
+        <h3>{title}</h3>
+      )}
       {editMode ? (
         <>
           <EntityFieldInputs

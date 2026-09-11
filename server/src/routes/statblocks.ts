@@ -172,7 +172,7 @@ statblocksRouter.post("/import", (req, res) => {
 
   // Realtime — same as PUT /:id so other windows refresh
   try {
-    broadcastCharacterUpdate(numericOwnerId);
+    broadcastCharacterUpdate(numericOwnerId, "sheet");
   } catch {
     /* broadcast is best-effort */
   }
@@ -318,7 +318,7 @@ statblocksRouter.put("/:id", (req, res) => {
     return;
   }
   if (updated.owner_type === "character") {
-    broadcastCharacterUpdate(updated.owner_id);
+    broadcastCharacterUpdate(updated.owner_id, "sheet");
     // Брошенная инициатива на листе — зеркалом в очередь боя Мастера.
     if (updated.format === "dnd_character") mirrorSheetRollToQueue(updated.owner_id);
   }
@@ -347,7 +347,7 @@ statblocksRouter.post("/:id/avatar", upload.single("file"), async (req, res) => 
   await writeReplacingOldFile(target, req.file.buffer, statblock.avatar_image_path, "avatar");
 
   db.prepare("UPDATE statblocks SET avatar_image_path = ? WHERE id = ?").run(target, statblock.id);
-  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id, "sheet");
   res.json(withAvatarUrl({ avatar_image_path: target }));
 });
 
@@ -371,7 +371,7 @@ statblocksRouter.delete("/:id/avatar", (req, res) => {
     );
   }
   db.prepare("UPDATE statblocks SET avatar_image_path = NULL WHERE id = ?").run(statblock.id);
-  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id, "sheet");
   res.json({ avatar_image_url: null });
 });
 
@@ -395,7 +395,7 @@ statblocksRouter.delete("/:id", (req, res) => {
     syncEntrySummaryAfterCreatureChange(statblock);
   })();
 
-  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id, "sheet");
   res.json({ ok: true });
 });
 
@@ -430,7 +430,7 @@ statblocksRouter.delete("/:id/forever", (req, res) => {
     );
   }
   db.prepare("DELETE FROM statblocks WHERE id = ?").run(statblock.id);
-  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id, "sheet");
   res.json({ ok: true });
 });
 
@@ -449,7 +449,7 @@ statblocksRouter.put("/:id/restore", (req, res) => {
   if (statblock.owner_type === "compendium_entry" && statblock.format === "dnd_creature") {
     syncCreatureDataFromStatblock(db, statblock.owner_id);
   }
-  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id);
+  if (statblock.owner_type === "character") broadcastCharacterUpdate(statblock.owner_id, "sheet");
   const row = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(statblock.id) as {
     avatar_image_path: string | null;
   };

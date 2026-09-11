@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { api } from "../../api/client";
+import { write } from "../../data/hooks";
+import { readResource } from "../../data/imperative";
 import type {
   CompendiumEntry,
   DndAbilityKey,
@@ -411,7 +412,7 @@ export function LssImportWizard({
 
   async function fetchEntry(id: number): Promise<CompendiumEntry | null> {
     try {
-      return await api.get<CompendiumEntry>(`/systems/entries/${id}`);
+      return await readResource<CompendiumEntry>(`/systems/entries/${id}`);
     } catch {
       return null;
     }
@@ -710,7 +711,8 @@ export function LssImportWizard({
       const note = `Импортировано из Long Story Short${value.characterName ? ` (${value.characterName})` : ""}${
         warnings.length ? ` — ${warnings.length} замечаний (см. визард)` : ""
       }`;
-      const created = await api.post<{ id: number }>("/statblocks", {
+      // Список владельца обновит onDone → StatblockList.refresh.
+      const created = await write.post<{ id: number }>("/statblocks", {
         owner_type: ownerType,
         owner_id: ownerId,
         format: "dnd_character",
@@ -726,7 +728,7 @@ export function LssImportWizard({
           if (blob.size > 15 * 1024 * 1024) throw new Error("больше 15 МБ");
           const form = new FormData();
           form.append("file", new File([blob], "lss-avatar", { type: blob.type || "image/jpeg" }));
-          await api.post(`/statblocks/${created.id}/avatar`, form);
+          await write.post(`/statblocks/${created.id}/avatar`, form, { timeoutMs: 60_000 });
         } catch {
           setAvatarNote("Портрет не подтянулся (hotbox не отдал файл) — скачайте картинку из LSS и загрузите вручную.");
         }

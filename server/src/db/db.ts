@@ -6219,6 +6219,23 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE canvas_routes DROP COLUMN to_key");
   }
 
+  // Выходы между местами (решения 2026-09-11, §4). schema.sql заводит таблицу
+  // и на старой базе (CREATE TABLE IF NOT EXISTS), шаг — страховка порядка,
+  // как у location_content. Индексы живут в schema.sql и повторяются ниже.
+  if (!tableExists(database, "location_exits")) {
+    database.exec(`CREATE TABLE location_exits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+      to_location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+      how TEXT NOT NULL DEFAULT '',
+      travel_time TEXT NOT NULL DEFAULT '',
+      one_way INTEGER NOT NULL DEFAULT 0,
+      secret INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
