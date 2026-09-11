@@ -2010,12 +2010,10 @@ export interface CanvasRouteNode {
   route: {
     id: number;
     from_key: string;
-    to_key: string;
     kind: string;
     role: string;
     /** Имя входа (носителя) — для тела рераута «A → B» (cast/исход/нить). */
     from_name?: string;
-    to_name?: string;
     /** Выходы хаба: сцены, куда передаётся носитель. */
     outputs?: { to_key: string; role: string; to_name?: string }[];
     /** У перехода — реальная строка `story_scene_transitions` между соседями:
@@ -2029,7 +2027,6 @@ export interface CanvasRouteNode {
 export interface CanvasRoute {
   id: number;
   from_key: string;
-  to_key: string;
   kind: string;
   role: string;
   /** Выходы хаба: сцены, куда передаётся носитель. */

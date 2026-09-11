@@ -343,6 +343,118 @@ function fixResidualLegacyMentions(database: Database.Database): void {
   }
 }
 
+// ── Шаги, поднятые на своё историческое место ───────────────────────────────
+//
+// Эти три шага написаны 13, 20 и 31 августа 2026. Шаги, которые ищут по их
+// колонкам (выборы подклассов, воззвания колдуна, стартовые наборы…), написаны
+// 8 сентября, но вставлены в файл ВЫШЕ. База, мигрировавшая непрерывно, прошла
+// их в порядке написания; база, пропустившая версии, шла по порядку строк и
+// падала «no such column: name_original» — приложение у неё не запускалось
+// (все релизы с 30 июля по 19 августа). Поэтому они вызываются в самом начале
+// migrateDatabase, где стояли бы, если бы файл рос только вниз. На уже
+// мигрировавшей базе все три — пустые проверки.
+//
+// Гардом «пропустить шаг, пока колонки нет» это не чинится: шаг до разреза
+// увидел бы пустой name_original, записал бы пустой результат и поставил флаг
+// навсегда — тихая порча вместо падения.
+
+function ensureSettingNameColumns(database: Database.Database): void {
+  // Синонимы имени и имя в оригинале. Один и тот же район книги разные
+  // переводчики зовут «Морской округ» и «Приморский район», а сходится это
+  // надёжнее всего по оригинальному «Sea Ward» — без этих двух полей вторая
+  // книга про тот же город создаёт второй комплект локаций.
+  for (const table of [
+    "setting_locations",
+    "setting_beings",
+    "setting_communities",
+    "artifacts",
+  ]) {
+    if (!tableExists(database, table)) continue;
+    if (!columnExists(database, table, "aliases")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'`);
+    }
+    if (!columnExists(database, table, "name_original")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN name_original TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+}
+
+function ensureCompendiumNameColumns(database: Database.Database): void {
+  // Имена записи компендиума — как у сущностей сеттинга. Синонимы и
+  // оригинальное название нужны поиску (иначе «Goblin Boss» не находит
+  // «Гоблина-вожака»), короткое имя подписывает пин: карта принимает
+  // перетаскиванием любой результат поиска, включая запись бестиария.
+  for (const [column, def] of [
+    ["aliases", "TEXT NOT NULL DEFAULT '[]'"],
+    ["name_original", "TEXT NOT NULL DEFAULT ''"],
+    ["short_name", "TEXT"],
+  ] as const) {
+    if (!columnExists(database, "compendium_entries", column)) {
+      database.exec(`ALTER TABLE compendium_entries ADD COLUMN ${column} ${def}`);
+    }
+  }
+}
+
+function splitBracketNames(database: Database.Database): void {
+  // П2.6 — разрез «Имя [Original]» по колонкам. Импорт бестиария вклеивал
+  // оригинал в name, поиск по name_original/aliases не находил. Миграция
+  // одноразовая и идемпотентна: режет bracket-хвост только если он есть.
+  for (const table of ["compendium_entries", "setting_beings", "setting_locations", "setting_communities", "artifacts"] as const) {
+    if (!tableExists(database, table) || !columnExists(database, table, "name_original")) continue;
+    const rows = database
+      .prepare(`SELECT id, name, name_original FROM ${table} WHERE name LIKE '%[%'`)
+      .all() as { id: number; name: string; name_original: string }[];
+    if (rows.length === 0) continue;
+    const upd = database.prepare(`UPDATE ${table} SET name = ?, name_original = ? WHERE id = ?`);
+    let fixed = 0;
+    for (const r of rows) {
+      const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(r.name ?? "");
+      if (!m) continue;
+      const clean = m[1].trim();
+      const en = m[2].trim();
+      const keepEn = r.name_original && r.name_original.trim() ? r.name_original : en;
+      upd.run(clean, keepEn, r.id);
+      fixed++;
+    }
+    if (fixed) console.log(`[migrate] ${table}: split bracket names ${fixed}`);
+  }
+}
+
+const SCHEMA_INDEX_RE = /^[ \t]*CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b[^;]*;/gim;
+
+/**
+ * Прогоняет schema.sql так, чтобы база ЛЮБОГО возраста её переживала.
+ *
+ * `CREATE TABLE IF NOT EXISTS` на существующей таблице ничего не делает, а
+ * `CREATE INDEX` рядом с ней — делает, и если индекс стоит на колонке, которую
+ * добавляет миграция НИЖЕ, старая база падает с «no such column» прямо на
+ * старте. Раньше это чинили поштучно, перенося индекс из schema.sql в миграцию
+ * (следы — комментарии в schema.sql), и пятый такой индекс (`archived_at`)
+ * уронил старт на базах до конца августа 2026.
+ *
+ * Здесь класс закрыт целиком: таблицы создаются как раньше, индексы — каждый
+ * отдельно, и тот, что упёрся в отсутствующую колонку, пропускается. В конце
+ * миграций все индексы schema.sql прогоняются ещё раз (см. migrateDatabase):
+ * это доделывает пропущенные и возвращает те, что унесла перестройка таблицы
+ * (DROP TABLE забирает индексы с собой — так на базах конца августа пропадал
+ * idx_story_arc_transitions_from). Все они `IF NOT EXISTS`, и `DROP INDEX` в
+ * миграциях нет, так что на базе, где всё на месте, повтор ничего не делает.
+ * Уникальных индексов в schema.sql нет, так что откладывание влияет только на
+ * скорость запросов внутри миграций, а не на их смысл.
+ */
+function execSchema(database: Database.Database, schema: string): string[] {
+  const indexes = schema.match(SCHEMA_INDEX_RE) ?? [];
+  database.exec(schema.replace(SCHEMA_INDEX_RE, ""));
+  for (const sql of indexes) {
+    try {
+      database.exec(sql);
+    } catch (e) {
+      if (!/no such column/i.test((e as Error).message)) throw e;
+    }
+  }
+  return indexes;
+}
+
 // Opens (creating if needed) the SQLite database at dbDir/app.db and brings
 // it up to the current schema. Used both at startup and whenever the active
 // storage profile changes, so it must be safe to run repeatedly and against
@@ -381,7 +493,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   }
 
   const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf-8");
-  database.exec(schema);
+  const schemaIndexes = execSchema(database, schema);
+  // Имена сущностей и записей компендиума — раньше всех шагов, которые по ним
+  // ищут (см. «Шаги, поднятые на своё историческое место»).
+  ensureSettingNameColumns(database);
+  ensureCompendiumNameColumns(database);
+  splitBracketNames(database);
 
   const archivableTables = [
     "settings",
@@ -4574,6 +4691,14 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (!columnExists(database, "setting_calendar_events", "consequences")) {
     database.exec("ALTER TABLE setting_calendar_events ADD COLUMN consequences TEXT DEFAULT ''");
   }
+  // Те же два поля у событий кампании. В schema.sql они появились 2026-08-14
+  // сразу в обеих таблицах, а ALTER написали только для сеттинга — у базы,
+  // заведённой раньше, профиль события кампании падал «no such column».
+  for (const column of ["full_description", "consequences"]) {
+    if (tableExists(database, "campaign_calendar_events") && !columnExists(database, "campaign_calendar_events", column)) {
+      database.exec(`ALTER TABLE campaign_calendar_events ADD COLUMN ${column} TEXT DEFAULT ''`);
+    }
+  }
 
   // Persisted, user-editable state for the session cheatsheet generator
   // (locations/npcs/loot lines with per-line notes, freeform Заметки/Улики
@@ -5135,25 +5260,6 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     }
   }
 
-  // Синонимы имени и имя в оригинале. Один и тот же район книги разные
-  // переводчики зовут «Морской округ» и «Приморский район», а сходится это
-  // надёжнее всего по оригинальному «Sea Ward» — без этих двух полей вторая
-  // книга про тот же город создаёт второй комплект локаций.
-  for (const table of [
-    "setting_locations",
-    "setting_beings",
-    "setting_communities",
-    "artifacts",
-  ]) {
-    if (!tableExists(database, table)) continue;
-    if (!columnExists(database, table, "aliases")) {
-      database.exec(`ALTER TABLE ${table} ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'`);
-    }
-    if (!columnExists(database, table, "name_original")) {
-      database.exec(`ALTER TABLE ${table} ADD COLUMN name_original TEXT NOT NULL DEFAULT ''`);
-    }
-  }
-
   // История импортов книг приключений. key_map_json нужен не только для
   // истории: по нему второй файл той же книги видит ключи первого, а откат
   // знает, какие строки создал именно этот батч.
@@ -5429,41 +5535,9 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE sound_sets DROP COLUMN background_playlist_id");
   }
 
-  // Имена записи компендиума — как у сущностей сеттинга. Синонимы и
-  // оригинальное название нужны поиску (иначе «Goblin Boss» не находит
-  // «Гоблина-вожака»), короткое имя подписывает пин: карта принимает
-  // перетаскиванием любой результат поиска, включая запись бестиария.
-  for (const [column, def] of [
-    ["aliases", "TEXT NOT NULL DEFAULT '[]'"],
-    ["name_original", "TEXT NOT NULL DEFAULT ''"],
-    ["short_name", "TEXT"],
-  ] as const) {
-    if (!columnExists(database, "compendium_entries", column)) {
-      database.exec(`ALTER TABLE compendium_entries ADD COLUMN ${column} ${def}`);
-    }
-  }
-  // П2.6 — разрез «Имя [Original]» по колонкам. Импорт бестиария вклеивал
-  // оригинал в name, поиск по name_original/aliases не находил. Миграция
-  // одноразовая и идемпотентна: режет bracket-хвост только если он есть.
-  for (const table of ["compendium_entries", "setting_beings", "setting_locations", "setting_communities", "artifacts"] as const) {
-    if (!tableExists(database, table) || !columnExists(database, table, "name_original")) continue;
-    const rows = database
-      .prepare(`SELECT id, name, name_original FROM ${table} WHERE name LIKE '%[%'`)
-      .all() as { id: number; name: string; name_original: string }[];
-    if (rows.length === 0) continue;
-    const upd = database.prepare(`UPDATE ${table} SET name = ?, name_original = ? WHERE id = ?`);
-    let fixed = 0;
-    for (const r of rows) {
-      const m = /^(.*?)\s*\[([^\]]+)\]\s*$/.exec(r.name ?? "");
-      if (!m) continue;
-      const clean = m[1].trim();
-      const en = m[2].trim();
-      const keepEn = r.name_original && r.name_original.trim() ? r.name_original : en;
-      upd.run(clean, keepEn, r.id);
-      fixed++;
-    }
-    if (fixed) console.log(`[migrate] ${table}: split bracket names ${fixed}`);
-  }
+  // Разрез «Имя [Original]» стоит и здесь, на своём прежнем месте: записи,
+  // заведённые шагами выше, могли прийти со скобкой в имени. Шаг идемпотентен.
+  splitBracketNames(database);
 
   // Своё изображение записи компендиума. Раньше портрет записи брался из её
   // статблока — тогда у записи без статблока картинки не могло быть вовсе, а
@@ -5676,6 +5750,15 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   }
   if (tableExists(database, "canvas_boards") && !columnExists(database, "canvas_boards", "archived_at")) {
     database.exec("ALTER TABLE canvas_boards ADD COLUMN archived_at TEXT");
+  }
+  // Имя доски и порядок нод по глубине появились в schema.sql 2026-08-24 без
+  // ALTER для уже заведённых таблиц: у базы, где холст был раньше, чтение и
+  // запись доски падали «no such column».
+  if (tableExists(database, "canvas_boards") && !columnExists(database, "canvas_boards", "name")) {
+    database.exec("ALTER TABLE canvas_boards ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+  }
+  if (tableExists(database, "canvas_nodes") && !columnExists(database, "canvas_nodes", "z_index")) {
+    database.exec("ALTER TABLE canvas_nodes ADD COLUMN z_index INTEGER NOT NULL DEFAULT 0");
   }
   // Индекс — отдельно и без условия на колонку: он нужен и свежей базе (где
   // колонки пришли из schema.sql, и ветка выше не сработала), и старой.
@@ -6123,6 +6206,22 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
   }
+
+  // Рераут холста больше не помнит выход в своей строке: с 2026-08-30 выходы
+  // живут в canvas_route_outputs, и `to_key` убрали из schema.sql, но не из
+  // кода и не из старых баз. Итог — поломка в обе стороны: на новой базе
+  // создание рераута падало «no column named to_key», а на старой, где колонка
+  // осталась `NOT NULL` без умолчания, импорт приключения с рераутами падал
+  // «NOT NULL constraint failed». В колонке только пустые строки (её никто не
+  // заполнял), так что она уходит без потери данных. Шаг стоит в конце: новые
+  // шаги дописываются вниз, см. migrateOldDatabases.test.ts.
+  if (columnExists(database, "canvas_routes", "to_key")) {
+    database.exec("ALTER TABLE canvas_routes DROP COLUMN to_key");
+  }
+
+  // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
+  // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
+  for (const sql of schemaIndexes) database.exec(sql);
 
   compactIfBloated(database);
 }

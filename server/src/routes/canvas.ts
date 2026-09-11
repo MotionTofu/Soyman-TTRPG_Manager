@@ -349,7 +349,6 @@ function boardDecor(boardId: number, saved: PlacedNode[]) {
 interface RouteRow {
   id: number;
   from_key: string;
-  to_key: string;
   kind: string;
   role: string;
   /** Выходы хаба: каждый — сцена (to_key), куда передаётся носитель. */
@@ -361,7 +360,7 @@ function splitNodeKey(key: string): [string, string] {
   return i === -1 ? [key, ""] : [key.slice(0, i), key.slice(i + 1)];
 }
 
-/** Типы ключей, которые могут быть соседями рераута (`from_key`/`to_key`). */
+/** Типы ключей, которые могут быть соседями рераута (вход `from_key` и выходы). */
 const ROUTE_PEER_RE = /^(scene|being|location|artifact|community|compendium_entry|bundle|adventure|chapter|sticker|image|frame|pin|sound_set|playlist|check|setting_event|campaign_event|route|character|campaign):\d+$/;
 const ROUTE_KIND_RE = /^(transition|outcome|cast|member|thread|arc-transition)$/;
 const isValidRouteKey = (key: string) => key === "" || ROUTE_PEER_RE.test(key);
@@ -381,7 +380,7 @@ const isValidRouteKey = (key: string) => key === "" || ROUTE_PEER_RE.test(key);
 function boardRoutes(boardId: number, saved: PlacedNode[]) {
   const rows = db
     .prepare(
-      "SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE board_id=? ORDER BY id"
+      "SELECT id, from_key, kind, role FROM canvas_routes WHERE board_id=? ORDER BY id"
     )
     .all(boardId) as RouteRow[];
   // Выходы каждого рераута: N сцен, куда передаётся носитель.
@@ -411,7 +410,7 @@ function boardRoutes(boardId: number, saved: PlacedNode[]) {
     }
   };
   for (const r of rows) {
-    collectKeys([r.from_key, r.to_key]);
+    collectKeys([r.from_key]);
     collectKeys((r.outputs ?? []).map((o) => o.to_key));
   }
   // Имена соседей — общим модулем: он и раскладывает по видам, и режет на
@@ -434,15 +433,12 @@ function boardRoutes(boardId: number, saved: PlacedNode[]) {
   const nodes = rows.map((r) => {
     const pos = posOfKey.get(`route:${r.id}`);
     const fromName = r.from_key ? nameOf(r.from_key) : "";
-    const toName = r.to_key ? nameOf(r.to_key) : "";
     // Для перехода — реальная строка `story_scene_transitions` между соседями:
     // её id и label и есть «Условие перехода», которое правим в панели свойств.
     let transition_id: number | null = null;
     let transition_label = "";
-    // У перехода ровно один сосед-выход (сцена). Наследную колонку to_key
-    // могли не заполнить в новой модели (выходы в canvas_route_outputs),
-    // поэтому берём выход отсюда, а не из строки.
-    const toSceneKey = (r.outputs && r.outputs.length ? r.outputs[0].to_key : r.to_key) || "";
+    // У перехода ровно один сосед-выход (сцена) — первый выход рераута.
+    const toSceneKey = r.outputs?.[0]?.to_key ?? "";
     if (r.kind === "transition" && r.from_key.startsWith("scene:") && toSceneKey.startsWith("scene:")) {
       const t = db
         .prepare(
@@ -468,11 +464,9 @@ function boardRoutes(boardId: number, saved: PlacedNode[]) {
       route: {
         id: r.id,
         from_key: r.from_key,
-        to_key: r.to_key,
         kind: r.kind,
         role: r.role,
         from_name: fromName,
-        to_name: toName,
         outputs: (r.outputs ?? []).map((o) => ({
           to_key: o.to_key,
           role: o.role,
@@ -489,12 +483,12 @@ function boardRoutes(boardId: number, saved: PlacedNode[]) {
 /**
  * Разводит реальные рёбра через цепочки рераутов.
  *
- * Модель (согласовано с владельцем): рераут — узел графа, а строка
- * `canvas_routes` для рераута с id=k запоминает двух его СОСЕДЕЙ — `from_key` и
- * `to_key`, каждый из которых либо ключ настоящего узла (`scene:41`,
- * `being:12`, `pin:3`), либо ключ другого рераута (`route:7`). Из этого строится
- * неориентированный граф связности: узел `route:k` смежен с `from_key` и с
- * `to_key`.
+ * Модель (согласовано с владельцем): рераут — узел графа. Строка
+ * `canvas_routes` для рераута с id=k запоминает его вход `from_key`, а выходы
+ * лежат в `canvas_route_outputs`; каждый ключ — либо настоящий узел
+ * (`scene:41`, `being:12`, `pin:3`), либо другой рераут (`route:7`). Из этого
+ * строится неориентированный граф связности: узел `route:k` смежен со своим
+ * входом и со всеми выходами.
  *
  * Реальное ребро E: X→Y (с известным `kind`) рвётся, когда X и Y связаны цепью
  * рераутов того же `kind`. Путь X=r0, route:r1, route:r2, ..., route:rn, Y=Y
@@ -513,10 +507,10 @@ function routedEdges(
   if (rows.length === 0) return edges;
 
   // Граф: ключ ноды → соседи (ключи) через рерауты данного kind.
-  // Для учёта каждой строки: узел `route:<id>` смежен с from_key и to_key.
+  // Для учёта каждой строки: узел `route:<id>` смежен со входом и выходами.
   // Но нам нужны только рерауты, попадающие в конкретное ребро — см. ниже.
-  // Граф: ключ ноды → соседи (ключи). Узел `route:k` смежен со своими from_key и
-  // to_key. Это неориентированные связи пути, а порядок задаёт направление
+  // Граф: ключ ноды → соседи (ключи). Узел `route:k` смежен со своим входом и
+  // выходами. Это неориентированные связи пути, а порядок задаёт направление
   // реального ребра, которое разрезаем.
   const adj = new Map<string, string[]>();
   const link = (a: string, b: string) => {
@@ -619,7 +613,7 @@ function routedEdges(
 /**
  * Подметает осиротевшие рерауты после удаления реального ребра/узла.
  *
- * `canvas_routes.from_key`/`to_key` — голый TEXT без FK: если удалить само
+ * `canvas_routes.from_key` и `canvas_route_outputs.to_key` — голый TEXT без FK: если удалить само
  * ребро (переход между сценами, generic_link каста/состава и т.п.) или один из
  * крайних узлов, строка рераута остаётся висячей — BFS путь потеряет, и рераут
  * начнёт пустовать / терять имя соседа. Здесь удаляем строки, ссылающиеся на
@@ -640,10 +634,10 @@ export function pruneRoutesForKeys(gone: string[]) {
       db.prepare("DELETE FROM canvas_route_outputs WHERE to_key=?").run(goneKey);
     }
     const rows = db
-      .prepare("SELECT id, from_key, to_key FROM canvas_routes")
-      .all() as { id: number; from_key: string; to_key: string }[];
+      .prepare("SELECT id, from_key FROM canvas_routes")
+      .all() as { id: number; from_key: string }[];
     const doomed = rows.filter(
-      (r) => goneSet.has(r.from_key) || goneSet.has(r.to_key) || goneSet.has(`route:${r.id}`)
+      (r) => goneSet.has(r.from_key) || goneSet.has(`route:${r.id}`)
     );
     for (const r of doomed) {
       db.prepare("DELETE FROM canvas_nodes WHERE node_type='route' AND node_id=?").run(r.id);
@@ -2484,15 +2478,15 @@ canvasRouter.get("/threads", (req, res) => {
 // Память прохода живёт в `canvas_routes`, место — в парной строке `canvas_nodes`
 // с `node_type='route'`, ровно по паттерну пинов и стикеров. Рераут сам данных
 // не заводит: реальное ребро (переход/каст/исход/нить) остаётся одно, а строка
-// здесь лишь говорит, каких двух соседей рераут разводит и ребро какого вида
-// несёт. `from_key`/`to_key` могут ссылаться и на другой рераут (`route:N`) —
-// так строится цепочка разрывов одного ребра.
+// здесь лишь говорит, откуда рераут берёт вход (`from_key`) и ребро какого вида
+// несёт; куда оно уходит — выходы в `canvas_route_outputs`. Вход может
+// ссылаться и на другой рераут (`route:N`) — так строится цепочка разрывов.
 canvasRouter.get("/routes", (req, res) => {
   const board_id = req.query.board_id ? Number(req.query.board_id) : null;
   if (!board_id) return res.status(400).json({ error: "board_id required" });
   res.json(
     db
-      .prepare("SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE board_id=? ORDER BY id")
+      .prepare("SELECT id, from_key, kind, role FROM canvas_routes WHERE board_id=? ORDER BY id")
       .all(board_id)
   );
 });
@@ -2500,11 +2494,11 @@ canvasRouter.post("/routes", (req, res) => {
   const { board_id, x, y } = req.body as { board_id?: number; x?: number; y?: number };
   if (!board_id) return res.status(400).json({ error: "board_id required" });
   const board_id_r = resolveFreeBoardId(board_id);
-  // Пустой рераут: с обоими пустыми рёбрами-holes. from/to заполняются, когда
-  // Мастер подводит концы реального ребра. Висящий одноконцовый допустим.
+  // Пустой рераут: вход (from_key) и выходы (canvas_route_outputs) подводятся
+  // потом, когда Мастер тянет к нему рёбра. Висящий одноконцовый допустим.
   const info = db
-    .prepare("INSERT INTO canvas_routes (board_id, from_key, to_key, kind, role) VALUES (?,?,?,?,?)")
-    .run(board_id_r, "", "", "transition", "");
+    .prepare("INSERT INTO canvas_routes (board_id, from_key, kind, role) VALUES (?,?,?,?)")
+    .run(board_id_r, "", "transition", "");
   const id = Number(info.lastInsertRowid);
   db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?,?,?)").run(
     board_id_r,
@@ -2515,14 +2509,14 @@ canvasRouter.post("/routes", (req, res) => {
   );
   res.status(201).json(
     db
-      .prepare("SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE id=?")
+      .prepare("SELECT id, from_key, kind, role FROM canvas_routes WHERE id=?")
       .get(id)
   );
 });
 canvasRouter.put("/routes/:id", (req, res) => {
   const id = Number(req.params.id);
-  // Вход и характеристики. `to_key` больше не используется: выходы рераута-хаба
-  // живут в `canvas_route_outputs` и заводятся своим эндпоинтом.
+  // Вход и характеристики. Выходы рераута-хаба живут в `canvas_route_outputs`
+  // и заводятся своим эндпоинтом.
   const { from_key, kind, role } = req.body as {
     from_key?: string;
     kind?: string;
@@ -2544,7 +2538,7 @@ canvasRouter.put("/routes/:id", (req, res) => {
   );
   res.json(
     db
-      .prepare("SELECT id, from_key, to_key, kind, role FROM canvas_routes WHERE id=?")
+      .prepare("SELECT id, from_key, kind, role FROM canvas_routes WHERE id=?")
       .get(id)
   );
 });

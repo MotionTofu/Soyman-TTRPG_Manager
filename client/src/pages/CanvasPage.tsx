@@ -706,7 +706,7 @@ function RouteNode({ data }: NodeProps<Node<RouteNodeData>>) {
   const fromText = data.fromLabel || (data.fromKey ? data.fromKey : "—");
   const toText = outputs.length > 0
     ? outputs.map((o) => o.toName ?? o.toKey).join(", ")
-    : data.toLabel || "—";
+    : "—";
   const bodyText = data.kind === "transition" ? (data.condition ?? "") : "";
   return (
     <div
@@ -760,7 +760,6 @@ interface RouteNodeData extends Record<string, unknown> {
   /** Подпись тела: у перехода — условие, читается с сервера. */
   condition?: string;
   fromLabel?: string;
-  toLabel?: string;
 }
 
 function PinNode({ data, selected }: NodeProps<Node<PinNodeData>>) {
@@ -1427,7 +1426,7 @@ function boardNodeTitle(n: CanvasBoardNode): string {
     case "route":
       // Рераут-нода — только память прохода между двумя соседями, у неё нет
       // имени: называем её «A → B», если имена соседей доехали, иначе вид.
-      return [n.route.from_name, n.route.to_name].filter(Boolean).join(" → ") || "Маршрут";
+      return n.route.from_name || "Маршрут";
     default: return n.entity.name;
   }
 }
@@ -1616,10 +1615,8 @@ function toFlowNode(
         kind: n.route.kind as RouteKind,
         role: n.route.role,
         fromKey: n.route.from_key,
-        toKey: n.route.to_key,
         condition: n.route.transition_label,
         fromLabel: n.route.from_name,
-        toLabel: n.route.to_name,
         outputs: (n.route.outputs ?? []).map((o) => ({
           toKey: o.to_key,
           role: o.role,
