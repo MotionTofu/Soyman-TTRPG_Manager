@@ -45,13 +45,23 @@ function useStableReload(refetch: () => Promise<unknown>): () => void {
   return useCallback(() => void ref.current(), []);
 }
 
-/** Чтение ресурса по пути API. null — не читать (данных для пути ещё нет). */
-export function useResource<T>(path: string | null, options?: { staleMs?: number }): DataState<T> {
-  const query = useQuery({
+/**
+ * Чтение ресурса по пути API. null — не читать (данных для пути ещё нет).
+ *
+ * `keepPrevious` — пока грузится новый путь, показывать данные прежнего:
+ * предпросмотр сцены на пульте при переборе стрелками не мигает пустой
+ * карточкой между сценами.
+ */
+export function useResource<T>(
+  path: string | null,
+  options?: { staleMs?: number; keepPrevious?: boolean }
+): DataState<T> {
+  const query = useQuery<T, Error, T, ReturnType<typeof dataKeys.resource>>({
     queryKey: dataKeys.resource(path ?? ""),
     queryFn: ({ signal }) => api.get<T>(path as string, { signal }),
     enabled: path != null,
     staleTime: options?.staleMs,
+    placeholderData: options?.keepPrevious ? (previous) => previous : undefined,
   });
   const reload = useStableReload(query.refetch);
   return {

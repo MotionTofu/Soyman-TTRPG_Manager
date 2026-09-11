@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { showSaveError } from "../data/notices";
+import { remindersPath } from "../data/sessions";
 import type { GmReminder, InitiativeEntry } from "../types";
 
 // Цели для меток (Метка охотника / Сглаз): живут в панели «Напоминания»
@@ -15,6 +18,8 @@ import type { GmReminder, InitiativeEntry } from "../types";
 // напоминалки — руками (вариант «а»): крестик и пикер состояний трекера.
 
 const MARK_PREFIX = "🏹 ";
+const NO_REMINDERS: GmReminder[] = [];
+const NO_ENTRIES: InitiativeEntry[] = [];
 
 function parseConditions(raw: string): string[] {
   try {
@@ -40,23 +45,17 @@ function parseMark(r: GmReminder): ParsedMark | null {
 }
 
 export function MarkTargetPicker({ sessionId, campaignId }: { sessionId: number; campaignId: number }) {
-  const [reminders, setReminders] = useState<GmReminder[]>([]);
-  const [entries, setEntries] = useState<InitiativeEntry[]>([]);
+  // Напоминалки кампании и очередь инициативы — из кэша слоя данных: заявка
+  // игрока (событие hunter-mark) и правки очереди перечитывают их сами
+  // (data/syncAffects.ts), своих слушателей здесь больше нет. Список
+  // напоминалок — тот же ключ, что у виджета напоминаний рядом.
+  const reminderListPath = remindersPath("campaign", campaignId);
+  const entriesPath = `/initiative-entries?session_id=${sessionId}`;
+  const reminders = useResource<GmReminder[]>(reminderListPath).data ?? NO_REMINDERS;
+  const entries = useResource<InitiativeEntry[]>(entriesPath).data ?? NO_ENTRIES;
+  const afterWrite = useAfterWrite();
   const [targetByReminder, setTargetByReminder] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
-
-  function refresh() {
-    api.get<GmReminder[]>(`/campaigns/${campaignId}/reminders`).then((rows) => {
-      setReminders(rows.filter((r) => r.message.startsWith(MARK_PREFIX)));
-    });
-    api.get<InitiativeEntry[]>(`/initiative-entries?session_id=${sessionId}`).then(setEntries);
-  }
-  useEffect(refresh, [sessionId, campaignId]);
-  useEffect(() => {
-    const handler = () => refresh();
-    window.addEventListener("hunter-mark", handler);
-    return () => window.removeEventListener("hunter-mark", handler);
-  }, [sessionId, campaignId]);
 
   const marks = reminders.map(parseMark).filter((m): m is ParsedMark => m != null && !!m.caster);
   if (marks.length === 0) return null;
@@ -70,7 +69,8 @@ export function MarkTargetPicker({ sessionId, campaignId }: { sessionId: number;
     setBusy(true);
     try {
       const label = markLabel(mark);
-      const live = await api.get<InitiativeEntry[]>(`/initiative-entries?session_id=${sessionId}`);
+      // Очередь — свежая, мимо кэша: поверх неё сразу пишут прицелы.
+      const live = await readResource<InitiativeEntry[]>(entriesPath, { fresh: true });
       // Старый прицел этого кастера снимаем со всех строк (перевешивание),
       // новый ставим только на строку с совпавшим именем — вписанное вручную
       // имя может не совпасть ни с чем, тогда прицела в трекере не будет, но
@@ -83,14 +83,16 @@ export function MarkTargetPicker({ sessionId, campaignId }: { sessionId: number;
             ? [...cleaned, label]
             : cleaned;
         if (next.length !== cur.length || next.some((c, i) => c !== cur[i])) {
-          await api.put(`/initiative-entries/${e.id}`, { conditions: next });
+          await write.put(`/initiative-entries/${e.id}`, { conditions: next });
         }
       }
       const base = `🏹 ${mark.caster}: ${mark.spell} — ${mark.mode}. Цель: ${name}.`;
-      await api.del(`/campaigns/${campaignId}/reminders/${mark.reminder.id}`);
-      await api.post(`/campaigns/${campaignId}/reminders`, { message: base });
-      refresh();
+      await write.del(`${reminderListPath}/${mark.reminder.id}`);
+      await write.post(reminderListPath, { message: base });
+    } catch (e) {
+      showSaveError(`Цель метки не назначилась: ${errorText(e)}`);
     } finally {
+      afterWrite([{ path: reminderListPath }, { path: entriesPath }]);
       setBusy(false);
     }
   }
@@ -100,17 +102,19 @@ export function MarkTargetPicker({ sessionId, campaignId }: { sessionId: number;
     setBusy(true);
     try {
       const label = markLabel(mark);
-      const live = await api.get<InitiativeEntry[]>(`/initiative-entries?session_id=${sessionId}`);
+      const live = await readResource<InitiativeEntry[]>(entriesPath, { fresh: true });
       for (const e of live) {
         const cur = parseConditions(e.conditions);
         const next = cur.filter((c) => c !== label && !c.startsWith(`${label} →`));
         if (next.length !== cur.length) {
-          await api.put(`/initiative-entries/${e.id}`, { conditions: next });
+          await write.put(`/initiative-entries/${e.id}`, { conditions: next });
         }
       }
-      await api.del(`/campaigns/${campaignId}/reminders/${mark.reminder.id}`);
-      refresh();
+      await write.del(`${reminderListPath}/${mark.reminder.id}`);
+    } catch (e) {
+      showSaveError(`Метка не снялась: ${errorText(e)}`);
     } finally {
+      afterWrite([{ path: reminderListPath }, { path: entriesPath }]);
       setBusy(false);
     }
   }

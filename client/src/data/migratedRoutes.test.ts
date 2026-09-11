@@ -8,6 +8,14 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/characters/7/sheet")).toBe(true);
   });
 
+  it("профиль сессии, пульт и вынесенная панель — переведены, окно показа — нет", () => {
+    expect(isMigratedRoute("/sessions/15")).toBe(true);
+    expect(isMigratedRoute("/sessions/15/live")).toBe(true);
+    expect(isMigratedRoute("/sessions/15/live/panel/plotCharacters")).toBe(true);
+    expect(isMigratedRoute("/sessions/15/live/show")).toBe(false);
+    expect(isMigratedRoute("/sessions")).toBe(false);
+  });
+
   it("соседние адреса не цепляются префиксом", () => {
     expect(isMigratedRoute("/characters")).toBe(false);
     expect(isMigratedRoute("/characters/7/sheet/extra")).toBe(false);

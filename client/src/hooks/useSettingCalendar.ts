@@ -1,15 +1,8 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import type { SettingCalendar } from "../types";
 
+// Календарь сеттинга — из кэша слоя данных (docs/adr/0001): профиль сессии и
+// полоса времени пульта берут его одним запросом на двоих.
 export function useSettingCalendar(settingId: number | null | undefined) {
-  const [calendar, setCalendar] = useState<SettingCalendar | null>(null);
-  useEffect(() => {
-    if (!settingId) {
-      setCalendar(null);
-      return;
-    }
-    api.get<SettingCalendar>(`/settings/${settingId}/calendar`).then(setCalendar);
-  }, [settingId]);
-  return calendar;
+  return useResource<SettingCalendar>(settingId ? `/settings/${settingId}/calendar` : null).data ?? null;
 }

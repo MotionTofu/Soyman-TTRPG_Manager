@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../../api/client";
-import { onDataChangedElsewhere } from "../../dataSync";
+import { useQueryClient } from "@tanstack/react-query";
+import { notifyDataChanged } from "../../dataSync";
+import { dataKeys } from "../../data/entities";
+import { errorText, useEntity, useResource, write } from "../../data/hooks";
+import { readResource } from "../../data/imperative";
+import { showSaveError } from "../../data/notices";
+import { sessionPaths } from "../../data/sessions";
 import { LazyDetails } from "../LazyDetails";
 import { PresentationStage } from "./PresentationStage";
 import { getScreens, loadLastScreenId, openOnScreen, type ScreenChoice } from "./screens";
@@ -16,79 +21,32 @@ import type { CampaignCover, ScenePresentation, SessionStage, ShowState, StorySc
 export function PresentationPanel({
   sessionId,
   campaignId,
-  launches,
 }: {
   sessionId: number;
   campaignId: number;
-  /** Счётчик запусков сцен: после launch сервер сам двинул show-state. */
-  launches: number;
 }) {
-  const [stage, setStage] = useState<SessionStage | null>(null);
-  const [show, setShow] = useState<ShowState | null>(null);
-  const [currentPres, setCurrentPres] = useState<ScenePresentation | null>(null);
-  const [shownPres, setShownPres] = useState<ScenePresentation | null>(null);
-  const [shownName, setShownName] = useState("");
-  const [cover, setCover] = useState<CampaignCover | null>(null);
-
-  const refresh = useCallback(() => {
-    api.get<SessionStage>(`/sessions/${sessionId}/stage`).then(setStage).catch(() => {});
-    api.get<ShowState>(`/sessions/${sessionId}/show-state`).then(setShow).catch(() => {});
-    api.get<CampaignCover>(`/campaigns/${campaignId}/cover`).then(setCover).catch(() => setCover(null));
-  }, [sessionId, campaignId]);
-
-  useEffect(refresh, [refresh, launches]);
-  useEffect(() => onDataChangedElsewhere(refresh), [refresh]);
+  // Сцена, экран и заглавное — из кэша слоя данных. После запуска сцены сервер
+  // сам двигает экран, а запуск задевает сессию целиком (data/sessions.ts):
+  // блок перечитывается без счётчика запусков и без своего слушателя других
+  // окон. Сцену вечера читает и переключатель — одним запросом на двоих.
+  const client = useQueryClient();
+  const showPath = sessionPaths.showState(sessionId);
+  const stage = useResource<SessionStage>(sessionPaths.stage(sessionId)).data ?? null;
+  const show = useResource<ShowState>(showPath).data ?? null;
+  const cover = useResource<CampaignCover>(sessionPaths.campaignCover(campaignId)).data ?? null;
 
   const currentId = stage?.current?.id ?? null;
-  useEffect(() => {
-    if (currentId == null) {
-      setCurrentPres(null);
-      return;
-    }
-    let cancelled = false;
-    api
-      .get<ScenePresentation>(`/story/scenes/${currentId}/presentation?campaign_id=${campaignId}`)
-      .then((p) => {
-        if (!cancelled) setCurrentPres(p);
-      })
-      .catch(() => {
-        if (!cancelled) setCurrentPres(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentId, campaignId]);
+  const currentPres =
+    useResource<ScenePresentation>(
+      currentId != null ? `/story/scenes/${currentId}/presentation?campaign_id=${campaignId}` : null
+    ).data ?? null;
 
   // Висящий кадр: экран показывает не текущую сцену. show.scene_id — уже
   // writable-строка, разруливать copy-on-write нечего; имя — для пометки.
   const hangingId = show?.mode === "scene" && show.scene_id != null && show.scene_id !== currentId ? show.scene_id : null;
-  useEffect(() => {
-    if (hangingId == null) {
-      setShownPres(null);
-      setShownName("");
-      return;
-    }
-    let cancelled = false;
-    api
-      .get<ScenePresentation>(`/story/scenes/${hangingId}/presentation`)
-      .then((p) => {
-        if (!cancelled) setShownPres(p);
-      })
-      .catch(() => {
-        if (!cancelled) setShownPres(null);
-      });
-    api
-      .get<StorySceneDetail>(`/story/scenes/${hangingId}`)
-      .then((s) => {
-        if (!cancelled) setShownName(s.name);
-      })
-      .catch(() => {
-        if (!cancelled) setShownName("");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [hangingId]);
+  const shownPres =
+    useResource<ScenePresentation>(hangingId != null ? `/story/scenes/${hangingId}/presentation` : null).data ?? null;
+  const shownName = useEntity<StorySceneDetail>("scene", hangingId).data?.name ?? "";
 
   const hasContent = useCallback((p: ScenePresentation | CampaignCover | null) => {
     return !!p && (!!p.background_url || p.layers.length > 0);
@@ -108,8 +66,15 @@ export function PresentationPanel({
   const screenHas = hasContent(screenPres);
 
   async function putShow(patch: Partial<ShowState>) {
-    const updated = await api.put<ShowState>(`/sessions/${sessionId}/show-state`, patch);
-    setShow(updated);
+    try {
+      const updated = await write.put<ShowState>(`/sessions/${sessionId}/show-state`, patch);
+      client.setQueryData(dataKeys.resource(showPath), updated);
+      // В этом окне экран уже в кэше — перечитывать незачем; окну показа и
+      // другим окнам пульта уходит адресный сигнал.
+      notifyDataChanged([{ path: showPath }]);
+    } catch (e) {
+      showSaveError(`Экран игрокам не переключился: ${errorText(e)}`);
+    }
   }
 
   // Окно показа — сразу на выбранный монитор. Основная кнопка открывает
@@ -173,7 +138,14 @@ export function PresentationPanel({
   }, [showing, screenPres, visibleKey]);
 
   async function toggleLayer(id: number) {
-    const cur = await api.get<ShowState>(`/sessions/${sessionId}/show-state`);
+    let cur: ShowState;
+    try {
+      // Экран — свежий, мимо кэша: поверх него сразу пишут.
+      cur = await readResource<ShowState>(showPath, { fresh: true });
+    } catch (e) {
+      showSaveError(`Экран игрокам не прочитался: ${errorText(e)}`);
+      return;
+    }
     const ids = new Set(cur.visible_layer_ids);
     if (ids.has(id)) ids.delete(id);
     else ids.add(id);

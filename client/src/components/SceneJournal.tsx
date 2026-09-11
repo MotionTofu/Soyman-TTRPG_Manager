@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
+import { sessionPaths } from "../data/sessions";
 
 // Лента вечера под «Основными событиями сессии»: что запускали и в каком
 // порядке. Дубли — это возвраты, и их видно: «таверна → подземелье →
@@ -10,21 +10,24 @@ import { api } from "../api/client";
 // правит то, что Мастер уже сформулировал. Кнопка даёт всю пользу и ноль
 // риска.
 
+interface JournalRow {
+  id: number;
+  scene_id: number;
+  name: string;
+}
+
+const NO_JOURNAL: JournalRow[] = [];
+
 export function SceneJournal({
   sessionId,
-  version,
   onInsert,
 }: {
   sessionId: number;
-  /** Счётчик запусков сцен: лента живёт ниже переключателя и сама о них не знает. */
-  version: number;
   onInsert: (text: string) => void;
 }) {
-  const [journal, setJournal] = useState<{ id: number; scene_id: number; name: string }[]>([]);
-
-  useEffect(() => {
-    api.get<typeof journal>(`/sessions/${sessionId}/journal`).then(setJournal);
-  }, [sessionId, version]);
+  // Лента — из кэша слоя данных: запуск сцены задевает сессию
+  // (data/sessions.ts), и лента перечитывается сама, без счётчика запусков.
+  const journal = useResource<JournalRow[]>(sessionPaths.journal(sessionId)).data ?? NO_JOURNAL;
 
   if (journal.length === 0) return null;
 

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api } from "../api/client";
-import { onDataChangedElsewhere } from "../dataSync";
+import { useEntity, useResource } from "../data/hooks";
+import { sessionPaths } from "../data/sessions";
 import { SESSION_PANEL_CONTENT, SESSION_PANEL_TITLES, type SessionPanelKey } from "./sessionLivePanels";
 import "../session.css";
 import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
+
+const NO_CHARACTERS: Character[] = [];
 
 // Rendered outside <AppShell> (see App.tsx) — no sidebar/search/audio-bar
 // chrome, just the one panel's content, meant to live in its own small
@@ -14,38 +15,16 @@ export function SessionPanelPopoutPage() {
   const { id, panelKey } = useParams<{ id: string; panelKey: SessionPanelKey }>();
   const sessionId = Number(id);
 
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
-  const [characters, setCharacters] = useState<Character[]>([]);
-
-  const refresh = useCallback(() => {
-    let cancelled = false;
-    api
-      .get<SessionDetail>(`/sessions/${sessionId}`)
-      .then((s) => {
-        if (cancelled) return;
-        setSession(s);
-        api.get<CampaignDetail>(`/campaigns/${s.campaign_id}`).then((c) => { if (!cancelled) setCampaign(c); }).catch(() => {});
-        api.get<Character[]>(`/characters?campaign_id=${s.campaign_id}`).then((ch) => { if (!cancelled) setCharacters(ch); }).catch(() => {});
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [sessionId]);
-
-  useEffect(() => {
-    const c = refresh();
-    return c;
-  }, [refresh]);
-
   // Вынесенная панель живёт в своём окне и про запуск сцены в главном не
-  // знает. Правки объявляются между окнами (dataSync.ts) — этого хватает:
-  // отдельного канала под пульт заводить незачем.
-  const [launches, setLaunches] = useState(0);
-  const [union, setUnion] = useState<SessionUnionRow[]>([]);
-  useEffect(() => onDataChangedElsewhere(() => setLaunches((n) => n + 1)), []);
-  useEffect(() => {
-    api.get<SessionUnionRow[]>(`/sessions/${sessionId}/cast-union`).then(setUnion).catch(() => {});
-  }, [sessionId, launches]);
+  // знает. Правка из главного окна приходит сюда адресным сигналом (dataSync.ts
+  // → data/DataLayerSync.tsx), и перечитывается ровно задетое — тот же кэш и те
+  // же ключи, что у пульта.
+  const session = useEntity<SessionDetail>("session", sessionId).data ?? null;
+  const campaign = useEntity<CampaignDetail>("campaign", session?.campaign_id).data ?? null;
+  const characters =
+    useResource<Character[]>(session ? sessionPaths.campaignCharacters(session.campaign_id) : null).data ??
+    NO_CHARACTERS;
+  const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data;
 
   if (!session || !campaign || !panelKey || !(panelKey in SESSION_PANEL_CONTENT)) return null;
 
@@ -54,14 +33,7 @@ export function SessionPanelPopoutPage() {
   return (
     <div className="stack" style={{ padding: 16 }}>
       <h2>{SESSION_PANEL_TITLES[panelKey]}</h2>
-      <Content
-        sessionId={sessionId}
-        session={session}
-        campaign={campaign}
-        characters={characters}
-        launches={launches}
-        union={union}
-      />
+      <Content sessionId={sessionId} session={session} campaign={campaign} characters={characters} union={union} />
     </div>
   );
 }

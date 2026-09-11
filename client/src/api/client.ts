@@ -1,5 +1,6 @@
 import { isBusyEditing, notifyDataChanged } from "../dataSync";
 import { reportRequest, setJournalSender } from "../data/journal";
+import { queryClient } from "../data/queryClient";
 
 const BASE = "/api";
 const TOKEN_KEY = "rpgManagerAuthToken";
@@ -69,6 +70,18 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 // без заголовка всё равно получит уже подписанный URL из JSON.
 function withFileTokens<T>(value: T): T {
   return value;
+}
+
+/**
+ * Правка мимо слоя данных (страница ещё не переведена, docs/adr/0001): что она
+ * задела, неизвестно. Другим окнам уходит безадресный сигнал — они перечитают
+ * всё, — а кэш слоя в этом окне помечается устаревшим целиком по той же
+ * причине. Без второго переведённая страница, открытая следом за такой
+ * правкой, до 30 секунд показывала бы старое.
+ */
+function announceUnaddressedWrite(): void {
+  notifyDataChanged();
+  void queryClient.invalidateQueries();
 }
 
 /**
@@ -145,7 +158,7 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   report(res.status);
   // Любая удачная правка — повод остальным окнам приложения обновиться: они
   // работают с той же базой, но своей копией уже загруженных данных.
-  if (method !== "GET" && broadcast) notifyDataChanged();
+  if (method !== "GET" && broadcast) announceUnaddressedWrite();
   return withFileTokens(await res.json());
 }
 
@@ -189,6 +202,6 @@ export async function deleteFileWithChoice(path: string): Promise<boolean> {
     }
   }
   if (!res.ok) throw new Error(await res.text());
-  notifyDataChanged();
+  announceUnaddressedWrite();
   return true;
 }

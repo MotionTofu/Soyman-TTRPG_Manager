@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useRef, type MouseEvent } from "react";
+import { Fragment, type MouseEvent } from "react";
 import { useResource } from "../data/hooks";
 import { openPreviewDockCard } from "../previewDockStore";
-import type { PartyPlaceView } from "../partyPlaceEvents";
+import type { PartyPlaceView } from "../partyPlace";
 import { NavIcon } from "./NavIcons";
 
 /**
@@ -9,19 +9,11 @@ import { NavIcon } from "./NavIcons";
  * — из последней запущенной сцены или ручной отметки. Клик по месту кладёт его
  * карточку в докстанцию, Ctrl+клик — полная страница в новом окне.
  */
-export function PartyHereStrip({ sessionId, version }: { sessionId: number; version: number }) {
-  const { data, reload } = useResource<PartyPlaceView>(`/sessions/${sessionId}/party-place`);
-
-  // Запуск сцены идёт мимо слоя данных (SceneSwitcher) и сообщает о себе
-  // счётчиком страницы; первый прогон — это и есть первое чтение.
-  const mounted = useRef(false);
-  useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      return;
-    }
-    reload();
-  }, [version, reload]);
+export function PartyHereStrip({ sessionId }: { sessionId: number }) {
+  // Запуск сцены и отметка «Мы здесь» из докстанции задевают сессию целиком
+  // (data/sessions.ts), и полоса перечитывается сама — счётчик запусков, через
+  // который она узнавала об этом раньше, больше не нужен.
+  const { data } = useResource<PartyPlaceView>(`/sessions/${sessionId}/party-place`);
 
   if (!data) return null;
 

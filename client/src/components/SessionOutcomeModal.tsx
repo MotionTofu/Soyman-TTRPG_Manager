@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
 import { Modal } from "./Modal";
 import { useConfirm } from "../hooks/useConfirm";
 import { loadHideFinance } from "../financePrivacy";
+import { errorText, useAfterWrite, useEntity, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { attendanceBody, sessionMoneyAffects } from "../data/sessions";
 import type { Campaign, SessionDetail } from "../types";
 
 // Разбор прошедшей игры одним окном.
@@ -24,34 +26,32 @@ interface Props {
 }
 
 export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
+  const stored = useEntity<SessionDetail>("session", sessionId);
+  const campaignState = useEntity<Campaign>("campaign", stored.data?.campaign_id);
+  const campaign = campaignState.data ?? null;
+  // Окно — форма: отметки, суммы и заметка правятся здесь до «Сохранить».
+  // Поэтому сессия из кэша копируется в неё один раз, при открытии, и
+  // перечитывание посреди заполнения набранное не затирает.
   const [session, setSession] = useState<SessionDetail | null>(null);
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [cancelChoice, setCancelChoice] = useState(false);
   const [dialog, confirm] = useConfirm();
+  const afterWrite = useAfterWrite();
   const hideFinance = loadHideFinance();
 
   useEffect(() => {
-    const ac = new AbortController();
-    setLoading(true);
-    api.get<SessionDetail>(`/sessions/${sessionId}`, { signal: ac.signal } as RequestInit)
-      .then((s) => {
-        setSession(s);
-        // Заметка предзаполняется тем, что уже написано, и правится на месте:
-        // Мастер видит, что там есть, и дописывает сам. Автоматическая склейка
-        // вслепую однажды приклеила бы абзац к тексту, который он только что
-        // дописал в соседнем окне, — а работать в двух окнах здесь штатно.
-        setNotes(s.main_events ?? "");
-        api.get<Campaign>(`/campaigns/${s.campaign_id}`, { signal: ac.signal } as RequestInit)
-          .then(setCampaign)
-          .catch(() => {})
-          .finally(() => setLoading(false));
-      })
-      .catch(() => { if (!ac.signal.aborted) setLoading(false); });
-    return () => ac.abort();
-  }, [sessionId]);
+    if (session || !stored.data) return;
+    setSession(stored.data);
+    // Заметка предзаполняется тем, что уже написано, и правится на месте:
+    // Мастер видит, что там есть, и дописывает сам. Автоматическая склейка
+    // вслепую однажды приклеила бы абзац к тексту, который он только что
+    // дописал в соседнем окне, — а работать в двух окнах здесь штатно.
+    setNotes(stored.data.main_events ?? "");
+  }, [stored.data, session]);
+
+  // Сессия ещё не пришла — грузимся; кампания, которая не прочиталась, окно не держит.
+  const loading = (session == null && stored.error == null) || campaignState.loading;
 
   const held = session?.status === "held";
 
@@ -120,20 +120,23 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
   async function persist(status: SessionDetail["status"] | null, wipeSums = false) {
     if (!session || saving) return;
     setSaving(true);
+    const affects = sessionMoneyAffects(sessionId, session.campaign_id);
     try {
-      await api.put(`/sessions/${sessionId}/attendance`, {
-        attendance: session.attendance.map((a) => ({
-          player_id: a.player_id,
-          attended: !!a.attended,
-          amount_paid: wipeSums ? 0 : a.amount_paid,
-          amount_forgiven: wipeSums ? 0 : a.amount_forgiven,
-        })),
-      });
+      const rows = wipeSums
+        ? session.attendance.map((a) => ({ ...a, amount_paid: 0, amount_forgiven: 0 }))
+        : session.attendance;
+      await write.put(`/sessions/${sessionId}/attendance`, { attendance: attendanceBody(rows) });
       const patch: Record<string, unknown> = { main_events: notes };
       if (status) patch.status = status;
-      await api.put(`/sessions/${sessionId}`, patch);
+      await write.put(`/sessions/${sessionId}`, patch);
+      afterWrite(affects);
       onSaved?.();
       onClose();
+    } catch (e) {
+      // Окно остаётся открытым с набранным: нажать ещё раз можно, когда сервер
+      // ответит. Задетое перечитывается — половина могла успеть записаться.
+      afterWrite(affects);
+      showSaveError(`Итог сессии не сохранился: ${errorText(e)}`);
     } finally {
       setSaving(false);
     }

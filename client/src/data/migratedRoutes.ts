@@ -14,6 +14,11 @@ const MIGRATED_ROUTES: readonly RegExp[] = [
   // Группа «лист персонажа»: профиль и чарник на весь экран.
   /^\/characters\/\d+\/?$/,
   /^\/characters\/\d+\/sheet\/?$/,
+  // Группа «пульт и сессии»: профиль сессии, пульт и вынесенная панель пульта.
+  // Окно показа игрокам (/live/show) сюда не входит — оно слушает сигналы само.
+  /^\/sessions\/\d+\/?$/,
+  /^\/sessions\/\d+\/live\/?$/,
+  /^\/sessions\/\d+\/live\/panel\/[A-Za-z]+\/?$/,
 ];
 
 export function isMigratedRoute(pathname: string): boolean {

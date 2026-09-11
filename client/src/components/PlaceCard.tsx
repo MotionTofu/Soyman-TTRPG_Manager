@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
+import { linkAffects } from "../data/sessions";
 import { DETAIL_ROUTES } from "../entityTypes";
 import { LOCATION_ROLE_LABELS, locationRoleIcon, locationRoleOf } from "../locationRoles";
-import { PARTY_PLACE_CHANGED, type PartyPlaceView } from "../partyPlaceEvents";
+import type { PartyPlaceView } from "../partyPlace";
 import { plainMentions } from "../utils/plainMentions";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import type { LocationContentItem, SettingLocation } from "../types";
@@ -306,17 +307,19 @@ export function PlaceCard({
   const markHere = async () => {
     if (!sessionId || marking) return;
     setMarking(true);
-    const done = await run(() => write.put(`/sessions/${sessionId}/party-place`, { location_id: d.id }), {
+    // Отметка кладёт место и в «Локации» сессии (setPartyPlace), поэтому в
+    // задетое идут и связи сессии: панель пульта перечитает её сама, в этом
+    // окне и в вынесенном.
+    await run(() => write.put(`/sessions/${sessionId}/party-place`, { location_id: d.id }), {
       affects: [
         { path: `/sessions/${sessionId}/party-place` },
         { path: `/settings/${d.setting_id}/party-places` },
         { kind: "location", id: d.id },
+        ...linkAffects("session", sessionId),
       ],
       retry: false,
     });
     setMarking(false);
-    // Панели пульта читают себя сами — место легло в «Локации» сессии.
-    if (done !== undefined) window.dispatchEvent(new CustomEvent(PARTY_PLACE_CHANGED, { detail: { sessionId } }));
   };
 
   function placeLink(id: number, name: string, className?: string) {

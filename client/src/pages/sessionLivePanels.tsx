@@ -1,17 +1,28 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
-import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { LazyDetails } from "../components/LazyDetails";
-import { CampaignSecrets } from "../components/CampaignSecrets";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { MarkTargetPicker } from "../components/MarkTargetPicker";
 import { EntityPreviewModal } from "../components/EntityPreviewModal";
 import { MentionText } from "../components/mentions/MentionText";
 import { openPreviewDockCard } from "../previewDockStore";
-import type { CampaignDetail, CampaignGrouped, Character, SearchResult, SessionDetail, SessionUnionRow, StorySecret } from "../types";
+import { dataKeys } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
+import { attendanceBody, secretStateAffects, sessionMoneyAffects, sessionPaths } from "../data/sessions";
+import type {
+  AttendanceRow,
+  CampaignDetail,
+  CampaignGrouped,
+  Character,
+  SearchResult,
+  SessionDetail,
+  SessionUnionRow,
+  StorySecret,
+} from "../types";
 
 // Same module-level constants as SessionDetailPage.tsx — SectionDropZone is
 // React.memo'd, so an inline array literal here would be a new reference
@@ -66,8 +77,6 @@ interface PanelProps {
   session: SessionDetail;
   campaign: CampaignDetail;
   characters: Character[];
-  /** Счётчик запусков сцен: панели перечитываются, когда сцена сменилась. */
-  launches: number;
   /**
    * Состав всех сцен сессии. Панели показывают его строками наравне со
    * связями: Мастеру полезнее видеть весь вечер сразу, а не состав одной
@@ -75,7 +84,6 @@ interface PanelProps {
    * участников, так что объединение это два десятка строк, а не сотня.
    */
   union?: SessionUnionRow[];
-  onChanged?: () => void;
 }
 
 /** Строки объединения для одной панели. */
@@ -106,7 +114,11 @@ function PopoutButton({ sessionId, panelKey }: { sessionId: number; panelKey: Se
   );
 }
 
-function LocationsContent({ sessionId, session, launches }: PanelProps) {
+// Панели не знают про запуск сцены: он задевает связи и состав сессии
+// (data/sessions.ts), и зоны перечитываются сами. Строки объединения — через
+// useMemo, иначе новый массив на каждой отрисовке сбивал бы memo зоны.
+
+function LocationsContent({ sessionId, session }: PanelProps) {
   return (
     <SectionDropZone
       entityType="session"
@@ -117,13 +129,13 @@ function LocationsContent({ sessionId, session, launches }: PanelProps) {
       mentionText={session.idea_notes}
       mentionTypes={LOCATION_TYPES}
       origin="live"
-      version={launches}
       onEntityClick={openLocationInDock}
     />
   );
 }
 
-function PlotCharactersContent({ sessionId, session, launches, union }: PanelProps) {
+function PlotCharactersContent({ sessionId, session, union }: PanelProps) {
+  const rows = useMemo(() => forPanel(union, "plot_characters"), [union]);
   return (
     <SectionDropZone
       entityType="session"
@@ -134,26 +146,19 @@ function PlotCharactersContent({ sessionId, session, launches, union }: PanelPro
       mentionText={session.idea_notes}
       mentionTypes={PLOT_CHARACTER_TYPES}
       origin="live"
-      version={launches}
-      unionRows={forPanel(union, "plot_characters")}
+      unionRows={rows}
       toInitiative
     />
   );
 }
 
-function ObstaclesContent({ sessionId, launches, union }: PanelProps) {
-  return (
-    <ObstacleDropZone
-      sessionId={sessionId}
-      origin="live"
-      version={launches}
-      unionRows={forPanel(union, "enemies")}
-      toInitiative
-    />
-  );
+function ObstaclesContent({ sessionId, union }: PanelProps) {
+  const rows = useMemo(() => forPanel(union, "enemies"), [union]);
+  return <ObstacleDropZone sessionId={sessionId} origin="live" unionRows={rows} toInitiative />;
 }
 
-function LootContent({ sessionId, launches, union }: PanelProps) {
+function LootContent({ sessionId, union }: PanelProps) {
+  const rows = useMemo(() => forPanel(union, "loot"), [union]);
   return (
     <SectionDropZone
       entityType="session"
@@ -162,22 +167,43 @@ function LootContent({ sessionId, launches, union }: PanelProps) {
       acceptTypes={LOOT_TYPES}
       placeholder="Перетащите сюда ресурс или артефакт из поиска"
       origin="live"
-      version={launches}
-      unionRows={forPanel(union, "loot")}
+      unionRows={rows}
     />
   );
 }
 
-function RosterContent({ campaign, characters, session, sessionId, onChanged }: PanelProps) {
+function RosterContent({ campaign, characters, session, sessionId }: PanelProps) {
+  const client = useQueryClient();
+  const run = useAction();
+
   async function updateAttendance(playerId: number, field: "attended" | "amount_paid", value: number) {
-    const base = session.attendance.length > 0 ? session.attendance : campaign.roster.map((p) => ({ player_id: p.id, name: p.name, attended: 0, amount_paid: 0 }));
+    const base: AttendanceRow[] =
+      session.attendance.length > 0
+        ? session.attendance
+        : campaign.roster.map((p) => ({ player_id: p.id, name: p.name, attended: 0, amount_paid: 0, amount_forgiven: 0 }));
     const next = base.map((a) => (a.player_id === playerId ? { ...a, [field]: value } : a));
     // если игрока ещё нет в attendance (новый в ростере) — добавляем
-    if (!next.find((a) => a.player_id === playerId)) next.push({ player_id: playerId, name: campaign.roster.find((p) => p.id === playerId)?.name ?? "", attended: field === "attended" ? value : 0, amount_paid: field === "amount_paid" ? value : 0 } as any);
-    await api.put(`/sessions/${sessionId}/attendance`, {
-      attendance: next.map((a) => ({ player_id: a.player_id, attended: !!a.attended, amount_paid: a.amount_paid })),
-    });
-    onChanged?.();
+    if (!next.find((a) => a.player_id === playerId)) {
+      next.push({
+        player_id: playerId,
+        name: campaign.roster.find((p) => p.id === playerId)?.name ?? "",
+        attended: field === "attended" ? value : 0,
+        amount_paid: field === "amount_paid" ? value : 0,
+        amount_forgiven: 0,
+      });
+    }
+    // Галочка встаёт сразу: строка сессии в кэше правится до ответа сервера, а
+    // отказ сервера её перечитывает обратно.
+    client.setQueryData<SessionDetail>(dataKeys.entity("session", sessionId), (prev) =>
+      prev ? { ...prev, attendance: next } : prev
+    );
+    await run(
+      async () => {
+        await write.put(`/sessions/${sessionId}/attendance`, { attendance: attendanceBody(next) });
+        return true;
+      },
+      { affects: sessionMoneyAffects(sessionId, campaign.id) }
+    );
   }
 
   if (campaign.roster.length === 0) return <span className="muted">Состав кампании пуст.</span>;
@@ -186,7 +212,6 @@ function RosterContent({ campaign, characters, session, sessionId, onChanged }: 
       {campaign.roster.map((p) => {
         const playerCharacters = characters.filter((c) => c.player_id === p.id);
         const att = session.attendance.find((a) => a.player_id === p.id);
-        const charNames = playerCharacters.length ? playerCharacters.map((c) => c.character_name).join(", ") : "—";
         const avatar = p.thumbnail_image_url ?? p.avatar_image_url;
         return (
           <div key={p.id} className="row" style={{ alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
@@ -222,16 +247,18 @@ function RosterContent({ campaign, characters, session, sessionId, onChanged }: 
   );
 }
 
+type SecretWithState = StorySecret & { state?: { revealed?: number; pinned?: number; note?: string } | null };
+const NO_SECRETS: CampaignGrouped<SecretWithState> = { groups: [], own: [] };
+
 function SecretsContent({ campaign }: PanelProps) {
   // Пульт — боевая подсказка, не подготовка: показываем только нераскрытые по умолчанию, категории сворачиваемы, важные звездочкой наверх
-  const [data, setData] = useState<CampaignGrouped<StorySecret & { state?: { revealed?: number; pinned?: number; note?: string } }>>({ groups: [], own: [] });
+  const client = useQueryClient();
+  const run = useAction();
+  const secretsPath = sessionPaths.campaignSecrets(campaign.id);
+  // Тот же ключ кэша, что у «Обзора» профиля сессии: раскрытое здесь видно там сразу.
+  const data = useResource<CampaignGrouped<SecretWithState>>(secretsPath).data ?? NO_SECRETS;
   const [showRevealed, setShowRevealed] = useState(false);
   const [pendingReveal, setPendingReveal] = useState<StorySecret | null>(null);
-
-  const refresh = () => {
-    api.get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${campaign.id}`).then(setData as any).catch(() => {});
-  };
-  useEffect(refresh, [campaign.id]);
 
   const total = data.own.length + data.groups.reduce((n, g) => n + g.items.length, 0);
   const revealedCount = [...data.own, ...data.groups.flatMap((g) => g.items)].filter((s: any) => s.state?.revealed === 1).length;
@@ -243,6 +270,22 @@ function SecretsContent({ campaign }: PanelProps) {
     return sortPinnedFirst(filtered);
   };
 
+  // Отметка встаёт сразу — правкой кэша, до ответа сервера; отказ сервера
+  // перечитывает тайны обратно.
+  const patchData = (fn: (prev: CampaignGrouped<SecretWithState>) => CampaignGrouped<SecretWithState>) => {
+    client.setQueryData<CampaignGrouped<SecretWithState>>(dataKeys.resource(secretsPath), (prev) => (prev ? fn(prev) : prev));
+  };
+
+  const saveState = (secretId: number, body: { revealed?: boolean; pinned?: boolean }) => {
+    void run(
+      async () => {
+        await write.put(`/story/secrets/${secretId}/state`, { campaign_id: campaign.id, ...body });
+        return true;
+      },
+      { affects: secretStateAffects(campaign.id) }
+    );
+  };
+
   const patchRevealed = (id: number, revealed: boolean) => {
     const patch = (list: any[]) => {
       const i = list.findIndex((x: any) => x.id === id);
@@ -252,7 +295,7 @@ function SecretsContent({ campaign }: PanelProps) {
       next[i] = { ...next[i], state: { ...prev, revealed: revealed ? 1 : 0, note: prev.note ?? "" } };
       return next;
     };
-    setData((prev) => ({ own: patch(prev.own), groups: prev.groups.map((g) => { const items = patch(g.items); return items === g.items ? g : { ...g, items }; }) } as any));
+    patchData((prev) => ({ own: patch(prev.own), groups: prev.groups.map((g) => { const items = patch(g.items); return items === g.items ? g : { ...g, items }; }) }));
   };
 
   const patchPinned = (id: number, pinned: boolean) => {
@@ -264,13 +307,13 @@ function SecretsContent({ campaign }: PanelProps) {
       next[i] = { ...next[i], state: { ...prev, pinned: pinned ? 1 : 0, revealed: prev.revealed ?? 0, note: prev.note ?? "" } };
       return next;
     };
-    setData((prev) => ({ own: patch(prev.own), groups: prev.groups.map((g) => { const items = patch(g.items); return items === g.items ? g : { ...g, items }; }) } as any));
+    patchData((prev) => ({ own: patch(prev.own), groups: prev.groups.map((g) => { const items = patch(g.items); return items === g.items ? g : { ...g, items }; }) }));
   };
 
   const toggle = (s: StorySecret, checked: boolean) => {
     if (checked) { setPendingReveal(s); return; }
     patchRevealed(s.id, false);
-    void api.put(`/story/secrets/${s.id}/state`, { campaign_id: campaign.id, revealed: false });
+    saveState(s.id, { revealed: false });
   };
 
   const confirmReveal = () => {
@@ -278,13 +321,13 @@ function SecretsContent({ campaign }: PanelProps) {
     const s = pendingReveal;
     setPendingReveal(null);
     patchRevealed(s.id, true);
-    void api.put(`/story/secrets/${s.id}/state`, { campaign_id: campaign.id, revealed: true });
+    saveState(s.id, { revealed: true });
   };
 
   const togglePinned = (s: any) => {
     const next = !(s.state?.pinned === 1);
     patchPinned(s.id, next);
-    void api.put(`/story/secrets/${s.id}/state`, { campaign_id: campaign.id, pinned: next });
+    saveState(s.id, { pinned: next });
   };
 
   const SecretRow = ({ s }: { s: any }) => (
@@ -366,6 +409,8 @@ function CompendiumContent({ campaign }: PanelProps) {
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
 
+  // Поиск по мере набора — не данные страницы, а подсказка: кэшировать и
+  // перечитывать по сигналам тут нечего, поэтому запрос идёт мимо слоя.
   useEffect(() => {
     if (!campaign.system_id) return;
     if (q.trim().length < 2) { setItems([]); return; }

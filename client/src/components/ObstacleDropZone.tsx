@@ -1,6 +1,9 @@
-import { memo, useEffect, useState, type DragEvent } from "react";
+import { memo, useEffect, useMemo, useState, type DragEvent } from "react";
 import { api } from "../api/client";
 import { resolveEntityLabel } from "../api/resolveEntity";
+import { useAction, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { linkAffects, linksPath } from "../data/sessions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
@@ -46,8 +49,6 @@ interface Props {
   // during a running session are tagged distinctly from ones planned ahead
   // of time via the session profile page (same drop zone, different caller).
   origin?: string;
-  /** Счётчик запусков сцен — см. SectionDropZone. */
-  version?: number;
   /** Состав всех сцен сессии для этой панели — строками без крестика. */
   unionRows?: SessionUnionRow[];
   /** Показывать ли «в трекер инициативы» у существ. */
@@ -55,25 +56,28 @@ interface Props {
 }
 
 // Memoized so an unrelated setState elsewhere on the session page (e.g.
-// typing in the Игровая дата fields) doesn't force this drop zone — and its
-// own fetch-on-mount effect — to re-render along with everything else.
+// typing in the Игровая дата fields) doesn't force this drop zone to
+// re-render along with everything else.
 export const ObstacleDropZone = memo(function ObstacleDropZone({
   sessionId,
   origin,
-  version,
   unionRows,
   toInitiative,
 }: Props) {
-  const [entries, setEntries] = useState<Entry[]>([]);
+  // Связи «Препятствий» — из кэша слоя данных: запуск сцены задевает связи
+  // сессии (data/sessions.ts), и зона перечитывается сама. Тот же ключ читают
+  // шпаргалки сессии.
+  const links = useResource<GenericLink[]>(linksPath("session", sessionId, "enemies")).data;
+  const run = useAction();
+  const [rows, setRows] = useState<Entry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  async function load() {
-    const links = await api.get<GenericLink[]>(
-      `/links?type=session&id=${sessionId}&section=enemies`
-    );
-    const resolved: (Entry | null)[] = await Promise.all(
+  useEffect(() => {
+    if (!links) return;
+    let cancelled = false;
+    void Promise.all(
       links.map(async (l): Promise<Entry | null> => {
         const other =
           l.from_type === "session" && l.from_id === sessionId
@@ -81,7 +85,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
             : { type: l.from_type, id: l.from_id };
         try {
           if (other.type === "being") {
-            const being = await api.get<SettingBeing>(`/setting-beings/${other.id}`);
+            const being = await readResource<SettingBeing>(`/setting-beings/${other.id}`);
             return {
               linkId: l.id,
               type: other.type,
@@ -97,8 +101,15 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
           return null;
         }
       })
-    );
-    const rows = resolved.filter((e): e is Entry => e !== null);
+    ).then((resolved) => {
+      if (!cancelled) setRows(resolved.filter((e): e is Entry => e !== null));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [links, sessionId]);
+
+  const entries = useMemo(() => {
     const keys = new Set(rows.map((e) => `${e.type}:${e.id}`));
     // Связь Мастера бьёт объединение: рука точнее заготовки.
     const union: Entry[] = (unionRows ?? [])
@@ -113,13 +124,28 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
         fromScenes: u.scenes,
         inScene: u.inScene,
       }));
-    setEntries([...rows, ...union]);
-  }
+    return [...rows, ...union];
+  }, [rows, unionRows]);
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, version, unionRows]);
+  // Добавить препятствие. Без повтора на плашке: ответ мог потеряться после
+  // того, как связь уже легла, и повтор завёл бы вторую.
+  async function addLink(result: SearchResult): Promise<boolean> {
+    const done = await run(
+      async () => {
+        await write.post("/links", {
+          from_type: "session",
+          from_id: sessionId,
+          to_type: result.type,
+          to_id: result.id,
+          section: "enemies",
+          origin: origin === "live" ? "live" : "planned",
+        });
+        return true;
+      },
+      { affects: linkAffects("session", sessionId), retry: false }
+    );
+    return done === true;
+  }
 
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -134,24 +160,15 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
     }
     if (!ACCEPT_TYPES.includes(result.type)) return;
     if (result.type === "compendium_entry" && result.kind !== "monster") return;
-    await api.post("/links", {
-      from_type: "session",
-      from_id: sessionId,
-      to_type: result.type,
-      to_id: result.id,
-      section: "enemies",
-      origin: origin === "live" ? "live" : "planned",
-    });
-    load();
+    await addLink(result);
   }
 
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [filter, setFilter] = useState("");
 
   async function remove(relationId: number) {
-    await api.del(`/links/${relationId}`);
     setPendingDelete(null);
-    load();
+    await run(() => write.del(`/links/${relationId}`), { affects: linkAffects("session", sessionId) });
   }
 
   const filteredEntries = filter.trim()
@@ -261,16 +278,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       {pickerOpen && (
         <ObstaclePicker
           onPick={async (result) => {
-            await api.post("/links", {
-              from_type: "session",
-              from_id: sessionId,
-              to_type: result.type,
-              to_id: result.id,
-              section: "enemies",
-              origin: origin === "live" ? "live" : "planned",
-            });
-            setPickerOpen(false);
-            load();
+            if (await addLink(result)) setPickerOpen(false);
           }}
           onClose={() => setPickerOpen(false)}
         />
@@ -284,6 +292,7 @@ function ObstaclePicker({ onPick, onClose }: { onPick: (r: SearchResult) => void
   const [q, setQ] = useState("");
   const [items, setItems] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  // Поиск по мере набора идёт мимо слоя данных: это подсказка, а не данные страницы.
   useEffect(() => {
     if (q.trim().length < 2) { setItems([]); return; }
     setLoading(true);

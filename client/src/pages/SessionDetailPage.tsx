@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -13,13 +13,18 @@ import { Modal } from "../components/Modal";
 import { SessionSceneTree } from "../components/SessionSceneTree";
 import { LazyDetails } from "../components/LazyDetails";
 import { MentionText } from "../components/mentions/MentionText";
+import { dataKeys } from "../data/entities";
+import { useFieldDraft } from "../data/fieldDraft";
+import { errorText, useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { attendanceBody, secretStateAffects, sessionMoneyAffects, sessionPaths } from "../data/sessions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { useAlert } from "../hooks/useConfirm";
 import { elapsedDays, formatInworldDate, formatInworldRange } from "../inworldCalendar";
 import { loadHideFinance } from "../financePrivacy";
 import type {
+  AttendanceRow,
   Campaign,
   CampaignGrouped,
   PaymentType,
@@ -42,6 +47,12 @@ const LOCATION_TYPES = ["location"];
 const LOOT_TYPES = ["resource", "artifact", "compendium_entry"];
 const LOOT_COMPENDIUM_KINDS = ["equipment", "magic_item"];
 
+// Пустое — постоянными ссылками: иначе useMemo ниже пересчитывался бы на
+// каждой отрисовке.
+const NO_SESSIONS: SessionSummary[] = [];
+const NO_PLAYLISTS: Playlist[] = [];
+const NO_SECRETS: CampaignGrouped<StorySecret> = { groups: [], own: [] };
+
 // «Хроника» переименована в «Резюме»: в ней теперь не летопись, а итог
 // вечера — сколько прошло дней в мире, что раскрылось, кто пришёл и заплатил.
 const SESSION_TABS = ["Обзор", "Подготовка", "Резюме", "Ресурсы"] as const;
@@ -61,6 +72,10 @@ function plural(n: number, one: string, few: string, many: string): string {
   return many;
 }
 
+function numberText(value: number | null): string {
+  return value != null ? String(value) : "";
+}
+
 export function SessionDetailPage() {
   const { id } = useParams();
   const sessionId = Number(id);
@@ -68,20 +83,46 @@ export function SessionDetailPage() {
   const [tab, selectTab] = useTabState<SessionTab>(SESSION_TABS, "Обзор");
   const [outcomeOpen, setOutcomeOpen] = useState(false);
 
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [dateDraft, setDateDraft] = useState("");
-  const [stakeDraft, setStakeDraft] = useState("");
-  const [startTimeDraft, setStartTimeDraft] = useState("");
+  // Всё — из кэша слоя данных (docs/adr/0001): пульт в соседнем окне, игроки и
+  // вынесенные панели обновляют задетое здесь сами, без перезагрузки страницы.
+  const sessionState = useEntity<SessionDetail>("session", sessionId);
+  const session = sessionState.data ?? null;
+  const campaignId = session?.campaign_id ?? null;
+  const campaign = useEntity<Campaign>("campaign", campaignId).data ?? null;
+  const campaignSessions =
+    useResource<SessionSummary[]>(campaignId != null ? sessionPaths.campaignSessions(campaignId) : null).data ??
+    NO_SESSIONS;
+  const battles = useResource<Playlist[]>(sessionPaths.playlists()).data ?? NO_PLAYLISTS;
+  // Ответ хранится как есть, разложенным по приключениям: за столом
+  // нераскрытая тайна почти всегда вспоминается вместе с приключением, из
+  // которого тянется, и плоский список на семь десятков строк не давал
+  // понять, где какая ветка.
+  const secretsPath = campaignId != null ? sessionPaths.campaignSecrets(campaignId) : null;
+  const secretData = useResource<CampaignGrouped<StorySecret>>(secretsPath).data ?? NO_SECRETS;
+  const report = useResource<SessionReport>(sessionPaths.summary(sessionId)).data ?? null;
+
+  // Поля статуса, оплаты и ставки задевают деньги кампании, остальные — только
+  // сессию и список сессий кампании (data/sessions.ts).
+  const { save } = useSaveEntity<SessionDetail>("session", sessionId, {
+    affects: campaignId != null ? [{ path: sessionPaths.campaignSessions(campaignId) }] : [],
+  });
+  const { save: saveMoney } = useSaveEntity<SessionDetail>("session", sessionId, {
+    affects: campaignId != null ? [{ kind: "campaign", id: campaignId }] : [],
+  });
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const client = useQueryClient();
+
+  // Поля, которые сохраняются по уходу из них. Пока Мастер в поле, значение,
+  // пришедшее из другого окна, набранное не затирает (data/fieldDraft.ts).
+  const dateField = useFieldDraft(session?.date ?? "");
+  const startTimeField = useFieldDraft(session?.start_time ?? "");
+  const stakeField = useFieldDraft(numberText(session?.stake_override ?? null));
+
+  // Название и дата в мире правятся формой: черновик заводится при входе в
+  // правку, а вне правки показывается то, что в сессии.
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
-  const [campaignSessions, setCampaignSessions] = useState<SessionSummary[]>([]);
-  const [battles, setBattles] = useState<Playlist[]>([]);
-  const [secretData, setSecretData] = useState<CampaignGrouped<StorySecret>>({
-    groups: [],
-    own: [],
-  });
-  const [report, setReport] = useState<SessionReport | null>(null);
   const [inworldYearDraft, setInworldYearDraft] = useState("");
   const [inworldMonthDraft, setInworldMonthDraft] = useState("");
   const [inworldDayDraft, setInworldDayDraft] = useState("");
@@ -96,48 +137,6 @@ export function SessionDetailPage() {
   const [openSecretGroups, setOpenSecretGroups] = useState<string[]>([]);
   const calendar = useSettingCalendar(campaign?.setting_id);
   const { deleteWithUndo } = useUndoDelete();
-  const [alertDialog, showAlert] = useAlert();
-
-  const refresh = useCallback(() => {
-    let cancelled = false;
-    api.get<SessionDetail>(`/sessions/${sessionId}`).then((s) => {
-      if (cancelled) return;
-      setSession(s);
-      setStakeDraft(s.stake_override != null ? String(s.stake_override) : "");
-      setDateDraft(s.date);
-      setStartTimeDraft(s.start_time || "");
-      setTitleDraft(s.title || "");
-      setInworldYearDraft(s.inworld_year != null ? String(s.inworld_year) : "");
-      setInworldMonthDraft(s.inworld_month != null ? String(s.inworld_month) : "");
-      setInworldDayDraft(s.inworld_day != null ? String(s.inworld_day) : "");
-      setInworldYearEndDraft(s.inworld_year_end != null ? String(s.inworld_year_end) : "");
-      setInworldMonthEndDraft(s.inworld_month_end != null ? String(s.inworld_month_end) : "");
-      setInworldDayEndDraft(s.inworld_day_end != null ? String(s.inworld_day_end) : "");
-      if (s.inworld_year_end != null) setShowEndDate(true);
-      api.get<Campaign>(`/campaigns/${s.campaign_id}`).then((c) => { if (!cancelled) setCampaign(c); }).catch(() => {});
-      api
-        .get<SessionSummary[]>(`/campaigns/${s.campaign_id}/sessions`)
-        .then((v) => { if (!cancelled) setCampaignSessions(v); }).catch(() => {});
-      // Ответ хранится как есть, разложенным по приключениям: за столом
-      // нераскрытая тайна почти всегда вспоминается вместе с приключением, из
-      // которого тянется, и плоский список на семь десятков строк не давал
-      // понять, где какая ветка.
-      api
-        .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${s.campaign_id}`)
-        .then((v) => { if (!cancelled) setSecretData(v); }).catch(() => {});
-    }).catch(() => {});
-    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then((r) => { if (!cancelled) setReport(r); }).catch(() => { if (!cancelled) setReport(null); });
-    return () => { cancelled = true; };
-  }, [sessionId]);
-
-  useEffect(() => {
-    const cleanup = refresh();
-    return cleanup;
-  }, [refresh]);
-
-  useEffect(() => {
-    api.get<Playlist[]>("/playlists").then(setBattles).catch(() => setBattles([]));
-  }, []);
 
   // Общее число тайн кампании — только для счётчиков «столько-то из
   // стольких-то»; сам список берётся из групп.
@@ -178,34 +177,50 @@ export function SessionDetailPage() {
   const [pendingReveal, setPendingReveal] = useState<StorySecret | null>(null);
   const [justRevealed, setJustRevealed] = useState<StorySecret | null>(null);
 
-  async function markSecretRevealed(secretId: number) {
-    if (!session) return;
-    const secret = [...secretData.own, ...secretData.groups.flatMap((g) => g.items)].find((x) => x.id === secretId) ?? null;
-    // Сессия уезжает вместе с отметкой: «Раскрылось в этот вечер» в резюме
-    // строится по ней, а не по дате правки.
-    await api.put(`/story/secrets/${secretId}/state`, {
-      campaign_id: session.campaign_id,
-      revealed: true,
-      session_id: sessionId,
-    });
-    // Правка на месте, без перечитывания раздела: списки, которых отметка не
-    // касается, сохраняют ссылку, и React перерисовывает одну группу.
+  // Отметка встаёт сразу — правкой кэша, без ожидания сервера. Списки, которых
+  // она не касается, сохраняют ссылку, и React перерисовывает одну группу;
+  // отказ сервера перечитывает тайны обратно.
+  function patchSecretState(secretId: number, revealed: 0 | 1) {
+    if (!secretsPath) return;
     const patch = (list: StorySecret[]) => {
       const i = list.findIndex((x) => x.id === secretId);
       if (i === -1) return list;
       const next = list.slice();
-      next[i] = { ...list[i], state: { revealed: 1, note: list[i].state?.note ?? "" } };
+      next[i] = { ...list[i], state: { revealed, note: list[i].state?.note ?? "" } };
       return next;
     };
-    setSecretData((prev) => ({
-      own: patch(prev.own),
-      groups: prev.groups.map((g) => {
-        const items = patch(g.items);
-        return items === g.items ? g : { ...g, items };
-      }),
-    }));
-    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then((r) => setReport(r)).catch(() => {});
-    if (secret) {
+    client.setQueryData<CampaignGrouped<StorySecret>>(dataKeys.resource(secretsPath), (prev) =>
+      prev
+        ? {
+            own: patch(prev.own),
+            groups: prev.groups.map((g) => {
+              const items = patch(g.items);
+              return items === g.items ? g : { ...g, items };
+            }),
+          }
+        : prev
+    );
+  }
+
+  async function markSecretRevealed(secretId: number) {
+    if (!session) return;
+    const campaignOfSession = session.campaign_id;
+    const secret = [...secretData.own, ...secretData.groups.flatMap((g) => g.items)].find((x) => x.id === secretId) ?? null;
+    patchSecretState(secretId, 1);
+    // Сессия уезжает вместе с отметкой: «Раскрылось в этот вечер» в резюме
+    // строится по ней, а не по дате правки.
+    const done = await run(
+      async () => {
+        await write.put(`/story/secrets/${secretId}/state`, {
+          campaign_id: campaignOfSession,
+          revealed: true,
+          session_id: sessionId,
+        });
+        return true;
+      },
+      { affects: secretStateAffects(campaignOfSession, sessionId) }
+    );
+    if (done && secret) {
       setJustRevealed(secret);
       setTimeout(() => setJustRevealed((cur) => (cur?.id === secretId ? null : cur)), 5000);
     }
@@ -213,26 +228,16 @@ export function SessionDetailPage() {
 
   async function undoReveal(secretId: number) {
     if (!session) return;
-    await api.put(`/story/secrets/${secretId}/state`, {
-      campaign_id: session.campaign_id,
-      revealed: false,
-    });
-    const patch = (list: StorySecret[]) => {
-      const i = list.findIndex((x) => x.id === secretId);
-      if (i === -1) return list;
-      const next = list.slice();
-      next[i] = { ...list[i], state: { revealed: 0, note: list[i].state?.note ?? "" } };
-      return next;
-    };
-    setSecretData((prev) => ({
-      own: patch(prev.own),
-      groups: prev.groups.map((g) => {
-        const items = patch(g.items);
-        return items === g.items ? g : { ...g, items };
-      }),
-    }));
+    const campaignOfSession = session.campaign_id;
     setJustRevealed(null);
-    api.get<SessionReport>(`/sessions/${sessionId}/summary`).then((r) => setReport(r)).catch(() => {});
+    patchSecretState(secretId, 0);
+    await run(
+      async () => {
+        await write.put(`/story/secrets/${secretId}/state`, { campaign_id: campaignOfSession, revealed: false });
+        return true;
+      },
+      { affects: secretStateAffects(campaignOfSession, sessionId) }
+    );
   }
 
   // useMemo (not a plain filter) so ResourcesSection's React.memo sees a
@@ -247,69 +252,76 @@ export function SessionDetailPage() {
 
   // Recommendation #4: the summary badge should reflect what's currently
   // typed in the date fields, not just what's already saved — so it updates
-  // live as the GM fills the date in, before hitting "Сохранить дату".
-  const draftYear = inworldYearDraft ? Number(inworldYearDraft) : null;
-  const draftMonth = inworldMonthDraft ? Number(inworldMonthDraft) : null;
-  const draftDay = inworldDayDraft ? Number(inworldDayDraft) : null;
-  const draftYearEnd = inworldYearEndDraft ? Number(inworldYearEndDraft) : null;
-  const draftMonthEnd = inworldMonthEndDraft ? Number(inworldMonthEndDraft) : null;
-  const draftDayEnd = inworldDayEndDraft ? Number(inworldDayEndDraft) : null;
+  // live as the GM fills the date in, before hitting "Сохранить дату". Вне
+  // правки черновика нет, и сводка показывает то, что в сессии.
+  const parseDraft = (v: string) => (v ? Number(v) : null);
+  const draftYear = editingInworldDate ? parseDraft(inworldYearDraft) : session?.inworld_year ?? null;
+  const draftMonth = editingInworldDate ? parseDraft(inworldMonthDraft) : session?.inworld_month ?? null;
+  const draftDay = editingInworldDate ? parseDraft(inworldDayDraft) : session?.inworld_day ?? null;
+  const draftYearEnd = editingInworldDate ? parseDraft(inworldYearEndDraft) : session?.inworld_year_end ?? null;
+  const draftMonthEnd = editingInworldDate ? parseDraft(inworldMonthEndDraft) : session?.inworld_month_end ?? null;
+  const draftDayEnd = editingInworldDate ? parseDraft(inworldDayEndDraft) : session?.inworld_day_end ?? null;
+  const showEnd = editingInworldDate ? showEndDate : session?.inworld_year_end != null;
   const inworldBadge = calendar
     ? formatInworldDate(draftYear, draftMonth, draftDay, calendar.months, calendar.era)
     : null;
   const inworldBadgeEnd =
-    calendar && showEndDate
+    calendar && showEnd
       ? formatInworldDate(draftYearEnd, draftMonthEnd, draftDayEnd, calendar.months, calendar.era)
       : null;
 
-  if (!session || !campaign) return <p className="muted">Загрузка…</p>;
-
-  async function setStatus(status: SessionStatus) {
-    await api.put(`/sessions/${sessionId}`, { status });
-    refresh();
+  if (!session || !campaign) {
+    return (
+      <p className="muted">
+        {!session && sessionState.error != null ? `Сессия не открылась: ${sessionState.error}` : "Загрузка…"}
+      </p>
+    );
   }
 
-  async function setBattlePlaylist(id: number | null) {
-    await api.put(`/sessions/${sessionId}`, { battle_playlist_id: id });
-    refresh();
+  // Текст из карточки: не сохранилось — карточка остаётся в правке с набранным,
+  // а плашка предлагает повтор.
+  async function saveText(patch: Partial<SessionDetail>) {
+    if (!(await save(patch))) throw new Error("Не сохранилось");
   }
 
-  async function saveIdea(value: string) {
-    await api.put(`/sessions/${sessionId}`, { idea_notes: value });
-    refresh();
+  function setStatus(status: SessionStatus) {
+    void saveMoney({ status });
   }
 
-  async function saveMainEvents(value: string) {
-    await api.put(`/sessions/${sessionId}`, { main_events: value });
-    refresh();
+  function setBattlePlaylist(id: number | null) {
+    void save({ battle_playlist_id: id });
   }
 
-  async function toggleMainEventsVisible() {
-    await api.put(`/sessions/${sessionId}`, { main_events_visible: !session!.main_events_visible });
-    refresh();
+  function toggleMainEventsVisible() {
+    void save({ main_events_visible: session!.main_events_visible ? 0 : 1 });
   }
 
-  async function saveTitle() {
-    await api.put(`/sessions/${sessionId}`, { title: titleDraft || null });
+  function startTitleEdit() {
+    setTitleDraft(session!.title || "");
+    setEditingTitle(true);
+  }
+
+  function saveTitle() {
     setEditingTitle(false);
-    refresh();
+    void save({ title: titleDraft || null });
   }
 
-  async function setPaymentOverride(value: "" | PaymentType) {
-    await api.put(`/sessions/${sessionId}`, { payment_override: value || null });
-    refresh();
+  function setPaymentOverride(value: "" | PaymentType) {
+    void saveMoney({ payment_override: value || null });
   }
 
-  async function saveStake() {
-    await api.put(`/sessions/${sessionId}`, {
-      stake_override: stakeDraft ? Number(stakeDraft) : null,
-    });
-    refresh();
+  function saveStake() {
+    stakeField.release();
+    const next = stakeField.draft ? Number(stakeField.draft) : null;
+    if (next === session!.stake_override) return;
+    void saveMoney({ stake_override: next });
   }
 
-  async function saveStartTime() {
-    await api.put(`/sessions/${sessionId}`, { start_time: startTimeDraft || null });
-    refresh();
+  function saveStartTime() {
+    startTimeField.release();
+    const next = startTimeField.draft || null;
+    if (next === (session!.start_time || null)) return;
+    void save({ start_time: next });
   }
 
   function parseDraftInt(v: string): number | null {
@@ -360,7 +372,20 @@ export function SessionDetailPage() {
 
   const inworldValidationError = editingInworldDate ? validateInworldDraft() : null;
 
-  async function saveInworldDate() {
+  // Черновик даты в мире заводится из сессии при входе в правку.
+  function startInworldEdit() {
+    const s = session!;
+    setInworldYearDraft(numberText(s.inworld_year));
+    setInworldMonthDraft(numberText(s.inworld_month));
+    setInworldDayDraft(numberText(s.inworld_day));
+    setInworldYearEndDraft(numberText(s.inworld_year_end));
+    setInworldMonthEndDraft(numberText(s.inworld_month_end));
+    setInworldDayEndDraft(numberText(s.inworld_day_end));
+    setShowEndDate(s.inworld_year_end != null);
+    setEditingInworldDate(true);
+  }
+
+  function saveInworldDate() {
     if (validateInworldDraft()) return;
     const y = parseDraftInt(inworldYearDraft);
     const m = parseDraftInt(inworldMonthDraft);
@@ -368,7 +393,8 @@ export function SessionDetailPage() {
     const ye = showEndDate ? parseDraftInt(inworldYearEndDraft) : null;
     const me = showEndDate ? parseDraftInt(inworldMonthEndDraft) : null;
     const de = showEndDate ? parseDraftInt(inworldDayEndDraft) : null;
-    await api.put(`/sessions/${sessionId}`, {
+    setEditingInworldDate(false);
+    void save({
       inworld_year: y,
       inworld_month: m,
       inworld_day: d,
@@ -376,65 +402,66 @@ export function SessionDetailPage() {
       inworld_month_end: me,
       inworld_day_end: de,
     });
-    setEditingInworldDate(false);
-    refresh();
   }
 
   async function archiveSession() {
-    if (!session) return;
-    const date = session.date || "Без даты";
+    const s = session!;
+    const date = s.date || "Без даты";
+    const affects = sessionMoneyAffects(sessionId, s.campaign_id);
     // Без catch падение молчало, а `navigate` ниже не срабатывал.
     try {
       await deleteWithUndo({
         entityName: `Сессия ${date}`,
-        deleteFn: () => api.del(`/sessions/${sessionId}`),
-        restoreFn: () => api.put(`/sessions/${sessionId}/restore`),
+        deleteFn: async () => {
+          await write.del(`/sessions/${sessionId}`);
+          afterWrite(affects);
+        },
+        restoreFn: async () => {
+          await write.put(`/sessions/${sessionId}/restore`);
+          afterWrite(affects);
+        },
       });
     } catch (e) {
-      showAlert(`Не удалось архивировать сессию: ${e instanceof Error ? e.message : String(e)}`);
+      showSaveError(`Не удалось архивировать сессию: ${errorText(e)}`);
       return;
     }
-    navigate(`/campaigns/${session.campaign_id}`);
+    navigate(`/campaigns/${s.campaign_id}`);
   }
 
-  async function updateAttendance(
+  // Отметка встаёт сразу — правкой строки сессии в кэше; отказ сервера её
+  // перечитывает обратно. Прощённое уходит в каждой отметке: без него сервер
+  // стирал списанное Мастером (data/sessions.ts, attendanceBody).
+  async function writeAttendance(next: AttendanceRow[]) {
+    const campaignOfSession = session!.campaign_id;
+    client.setQueryData<SessionDetail>(dataKeys.entity("session", sessionId), (prev) =>
+      prev ? { ...prev, attendance: next } : prev
+    );
+    await run(
+      async () => {
+        await write.put(`/sessions/${sessionId}/attendance`, { attendance: attendanceBody(next) });
+        return true;
+      },
+      { affects: sessionMoneyAffects(sessionId, campaignOfSession) }
+    );
+  }
+
+  function updateAttendance(
     playerId: number,
     field: "attended" | "amount_paid" | "amount_forgiven",
     value: number
   ) {
-    if (!session) return;
-    const next = session.attendance.map((a) =>
-      a.player_id === playerId ? { ...a, [field]: value } : a
+    void writeAttendance(
+      session!.attendance.map((a) => (a.player_id === playerId ? { ...a, [field]: value } : a))
     );
-    setSession({ ...session, attendance: next });
-    await api.put(`/sessions/${sessionId}/attendance`, {
-      attendance: next.map((a) => ({
-        player_id: a.player_id,
-        attended: !!a.attended,
-        amount_paid: a.amount_paid,
-        amount_forgiven: a.amount_forgiven,
-      })),
-    });
-    refresh();
   }
 
   // Header checkbox column acts as a select-all/none toggle: if everyone is
   // already checked, clicking it clears everyone; otherwise it checks
   // everyone (mirrors a typical table "select all" header).
-  async function toggleAllAttendance() {
-    if (!session) return;
-    const allAttended = session.attendance.every((a) => !!a.attended);
-    const nextValue = allAttended ? 0 : 1;
-    const next = session.attendance.map((a) => ({ ...a, attended: nextValue }));
-    setSession({ ...session, attendance: next });
-    await api.put(`/sessions/${sessionId}/attendance`, {
-      attendance: next.map((a) => ({
-        player_id: a.player_id,
-        attended: !!a.attended,
-        amount_paid: a.amount_paid,
-      })),
-    });
-    refresh();
+  function toggleAllAttendance() {
+    const allChecked = session!.attendance.every((a) => !!a.attended);
+    const nextValue = allChecked ? 0 : 1;
+    void writeAttendance(session!.attendance.map((a) => ({ ...a, attended: nextValue })));
   }
 
   // Honors the campaign's payment_frequency × rate_split terms: "per_table"
@@ -460,19 +487,9 @@ export function SessionDetailPage() {
 
   // Mirrors toggleAllAttendance: pays everyone the currently-computed
   // default stake in one call, instead of clicking each row's own button.
-  async function payAllDefault() {
-    if (!session) return;
+  function payAllDefault() {
     const amount = defaultStake();
-    const next = session.attendance.map((a) => ({ ...a, amount_paid: amount }));
-    setSession({ ...session, attendance: next });
-    await api.put(`/sessions/${sessionId}/attendance`, {
-      attendance: next.map((a) => ({
-        player_id: a.player_id,
-        attended: !!a.attended,
-        amount_paid: a.amount_paid,
-      })),
-    });
-    refresh();
+    void writeAttendance(session!.attendance.map((a) => ({ ...a, amount_paid: amount })));
   }
 
   // Перенос сессии — это правка её даты, а не заведение новой. Прежняя
@@ -480,10 +497,11 @@ export function SessionDetailPage() {
   // rescheduled: название, задумка, состав и подготовка оставались на
   // брошенной записи. Номер сессии считается по порядку дат, так что после
   // правки он пересчитается сам.
-  async function saveDate() {
-    if (!session || !dateDraft || dateDraft === session.date) return;
-    await api.put(`/sessions/${sessionId}`, { date: dateDraft });
-    refresh();
+  function saveDate() {
+    dateField.release();
+    const next = dateField.draft;
+    if (!next || next === session!.date) return;
+    void save({ date: next });
   }
 
   const sortedSessions = [...campaignSessions].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -516,7 +534,7 @@ export function SessionDetailPage() {
     (calendar
       ? formatInworldRange(
           { year: draftYear, month: draftMonth, day: draftDay },
-          showEndDate ? { year: draftYearEnd, month: draftMonthEnd, day: draftDayEnd } : null,
+          showEnd ? { year: draftYearEnd, month: draftMonthEnd, day: draftDayEnd } : null,
           calendar.months,
           ""
         )
@@ -620,7 +638,7 @@ export function SessionDetailPage() {
             <div className="sp-strip__cell">
               <span className="sp-label">В мире</span>
               {worldLabel === "не указана" && !editingInworldDate ? (
-                <button className="sp-value sp-value--cta" onClick={() => { selectTab("Обзор"); setEditingInworldDate(true); }}>указать →</button>
+                <button className="sp-value sp-value--cta" onClick={() => { selectTab("Обзор"); startInworldEdit(); }}>указать →</button>
               ) : (
                 <span className="sp-value">{worldLabel}</span>
               )}
@@ -641,13 +659,12 @@ export function SessionDetailPage() {
         ) : undefined
       }
       actions={[
-        { label: "Переименовать сессию", onClick: () => setEditingTitle(true) },
+        { label: "Переименовать сессию", onClick: startTitleEdit },
         { label: "Архивировать", danger: true, onClick: archiveSession },
       ]}
       tabs={SESSION_TABS}
       tab={tab}
       onTab={(t) => selectTab(t as SessionTab)}
-      overlays={alertDialog}
     >
       {editingTitle && <div className="card">{titleEditor}</div>}
 
@@ -706,9 +723,10 @@ export function SessionDetailPage() {
                       <span className="sp-deal__label">Ставка</span>
                       <span className="sp-deal__body">
                         <input
-                          value={stakeDraft}
+                          value={stakeField.draft}
                           placeholder={String(campaign.session_rate)}
-                          onChange={(e) => setStakeDraft(e.target.value)}
+                          onFocus={stakeField.hold}
+                          onChange={(e) => stakeField.setDraft(e.target.value)}
                           onBlur={saveStake}
                         />
                         <span className="sp-deal__unit">{campaign.currency}</span>
@@ -735,8 +753,9 @@ export function SessionDetailPage() {
                   <span className="sp-label">Дата</span>
                   <input
                     type="date"
-                    value={dateDraft}
-                    onChange={(e) => setDateDraft(e.target.value)}
+                    value={dateField.draft}
+                    onFocus={dateField.hold}
+                    onChange={(e) => dateField.setDraft(e.target.value)}
                     onBlur={saveDate}
                   />
                 </label>
@@ -744,8 +763,9 @@ export function SessionDetailPage() {
                   <span className="sp-label">Начало</span>
                   <input
                     type="time"
-                    value={startTimeDraft}
-                    onChange={(e) => setStartTimeDraft(e.target.value)}
+                    value={startTimeField.draft}
+                    onFocus={startTimeField.hold}
+                    onChange={(e) => startTimeField.setDraft(e.target.value)}
                     onBlur={saveStartTime}
                   />
                 </label>
@@ -767,7 +787,7 @@ export function SessionDetailPage() {
                   <>
                     <div className="sp-field">
                       <span className="sp-label">Начало</span>
-                      <button className="sp-inworld" onClick={() => setEditingInworldDate(true)}>
+                      <button className="sp-inworld" onClick={startInworldEdit}>
                         {inworldBadge ?? "указать дату"}
                       </button>
                     </div>
@@ -775,7 +795,7 @@ export function SessionDetailPage() {
                       <span className="sp-label">Конец</span>
                       <button
                         className={`sp-inworld${inworldBadgeEnd ? "" : " is-empty"}`}
-                        onClick={() => setEditingInworldDate(true)}
+                        onClick={startInworldEdit}
                       >
                         {inworldBadgeEnd ?? "не указан"}
                       </button>
@@ -971,7 +991,7 @@ export function SessionDetailPage() {
             key={`idea-${session.id}`}
             title="Задумка на сессию"
             value={session.idea_notes}
-            onSave={saveIdea}
+            onSave={(value) => saveText({ idea_notes: value })}
             entityType="session"
             entityId={sessionId}
             collapsible
@@ -1106,7 +1126,7 @@ export function SessionDetailPage() {
             key={`events-${session.id}`}
             title="Основные события сессии"
             value={session.main_events}
-            onSave={saveMainEvents}
+            onSave={(value) => saveText({ main_events: value })}
             entityType="session"
             entityId={sessionId}
             collapsible
@@ -1260,11 +1280,7 @@ export function SessionDetailPage() {
             </button>
           )}
           {!isPlayer && outcomeOpen && (
-            <SessionOutcomeModal
-              sessionId={sessionId}
-              onClose={() => setOutcomeOpen(false)}
-              onSaved={refresh}
-            />
+            <SessionOutcomeModal sessionId={sessionId} onClose={() => setOutcomeOpen(false)} />
           )}
         </div>
       )}
@@ -1274,7 +1290,7 @@ export function SessionDetailPage() {
           scope="session"
           entityId={sessionId}
           resources={linkResources}
-          onChange={refresh}
+          onChange={sessionState.reload}
           settingId={campaign?.setting_id ?? null}
         />
       )}

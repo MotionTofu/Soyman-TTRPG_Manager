@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../api/client";
+import { useCallback, useMemo, useState } from "react";
+import { useAction, useResource, write } from "../data/hooks";
+import { sessionAffects, sessionPaths } from "../data/sessions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { dateFromElapsed, elapsedDays, formatInworldDate } from "../inworldCalendar";
 import type {
@@ -18,53 +19,46 @@ import type {
 // там на неё как раз смотрят.
 
 const NEAR_COUNT = 3;
+const NO_SETTING_EVENTS: SettingCalendarEvent[] = [];
+const NO_CAMPAIGN_EVENTS: CampaignCalendarEvent[] = [];
 
 interface Props {
   session: SessionDetail;
   settingId: number | null | undefined;
   campaignId: number;
-  onChanged: () => void;
 }
 
-export function SessionTimeStrip({ session, settingId, campaignId, onChanged }: Props) {
+export function SessionTimeStrip({ session, settingId, campaignId }: Props) {
   const calendar = useSettingCalendar(settingId ?? undefined);
-  const [settingEvents, setSettingEvents] = useState<SettingCalendarEvent[]>([]);
-  const [campaignEvents, setCampaignEvents] = useState<CampaignCalendarEvent[]>([]);
-  const [suggested, setSuggested] = useState<{ year: number; month: number; day: number } | null>(null);
+  const settingEvents =
+    useResource<SettingCalendarEvent[]>(settingId ? `/settings/${settingId}/calendar-events` : null).data ??
+    NO_SETTING_EVENTS;
+  const campaignEvents =
+    useResource<CampaignCalendarEvent[]>(`/campaigns/${campaignId}/calendar-events`).data ?? NO_CAMPAIGN_EVENTS;
+  const run = useAction();
 
   const months = calendar?.months ?? [];
   const era = calendar?.era ?? "";
-
-  useEffect(() => {
-    if (settingId) {
-      api
-        .get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`)
-        .then(setSettingEvents);
-    }
-    api.get<CampaignCalendarEvent[]>(`/campaigns/${campaignId}/calendar-events`).then(setCampaignEvents);
-  }, [settingId, campaignId]);
 
   // Даты у сессии нет — предлагаем ту, на которой кончилась прошлая
   // проведённая. Кнопкой, а не молча: внутримировое время потом трудно
   // расплести, и запись даты, которой Мастер не назначал, — не помощь.
   const hasDate = session.inworld_year != null;
-  useEffect(() => {
-    if (hasDate) return;
-    api
-      .get<SessionSummary[]>(`/campaigns/${campaignId}/sessions`)
-      .then((all) => {
-        const held = all
-          .filter((s) => s.id !== session.id && s.status === "held" && s.inworld_year != null)
-          .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
-        if (!held) return setSuggested(null);
-        setSuggested({
-          year: held.inworld_year_end ?? held.inworld_year!,
-          month: held.inworld_month_end ?? held.inworld_month ?? 1,
-          day: held.inworld_day_end ?? held.inworld_day ?? 1,
-        });
-      })
-      .catch(() => setSuggested(null));
-  }, [hasDate, campaignId, session.id]);
+  const campaignSessions = useResource<SessionSummary[]>(
+    hasDate ? null : sessionPaths.campaignSessions(campaignId)
+  ).data;
+  const suggested = useMemo(() => {
+    if (hasDate || !campaignSessions) return null;
+    const held = campaignSessions
+      .filter((s) => s.id !== session.id && s.status === "held" && s.inworld_year != null)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    if (!held) return null;
+    return {
+      year: held.inworld_year_end ?? held.inworld_year!,
+      month: held.inworld_month_end ?? held.inworld_month ?? 1,
+      day: held.inworld_day_end ?? held.inworld_day ?? 1,
+    };
+  }, [hasDate, campaignSessions, session.id]);
 
   // «Сейчас» сессии — конец её промежутка, если он есть: время внутри сессии
   // идёт, и события считаются от того дня, до которого партия дожила.
@@ -105,40 +99,53 @@ export function SessionTimeStrip({ session, settingId, campaignId, onChanged }: 
 
   const [undo, setUndo] = useState<{ y: number | null; m: number | null; d: number | null } | null>(null);
 
+  // Запись промежутка сессии. Полоса, профиль сессии и соседние окна
+  // обновятся по тому, что правка задела (data/sessions.ts); не записалось —
+  // плашка с повтором.
+  const writeDates = useCallback(
+    (patch: Partial<SessionDetail>) =>
+      run(
+        async () => {
+          await write.put(`/sessions/${session.id}`, patch);
+          return true;
+        },
+        { affects: sessionAffects(session.id, campaignId) }
+      ),
+    [run, session.id, campaignId]
+  );
+
   const advanceDay = useCallback(async () => {
     if (nowElapsed == null) return;
     const prev = { y: session.inworld_year_end, m: session.inworld_month_end, d: session.inworld_day_end };
     const next = dateFromElapsed(nowElapsed + 1, months);
-    await api.put(`/sessions/${session.id}`, {
+    const done = await writeDates({
       inworld_year_end: next.year,
       inworld_month_end: next.month,
       inworld_day_end: next.day,
     });
+    if (!done) return;
     setUndo(prev);
     setTimeout(() => setUndo((cur) => (cur === prev ? null : cur)), 5000);
-    onChanged();
-  }, [nowElapsed, months, session]);
+  }, [nowElapsed, months, session, writeDates]);
 
   const undoAdvance = useCallback(async () => {
     if (!undo) return;
-    await api.put(`/sessions/${session.id}`, {
+    const done = await writeDates({
       inworld_year_end: undo.y,
       inworld_month_end: undo.m,
       inworld_day_end: undo.d,
     });
-    setUndo(null);
-    onChanged();
-  }, [undo, session.id, onChanged]);
+    if (done) setUndo(null);
+  }, [undo, writeDates]);
 
   const applySuggested = useCallback(async () => {
     if (!suggested) return;
-    await api.put(`/sessions/${session.id}`, {
+    await writeDates({
       inworld_year: suggested.year,
       inworld_month: suggested.month,
       inworld_day: suggested.day,
     });
-    onChanged();
-  }, [suggested, session.id, onChanged]);
+  }, [suggested, writeDates]);
 
   // Календаря у сеттинга нет — считать не из чего, и полоса молчит, а не
   // показывает пустую рамку.

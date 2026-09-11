@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../api/client";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { dataKeys } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
+import { launchAffects, sessionPaths } from "../data/sessions";
 import type { SessionUnionRow, TreeAdventure } from "../types";
 
 // «Сцены на вечер» — заготовка сессии.
@@ -26,6 +29,9 @@ interface PlannedReply {
   carried: number[];
 }
 
+const NO_IDS: number[] = [];
+const NO_UNION: SessionUnionRow[] = [];
+
 export function SessionSceneTree({
   sessionId,
   onChanged,
@@ -34,37 +40,24 @@ export function SessionSceneTree({
   onChanged?: () => void;
 }) {
   const [wide, setWide] = useState(false);
-  const [tree, setTree] = useState<TreeAdventure[] | null>(null);
-  const [planned, setPlanned] = useState<number[]>([]);
-  const [carried, setCarried] = useState<number[]>([]);
-  const [union, setUnion] = useState<SessionUnionRow[]>([]);
+  // Дерево, отметки и состав — из кэша слоя данных: отметка здесь и запуск на
+  // пульте задевают сессию (data/sessions.ts), и всё перечитывается само, в
+  // том числе в окне пульта. Дерево при смене охвата держит прежнее, пока не
+  // придёт новое, — как и раньше.
+  const tree = useResource<TreeAdventure[]>(sessionPaths.storyTree(sessionId, wide), { keepPrevious: true }).data ?? null;
+  const plannedPath = sessionPaths.planned(sessionId);
+  const plannedReply = useResource<PlannedReply>(plannedPath).data;
+  const planned = plannedReply?.ids ?? NO_IDS;
+  const carried = plannedReply?.carried ?? NO_IDS;
+  const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data ?? NO_UNION;
   const [openAdv, setOpenAdv] = useState<number | null>(null);
   const [openCh, setOpenCh] = useState<string | null>(null);
-  // Заготовка приезжает отдельным запросом и позже дерева. Без этого флага
-  // «открыть то приключение, где уже отмечено» срабатывало на пустом ещё
+  // Заготовка приезжает отдельным запросом и позже дерева. Пока её нет,
+  // «открыть то приключение, где уже отмечено» сработало бы на пустом ещё
   // списке отметок и всегда открывало первое.
-  const [plannedLoaded, setPlannedLoaded] = useState(false);
-
-  useEffect(() => {
-    api
-      .get<TreeAdventure[]>(`/sessions/${sessionId}/story-tree${wide ? "?scope=setting" : ""}`)
-      .then(setTree);
-  }, [sessionId, wide]);
-
-  const readPlanned = useCallback((reply: PlannedReply) => {
-    setPlanned(reply.ids);
-    setCarried(reply.carried);
-    setPlannedLoaded(true);
-  }, []);
-
-  const refreshUnion = useCallback(() => {
-    api.get<SessionUnionRow[]>(`/sessions/${sessionId}/cast-union`).then(setUnion);
-  }, [sessionId]);
-
-  useEffect(() => {
-    api.get<PlannedReply>(`/sessions/${sessionId}/planned`).then(readPlanned);
-    refreshUnion();
-  }, [sessionId, readPlanned, refreshUnion]);
+  const plannedLoaded = plannedReply !== undefined;
+  const client = useQueryClient();
+  const run = useAction();
 
   const pickedSet = useMemo(() => new Set(planned), [planned]);
   const carriedSet = useMemo(() => new Set(carried), [carried]);
@@ -81,12 +74,12 @@ export function SessionSceneTree({
 
   async function toggle(ids: number[], on: boolean) {
     if (ids.length === 0) return;
-    const reply = await api.post<PlannedReply>(`/sessions/${sessionId}/planned`, {
-      scene_ids: ids,
-      on,
+    // Набор вечера меняет и сцену на пульте, и состав панелей — задето всё под
+    // сессией и её связи.
+    const reply = await run(() => write.post<PlannedReply>(plannedPath, { scene_ids: ids, on }), {
+      affects: launchAffects(sessionId),
     });
-    readPlanned(reply);
-    refreshUnion();
+    if (reply) client.setQueryData(dataKeys.resource(plannedPath), reply);
     onChanged?.();
   }
 

@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api/client";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { NavIcon } from "../components/NavIcons";
 import { SceneSwitcher } from "../components/SceneSwitcher";
@@ -30,89 +29,46 @@ import { sessionLabel } from "../sessionLabel";
 import { loadPultFinishAction } from "../pultPrefs";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { PartyHereStrip } from "../components/PartyHereStrip";
-import { PARTY_PLACE_CHANGED } from "../partyPlaceEvents";
+import { useAction, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
+import { sessionMoneyAffects, sessionPaths } from "../data/sessions";
 
-function errorText(e: unknown, fallback: string): string {
-  const message = e instanceof Error ? e.message : "";
-  return message || fallback;
-}
+// Пустые списки — постоянными ссылками: панели мемоизированы, и новый `[]` на
+// каждой отрисовке перерисовывал бы их зря.
+const NO_CHARACTERS: Character[] = [];
+const NO_PLAYLISTS: Playlist[] = [];
+const NO_UNION: SessionUnionRow[] = [];
 
 export function SessionLivePage() {
   const { id } = useParams();
   const sessionId = Number(id);
-
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
-  const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
-  const [characters, setCharacters] = useState<Character[]>([]);
+
+  // Всё — из кэша слоя данных (docs/adr/0001). Запуск сцены, правка в другом
+  // окне и заявка игрока обновляют задетое сами: счётчик запусков, который
+  // раньше тянулся через полстраницы к панелям, больше не нужен.
+  const sessionState = useEntity<SessionDetail>("session", sessionId);
+  const session = sessionState.data ?? null;
+  const campaignState = useEntity<CampaignDetail>("campaign", session?.campaign_id);
+  const campaign = campaignState.data ?? null;
+  const characters =
+    useResource<Character[]>(session ? sessionPaths.campaignCharacters(session.campaign_id) : null).data ??
+    NO_CHARACTERS;
   // Боевые темы теперь общие: плейлистов сессии и сеттинга больше нет, и
   // выбирать тему приходится из одного списка, а не из двух.
-  const [battles, setBattles] = useState<Playlist[]>([]);
-  // Запуск сцены меняет и ленту вечера, и панели, а они живут ниже
-  // переключателя и о нём не знают. Счётчик — самый дешёвый способ сказать им
-  // «перечитайте», не таща состояние пульта через полстраницы.
-  const [launches, setLaunches] = useState(0);
-  const [union, setUnion] = useState<SessionUnionRow[]>([]);
-
-  // «Мы здесь» из докстанции кладёт место в «Локации» сессии: панели
-  // перечитываются тем же счётчиком, что и после запуска сцены.
-  useEffect(() => {
-    const onPartyPlace = (e: Event) => {
-      if ((e as CustomEvent<{ sessionId: number }>).detail?.sessionId === sessionId) setLaunches((n) => n + 1);
-    };
-    window.addEventListener(PARTY_PLACE_CHANGED, onPartyPlace);
-    return () => window.removeEventListener(PARTY_PLACE_CHANGED, onPartyPlace);
-  }, [sessionId]);
-
-  const refresh = useCallback(() => {
-    let cancelled = false;
-    setLoadError(null);
-    api
-      .get<SessionDetail>(`/sessions/${sessionId}`)
-      .then((s) => {
-        if (cancelled) return;
-        setSession(s);
-        api
-          .get<CampaignDetail>(`/campaigns/${s.campaign_id}`)
-          .then((c) => { if (!cancelled) setCampaign(c); })
-          .catch((e) => { if (!cancelled) setLoadError(errorText(e, "Кампания сессии не читается.")); });
-        api.get<Character[]>(`/characters?campaign_id=${s.campaign_id}`).then((ch) => { if (!cancelled) setCharacters(ch); }).catch(() => {});
-      })
-      .catch((e) => {
-        if (!cancelled) setLoadError(errorText(e, "Сессия не найдена или сервер не отвечает."));
-      });
-    return () => { cancelled = true; };
-  }, [sessionId]);
-
-  useEffect(() => {
-    api.get<Playlist[]>("/playlists").then(setBattles).catch(() => setBattles([]));
-  }, []);
-
+  const battles = useResource<Playlist[]>(sessionPaths.playlists()).data ?? NO_PLAYLISTS;
   // Объединение зависит и от отметок приключений, и от того, какая сцена идёт
-  // (пометка «в сцене»), поэтому перечитывается на каждом запуске.
-  useEffect(() => {
-    api.get<SessionUnionRow[]>(`/sessions/${sessionId}/cast-union`).then(setUnion).catch(() => {});
-  }, [sessionId, launches]);
+  // (пометка «в сцене»): запуск задевает сессию, и оно перечитывается само.
+  const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data ?? NO_UNION;
 
-  useEffect(() => {
-    const cleanup = refresh();
-    return cleanup;
-  }, [refresh]);
+  const { save } = useSaveEntity<SessionDetail>("session", sessionId, {
+    affects: session ? [{ path: sessionPaths.campaignSessions(session.campaign_id) }] : [],
+  });
+  const run = useAction();
 
-  async function saveIdea(value: string) {
-    await api.put(`/sessions/${sessionId}`, { idea_notes: value });
-    refresh();
-  }
-
-  async function saveBattlePlaylist(playlistId: number | null) {
-    await api.put(`/sessions/${sessionId}`, { battle_playlist_id: playlistId });
-    refresh();
-  }
-
-  async function saveMainEvents(value: string) {
-    await api.put(`/sessions/${sessionId}`, { main_events: value });
-    refresh();
+  // Текст из карточки: не сохранилось — карточка остаётся в правке с набранным,
+  // а плашка предлагает повтор.
+  async function saveText(patch: Partial<SessionDetail>) {
+    if (!(await save(patch))) throw new Error("Не сохранилось");
   }
 
   // «Сохранить и завершить сессию» — одна кнопка вместо двух шагов: записать
@@ -124,18 +80,32 @@ export function SessionLivePage() {
   // Главной и там дождётся. Кому удобнее считать сразу — включает окно во
   // вкладке настроек «Пульт сессии».
   async function finishSession(text: string) {
-    await api.put(`/sessions/${sessionId}`, { main_events: text, status: "held" });
-    refresh();
+    if (!session) return;
+    const done = await run(
+      async () => {
+        await write.put(`/sessions/${sessionId}`, { main_events: text, status: "held" });
+        return true;
+      },
+      { affects: sessionMoneyAffects(sessionId, session.campaign_id) }
+    );
+    if (!done) throw new Error("Не сохранилось");
     if (loadPultFinishAction() === "modal") setOutcomeOpen(true);
   }
 
-  async function toggleMainEventsVisible() {
-    await api.put(`/sessions/${sessionId}`, { main_events_visible: !session!.main_events_visible });
-    refresh();
+  function reload() {
+    sessionState.reload();
+    campaignState.reload();
   }
 
   // Немой `return null` оставлял пустую страницу навсегда — и при неверном id,
   // и при упавшем сервере: за столом это белый экран без единого слова.
+  let loadError: string | null = null;
+  if (!session && sessionState.error != null) {
+    loadError = sessionState.error || "Сессия не найдена или сервер не отвечает.";
+  } else if (session && !campaign && campaignState.error != null) {
+    loadError = campaignState.error || "Кампания сессии не читается.";
+  }
+
   if (loadError) {
     return (
       <div className="stack session-live">
@@ -143,7 +113,7 @@ export function SessionLivePage() {
           <strong>Пульт не открылся</strong>
           <span className="muted">{loadError}</span>
           <div className="row" style={{ gap: 8 }}>
-            <button className="primary" onClick={refresh}>
+            <button className="primary" onClick={reload}>
               Попробовать снова
             </button>
             <Link to={`/sessions/${sessionId}`}>К странице сессии</Link>
@@ -155,7 +125,7 @@ export function SessionLivePage() {
 
   if (!session || !campaign) return <span className="muted">Открываем пульт…</span>;
 
-  const panelProps = { sessionId, session, campaign, characters, launches, union, onChanged: refresh };
+  const panelProps = { sessionId, session, campaign, characters, union };
 
   return (
     <div className="stack session-live">
@@ -176,7 +146,7 @@ export function SessionLivePage() {
 
       {/* Где партия (решения 2026-09-11, §3): между шапкой и переключателем
           сцен — на вопрос «где мы» Мастер отвечает, не отводя глаз от пульта. */}
-      <PartyHereStrip sessionId={sessionId} version={launches} />
+      <PartyHereStrip sessionId={sessionId} />
 
       {/* Порядок вечера сверху вниз: где мы во времени → что запускаем → что
           на экране у игроков → с чем сели играть → чем пользуемся.
@@ -184,22 +154,17 @@ export function SessionLivePage() {
           ради него сюда и смотрят, и искать его прокруткой посреди игры
           некогда. Задумка, боевая тема и «Основные события» — под ним: их
           читают редко, а пишут в них под конец. */}
-      <SessionTimeStrip
-        session={session}
-        settingId={campaign.setting_id}
-        campaignId={campaign.id}
-        onChanged={refresh}
-      />
+      <SessionTimeStrip session={session} settingId={campaign.setting_id} campaignId={campaign.id} />
 
-      <SceneSwitcher sessionId={sessionId} onLaunched={() => setLaunches((n) => n + 1)} />
+      <SceneSwitcher sessionId={sessionId} />
 
-      <PresentationPanel sessionId={sessionId} campaignId={campaign.id} launches={launches} />
+      <PresentationPanel sessionId={sessionId} campaignId={campaign.id} />
 
       <div className="card row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span className="sp-idea-battle__label">Боевая тема</span>
         <select
           value={session.battle_playlist_id ?? ""}
-          onChange={(e) => saveBattlePlaylist(e.target.value ? Number(e.target.value) : null)}
+          onChange={(e) => void save({ battle_playlist_id: e.target.value ? Number(e.target.value) : null })}
           style={{ flex: 1, minWidth: 160, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}
         >
           <option value="">— из набора —</option>
@@ -217,7 +182,7 @@ export function SessionLivePage() {
           title="Задумка на сессию"
           draftKey={`session-idea-${sessionId}`}
           value={session.idea_notes}
-          onSave={saveIdea}
+          onSave={(value) => saveText({ idea_notes: value })}
           entityType="session"
           entityId={sessionId}
           collapsible
@@ -228,7 +193,7 @@ export function SessionLivePage() {
           title="Основные события сессии"
           draftKey={`session-main-events-${sessionId}`}
           value={session.main_events}
-          onSave={saveMainEvents}
+          onSave={(value) => saveText({ main_events: value })}
           entityType="session"
           entityId={sessionId}
           collapsible
@@ -240,7 +205,11 @@ export function SessionLivePage() {
           }
           inlineFooter={
             <label className="row muted" style={{ gap: 6, alignItems: "center" }}>
-              <input type="checkbox" checked={!!session.main_events_visible} onChange={toggleMainEventsVisible} />
+              <input
+                type="checkbox"
+                checked={!!session.main_events_visible}
+                onChange={() => void save({ main_events_visible: session.main_events_visible ? 0 : 1 })}
+              />
               {session.main_events_visible ? (
                 <>
                   <NavIcon name="eye" /> Видно игрокам
@@ -253,10 +222,8 @@ export function SessionLivePage() {
         >
           <SceneJournal
             sessionId={sessionId}
-            version={launches}
             onInsert={(text) =>
-              saveMainEvents(session.main_events ? `${session.main_events}
-${text}` : text)
+              void save({ main_events: session.main_events ? `${session.main_events}\n${text}` : text })
             }
           />
         </EditableTextCard>
@@ -287,13 +254,7 @@ ${text}` : text)
           <div style={{ flex: 1, minWidth: 260 }}><SecretsPanel {...panelProps} /></div>
         </div>
       </div>
-      {outcomeOpen && (
-        <SessionOutcomeModal
-          sessionId={sessionId}
-          onClose={() => setOutcomeOpen(false)}
-          onSaved={refresh}
-        />
-      )}
+      {outcomeOpen && <SessionOutcomeModal sessionId={sessionId} onClose={() => setOutcomeOpen(false)} />}
     </div>
   );
 }

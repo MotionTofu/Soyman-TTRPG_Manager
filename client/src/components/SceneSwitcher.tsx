@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { launchAffects, sessionPaths } from "../data/sessions";
 import { useSoundEngineOptional } from "../sound/engine";
 import type {
   LaunchResult,
@@ -31,55 +34,40 @@ import type {
 // не запускает: правило «щелчок не запускает» держит момент включения музыки и
 // панелей за Мастером.
 
-export function SceneSwitcher({
-  sessionId,
-  onLaunched,
-}: {
-  sessionId: number;
-  onLaunched: () => void;
-}) {
-  const [stage, setStage] = useState<SessionStage | null>(null);
+export function SceneSwitcher({ sessionId }: { sessionId: number }) {
+  // Сцена вечера — из кэша слоя данных: запуск здесь или в другом окне и
+  // правка набора в подготовке задевают сессию (data/sessions.ts), и
+  // переключатель перечитывается сам.
+  const stageState = useResource<SessionStage>(sessionPaths.stage(sessionId));
+  const stage = stageState.data ?? null;
   // Предпросмотр: щелчок по сцене НЕ запускает её. Запуск меняет панели и
   // музыку, и делать это перебором вариантов «куда дальше» нельзя.
   const [picked, setPicked] = useState<StageScene | null>(null);
-  const [preview, setPreview] = useState<ScenePreview | null>(null);
   const [busy, setBusy] = useState(false);
   const sound = useSoundEngineOptional();
+  const afterWrite = useAfterWrite();
 
-  const [stageError, setStageError] = useState(false);
-  // Без .catch сбой оставлял переключатель невидимым — главный орган пульта
+  // Без сообщения сбой оставлял переключатель невидимым — главный орган пульта
   // молча исчезал с экрана, и понять, что случилось, было не по чему.
-  const refresh = useCallback(() => {
-    setStageError(false);
-    api
-      .get<SessionStage>(`/sessions/${sessionId}/stage`)
-      .then(setStage)
-      .catch(() => setStageError(true));
-  }, [sessionId]);
-  useEffect(refresh, [refresh]);
+  const stageError = !stage && stageState.error != null;
+  const refresh = stageState.reload;
 
-  // Карточка показывает выбранную сцену, а пока не выбрали — запущенную.
+  // Карточка показывает выбранную сцену, а пока не выбрали — запущенную. При
+  // переборе стрелками держится прежняя карточка, пока не придёт новая.
   const shownId = picked?.id ?? stage?.current?.id ?? null;
-  useEffect(() => {
-    if (shownId == null) {
-      setPreview(null);
-      return;
-    }
-    let cancelled = false;
-    api
-      .get<ScenePreview>(`/sessions/${sessionId}/preview/${shownId}`)
-      .then((p) => !cancelled && setPreview(p))
-      .catch(() => !cancelled && setPreview(null));
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, shownId]);
+  const previewData = useResource<ScenePreview>(
+    shownId != null ? sessionPaths.preview(sessionId, shownId) : null,
+    { keepPrevious: true }
+  ).data;
+  const preview = shownId == null ? null : previewData ?? null;
+
+  const onPlannedChanged = useCallback(() => afterWrite(launchAffects(sessionId)), [afterWrite, sessionId]);
 
   async function launch(scene: StageScene) {
     if (busy) return;
     setBusy(true);
     try {
-      const result = await api.post<LaunchResult>(`/sessions/${sessionId}/launch`, {
+      const result = await write.post<LaunchResult>(`/sessions/${sessionId}/launch`, {
         scene_id: scene.id,
       });
       // Звук переключает клиент, а не сервер: движок живёт в главном окне
@@ -89,8 +77,12 @@ export function SceneSwitcher({
         sound.sceneSet(result.soundSetId, result.scene.name, result.soundSetName ?? "набор сцены");
       }
       setPicked(null);
-      refresh();
-      onLaunched();
+      // Запуск меняет сцену, экран и состав панелей: всё это перечитается по
+      // задетому — здесь, во вынесенных панелях и в окне показа.
+      afterWrite(launchAffects(sessionId));
+    } catch (e) {
+      afterWrite(launchAffects(sessionId));
+      showSaveError(`Сцена не запустилась: ${errorText(e)}`);
     } finally {
       setBusy(false);
     }
@@ -171,7 +163,7 @@ export function SceneSwitcher({
           sessionId={sessionId}
           pickedId={picked?.id ?? null}
           onPick={setPicked}
-          onChanged={refresh}
+          onChanged={onPlannedChanged}
         />
       </div>
 
@@ -361,6 +353,7 @@ function PlannedList({
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<SceneSearchRow[]>([]);
 
+  // Поиск по мере набора — подсказка, а не данные пульта: мимо слоя данных.
   useEffect(() => {
     if (!searching || query.trim().length < 2) {
       setFound([]);
@@ -380,7 +373,12 @@ function PlannedList({
   }, [searching, query, sessionId]);
 
   async function addAndPick(row: SceneSearchRow) {
-    await api.post(`/sessions/${sessionId}/planned`, { scene_ids: [row.id], on: true });
+    try {
+      await write.post(`/sessions/${sessionId}/planned`, { scene_ids: [row.id], on: true });
+    } catch (e) {
+      showSaveError(`Сцена не добавилась в вечер: ${errorText(e)}`);
+      return;
+    }
     setSearching(false);
     setQuery("");
     onChanged();

@@ -1,6 +1,8 @@
 import { memo, useEffect, useState, type DragEvent } from "react";
 import { api } from "../api/client";
 import { resolveEntityLabel } from "../api/resolveEntity";
+import { useAction, useResource, write } from "../data/hooks";
+import { linkAffects, linksPath } from "../data/sessions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
@@ -53,10 +55,6 @@ interface Props {
   // e.g. Потенциальный лут accepts compendium items but not spells/monsters.
   // Ignored for other accepted types.
   acceptCompendiumKinds?: string[];
-  // Счётчик запусков сцен на пульте. Запуск подменяет состав панели на
-  // сервере, а зона о нём не знает — без этого Мастер увидит прошлую сцену до
-  // перезагрузки страницы, то есть ровно тогда, когда смотреть некогда.
-  version?: number;
   // Состав всех сцен сессии для этой панели. Показывается строками без
   // крестика: удалить участника отсюда значило бы удалить его из сцены, а это
   // правка приключения, а не пульта.
@@ -85,21 +83,24 @@ export const SectionDropZone = memo(function SectionDropZone({
   mentionTypes,
   origin,
   acceptCompendiumKinds,
-  version,
   unionRows,
   toInitiative,
 }: Props) {
+  // Связи секции — из кэша слоя данных. Запуск сцены подменяет состав панели на
+  // сервере и задевает связи сессии (data/sessions.ts): зона перечитывается
+  // сама, в том числе во вынесенном окне, — счётчик запусков больше не нужен.
+  const links = useResource<GenericLink[]>(linksPath(entityType, entityId, section)).data;
+  const run = useAction();
   const [linkEntries, setLinkEntries] = useState<Entry[]>([]);
   const [mentionEntries, setMentionEntries] = useState<Entry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  async function load() {
-    const links = await api.get<GenericLink[]>(
-      `/links?type=${entityType}&id=${entityId}&section=${section}`
-    );
-    const settled = await Promise.allSettled(
+  useEffect(() => {
+    if (!links) return;
+    let cancelled = false;
+    void Promise.allSettled(
       links.map(async (l) => {
         const other =
           l.from_type === entityType && l.from_id === entityId
@@ -112,17 +113,18 @@ export const SectionDropZone = memo(function SectionDropZone({
           return null;
         }
       })
-    );
-    const resolved = settled
-      .map((r) => (r.status === "fulfilled" ? r.value : null))
-      .filter((e): e is Entry => e !== null);
-    setLinkEntries(resolved);
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityType, entityId, section, version]);
+    ).then((settled) => {
+      if (cancelled) return;
+      setLinkEntries(
+        settled
+          .map((r) => (r.status === "fulfilled" ? r.value : null))
+          .filter((e): e is Entry => e !== null)
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [links, entityType, entityId]);
 
   useEffect(() => {
     if (!mentionText || !mentionTypes || mentionTypes.length === 0) {
@@ -172,6 +174,40 @@ export const SectionDropZone = memo(function SectionDropZone({
   const shownKeys = new Set(shown.map((e) => `${e.type}:${e.id}`));
   const entries = [...shown, ...mentionEntries.filter((e) => !shownKeys.has(`${e.type}:${e.id}`))];
 
+  // Добавить связь. Повтор на плашке не предлагается: ответ мог потеряться
+  // после того, как связь уже легла, и повтор завёл бы вторую.
+  async function addLink(result: SearchResult): Promise<boolean> {
+    const done = await run(
+      async () => {
+        if (entityType === "session") {
+          await write.post("/links", {
+            from_type: entityType,
+            from_id: entityId,
+            to_type: result.type,
+            to_id: result.id,
+            section,
+            origin: origin === "live" ? "live" : "planned",
+          });
+        } else {
+          await write.post("/entity-relations", {
+            from_type: entityType,
+            from_id: entityId,
+            to_type: result.type,
+            to_id: result.id,
+            section,
+            origin,
+            tone: "neutral",
+            label: "",
+            description: "",
+          });
+        }
+        return true;
+      },
+      { affects: linkAffects(entityType, entityId), retry: false }
+    );
+    return done === true;
+  }
+
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setDragOver(false);
@@ -190,39 +226,18 @@ export const SectionDropZone = memo(function SectionDropZone({
       !acceptCompendiumKinds.includes(result.kind ?? "")
     )
       return;
-    if (entityType === "session") {
-      await api.post("/links", {
-        from_type: entityType,
-        from_id: entityId,
-        to_type: result.type,
-        to_id: result.id,
-        section,
-        origin: origin === "live" ? "live" : "planned",
-      });
-    } else {
-      await api.post("/entity-relations", {
-        from_type: entityType,
-        from_id: entityId,
-        to_type: result.type,
-        to_id: result.id,
-        section,
-        origin,
-        tone: "neutral",
-        label: "",
-        description: "",
-      });
-    }
-    load();
+    await addLink(result);
   }
 
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [filter, setFilter] = useState("");
 
   async function remove(relationId: number) {
-    if (entityType === "session") await api.del(`/links/${relationId}`);
-    else await api.del(`/entity-relations/${relationId}`);
     setPendingDelete(null);
-    load();
+    await run(
+      () => (entityType === "session" ? write.del(`/links/${relationId}`) : write.del(`/entity-relations/${relationId}`)),
+      { affects: linkAffects(entityType, entityId) }
+    );
   }
 
   const filteredEntries = filter.trim()
@@ -336,30 +351,7 @@ export const SectionDropZone = memo(function SectionDropZone({
           acceptTypes={acceptTypes}
           acceptCompendiumKinds={acceptCompendiumKinds}
           onPick={async (result) => {
-            if (entityType === "session") {
-              await api.post("/links", {
-                from_type: entityType,
-                from_id: entityId,
-                to_type: result.type,
-                to_id: result.id,
-                section,
-                origin: origin === "live" ? "live" : "planned",
-              });
-            } else {
-              await api.post("/entity-relations", {
-                from_type: entityType,
-                from_id: entityId,
-                to_type: result.type,
-                to_id: result.id,
-                section,
-                origin,
-                tone: "neutral",
-                label: "",
-                description: "",
-              });
-            }
-            setPickerOpen(false);
-            load();
+            if (await addLink(result)) setPickerOpen(false);
           }}
           onClose={() => setPickerOpen(false)}
         />
@@ -383,6 +375,8 @@ function DropZonePicker({
   const [q, setQ] = useState("");
   const [items, setItems] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  // Поиск по мере набора — подсказка, а не данные страницы: кэшировать и
+  // перечитывать по сигналам тут нечего, запрос идёт мимо слоя.
   useEffect(() => {
     if (q.trim().length < 2) { setItems([]); return; }
     setLoading(true);

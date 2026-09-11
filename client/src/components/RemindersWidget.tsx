@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
 import type { GmReminder } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { useAction, useResource, write } from "../data/hooks";
+import { remindersPath } from "../data/sessions";
 
 interface Props {
   targetType: "player" | "campaign" | "character";
   targetId: number;
 }
+
+const NO_REMINDERS: GmReminder[] = [];
 
 // Напоминание — shown on the player's Главная in player-app. Lifecycle is
 // entirely GM-controlled here: deleting it removes it for everyone, that's
@@ -16,49 +19,47 @@ interface Props {
 // из профиля игрока.
 export function RemindersWidget({ targetType, targetId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
-  const [reminders, setReminders] = useState<GmReminder[]>([]);
+  const basePath = remindersPath(targetType, targetId);
+  // Список — из кэша слоя данных. Заявку игрока (метка, сглаз) сервер уже
+  // положил в напоминалки, и живое событие перечитывает список само
+  // (data/syncAffects.ts); здесь остаётся только подсветить новую.
+  const reminders = useResource<GmReminder[]>(basePath).data ?? NO_REMINDERS;
+  const run = useAction();
   const [draft, setDraft] = useState("");
-  // Живое обновление панели пульта: игрок заявил метку/сглаз — сервер уже
-  // положил напоминалку, здесь только перечитываем и подсвечиваем новую.
   const [flashId, setFlashId] = useState<number | null>(null);
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as { reminderId?: number } | undefined;
       if (detail?.reminderId != null) setFlashId(detail.reminderId);
-      refresh();
     };
     window.addEventListener("hunter-mark", handler);
     return () => window.removeEventListener("hunter-mark", handler);
-  }, [targetType, targetId]);
-  const basePath =
-    targetType === "player"
-      ? `/players/${targetId}/reminders`
-      : targetType === "campaign"
-        ? `/campaigns/${targetId}/reminders`
-        : `/characters/${targetId}/reminders`;
+  }, []);
   const emptyHint =
     targetType === "character"
       ? "Нет посланий — напишите первое, оно придёт на оборот карты персонажа."
-      : "Нет активных напоминаний — напишите первое, оно появится у игроков на\u00a0Главной.";
-
-  function refresh() {
-    api.get<GmReminder[]>(basePath).then(setReminders);
-  }
-  useEffect(refresh, [targetType, targetId]);
+      : "Нет активных напоминаний — напишите первое, оно появится у игроков на Главной.";
 
   async function add() {
-    if (!draft.trim()) return;
-    await api.post(basePath, { message: draft.trim() });
-    setDraft("");
-    refresh();
+    const message = draft.trim();
+    if (!message) return;
+    const done = await run(
+      async () => {
+        await write.post(basePath, { message });
+        return true;
+      },
+      // Без повтора: ответ мог потеряться после того, как напоминание уже
+      // легло, и повтор завёл бы второе.
+      { affects: [{ path: basePath }], retry: false }
+    );
+    if (done) setDraft("");
   }
 
   async function remove(reminderId: number) {
     if (!(await confirm({ message: "Удалить напоминание?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`${basePath}/${reminderId}`);
     if (flashId === reminderId) setFlashId(null);
-    refresh();
+    await run(() => write.del(`${basePath}/${reminderId}`), { affects: [{ path: basePath }] });
   }
 
   return (
