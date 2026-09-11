@@ -1109,17 +1109,25 @@ summary.sb-section {
   padding: 2px 0;
 }
 .dnd-replica-modal {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   max-height: min(78vh, 720px);
   overflow-y: auto;
-  min-width: min(92vw, 440px);
+  overflow-x: hidden;
 }
 
 /* Список доступных заклинаний: длинный, поэтому скроллится внутри модалки,
    а не растит её на весь экран. */
 .dnd-spell-list-modal {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   max-height: min(78vh, 720px);
   overflow-y: auto;
-  min-width: min(92vw, 420px);
+  overflow-x: hidden;
 }
 .dnd-spell-list-row {
   gap: 8px;

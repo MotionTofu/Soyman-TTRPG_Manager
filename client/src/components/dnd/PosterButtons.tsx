@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { downloadPoster, sharePoster, type PosterData } from "./CharacterPoster";
+import { downloadBlob, posterFileName, shareBlobFile } from "./CharacterPoster";
 
 // Кнопки постера: PNG-скачивание + системный шаринг с фолбэком.
-// Данные отдаёт родитель колбэком — собираются в момент нажатия,
-// поэтому кнопки не протухают при правках между рендерами.
+// Blob отдаёт родитель колбэком — собирается в момент нажатия, поэтому
+// кнопки не протухают при правках между рендерами. Что внутри blob —
+// дело родителя: визард рисует canvas (CharacterPoster), карта снимает
+// лицевую сторону (cardSnapshot).
 export function PosterButtons({
-  getData,
+  getBlob,
   fileBase,
+  shareTitle,
 }: {
-  getData: () => PosterData;
+  getBlob: () => Promise<Blob>;
   fileBase: string;
+  shareTitle: string;
 }) {
   const [busy, setBusy] = useState<null | "png" | "share">(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,11 +23,11 @@ export function PosterButtons({
     setBusy(kind);
     setError(null);
     try {
-      const data = getData();
+      const blob = await getBlob();
       if (kind === "png") {
-        await downloadPoster(data, fileBase);
+        downloadBlob(blob, posterFileName(fileBase));
       } else {
-        await sharePoster(data, fileBase);
+        await shareBlobFile(blob, fileBase, shareTitle);
       }
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") {

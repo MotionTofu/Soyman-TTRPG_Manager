@@ -14,7 +14,7 @@ import {
 } from "./dndEquipment";
 import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
 import { PosterButtons } from "./PosterButtons";
-import type { PosterData } from "./CharacterPoster";
+import { renderPosterBlob, type PosterData } from "./CharacterPoster";
 import { WizardMiniSheet, type MiniSheetProblem } from "./WizardMiniSheet";
 import { choicesFromEntries, featuresFromEntries, sumEntrySlots, type ChoiceDef } from "./dndFeatures";
 import { cantripsAtLevel, preparedAtLevel, spellSlotsAtLevel, type ClassProgression } from "./progression";
@@ -3035,7 +3035,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       {step === "Обзор" && (
         <>
           {miniSheet()}
-          <PosterButtons getData={posterData} fileBase={characterName.trim() || "personazh"} />
+          <PosterButtons
+            getBlob={() => renderPosterBlob(posterData())}
+            fileBase={characterName.trim() || "personazh"}
+            shareTitle={characterName.trim() || "Без имени"}
+          />
         </>
       )}
       </>

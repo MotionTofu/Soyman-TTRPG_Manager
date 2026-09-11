@@ -134,6 +134,10 @@ interface ThemeCfg {
   surfaceMix?: number;
   surfaceAltMix?: number;
   textMutedOverride?: string;
+  // `--level-ink`: подпись уровня на листе D&D (бейдж «ур. N», ромб секции).
+  // Тёплое золото только там, где оно из палитры темы; иначе вторые чернила —
+  // уровень служебная подпись, акцент темы на неё не тратится (разбор 2026-09-11).
+  levelInk?: string;
   cardBorderWidth?: number; // px
   cardRadius?: number; // px
   cardClip?: string; // clip-path value
@@ -208,6 +212,7 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
     "--paper-2": paper2,
     "--ink": ink,
     "--ink-2": ink2,
+    "--level-ink": cfg.levelInk || ink2,
     "--muted": muted,
     "--surface": surface,
     "--on-surface": onSurface,
@@ -305,6 +310,9 @@ function skinTheme(
       "--paper-2": d.paper2,
       "--ink": d.ink,
       "--ink-2": d.ink2,
+      // Уровень на листе — вторыми чернилами: у скинов свои кричащие акценты,
+      // и золото было бы в них третьим цветом (разбор 2026-09-11).
+      "--level-ink": d.ink2,
       "--muted": d.muted,
       "--surface": d.surface,
       "--on-surface": d.onSurface,
@@ -418,6 +426,7 @@ const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация",
   fontDisplay: "'PT Serif', serif", fontBody: "'PT Serif', serif",
   bandBg: "radial-gradient(ellipse at 30% -10%, #3a1f4a, #0e0c14 70%)",
   textMutedOverride: "#7fd88a",
+  levelInk: "#e0c15f",
   semanticOverrides: { gm: "#b366e8", player: "#7fd88a", paid: "#e0c15f", free: "#7fd88a", active: "#7fd88a", hold: "#6b5a78", danger: "#e05f5f" },
   statusCapsuleOverrides: { planned: { bg: "#2c1c38", fg: "#c9a8e0" } },
   cardBorderWidth: 1,
@@ -435,6 +444,7 @@ const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
   // к фону: так вся четвёрка (#092328/#12544F/#2A835F/#8BBB92) живёт
   // в теме как есть, и при этом muted остаётся читаемым на тёмной бумаге.
   textMutedOverride: "#8BBB92",
+  levelInk: "#D2C49E",
   bandBg: "#0E3C3C",
   bandImage: "repeating-linear-gradient(180deg, rgba(139,187,146,.07) 0 3px, transparent 3px 22px)",
   pageTexture: "radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px) 0 0/3px 3px",

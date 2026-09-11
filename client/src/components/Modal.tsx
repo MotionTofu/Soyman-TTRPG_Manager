@@ -17,6 +17,9 @@ interface Props {
   // внутри окна. false — на само окно: у модалки хитов первым интерактивом
   // идёт цифра пада, и скринридер объявлял «кнопка 1» вместо имени диалога.
   autoFocus?: boolean;
+  // Дополнительный класс на само окно (не на затемнение): размерные
+  // варианты вроде модалки состояний, которой на мобиле нужен весь экран.
+  className?: string;
 }
 
 // Стек открытых модалок: вложенная (кроп портрета внутри визарда) тоже
@@ -30,7 +33,7 @@ const modalStack: (() => void)[] = [];
 // otherwise forward any click inside the modal (like a mouseup after
 // dragging in an image cropper) to that input, silently reopening the file
 // picker.
-export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true }: Props) {
+export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true, className }: Props) {
   // A "click" only means the mousedown AND mouseup landed on the same
   // element. Selecting text inside the modal and dragging past its edge
   // before releasing ends the drag over the backdrop — the browser then
@@ -108,7 +111,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ar
         mouseDownOnBackdrop.current = false;
       }}
     >
-      <div className={wide ? "modal modal-wide" : "modal"} ref={modalRef} role="dialog" aria-modal="true" aria-label={ariaLabel} tabIndex={-1}>
+      <div className={`modal${wide ? " modal-wide" : ""}${className ? ` ${className}` : ""}`} ref={modalRef} role="dialog" aria-modal="true" aria-label={ariaLabel} tabIndex={-1}>
         {children}
       </div>
     </div>,

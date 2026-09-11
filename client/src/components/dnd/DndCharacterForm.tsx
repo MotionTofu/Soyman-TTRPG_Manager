@@ -102,7 +102,7 @@ import { rollDiceFormula } from "./diceRoll";
 import { DndCardBack } from "./DndCardBack";
 import { DndLevelUpWizard } from "./DndLevelUpWizard";
 import { PosterButtons } from "./PosterButtons";
-import type { PosterData } from "./CharacterPoster";
+import { snapshotNodeBlob } from "./cardSnapshot";
 import { DndTransferBox } from "./DndTransferBox";
 import {
   fetchCharacterInbox,
@@ -117,6 +117,7 @@ import {
   transferAction,
   type CharacterTransfer,
 } from "./characterTransfers";
+import { getCachedUser } from "../../api/currentUser";
 import { armorProfNames, carryCapacityLb, EMPTY_EQUIPMENT_ITEM, ensureEquipmentIds, entryRequiresAttunement, fetchEquipmentMeta, findCarryDoublings, isArmorProficient, isRationRow, isStackableEquipmentEntry, makeEquipmentId } from "./dndEquipment";
 import { DndCoinCalculator } from "./DndCoinCalculator";
 import { deadEntryIds, ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
@@ -163,6 +164,8 @@ import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPick
 import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
+import { conditionIconSrc } from "./conditionIcons";
+import { schoolIconSrc } from "./schoolIcons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { CompendiumEntryPicker } from "../MonsterTemplatePicker";
@@ -1598,6 +1601,7 @@ function DndSpellLevelSection({
         {sorted.map((s) => {
           const realIndex = spells.indexOf(s);
           const { ru, en } = spellNameParts(s);
+          const schoolSrc = s.school ? schoolIconSrc(s.school) : null;
           return (
             <div key={realIndex}>
               <div
@@ -1607,6 +1611,14 @@ function DndSpellLevelSection({
                     подпись под ним. Раньше и то и другое стояло в строку
                     одним кеглем, и глаз читал всё подряд. Мишени остались
                     прежние: имя — использовать, подпись — раскрыть описание. */}
+                {/* Значок школы — слева от названия, высотой в обе строки
+                    (имя + подпись): школа уже есть текстом в подписи, значок
+                    её дублирует графикой, поэтому скрыт от скринридера. */}
+                {schoolSrc && (
+                  <span className="dnd-spell-school-icon" title={s.school} aria-hidden="true">
+                    <img src={schoolSrc} alt="" draggable={false} />
+                  </span>
+                )}
                 <span className="dnd-spell-main">
                   {s.entryId && onCast ? (
                     <button
@@ -4814,16 +4826,64 @@ function DeathSaveOverlay({
   );
 }
 
+/**
+ * Ряд навешанных состояний над живым рядом: по иконке на каждое (см.
+ * conditionIcons.ts), клик ведёт в модалку. Постоянного места ряд не
+ * занимает: виден, только когда есть что показать, а якорь — плашка
+ * «Состояния» в живом ряду ниже. Состояние без значка не пропадает —
+ * встаёт текстом.
+ */
+function ActiveConditionIcons({ conditions, onOpen }: { conditions: string[]; onOpen?: () => void }) {
+  if (conditions.length === 0) return null;
+  return (
+    <div className="dnd-active-conditions" role="list" aria-label="Активные состояния">
+      {conditions.map((c) => {
+        const src = conditionIconSrc(c);
+        const body = src ? (
+          <img src={src} alt="" aria-hidden="true" draggable={false} />
+        ) : (
+          <span className="dnd-active-condition-text">{c}</span>
+        );
+        // Без правки (чужой лист) — просто значки, кнопке без действия
+        // на карте не место.
+        if (!onOpen) {
+          return (
+            <span key={c} className="dnd-active-condition is-static" role="listitem" title={c}>
+              {body}
+            </span>
+          );
+        }
+        return (
+          <button
+            key={c}
+            type="button"
+            className="dnd-active-condition"
+            role="listitem"
+            title={`${c} — изменить`}
+            aria-label={`${c} — изменить состояния`}
+            onClick={onOpen}
+          >
+            {body}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ConditionsBox({
   conditions,
   systemId,
   onQuickUpdate,
+  open,
+  onOpenChange,
 }: {
   conditions: string[];
   systemId: number | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<DndMechanicsOption[]>([]);
   useEffect(() => {
     if (!open || !systemId) return;
@@ -4845,6 +4905,21 @@ function ConditionsBox({
     });
   }
 
+  function ConditionRow({ name }: { name: string }) {
+    const src = conditionIconSrc(name);
+    return (
+      <label className="dnd-condition-option">
+        <input
+          type="checkbox"
+          checked={conditions.includes(name)}
+          onChange={() => toggle(name)}
+        />
+        {src && <img className="dnd-condition-icon" src={src} alt="" aria-hidden="true" draggable={false} />}
+        <span>{name}</span>
+      </label>
+    );
+  }
+
   return (
     <>
       {/* Число, а не перечисление: три состояния подряд не влезают в плашку
@@ -4855,27 +4930,20 @@ function ConditionsBox({
         value={conditions.length > 0 ? conditions.length : "нет"}
         active={conditions.length > 0}
         ariaLabel="Состояния — изменить"
-        onClick={onQuickUpdate ? () => setOpen(true) : undefined}
+        onClick={onQuickUpdate ? () => onOpenChange(true) : undefined}
       />
       {open && (
-        <Modal onClose={() => setOpen(false)}>
-          <div className="stack" style={{ minWidth: 240 }}>
+        <Modal onClose={() => onOpenChange(false)} className="modal-conditions" ariaLabel="Состояния">
+          <div className="stack dnd-conditions-modal">
             <h3 style={{ margin: 0, fontFamily: "var(--font-display)", textTransform: "uppercase" }}>Состояния</h3>
             {options.length === 0 && (
               <p className="muted" style={{ margin: 0 }}>
                 В системе не нашлось раздела механик «Состояния».
               </p>
             )}
-            <div className="stack" style={{ gap: 2 }}>
+            <div className="stack dnd-conditions-list">
               {options.map((o) => (
-                <label key={o.id} className="row" style={{ gap: 6, justifyContent: "flex-start" }}>
-                  <input
-                    type="checkbox"
-                    checked={conditions.includes(o.name)}
-                    onChange={() => toggle(o.name)}
-                  />
-                  {o.name}
-                </label>
+                <ConditionRow key={o.id} name={o.name} />
               ))}
               {/* Состояние, проставленное до того, как система обзавелась
                   списком, не должно пропасть из окна — иначе снять его будет
@@ -4883,13 +4951,10 @@ function ConditionsBox({
               {conditions
                 .filter((c) => !options.some((o) => o.name === c))
                 .map((c) => (
-                  <label key={c} className="row" style={{ gap: 6, justifyContent: "flex-start" }}>
-                    <input type="checkbox" checked onChange={() => toggle(c)} />
-                    {c}
-                  </label>
+                  <ConditionRow key={c} name={c} />
                 ))}
             </div>
-            <button type="button" className="primary" onClick={() => setOpen(false)} style={{ alignSelf: "flex-end" }}>
+            <button type="button" className="primary" onClick={() => onOpenChange(false)} style={{ alignSelf: "flex-end" }}>
               Готово
             </button>
           </div>
@@ -7022,27 +7087,36 @@ function DndTraitsView({ value }: { value: DndCharacterData }) {
   const notes = value.notes?.trim();
   // §1.11: показывать нечего — блок не показывается.
   if (rows.length === 0 && !notes) return null;
+  // Той же секцией, что и группы умений, но без шеврона: строки здесь не
+  // раскрываются, и это должно быть видно до клика (разбор 2026-09-11).
   return (
-    <div className="cs-list">
+    <>
       {rows.length > 0 && (
-        <>
-          <div className="sb-section">Свойства</div>
+        <div className="dnd-feat-section">
+          <div className="dnd-feat-section-head">
+            <span className="dnd-feat-section-mark" aria-hidden="true" />
+            <span className="dnd-feat-section-title">Свойства</span>
+          </div>
           {rows.map(([label, text]) => (
-            <div key={label} className="sb-entry">
-              <span className="sb-prop-label">{label}</span> {text}
+            <div key={label} className="dnd-feat-prop">
+              <span className="dnd-feat-prop-label">{label}</span>
+              <span className="dnd-feat-prop-value">{text}</span>
             </div>
           ))}
-        </>
+        </div>
       )}
       {notes && (
-        <>
-          <div className="sb-section">Заметки класса</div>
-          <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
+        <div className="dnd-feat-section">
+          <div className="dnd-feat-section-head">
+            <span className="dnd-feat-section-mark" aria-hidden="true" />
+            <span className="dnd-feat-section-title">Заметки класса</span>
+          </div>
+          <div className="dnd-feat-notes">
             <MentionText text={notes} />
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -7053,27 +7127,40 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
   // одна — иначе список уезжает с экрана.
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   if (values.length === 0) return null;
+  // Бейдж уровня — только если уровни в группе различаются. «Ур. 1» у всех
+  // видовых (или у всех классовых на первом уровне) ничего не сообщает и
+  // только шумит. Строки без уровня (добавленные руками) в счёт не идут.
+  const showLevels = new Set(values.map((f) => f.level).filter((l) => l != null && l > 0)).size > 1;
   return (
-    <details className="cs-list" open>
-      <summary className="dnd-section-title">{title}</summary>
-      {values.map((f, i) => (
-        <div key={i}>
-          <button
-            type="button"
-            className={`dnd-feature-row-link${openIndex === i ? " is-open" : ""}`}
-            aria-expanded={openIndex === i}
-            onClick={() => setOpenIndex(openIndex === i ? null : i)}
-          >
-            {f.name || "Без названия"}
-            {f.level ? <span className="muted"> (ур. {f.level})</span> : null}
-          </button>
-          {openIndex === i && (
-            <div className="dnd-spell-description">
-              <MentionText text={f.description} />
-            </div>
-          )}
-        </div>
-      ))}
+    <details className="dnd-feat-section" open>
+      <summary className="dnd-feat-section-head">
+        <span className="dnd-feat-section-mark" aria-hidden="true" />
+        <span className="dnd-feat-section-title">{title}</span>
+        <span className="dnd-feat-section-count">{values.length}</span>
+        <NavIcon name="chevron" className="chevron-icon" />
+      </summary>
+      {values.map((f, i) => {
+        const open = openIndex === i;
+        return (
+          <div key={i} className={`dnd-feat-item${open ? " is-open" : ""}`}>
+            <button
+              type="button"
+              className="dnd-feat-row"
+              aria-expanded={open}
+              onClick={() => setOpenIndex(open ? null : i)}
+            >
+              <span className="dnd-feat-name">{f.name || "Без названия"}</span>
+              {showLevels && f.level ? <span className="dnd-feat-level">ур. {f.level}</span> : null}
+              <NavIcon name="chevron" className={`chevron-icon${open ? " is-open" : ""}`} />
+            </button>
+            {open && (
+              <div className="dnd-feat-description">
+                <MentionText text={f.description} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </details>
   );
 }
@@ -9419,6 +9506,8 @@ export function DndCharacterView({
   // пустотой: угол одинаково доступен, содержимое только владельцу.
   // Загрузка ленивая: угол-индикатор нужен только на первой карте.
   const [cardFlipped, setCardFlipped] = useState(false);
+  // Узел лицевой для постера: «Скачать постер» снимает лицевую как есть.
+  const cardFaceRef = useRef<HTMLDivElement | null>(null);
   // Оракул класса: счётчик переворотов — по нему рубашка тянет новую цитату.
   // Десктоп-панель («Карта» без переворота) счётчик не трогает: цитата там
   // стоит, пока карту не перевернут на телефоне/мобильной вёрстке.
@@ -9472,6 +9561,15 @@ export function DndCharacterView({
   // Данные уже приезжали: следующие тики тихие, без скелетона и ошибок.
   const inboxReady = useRef(false);
   const canUseInbox = ownerCharacterId != null;
+  // Входящие и передачи — роуты игрока: сервер отвечает 403 любой учётке без
+  // привязанного профиля игрока (server/src/routes/player.ts). Мастер без
+  // профиля получал этот отказ на каждом открытии листа и на каждом тике
+  // оборота; экран его и так гасил, но запрос уходил впустую и падал в журнал
+  // ошибок (data/journal.ts). Здесь отказ известен заранее — и запроса нет.
+  const knownNoPlayerProfile = () => {
+    const user = getCachedUser();
+    return user != null && user.playerId == null;
+  };
   const unreadInbox = (inbox ?? []).filter((m) => !m.read_at).length;
   // Передачи 4б живут рядом с входящими: тот же оборот, тот же угол (плюс
   // входящие офферы к непрочитанным), тот же опрос на открытом обороте.
@@ -9555,6 +9653,11 @@ export function DndCharacterView({
   // обязана работать и без входящих.
   const refreshInbox = useCallback(() => {
     if (ownerCharacterId == null) return;
+    if (knownNoPlayerProfile()) {
+      setInboxDenied(true);
+      setInboxLoading(false);
+      return;
+    }
     const id = ownerCharacterId;
     // Тихий тик не должен мигать «Загрузкой»: скелетон — только пока данных
     // нет вовсе, ошибка на фоне — тоже молча, старое лучше пустоты.
@@ -9582,6 +9685,13 @@ export function DndCharacterView({
   }, [canUseInbox, tab, inbox, refreshInbox]);
   const refreshTransfers = useCallback(() => {
     if (ownerCharacterId == null) return;
+    if (knownNoPlayerProfile()) {
+      transfersReady.current = true;
+      setTransfers({ incoming: [], outgoing: [] });
+      setTransfersError(null);
+      setTransfersLoading(false);
+      return;
+    }
     const id = ownerCharacterId;
     if (!transfersReady.current) setTransfersLoading(true);
     fetchTransfers(id).then(
@@ -9675,20 +9785,24 @@ export function DndCharacterView({
   // «Карте»), но никогда разом: условия исключают друг друга. Одна функция,
   // чтобы две копии не разъехались.
   function renderCardBack() {
-    // Данные постера — снимком в момент нажатия (кнопки зовут колбэк).
-    function cardPosterData(): PosterData {
-      const classLine = value.classes.map((c) => `${c.className} ${c.level}`).join(" + ");
-      return {
-        name: value.characterName || "Без имени",
-        subtitle: [classLine, value.raceName].filter(Boolean).join(" · "),
-        hp: value.hitPointMax || "—",
-        ac: value.armorClass || "—",
-        pb: value.proficiencyBonus || "—",
-        extra: value.speed.trim() ? { label: "СКОР", value: value.speed.trim() } : undefined,
-        abilities: ABILITY_LABELS.map(({ key, label }) => ({ label, value: value.abilities[key] })),
-        portraitSrc: portraitUrl ?? null,
-        accent: cardColor,
-      };
+    // Постер — снимок лицевой стороны как есть. Переворот на телефоне
+    // лицевую размонтирует — тогда на время снимка доворачиваем карту
+    // обратно: два кадра на отрисовку, снимок, возврат на оборот.
+    async function snapshotFaceBlob(): Promise<Blob> {
+      const restored = cardFaceRef.current == null && cardFlipped;
+      if (restored) {
+        setCardFlipped(false);
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
+      }
+      try {
+        const node = cardFaceRef.current;
+        if (!node) throw new Error("Лицевая сторона недоступна");
+        return await snapshotNodeBlob(node);
+      } finally {
+        if (restored) setCardFlipped(true);
+      }
     }
     return (
       <DndCardBack
@@ -9753,13 +9867,15 @@ export function DndCharacterView({
             onRetry={refreshTransfers}
           />
         )}
-        {/* Постер — снимок персонажа для чата партии. Левелап отсюда убран:
-            вход в него — цифра уровня в картуше на лицевой стороне. Здесь он
-            висел под отказом «оборот читает владелец персонажа», то есть
-            мастеру предлагался ровно там, где ему только что отказали. */}
+        {/* Постер — буквально лицевая сторона главной карты, снимком.
+            Левелап отсюда убран: вход в него — цифра уровня в картуше на
+            лицевой стороне. Здесь он висел под отказом «оборот читает
+            владелец персонажа», то есть мастеру предлагался ровно там, где
+            ему только что отказали. */}
         <PosterButtons
-          getData={cardPosterData}
+          getBlob={snapshotFaceBlob}
           fileBase={value.characterName.trim() || "personazh"}
+          shareTitle={value.characterName.trim() || "Без имени"}
         />
       </DndCardBack>
     );
@@ -9888,6 +10004,9 @@ export function DndCharacterView({
   // касанию листа.
   const [highlight, setHighlight] = useState<string | null>(null);
   const [openAction, setOpenAction] = useState<AttackRow | null>(null);
+  // Модалка состояний: открыта состоянием карты, а не плашки, — иконки
+  // навешанных состояний над живым рядом ведут в то же окно.
+  const [conditionsOpen, setConditionsOpen] = useState(false);
   const [addingCompanion, setAddingCompanion] = useState(false);
   // Призыв заклинанием — двухшаговый: сначала «Призвать», потом круг ячейки
   // (мощь тела зависит от круга, а ритуал ячейки не тратит — форсить трату
@@ -10673,6 +10792,7 @@ export function DndCharacterView({
               одним числом. */}
           {(tab === "Карта" || showDesktopFace) && !cardFlipped && (
             <div
+              ref={cardFaceRef}
               className="stack dnd-card-face"
               style={{ borderLeftColor: cardColor, borderRightColor: cardColor, borderBottomColor: cardColor }}
             >
@@ -10889,6 +11009,12 @@ export function DndCharacterView({
               </div>
             )}
 
+            {/* Навешанное — иконками строкой над живым рядом: за столом
+                «отравлен и лежит» считывают краем глаза, не открывая окно. */}
+            <ActiveConditionIcons
+              conditions={value.conditions}
+              onOpen={onQuickUpdate ? () => setConditionsOpen(true) : undefined}
+            />
             {/* Живой ряд: инициатива, концентрация, истощение — то, что
                 меняется в бою, строкой плашек, как на макете. */}
             <div className="dnd-live-row">
@@ -10899,6 +11025,8 @@ export function DndCharacterView({
                 conditions={value.conditions}
                 systemId={value.systemId}
                 onQuickUpdate={onQuickUpdate}
+                open={conditionsOpen}
+                onOpenChange={setConditionsOpen}
               />
               {/* Концентрация — там, куда игрок и так смотрит каждый ход.
                   Ставится из окна заклинания, снимается кликом и длинным отдыхом. */}

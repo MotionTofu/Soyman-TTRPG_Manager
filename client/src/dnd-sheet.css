@@ -2053,6 +2053,81 @@ body.sheet-fullscreen .app-content {
 .dnd-conditions.is-on {
   font-weight: 700;
 }
+/* Ряд навешанных состояний над живым рядом: иконки 30px в строку, клик —
+   в модалку. Пустых мест нет: ряд рендерится, только когда есть что
+   показать. Кнопка — бумажная плашка, как живой ряд под ней. */
+.dnd-active-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.dnd-active-condition {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 3px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.dnd-active-condition.is-static {
+  cursor: default;
+}
+.dnd-active-condition img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  display: block;
+}
+.dnd-active-condition-text {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  padding: 0 6px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Модалка состояний: строки со значком 40px и мишенью под палец, а не
+   голый чекбокс. Список скроллится внутри окна, кнопка «Готово» видна. */
+.dnd-conditions-modal {
+  gap: 10px;
+}
+.dnd-conditions-list {
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.dnd-condition-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 4px 8px 4px 4px;
+  border: var(--card-border-width, 1px) solid transparent;
+  cursor: pointer;
+}
+.dnd-condition-option:has(input:checked) {
+  border-color: var(--line);
+  background: var(--paper);
+}
+.dnd-condition-option input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--ink);
+}
+.dnd-condition-icon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex: none;
+}
 
 /* Полоса правки над картой — только когда лист открыт карандашом. */
 .dnd-card-editbar {

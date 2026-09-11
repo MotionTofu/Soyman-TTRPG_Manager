@@ -206,7 +206,7 @@ export async function renderPosterBlob(d: PosterData): Promise<Blob> {
   return blob;
 }
 
-function downloadBlob(blob: Blob, filename: string) {
+export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -217,9 +217,27 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-function posterFileName(base: string): string {
+export function posterFileName(base: string): string {
   const clean = base.trim().replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_").slice(0, 60);
   return `${clean || "personazh"}_poster.png`;
+}
+
+/** Шаринг готового blob с фолбэком на скачивание (та же механика, что у
+ *  sharePoster, но blob приходит снаружи — снимок лицевой, а не canvas). */
+export async function shareBlobFile(blob: Blob, fileBase: string, title: string): Promise<"shared" | "downloaded"> {
+  const file = new File([blob], posterFileName(fileBase), { type: "image/png" });
+  const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };
+  try {
+    if (typeof navigator.share === "function" && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      await navigator.share({ files: [file], title });
+      return "shared";
+    }
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw e;
+    // share упал — падаем в скачивание ниже
+  }
+  downloadBlob(blob, posterFileName(fileBase));
+  return "downloaded";
 }
 
 export async function downloadPoster(d: PosterData, fileBase: string): Promise<void> {
@@ -231,17 +249,5 @@ export async function downloadPoster(d: PosterData, fileBase: string): Promise<v
  *  молча уходят в файл, AbortError (свайп «отмена») — тишина. */
 export async function sharePoster(d: PosterData, fileBase: string): Promise<"shared" | "downloaded"> {
   const blob = await renderPosterBlob(d);
-  const file = new File([blob], posterFileName(fileBase), { type: "image/png" });
-  const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };
-  try {
-    if (typeof navigator.share === "function" && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      await navigator.share({ files: [file], title: d.name });
-      return "shared";
-    }
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") throw e;
-    // share упал — падаем в скачивание ниже
-  }
-  downloadBlob(blob, posterFileName(fileBase));
-  return "downloaded";
+  return shareBlobFile(blob, fileBase, d.name);
 }
