@@ -63,10 +63,35 @@ export function getActiveStorage(): StorageProfile {
   return active ?? registry.storages[0];
 }
 
+/**
+ * DB_DIR или VAULT_ROOT из окружения без своего CONFIG_DIR — ловушка: реестр
+ * хранилищ тогда читается из общего `server/config` и молча перебивает их
+ * активным профилем. Так конфигурации `api-scratch*` годами работали с рабочей
+ * базой и рабочим хранилищем, считая, что работают с копией
+ * (docs/db-open-seam-revision.md, находка 8).
+ *
+ * Уважать DB_DIR из окружения нельзя: Electron ставит его всегда, и тогда
+ * переключение хранилища в установленном приложении перестало бы работать.
+ * Но Electron ставит и CONFIG_DIR — как и scripts/check-migrations.js, — так что
+ * запрет задевает только неполную изоляцию.
+ */
+export function storageEnvConflict(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.CONFIG_DIR) return null;
+  const given = (["DB_DIR", "VAULT_ROOT"] as const).filter((name) => env[name]);
+  if (given.length === 0) return null;
+  return (
+    `Задан ${given.join(" и ")} без CONFIG_DIR. Реестр хранилищ из общего server/config ` +
+    `перебил бы ${given.length > 1 ? "их" : "его"} активным профилем, и сервер открыл бы рабочую ` +
+    `базу и рабочее хранилище. Задайте CONFIG_DIR (свой каталог для копии) вместе с DB_DIR и VAULT_ROOT.`
+  );
+}
+
 // Called once at process startup, before ./db/db is imported, so the initial
 // SQLite connection opens against whichever storage is currently active
 // instead of always the hardcoded defaults.
 export function applyActiveStorageEnv(): void {
+  const conflict = storageEnvConflict();
+  if (conflict) throw new Error(conflict);
   const active = getActiveStorage();
   process.env.DB_DIR = active.dbDir;
   process.env.VAULT_ROOT = active.vaultRoot;
