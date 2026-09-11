@@ -5,7 +5,7 @@ import type { DndClassEntry, DndEquipmentSection, DndFeature } from "./types";
 // её за базовое значение, и персонаж со щитом и без доспеха получал КЗ
 // 2 + Ловкость вместо 12 + Ловкость. Поэтому щит распознаётся отдельно и
 // его число идёт плюсом, а не в базу.
-function isShield(armorType: string | undefined): boolean {
+export function isShield(armorType: string | undefined): boolean {
   return (armorType ?? "").trim().toLowerCase().startsWith("щит");
 }
 

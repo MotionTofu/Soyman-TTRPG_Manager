@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveSheet, proficiencyBonusForLevel, creatureInitiativeModifier } from "./derive";
+import { deriveSheet, proficiencyBonusForLevel, creatureInitiativeModifier, hitPointLumpFor } from "./derive";
 import { emptyDndCharacter } from "./normalize";
 import type { DndCharacterData, DndClassEntry, DndEquipmentItem, DndFeature } from "./types";
 import type { DndEffect } from "./effects";
@@ -246,6 +246,38 @@ describe("максимум хитов", () => {
       feats: [feature("Крепкий")],
     });
     expect(deriveSheet(c).maxHitPoints.value).toBe(20 + 2 * 4);
+  });
+
+  describe("обратный вывод кубовой части из готового максимума", () => {
+    // Импорт из Long Story Short знает только итоговый максимум. Кубовая часть
+    // выводится обратно той же формулой, по которой лист складывает число, —
+    // и лист обязан показать ровно тот максимум, что был в LSS.
+    it("Изобретатель 3 с Телосложением 16 и максимумом 30 — кубов 21", () => {
+      // По правилам 8 + 5 + 5 = 18, но игрок бросал кость и выбросил на 3
+      // больше: броски LSS не отдаёт, поэтому весь излишек ложится в кубы.
+      const c = character({
+        classes: [cls({ className: "Изобретатель", level: 3 })],
+        abilities: { str: 7, dex: 16, con: 16, int: 18, wis: 14, cha: 7 },
+      });
+      const lump = hitPointLumpFor(c, 30);
+      expect(lump).toBe(21);
+      const hp = deriveSheet({ ...c, hpLump: lump, hpRolls: [], hpMiscPerLevel: 0 }).maxHitPoints;
+      expect(hp.value).toBe(30);
+      expect(hp.stale).toBeUndefined();
+    });
+
+    it("«Крепкий», мультикласс и отрицательное Телосложение дают тот же максимум", () => {
+      const c = character({
+        classes: [cls({ className: "Воин", level: 4 }), cls({ className: "Плут", level: 3 })],
+        abilities: { str: 10, dex: 10, con: 8, int: 10, wis: 10, cha: 10 },
+        feats: [feature("Крепкий")],
+        hpMiscPerLevel: 1,
+      });
+      const lump = hitPointLumpFor(c, 55);
+      // 7 уровней × (−1 Телосложения + 2 «Крепкого» + 1 прочего) = 14.
+      expect(lump).toBe(55 - 14);
+      expect(deriveSheet({ ...c, hpLump: lump, hpRolls: [] }).maxHitPoints.value).toBe(55);
+    });
   });
 
   it("пересчёт устойчив: одни и те же слагаемые дают одно и то же число", () => {

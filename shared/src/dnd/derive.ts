@@ -141,9 +141,9 @@ export function proficiencyBonusForLevel(totalLevel: number): number {
  *
  * Вывести их из класса и уровня нельзя: броски кости хитов есть только в
  * `hpRolls`, а `hpLump` — дайсовая часть без Телосложения. У листов, заведённых
- * до появления этой модели (и у всех импортированных из Long Story Short —
- * импорт копирует `hp-max` строкой и `hpLump` не ставит вовсе), пересчитать
- * нечем: отдаём сохранённое число и говорим об этом через `stale`.
+ * до появления этой модели (и импортированных из Long Story Short до
+ * 2026-09-11, когда импорт начал выводить `hpLump` через `hitPointLumpFor`),
+ * пересчитать нечем: отдаём сохранённое число и говорим об этом через `stale`.
  */
 function maxHitPoints(c: DndCharacterData, conMod: number, level: number): Derived {
   const stored = Number.parseInt(c.hitPointMax || "0", 10) || 0;
@@ -160,8 +160,7 @@ function maxHitPoints(c: DndCharacterData, conMod: number, level: number): Deriv
   }
 
   const rolls = (c.hpRolls ?? []).reduce((a, b) => a + b, 0);
-  const hasTough = (c.feats ?? []).some((f) => (f.name ?? "").includes("Крепкий"));
-  const perLevel = (hasTough ? 2 : 0) + (c.hpMiscPerLevel ?? 0);
+  const perLevel = hpPerLevelBonus(c);
 
   const parts: Part[] = [
     { label: "Кости хитов (база)", value: c.hpLump },
@@ -175,6 +174,30 @@ function maxHitPoints(c: DndCharacterData, conMod: number, level: number): Deriv
   return sum(parts, { min: 1 });
 }
 
+/** Хиты за каждый уровень сверх Телосложения: черта «Крепкий» и «прочее». */
+function hpPerLevelBonus(c: Pick<DndCharacterData, "feats" | "hpMiscPerLevel">): number {
+  const hasTough = (c.feats ?? []).some((f) => (f.name ?? "").includes("Крепкий"));
+  return (hasTough ? 2 : 0) + (c.hpMiscPerLevel ?? 0);
+}
+
+/**
+ * Кубовая часть хитов, при которой лист покажет ровно `max`.
+ *
+ * Обратная к `maxHitPoints` формула: из готового максимума вычитается всё, что
+ * лист прибавляет сам (Телосложение и прибавки за уровень). Нужна тому, кто
+ * знает только итог, — импорту из Long Story Short: бросков по уровням в
+ * экспорте нет, и весь остаток честно ложится в кубы. Формула одна с листом,
+ * поэтому смена правила здесь не разойдётся с числом на экране.
+ */
+export function hitPointLumpFor(
+  c: Pick<DndCharacterData, "classes" | "abilities" | "feats" | "hpMiscPerLevel">,
+  max: number
+): number {
+  const level = totalCharacterLevel(c.classes ?? []);
+  const conMod = abilityModifier(c.abilities?.con ?? 10);
+  return max - (conMod + hpPerLevelBonus(c)) * level;
+}
+
 /**
  * КЗ: вычисленное — или сохранённое, если вычислять не из чего.
  *
@@ -183,8 +206,9 @@ function maxHitPoints(c: DndCharacterData, conMod: number, level: number): Deriv
  * настоящие 15 в свободном поле `armorClass`. Показать 10 значит молча
  * ухудшить то, что Мастер видит в списке персонажей, ради согласованности.
  * Поэтому здесь так же, как с хитами: отдаём сохранённое и говорим, почему
- * оно не пересчитано. Корень (импорт должен отмечать снаряжение надетым)
- * чинится отдельно.
+ * оно не пересчитано. С 2026-09-11 импорт сам отмечает надетое по КЗ из LSS
+ * (server/src/services/lssGear.ts); ветка осталась для листов, импортированных
+ * раньше, и для случаев, когда сверка не сошлась.
  */
 function armorClassOf(
   c: DndCharacterData,

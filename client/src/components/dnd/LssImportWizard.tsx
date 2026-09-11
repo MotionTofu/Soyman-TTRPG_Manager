@@ -13,7 +13,7 @@ import type {
   DndSpellEntry,
 } from "../../types";
 import { normalizeDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
-import { EMPTY_EQUIPMENT_ITEM, fetchEquipmentMeta } from "./dndEquipment";
+import { EMPTY_EQUIPMENT_ITEM, fetchEquipmentMeta, splitEquipmentQty } from "./dndEquipment";
 import { useDndSkills } from "./useDndSkills";
 import { ABILITY_LABELS, computeProficiencyBonus } from "./AbilityScores";
 import {
@@ -51,6 +51,9 @@ export interface LssPreviewExtras {
   avatarWebp: string;
   bonusesRaw: Record<string, unknown>;
   homelessSections: { key: string; label: string; body: string }[];
+  /** Итог сверки снаряжения с КЗ из LSS (server/src/services/lssGear.ts).
+   *  Нет у черновиков, сохранённых до 2026-09-11. */
+  gearSummary?: string;
 }
 
 export interface LssImportWarning {
@@ -95,14 +98,6 @@ function norm(s: string) {
 }
 function clampScore(v: number) {
   return Number.isFinite(v) ? Math.min(30, Math.max(1, Math.round(v))) : 10;
-}
-/** "Болты (15)" → qty 15; "8x листы Пергамента" → qty 8. */
-function splitQty(rawName: string): { name: string; qty: string } {
-  const mQty = /^(\d+)\s*[x×]\s*(.+)$/i.exec(rawName.trim());
-  if (mQty) return { name: mQty[2].trim(), qty: mQty[1] };
-  const mParen = /^(.*)\(\s*(\d+)\s*\)\s*$/.exec(rawName.trim());
-  if (mParen && mParen[1].trim()) return { name: mParen[1].trim(), qty: mParen[2] };
-  return { name: rawName, qty: "" };
 }
 function isProbablyEmpty(value: DndCharacterData): boolean {
   const c = value.classes[0];
@@ -642,7 +637,7 @@ export function LssImportWizard({
               ...sec,
               items: sec.items.map((it) => {
                 if (it.qty) return it;
-                const { name, qty } = splitQty(it.name);
+                const { name, qty } = splitEquipmentQty(it.name);
                 return qty ? { ...it, name, qty } : it;
               }),
             }
@@ -668,7 +663,7 @@ export function LssImportWizard({
         if (e.name_original && !aliasMap.has(norm(e.name_original))) aliasMap.set(norm(e.name_original), e);
       }
       const findEntry = (rawName: string): CompendiumEntry | null => {
-        const { name } = splitQty(rawName);
+        const { name } = splitEquipmentQty(rawName);
         const n = norm(name);
         return byName.get(n) ?? aliasMap.get(n) ?? byName.get(norm(n.replace(/\s*\(.*?\)\s*$/, ""))) ?? null;
       };
@@ -972,7 +967,7 @@ export function LssImportWizard({
         <GearStep
           value={value} patch={patch} setValue={setValue}
           enrichNote={enrichNote} onQty={applyQtyParse} onEnrich={() => void enrichEquipment()}
-          rawCoins={rawExtras.coinsRaw}
+          rawCoins={rawExtras.coinsRaw} gearSummary={rawExtras.gearSummary ?? ""}
         />
       )}
 
@@ -1253,7 +1248,7 @@ function AttackRow({ attack, onChange, onRemove }: {
   );
 }
 
-function GearStep({ value, patch, setValue, enrichNote, onQty, onEnrich, rawCoins }: {
+function GearStep({ value, patch, setValue, enrichNote, onQty, onEnrich, rawCoins, gearSummary }: {
   value: DndCharacterData;
   patch: (p: Partial<DndCharacterData>) => void;
   setValue: Dispatch<SetStateAction<DndCharacterData>>;
@@ -1261,6 +1256,7 @@ function GearStep({ value, patch, setValue, enrichNote, onQty, onEnrich, rawCoin
   onQty: () => void;
   onEnrich: () => void;
   rawCoins: unknown;
+  gearSummary: string;
 }) {
   const [newItem, setNewItem] = useState("");
   const [newProf, setNewProf] = useState("");
@@ -1275,8 +1271,11 @@ function GearStep({ value, patch, setValue, enrichNote, onQty, onEnrich, rawCoin
   return (
     <div className="stack">
       <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-        Предметов: {items.length}. Количество вида «Болты (15)» / «8x» вытаскивается кнопкой; дубли с оружием — удалить.
+        Предметов: {items.length}. Количество и связь со справочником разобраны при импорте; кнопки — для повторного поиска после правок. Дубли с оружием — удалить.
       </span>
+      {/* Что отмечено надетым и почему — одной строкой: неверный доспех
+          потом на листе не заметен, а здесь его как раз проверяют. */}
+      {gearSummary && <div role="status">{gearSummary}</div>}
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
         <button type="button" onClick={onQty}>Количество из названий</button>
         <button type="button" onClick={onEnrich}>Обогатить из справочника</button>

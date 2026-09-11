@@ -4,7 +4,9 @@
 // rather than plain strings — most of this file is about flattening those
 // into readable text for a statblock card.
 
+import { hitPointLumpFor, normalizeDndCharacter } from "@soyman/shared";
 import { db } from "../db/db";
+import { normalizeForMatch, settleImportedGear, type GearEntry } from "./lssGear";
 
 interface CompendiumEntryRow {
   id: number;
@@ -26,15 +28,38 @@ function findDndSystemIdSync(): number | null {
   return row?.id ?? null;
 }
 
-function normalizeForMatch(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/[«»„“"']/g, "")
-    .replace(/[-–—]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+// Снаряжение и магические предметы справочника — пул для связи инвентаря LSS
+// (lssGear.ts). Разделы и виды записей те же, что у пикера инвентаря на
+// клиенте (loadDndEquipmentEntries): одна вещь находится одинаково в обоих.
+function loadGearEntries(systemId: number): GearEntry[] {
+  const rows = db
+    .prepare(
+      `SELECT e.id, e.parent_id, e.kind, e.name, e.data, e.aliases, e.name_original
+         FROM compendium_entries e
+         JOIN system_sections s ON s.id = e.section_id
+        WHERE s.system_id = ? AND s.kind IN ('equipment', 'magic_item') AND e.kind IN ('equipment', 'magic_item')
+        ORDER BY s.position, e.position, e.id`
+    )
+    .all(systemId) as CompendiumEntryRow[];
+  const parse = (raw: string): unknown => {
+    try {
+      return JSON.parse(raw || "null");
+    } catch {
+      return null;
+    }
+  };
+  return rows.map((r) => {
+    const aliases = parse(r.aliases);
+    const data = parse(r.data);
+    return {
+      id: r.id,
+      kind: r.kind,
+      name: r.name,
+      nameOriginal: r.name_original ?? "",
+      aliases: Array.isArray(aliases) ? aliases.filter((a): a is string => typeof a === "string" && !!a) : [],
+      data: data && typeof data === "object" ? (data as Record<string, unknown>) : {},
+    };
+  });
 }
 
 function entryMatchesName(row: CompendiumEntryRow, target: string, targetBase: string): boolean {
@@ -282,6 +307,8 @@ export interface LssRawExtras {
   bonusesRaw: Record<string, unknown>;
   /** Кастомные разделы без структурного дома (notes-*) — визард предлагает disposition. */
   homelessSections: { key: string; label: string; body: string }[];
+  /** Итог сверки снаряжения с КЗ из LSS — строка для шага «Снаряжение». */
+  gearSummary: string;
 }
 
 export interface LssImportResult {
@@ -593,21 +620,21 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     const body = textBlockValue(text[key]);
     return body ? [{ name: blockLabel(key, text[key]), description: body }] : [];
   };
-  // Снаряжение: если LSS отдал ProseMirror bulletList, разбить по «- » строкам вместо одного кома
+  // Снаряжение: если LSS отдал ProseMirror bulletList, разбить по «- » строкам вместо одного кома.
+  // Строки инвентаря из них собирает сверка в конце разбора (lssGear.ts).
   const equipmentRawBody = textBlockValue(text.equipment);
-  const equipmentItems = equipmentRawBody
+  const equipmentNames = equipmentRawBody
     ? equipmentRawBody
         .split("\n")
         .map((l) => l.replace(/^-+\s*/, "").trim())
         .filter(Boolean)
-        .map((name) => ({ name, qty: "", weight: "", notes: "" }))
     : [];
   // Fallback: некоторые экспорты кладут инвентарь в data.inventory / data.equipment как массив
-  if (equipmentItems.length === 0 && Array.isArray(rawInventory)) {
+  if (equipmentNames.length === 0 && Array.isArray(rawInventory)) {
     for (const it of rawInventory as unknown[]) {
       const rec = it as Record<string, unknown>;
       const name = typeof rec.name === "string" ? rec.name : typeof rec.title === "string" ? rec.title : "";
-      if (name) equipmentItems.push({ name, qty: "", weight: "", notes: "" });
+      if (name) equipmentNames.push(name);
     }
   }
 
@@ -647,9 +674,9 @@ export function parseLongStoryShort(raw: string): LssImportResult {
   const notesSections = Object.entries(notesBodies)
     .map(([key, body]) => (body ? `## ${blockLabel(key, text[key])}\n${body}` : ""))
     .filter(Boolean);
-  if (attunedNames.length > 0) {
-    notesSections.push(`## Настройка (${attunedNames.length})\n${attunedNames.map((n) => `- ${n}`).join("\n")}`);
-  }
+  // Место раздела «Настройка»: сам раздел встаёт сюда после сверки с
+  // инвентарём — в него идёт только то, что не нашло строки инвентаря.
+  const attunementNotesAt = notesSections.length;
   // Outer inspiration/edition hints go to notes if not otherwise visible
   if (outerSpellsPact && typeof outerSpellsPact === "object") {
     const pactSlots = (outerSpellsPact as Record<string, unknown>)["slots-3"] as Record<string, unknown> | undefined;
@@ -846,6 +873,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     avatarJpeg: avatarStr(avatarBlock, "jpeg") || avatarStr(avatarInner, "jpeg"),
     avatarWebp: avatarStr(avatarBlock, "webp") || avatarStr(avatarInner, "webp"),
     homelessSections,
+    gearSummary: "",
     bonusesRaw: {
       bonuses: (data as Record<string, unknown>).bonuses ?? null,
       bonusesSkills: (data as Record<string, unknown>).bonusesSkills ?? null,
@@ -857,7 +885,7 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     },
   };
 
-  const characterData = {
+  const characterData: Record<string, unknown> = {
     systemId: dndSystemId,
     characterName: name,
     playerName: infoPlayerName,
@@ -902,7 +930,8 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     deathSaveSuccesses: 0,
     deathSaveFailures: 0,
     attacks,
-    equipmentSections: equipmentItems.length ? [{ name: "Снаряжение", items: equipmentItems }] : [],
+    // Инвентарь и Заметки дописываются ниже, после сверки снаряжения.
+    equipmentSections: [],
     attunementCount,
     coins,
     speciesFeatures: featureBlock("features"),
@@ -922,11 +951,47 @@ export function parseLongStoryShort(raw: string): LssImportResult {
     spellSlotPips: new Array(9).fill(0),
     spellSlotsUsed: new Array(9).fill(0),
     spellsByLevel: new Array(9).fill(null).map(() => [] as unknown[]),
-    notes: notesSections.join("\n\n"),
+    notes: "",
     manualAcBonus: "",
     resourceUsed: {},
     resourceBonus: {},
   };
+
+  // Хиты и надетое сверяются по правилам листа (deriveSheet), поэтому — на
+  // нормализованном листе, когда всё остальное уже собрано.
+  const sheet = normalizeDndCharacter(characterData);
+
+  // Модель слагаемых хитов (docs/dnd-derive-revision.md): LSS отдаёт только
+  // итог, бросков по уровням в нём нет, и весь кубовый остаток ложится в
+  // hpLump — лист показывает ровно максимум из LSS. Пустой максимум не
+  // превращается в число: лист остаётся со старой моделью.
+  const hpMaxNum = Number.parseInt(hitPointMaxStr, 10);
+  if (hitPointMaxStr.trim() && Number.isFinite(hpMaxNum)) {
+    characterData.hpLump = hitPointLumpFor(sheet, hpMaxNum);
+    characterData.hpRolls = [];
+    characterData.hpMiscPerLevel = 0;
+  }
+
+  const lssAcNum = Number.parseInt(armorClassStr, 10);
+  const gear = settleImportedGear({
+    character: sheet,
+    rawNames: equipmentNames,
+    entries: dndSystemId != null ? loadGearEntries(dndSystemId) : [],
+    attunedNames,
+    lssAc: armorClassStr.trim() && Number.isFinite(lssAcNum) ? lssAcNum : null,
+    lssShield: (vitality.shield as { value?: unknown } | undefined)?.value === true,
+  });
+  characterData.equipmentSections = gear.items.length ? [{ name: "Снаряжение", items: gear.items }] : [];
+  if (gear.warning) warn("equipment", gear.warning);
+  rawExtras.gearSummary = gear.summary;
+  if (gear.unmatchedAttuned.length > 0) {
+    notesSections.splice(
+      attunementNotesAt,
+      0,
+      `## Настройка (${gear.unmatchedAttuned.length})\n${gear.unmatchedAttuned.map((n) => `- ${n}`).join("\n")}`
+    );
+  }
+  characterData.notes = notesSections.join("\n\n");
 
   return { characterName: name, shortText, fullText, characterData, rawExtras, warnings };
 }
