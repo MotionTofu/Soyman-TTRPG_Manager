@@ -1363,43 +1363,152 @@ h4 { font-size: var(--fs-h3); }
   gap: 8px;
   align-items: center;
 }
+/* Карта-проводник: крупный корень мира, чипы районов, счёт — без рамок. */
+.miller-hero {
+  padding: 4px 2px 0;
+}
+.miller-hero__eyebrow {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.miller-hero__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1.05;
+  margin: 2px 0 0;
+  letter-spacing: 0.01em;
+  overflow-wrap: break-word;
+}
+.miller-hero__sub {
+  font-size: var(--fs-meta);
+  margin-top: 4px;
+  max-width: 70ch;
+}
+.miller-hero__label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  margin-top: 12px;
+}
+.miller-hero__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.miller-chip {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.miller-chip:hover {
+  border-color: var(--ink);
+}
+.miller-chip.is-active {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+.miller-hero__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  margin-top: 10px;
+}
+/* Второй breadcrumb: кликабельный путь внутри мира. */
+.miller-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px;
+  padding: 2px;
+  font-size: var(--fs-meta);
+}
+.miller-crumb {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--fs-meta);
+}
+button.miller-crumb:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.miller-crumb.is-current {
+  color: var(--ink);
+  font-weight: 700;
+}
+.miller-crumb__sep {
+  color: var(--muted);
+}
+.miller-legend {
+  font-size: var(--fs-meta);
+  letter-spacing: 0.2em;
+}
 .miller-cols {
   display: flex;
-  gap: 12px;
+  gap: 20px;
   overflow-x: auto;
   align-items: stretch;
   padding-bottom: 4px;
 }
+/* Колонки без тяжёлых рамок: воздух по умолчанию, подложка — только у активной. */
 .miller-col {
   flex: none;
   min-width: 0;
-  border: var(--card-border-width) solid var(--line);
-  background: var(--paper-2);
+  border: none;
+  border-left: 1px solid var(--line);
+  background: transparent;
   display: flex;
   flex-direction: column;
   max-height: 60vh;
   overflow: hidden;
+  padding-left: 12px;
+}
+.miller-col:first-child {
+  border-left: none;
+  padding-left: 0;
 }
 .miller-col.is-active-col {
-  border-color: var(--ink);
+  background: var(--paper-2);
+  border-left: 1px solid var(--line);
+  padding: 0 10px 4px 12px;
+}
+.miller-col:first-child.is-active-col {
+  border-left: none;
+  padding-left: 10px;
 }
 .miller-col__title {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
-  background: var(--surface);
-  color: var(--on-surface);
+  padding: 6px 2px;
+  background: none;
+  color: var(--muted);
   border: none;
-  border-bottom: var(--card-border-width) solid var(--line);
   border-radius: 0;
   font-family: var(--font-ui);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-micro);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   overflow: hidden;
   cursor: pointer;
   text-align: left;
@@ -1428,77 +1537,93 @@ h4 { font-size: var(--fs-h3); }
 }
 .miller-col__count {
   font-family: var(--font-mono);
-  color: var(--on-surface-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
 }
 .miller-col__body {
   overflow-y: auto;
-  padding: 6px;
+  padding: 2px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
 }
 .miller-col__empty {
   font-size: var(--fs-meta);
   padding: 4px 6px;
 }
+/* Карточка проводника: глиф + имя + бейдж типа, рамка — только у выбранной. */
 .miller-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   text-align: left;
-  border: 1px solid transparent;
+  border: none;
+  border-left: 3px solid transparent;
   border-radius: 0;
   background: transparent;
   color: var(--ink);
-  padding: 8px;
+  padding: 8px 10px;
   cursor: pointer;
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
 }
 .miller-item:hover {
-  border-color: var(--line);
+  background: var(--paper-2);
 }
 .miller-item.is-active {
   background: var(--surface);
   color: var(--on-surface);
-  border-color: var(--line);
+  border-left-color: var(--accent);
+  box-shadow: 0 1px 0 var(--line);
 }
 .miller-item.drag-over {
-  border-color: var(--accent);
+  border-left-color: var(--accent);
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.miller-item__name {
+.miller-item__glyph {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  width: 1.2em;
+  text-align: center;
+}
+.miller-item.is-active .miller-item__glyph {
+  color: var(--accent);
+}
+.miller-item__body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.miller-item__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
 }
-.miller-item__meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-}
-.miller-item.is-active .miller-item__meta {
-  color: var(--on-surface-muted);
-}
-.miller-item__meta .nav-icon {
-  width: 14px;
-  height: 14px;
-}
-.miller-item__kind {
+.miller-item__badge {
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  max-width: 90px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.miller-item.is-active .miller-item__badge {
+  color: var(--on-surface-muted);
+}
+.miller-item .nav-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--muted);
 }
 /* Секции колонки Миллера: секторы отдельно от локаций (план «Зоны
    локаций», этап 3). Заголовок — только когда обе секции непусты. */
@@ -1506,76 +1631,95 @@ h4 { font-size: var(--fs-h3); }
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--muted);
-  padding: 8px 8px 2px;
+  padding: 10px 10px 0;
 }
-.miller-item__count {
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-}
+/* Выбранное — настоящий объект: превью сверху, бейдж, компактная строка. */
 .miller-preview {
   background: var(--paper);
-}
-.miller-preview__top {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-.miller-preview__thumb {
-  display: block;
-  width: 64px;
-  height: 64px;
-  flex: 0 0 64px;
-  object-fit: cover;
   border: var(--card-border-width) solid var(--line);
+}
+.miller-preview.is-active-col {
+  background: var(--paper);
+  border: var(--card-border-width) solid var(--ink);
+  padding: 0;
+}
+.miller-preview__body {
+  gap: 8px;
+  padding: 0 0 10px;
+}
+.miller-preview__hero {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
   background: var(--paper-2);
 }
-.miller-preview__nothumb {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  flex: 0 0 64px;
-  border: var(--card-border-width) dashed var(--line);
+.miller-preview__badge {
+  font-family: var(--font-ui);
   font-size: var(--fs-micro);
-  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  padding: 10px 12px 0;
 }
 .miller-preview__name {
   font-family: var(--font-display);
   font-size: var(--fs-h3);
   line-height: 1.1;
   overflow-wrap: break-word;
+  padding: 0 12px;
 }
-.miller-preview__kind {
-  font-family: var(--font-ui);
-  font-size: var(--fs-meta);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+.miller-preview__parent {
+  background: none;
+  border: none;
+  padding: 0 12px;
+  text-align: left;
   color: var(--muted);
-  margin-top: 2px;
-}
-.miller-preview__stats {
-  font-family: var(--font-mono);
+  cursor: pointer;
   font-size: var(--fs-meta);
-  margin-top: 6px;
+}
+button.miller-preview__parent:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.miller-preview__compact {
+  font-size: var(--fs-meta);
+  padding: 0 12px;
+}
+.miller-preview__map {
+  font-size: var(--fs-meta);
+  padding: 0 12px;
 }
 .miller-preview__desc {
-  font-size: var(--fs-body);
-  line-height: 1.4;
-  margin: 8px 0 0;
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+  margin: 0;
+  padding: 0 12px;
   overflow-wrap: break-word;
 }
 .miller-preview__actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 0 12px;
+}
+.miller-preview__open {
+  display: block;
+  text-align: center;
+  background: var(--surface);
+  color: var(--on-surface);
+  padding: 10px 12px;
+  font-weight: 700;
+  text-decoration: none;
 }
 .miller-preview__actions button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 .miller-preview__actions .nav-icon {

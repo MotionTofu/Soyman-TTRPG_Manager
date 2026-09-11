@@ -8,7 +8,7 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Modal } from "./Modal";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { EntityWizard } from "./entityWizard/EntityWizard";
-import { locationRoleOf } from "../locationRoles";
+import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
 import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { isSafeImageUrl } from "../utils/safeUrl";
@@ -37,6 +37,13 @@ function loadPath(settingId: number): number[] {
   } catch {
     return [];
   }
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  const word = m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+  return `${n} ${word}`;
 }
 
 const COL_FULL = 240;
@@ -229,6 +236,56 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     return (kidsOf.get(focus.id) ?? []).filter((l) => locationRoleOf(l) === "spot");
   }, [focus, kidsOf]);
 
+  // Карта-проводник: герой — корень текущей ветки (первый элемент цепочки
+  // фокуса), под ним чипами его прямые дети-районы, счёт — все потомки.
+  const roots = useMemo(() => kidsOf.get(null) ?? [], [kidsOf]);
+  const heroRoot: SettingLocation | null = useMemo(() => {
+    if (focus) return byId.get(chainFor(focus.id)[0]) ?? null;
+    return roots.length === 1 ? roots[0] : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, byId, roots]);
+  const heroKids = useMemo(() => {
+    if (heroRoot) return (kidsOf.get(heroRoot.id) ?? []).filter((l) => locationRoleOf(l) !== "spot");
+    return roots;
+  }, [heroRoot, kidsOf, roots]);
+  const heroTotal = useMemo(() => {
+    if (!heroRoot) return locations.filter((l) => !l.archived_at).length;
+    let n = 0;
+    const stack = (kidsOf.get(heroRoot.id) ?? []).map((l) => l.id);
+    const seen = new Set<number>([heroRoot.id]);
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const loc = byId.get(id);
+      if (loc && !loc.archived_at && locationRoleOf(loc) !== "spot") n += 1;
+      for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
+    }
+    return n;
+  }, [heroRoot, kidsOf, byId, locations]);
+  const heroSpotTotal = useMemo(() => {
+    if (!heroRoot) return 0;
+    let n = 0;
+    const stack = (kidsOf.get(heroRoot.id) ?? []).map((l) => l.id);
+    const seen = new Set<number>([heroRoot.id]);
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const loc = byId.get(id);
+      if (loc && !loc.archived_at && locationRoleOf(loc) === "spot") n += 1;
+      for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
+    }
+    return n;
+  }, [heroRoot, kidsOf, byId]);
+  // Второй breadcrumb: кликабельный путь внутри мира.
+  const crumbs = useMemo(
+    () => (focus ? chainFor(focus.id).map((id) => byId.get(id)).filter((l): l is SettingLocation => !!l) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focus, byId]
+  );
+  const focusParent = focus?.parent_id != null ? (byId.get(focus.parent_id) ?? null) : null;
+
   const shownDetail = focusDetail && focus && focusDetail.id === focus.id ? focusDetail : null;
   const focusThumb = shownDetail
     ? (shownDetail.thumbnail_image_url || shownDetail.avatar_image_url || null)
@@ -416,15 +473,28 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     ];
   }
 
-  // Строка колонки и списка точек — одна на всех (план «Зоны локаций»,
-  // этап 3): счётчик — только по навигационным детям (секторы/локации),
-  // у листа с точками вместо стрелки подпись «N точек».
+  // Карточка-проводник вместо строки БД: глиф роли + имя, тип — маленьким
+  // бейджем «РАЙОН · 4», счётчик только по навигационным детям, у листа
+  // с точками вместо стрелки подпись «N точек».
+  function roleGlyph(l: SettingLocation): string {
+    const role = locationRoleOf(l);
+    if (role === "spot") return "•";
+    if (role === "sector") return "◇";
+    const hasKids = (kidsOf.get(l.id) ?? []).length > 0;
+    if (l.parent_id == null) return "◉";
+    return hasKids ? "◆" : "▣";
+  }
+  function typeBadge(l: SettingLocation): string {
+    return (l.kind?.trim() || LOCATION_ROLE_LABELS[locationRoleOf(l)]).toUpperCase();
+  }
   function renderMillerRow(l: SettingLocation, activeId: number | null) {
-    const kidRoles = (kidsOf.get(l.id) ?? []).map((k) => locationRoleOf(k));
+    const kids = kidsOf.get(l.id) ?? [];
+    const kidRoles = kids.map((k) => locationRoleOf(k));
     const navKids = kidRoles.filter((r) => r !== "spot").length;
     const spotKids = kidRoles.length - navKids;
     const isActive = l.id === activeId;
     const isOver = dragOverId === l.id && draggedId !== l.id;
+    const hasMap = !!(l.map_image_path || l.map_image_url);
     return (
       <button
         key={l.id}
@@ -453,22 +523,16 @@ export function LocationMiller({ settingId }: { settingId: number }) {
           setMenu({ x: e.clientX, y: e.clientY, id: l.id });
         }}
       >
-        <span className="miller-item__name">{l.name}</span>
-        <span className="miller-item__meta">
-          {l.kind && <span className="miller-item__kind">{l.kind}</span>}
-          {(l.map_image_path || l.map_image_url) && (
-            <span title="Есть карта">
-              <NavIcon name="map" />
-            </span>
-          )}
-          {navKids > 0 && <span className="miller-item__count">{navKids}</span>}
-          {navKids > 0 && <NavIcon name="arrowRight" />}
-          {navKids === 0 && spotKids > 0 && (
-            <span className="miller-item__kind" title="Точек внутри">
-              {spotKids} точек
-            </span>
-          )}
+        <span className="miller-item__glyph" aria-hidden="true">{roleGlyph(l)}</span>
+        <span className="miller-item__body">
+          <span className="miller-item__name">{l.name}</span>
+          <span className="miller-item__badge">
+            {typeBadge(l)}
+            {navKids > 0 ? ` · ${navKids}` : spotKids > 0 ? ` · ${plural(spotKids, "точка", "точки", "точек")}` : ""}
+            {hasMap ? " · карта" : ""}
+          </span>
         </span>
+        {navKids > 0 && <NavIcon name="arrowRight" />}
       </button>
     );
   }
@@ -522,10 +586,78 @@ export function LocationMiller({ settingId }: { settingId: number }) {
             {backLabel}
           </button>
         )}
+        <span className="muted miller-legend" title="◉ корень · ◆ ветвь · ◇ сектор · ▣ локация · • точка">
+          ◉ ◆ ◇ ▣ •
+        </span>
+        <span style={{ flex: 1 }} />
         <button className="primary" onClick={() => setCreating(true)}>
           <NavIcon name="plus" /> Создать
         </button>
       </div>
+      {columns[0].items.length > 0 && !loadError && (
+        <section className="miller-hero" aria-label="Карта мира">
+          <div className="miller-hero__eyebrow">◉ Мир</div>
+          <h2 className="miller-hero__title" onClick={() => heroRoot && pick(heroRoot.id)} style={heroRoot ? { cursor: "pointer" } : undefined} title={heroRoot ? "Перейти к корню" : undefined}>
+            {(heroRoot?.name ?? "Мир").toUpperCase()}
+          </h2>
+          {(heroRoot?.kind || heroRoot?.description) && (
+            <div className="muted miller-hero__sub">
+              {heroRoot?.kind ? `${heroRoot.kind} · ` : ""}{heroRoot?.description ? (heroRoot.description.length > 140 ? `${heroRoot.description.slice(0, 140).replace(/\s+\S*$/, "")}…` : heroRoot.description) : ""}
+            </div>
+          )}
+          {heroKids.length > 0 && (
+            <>
+              <div className="miller-hero__label">Районы</div>
+              <div className="miller-hero__chips">
+                {heroKids.map((k) => {
+                  const inPath = cleanPath.includes(k.id);
+                  return (
+                    <button
+                      key={k.id}
+                      className={`miller-chip${inPath ? " is-active" : ""}`}
+                      onClick={() => pick(k.id)}
+                      title={k.name}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setMenu({ x: e.clientX, y: e.clientY, id: k.id });
+                      }}
+                    >
+                      <span aria-hidden="true">{roleGlyph(k)}</span> {k.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          <div className="muted miller-hero__count">
+            {plural(heroTotal, "локация", "локации", "локаций")}
+            {heroSpotTotal > 0 ? ` · ${plural(heroSpotTotal, "точка", "точки", "точек")}` : ""}
+          </div>
+        </section>
+      )}
+      {crumbs.length > 0 && (
+        <nav className="miller-crumbs" aria-label="Путь в мире">
+          <button className="miller-crumb" onClick={() => { setPath([]); setActiveCol(0); }} title="К корням мира">
+            Мир
+          </button>
+          {crumbs.map((c, idx) => {
+            const last = idx === crumbs.length - 1;
+            return (
+              <span key={c.id} className="miller-crumb__seg">
+                <span className="miller-crumb__sep" aria-hidden="true"> / </span>
+                {last ? (
+                  <span className="miller-crumb is-current" aria-current="page">{c.name}</span>
+                ) : (
+                  <button className="miller-crumb" onClick={() => pick(c.id)} title={`Перейти: ${c.name}`}>
+                    {c.name}
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </nav>
+      )}
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)" }}>
           Не удалось загрузить географию: {loadError}{" "}
@@ -639,8 +771,8 @@ export function LocationMiller({ settingId }: { settingId: number }) {
                   onClick={() => setActiveCol(i)}
                   title={col.parent ? `${col.parent.name} — развернуть колонку` : "Мир — развернуть колонку"}
                 >
-                  <span>{col.parent ? col.parent.name : "Мир"}</span>
-                  <span className="miller-col__count">{col.items.length}</span>
+                  <span>{col.parent ? `◆ ${col.parent.name}` : "◉ Мир"}</span>
+                  <span className="miller-col__count">{plural(col.items.length, "локация", "локации", "локаций")}</span>
                 </button>
                 <div
                   className="miller-col__body"
@@ -682,52 +814,38 @@ export function LocationMiller({ settingId }: { settingId: number }) {
               <button
                 className="miller-col__title"
                 onClick={() => setActiveCol(columns.length)}
-                title="Карточка — развернуть колонку"
+                title="Выбранное — развернуть колонку"
               >
-                <span>Карточка</span>
+                <span>▣ Выбрано</span>
               </button>
-              <div className="miller-col__body">
-                <div className="miller-preview__top">
-                  {focusSafeThumb ? (
-                    <img src={focusSafeThumb} alt="" className="miller-preview__thumb" />
-                  ) : (
-                    <div className="miller-preview__nothumb muted">Нет изо</div>
+              <div className="miller-col__body miller-preview__body">
+                {focusSafeThumb && (
+                  <img src={focusSafeThumb} alt="" className="miller-preview__hero" />
+                )}
+                <div className="miller-preview__badge">
+                  {typeBadge(focus)}
+                  {(focusDescByRole.sector + focusDescByRole.location) > 0
+                    ? ` · ${plural(focusDescByRole.sector + focusDescByRole.location, "локация", "локации", "локаций")}`
+                    : ""}
+                </div>
+                <strong className="miller-preview__name">{focus.name}</strong>
+                {focusParent && (
+                  <button className="miller-preview__parent" onClick={() => pick(focusParent.id)} title={`Перейти: ${focusParent.name}`}>
+                    📍 {focusParent.name}
+                  </button>
+                )}
+                <div className="muted miller-preview__compact">
+                  {focusLoading && !shownDetail ? "…" : (
+                    <>
+                      👤 {plural(focusPopulation, "житель", "жителя", "жителей")}
+                      {" · "}📍 {plural(focusDescByRole.spot, "точка", "точки", "точек")}
+                      {" · "}📄 {plural(shownDetail?.chapters.length ?? 0, "статья", "статьи", "статей")}
+                    </>
                   )}
-                  <div style={{ minWidth: 0 }}>
-                    <strong className="miller-preview__name">{focus.name}</strong>
-                    {focus.kind && <div className="miller-preview__kind">{focus.kind}</div>}
-                  </div>
                 </div>
-                <dl className="location-sidecard__stats" style={{ marginTop: 8 }}>
-                  <div>
-                    <dt>Секторов</dt>
-                    <dd>{focusDescByRole.sector}</dd>
-                  </div>
-                  <div>
-                    <dt>Локаций</dt>
-                    <dd>{focusDescByRole.location}</dd>
-                  </div>
-                  <div>
-                    <dt>Точек</dt>
-                    <dd>{focusDescByRole.spot}</dd>
-                  </div>
-                  <div>
-                    <dt>Население</dt>
-                    <dd>{focusLoading && !shownDetail ? "…" : focusPopulation}</dd>
-                  </div>
-                  <div>
-                    <dt>Сообществ</dt>
-                    <dd>{focusLoading && !shownDetail ? "…" : (shownDetail?.inhabitant_communities.length ?? 0)}</dd>
-                  </div>
-                  <div>
-                    <dt>Статей</dt>
-                    <dd>{focusLoading && !shownDetail ? "…" : (shownDetail?.chapters.length ?? 0)}</dd>
-                  </div>
-                </dl>
-                <div className="muted miller-preview__stats">
-                  {(focus.map_image_path || focus.map_image_url) ? "Есть карта" : "Без карты"}
-                  {(focus.description ?? "").trim() ? "" : " · без описания"}
-                </div>
+                {(focus.map_image_path || focus.map_image_url) && (
+                  <div className="muted miller-preview__map">🗺 Есть карта — откроется внутри локации</div>
+                )}
                 {focus.description && (
                   <p className="miller-preview__desc">{focus.description.length > 220 ? `${focus.description.slice(0, 220).replace(/\s+\S*$/, "")}…` : focus.description}</p>
                 )}
@@ -738,7 +856,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
                   </div>
                 )}
                 <div className="miller-preview__actions">
-                  <Link to={`/locations/${focus.id}`}>Открыть →</Link>
+                  <Link className="miller-preview__open" to={`/locations/${focus.id}`}>Открыть локацию</Link>
                   <button onClick={() => setWizardParentId(focus.id)}>
                     <NavIcon name="plus" /> Вложенная
                   </button>
