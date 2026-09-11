@@ -9327,3 +9327,69 @@ details[open] > .res-group__band .chevron-icon {
   color: var(--danger-bg, #b3261e);
   font-size: var(--fs-meta);
 }
+
+/* Плашки «Не сохранилось» (components/SaveNotices.tsx, docs/adr/0001, п. 3).
+   Угол экрана, а не центр: экран не перекрывается, фокус не забирается.
+   Цвет ошибки — те же токены, что у тоста мешка. */
+.save-notices {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.save-notice {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  background: var(--status-cancelled);
+  color: var(--status-cancelled-fg);
+  border: var(--card-border-width, 1px) solid var(--line);
+  border-radius: var(--card-radius);
+}
+.save-notice__msg {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.save-notice__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.save-notice__retry,
+.save-notice__close {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: var(--card-border-width, 1px) solid currentColor;
+  border-radius: var(--card-radius);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.save-notice__retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.save-notice__close {
+  border-color: transparent;
+  padding: 2px 6px;
+}
+@media (max-width: 860px) {
+  /* Над нижней навигацией: она висит на 10px от края и сама около 60px, а
+     круглая центральная кнопка выступает над ней ещё на ~15px. */
+  .save-notices {
+    left: 12px;
+    right: 12px;
+    max-width: none;
+    bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  }
+}

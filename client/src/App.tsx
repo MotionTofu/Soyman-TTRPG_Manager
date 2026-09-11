@@ -5,6 +5,8 @@ import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
 import { ShowEntriesListener } from "./components/ShowEntriesListener";
 import { CrossWindowSyncBanner } from "./components/CrossWindowSyncBanner";
+import { SaveNotices } from "./components/SaveNotices";
+import { DataLayerSync } from "./data/DataLayerSync";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useCurrentUser } from "./api/currentUser";
 import { EmptyState } from "./components/EmptyState";
@@ -155,6 +157,8 @@ function App() {
         <RealtimeListener />
         <ShowEntriesListener />
         <CrossWindowSyncBanner />
+        <SaveNotices />
+        <DataLayerSync />
         <MentionPreviewRoot />
         <ErrorBoundary>
           <Suspense fallback={<Loading full />}>

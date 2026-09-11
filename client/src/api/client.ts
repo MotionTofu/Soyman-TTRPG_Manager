@@ -1,4 +1,5 @@
 import { isBusyEditing, notifyDataChanged } from "../dataSync";
+import { reportRequest, setJournalSender } from "../data/journal";
 
 const BASE = "/api";
 const TOKEN_KEY = "rpgManagerAuthToken";
@@ -35,6 +36,20 @@ if (typeof window !== "undefined") {
   });
 }
 
+// Отправщик журнала — прямым fetch, мимо request(): иначе отправка записей
+// сама порождала бы записи, а при упавшем сервере — бесконечно.
+setJournalSender(async (entries) => {
+  const res = await fetch(`${BASE}/client-journal`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : undefined),
+    },
+    body: JSON.stringify({ entries }),
+  });
+  if (!res.ok) throw new Error(`журнал: ${res.status}`);
+});
+
 export function getAuthToken(): string | null {
   return token;
 }
@@ -56,9 +71,16 @@ function withFileTokens<T>(value: T): T {
   return value;
 }
 
-async function request<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
+/**
+ * `broadcast: false` — не объявлять правку другим окнам. Так пишет слой данных
+ * (data/hooks.ts): он шлёт сигнал сам и с адресатом, а безадресный сигнал
+ * транспорта заставил бы другое окно перечитать всё.
+ */
+type RequestOptions = RequestInit & { timeoutMs?: number; broadcast?: boolean };
+
+async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
-  const { timeoutMs: rawTimeout, ...rest } = (options ?? {}) as RequestInit & { timeoutMs?: number };
+  const { timeoutMs: rawTimeout, broadcast = true, ...rest } = (options ?? {}) as RequestOptions;
   const timeoutMs = rawTimeout ?? 10000;
   const controller = new AbortController();
   let timedOut = false;
@@ -67,6 +89,13 @@ async function request<T>(path: string, options?: RequestInit & { timeoutMs?: nu
   if (rest.signal) {
     rest.signal.addEventListener("abort", onExternalAbort, { once: true });
   }
+  // Журнал медленных запросов и ошибок (data/journal.ts): транспорт сообщает о
+  // каждом запросе, в журнал попадают только те, что шли дольше секунды или
+  // закончились ошибкой. Так он работает для всех страниц сразу, в том числе
+  // ещё не переведённых на слой данных.
+  const started = performance.now();
+  const report = (status: number | null, error?: string, aborted?: boolean) =>
+    reportRequest({ method, path, status, durationMs: performance.now() - started, error, aborted });
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -82,9 +111,14 @@ async function request<T>(path: string, options?: RequestInit & { timeoutMs?: nu
     });
   } catch (e) {
     if ((e as Error).name === "AbortError") {
-      if (timedOut) throw new Error("Сервер не отвечает (таймаут 10с) — попробуйте ещё раз");
+      if (timedOut) {
+        report(null, `таймаут ${timeoutMs} мс`);
+        throw new Error("Сервер не отвечает (таймаут 10с) — попробуйте ещё раз");
+      }
+      report(null, "отменён", true);
       throw e;
     }
+    report(null, (e as Error).message || "сеть недоступна");
     throw e;
   } finally {
     clearTimeout(timeout);
@@ -95,32 +129,37 @@ async function request<T>(path: string, options?: RequestInit & { timeoutMs?: nu
     // The server's error handler returns { error: "message" }; surface just
     // that instead of the raw "500 …: {json}" so UI shows a clean message.
     const text = await res.text();
-    let message = text || `${res.status} ${res.statusText}`;
+    // Неизвестный путь Express отвечает HTML-страницей, а не JSON: без этой
+    // проверки разметка целиком уезжала в текст ошибки на экране и в журнал.
+    const isHtml = /^\s*<(!doctype|html)/i.test(text);
+    let message = text && !isHtml ? text : `${res.status} ${res.statusText}`.trim();
     try {
       const parsed = JSON.parse(text);
       if (parsed?.error) message = parsed.error;
     } catch {
       /* not JSON — keep the raw text */
     }
+    report(res.status, message);
     throw new Error(message);
   }
+  report(res.status);
   // Любая удачная правка — повод остальным окнам приложения обновиться: они
   // работают с той же базой, но своей копией уже загруженных данных.
-  if (method !== "GET") notifyDataChanged();
+  if (method !== "GET" && broadcast) notifyDataChanged();
   return withFileTokens(await res.json());
 }
 
 export const api = {
-  get: <T>(path: string, options?: RequestInit & { timeoutMs?: number }) => request<T>(path, options),
-  post: <T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) =>
+  get: <T>(path: string, options?: RequestOptions) => request<T>(path, options),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, {
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body ?? {}),
       ...options,
     }),
-  put: <T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) =>
+  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body ?? {}), ...options }),
-  del: <T>(path: string, options?: RequestInit & { timeoutMs?: number }) => request<T>(path, { method: "DELETE", ...options }),
+  del: <T>(path: string, options?: RequestOptions) => request<T>(path, { method: "DELETE", ...options }),
 };
 
 // A handful of delete routes (gallery images, a location's map) can respond

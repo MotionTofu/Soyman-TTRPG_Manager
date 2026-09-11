@@ -16,6 +16,8 @@ import { applyCanvasPaletteVars } from './canvasPalette'
 import { applyImageTreatment } from './imagePrefs'
 import { migrateThumbnailStyles } from './thumbnailStyles'
 import { AudioPlayerProvider } from './audioPlayer'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './data/queryClient'
 import { installNativeDialogFocusFix } from './electronApi'
 
 // Apply the saved theme before the first render so there's no flash of the
@@ -34,8 +36,11 @@ installNativeDialogFocusFix()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AudioPlayerProvider>
-      <App />
-    </AudioPlayerProvider>
+    {/* Слой данных (docs/adr/0001): кэш, отмена устаревших запросов, обновление задетого. */}
+    <QueryClientProvider client={queryClient}>
+      <AudioPlayerProvider>
+        <App />
+      </AudioPlayerProvider>
+    </QueryClientProvider>
   </StrictMode>,
 )

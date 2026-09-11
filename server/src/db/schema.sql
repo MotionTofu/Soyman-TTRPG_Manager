@@ -1867,6 +1867,26 @@ CREATE TABLE IF NOT EXISTS system_group_members (
   PRIMARY KEY (group_id, system_id)
 );
 
+-- Журнал медленных запросов и ошибок клиента (docs/adr/0001, п. 6,
+-- routes/clientJournal.ts). Пишет любая роль, читает мастер на «Здоровье».
+-- Личные данные: кто, с какого устройства, что делал, — сид его вычищает.
+-- Срезается сам: не старше 30 дней и не больше 2000 строк.
+CREATE TABLE IF NOT EXISTS client_journal (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  occurred_at TEXT,             -- время на устройстве: запись могла копиться без сети
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  role TEXT,                    -- gm | player на момент записи
+  kind TEXT NOT NULL,           -- slow | error
+  screen TEXT NOT NULL DEFAULT '',   -- путь страницы, на которой случилось
+  action TEXT NOT NULL DEFAULT '',   -- метод и путь запроса
+  status INTEGER,               -- HTTP-статус; NULL — ответа не было (таймаут, сеть)
+  duration_ms INTEGER,
+  message TEXT NOT NULL DEFAULT '',
+  device TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_client_journal_created ON client_journal(created_at);
+
 -- Архив: `archived_at IS NOT NULL` — единственный предикат списка Архива
 -- (`/api/archive` делает 13× SELECT по нему). Без индекса — seq scan на
 -- больших базах с сотнями существ. Частичный индекс именно под `IS NOT NULL`

@@ -1,24 +1,8 @@
 import { api } from "./client";
+import { ENTITY_ENDPOINTS } from "../data/entities";
 
-const ENDPOINTS: Record<string, string> = {
-  campaign: "/campaigns",
-  setting: "/settings",
-  player: "/players",
-  resource: "/resources",
-  mastering: "/mastering",
-  session: "/sessions",
-  character: "/characters",
-  location: "/setting-locations",
-  being: "/setting-beings",
-  artifact: "/artifacts",
-  community: "/setting-communities",
-  compendium_entry: "/systems/entries",
-  scene: "/story/scenes",
-  adventure: "/story/arcs",
-  // У события своей коллекции нет — оно живёт внутри сеттинга, но одиночный
-  // маршрут у него такой же, и связи с ним разрешаются в название.
-  setting_event: "/settings/calendar-events",
-};
+// Реестр видов живёт в слое данных — одна карта на весь клиент.
+const ENDPOINTS: Record<string, string> = ENTITY_ENDPOINTS;
 
 // Same endpoint resolveEntityLabel below already hits for the full detail
 // payload — that function just reduces it to a label string and throws the

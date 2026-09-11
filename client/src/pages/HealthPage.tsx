@@ -7,6 +7,7 @@ import { EmptyState } from "../components/EmptyState";
 import { useCurrentUser } from "../api/currentUser";
 import { useConfirm } from "../hooks/useConfirm";
 import { OrphanBrowserModal } from "../components/health/OrphanBrowserModal";
+import { ClientJournalTab } from "../components/health/ClientJournalTab";
 
 interface LegacyEntry {
   type: string;
@@ -72,7 +73,7 @@ interface ScanResult {
   bracketNamesCount: number;
 }
 
-type TabId = "seq" | "paths" | "uids" | "names" | "orphanFiles";
+type TabId = "seq" | "paths" | "uids" | "names" | "orphanFiles" | "journal";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "seq", label: "Автоинкрементация" },
@@ -80,6 +81,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "uids", label: "Пропавшие UID" },
   { id: "names", label: "Имена" },
   { id: "orphanFiles", label: "Файлы-сироты" },
+  { id: "journal", label: "Журнал" },
 ];
 
 const TAB_HINTS: Record<TabId, string> = {
@@ -88,6 +90,7 @@ const TAB_HINTS: Record<TabId, string> = {
   uids: "Ссылки [[type@uid|code|label]] на несуществующие записи: модуль не установлен, uid удалён, или ссылка в старом формате [[type:id|label]]. Клик ведёт на запись-владельца.",
   names: "Имена с хвостом [Original] — наследство П2.6. Миграция режет хвост в name_original; перезапустите приложение — db.ts:2382 добьёт остатки.",
   orphanFiles: "Файлы на диске, которых нет ни в одной *_path-колонке. Отметь и перенеси в архив, создай ресурсы или пришей точечно.",
+  journal: "Запросы дольше секунды и ошибки со всех устройств — мастера и игроков: экран, действие, длительность и ответ сервера. Хранится 30 дней, не больше 2000 записей.",
 };
 
 export function HealthPage() {
@@ -440,6 +443,13 @@ export function HealthPage() {
 
       {/* Контент таба */}
       <div className="stack" style={{ minHeight: 120 }}>
+        {/* === Журнал медленных запросов и ошибок — от скана не зависит === */}
+        {activeTab === "journal" && (
+          <div className="stack">
+            <p className="muted health-hint">{TAB_HINTS.journal}</p>
+            <ClientJournalTab />
+          </div>
+        )}
         {/* === Автоинкрементация === */}
         {activeTab === "seq" && (
           <div className="stack">

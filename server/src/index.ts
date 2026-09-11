@@ -22,6 +22,7 @@ applyActiveStorageEnv();
 initDatabase();
 import { initVault, VAULT_ROOT, vaultAbs } from "./services/filesystem";
 import { storagesRouter } from "./routes/storages";
+import { clientJournalRouter } from "./routes/clientJournal";
 import { appSettingsRouter } from "./routes/appSettings";
 import { systemsRouter } from "./routes/systems";
 import { settingsRouter } from "./routes/settings";
@@ -297,6 +298,11 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 // real player-role client (игрок-клиент / мобил-игрок) exists to actually
 // exercise the distinction.
 app.use("/api/player", playerRouter);
+
+// Журнал медленных запросов и ошибок клиента — тоже до гейта: писать в него
+// должна любая роль (зависание на телефоне игрока — ровно то, что нужно
+// увидеть), а чтение и чистку роутер сам ограничивает мастером.
+app.use("/api/client-journal", clientJournalRouter);
 
 // Everything below is role-gated: gm tokens pass everything (the local
 // desktop app logs in as the GM account created on first run); player tokens
