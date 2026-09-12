@@ -6236,6 +6236,17 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     )`);
   }
 
+  // Ручная отметка «Мы здесь» кампании (решения 2026-09-11, §3). Как и
+  // выходы: schema.sql заводит таблицу сам, шаг — страховка порядка.
+  if (!tableExists(database, "campaign_party_place")) {
+    database.exec(`CREATE TABLE campaign_party_place (
+      campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+      location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+      session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+      set_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
+    )`);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
-import { Breadcrumbs } from "../components/Breadcrumbs";
+import { EntityPage } from "../components/EntityPage";
 import { EmptyState } from "../components/EmptyState";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";
 import { toLocalDateKey } from "../utils/date";
@@ -505,17 +505,14 @@ export function PlayerCampaignPage() {
 
 
   return (
-    <div className="stack">
-      <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кампании", to: "/campaigns" }, { label: content.campaign.name }]} />
-      <h1 style={{ margin: 0 }}>{content.campaign.name}</h1>
-
-      <div className="tabs" role="tablist" aria-label="Разделы кампании">
-        {TABS.map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+    <EntityPage
+      crumbs={[{ label: "Кампании", to: "/campaigns" }, { label: content.campaign.name }]}
+      entityType="campaign"
+      title={content.campaign.name}
+      tabs={TABS}
+      tab={tab}
+      onTab={(t) => setTab(t as Tab)}
+    >
 
       {tab === "От мастера" && (
         <div className="stack">
@@ -727,6 +724,6 @@ export function PlayerCampaignPage() {
           </div>
         </div>
       )}
-    </div>
+    </EntityPage>
   );
 }

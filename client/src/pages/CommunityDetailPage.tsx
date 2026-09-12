@@ -7,8 +7,7 @@ import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
 import { LinkDropZone, SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
-import { Breadcrumbs } from "../components/Breadcrumbs";
-import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityPage } from "../components/EntityPage";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
@@ -209,63 +208,48 @@ export function CommunityDetailPage() {
   }
 
   return (
-    <div className="stack">
-      {confirmDialog}
-      {alertDialog}
-      <Breadcrumbs
-        items={[
-          {
-            label: "Население",
-            to: `/settings/${community.setting_id}?tab=${encodeURIComponent("Население")}`,
-          },
-          ...community.ancestors.map((a) => ({ label: a.name, to: `/communities/${a.id}` })),
-          { label: community.name },
-        ]}
-      />
-
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div className="row" style={{ alignItems: "flex-start" }}>
-          <label className="avatar-upload-label" title={IMAGE_HINT}>
-            {community.avatar_image_url ? (
-              <img src={community.avatar_image_url} alt="" className="community-avatar" />
-            ) : (
-              <div className="community-avatar roster-avatar-placeholder" />
-            )}
-            <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
-            <input
-              type="file"
-              accept={IMAGE_ACCEPT}
-              style={{ display: "none" }}
-              onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
-            />
-          </label>
+    <EntityPage
+      crumbs={[
+        {
+          label: "Население",
+          to: `/settings/${community.setting_id}?tab=${encodeURIComponent("Население")}`,
+        },
+        ...community.ancestors.map((a) => ({ label: a.name, to: `/communities/${a.id}` })),
+        { label: community.name },
+      ]}
+      entityType="community"
+      title={community.name}
+      avatar={
+        <label className="avatar-upload-label" title={IMAGE_HINT}>
+          {community.avatar_image_url ? (
+            <img src={community.avatar_image_url} alt="" className="community-avatar" />
+          ) : (
+            <div className="community-avatar roster-avatar-placeholder" />
+          )}
+          <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
+          <input
+            type="file"
+            accept={IMAGE_ACCEPT}
+            style={{ display: "none" }}
+            onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      }
+      badges={<GraphNeighbourhoodLink type="community" id={community.id} />}
+      meta={<TagChips tags={community.tags} onChange={saveTags} />}
+      // Имя правится карточкой «Основное» во вкладке «Досье».
+      actions={[{ label: "Архивировать", danger: true, onClick: archiveCommunity }]}
+      tabs={TABS}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      overlays={
+        <>
+          {confirmDialog}
+          {alertDialog}
           {avatarCrop.modal}
-          <div>
-            <div className="row" style={{ alignItems: "center" }}>
-              <h1>{community.name}</h1>
-              <EntityTypeChip type="community" />
-              <GraphNeighbourhoodLink type="community" id={community.id} />
-            </div>
-            <div className="row" style={{ marginTop: 4 }}>
-              <TagChips tags={community.tags} onChange={saveTags} />
-            </div>
-          </div>
-        </div>
-        <div className="entity-header-actions">
-          {/* Имя правится карточкой «Основное» во вкладке «Досье». */}
-          <button className="danger" onClick={archiveCommunity}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
-      </div>
-
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+        </>
+      }
+    >
 
       {tab === "Досье" && (
         <div className="stack">
@@ -570,6 +554,6 @@ export function CommunityDetailPage() {
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="community" entityId={communityId} />}
-    </div>
+    </EntityPage>
   );
 }

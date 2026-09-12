@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import { Breadcrumbs } from "../components/Breadcrumbs";
-import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityPage } from "../components/EntityPage";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { MentionText } from "../components/mentions/MentionText";
 import { useTabState } from "../hooks/useTabState";
@@ -102,89 +101,80 @@ export function AdventureDetailPage() {
 
 
   return (
-    <div className="stack">
-      {confirmDialog}
-      {promptDialog}
-      <Breadcrumbs
-        items={[
-          { label: setting?.name ?? "Сеттинг", to: `/settings/${arc.setting_id}` },
-          {
-            label: "Приключения",
-            to: `/settings/${arc.setting_id}?tab=${encodeURIComponent("Приключения")}`,
-          },
-          { label: arc.name },
-        ]}
-      />
-
-      <div className="entity-header">
-        <div className="stack">
-          <div className="row" style={{ alignItems: "center" }}>
-            <h2>{arc.name}</h2>
-            <EntityTypeChip type="adventure" />
-            <Link
-              to={`/canvas?setting=${arc.setting_id}&arc=${arc.id}`}
-              className="graph-neighbourhood-link"
-              title="Открыть схему на полотне"
-            >
-              <NavIcon name="canvas" /> На полотне
-            </Link>
-          </div>
-          <div className="row">
-            {arc.is_default === 1 && <span className="badge tag">стандартное</span>}
-            {arc.recommended_level && <span className="muted">{arc.recommended_level}</span>}
-            {arc.duration && <span className="muted">{arc.duration}</span>}
-            {arcCampaigns.length > 0 && (
-              <span className="muted">
-                В кампаниях:{" "}
-                {arcCampaigns.map((c, i) => (
-                  <span key={c.id}>
-                    {i > 0 && ", "}
-                    <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
-                  </span>
-                ))}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="entity-header-actions">
-          <button
-            onClick={() => void exportArc()}
-            disabled={exportBusy}
-            title="Сохранить приключение в файл — со сценами, вехами, тайнами и схемой"
+    <EntityPage
+      crumbs={[
+        { label: setting?.name ?? "Сеттинг", to: `/settings/${arc.setting_id}` },
+        {
+          label: "Приключения",
+          to: `/settings/${arc.setting_id}?tab=${encodeURIComponent("Приключения")}`,
+        },
+        { label: arc.name },
+      ]}
+      entityType="adventure"
+      title={arc.name}
+      badges={
+        <>
+          <Link
+            to={`/canvas?setting=${arc.setting_id}&arc=${arc.id}`}
+            className="graph-neighbourhood-link"
+            title="Открыть схему на полотне"
           >
-            {exportBusy ? "Выгружаем…" : "Выгрузить в файл"}
-          </button>
-          {arc.is_default !== 1 && (
-            <>
-              <button
-                onClick={async () => {
-                  const name = await promptText({ title: "Переименовать приключение", message: "Название приключения", defaultValue: arc.name });
-                  if (name?.trim()) save({ name: name.trim() });
-                }}
-              >
-                Переименовать
-              </button>
-              <button className="danger" onClick={archive}>
-                <NavIcon name="archive" /> Архивировать
-              </button>
-            </>
+            <NavIcon name="canvas" /> На полотне
+          </Link>
+          {arc.is_default === 1 && <span className="badge tag">стандартное</span>}
+        </>
+      }
+      meta={
+        <div className="row">
+          {arc.recommended_level && <span>{arc.recommended_level}</span>}
+          {arc.duration && <span>{arc.duration}</span>}
+          {arcCampaigns.length > 0 && (
+            <span>
+              В кампаниях:{" "}
+              {arcCampaigns.map((c, i) => (
+                <span key={c.id}>
+                  {i > 0 && ", "}
+                  <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
+                </span>
+              ))}
+            </span>
           )}
         </div>
-      </div>
-
-      {(exportBusy || exportError) && (
-        <div style={{ maxWidth: 420 }}>
-          {exportBusy ? <ExportProgress label="Идёт выгрузка…" /> : <ExportProgress error={exportError} />}
-        </div>
-      )}
-
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+      }
+      // Стандартное приключение не переименовывают и не архивируют: оно
+      // приходит из книги, а не заводится руками.
+      actions={[
+        {
+          label: exportBusy ? "Выгружаем…" : "Выгрузить в файл",
+          onClick: () => void exportArc(),
+        },
+        ...(arc.is_default !== 1
+          ? [
+              {
+                label: "Переименовать",
+                onClick: async () => {
+                  const name = await promptText({
+                    title: "Переименовать приключение",
+                    message: "Название приключения",
+                    defaultValue: arc.name,
+                  });
+                  if (name?.trim()) save({ name: name.trim() });
+                },
+              },
+              { label: "Архивировать", danger: true, onClick: archive },
+            ]
+          : []),
+      ]}
+      tabs={TABS}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      overlays={
+        <>
+          {confirmDialog}
+          {promptDialog}
+        </>
+      }
+    >
 
       {tab === "Обзор" && (
         <div className="stack">
@@ -239,7 +229,7 @@ export function AdventureDetailPage() {
       {tab === "Тайны и зацепки" && (
         <Secrets arc={arc} campaignId={campaignId} onChange={refresh} />
       )}
-    </div>
+    </EntityPage>
   );
 }
 

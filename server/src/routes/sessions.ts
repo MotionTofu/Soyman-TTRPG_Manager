@@ -395,6 +395,28 @@ sessionsRouter.post("/:id/launch", (req, res) => {
   }
 });
 
+import { partyPlace, setPartyPlace } from "../services/partyPlace";
+
+/**
+ * «Партия здесь» (решения 2026-09-11, §3). Точка кампании сессии: пульт знает
+ * сессию, а не кампанию, поэтому маршрут — от сессии.
+ */
+sessionsRouter.get("/:id/party-place", (req, res) => {
+  const row = db.prepare("SELECT campaign_id FROM sessions WHERE id = ?").get(Number(req.params.id)) as
+    | { campaign_id: number }
+    | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  res.json(partyPlace(row.campaign_id));
+});
+
+sessionsRouter.put("/:id/party-place", (req, res) => {
+  const locationId = Number(req.body?.location_id);
+  if (!Number.isInteger(locationId) || locationId <= 0) return res.status(400).json({ error: "location_id is required" });
+  const result = setPartyPlace(Number(req.params.id), locationId);
+  if ("error" in result) return res.status(result.status).json({ error: result.error });
+  res.json(partyPlace(result.campaignId));
+});
+
 /**
  * Состав всех сцен сессии, объединением — панели пульта показывают его
  * строками без крестика: удалить участника из панели значило бы удалить его из

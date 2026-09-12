@@ -4,8 +4,7 @@ import { MentionsTab } from "../components/MentionsTab";
 import { ChapterList } from "../components/ChapterList";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCard";
-import { Breadcrumbs } from "../components/Breadcrumbs";
-import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityPage } from "../components/EntityPage";
 import { CreatureCardEditor } from "../components/CreatureCardEditor";
 import { EntryImagesTab } from "../components/EntryImagesTab";
 import { useTabState } from "../hooks/useTabState";
@@ -191,29 +190,21 @@ export function MonsterDetailPage({
   const chapters = entry.chapters ?? [];
 
   return (
-    <div className="stack">
-      <Breadcrumbs
-        items={[
-          { label: "Системы", to: "/systems" },
-          ...(system ? [{ label: system.name, to: `/systems/${system.id}` }] : []),
-          ...(sectionName && system
-            ? [{ label: sectionName, to: `/systems/${system.id}?section=${entry.section_id}` }]
-            : []),
-          { label: entry.name },
-        ]}
-      />
-      <div className="row" style={{ alignItems: "center", gap: 8 }}>
-        <EntityTypeChip type="compendium_entry" />
-        <h2 style={{ margin: 0 }}>{entry.name}</h2>
-      </div>
-
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+    <EntityPage
+      crumbs={[
+        { label: "Системы", to: "/systems" },
+        ...(system ? [{ label: system.name, to: `/systems/${system.id}` }] : []),
+        ...(sectionName && system
+          ? [{ label: sectionName, to: `/systems/${system.id}?section=${entry.section_id}` }]
+          : []),
+        { label: entry.name },
+      ]}
+      entityType="compendium_entry"
+      title={entry.name}
+      tabs={TABS}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+    >
 
       {tab === "Статблоки" && (
         <StatblockList
@@ -311,6 +302,6 @@ export function MonsterDetailPage({
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="compendium_entry" entityId={entryId} />}
-    </div>
+    </EntityPage>
   );
 }

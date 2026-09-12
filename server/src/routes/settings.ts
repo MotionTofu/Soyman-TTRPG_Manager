@@ -1695,6 +1695,16 @@ settingsRouter.get("/:id/export", (req, res) => {
   res.json(payload);
 });
 
+import { settingPartyPlaces } from "../services/partyPlace";
+
+// Флажки «Партия здесь» в Географии: где партии всех кампаний сеттинга
+// (решения 2026-09-11, §3, п. 5).
+settingsRouter.get("/:id/party-places", (req, res) => {
+  const settingId = Number(req.params.id);
+  if (!Number.isInteger(settingId)) return res.status(400).json({ error: "invalid setting id" });
+  res.json(settingPartyPlaces(settingId));
+});
+
 interface FileData {
   filename: string;
   mime: string;

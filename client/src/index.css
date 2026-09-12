@@ -10603,3 +10603,72 @@ details[open] > .res-group__band .chevron-icon {
 .entity-page__tabs-more:hover {
   color: var(--ink);
 }
+
+/* Счётчик на вкладке: «Досье · 3». Тише самой подписи — он отвечает на
+   «есть ли там что-нибудь», а не зовёт на себя. */
+.entity-page__tab-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  opacity: 0.7;
+}
+
+/* Мета существа: строка вида/размера/мировоззрения и значок категории.
+   Раньше — четыре инлайновых стиля в BeingDetailPage. */
+.being-creature-meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.02em;
+}
+
+.being-category-badge {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+}
+
+/* «Сохранение…» — тихая строка состояния, не заголовок и не действие. */
+.entity-page__saving {
+  font-size: var(--fs-meta);
+}
+
+/* Строка управления в шапке сцены: статус и «скрыта от игроков». Не
+   действия — состояния, поэтому живут в мете, а не под «…». */
+.scene-header-controls {
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.scene-header-controls .campaign-field-label {
+  margin: 0;
+}
+
+.scene-header-sep {
+  display: inline-block;
+  width: var(--sp-0);
+  height: 18px;
+  background: var(--line);
+}
+
+.scene-header-toggle {
+  gap: var(--sp-3);
+  cursor: pointer;
+}
+
+.scene-header-toggle > span {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+/* Строка «Игрок · Кампания» под именем персонажа. */
+.character-owner-line {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+
+/* Заработок кампании в значке шапки — цифры моноширинным. */
+.campaign-earned {
+  font-family: var(--font-mono);
+}

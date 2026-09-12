@@ -7,7 +7,7 @@ import { RelationsTab } from "../components/RelationsTab";
 import { StatblockList } from "../components/StatblockList";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
-import { Breadcrumbs } from "../components/Breadcrumbs";
+import { EntityPage } from "../components/EntityPage";
 import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -274,17 +274,39 @@ export function CharacterDetailPage() {
     }
   }
 
-  return (
+  const nameEditor = (
     <div className="stack">
-      <Breadcrumbs
-        items={[
-          { label: "Кампания", to: `/campaigns/${character.campaign_id}` },
-          { label: character.player_name ?? "Игрок", to: `/players/${character.player_id}` },
-          { label: character.character_name },
-        ]}
-      />
-      <div className="character-layout">
-      <div className="character-avatar-col">
+      <div className="row" style={{ flexWrap: "wrap" }}>
+        <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} autoFocus maxLength={80} aria-label="Имя персонажа" onKeyDown={(e) => { if (e.key === "Enter") void saveName(); if (e.key === "Escape") { setEditingName(false); setNameError(null); if (character) { setNameDraft(character.character_name); setShortNameDraft(character.short_name ?? ""); } } }} style={{ flex: "1 1 160px", minWidth: 0 }} />
+        <input
+          value={shortNameDraft}
+          onChange={(e) => setShortNameDraft(e.target.value)}
+          placeholder="Короткое имя для карты"
+          title="Показывается вместо полного имени в подписи пина на карте локации"
+          maxLength={40}
+          aria-label="Короткое имя для карты"
+          onKeyDown={(e) => { if (e.key === "Enter") void saveName(); if (e.key === "Escape") { setEditingName(false); setNameError(null); if (character) { setNameDraft(character.character_name); setShortNameDraft(character.short_name ?? ""); } } }}
+          style={{ flex: "1 1 140px", minWidth: 0 }}
+        />
+        <button className="primary" onClick={saveName} disabled={nameSaving}>
+          {nameSaving ? "Сохранение…" : "Сохранить"}
+        </button>
+        <button onClick={() => { setEditingName(false); setNameError(null); }} disabled={nameSaving}>Отмена</button>
+      </div>
+      {nameError && <p className="error" role="alert">{nameError}</p>}
+    </div>
+  );
+
+  return (
+    <EntityPage
+      crumbs={[
+        { label: "Кампания", to: `/campaigns/${character.campaign_id}` },
+        { label: character.player_name ?? "Игрок", to: `/players/${character.player_id}` },
+        { label: character.character_name },
+      ]}
+      entityType="character"
+      title={character.character_name}
+      avatar={
         <label className="avatar-upload-label character-avatar-wrap" title={IMAGE_HINT}>
           {character.avatar_image_url ? (
             <div className="character-avatar cover-photo cover-halftone" aria-hidden="true">
@@ -301,63 +323,31 @@ export function CharacterDetailPage() {
             onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
           />
         </label>
-        {avatarCrop.modal}
-      </div>
-
-      <div className="card character-name-block stack">
-        <div className="campaign-player-header">
-          <span>Персонаж</span>
-          <span className="row" style={{ gap: 4 }}>
-            <GraphNeighbourhoodLink type="character" id={character.id} />
-            <button className="danger comp-mini" onClick={() => setShowArchiveConfirm(true)} aria-label="Архивировать персонажа">
-              <NavIcon name="archive" /> Архивировать
-            </button>
-          </span>
-        </div>
-        {editingName ? (
-          <div className="stack">
-            <div className="row" style={{ flexWrap: "wrap" }}>
-              <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} autoFocus maxLength={80} aria-label="Имя персонажа" onKeyDown={(e) => { if (e.key === "Enter") void saveName(); if (e.key === "Escape") { setEditingName(false); setNameError(null); if (character) { setNameDraft(character.character_name); setShortNameDraft(character.short_name ?? ""); } } }} style={{ flex: "1 1 160px", minWidth: 0 }} />
-              <input
-                value={shortNameDraft}
-                onChange={(e) => setShortNameDraft(e.target.value)}
-                placeholder="Короткое имя для карты"
-                title="Показывается вместо полного имени в подписи пина на карте локации"
-                maxLength={40}
-                aria-label="Короткое имя для карты"
-                onKeyDown={(e) => { if (e.key === "Enter") void saveName(); if (e.key === "Escape") { setEditingName(false); setNameError(null); if (character) { setNameDraft(character.character_name); setShortNameDraft(character.short_name ?? ""); } } }}
-                style={{ flex: "1 1 140px", minWidth: 0 }}
-              />
-              <button className="primary" onClick={saveName} disabled={nameSaving}>
-                {nameSaving ? "Сохранение…" : "Сохранить"}
-              </button>
-              <button onClick={() => { setEditingName(false); setNameError(null); }} disabled={nameSaving}>Отмена</button>
-            </div>
-            {nameError && <p className="error" role="alert">{nameError}</p>}
+      }
+      badges={<GraphNeighbourhoodLink type="character" id={character.id} />}
+      meta={
+        <>
+          {avatarError && <p className="error" role="alert">{avatarError}</p>}
+          <div className="character-owner-line">
+            Игрок: <Link to={`/players/${character.player_id}`}>{character.player_name}</Link>
+            {" · "}
+            Кампания: <Link to={`/campaigns/${character.campaign_id}`}>{character.campaign_name}</Link>
           </div>
-        ) : (
-          <h1 className="editable-title" onClick={() => setEditingName(true)} title="Нажмите, чтобы переименовать" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setEditingName(true); }} aria-label="Переименовать персонажа">
-            {character.character_name}
-          </h1>
-        )}
-        {avatarError && <p className="error" role="alert">{avatarError}</p>}
-        <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-          Игрок: <Link to={`/players/${character.player_id}`}>{character.player_name}</Link>
-          {" · "}
-          Кампания: <Link to={`/campaigns/${character.campaign_id}`}>{character.campaign_name}</Link>
-        </div>
-      </div>
-
-      <div className="character-tabs-row">
-        <div className="tabs" role="tablist" aria-label="Разделы персонажа">
-          {TABS.map((s) => (
-            <button key={s.key} className={tab === s.key ? "active" : ""} onClick={() => selectTab(s.key)} role="tab" aria-selected={tab === s.key}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      </div>
+        </>
+      }
+      // Имя правится не щелчком по заголовку — о таком приёме неоткуда
+      // узнать, — а названным действием. Форма правки открывается первой
+      // карточкой тела, где её видно целиком вместе с коротким именем.
+      actions={[
+        { label: "Переименовать", onClick: () => setEditingName(true) },
+        { label: "Архивировать", danger: true, onClick: () => setShowArchiveConfirm(true) },
+      ]}
+      tabs={TABS.map((t) => ({ id: t.key, label: t.label }))}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number]["key"])}
+      overlays={avatarCrop.modal}
+    >
+      {editingName && <div className="card">{nameEditor}</div>}
 
       <div className="stack">
         {tab === "statblock" && (
@@ -547,7 +537,7 @@ export function CharacterDetailPage() {
           onConfirm={archiveCharacter}
         />
       )}
-    </div>
+    </EntityPage>
   );
 }
 

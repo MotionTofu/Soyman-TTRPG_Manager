@@ -433,6 +433,18 @@ CREATE TABLE IF NOT EXISTS location_exits (
 CREATE INDEX IF NOT EXISTS idx_location_exits_from ON location_exits(from_location_id);
 CREATE INDEX IF NOT EXISTS idx_location_exits_to ON location_exits(to_location_id);
 
+-- Где партия кампании (решения 2026-09-11, §3): ручная отметка «Мы здесь».
+-- Одна строка на кампанию. Место из запущенной сцены здесь не хранится — оно
+-- считается из session_scenes; отметка действует, пока после её set_at не
+-- запустили сцену. set_at с долями секунды: запуск пишет секунды, и отметка,
+-- поставленная в ту же секунду после запуска, должна его перебить.
+CREATE TABLE IF NOT EXISTS campaign_party_place (
+  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+  location_id INTEGER NOT NULL REFERENCES setting_locations(id) ON DELETE CASCADE,
+  session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+  set_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
+);
+
 -- Pins placed on a location's map image, linking to any entity (usually a
 -- child location, but any type from the search panel can be dropped here).
 CREATE TABLE IF NOT EXISTS location_pins (  id INTEGER PRIMARY KEY AUTOINCREMENT,

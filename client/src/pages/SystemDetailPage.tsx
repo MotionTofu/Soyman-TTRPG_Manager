@@ -13,6 +13,7 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemGroup, SystemSection } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
+import { EntityPage } from "../components/EntityPage";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
@@ -196,21 +197,29 @@ export function SystemDetailPage() {
   const currentSection = sections.find((s) => String(s.id) === activeTab) ?? null;
 
   return (
-    <div className="stack" style={{ position: "relative" }}>
-      <SectionBackground />
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1 className="sys-title">
-          <button type="button" className="entity-title-link" onClick={() => selectTab("overview")} title="К обзору">
-            {system.name}
-          </button>
-          {system.code && <span className="sys-stamp">{system.code}</span>}
-        </h1>
-        <div className="entity-header-actions">
-          <button onClick={() => setTidying(true)}>Привести справочник в порядок</button>
-          <button onClick={() => setExporting(true)}>Экспорт</button>
-          <button type="button" onClick={() => importInputRef.current?.click()}>
-            Импорт
-          </button>
+    <EntityPage
+      crumbs={[{ label: "Системы", to: "/systems" }, { label: system.name }]}
+      entityType="system"
+      title={system.name}
+      // «Обзор» стоит в полосе первой вкладкой. Прежде его в полосе не было
+      // вовсе: попасть на обзор можно было только щелчком по названию
+      // системы — приём, о котором неоткуда узнать.
+      tabs={[{ id: "overview", label: "Обзор" }, ...sections.map((sec) => ({ id: String(sec.id), label: sec.name }))]}
+      tab={activeTab}
+      onTab={(t) => selectTab(t)}
+      badges={system.code && <span className="sys-stamp">{system.code}</span>}
+      // Все четыре действия системы редки — наведение порядка в справочнике,
+      // обмен файлами, архивация. Ни одно не заслуживает места в шапке.
+      actions={[
+        { label: "Привести справочник в порядок", onClick: () => setTidying(true) },
+        { label: "Экспорт", onClick: () => setExporting(true) },
+        { label: "Импорт", onClick: () => importInputRef.current?.click() },
+        { label: "Архивировать", danger: true, onClick: archiveSystem },
+      ]}
+      overlays={
+        <>
+          <SectionBackground />
+          {/* Импорт — файловое поле; пункт меню щёлкает по нему. */}
           <input
             ref={importInputRef}
             type="file"
@@ -223,26 +232,9 @@ export function SystemDetailPage() {
               e.currentTarget.value = "";
             }}
           />
-          <button className="danger" onClick={archiveSystem}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
-      </div>
-
-      <div className="row sys-tabs" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
-        <div className="tabs" style={{ flexWrap: "wrap" }}>
-          {sections.map((s) => (
-            <button
-              key={s.id}
-              className={String(s.id) === activeTab ? "active" : ""}
-              onClick={() => selectTab(String(s.id))}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {activeTab === "overview" && (
         <div className="stack">
           {confirmDialog}
@@ -423,6 +415,6 @@ export function SystemDetailPage() {
           </div>
         </Modal>
       )}
-    </div>
+    </EntityPage>
   );
 }

@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
-import { Breadcrumbs } from "../components/Breadcrumbs";
-import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityPage } from "../components/EntityPage";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { LazyDetails } from "../components/LazyDetails";
@@ -140,98 +139,81 @@ export function SceneDetailPage() {
   }
 
   return (
-    <div className="stack scene-detail">
-      {confirmDialog}
-      {/* Из кампании крошки ведут обратно в её раздел «Главы и сцены», а не
-           в сеттинг: мастер пришёл сюда оттуда и туда же возвращается. */}
-      <Breadcrumbs
-        items={
-          campaignId
-            ? [
-                { label: campaignName || "Кампания", to: `/campaigns/${campaignId}` },
-                {
-                  label: "Главы и сцены",
-                  to: `/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}`,
-                },
-                { label: scene.name },
-              ]
-            : [
-                { label: setting?.name ?? "Сеттинг", to: `/settings/${scene.setting_id}` },
-                {
-                  label: "Приключения",
-                  to: `/settings/${scene.setting_id}?tab=${encodeURIComponent("Приключения")}`,
-                },
-                { label: scene.name },
-              ]
-        }
-      />
-
-      <div className="entity-header">
-        <div className="stack" style={{ flex: 1, minWidth: 0 }}>
-          <div className="row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <h1 style={{ margin: 0, flex: "1 1 auto", minWidth: 0 }}>{scene.name}</h1>
-            <EntityTypeChip type="scene" />
-            <Link
-              to={`/canvas?setting=${scene.setting_id}&arc=${scene.arc_id ?? ""}&focus=scene:${scene.id}`}
-              className="graph-neighbourhood-link"
-              title="Показать на полотне"
-            >
-              <NavIcon name="canvas" /> На полотне
-            </Link>
-            <button className="danger" onClick={archiveScene} style={{ marginLeft: "auto" }}>
-              <NavIcon name="archive" /> Архивировать
-            </button>
-          </div>
-          {(scene.kind !== "scene" || scene.is_override || scene.campaign_only) && (
-            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              {scene.kind !== "scene" && (
-                <span className="badge tag">
-                  {SCENE_KINDS.find((k) => k.key === scene.kind)?.label}
-                </span>
-              )}
-              {scene.is_override && <span className="badge tag">правка кампании</span>}
-              {scene.campaign_only && <span className="badge tag">только в кампании</span>}
-            </div>
+    <EntityPage
+      crumbs={
+        // Из кампании крошки ведут обратно в её раздел «Главы и сцены», а не
+        // в сеттинг: мастер пришёл сюда оттуда и туда же возвращается.
+        campaignId
+          ? [
+              { label: campaignName || "Кампания", to: `/campaigns/${campaignId}` },
+              {
+                label: "Главы и сцены",
+                to: `/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}`,
+              },
+              { label: scene.name },
+            ]
+          : [
+              { label: setting?.name ?? "Сеттинг", to: `/settings/${scene.setting_id}` },
+              {
+                label: "Приключения",
+                to: `/settings/${scene.setting_id}?tab=${encodeURIComponent("Приключения")}`,
+              },
+              { label: scene.name },
+            ]
+      }
+      entityType="scene"
+      title={scene.name}
+      badges={
+        <>
+          <Link
+            to={`/canvas?setting=${scene.setting_id}&arc=${scene.arc_id ?? ""}&focus=scene:${scene.id}`}
+            className="graph-neighbourhood-link"
+            title="Показать на полотне"
+          >
+            <NavIcon name="canvas" /> На полотне
+          </Link>
+          {scene.kind !== "scene" && (
+            <span className="badge tag">{SCENE_KINDS.find((k) => k.key === scene.kind)?.label}</span>
           )}
-          <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            {campaignId && (
-              <>
-                <span className="campaign-field-label" style={{ margin: 0 }}>Статус:</span>
-                <select value={scene.state?.status ?? "pending"} onChange={(e) => setStatus(e.target.value)}>
-                  {SCENE_STATUSES.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-                <span style={{ width: 1, height: 18, background: "var(--line)", display: "inline-block" }} aria-hidden="true" />
-              </>
-            )}
-            <label className="row" style={{ gap: 6, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={scene.hidden_from_players === 1}
-                onChange={(e) => save({ hidden_from_players: e.target.checked })}
-              />
-              <span className="campaign-field-label" style={{ margin: 0, textTransform: "none", letterSpacing: 0, color: "var(--ink)" }}>Скрыта от игроков</span>
-            </label>
-          </div>
+          {scene.is_override && <span className="badge tag">правка кампании</span>}
+          {scene.campaign_only && <span className="badge tag">только в кампании</span>}
+        </>
+      }
+      meta={
+        <div className="row scene-header-controls">
+          {campaignId && (
+            <>
+              <span className="campaign-field-label">Статус:</span>
+              <select value={scene.state?.status ?? "pending"} onChange={(e) => setStatus(e.target.value)}>
+                {SCENE_STATUSES.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <span className="scene-header-sep" aria-hidden="true" />
+            </>
+          )}
+          <label className="row scene-header-toggle">
+            <input
+              type="checkbox"
+              checked={scene.hidden_from_players === 1}
+              onChange={(e) => save({ hidden_from_players: e.target.checked })}
+            />
+            <span>Скрыта от игроков</span>
+          </label>
         </div>
-        {scene.is_override && (
-          <div className="entity-header-actions" style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 4, justifyContent: "flex-end" }}>
-            <button onClick={revert}>Вернуть к оригиналу</button>
-          </div>
-        )}
-      </div>
-
-      <div className="tabs">
-        {SCENE_TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
-
+      }
+      // «Вернуть к оригиналу» есть только у сцены, правленной в кампании.
+      actions={[
+        ...(scene.is_override ? [{ label: "Вернуть к оригиналу", onClick: revert }] : []),
+        { label: "Архивировать", danger: true, onClick: archiveScene },
+      ]}
+      tabs={SCENE_TABS}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof SCENE_TABS)[number])}
+      overlays={confirmDialog}
+    >
       {tab === "Досье" && (
         <>
       <EditableTextCard
@@ -567,7 +549,7 @@ export function SceneDetailPage() {
       </details>
         </>
       )}
-    </div>
+    </EntityPage>
   );
 }
 

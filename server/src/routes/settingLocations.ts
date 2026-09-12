@@ -809,6 +809,20 @@ settingLocationsRouter.delete("/exits/:exitId", (req, res) => {
   res.json({ ok: true });
 });
 
+import { placeHistory } from "../services/placeHistory";
+
+// «Что здесь было» (решения 2026-09-11, §2, п. 8): сцены впереди и сессии, где
+// место было, — отдельным запросом, деталь локации остаётся лёгкой.
+settingLocationsRouter.get("/:id/history", (req, res) => {
+  const campaignId = req.query.campaign_id !== undefined ? Number(req.query.campaign_id) : null;
+  if (campaignId != null && (!Number.isInteger(campaignId) || campaignId <= 0)) {
+    return res.status(400).json({ error: "invalid campaign_id" });
+  }
+  const history = placeHistory(Number(req.params.id), { campaignId, all: req.query.all === "1" });
+  if (!history) return res.status(404).json({ error: "not found" });
+  res.json(history);
+});
+
 // План родителя одним запросом: его точки с наполнением и счётчиками
 // обитателей — для секции «План» во «Вложенности» (этап 6).
 settingLocationsRouter.get("/:id/plan", (req, res) => {

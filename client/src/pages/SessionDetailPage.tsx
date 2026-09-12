@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { EntityPage } from "../components/EntityPage";
 import { NavIcon } from "../components/NavIcons";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { ResourcesSection } from "../components/ResourcesSection";
@@ -547,112 +548,109 @@ export function SessionDetailPage() {
 
   const allAttended = session.attendance.length > 0 && session.attendance.every((a) => !!a.attended);
 
+  const titleEditor = (
+    <div className="row">
+      <input
+        autoFocus
+        placeholder={`Сессия №${session.session_number ?? ""}`}
+        value={titleDraft}
+        onChange={(e) => setTitleDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") saveTitle();
+          if (e.key === "Escape") setEditingTitle(false);
+        }}
+      />
+      <button className="primary" onClick={saveTitle}>
+        Сохранить
+      </button>
+      <button onClick={() => setEditingTitle(false)}>Отмена</button>
+    </div>
+  );
+
   return (
-    <div className="stack session-profile">
-      {alertDialog}
-      <div className="sp-nav">
-        <button className="sp-nav__btn" disabled={!prevSession} title={prevSession ? `${sessionLabel(prevSession)} — ${prevSession.date}` : "Это первая сессия кампании"} onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}>
-          ← {prevSession ? (prevSession.title || `№${prevSession.session_number ?? ""} · ${prevSession.date}`) : "Пред. сессия"}
-        </button>
-        <button className="sp-nav__btn" disabled={!nextSession} title={nextSession ? `${sessionLabel(nextSession)} — ${nextSession.date}` : "Это последняя сессия кампании"} onClick={() => nextSession && navigate(`/sessions/${nextSession.id}`)}>
-          {nextSession ? (nextSession.title || `№${nextSession.session_number ?? ""} · ${nextSession.date}`) : "След. сессия"} →
-        </button>
-      </div>
-
-      {/* Заголовок. Название правится прямо здесь: пунктир под ним и карандаш
-          рядом — единственное, что говорит «это можно переписать». Двойной
-          щелчок работал и раньше, но о нём никто не знал, а кнопка «Название»
-          в углу стояла среди действий над сессией, а не над её именем. */}
-      <div className="row sp-header" style={{ justifyContent: "space-between" }}>
-        {editingTitle ? (
-          <div className="row">
-            <input
-              autoFocus
-              placeholder={`Сессия №${session.session_number ?? ""}`}
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveTitle();
-                if (e.key === "Escape") setEditingTitle(false);
-              }}
-            />
-            <button className="primary" onClick={saveTitle}>
-              Сохранить
-            </button>
-            <button onClick={() => setEditingTitle(false)}>Отмена</button>
-          </div>
-        ) : (
-          <h1 className="sp-h1">
-            <Link to={`/campaigns/${campaign.id}`}>{campaign.name}</Link> —{" "}
-            <span className="sp-name" onClick={() => setEditingTitle(true)}>
-              {sessionLabel(session)}
-            </span>
-            <button
-              className="sp-pencil"
-              title="Переименовать сессию"
-              onClick={() => setEditingTitle(true)}
-            >
-              <NavIcon name="edit" />
-            </button>
-          </h1>
-        )}
-
-        <div className="row">
-          {!isPlayer && !hideFinance && (
-            <div className="badge held">
-              {session.earned} {campaign.currency}
-            </div>
-          )}
-          <div className="entity-header-actions">
-            {!isPlayer && (
-              <button className="primary" onClick={() => navigate(`/sessions/${sessionId}/live`)}>
-                <NavIcon name="die" /> Пульт сессии
-              </button>
-            )}
-            <button className="danger" onClick={archiveSession}>
-              <NavIcon name="archive" /> Архивировать
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Шапка одной строкой на всех вкладках, только чтение: «когда», «в
-          мире» и номер — это то, что переспрашивают на любой вкладке, а
-          править их есть где (Обзор). */}
-      <div className="sp-strip">
-        <div className="sp-strip__cell">
-          <span className="sp-label">Когда</span>
-          <span className="sp-value">{whenLabel}</span>
-        </div>
-        {campaign.setting_id && (
-          <div className="sp-strip__cell">
-            <span className="sp-label">В мире</span>
-            {worldLabel === "не указана" && !editingInworldDate ? (
-              <button className="sp-value sp-value--cta" onClick={() => { selectTab("Обзор"); setEditingInworldDate(true); }}>указать →</button>
-            ) : (
-              <span className="sp-value">{worldLabel}</span>
-            )}
-          </div>
-        )}
-        <div className="sp-strip__cell">
-          <span className="sp-label">Номер</span>
-          <span className="sp-value">№{session.session_number ?? "—"}</span>
-        </div>
-        <span style={{ flex: 1 }} />
-        <div className="sp-strip__status">
+    <EntityPage
+      crumbs={[
+        { label: "Кампании", to: "/campaigns" },
+        { label: campaign.name, to: `/campaigns/${campaign.id}` },
+        { label: sessionLabel(session) },
+      ]}
+      entityType="session"
+      title={sessionLabel(session)}
+      badges={
+        <>
+          {/* Переход к соседней сессии кампании. */}
+          <button
+            type="button"
+            className="comp-mini"
+            disabled={!prevSession}
+            title={prevSession ? `${sessionLabel(prevSession)} — ${prevSession.date}` : "Это первая сессия кампании"}
+            onClick={() => prevSession && navigate(`/sessions/${prevSession.id}`)}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="comp-mini"
+            disabled={!nextSession}
+            title={nextSession ? `${sessionLabel(nextSession)} — ${nextSession.date}` : "Это последняя сессия кампании"}
+            onClick={() => nextSession && navigate(`/sessions/${nextSession.id}`)}
+          >
+            →
+          </button>
           <span className={`badge ${session.status}`}>
             {STATUS_LABELS[session.status] ?? session.status}
           </span>
+          {!isPlayer && !hideFinance && (
+            <span className="badge held">
+              {session.earned} {campaign.currency}
+            </span>
+          )}
+        </>
+      }
+      meta={
+        // Шапка одной строкой на всех вкладках, только чтение: «когда», «в
+        // мире» и номер — это то, что переспрашивают на любой вкладке, а
+        // править их есть где (Обзор).
+        <div className="sp-strip">
+          <div className="sp-strip__cell">
+            <span className="sp-label">Когда</span>
+            <span className="sp-value">{whenLabel}</span>
+          </div>
+          {campaign.setting_id && (
+            <div className="sp-strip__cell">
+              <span className="sp-label">В мире</span>
+              {worldLabel === "не указана" && !editingInworldDate ? (
+                <button className="sp-value sp-value--cta" onClick={() => { selectTab("Обзор"); setEditingInworldDate(true); }}>указать →</button>
+              ) : (
+                <span className="sp-value">{worldLabel}</span>
+              )}
+            </div>
+          )}
+          <div className="sp-strip__cell">
+            <span className="sp-label">Номер</span>
+            <span className="sp-value">№{session.session_number ?? "—"}</span>
+          </div>
         </div>
-      </div>
-
-      <div className="tabs">
-        {SESSION_TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}{t === "Ресурсы" && linkResources.length > 0 ? ` · ${linkResources.length}` : ""}
+      }
+      // Главное действие — пульт: за ним сюда и приходят во время игры.
+      primaryAction={
+        !isPlayer ? (
+          <button className="primary" onClick={() => navigate(`/sessions/${sessionId}/live`)}>
+            <NavIcon name="die" /> Пульт сессии
           </button>
-        ))}
-      </div>
+        ) : undefined
+      }
+      actions={[
+        { label: "Переименовать сессию", onClick: () => setEditingTitle(true) },
+        { label: "Архивировать", danger: true, onClick: archiveSession },
+      ]}
+      tabs={SESSION_TABS}
+      tab={tab}
+      onTab={(t) => selectTab(t as SessionTab)}
+      overlays={alertDialog}
+    >
+      {editingTitle && <div className="card">{titleEditor}</div>}
+
 
       {tab === "Обзор" && (
         <div className="stack">
@@ -1280,7 +1278,7 @@ export function SessionDetailPage() {
           settingId={campaign?.setting_id ?? null}
         />
       )}
-    </div>
+    </EntityPage>
   );
 }
 

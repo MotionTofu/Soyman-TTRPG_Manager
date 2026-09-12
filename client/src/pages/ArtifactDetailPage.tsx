@@ -3,10 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AliasesCard } from "../components/AliasesCard";
 import { ArtifactCardEditor } from "../components/ArtifactCardEditor";
-import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
-import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityPage } from "../components/EntityPage";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { MentionsTab } from "../components/MentionsTab";
@@ -167,61 +166,51 @@ export function ArtifactDetailPage() {
   }
 
   return (
-    <div className="stack">
-      {confirmDialog}
-      {alertDialog}
-      <Breadcrumbs
-        items={[
-          {
-            label: "Сокровищница",
-            to: `/settings/${artifact.setting_id}?tab=${encodeURIComponent("Сокровищница")}`,
-          },
-          { label: artifact.name },
-        ]}
-      />
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div className="row" style={{ alignItems: "flex-start" }}>
-          <div className="stack" style={{ alignItems: "center" }}>
-            <label className="avatar-upload-label" title={IMAGE_HINT}>
-              {artifact.avatar_image_url ? (
-                <img src={artifact.avatar_image_url} alt="" className="being-avatar" />
-              ) : (
-                <div className="being-avatar roster-avatar-placeholder" />
-              )}
-              <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
-              <input
-                type="file"
-                accept={IMAGE_ACCEPT}
-                style={{ display: "none" }}
-                onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {avatarCrop.modal}
-          </div>
-          <div>
-            <div className="row" style={{ alignItems: "center" }}>
-              <h1>{artifact.name}</h1>
-              <EntityTypeChip type="artifact" />
-              <GraphNeighbourhoodLink type="artifact" id={artifact.id} />
-            </div>
-            <TagChips tags={artifact.tags ?? []} onChange={saveTags} />
-          </div>
-        </div>
-        <div className="entity-header-actions">
-          <button className="danger" onClick={archiveArtifact}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
-      </div>
-      {artifact.file_path && <div className="muted">{artifact.file_path}</div>}
-
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+    <EntityPage
+      crumbs={[
+        {
+          label: "Сокровищница",
+          to: `/settings/${artifact.setting_id}?tab=${encodeURIComponent("Сокровищница")}`,
+        },
+        { label: artifact.name },
+      ]}
+      entityType="artifact"
+      title={artifact.name}
+      avatar={
+        <label className="avatar-upload-label" title={IMAGE_HINT}>
+          {artifact.avatar_image_url ? (
+            <img src={artifact.avatar_image_url} alt="" className="being-avatar" />
+          ) : (
+            <div className="being-avatar roster-avatar-placeholder" />
+          )}
+          <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
+          <input
+            type="file"
+            accept={IMAGE_ACCEPT}
+            style={{ display: "none" }}
+            onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      }
+      badges={<GraphNeighbourhoodLink type="artifact" id={artifact.id} />}
+      meta={
+        <>
+          <TagChips tags={artifact.tags ?? []} onChange={saveTags} />
+          {artifact.file_path && <div>{artifact.file_path}</div>}
+        </>
+      }
+      actions={[{ label: "Архивировать", danger: true, onClick: archiveArtifact }]}
+      tabs={TABS}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      overlays={
+        <>
+          {confirmDialog}
+          {alertDialog}
+          {avatarCrop.modal}
+        </>
+      }
+    >
 
       {tab === "Досье" && (
         <div className="stack">
@@ -503,7 +492,7 @@ export function ArtifactDetailPage() {
       {tab === "Карточка предмета" && (
         <ArtifactCardEditor id={artifactId} onChange={refresh} />
       )}
-    </div>
+    </EntityPage>
   );
 }
 

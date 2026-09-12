@@ -43,7 +43,7 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
 import { formatInworldDate, formatEventDate } from "../inworldCalendar";
 import { InworldCalendar, type InworldDatedItem } from "../components/InworldCalendar";
-import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityPage } from "../components/EntityPage";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { cardThumbnailProps, loadThumbnailStyles, type ThumbnailStyle } from "../thumbnailStyles";
 import { loadHideFinance } from "../financePrivacy";
@@ -612,53 +612,30 @@ export function CampaignDetailPage() {
 
   const safeBgLayer = safeBackgroundImage(campaign.background_image_url && isSafeImageUrl(campaign.background_image_url) ? campaign.background_image_url : null);
   return (
-    <div className="stack" style={{ position: "relative", paddingBottom: 60 }}>
-      {safeBgLayer && (
-        <div className="campaign-bg-layer cover-photo cover-halftone">
-          <div className="cover-art cover-photo">
-            <div className="cover-art-image" style={{ backgroundImage: safeBgLayer }} aria-hidden="true" />
-          </div>
-        </div>
-      )}
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div>
-          <div className="row" style={{ alignItems: "center" }}>
-            <h1>
-                <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
-                  {campaign.name}
-                </button>
-            </h1>
-            <EntityTypeChip type="campaign" />
-          </div>
-          <div className="muted">
-            {campaign.system_name ?? "система не выбрана"} · {CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}
-          </div>
-        </div>
-        <div className="row">
-          {campaign.role === "player" ? (
-            <div className="badge role-player-badge zine-rotate">Я игрок</div>
-          ) : (
-            !loadHideFinance() && (
-              <div className="badge tag">
-                <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned}</span> {campaign.currency}
-              </div>
-            )
-          )}
-          <div className="entity-header-actions">
-            <button className="danger" onClick={archiveCampaign}>
-              <NavIcon name="archive" /> Архивировать
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="tabs">
-        {tabs.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+    <EntityPage
+      crumbs={[{ label: "Кампании", to: "/campaigns" }, { label: campaign.name }]}
+      entityType="campaign"
+      title={campaign.name}
+      badges={
+        campaign.role === "player" ? (
+          <span className="badge role-player-badge zine-rotate">Я игрок</span>
+        ) : (
+          !loadHideFinance() && (
+            <span className="badge tag">
+              <span className="campaign-earned">{campaign.finance.earned}</span> {campaign.currency}
+            </span>
+          )
+        )
+      }
+      meta={`${campaign.system_name ?? "система не выбрана"} · ${
+        CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status
+      }`}
+      backdrop={safeBgLayer}
+      actions={[{ label: "Архивировать", danger: true, onClick: archiveCampaign }]}
+      tabs={tabs}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof tabs)[number])}
+    >
 
       {tab === "Обзор" && campaign.role === "player" && (
         <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} onRefresh={refreshCampaign} />
@@ -1380,7 +1357,7 @@ export function CampaignDetailPage() {
           </div>
         </Modal>
       )}
-    </div>
+    </EntityPage>
   );
 }
 

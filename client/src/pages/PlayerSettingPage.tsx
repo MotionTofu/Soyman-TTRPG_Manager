@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
-import { Breadcrumbs } from "../components/Breadcrumbs";
+import { EntityPage } from "../components/EntityPage";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatEventDate } from "../inworldCalendar";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";
@@ -147,9 +147,11 @@ export function PlayerSettingPage() {
   }
 
   return (
-    <div className="stack">
-      <Breadcrumbs items={[{ label: "Сеттинги", to: "/player/settings" }, { label: data.setting.name }]} />
-      <h1 style={{ margin: 0 }}>{data.setting.name}</h1>
+    <EntityPage
+      crumbs={[{ label: "Сеттинги", to: "/player/settings" }, { label: data.setting.name }]}
+      entityType="setting"
+      title={data.setting.name}
+    >
       {!nothingVisible && (
         <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <input
@@ -269,6 +271,6 @@ export function PlayerSettingPage() {
           onClose={() => setReaderIndex(null)}
         />
       )}
-    </div>
+    </EntityPage>
   );
 }

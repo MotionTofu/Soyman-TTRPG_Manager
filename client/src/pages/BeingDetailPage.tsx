@@ -14,8 +14,7 @@ import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatImportantDate } from "../inworldCalendar";
-import { Breadcrumbs } from "../components/Breadcrumbs";
-import { EntityTypeChip } from "../components/EntityTypeChip";
+import { EntityPage } from "../components/EntityPage";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { useTabState } from "../hooks/useTabState";
@@ -450,149 +449,147 @@ export function BeingDetailPage() {
   }
 
   return (
-    <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
-      {confirmDialog}
-      {alertDialog}
-      {loadError && being && (
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
+    <EntityPage
+      crumbs={[
+        {
+          label: "Население",
+          to: (() => {
+            // Возврат в «Население» с теми же фильтрами, с какими оттуда ушли.
+            const lastFilters = (() => {
+              try {
+                return sessionStorage.getItem(`population-last-filters-${being.setting_id}`) || "";
+              } catch {
+                return "";
+              }
+            })();
+            const baseTo = `/settings/${being.setting_id}?tab=${encodeURIComponent("Население")}`;
+            return lastFilters ? `${baseTo}&${lastFilters}` : baseTo;
+          })(),
+        },
+        { label: being.name },
+      ]}
+      entityType="being"
+      title={being.name}
+      avatar={
+        <label className="avatar-upload-label" title={IMAGE_HINT}>
+          {being.avatar_image_url ? (
+            <img src={being.avatar_image_url} alt="" className="being-avatar" />
+          ) : (
+            <div className="being-avatar roster-avatar-placeholder" />
+          )}
+          <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
+          <input
+            type="file"
+            accept={IMAGE_ACCEPT}
+            style={{ display: "none" }}
+            onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      }
+      badges={
+        <>
+          <GraphNeighbourhoodLink type="being" id={being.id} />
+          {/* Переход к соседям по списку населения. Если такое понадобится
+              ещё одной карточке — это гнездо каркаса, а не значок. */}
+          <button
+            type="button"
+            className="comp-mini"
+            disabled={!neighbourIds.prev}
+            title={neighbourIds.prev ? "Предыдущее существо" : "Нет предыдущего"}
+            onClick={() => neighbourIds.prev && navigate(`/beings/${neighbourIds.prev}`)}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="comp-mini"
+            disabled={!neighbourIds.next}
+            title={neighbourIds.next ? "Следующее существо" : "Нет следующего"}
+            onClick={() => neighbourIds.next && navigate(`/beings/${neighbourIds.next}`)}
+          >
+            →
+          </button>
+        </>
+      }
+      meta={
+        <>
+          {being.creature_meta && (
+            <div className="being-creature-meta">
+              {[being.creature_meta.size, being.creature_meta.creatureType, being.creature_meta.alignment]
+                .filter((p) => p && p.trim())
+                .join(" · ")}
+            </div>
+          )}
+          <div className="row">
+            <span className="badge tag being-category-badge">{CATEGORY_LABELS[being.category]}</span>
+            {being.locations.map((l) => (
+              <Link key={l.id} to={`/locations/${l.id}`} className="entity-type-chip location">
+                {l.name}
+              </Link>
+            ))}
+            {being.communities.map((c) => (
+              <Link key={c.id} to={`/communities/${c.id}`} className="entity-type-chip community">
+                {c.name}
+              </Link>
+            ))}
+          </div>
+          {being.base_monster_id && (
+            <div className="row">
+              <span>
+                На основе:{" "}
+                <Link to={`/compendium/${being.base_monster_id}`}>{being.base_monster_name}</Link>
+              </span>
+            </div>
+          )}
+          <div className="row">
+            <TagChips tags={being.tags} onChange={saveTags} />
+          </div>
+        </>
+      }
+      // Главное действие — «Карточка»: быстрый просмотр для стола. Печать,
+      // дублирование и архивация редки; архивация ещё и разрушительна.
+      primaryAction={
+        <button onClick={() => setCardPreviewOpen(true)} title="Быстрый просмотр карточки — для стола">
+          <NavIcon name="card" /> Карточка
+        </button>
+      }
+      actions={[
+        { label: "Печать профиля", onClick: () => window.print() },
+        { label: "Дублировать", onClick: duplicateBeing },
+        { label: "Архивировать", danger: true, onClick: archiveBeing },
+      ]}
+      tabs={TABS.map((t) => ({
+        id: t,
+        count: {
+          Досье: being.chapters.length + (being.description ? 1 : 0),
+          Отношения: being.relations?.length ?? 0,
+          "Места обитания": being.locations.length,
+          "Важные даты": being.important_dates.length,
+          Галерея: 0,
+          "Карточка существа": being.statblock_count ?? 0,
+          Упоминания: 0,
+        }[t as string],
+      }))}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      overlays={
+        <>
+          {confirmDialog}
+          {alertDialog}
+          {avatarCrop.modal}
+        </>
+      }
+    >
+      {/* Обновление не удалось, прежние данные на экране. */}
+      {loadError && (
+        <div className="card entity-page__error">
           <span>Ошибка загрузки: {loadError}</span>
           <button className="primary" onClick={() => refresh()}>
             Повторить
           </button>
         </div>
       )}
-      {saving && <span className="muted" aria-live="polite" style={{ fontSize: "var(--fs-meta)" }}>Сохранение…</span>}
-      {(() => {
-        const lastFilters = (() => {
-          try {
-            return sessionStorage.getItem(`population-last-filters-${being.setting_id}`) || "";
-          } catch {
-            return "";
-          }
-        })();
-        const baseTo = `/settings/${being.setting_id}?tab=${encodeURIComponent("Население")}`;
-        const to = lastFilters ? `${baseTo}&${lastFilters}` : baseTo;
-        return (
-          <Breadcrumbs
-            items={[
-              { label: "Население", to },
-              { label: being.name },
-            ]}
-          />
-        );
-      })()}
-
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div className="row" style={{ alignItems: "flex-start" }}>
-          <div className="stack" style={{ alignItems: "center" }}>
-            <label className="avatar-upload-label" title={IMAGE_HINT}>
-              {being.avatar_image_url ? (
-                <img src={being.avatar_image_url} alt="" className="being-avatar" />
-              ) : (
-                <div className="being-avatar roster-avatar-placeholder" />
-              )}
-              <span className="avatar-upload-hint">{uploadingAvatar ? "Загрузка…" : "Сменить фото"}</span>
-              <input
-                type="file"
-                accept={IMAGE_ACCEPT}
-                style={{ display: "none" }}
-                onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {avatarCrop.modal}
-          </div>
-          <div>
-            <div className="row" style={{ alignItems: "center" }}>
-              <h1
-                title="Нажмите чтобы перейти к редактированию основного"
-                style={{ cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 4 }}
-                onClick={() => {
-                  selectTab("Досье");
-                  setTimeout(() => document.getElementById("dossier-fields")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-                }}
-              >
-                {being.name}
-              </h1>
-              <EntityTypeChip type="being" />
-              <GraphNeighbourhoodLink type="being" id={being.id} />
-              <span className="row" style={{ gap: 4, marginLeft: 8 }}>
-                <button
-                  type="button"
-                  className="comp-mini"
-                  disabled={!neighbourIds.prev}
-                  title={neighbourIds.prev ? "Предыдущее существо" : "Нет предыдущего"}
-                  onClick={() => neighbourIds.prev && navigate(`/beings/${neighbourIds.prev}`)}
-                >
-                  ←
-                </button>
-                <button
-                  type="button"
-                  className="comp-mini"
-                  disabled={!neighbourIds.next}
-                  title={neighbourIds.next ? "Следующее существо" : "Нет следующего"}
-                  onClick={() => neighbourIds.next && navigate(`/beings/${neighbourIds.next}`)}
-                >
-                  →
-                </button>
-              </span>
-            </div>
-            {being.creature_meta && (
-              <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", letterSpacing: "0.02em" }}>
-                {[being.creature_meta.size, being.creature_meta.creatureType, being.creature_meta.alignment]
-                  .filter((p) => p && p.trim())
-                  .join(" · ")}
-              </div>
-            )}
-            <div className="row">
-              <span className="badge tag" style={{ fontFamily: "var(--font-ui)", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.10em" }}>{CATEGORY_LABELS[being.category]}</span>
-              {being.locations.map((l) => (
-                <Link key={l.id} to={`/locations/${l.id}`} className="entity-type-chip location">
-                  {l.name}
-                </Link>
-              ))}
-              {being.communities.map((c) => (
-                <Link key={c.id} to={`/communities/${c.id}`} className="entity-type-chip community">
-                  {c.name}
-                </Link>
-              ))}
-            </div>
-            {being.base_monster_id && (
-              <div className="row" style={{ marginTop: 4 }}>
-                <span className="muted">
-                  На основе:{" "}
-                  <Link to={`/compendium/${being.base_monster_id}`}>{being.base_monster_name}</Link>
-                </span>
-              </div>
-            )}
-            <div className="row" style={{ marginTop: 4 }}>
-              <TagChips tags={being.tags} onChange={saveTags} />
-            </div>
-          </div>
-        </div>
-        <div className="entity-header-actions">
-          <button onClick={() => setCardPreviewOpen(true)} title="Быстрый просмотр карточки — для стола">
-            <NavIcon name="card" /> Карточка
-          </button>
-          <button onClick={() => window.print()} title="Печать профиля">
-            <NavIcon name="document" /> Печать
-          </button>
-          <button onClick={duplicateBeing} title="Создать копию этого существа">
-            <NavIcon name="plus" /> Дублировать
-          </button>
-          <button className="danger" onClick={archiveBeing}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
-      </div>
+      {saving && <span className="muted entity-page__saving" aria-live="polite">Сохранение…</span>}
       {cardPreviewOpen && (
         <Modal onClose={() => setCardPreviewOpen(false)}>
           <div className="stack" style={{ minWidth: 320, maxWidth: 560 }}>
@@ -601,30 +598,6 @@ export function BeingDetailPage() {
           </div>
         </Modal>
       )}
-
-      <div className="tabs">
-        {(() => {
-          const counts: Record<string, number> = {
-            Досье: being.chapters.length + (being.description ? 1 : 0),
-            Отношения: (being.relations?.length ?? 0),
-            "Места обитания": being.locations.length,
-            "Важные даты": being.important_dates.length,
-            Галерея: 0,
-            "Карточка существа": being.statblock_count ?? 0,
-            Упоминания: 0,
-          };
-          return TABS.map((t) => (
-            <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-              {t}
-              {counts[t] !== undefined && counts[t] > 0 && (
-                <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "10px", marginLeft: 6, opacity: 0.7 }}>
-                  · {counts[t]}
-                </span>
-              )}
-            </button>
-          ));
-        })()}
-      </div>
 
       {tab === "Досье" && (
         <div className="stack">
@@ -1007,7 +980,7 @@ export function BeingDetailPage() {
           </div>
         </div>
       )}
-    </div>
+    </EntityPage>
   );
 }
 

@@ -50,6 +50,17 @@ import { EntityTypeChip } from "./EntityTypeChip";
 // выхода перешагивают молча, метка переводит отступление из нарушения в
 // запись.
 
+/** Вкладка со счётчиком: «Досье · 3». Счётчик говорит, есть ли там что
+ *  смотреть, и потому строкой быть не может. Нуль не показывается — пустая
+ *  вкладка ничем не отличается от вкладки без счётчика. */
+export interface EntityPageTab {
+  id: string;
+  /** Подпись, если она не совпадает с ключом. У Системы вкладки — разделы
+   *  справочника: ключ числовой, подпись — имя раздела. */
+  label?: string;
+  count?: number;
+}
+
 export interface EntityPageProps {
   /** Крошки. Обязательны даже у хаба — там это одна ступень («Сеттинги ▸
    *  Вотердип»): ответ на «где я» и дорога обратно к списку. */
@@ -70,8 +81,9 @@ export interface EntityPageProps {
   actions?: ContextMenuItem[];
   /** Фон-подложка под всей страницей (обложка сеттинга), готовый `url(...)`. */
   backdrop?: string | null;
-  /** Полоса вкладок. Нет — страница без вкладок, как Событие. */
-  tabs?: readonly string[];
+  /** Полоса вкладок. Нет — страница без вкладок, как Событие.
+   *  Строка — вкладка без счётчика; объект — со счётчиком. */
+  tabs?: readonly (string | EntityPageTab)[];
   /** Вкладки, спрятанные под «Ещё» — постепенность, а не переполнение.
    *  Пустому сеттингу показывают четыре вкладки вместо десяти: остальные
    *  нечем наполнить, пока нет ни одной кампании. Полоса от ширины экрана
@@ -127,7 +139,10 @@ export function EntityPage({
   // страница показывает содержимое «Заметок», а в полосе не подсвечено
   // ничего, и человеку неоткуда узнать, где он стоит.
   const openedHidden = tab && hiddenTabs?.includes(tab) ? tab : null;
-  const shownTabs = openedHidden ? [...(tabs ?? []), openedHidden] : (tabs ?? []);
+  const shownTabs: EntityPageTab[] = [
+    ...(tabs ?? []).map((t) => (typeof t === "string" ? { id: t } : t)),
+    ...(openedHidden ? [{ id: openedHidden }] : []),
+  ];
   const restTabs = hiddenTabs?.filter((t) => t !== openedHidden) ?? [];
 
   function openMenu() {
@@ -190,13 +205,16 @@ export function EntityPage({
         <div className="tabs" role="tablist">
           {shownTabs.map((t) => (
             <button
-              key={t}
+              key={t.id}
               role="tab"
-              aria-selected={tab === t}
-              className={tab === t ? "active" : ""}
-              onClick={() => onTab?.(t)}
+              aria-selected={tab === t.id}
+              className={tab === t.id ? "active" : ""}
+              onClick={() => onTab?.(t.id)}
             >
-              {t}
+              {t.label ?? t.id}
+              {t.count !== undefined && t.count > 0 && (
+                <span className="entity-page__tab-count"> · {t.count}</span>
+              )}
             </button>
           ))}
           {restTabs.length > 0 && (
