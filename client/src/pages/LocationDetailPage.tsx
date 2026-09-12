@@ -8,9 +8,8 @@ import { LocationMap } from "../components/LocationMap";
 import { GalleryTab } from "../components/GalleryTab";
 import { MentionsTab } from "../components/MentionsTab";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
-import { Breadcrumbs } from "../components/Breadcrumbs";
-import { EntityTypeChip } from "../components/EntityTypeChip";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
+import { EntityPage } from "../components/EntityPage";
 import { RelationsTab, type RelationsSection, type RelationStats } from "../components/RelationsTab";
 import { RELATION_TONE_LABELS } from "../relations";
 import { LocationInfoTab } from "../components/LocationInfoTab";
@@ -411,29 +410,31 @@ export function LocationDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- location fields accessed via optional chaining
   }, [location?.inhabitant_beings, location?.nested_inhabitant_beings, location?.inhabitant_communities, location?.nested_inhabitant_communities, debouncedQuery, categoryFilter, sortMode]);
 
+  // Крошки до прихода данных знают только первую ступень: дальше дорога
+  // ведёт через сеттинг, а он приезжает вместе с самой локацией.
+  const rootCrumbs = [{ label: "Сеттинги", to: "/settings" }];
+
   if (loadError && !location) {
     return (
-      <div className="stack">
-        {confirmDialog}
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Не удалось загрузить локацию: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
-      </div>
+      <EntityPage
+        crumbs={rootCrumbs}
+        entityType="location"
+        title=""
+        error={loadError}
+        onRetry={() => refresh()}
+        overlays={confirmDialog}
+      >
+        {null}
+      </EntityPage>
     );
   }
-  if (!location) return <div className="stack"><div className="card" style={{ padding: 24 }}><p className="muted" aria-busy="true">Загрузка…</p></div></div>;
+  if (!location) {
+    return (
+      <EntityPage crumbs={rootCrumbs} entityType="location" title="" loading overlays={confirmDialog}>
+        {null}
+      </EntityPage>
+    );
+  }
 
   // Карточка «Основное» таба «Информация» правится напрямую в
   // LocationInfoTab — одним сохранением: поля, описание и алиасы.
@@ -831,45 +832,43 @@ export function LocationDetailPage() {
   ];
 
   return (
-    <div className={`stack${tab === "Карта" ? " page-fill" : ""}`}>
-      {confirmDialog}
-      <Breadcrumbs
-        items={[
-          { label: "Сеттинг", to: `/settings/${location.setting_id}` },
-          { label: "География", to: `/settings/${location.setting_id}?tab=${encodeURIComponent("География")}` },
-          ...location.ancestors.map((a) => ({ label: a.name, to: `/locations/${a.id}` })),
-          { label: location.name },
-        ]}
-      />
-
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div className="row" style={{ alignItems: "flex-start" }}>
-          <div className="row" style={{ alignItems: "center" }}>
-            <h1>{location.name}</h1>
-            <EntityTypeChip type="location" />
-            {location.kind && <span className="badge tag">{location.kind}</span>}
-            <GraphNeighbourhoodLink type="location" id={location.id} />
-          </div>
-        </div>
-        <div className="entity-header-actions">
-          {/* Имя, тип и короткое имя правятся карточкой «Основное» во вкладке
-              «Информация о локации». */}
-          <button onClick={() => { selectTab("Вложенность"); setNestSel({ section: "add" }); setTimeout(() => document.querySelector<HTMLInputElement>(".location-nested input")?.focus(), 50); }}>
-            <NavIcon name="plus" /> Вложенная
-          </button>
-          <button className="danger" onClick={archiveLocation}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
-      </div>
-
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+    <EntityPage
+      crumbs={[
+        { label: "Сеттинг", to: `/settings/${location.setting_id}` },
+        { label: "География", to: `/settings/${location.setting_id}?tab=${encodeURIComponent("География")}` },
+        ...location.ancestors.map((a) => ({ label: a.name, to: `/locations/${a.id}` })),
+        { label: location.name },
+      ]}
+      entityType="location"
+      title={location.name}
+      badges={
+        <>
+          {location.kind && <span className="badge tag">{location.kind}</span>}
+          <GraphNeighbourhoodLink type="location" id={location.id} />
+        </>
+      }
+      // Имя, тип и короткое имя правятся карточкой «Основное» во вкладке
+      // «Информация о локации», поэтому «Редактировать» в шапке нет.
+      // Главное действие одно — завести вложенную; архивация разрушительна
+      // и потому живёт под «…».
+      primaryAction={
+        <button
+          onClick={() => {
+            selectTab("Вложенность");
+            setNestSel({ section: "add" });
+            setTimeout(() => document.querySelector<HTMLInputElement>(".location-nested input")?.focus(), 50);
+          }}
+        >
+          <NavIcon name="plus" /> Вложенная
+        </button>
+      }
+      actions={[{ label: "Архивировать", danger: true, onClick: archiveLocation }]}
+      tabs={TABS}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      fill={tab === "Карта"}
+      overlays={confirmDialog}
+    >
 
       {tab === "Информация о локации" && (
         <LocationInfoTab
@@ -1432,6 +1431,6 @@ export function LocationDetailPage() {
           />
         </EntityTabWorkspace>
       )}
-    </div>
+    </EntityPage>
   );
 }

@@ -14,7 +14,7 @@ import { SettingCalendarEditor } from "../components/SettingCalendarEditor";
 import { SettingCalendarSettings } from "../components/SettingCalendarSettings";
 import { ImportantDatesSection } from "../components/ImportantDatesSection";
 import { EntityTypeChip } from "../components/EntityTypeChip";
-import { SectionHeading } from "../components/SectionHeading";
+import { EntityPage } from "../components/EntityPage";
 import { useTabState } from "../hooks/useTabState";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
@@ -263,6 +263,8 @@ export function SettingDetailPage() {
     return sorted;
   }, [filteredCalendarEvents, chronicleFilter, chronicleSort, selectedEraId, eras]);
   const axisRef = useRef<HTMLDivElement>(null);
+  // Скрытое файловое поле импорта — его щёлкает пункт «Импорт» из меню «…».
+  const importInputRef = useRef<HTMLInputElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
   const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
@@ -382,69 +384,38 @@ export function SettingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingId]);
 
+  // Крошки до прихода данных знают только первую ступень.
+  const rootCrumbs = [{ label: "Сеттинги", to: "/settings" }];
+
   if (loadError && !setting) {
     return (
-    <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Не удалось загрузить сеттинг: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
-      </div>
+      <EntityPage
+        crumbs={rootCrumbs}
+        entityType="setting"
+        title=""
+        error={loadError}
+        onRetry={() => refresh()}
+      >
+        {null}
+      </EntityPage>
     );
   }
 
-  // loading используется и как флаг первоначальной загрузки (пока setting===null)
-  // и как индикатор обновления уже загруженных данных (saving для точечных сохранений)
+  // loading — и флаг первоначальной загрузки (пока setting===null), и
+  // индикатор обновления уже загруженных данных.
   if (loading && !setting) {
     return (
-      <div className="stack" aria-busy="true" aria-label="Загрузка сеттинга">
-        <div
-          className="card"
-          style={{
-            height: 140,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-          }}
-        />
-        <div
-          className="card"
-          style={{
-            height: 220,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-            animationDelay: "120ms",
-          }}
-        />
-      </div>
+      <EntityPage crumbs={rootCrumbs} entityType="setting" title="" loading>
+        {null}
+      </EntityPage>
     );
   }
 
   if (!setting) {
     return (
-      <div className="stack" aria-busy="true" aria-label="Загрузка сеттинга">
-        <div
-          className="card"
-          style={{
-            height: 140,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-          }}
-        />
-      </div>
+      <EntityPage crumbs={rootCrumbs} entityType="setting" title="" loading>
+        {null}
+      </EntityPage>
     );
   }
 
@@ -718,63 +689,49 @@ export function SettingDetailPage() {
       : null
   );
 
-  return (
-    <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
-      {confirmDialog}
-      {alertDialog}
-      {safeBg && (
-        <div className="campaign-bg-layer cover-photo cover-halftone" aria-hidden="true">
-          <div className="cover-art-image" style={{ backgroundImage: safeBg }} />
-        </div>
-      )}
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <SectionHeading section="settings" compact>
-            <span id="section-overview-title" style={{ scrollMarginTop: 16 }}>
-              {tab === "Обзор" ? (
-                setting.name
-              ) : (
-                <button type="button" className="entity-title-link" onClick={() => selectTab("Обзор")} title="К обзору">
-                  {setting.name}
-                </button>
-              )}
-            </span>
-          </SectionHeading>
-          <div className="row" style={{ gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
-            <EntityTypeChip type="setting" />
-            {(setting as any).archived_at && <span className="badge cancelled">Архивировано</span>}
-          </div>
-        </div>
-        <div className="entity-header-actions" style={{ flexShrink: 0 }}>
-          {/* Имя правится в карточке «Описание» на «Обзоре» — вместе с самим
-              описанием, одной кнопкой «Сохранить». */}
-          {saving && <span className="muted" aria-live="polite">Сохранение…</span>}
-          <button onClick={() => setShowExport(true)}>Экспорт</button>
-          <label
-            style={{
-              background: "var(--bg-elevated)",
-              border: "var(--card-border-width, 1px) solid var(--line)",
-              color: "var(--text-bright)",
-              borderRadius: 0,
-              padding: "6px 12px",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Импорт
-            <input
-              type="file"
-              accept="application/json"
-              style={{ display: "none" }}
-              onChange={(e) => e.target.files?.[0] && importSetting(e.target.files[0])}
-            />
-          </label>
-          <button className="danger" onClick={archiveSetting}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
-      </div>
+  const isNewSetting = campaigns.length === 0;
+  // Пустому сеттингу показываем четыре вкладки вместо десяти: остальные
+  // нечем наполнить, пока нет ни одной кампании.
+  const coreTabs = new Set(["Обзор", "География", "Население", "Хроника мира"]);
+  const visibleTabs = isNewSetting ? TABS.filter((t) => coreTabs.has(t)) : TABS;
+  const hiddenTabs = isNewSetting ? TABS.filter((t) => !coreTabs.has(t)) : [];
 
+  return (
+    <EntityPage
+      crumbs={[{ label: "Сеттинги", to: "/settings" }, { label: setting.name }]}
+      entityType="setting"
+      title={setting.name}
+      badges={(setting as any).archived_at && <span className="badge cancelled">Архивировано</span>}
+      meta={saving && <span aria-live="polite">Сохранение…</span>}
+      backdrop={safeBg}
+      // Имя правится в карточке «Описание» на «Обзоре» — вместе с самим
+      // описанием, одной кнопкой «Сохранить». Экспорт, импорт и архивация
+      // редки, и ни одно из них не заслуживает места в шапке: под «…» все.
+      actions={[
+        { label: "Экспорт", onClick: () => setShowExport(true) },
+        { label: "Импорт", onClick: () => importInputRef.current?.click() },
+        { label: "Архивировать", danger: true, onClick: archiveSetting },
+      ]}
+      tabs={visibleTabs}
+      hiddenTabs={hiddenTabs}
+      tab={tab}
+      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      overlays={
+        <>
+          {confirmDialog}
+          {alertDialog}
+          {/* Импорт — файловое поле, а пункт меню кнопкой его не откроет:
+              держим поле здесь и щёлкаем по нему из «…». */}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: "none" }}
+            onChange={(e) => e.target.files?.[0] && importSetting(e.target.files[0])}
+          />
+        </>
+      }
+    >
       {showExport && (
         <SettingExportModal settingId={settingId} settingName={setting.name} onClose={() => setShowExport(false)} />
       )}
@@ -796,51 +753,16 @@ export function SettingDetailPage() {
         />
       )}
 
-      {loadError && setting && (
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
+      {/* Обновление не удалось, но прежние данные на экране: баннер рядом с
+          содержимым, а не вместо него. */}
+      {loadError && (
+        <div className="card entity-page__error">
           <span>Ошибка загрузки: {loadError}</span>
           <button className="primary" onClick={() => refresh()}>
             Повторить
           </button>
         </div>
       )}
-
-      <div className="tabs">
-        {(() => {
-          const isNew = campaigns.length === 0;
-          const core = new Set(["Обзор", "География", "Население", "Хроника мира"]);
-          const visible = isNew ? TABS.filter((t) => core.has(t)) : TABS;
-          const hidden = isNew ? TABS.filter((t) => !core.has(t)) : [];
-          return (
-            <>
-              {visible.map((t) => (
-                <button key={t} className={tab === t ? "active" : ""} onClick={() => selectTab(t)}>
-                  {t}
-                </button>
-              ))}
-              {hidden.length > 0 && (
-                <details className="tabs-more" style={{ display: "inline-flex", position: "relative" }}>
-                  <summary style={{ listStyle: "none", cursor: "pointer", padding: "6px 10px", border: "1px solid var(--line)", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ещё ▾</summary>
-                  <div style={{ position: "absolute", top: "100%", right: 0, background: "var(--paper)", border: "1px solid var(--line)", display: "flex", flexDirection: "column", zIndex: 5, minWidth: 160 }}>
-                    {hidden.map((t) => (
-                      <button key={t} style={{ textAlign: "left", border: "none", borderBottom: "1px solid var(--line)", background: tab === t ? "var(--paper-2)" : "var(--paper)", padding: "8px 12px" }} onClick={() => selectTab(t)}>{t}</button>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </>
-          );
-        })()}
-      </div>
 
       {tab === "Обзор" && (
         <div className="stack setting-overview">
@@ -1436,7 +1358,7 @@ export function SettingDetailPage() {
           emptyLabel="Заметок пока нет."
         />
       )}
-    </div>
+    </EntityPage>
   );
 }
 

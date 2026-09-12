@@ -10463,3 +10463,143 @@ details[open] > .res-group__band .chevron-icon {
     bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ============================================================
+   Каркас карточки сущности — см. components/EntityPage.tsx.
+   Состав шапки закрыт: крошки, аватар, значок вида, имя, мета,
+   действия. Правило состава живёт в комментарии компонента, здесь
+   только его вид.
+   ============================================================ */
+
+.entity-page__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+
+/* Аватар не тянется и не сжимается: имя рядом с ним должно начинаться
+   на одном и том же месте у всех шестнадцати карточек. */
+.entity-page__avatar {
+  flex: 0 0 auto;
+}
+
+.entity-page__ident {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.entity-page__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+/* Заголовок карточки не носит нижнего отступа: расстояние до меты и до
+   полосы вкладок задаёт .stack, а собственный margin у h1 ломал бы его
+   ровно на величину, разную для страниц с метой и без. */
+.entity-page__title-row h1 {
+  margin: 0;
+}
+
+.entity-page__meta {
+  margin-top: var(--sp-2);
+}
+
+.entity-page__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* Кнопка «…». Квадратная и спокойная: в шапке она соседствует с одним
+   главным действием и не должна спорить с ним за взгляд. */
+.entity-page__more {
+  min-width: var(--sp-7);
+  padding: var(--sp-2) var(--sp-4);
+  line-height: 1;
+}
+
+.entity-page__error {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-5);
+  border-left: 3px solid var(--status-cancelled);
+}
+
+.entity-page__missing {
+  padding: var(--sp-7);
+  text-align: center;
+}
+
+/* Скелет тела. Смысл не в украшении, а в том, что рама и тело занимают
+   своё место до прихода данных: пять карточек писали серым абзацем
+   «Загрузка…» вместо всей страницы, и раскладка прыгала. */
+.entity-page__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+.entity-page__skeleton-card {
+  height: 220px;
+  background: var(--bg-elevated);
+  border: var(--card-border-width) solid var(--line);
+  animation: search-skeleton-pulse 1.1s ease-in-out infinite alternate;
+}
+
+.entity-page__skeleton-card--short {
+  height: 120px;
+}
+
+/* Полоса на месте имени, пока имя не пришло. Ширина условная — точнее
+   всё равно не угадать, а высота совпадает с h1, и это то, ради чего
+   полоса нужна. */
+.entity-page__title-skeleton {
+  display: inline-block;
+  width: 220px;
+  height: var(--fs-h1);
+  background: var(--bg-elevated);
+  animation: search-skeleton-pulse 1.1s ease-in-out infinite alternate;
+}
+
+/* Подпись только для экранных читалок. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: calc(-1 * var(--sp-0));
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* «Ещё ▾» — вкладки, которые пустой сущности пока нечем наполнить.
+   Сам список идёт меню на уровне документа (см. EntityPage): полоса
+   вкладок прокручивается вбок и обрезает всё, что торчит вниз, поэтому
+   выпадающий блок внутри неё был бы не виден. Здесь — только кнопка,
+   и выглядит она как вкладка, потому что стоит в одном ряду с ними. */
+.entity-page__tabs-more {
+  flex: 0 0 auto;
+  cursor: pointer;
+  padding: var(--sp-3) var(--sp-5);
+  background: transparent;
+  border: var(--card-border-width) solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.entity-page__tabs-more:hover {
+  color: var(--ink);
+}
