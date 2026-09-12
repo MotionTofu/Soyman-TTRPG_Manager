@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { EntityGroup } from "../types";
-import { useAlert } from "../hooks/useConfirm";
+import { ContextMenu } from "./ContextMenu";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
 
 // Полоса групп для списков: «Все», группы владельца, «Вне групп», «+».
 //
@@ -66,11 +67,10 @@ export function GroupTabs({
     { kind: "group"; groupId: number; x: number; y: number } | { kind: "static"; x: number; y: number } | null
   >(null);
   const [renaming, setRenaming] = useState<{ groupId: number; name: string } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [alertDialog, showAlert] = useAlert();
+  const [confirmDialog, confirm] = useConfirm();
   const inputRef = useRef<HTMLInputElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   async function loadGroups() {
     try {
@@ -93,15 +93,6 @@ export function GroupTabs({
   useEffect(() => {
     if (renaming && renameRef.current) renameRef.current.focus();
   }, [renaming]);
-
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setContextMenu(null);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [contextMenu]);
 
   async function handleCreate() {
     const name = newName.trim();
@@ -132,9 +123,15 @@ export function GroupTabs({
   }
 
   async function handleDelete(groupId: number) {
+    const ok = await confirm({
+      title: "Удалить группу?",
+      message: deleteNote,
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.del(`${endpoint}/${groupId}`);
-      setDeleteConfirm(null);
       if (activeTab === String(groupId)) onTabChange(null);
       await loadGroups();
       onGroupsChanged();
@@ -251,62 +248,37 @@ export function GroupTabs({
         </div>
       )}
 
+      {/* Меню и диалог — общие для приложения, а не свои: у полосы были копия
+          того и другого. Своя копия ещё и уезжала за край экрана — `ContextMenu`
+          меряет себя после появления и прижимается к краю. */}
       {contextMenu && (
-        <div
-          ref={menuRef}
-          className="setting-group-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          {contextMenu.kind === "static" ? (
-            <span
-              style={{
-                display: "block",
-                padding: "6px 12px",
-                color: "var(--muted)",
-                fontSize: "var(--fs-meta)",
-              }}
-            >
-              Эту вкладку не изменить
-            </span>
-          ) : (
-            <>
-              <button
-                onClick={() => {
-                  const g = groups.find((gr) => gr.id === contextMenu.groupId);
-                  if (g) setRenaming({ groupId: g.id, name: g.name });
-                  setContextMenu(null);
-                }}
-              >
-                Переименовать
-              </button>
-              <button
-                className="danger"
-                onClick={() => {
-                  setDeleteConfirm(contextMenu.groupId);
-                  setContextMenu(null);
-                }}
-              >
-                Удалить
-              </button>
-            </>
-          )}
-        </div>
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          title={contextMenu.kind === "static" ? "Эту вкладку не изменить" : undefined}
+          items={
+            contextMenu.kind === "static"
+              ? []
+              : [
+                  {
+                    label: "Переименовать",
+                    onClick: () => {
+                      const g = groups.find((gr) => gr.id === contextMenu.groupId);
+                      if (g) setRenaming({ groupId: g.id, name: g.name });
+                    },
+                  },
+                  {
+                    label: "Удалить",
+                    danger: true,
+                    onClick: () => handleDelete(contextMenu.groupId),
+                  },
+                ]
+          }
+          onClose={() => setContextMenu(null)}
+        />
       )}
 
-      {deleteConfirm !== null && (
-        <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Удалить группу?</h3>
-            <p>{deleteNote}</p>
-            <div className="row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-              <button onClick={() => setDeleteConfirm(null)}>Отмена</button>
-              <button className="danger" onClick={() => handleDelete(deleteConfirm)}>
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmDialog}
       {alertDialog}
     </div>
   );

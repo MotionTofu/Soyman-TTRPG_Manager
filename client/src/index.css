@@ -10167,37 +10167,6 @@ details[open] > .res-group__band .chevron-icon {
   color: var(--ink);
   width: 200px;
 }
-.setting-group-context-menu {
-  position: fixed;
-  z-index: 1000;
-  background: var(--paper-2);
-  border: 1px solid var(--line);
-  border-radius: 0;
-  padding: var(--sp-2) 0;
-  min-width: 160px;
-}
-.setting-group-context-menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
-  padding: var(--sp-3) var(--sp-5);
-  font: inherit;
-  font-size: var(--fs-meta);
-  color: var(--ink);
-  cursor: pointer;
-}
-.setting-group-context-menu button:hover {
-  background: var(--bg-hover);
-}
-.setting-group-context-menu button.danger {
-  color: var(--danger-bg);
-  font-weight: 600;
-}
-.setting-group-context-menu button.danger:hover {
-  background: var(--status-cancelled-bg, rgba(220, 50, 50, 0.08));
-}
 .setting-group-empty-add {
   cursor: pointer;
   opacity: 0.6;
