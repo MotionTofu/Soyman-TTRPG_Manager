@@ -558,18 +558,7 @@ export function BeingDetailPage() {
         { label: "Дублировать", onClick: duplicateBeing },
         { label: "Архивировать", danger: true, onClick: archiveBeing },
       ]}
-      tabs={TABS.map((t) => ({
-        id: t,
-        count: {
-          Досье: being.chapters.length + (being.description ? 1 : 0),
-          Отношения: being.relations?.length ?? 0,
-          "Места обитания": being.locations.length,
-          "Важные даты": being.important_dates.length,
-          Галерея: 0,
-          "Карточка существа": being.statblock_count ?? 0,
-          Упоминания: 0,
-        }[t as string],
-      }))}
+      tabs={TABS}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof TABS)[number])}
       overlays={
