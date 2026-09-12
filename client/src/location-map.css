@@ -40,7 +40,7 @@
   z-index: 15;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
   line-height: normal;
 }
 .location-map-zoom-controls button {
@@ -61,8 +61,8 @@
   z-index: 15;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px 10px;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
@@ -73,7 +73,7 @@
 .location-map-legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .location-map-legend-dot {
   display: inline-block;
@@ -101,18 +101,18 @@
 }
 .location-map-fullscreen-close {
   flex-shrink: 0;
-  margin: 0 12px;
+  margin: 0 var(--sp-5);
   width: 32px;
   height: 32px;
   font-size: var(--fs-h3);
 }
 .location-map-fullscreen .location-map-card {
-  padding: 12px;
+  padding: var(--sp-5);
 }
 .location-map-pin-search {
   position: relative;
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-shrink: 0;
 }
 .location-map-pin-search input {
@@ -131,7 +131,7 @@
   z-index: 20;
 }
 .location-map-pin-search-item {
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   cursor: pointer;
   font-size: var(--fs-meta);
 }
@@ -164,7 +164,7 @@
   background: var(--surface);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   font-size: var(--fs-meta);
   white-space: nowrap;
   max-width: min(200px, 40vw);
@@ -172,12 +172,12 @@
   text-overflow: ellipsis;
   z-index: 10;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .location-map-pin-label button {
   background: transparent;
   border: none;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   line-height: 1;
   color: inherit;
 }
@@ -196,10 +196,10 @@
 }
 .location-map-pin-label.pin-label-character {
   background: var(--surface);
-  border: 2px solid var(--accent);
+  border: var(--card-border-width, 1px) solid var(--accent);
   color: var(--on-surface);
   font-size: var(--fs-meta);
-  padding: 7px 11px;
+  padding: var(--sp-3) var(--sp-5);
 }
 .location-map-pin-label.pin-label-location {
   background: var(--surface);
@@ -223,29 +223,29 @@
   background: var(--paper-2);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 12px;
+  padding: var(--sp-5);
   font-size: var(--fs-meta);
   white-space: nowrap;
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
   cursor: default;
 }
 .location-map-pin-toolbar button {
   font-size: var(--fs-meta);
-  padding: 5px 10px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .location-map-pin-toolbar input[type="color"] {
   width: 34px;
   height: 26px;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
 }
 .location-map-pin-toolbar input[type="range"] {
   width: 110px;
 }
 .location-map-pin-toolbar label {
-  gap: 6px;
+  gap: var(--sp-3);
   align-items: center;
 }
 .location-map-pin-loading {
@@ -257,7 +257,7 @@
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 4px 12px;
+  padding: var(--sp-2) var(--sp-5);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--on-surface-muted);
@@ -276,11 +276,11 @@
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   background: var(--surface);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 8px 16px;
+  padding: var(--sp-4) var(--sp-6);
   font-size: var(--fs-meta);
 }
 .location-map-toast-undo {
@@ -292,13 +292,13 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
 }
 .location-map-toast-close {
   background: none;
   border: none;
   cursor: pointer;
   font-size: var(--fs-h3);
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   color: var(--on-surface-muted);
 }

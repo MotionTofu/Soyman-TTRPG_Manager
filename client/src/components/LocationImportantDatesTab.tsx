@@ -5,6 +5,7 @@ import { useConfirm } from "../hooks/useConfirm";
 import { Modal } from "./Modal";
 import { EmptyState } from "./EmptyState";
 import { formatImportantDate, formatCustomRule } from "../inworldCalendar";
+import { DATE_GROUP_LABELS, DATE_GROUP_ORDER } from "../locationDateGroups";
 import type { CalendarMonth, CalendarWeekday, CustomRule, ImportantDate, SettingCalendar } from "../types";
 
 interface Props {
@@ -16,6 +17,9 @@ interface Props {
   calendarWeekdays?: CalendarWeekday[];
   onChange: () => void;
   onShowOnMap?: () => void;
+  // Master–Detail: показать только одну группу периодичности.
+  // Не задано или "all" — все группы, как раньше.
+  groupFilter?: string | null;
 }
 
 type Recurrence = "once" | "annual" | "monthly" | "weekly" | "custom";
@@ -48,14 +52,6 @@ const EMPTY_DRAFT: Draft = {
 
 const CUSTOM_UNITS = ["день", "неделя", "месяц", "год", "десятилетие", "столетие", "тысячелетие"];
 
-const GROUP_LABELS: Record<string, string> = {
-  once: "Разовые",
-  annual: "Ежегодные",
-  monthly: "Ежемесячные",
-  weekly: "Еженедельные",
-  custom: "Особые",
-};
-
 function sortChronological(a: ImportantDate, b: ImportantDate): number {
   const ma = a.month ?? 0, mb = b.month ?? 0;
   if (ma !== mb) return ma - mb;
@@ -78,7 +74,7 @@ function ordinalPreview(n: number, unit1: string, unit2: string): string {
   return `${n}-й ${unit1} ${unit2Gen}`;
 }
 
-export function LocationImportantDatesTab({ locationId, locationName, settingId, dates, calendarMonths = [], calendarWeekdays = [], onChange, onShowOnMap }: Props) {
+export function LocationImportantDatesTab({ locationId, locationName, settingId, dates, calendarMonths = [], calendarWeekdays = [], onChange, onShowOnMap, groupFilter }: Props) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -237,10 +233,22 @@ export function LocationImportantDatesTab({ locationId, locationName, settingId,
   }, [dateTypes, draft.date_type]);
 
   const total = dates.length;
+  // Внутри Master–Detail навигация уже выбрала группу — показываем только
+  // её, с обычным заголовком вместо плашки и своей кнопкой добавления.
+  const isFiltered = !!groupFilter && groupFilter !== "all";
+  const visibleKeys = (isFiltered ? [groupFilter!] : [...DATE_GROUP_ORDER]) as (typeof DATE_GROUP_ORDER)[number][];
+  const visibleTotal = visibleKeys.reduce((n, k) => n + (grouped[k]?.length ?? 0), 0);
 
   return (
-    <div className="card stack" style={{ gap: "var(--sp-5)" }}>
+    <div className="card stack" style={{ gap: "var(--sp-7)" }}>
       {confirmDialog}
+      {isFiltered ? (
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ margin: 0 }}>{DATE_GROUP_LABELS[groupFilter!]} · {visibleTotal}</h3>
+          <button type="button" onClick={openCreate}>+ Добавить</button>
+        </div>
+      ) : (
+      <>
       {/* §1.4 плашка-инверсия */}
       <div className="geography-node-header" style={{ margin: "-14px -14px 0" }}>
         <span>
@@ -250,6 +258,8 @@ export function LocationImportantDatesTab({ locationId, locationName, settingId,
           <button type="button" onClick={openCreate}>+ Добавить</button>
         </span>
       </div>
+      </>
+      )}
 
 
 
@@ -259,14 +269,20 @@ export function LocationImportantDatesTab({ locationId, locationName, settingId,
           hint="Отметьте основание, праздник, битву или затмение — дата появится на календаре сеттинга и в календарях кампаний на его основе."
           action={<button className="primary" onClick={openCreate}>+ Добавить важную дату</button>}
         />
+      ) : isFiltered && visibleTotal === 0 ? (
+        <EmptyState
+          title={`В категории «${DATE_GROUP_LABELS[groupFilter!]}» пока пусто`}
+          hint="Даты этой периодичности появятся здесь."
+          action={<button className="primary" onClick={openCreate}>+ Добавить дату</button>}
+        />
       ) : (
-        <div className="stack" style={{ gap: "var(--sp-4)" }}>
-          {(["once", "annual", "monthly", "weekly", "custom"] as const).map((key) => {
+        <div className="stack" style={{ gap: "var(--sp-6)" }}>
+          {visibleKeys.map((key) => {
             const items = grouped[key];
             if (items.length === 0) return null;
             return (
               <div key={key} className="stack" style={{ gap: 4 }}>
-                <strong style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{GROUP_LABELS[key]}</strong>
+                <strong style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{DATE_GROUP_LABELS[key]}</strong>
                 {items.map((d) => (
                   <div key={d.id} className="entity-row" style={{ alignItems: "center", gap: 8 }}>
                     {d.color && <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: d.color, flexShrink: 0, border: "1px solid var(--line)" }} title={d.color} />}

@@ -5,7 +5,13 @@
    Никаких новых цветов: всё через --paper/--ink/--accent/--line, как в
    docs/design-system-punk-zine.md §3.2. */
 
+/* Полотну тени запрещены (§1.2), а глубину на схеме из 30+ нод чем-то
+   показывать надо — её несёт толщина обводки (§6: «глубину даёт border
+   плюс лёгкая подложка, не box-shadow системы»). Поэтому здесь своя пара
+   ступеней: обычная и усиленная, которой помечено выделенное. */
 .canvas-page {
+  --card-border-width: 1.5px;
+  --card-border-width-strong: 2px;
   display: flex;
   flex-direction: column;
   /* Высоту берёт только режим холста (.canvas-page--board ниже): список
@@ -39,16 +45,16 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
-  padding-bottom: 6px;
+  padding-bottom: var(--sp-3);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .canvas-group-head__actions {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 
 .canvas-body {
@@ -118,7 +124,7 @@
      104-м, и без этого низкая нода (сцена без чипов) обрезала бы последние
      два разъёма по кромке. +2 аудио/бой на 124/144. */
   min-height: 170px;
-  border: 2px solid var(--ink);
+  border: var(--card-border-width-strong, 1px) solid var(--ink);
   background: var(--paper);
   color: var(--ink);
   border-radius: var(--card-radius);
@@ -144,10 +150,10 @@
 .canvas-node--route {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
   background: var(--surface);
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: calc(var(--card-radius) - 2px);
   min-width: 64px;
   /* Рераут 24px на длинном ребре иначе тонет под крупной нодой сцены (300px);
@@ -161,13 +167,13 @@
     #1a1a1a 0 14px,
     #f4c400 14px 28px
   );
-  border: 2px solid #1a1a1a;
+  border: var(--card-border-width-strong, 1px) solid #1a1a1a;
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: var(--sp-1) var(--sp-3);
   min-height: 22px;
 }
 .canvas-node--route.is-partial {
-  border: 2px dashed var(--ink);
+  border: var(--card-border-width-strong, 1px) dashed var(--ink);
   opacity: 0.9;
 }
 .canvas-handle--route.is-missing {
@@ -203,7 +209,7 @@
   height: 12px;
   border-radius: 50%;
   background: var(--ink);
-  border: 2px solid var(--ink);
+  border: var(--card-border-width-strong, 1px) solid var(--ink);
 }
 .canvas-node--route .canvas-handle--route.react-flow__handle-left {
   left: -3px;
@@ -215,11 +221,11 @@
   background: var(--surface);
   color: var(--on-surface);
   border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
-  padding: 7px 10px;
+  padding: var(--sp-3) var(--sp-4);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .canvas-node__name {
   font-family: var(--font-display);
@@ -236,21 +242,21 @@
   white-space: nowrap;
 }
 .canvas-node__body {
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .canvas-node__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: var(--sp-3);
 }
 .canvas-node__chip {
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
-  border: 1.5px solid var(--line);
-  padding: 1px 5px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: var(--sp-0) var(--sp-2);
 }
 .canvas-node__chip.is-solid {
   background: var(--surface);
@@ -284,7 +290,7 @@
   height: 12px;
   border-radius: 0;
   background: var(--ink);
-  border: 2px solid var(--ink);
+  border: var(--card-border-width-strong, 1px) solid var(--ink);
 }
 .canvas-flow .react-flow__handle.canvas-handle--story {
   transform: rotate(45deg);
@@ -320,12 +326,12 @@
   flex-direction: column;
 }
 .canvas-props__head {
-  padding: 12px 14px;
+  padding: var(--sp-5) var(--sp-5);
   border-bottom: var(--card-border-width) solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .canvas-props__label {
   font-family: var(--font-ui);
@@ -343,15 +349,15 @@
   color: var(--ink);
 }
 .canvas-props__fields {
-  padding: 14px;
+  padding: var(--sp-5);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .canvas-props__field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 /* Свотчи выбора цвета — одни на стикер, рамку, главу и пин (блок C1).
    Значения цветов сюда не попадают: их ставит инлайном компонент
@@ -360,20 +366,20 @@
 .canvas-swatches {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .canvas-swatch {
   width: 24px;
   height: 24px;
   padding: 0;
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
 }
 .canvas-swatch.is-active {
-  border: 2px solid var(--ink);
+  border: var(--card-border-width-strong, 1px) solid var(--ink);
 }
 
 .canvas-props__empty {
-  padding: 24px 16px;
+  padding: var(--sp-7) var(--sp-6);
   color: var(--muted);
   font-size: var(--fs-meta);
   line-height: 1.5;
@@ -417,16 +423,16 @@
 .canvas-outcomes {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .canvas-outcome {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--sp-3);
   /* Полоска слева вместо рамки: рамка внутри карточки дала бы «рамку в
      рамке», что дизайн-система запрещает (§«одна рама на регион»). */
   border-left: 2px solid var(--line);
-  padding-left: 9px;
+  padding-left: var(--sp-4);
 }
 .canvas-outcome__label {
   flex: 1;
@@ -452,8 +458,8 @@
   max-height: calc(100% - 24px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
   background: var(--paper);
   border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
@@ -462,15 +468,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .canvas-palette__tab {
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 2px 6px;
-  border: 1.5px solid transparent;
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--card-border-width, 1px) solid transparent;
 }
 .canvas-palette__tab.is-active {
   /* Инверсия вместо подчёркивания: в системе выделение делается заливкой,
@@ -488,7 +494,7 @@
 .canvas-palette__list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
   overflow-y: auto;
   min-height: 0;
 }
@@ -496,10 +502,10 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--sp-1);
   text-align: left;
-  padding: 6px 8px;
-  border: 1.5px solid var(--line);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
   color: var(--ink);
 }
@@ -524,8 +530,8 @@
 .canvas-props__library {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 14px;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
   border-bottom: var(--card-border-width) solid var(--line);
 }
 
@@ -537,14 +543,14 @@
   width: 176px;
 }
 .canvas-node--entity .canvas-node__band {
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .canvas-node__portrait {
   width: 26px;
   height: 26px;
   object-fit: cover;
   flex-shrink: 0;
-  border: 1.5px solid var(--on-surface);
+  border: var(--card-border-width, 1px) solid var(--on-surface);
 }
 .canvas-node__portrait--empty {
   /* Пустая рамка вместо заглушки-картинки: место под портрет остаётся, и
@@ -720,10 +726,10 @@
 /* Кнопка на ноде. Появляется только у выбранной: тридцать кнопок на схеме из
    тридцати сцен читаются раньше имён. */
 .canvas-node__action {
-  margin-top: 4px;
+  margin-top: var(--sp-2);
   width: 100%;
   font-size: var(--fs-micro);
-  padding: 3px 6px;
+  padding: var(--sp-1) var(--sp-3);
 }
 
 /* Нода события. Уже сцены и без портрета: у события опознаётся название и
@@ -748,7 +754,7 @@
 .canvas-frame {
   width: 100%;
   height: 100%;
-  border: 2px dashed var(--line);
+  border: var(--card-border-width-strong, 1px) dashed var(--line);
   /* Без заливки. Выделенную ноду React Flow поднимает на z-index 1000, и
      залитая рамка в этот момент закрыла бы собой все свои сцены. */
   background: none;
@@ -762,9 +768,9 @@
 .canvas-frame__title {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
-  margin: -2px 0 0 -2px;
-  padding: 7px 14px;
+  gap: var(--sp-4);
+  margin: calc(-1 * var(--sp-1)) 0 0 calc(-1 * var(--sp-1));
+  padding: var(--sp-3) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-ui);
@@ -841,8 +847,8 @@
   /* Глиф маленький, а на общем виде холст ещё и отмасштабирован вдвое —
      без запаса по нему не попасть. Поля растягивают только зону попадания,
      отрицательные отступы возвращают разметку на место. */
-  padding: 6px;
-  margin: -6px -6px -6px -4px;
+  padding: var(--sp-3);
+  margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-3)) calc(-1 * var(--sp-3)) calc(-1 * var(--sp-2));
 }
 .canvas-frame__fold:hover {
   opacity: 1;
@@ -865,9 +871,9 @@
 .canvas-frame__hints {
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
-  border: 1.5px dashed currentColor;
-  padding: 0 4px;
-  margin-left: 4px;
+  border: var(--card-border-width, 1px) dashed currentColor;
+  padding: 0 var(--sp-2);
+  margin-left: var(--sp-2);
 }
 
 /* Узел главы (блок G6.2) — карточка того же роста, что ярлык приключения:
@@ -886,16 +892,16 @@
 .canvas-node__outside {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
 }
 .canvas-node__outlink {
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
-  border: 1.5px dashed var(--ink);
+  border: var(--card-border-width, 1px) dashed var(--ink);
   background: transparent;
   color: var(--ink);
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -910,7 +916,7 @@
    поэтому здесь нет ни width, ни height в 100%, как у развёрнутой рамки. */
 .canvas-chapter-card {
   display: inline-block;
-  border: 2px solid var(--line);
+  border: var(--card-border-width-strong, 1px) solid var(--line);
   background: var(--paper);
 }
 .canvas-chapter-card .canvas-frame__title {
@@ -927,7 +933,7 @@
   width: 30px;
   height: 30px;
   background: var(--paper);
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -947,7 +953,7 @@
   width: 30px !important;
   height: 30px !important;
   background: var(--paper) !important;
-  border: 1.5px solid var(--line) !important;
+  border: var(--card-border-width, 1px) solid var(--line) !important;
   display: flex !important;
   align-items: center;
   justify-content: center;
@@ -979,13 +985,13 @@
   display: flex;
   flex-direction: column-reverse;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--sp-3);
   max-width: calc(100% - 61px);
 }
 .canvas-legend__chip {
-  padding: 5px 10px;
+  padding: var(--sp-2) var(--sp-4);
   background: var(--paper);
-  border: 2px solid var(--line);
+  border: var(--card-border-width-strong, 1px) solid var(--line);
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
@@ -1002,23 +1008,23 @@
 .canvas-legend__body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4);
   max-width: 260px;
   background: var(--paper);
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.04em;
 }
 .canvas-legend__cols {
   display: flex;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .canvas-legend__col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 /* Подпись колонки — «Сцена ←» / «→ Сцена»: тише строк, но не серая заливка. */
 .canvas-legend__col-title {
@@ -1027,7 +1033,7 @@
 .canvas-legend__row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 /* Значок строки. Форма задаётся модификатором, цвет приходит инлайном одной
    переменной `--mark` из canvasPalette.ts — он свой у каждого разъёма. */
@@ -1037,7 +1043,7 @@
   display: inline-block;
   position: relative;
   background: var(--mark);
-  border: 2px solid var(--mark);
+  border: var(--card-border-width-strong, 1px) solid var(--mark);
   flex-shrink: 0;
 }
 .canvas-legend__mark--diamond {
@@ -1080,7 +1086,7 @@
   align-items: center;
   justify-content: center;
   background: var(--paper);
-  border: 2px solid var(--line);
+  border: var(--card-border-width-strong, 1px) solid var(--line);
   color: var(--ink);
   font-size: var(--fs-h3);
   cursor: pointer;
@@ -1126,7 +1132,7 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-top: 4px;
+  margin-top: var(--sp-2);
   /* Ширина по содержимому, а не по родителю: пин шириной 24 px ужал бы
      абсолютную подпись до столбика в одну букву. */
   width: max-content;
@@ -1139,7 +1145,7 @@
   /* Фон — бумага под текстом, иначе подпись ложится на сетку и на нити и
      перестаёт читаться. Обводки нет: это подпись, а не плашка. */
   background: var(--paper);
-  padding: 0 3px;
+  padding: 0 var(--sp-1);
   pointer-events: none;
   white-space: normal;
 }
@@ -1158,10 +1164,10 @@
   width: min(440px, calc(100% - 48px));
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 20px;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
   background: var(--paper);
-  border: 2px solid var(--line);
+  border: var(--card-border-width-strong, 1px) solid var(--line);
 }
 
 /* Капс-подпись — один из четырёх голосов, не длиннее строки. */
@@ -1185,7 +1191,7 @@
 .canvas-blank__row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 
 /* Три кнопки одного веса: набор не рекомендуется, он предлагается. Главной
@@ -1193,8 +1199,8 @@
    которого никто не задавал. */
 .canvas-blank__btn {
   flex: 1 1 auto;
-  padding: 8px 12px;
-  border: 1.5px solid var(--line);
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
   color: var(--ink);
   font-family: var(--font-ui);
@@ -1234,31 +1240,31 @@
   width: 260px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
   background: var(--paper);
-  border: 2px solid var(--line);
+  border: var(--card-border-width-strong, 1px) solid var(--line);
 }
 .canvas-search input {
   width: 100%;
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
   color: var(--ink);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
 }
 .canvas-search__list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
   max-height: 180px;
   overflow-y: auto;
 }
 .canvas-search__item {
   text-align: left;
-  padding: 6px 8px;
-  border: 1.5px solid var(--line);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
   color: var(--ink);
   font-family: var(--font-ui);
@@ -1273,7 +1279,7 @@
 /* MiniMap — прямоугольники, 2px обводка, без теней/радиусов, инверсия маски */
 .canvas-flow .react-flow__minimap {
   background: var(--paper);
-  border: 2px solid var(--line);
+  border: var(--card-border-width-strong, 1px) solid var(--line);
   bottom: 12px;
   right: 12px;
 }
@@ -1318,7 +1324,7 @@
 /* «дальше…» — служебный выбор, а не главное на карточке: держится мелким и
    не спорит с именем приключения за внимание. */
 .canvas-index__next {
-  margin-top: 6px;
+  margin-top: var(--sp-3);
   font-size: var(--fs-meta);
   /* Ширину select берёт от самого длинного пункта, а пункты здесь — имена
      приключений («Глубоководье: Ограбить Дракона»). Без ограничения плитка
@@ -1331,8 +1337,8 @@
   text-overflow: ellipsis;
 }
 .canvas-index__unlink {
-  padding: 0 6px;
-  border: 1.5px solid var(--line);
+  padding: 0 var(--sp-3);
+  border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper);
   line-height: 1.4;
   cursor: pointer;
@@ -1342,7 +1348,7 @@
    карточки приключения (`padding: 12` инлайном), но текст слева, а не по
    центру карточки. */
 .canvas-index__board {
-  padding: 12px;
+  padding: var(--sp-5);
   text-align: left;
 }
 /* «⋯» — основной путь к действиям с доской: правой кнопки нет на тач-экране.
@@ -1351,8 +1357,8 @@
    текст, и порог для него 3:1. Наведение и фокус добавляют обводку. */
 .canvas-index__more {
   flex: 0 0 auto;
-  padding: 0 6px;
-  border: 1.5px solid transparent;
+  padding: 0 var(--sp-3);
+  border: var(--card-border-width, 1px) solid transparent;
   background: none;
   color: var(--muted);
   line-height: 1.4;
@@ -1367,8 +1373,8 @@
 /* «Схема» у заголовка сеттинга (блок D3). Второй взгляд, а не главное
    действие: список — дорога по умолчанию, и кнопка не должна с ним спорить. */
 .canvas-index__map {
-  padding: 1px 8px;
-  border: 1.5px solid var(--line);
+  padding: var(--sp-0) var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper);
   font-size: var(--fs-meta);
   line-height: 1.4;
@@ -1418,7 +1424,7 @@
   text-transform: uppercase;
   background: var(--surface);
   color: var(--on-surface);
-  padding: 1px 5px;
+  padding: var(--sp-0) var(--sp-2);
 }
 
 /* --------------------------------------------------- режим репетиции (G3) */
@@ -1437,15 +1443,15 @@
 }
 
 .canvas-rehearse {
-  padding: 14px;
+  padding: var(--sp-5);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--sp-6);
 }
 .canvas-rehearse__head {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 /* Имя сцены — заголовочный голос: это единственный крупный кегль карточки,
    от него и считается скачок к подписям блоков. */
@@ -1458,7 +1464,7 @@
 .canvas-rehearse__block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .canvas-rehearse__text {
   margin: 0;
@@ -1471,7 +1477,7 @@
    надо быстрее, чем прочитать подпись блока. */
 .canvas-rehearse__text--aloud {
   border-left: var(--card-border-width) solid var(--line);
-  padding-left: 10px;
+  padding-left: var(--sp-4);
 }
 .canvas-rehearse__list {
   margin: 0;
@@ -1479,7 +1485,7 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
   font-family: var(--font-body);
   font-size: var(--fs-meta);
   line-height: 1.4;
@@ -1506,17 +1512,17 @@
    и стоит последним всегда, даже когда всё выше пусто. */
 .canvas-rehearse__next {
   border-top: var(--card-border-width) solid var(--line);
-  padding-top: 12px;
-  gap: 8px;
+  padding-top: var(--sp-5);
+  gap: var(--sp-4);
 }
 .canvas-rehearse__exit {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--sp-1);
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
 }
 .canvas-rehearse__exit-name {
   font-family: var(--font-body);
@@ -1536,15 +1542,15 @@
 }
 .canvas-rehearse__back {
   align-self: flex-start;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 .canvas-rehearse__cast {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .canvas-rehearse__cast + .canvas-rehearse__cast {
-  margin-top: 8px;
+  margin-top: var(--sp-4);
 }
 
 /* Canvas index tabs — Кампании / Сеттинги / Мои доски */
@@ -1558,8 +1564,8 @@
   font-size: var(--fs-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 6px 14px;
-  border: 1.5px solid transparent;
+  padding: var(--sp-3) var(--sp-5);
+  border: var(--card-border-width, 1px) solid transparent;
   border-bottom: none;
   background: transparent;
   color: var(--muted);

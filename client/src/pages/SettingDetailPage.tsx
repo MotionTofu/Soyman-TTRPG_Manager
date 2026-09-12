@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
-import { ResourcesSection } from "../components/ResourcesSection";
+import { ResourcesSection, type ResourceStats } from "../components/ResourcesSection";
+import { RESOURCE_CATEGORIES } from "../resourceCategories";
 import { LocationTree } from "../components/LocationTree";
 import { LocationRootGraph } from "../components/LocationRootGraph";
 import { LocationMiller } from "../components/LocationMiller";
@@ -35,7 +37,10 @@ import type { SettingGenre } from "../types";
 import { LocationFilter } from "../components/LocationCascadePicker";
 import { SettingEntryList } from "../components/SettingEntryList";
 import { SettingBeingTileGrid, SettingCommunityTileGrid } from "../components/SettingBeingTileGrid";
-import { ArtifactTileGrid } from "../components/ArtifactTileGrid";
+import { ArtifactTileGrid, ArtifactEditModal, ArtifactAssignModal } from "../components/ArtifactTileGrid";
+import { groupArtifacts, type ArtifactGrouping } from "../artifactGroups";
+import { EntityPreviewContent, CreatureCardPreview } from "../components/EntityPreviewModal";
+import { StatblockList } from "../components/StatblockList";
 import { EntityWizard } from "../components/entityWizard/EntityWizard";
 import { AdventuresTab } from "../components/AdventuresTab";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
@@ -53,6 +58,7 @@ import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { CampaignWizard } from "../components/CampaignWizard";
 import { EntityImageSlot } from "../components/EntityImageSlot";
+import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 
 import type { System } from "../types";
 import type {
@@ -64,10 +70,12 @@ import type {
   Resource,
   Setting,
   SettingBeing,
+  SettingBeingDetail,
   SettingCalendarEra,
   SettingCalendarEvent,
   SettingCalendarTimeline,
   SettingCommunity,
+  SettingCommunityDetail,
   SettingCycle,
   SettingGroup,
   SettingLocation,
@@ -158,6 +166,13 @@ export function SettingDetailPage() {
   const bgCrop = useImageCrop("background", (file) => uploadImage("background", file));
   const thumbCrop = useImageCrop("thumbnail", (file) => uploadImage("thumbnail", file));
   const [tab, selectTab] = useTabState(TABS, "Обзор");
+  // Навигация внутри таба «Обзор» (Master–Detail): описание, теги,
+  // кампании, изображения, проверка связей. Онбординг — transient-баннер
+  // сверху, верхний таб-бар не трогаем.
+  const [ovSel, setOvSel] = useState<{ section: string; item?: string }>({ section: "desc" });
+  // Навигация внутри таба «Ресурсы»: все и категории со счётчиками.
+  const [resSel, setResSel] = useState<{ section: string; item?: string }>({ section: "all" });
+  const [resStats, setResStats] = useState<ResourceStats | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [creatingEvent, setCreatingEvent] = useState(false);
 
@@ -882,8 +897,26 @@ export function SettingDetailPage() {
               </div>
             );
           })()}
-          <div className="overview-two-col" style={{ marginTop: 0 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
+          <EntityTabWorkspace
+            sections={[
+              { id: "desc", label: "Описание" },
+              { id: "tags", label: "Теги" },
+              { id: "campaigns", label: "Кампании", count: campaigns.length },
+              { id: "images", label: "Изображения" },
+              { id: "links", label: "Проверка связей" },
+            ]}
+            selection={ovSel}
+            onSelect={setOvSel}
+            workspaceKey={settingId}
+            navFooter={
+              ovSel.section === "campaigns" ? (
+                <button className="primary" onClick={openCampaignWizard} style={{ alignSelf: "flex-start" }}>
+                  + Новая кампания
+                </button>
+              ) : undefined
+            }
+          >
+          {ovSel.section === "desc" && (
               <EditableTextCard
                 key={`description-${setting.id}`}
                 title="Описание"
@@ -906,7 +939,8 @@ export function SettingDetailPage() {
                 ]}
                 onSaveFields={(v) => saveName(v.name, v.code)}
               />
-            </div>
+          )}
+          {ovSel.section === "tags" && (
             <div className="card stack" style={{ flex: 1, minWidth: 0 }}>
               <h3>Теги</h3>
               <div className="genre-chips">
@@ -988,8 +1022,8 @@ export function SettingDetailPage() {
                 </>
               )}
             </div>
-          </div>
-
+          )}
+          {ovSel.section === "campaigns" && (
           <div className="card res-group" id="section-campaigns">
             <div className="res-group__band" style={{ cursor: "default" }}>
               <span className="res-group__title">Кампании и персонажи</span>
@@ -1036,19 +1070,8 @@ export function SettingDetailPage() {
             )}
             </div>
           </div>
-          {campaignWizardOpen && (
-            <CampaignWizard
-              systems={wizardSystems}
-              settings={wizardSettings}
-              defaultSettingId={settingId}
-              onClose={() => setCampaignWizardOpen(false)}
-              onCreated={() => {
-                setCampaignWizardOpen(false);
-                refresh();
-              }}
-            />
           )}
-
+          {ovSel.section === "images" && (
           <div className="card res-group" id="section-images">
             <div className="res-group__band" style={{ cursor: "default" }}>
               <span className="res-group__title">Изображения сеттинга</span>
@@ -1077,12 +1100,27 @@ export function SettingDetailPage() {
             {bgCrop.modal}
             {thumbCrop.modal}
           </div>
-
+          )}
+          {ovSel.section === "links" && (
           <CrossLinksWizard
             ownerKind="setting"
             ownerId={settingId}
             help="Ищет имена в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Шаг за шагом, по одному типу цели: у каждого своя строгость. Сцены размечает такой же проход на странице приключения. Ничего не пишет, пока вы не подтвердите."
           />
+          )}
+          </EntityTabWorkspace>
+          {campaignWizardOpen && (
+            <CampaignWizard
+              systems={wizardSystems}
+              settings={wizardSettings}
+              defaultSettingId={settingId}
+              onClose={() => setCampaignWizardOpen(false)}
+              onCreated={() => {
+                setCampaignWizardOpen(false);
+                refresh();
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -1232,7 +1270,7 @@ export function SettingDetailPage() {
               )}
             </div>
 
-            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
+            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-6)" }}>
               <SettingCalendarEditor
                 settingId={settingId}
                 items={calendarItems}
@@ -1253,9 +1291,30 @@ export function SettingDetailPage() {
       {tab === "Для игроков" && <SettingPlayerContentTab settingId={settingId} campaigns={campaigns} />}
 
       {tab === "Ресурсы" && (
-        <div className="card stack">
-          <ResourcesSection scope="setting" entityId={settingId} resources={resources} onChange={refresh} />
-        </div>
+        <EntityTabWorkspace
+          sections={[
+            { id: "all", label: "Все", count: resStats?.total ?? resources.length },
+            ...RESOURCE_CATEGORIES.map((c) => ({
+              id: c.key,
+              label: c.label,
+              count: resStats?.byCategory[c.key] ?? 0,
+            })),
+          ]}
+          selection={resSel}
+          onSelect={setResSel}
+          workspaceKey={settingId}
+        >
+          <div className="card stack">
+            <ResourcesSection
+              scope="setting"
+              entityId={settingId}
+              resources={resources}
+              onChange={refresh}
+              visibleCategories={resSel.section === "all" ? null : [resSel.section]}
+              onStats={(s) => setResStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
+            />
+          </div>
+        </EntityTabWorkspace>
       )}
 
       {calendarMenu && (
@@ -1475,12 +1534,64 @@ function GeographyTab({ settingId }: { settingId: number }) {
       {view === "columns" && <LocationMiller key={`m-${settingId}`} settingId={settingId} />}
       {view === "list" && (
         <div className="card stack geography-tree">
-          <LocationTree settingId={settingId} />
+          <LocationTree settingId={settingId} flat selectOnClick />
         </div>
       )}
       {view === "tree" && <LocationRootGraph key={settingId} settingId={settingId} />}
     </div>
   );
+}
+
+// Пагинация плиточных сеток («Все» в Личностях/Бестиарии/Сообществах/
+// Сокровищнице): страница — 6 строк плитки. Колонки резиновые
+// (minmax 280px), поэтому ширину меряем ResizeObserver'ом.
+// active=false — без пагинации (возвращает всё как есть).
+function useTilePagination<T>(
+  items: T[],
+  active: boolean,
+  resetKey: string
+): { paged: T[]; pager: ReactNode; wrapRef: RefObject<HTMLDivElement | null> } {
+  const [page, setPage] = useState(1);
+  const [cols, setCols] = useState(4);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  // Строка-ключ собирается вызывающей секцией из её фильтров: сменился
+  // набор — страница сбрасывается на первую.
+  useEffect(() => {
+    setPage(1);
+  }, [resetKey]);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || !active) return;
+    const update = () => setCols(Math.max(1, Math.floor(el.clientWidth / 290)));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [active]);
+  const pageSize = Math.max(1, cols) * 6;
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paged = active ? items.slice((safePage - 1) * pageSize, safePage * pageSize) : items;
+  const pager =
+    active && totalPages > 1 ? (
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+          Показано {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, items.length)} из {items.length}
+        </span>
+        <div className="row" style={{ gap: 6, alignItems: "center" }}>
+          <button disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>
+            ← Назад
+          </button>
+          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+            Стр. {safePage} из {totalPages}
+          </span>
+          <button disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>
+            Вперёд →
+          </button>
+        </div>
+      </div>
+    ) : null;
+  return { paged, pager, wrapRef };
 }
 
 // Артефакты moved out to their own top-level "Сокровищница" tab — they're
@@ -1542,6 +1653,10 @@ function BeingsSection({ settingId }: { settingId: number }) {
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
   const [category, setCategory] = useState<BeingCategory | "all">("all");
+  // Master–Detail внутри «Личностей»: категории слева раскрываются в
+  // существ, выбранное — справа большой карточкой. Категория навигации и
+  // фильтр списка — одно состояние, расходятся только при пресетах.
+  const [beingSel, setBeingSel] = useState<{ section: string; item?: string }>({ section: "all" });
   const [locationFilter, setLocationFilter] = useState("");
   const [communityFilter, setCommunityFilter] = useState("");
   const [creating, setCreating] = useState(false);
@@ -1556,10 +1671,6 @@ function BeingsSection({ settingId }: { settingId: number }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
-  const [presetName, setPresetName] = useState("");
-  const [presets, setPresets] = useState<{ id: string; name: string; filters: { category: string; locationFilter: string; communityFilter: string; query: string; sort: string; sortDir: string } }[]>(() => {
-    try { return JSON.parse(localStorage.getItem(`population-presets-${settingId}`) || "[]"); } catch { return []; }
-  });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkFaction, setBulkFaction] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -1644,28 +1755,6 @@ function BeingsSection({ settingId }: { settingId: number }) {
     return () => controller.abort();
   }, [settingId]);
 
-  useEffect(() => {
-    localStorage.setItem(`population-presets-${settingId}`, JSON.stringify(presets));
-  }, [presets, settingId]);
-
-  function savePreset() {
-    if (!presetName.trim()) return;
-    const newPreset = { id: Date.now().toString(), name: presetName.trim(), filters: { category, locationFilter, communityFilter, query, sort, sortDir } };
-    setPresets((prev) => [...prev, newPreset]);
-    setPresetName("");
-  }
-  function applyPreset(p: typeof presets[0]) {
-    setCategory(p.filters.category as BeingCategory | "all");
-    setLocationFilter(p.filters.locationFilter);
-    setCommunityFilter(p.filters.communityFilter);
-    setQuery(p.filters.query);
-    setSort(p.filters.sort as typeof sort);
-    setSortDir(p.filters.sortDir as typeof sortDir);
-  }
-  function deletePreset(id: string) {
-    setPresets((prev) => prev.filter((p) => p.id !== id));
-  }
-
   function toggleSelect(id: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -1733,32 +1822,68 @@ function BeingsSection({ settingId }: { settingId: number }) {
     refresh();
   }
 
+  const beingNavCats = NAMED_BEING_CATEGORIES.filter((c) => c.key !== "all");
+  const beingSections = [
+    { id: "all", label: "Все", count: category === "all" ? beings.length : undefined },
+    ...beingNavCats.map((c) => ({
+      id: c.key,
+      label: c.label,
+      count: category === c.key ? beings.length : undefined,
+      // Пункты — из текущего (уже отфильтрованного сервером) списка:
+      // раскрытие категории всегда совпадает с её выбором.
+      items: category === c.key ? beings.map((b) => ({ id: String(b.id), label: b.name || "Без названия" })) : [],
+    })),
+  ];
+
+  function handleBeingSelect(next: { section: string; item?: string }) {
+    if (next.section !== "all" && next.section !== category) {
+      setCategory(next.section as BeingCategory | "all");
+    } else if (next.section === "all" && category !== "all") {
+      setCategory("all");
+    }
+    setBeingSel(next.item ? { section: next.section, item: next.item } : { section: next.section });
+  }
+
+  const {
+    paged: pagedBeings,
+    pager: tilesPager,
+    wrapRef: gridWrapRef,
+  } = useTilePagination(beings, beingSel.section === "all" && !beingSel.item, [
+    category,
+    debouncedQuery,
+    locationFilter,
+    communityFilter,
+    sort,
+    sortDir,
+  ].join("|"));
+
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       {confirmDialog}
       {promptDialog}
-      <div className="sort-toggle" role="tablist" aria-label="Категории личностей">
-        {NAMED_BEING_CATEGORIES.map((c) => (
-          <button
-            key={c.key}
-            role="tab"
-            aria-selected={category === c.key}
-            className={category === c.key ? "active-sort" : ""}
-            onClick={() => setCategory(c.key)}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-      <div className="row sort-toggle" role="tablist" aria-label="Сортировка">
+      <div className="row sort-toggle" role="tablist" aria-label="Сортировка" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {/* Фильтр спрятан, поэтому кнопка сама говорит, что он включён —
+            иначе непонятно, почему список короче, чем ожидаешь. */}
+        <button
+          className={`toggle-button${filtersOpen || locationFilter || communityFilter ? " active" : ""}`}
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+        >
+          Фильтры{(locationFilter || communityFilter) ? ` (${(locationFilter ? 1 : 0) + (communityFilter ? 1 : 0)})` : ""}
+        </button>
+        <input
+          placeholder="Поиск: имя, связанное существо или сообщество…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Поиск личностей"
+          style={{ flex: 1, minWidth: 140 }}
+        />
         <span className="muted" style={{ fontSize: "11px", alignSelf: "center" }}>Сортировка:</span>
         <button className={sort === "name" ? "active-sort" : ""} onClick={() => handleSort("name")}>А-Я{sort === "name" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
         <button className={sort === "recent" ? "active-sort" : ""} onClick={() => handleSort("recent")}>Недавние{sort === "recent" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
         <button className={sort === "category" ? "active-sort" : ""} onClick={() => handleSort("category")}>По типу{sort === "category" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
         <button className={sort === "community" ? "active-sort" : ""} onClick={() => handleSort("community")}>По фракциям{sort === "community" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
-      </div>
-      <div className="row">
-        <button className="primary" onClick={() => setCreating(true)}>
+        <button className="primary" onClick={() => setCreating(true)} style={{ marginLeft: "auto" }}>
           Создать личность
         </button>
       </div>
@@ -1770,24 +1895,6 @@ function BeingsSection({ settingId }: { settingId: number }) {
           onCreated={() => refresh()}
         />
       )}
-      <div className="row" style={{ gap: 8 }}>
-        <input
-          placeholder="Поиск: имя, связанное существо или сообщество…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск личностей"
-          style={{ flex: 1 }}
-        />
-        {/* Фильтр спрятан, поэтому кнопка сама говорит, что он включён —
-            иначе непонятно, почему список короче, чем ожидаешь. */}
-        <button
-          className={`toggle-button${filtersOpen || locationFilter || communityFilter ? " active" : ""}`}
-          onClick={() => setFiltersOpen((v) => !v)}
-          aria-expanded={filtersOpen}
-        >
-          Фильтры{(locationFilter || communityFilter) ? ` (${(locationFilter ? 1 : 0) + (communityFilter ? 1 : 0)})` : ""}
-        </button>
-      </div>
       {filtersOpen && (
         <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center", padding: "8px 0" }}>
           <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
@@ -1820,26 +1927,6 @@ function BeingsSection({ settingId }: { settingId: number }) {
           сообщества/народы/культуры или общую локацию.
         </span>
       )}
-      <div className="stack" style={{ gap: 6, paddingTop: 8, borderTop: "1px solid var(--line)" }} title="Пресет сохраняет: категория, локация, фракция, поиск, сортировка. Клик по чипу — применить.">
-        <span className="muted" style={{ fontSize: "11px", lineHeight: 1.3 }} title="Наведите на чип — покажет что внутри, на × — удалить">
-          💾 Пресет — это сохранённый вид списка (фильтры + поиск + сортировка). Сохраните текущий набор, чтобы вернуться к нему одним кликом.
-        </span>
-        {presets.length > 0 && (
-          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <span className="muted" style={{ fontSize: "11px" }}>Пресеты:</span>
-            {presets.map((p) => (
-              <span key={p.id} className="badge tag" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }} title={`Применить: ${p.filters.category} · ${p.filters.sort} ${p.filters.sortDir} · ${p.filters.query || "без поиска"}`}>
-                <span onClick={() => applyPreset(p)} style={{ cursor: "pointer" }}>{p.name}</span>
-                <button type="button" className="tag-chip-remove" onClick={() => deletePreset(p.id)} title="Удалить пресет">×</button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="row" style={{ gap: 8, alignItems: "center" }}>
-          <input placeholder="Имя пресета — напр. Вотердип · Орден" value={presetName} onChange={(e) => setPresetName(e.target.value)} style={{ width: 220, fontSize: "12px" }} title="Напишите имя и нажмите Сохранить — текущий набор фильтров запомнится" />
-          <button disabled={!presetName.trim()} onClick={savePreset} style={{ fontSize: "12px" }} title="Сохранит категорию, локацию, фракцию, поиск и сортировку">Сохранить вид</button>
-        </div>
-      </div>
       {selectedIds.size > 0 && (
         <div className="row" style={{ gap: 8, alignItems: "center", padding: "8px", background: "var(--bg-elevated)", border: "1px solid var(--line)", flexWrap: "wrap" }}>
           <span className="muted" style={{ fontSize: "11px" }}>Выбрано {selectedIds.size}</span>
@@ -1887,8 +1974,266 @@ function BeingsSection({ settingId }: { settingId: number }) {
           }
         />
       ) : (
-        <SettingBeingTileGrid beings={beings} grouping={sort === "category" ? "category" : sort === "community" ? "community" : "alpha"} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} selectedIds={selectedIds} onToggleSelect={toggleSelect} onRename={renameBeing} onArchive={(b) => deleteBeing(b.id)} />
+        <EntityTabWorkspace
+          sections={beingSections}
+          selection={beingSel}
+          onSelect={handleBeingSelect}
+          workspaceKey={settingId}
+          navFooter={
+            <button className="primary" onClick={() => setCreating(true)} style={{ alignSelf: "flex-start" }}>
+              Создать личность
+            </button>
+          }
+        >
+          {beingSel.item ? (
+            <BeingDetailPane
+              key={beingSel.item}
+              beingId={Number(beingSel.item)}
+              settingId={settingId}
+              onBack={() => setBeingSel({ section: beingSel.section })}
+            />
+          ) : (
+            <div ref={gridWrapRef} className="stack">
+              {tilesPager}
+              <SettingBeingTileGrid beings={pagedBeings} grouping={sort === "category" ? "category" : sort === "community" ? "community" : "alpha"} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} selectedIds={selectedIds} onToggleSelect={toggleSelect} onRename={renameBeing} onArchive={(b) => deleteBeing(b.id)} />
+            </div>
+          )}
+        </EntityTabWorkspace>
       )}
+    </div>
+  );
+}
+
+// Карточка сообщества справа: лицо (аватар/монограмма + имя), сводка
+// (описание, теги, локации, вложенность) и состав — кто состоит.
+function CommunityDetailPane({ communityId, onBack }: { communityId: number; onBack: () => void }) {
+  const [detail, setDetail] = useState<SettingCommunityDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .get<SettingCommunityDetail>(`/setting-communities/${communityId}`, { signal: controller.signal })
+      .then((d) => {
+        if (controller.signal.aborted) return;
+        setDetail(d);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setError(String(e instanceof Error ? e.message : e));
+      });
+    return () => controller.abort();
+  }, [communityId]);
+
+  if (error) {
+    return (
+      <div className="card stack">
+        <span>Не удалось загрузить сообщество: {error}</span>
+        <div className="row">
+          <button className="primary" onClick={onBack}>Назад к списку</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!detail) {
+    return (
+      <div className="card" aria-busy="true" aria-label="Загрузка сообщества">
+        <p className="muted">Загрузка…</p>
+      </div>
+    );
+  }
+
+  const avatar = detail.avatar_image_url ?? detail.thumbnail_image_url;
+  return (
+    <div className="stack">
+      <div className="card stack">
+        <div className="row" style={{ gap: 12, alignItems: "center" }}>
+          {avatar ? (
+            <img
+              src={avatar}
+              alt=""
+              style={{ width: 64, height: 64, objectFit: "cover", border: "1px solid var(--line)", flexShrink: 0 }}
+            />
+          ) : (
+            <span
+              className="monster-tile__monogram"
+              style={{ width: 64, height: 64, fontSize: "var(--fs-h2)", flexShrink: 0 }}
+              aria-hidden="true"
+            >
+              {(detail.name.trim()[0] ?? "?").toUpperCase()}
+            </span>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ margin: 0 }}>{detail.name || "Без названия"}</h3>
+            {detail.name_original && <div className="muted">в оригинале: {detail.name_original}</div>}
+          </div>
+        </div>
+        <div className="entity-field-row">
+          <span className="muted">Описание</span>
+          <span style={{ whiteSpace: "pre-wrap", flex: 1, minWidth: 0 }}>
+            {detail.description || <span className="muted">—</span>}
+          </span>
+        </div>
+        {detail.tags.length > 0 && (
+          <div className="entity-field-row">
+            <span className="muted">Теги</span>
+            <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              {detail.tags.map((t) => (
+                <span key={t} className="badge tag">{t}</span>
+              ))}
+            </span>
+          </div>
+        )}
+        {detail.ancestors.length > 0 && (
+          <div className="entity-field-row">
+            <span className="muted">Входит в</span>
+            <span>
+              {detail.ancestors.map((a, i) => (
+                <span key={a.id}>
+                  {i > 0 && <span className="muted"> → </span>}
+                  <Link to={`/communities/${a.id}`}>{a.name}</Link>
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
+        {detail.locations.length > 0 && (
+          <div className="entity-field-row">
+            <span className="muted">Локации</span>
+            <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              {detail.locations.map((l, i) => (
+                <span key={l.id}>
+                  {i > 0 && <span className="muted">· </span>}
+                  <Link to={`/locations/${l.id}`}>{l.name}</Link>
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
+        {detail.children.length > 0 && (
+          <div className="entity-field-row">
+            <span className="muted">Вложенные</span>
+            <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              {detail.children.map((c, i) => (
+                <span key={c.id}>
+                  {i > 0 && <span className="muted">· </span>}
+                  <Link to={`/communities/${c.id}`}>{c.name}</Link>
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
+        <Link to={`/communities/${communityId}`}>Открыть полный профиль →</Link>
+      </div>
+      <div className="card stack">
+        <h3>Состоит · {detail.members.length}</h3>
+        {detail.members.length === 0 ? (
+          <span className="muted">Пока никого — личности добавляются на странице сообщества или перетаскиванием.</span>
+        ) : (
+          <div className="stack" style={{ gap: 4 }}>
+            {detail.members.map((m) => (
+              <div key={m.id} className="row" style={{ gap: 8, alignItems: "center" }}>
+                <Link to={`/beings/${m.id}`} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {m.name || "Без названия"}
+                </Link>
+                {m.category && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{m.category}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Большая карточка личности справа: обычная карточка + статблок двумя
+// столбцами, под карточкой — где обитает и в каких фракциях состоит.
+function BeingDetailPane({ beingId, settingId, onBack }: { beingId: number; settingId: number; onBack: () => void }) {
+  const [detail, setDetail] = useState<SettingBeingDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .get<SettingBeingDetail>(`/setting-beings/${beingId}`, { signal: controller.signal })
+      .then((d) => {
+        if (controller.signal.aborted) return;
+        setDetail(d);
+      })
+      .catch((e: unknown) => {
+        if ((e as Error).name === "AbortError") return;
+        setError(String(e instanceof Error ? e.message : e));
+      });
+    return () => controller.abort();
+  }, [beingId]);
+
+  if (error) {
+    return (
+      <div className="card stack">
+        <span>Не удалось загрузить существо: {error}</span>
+        <div className="row">
+          <button className="primary" onClick={onBack}>Назад к списку</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!detail) {
+    return (
+      <div className="card" aria-busy="true" aria-label="Загрузка личности">
+        <p className="muted">Загрузка…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="stack">
+      <div className="being-detail-split">
+        <div className="stack" style={{ flex: 1, minWidth: 0 }}>
+          <CreatureCardPreview type="being" id={beingId} />
+          <div className="card stack">
+            <div className="entity-field-row">
+              <span className="muted">Обитает</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {detail.locations.length > 0 ? (
+                  <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    {detail.locations.map((l, i) => (
+                      <span key={l.id}>
+                        {i > 0 && <span className="muted">· </span>}
+                        <Link to={`/locations/${l.id}`}>{l.name}</Link>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </span>
+            </div>
+            <div className="entity-field-row">
+              <span className="muted">Фракции</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {detail.communities.length > 0 ? (
+                  <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    {detail.communities.map((c, i) => (
+                      <span key={c.id}>
+                        {i > 0 && <span className="muted">· </span>}
+                        <Link to={`/communities/${c.id}`}>{c.name}</Link>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </span>
+            </div>
+            <Link to={`/beings/${beingId}`}>Открыть полный профиль →</Link>
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <StatblockList ownerType="being" ownerId={beingId} ownerName={detail.name} settingId={settingId} soleOnPage />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1907,12 +2252,15 @@ function BestiarySection({ settingId }: { settingId: number }) {
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [creating, setCreating] = useState(false);
   const [locationFilter, setLocationFilter] = useState("");
-  const [sort, setSort] = useState<"name" | "recent">("name");
+  const [sort, setSort] = useState<"name" | "recent" | "creature_type">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [locations, setLocations] = useState<SettingLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
+  // Master–Detail: список записей слева, выбранная — справа большой
+  // карточкой (та же BeingDetailPane, что у личностей).
+  const [selId, setSelId] = useState<number | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 250);
@@ -1930,13 +2278,25 @@ function BestiarySection({ settingId }: { settingId: number }) {
     const params = new URLSearchParams({ setting_id: String(settingId), category: "bestiary" });
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
     if (locationFilter) params.set("location_id", locationFilter);
-    if (sort !== "name") params.set("sort", sort);
+    // Сервер умеет только name/recent/category — тип существа сортируем
+    // клиентски (creature_meta догружается отдельным запросом сервера).
+    if (sort !== "name" && sort !== "creature_type") params.set("sort", sort);
     if (sortDir === "desc") params.set("dir", "desc");
     const opts = signal ? { signal } : undefined;
+    const dirMul = sortDir === "desc" ? -1 : 1;
     api
       .get<SettingBeing[]>(`/setting-beings?${params.toString()}`, opts)
       .then((rows) => {
-        setBeings(rows);
+        const list =
+          sort === "creature_type"
+            ? [...rows].sort(
+                (a, b) =>
+                  dirMul *
+                  ((a.creature_meta?.creatureType ?? "").localeCompare(b.creature_meta?.creatureType ?? "", "ru") ||
+                    a.name.localeCompare(b.name, "ru", { numeric: true }))
+              )
+            : rows;
+        setBeings(list);
         setLoading(false);
       })
       .catch((e: unknown) => {
@@ -2005,20 +2365,16 @@ function BestiarySection({ settingId }: { settingId: number }) {
     refresh();
   }
 
+  const {
+    paged: pagedBeings,
+    pager: tilesPager,
+    wrapRef: gridWrapRef,
+  } = useTilePagination(beings, selId == null, [debouncedQuery, locationFilter, sort, sortDir].join("|"));
+
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       {confirmDialog}
       {promptDialog}
-      <p className="muted" style={{ maxWidth: "none" }}>
-        Бестиарий сеттинга — виды и типы существ без имени, населяющие этот мир. Именные
-        персонажи живут в разделе «Личности». Запись бестиария можно связать с монстрами из
-        компендиумов систем на её собственной странице.
-      </p>
-      <div className="row">
-        <button className="primary" onClick={() => setCreating(true)}>
-          Создать запись бестиария
-        </button>
-      </div>
       {creating && (
         <EntityWizard
           initialType="bestiary"
@@ -2031,6 +2387,7 @@ function BestiarySection({ settingId }: { settingId: number }) {
         <div className="row sort-toggle" style={{ gap: 4 }}>
           <button className={sort === "name" ? "active-sort" : ""} onClick={() => handleSort("name")}>А-Я{sort === "name" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
           <button className={sort === "recent" ? "active-sort" : ""} onClick={() => handleSort("recent")}>Недавние{sort === "recent" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
+          <button className={sort === "creature_type" ? "active-sort" : ""} onClick={() => handleSort("creature_type")}>По типу{sort === "creature_type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</button>
         </div>
         <input
           placeholder="Поиск по бестиарию…"
@@ -2040,6 +2397,9 @@ function BestiarySection({ settingId }: { settingId: number }) {
           style={{ flex: 1 }}
         />
         <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+        <button className="primary" onClick={() => setCreating(true)} style={{ marginLeft: "auto" }}>
+          Создать запись бестиария
+        </button>
       </div>
       {loadError && (
         <div
@@ -2073,7 +2433,38 @@ function BestiarySection({ settingId }: { settingId: number }) {
           }
         />
       ) : (
-        <SettingBeingTileGrid beings={beings} grouping="alpha" searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} onRename={renameBeing} onArchive={(b) => deleteBeing(b.id)} />
+        <EntityTabWorkspace
+          sections={[
+            {
+              id: "all",
+              label: "Все записи",
+              count: beings.length,
+              items: beings.map((b) => ({ id: String(b.id), label: b.name || "Без названия" })),
+            },
+          ]}
+          selection={{ section: "all", item: selId != null ? String(selId) : undefined }}
+          onSelect={(next) => next.item != null && setSelId(Number(next.item))}
+          workspaceKey={settingId}
+          navFooter={
+            <button className="primary" onClick={() => setCreating(true)} style={{ alignSelf: "flex-start" }}>
+              Создать запись бестиария
+            </button>
+          }
+        >
+          {selId != null ? (
+            <BeingDetailPane
+              key={selId}
+              beingId={selId}
+              settingId={settingId}
+              onBack={() => setSelId(null)}
+            />
+          ) : (
+            <div ref={gridWrapRef} className="stack">
+              {tilesPager}
+              <SettingBeingTileGrid beings={pagedBeings} grouping={sort === "creature_type" ? "creature_type" : "alpha"} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} onRename={renameBeing} onArchive={(b) => deleteBeing(b.id)} />
+            </div>
+          )}
+        </EntityTabWorkspace>
       )}
     </div>
   );
@@ -2094,6 +2485,9 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
+  // Master–Detail: список слева, выбранное — справа карточкой
+  // сообщества + состав (CommunityDetailPane ниже).
+  const [selId, setSelId] = useState<number | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 250);
@@ -2171,21 +2565,16 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
     refresh();
   }
 
+  const {
+    paged: pagedCommunities,
+    pager: tilesPager,
+    wrapRef: gridWrapRef,
+  } = useTilePagination(communities, selId == null, [debouncedQuery, locationFilter, sort, sortDir].join("|"));
+
   return (
     <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       {confirmDialog}
       {promptDialog}
-      <p className="muted" style={{ maxWidth: "none" }}>
-        Сообщества — любые объединения (народы, культуры, фракции, гильдии), к которым можно
-        отнести личностей из раздела «Личности». Здесь показаны верхнеуровневые — вложенные
-        (например, отдельный город внутри королевства) создаются на странице родительского
-        сообщества, во вкладке «Вложенные сообщества».
-      </p>
-      <div className="row">
-        <button className="primary" onClick={() => setCreating(true)}>
-          Создать сообщество
-        </button>
-      </div>
       {creating && (
         <EntityWizard
           initialType="community"
@@ -2207,6 +2596,9 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
           style={{ flex: 1, minWidth: 160 }}
         />
         <LocationFilter locations={locations} value={locationFilter} onChange={setLocationFilter} />
+        <button className="primary" onClick={() => setCreating(true)} style={{ marginLeft: "auto" }}>
+          Создать сообщество
+        </button>
       </div>
       {locationFilter && !debouncedQuery.trim() && (
         <span className="muted">
@@ -2246,7 +2638,37 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
           }
         />
       ) : (
-        <SettingCommunityTileGrid communities={communities} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} onRename={renameCommunity} onArchive={(c) => deleteCommunity(c.id)} />
+        <EntityTabWorkspace
+          sections={[
+            {
+              id: "all",
+              label: "Все сообщества",
+              count: communities.length,
+              items: communities.map((c) => ({ id: String(c.id), label: c.name || "Без названия" })),
+            },
+          ]}
+          selection={{ section: "all", item: selId != null ? String(selId) : undefined }}
+          onSelect={(next) => next.item != null && setSelId(Number(next.item))}
+          workspaceKey={settingId}
+          navFooter={
+            <button className="primary" onClick={() => setCreating(true)} style={{ alignSelf: "flex-start" }}>
+              Создать сообщество
+            </button>
+          }
+        >
+          {selId != null ? (
+            <CommunityDetailPane
+              key={selId}
+              communityId={selId}
+              onBack={() => setSelId(null)}
+            />
+          ) : (
+            <div ref={gridWrapRef} className="stack">
+              {tilesPager}
+              <SettingCommunityTileGrid communities={pagedCommunities} searchActive={!!debouncedQuery.trim()} dir={sortDir} onCreate={() => setCreating(true)} onRename={renameCommunity} onArchive={(c) => deleteCommunity(c.id)} />
+            </div>
+          )}
+        </EntityTabWorkspace>
       )}
     </div>
   );
@@ -2264,6 +2686,14 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
   const [filterClass, setFilterClass] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("");
   const [filterRarity, setFilterRarity] = useState<string>("");
+  // Master–Detail: группы слева, предметы — пунктами, выбранный — справа
+  // в превью с действиями. Сетка плиток остаётся для обзоров (Все/группа).
+  const [artSel, setArtSel] = useState<{ section: string; item?: string }>({ section: "all" });
+  const [editing, setEditing] = useState<Artifact | null>(null);
+  const [assigning, setAssigning] = useState<Artifact | null>(null);
+  const [rev, setRev] = useState(0);
+  const [confirmDialog, confirm] = useConfirm();
+  const { deleteWithUndo } = useUndoDelete();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 250);
@@ -2309,8 +2739,59 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
     );
   });
 
+  const groups = useMemo(() => groupArtifacts(filtered, grouping, sortDir), [filtered, grouping, sortDir]);
+  const artSections = [
+    { id: "all", label: "Все", count: filtered.length },
+    ...groups.map(([label, list]) => ({
+      id: `g:${label}`,
+      label,
+      count: list.length,
+      items: list.map((a) => ({ id: String(a.id), label: a.name || "Без названия" })),
+    })),
+  ];
+  const selItem = artSel.item != null ? artifacts.find((a) => String(a.id) === artSel.item) : undefined;
+  const selGroup = artSel.section.startsWith("g:")
+    ? groups.find(([label]) => `g:${label}` === artSel.section)
+    : undefined;
+
+  async function removeArtifact(a: Artifact) {
+    const ok = await confirm({ message: `Отправить «${a.name}» в архив?`, confirmLabel: "Архивировать", danger: true });
+    if (!ok) return;
+    try {
+      await deleteWithUndo({
+        entityName: a.name,
+        deleteFn: () => api.del(`/artifacts/${a.id}`),
+        restoreFn: () => api.put(`/artifacts/${a.id}/restore`),
+      });
+    } catch {
+      /* тост отмены уже показал deleteWithUndo */
+    }
+    setArtSel({ section: artSel.section });
+    refresh();
+  }
+
+  function gridScope(): { artifacts: Artifact[]; grouping: ArtifactGrouping } {
+    if (selGroup) return { artifacts: selGroup[1], grouping };
+    return { artifacts: filtered, grouping };
+  }
+
+  const artAll = artSel.section === "all" && !artSel.item;
+  const {
+    paged: pagedArtifacts,
+    pager: tilesPager,
+    wrapRef: gridWrapRef,
+  } = useTilePagination(filtered, artAll, [
+    debouncedQuery,
+    grouping,
+    sortDir,
+    filterClass,
+    filterType,
+    filterRarity,
+  ].join("|"));
+
   return (
     <div className="card stack">
+      {confirmDialog}
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
         <button className="primary" onClick={() => setCreating(true)}>
           + Предмет
@@ -2365,9 +2846,11 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           initialType="artifact"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          // Визард отдаёт (id, type), а refresh принимает AbortSignal — обёртка
-          // гасит несовпадение: обновляем список, аргументы визарда не нужны.
-          onCreated={() => refresh()}
+          // Визард отдаёт (id, type): созданный предмет выбираем сразу.
+          onCreated={(id) => {
+            refresh();
+            if (typeof id === "number") setArtSel({ section: "all", item: String(id) });
+          }}
         />
       )}
       {loading && <p className="muted">Загрузка…</p>}
@@ -2393,13 +2876,59 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
         <p className="muted">Ничего не найдено.</p>
       )}
       {!loading && !loadError && filtered.length > 0 && (
-        <ArtifactTileGrid
-          artifacts={filtered}
-          grouping={grouping}
-          searchActive={!!debouncedQuery.trim()}
-          dir={sortDir}
+        <EntityTabWorkspace
+          sections={artSections}
+          selection={artSel}
+          onSelect={setArtSel}
+          workspaceKey={settingId}
+          navFooter={
+            <button className="primary" onClick={() => setCreating(true)} style={{ alignSelf: "flex-start" }}>
+              + Предмет
+            </button>
+          }
+        >
+          {selItem ? (
+            <div className="stack">
+              <EntityPreviewContent key={`${selItem.id}-${rev}`} type="artifact" id={selItem.id} />
+              <div className="card">
+                <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <Link to={`/artifacts/${selItem.id}`} className="primary" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>
+                    Открыть профиль
+                  </Link>
+                  <button onClick={() => setEditing(selItem)}>Редактировать</button>
+                  <button onClick={() => setAssigning(selItem)}>Привязать</button>
+                  <button className="danger" onClick={() => removeArtifact(selItem)}>Архивировать</button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div ref={gridWrapRef} className="stack">
+              {artAll && tilesPager}
+              <ArtifactTileGrid
+                artifacts={artAll ? pagedArtifacts : gridScope().artifacts}
+                grouping={gridScope().grouping}
+                searchActive={!!debouncedQuery.trim()}
+                dir={sortDir}
+                settingId={settingId}
+                onRefresh={refresh}
+              />
+            </div>
+          )}
+        </EntityTabWorkspace>
+      )}
+      {editing && (
+        <ArtifactEditModal
+          artifact={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { refresh(); setRev((r) => r + 1); setEditing(null); }}
+        />
+      )}
+      {assigning && (
+        <ArtifactAssignModal
+          artifact={assigning}
           settingId={settingId}
-          onRefresh={refresh}
+          onClose={() => setAssigning(null)}
+          onSaved={() => { refresh(); setRev((r) => r + 1); setAssigning(null); }}
         />
       )}
     </div>

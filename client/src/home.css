@@ -2,24 +2,24 @@
   display: grid;
   grid-template-columns: 1fr 320px;
   align-items: start;
-  gap: var(--sp-6);
+  gap: var(--sp-8);
 }
 .home-main {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-6);
+  gap: var(--sp-8);
   min-width: 0;
 }
 .home-rail {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-6);
   min-width: 0;
 }
 .home-section {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
 }
 
 .home-hero {
@@ -50,15 +50,15 @@
   justify-content: center;
 }
 .home-hero-empty .empty-state {
-  padding: var(--sp-5, 24px);
+  padding: var(--sp-7, 24px);
 }
 /* Onboarding Hero — 5 горизонтальных шагов. */
 .home-hero-onboarding {
   min-height: 220px;
-  padding: var(--sp-4);
+  padding: var(--sp-6);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
 }
 .onboarding-header {
   text-align: center;
@@ -71,14 +71,14 @@
   line-height: 0.96;
 }
 .onboarding-hint {
-  margin: var(--sp-1) 0 0;
+  margin: var(--sp-2) 0 0;
   font-family: var(--font-body);
   font-size: var(--fs-meta);
   color: var(--muted);
 }
 .onboarding-steps {
   display: flex;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   justify-content: center;
 }
 .onboarding-step {
@@ -87,8 +87,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-2);
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-4);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
   background: var(--paper-2);
@@ -172,8 +172,8 @@
 /* Модалка создания игроков — drafting rows. */
 .player-draft {
   display: flex;
-  gap: var(--sp-2);
-  padding: var(--sp-2);
+  gap: var(--sp-4);
+  padding: var(--sp-4);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
 }
@@ -181,7 +181,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
 }
 .player-draft-num {
   width: 28px;
@@ -201,7 +201,7 @@
   color: var(--muted);
   font-size: var(--fs-h3);
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
 }
 .player-draft-remove:hover {
   color: var(--accent);
@@ -209,7 +209,7 @@
 .player-draft-add {
   background: none;
   border: var(--card-border-width, 1px) dashed var(--line);
-  padding: var(--sp-2);
+  padding: var(--sp-4);
   color: var(--muted);
   cursor: pointer;
   font-family: var(--font-body);
@@ -239,15 +239,15 @@
 }
 .home-hero-content {
   position: absolute;
-  left: var(--sp-5);
-  right: var(--sp-5);
-  bottom: var(--sp-4);
+  left: var(--sp-7);
+  right: var(--sp-7);
+  bottom: var(--sp-6);
   /* Над растром (z-index 1 у .cover-halftone::before): §5.2 запрещает
      халфтон под текстом. */
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .home-hero-eyebrow {
   font-family: var(--font-ui);
@@ -279,7 +279,7 @@
 /* Номер, дата и время — значения, значит моношрифт. Это то, чего герою не
    хватало: он говорил куда идти, но не в каком состоянии то, куда идёшь. */
 .home-hero-date {
-  margin-top: var(--sp-1);
+  margin-top: var(--sp-2);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--on-surface-muted);
@@ -299,7 +299,7 @@
      скакала в размере, пока их не станет четыре. Ряд обрывается на четвёртой
      (HomeCalendarPage режет список), так что лишних треков не бывает. */
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-4);
+  gap: var(--sp-6);
 }
 
 /* Блок «Напомню!» — случайная статья из справочника (HomeArticleCard).
@@ -343,10 +343,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
-  padding: 7px var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
 }
 .home-article-band-title {
   font-family: var(--font-display);
@@ -367,14 +367,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: var(--sp-3) var(--sp-5);
-  padding: var(--sp-3);
+  gap: var(--sp-5) var(--sp-7);
+  padding: var(--sp-5);
 }
 .home-article-head,
 .home-article-text {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   min-width: 0;
 }
 /* Верхняя граница меры строки. На обычном широком экране колонка прозы и
@@ -387,7 +387,7 @@
    отделяет одно от другого. */
 .home-article-head {
   border-bottom: 1px solid var(--line);
-  padding-bottom: var(--sp-2);
+  padding-bottom: var(--sp-4);
 }
 /* Разворот. Порог — 620 px: шапке нужно не меньше 240 px, чтобы название
    в две-три строки не превращалось в столбик по слову, прозе — не меньше
@@ -400,7 +400,7 @@
     border-bottom: none;
     border-right: 1px solid var(--line);
     padding-bottom: 0;
-    padding-right: var(--sp-4);
+    padding-right: var(--sp-6);
     height: 100%;
   }
 }
@@ -453,7 +453,7 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   font-weight: 600;
@@ -482,10 +482,10 @@
      14 px на 375-м экране выходило 42 px, на два ниже порога в 44. Поле
      карточки календаря ужимается ровно настолько, чтобы клетка добрала. */
   .home-rail-calendar {
-    padding: var(--sp-2);
+    padding: var(--sp-4);
   }
   .home-rail-calendar .mini-calendar {
-    gap: 2px;
+    gap: var(--sp-1);
   }
   .home-rail {
     flex-direction: column;
@@ -495,7 +495,7 @@
      листают мимо. */
   .home-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-3);
+    gap: var(--sp-5);
   }
   /* Порядок в одну колонку: герой → календарь → плитки → счётчики →
      «Напомню!». Рельс вклинивается сразу за героем — на телефоне мастер
@@ -505,7 +505,7 @@
   .home-layout {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-5);
+    gap: var(--sp-7);
     /* Десктопная сетка несёт align-items: start; в колоночном флексе это
        значит «по содержимому», и блоки переставали занимать ширину экрана —
        клетка календаря ужималась до 20 px, вдвое ниже порога попадания
@@ -547,7 +547,7 @@
   font-size: var(--fs-meta);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   cursor: pointer;
 }
 .home-hero-held:hover {
@@ -559,7 +559,7 @@
    везде (§1.3); последняя строка без линии, чтобы не дублировать край карточки. */
 .home-overdue-row {
   border-bottom: var(--card-border-width) solid var(--line);
-  padding-bottom: 8px;
+  padding-bottom: var(--sp-4);
 }
 .home-overdue-row:last-child {
   border-bottom: none;

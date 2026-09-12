@@ -31,7 +31,7 @@ function metaLine(b: SettingBeing): string {
   return parts.join(" · ");
 }
 
-export type BeingGrouping = "alpha" | "category" | "community";
+export type BeingGrouping = "alpha" | "category" | "community" | "creature_type";
 export type SortDir = "asc" | "desc";
 
 function groupBeings(list: SettingBeing[], grouping: BeingGrouping, dir: SortDir = "asc"): [string, SettingBeing[]][] {
@@ -50,6 +50,16 @@ function groupBeings(list: SettingBeing[], grouping: BeingGrouping, dir: SortDir
     const map = new Map<string, SettingBeing[]>();
     for (const b of list) {
       const k = categoryLabel(b.category) || "Без категории";
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(b);
+    }
+    const keys = [...map.keys()].sort(collator);
+    return keys.map((k) => [k, map.get(k)!]);
+  }
+  if (grouping === "creature_type") {
+    const map = new Map<string, SettingBeing[]>();
+    for (const b of list) {
+      const k = b.creature_meta?.creatureType?.trim() || "Без типа";
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(b);
     }

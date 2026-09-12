@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { invalidateAffects } from "../data/entities";
+import { useResource } from "../data/hooks";
 import { EmptyState } from "./EmptyState";
 import { NavIcon } from "./NavIcons";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -104,6 +105,18 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const workRef = useRef<HTMLDivElement>(null);
+  // Флажки «Партия здесь»: путь до места партии каждой кампании сеттинга
+  // (решения 2026-09-11, §3, п. 5).
+  const { data: partyPlaces } = useResource<
+    { campaign_id: number; campaign_name: string; location_id: number; path_ids: number[] }[]
+  >(`/settings/${settingId}/party-places`);
+  const partyByPlace = useMemo(() => {
+    const m = new Map<number, string[]>();
+    for (const p of partyPlaces ?? []) {
+      for (const id of p.path_ids) m.set(id, [...(m.get(id) ?? []), p.campaign_name]);
+    }
+    return m;
+  }, [partyPlaces]);
 
   // Без массива зависимостей сознательно: рабочая область монтируется позже
   // скелетона, одноразовый эффект на монтировании рефа бы не нашёл и ширина
@@ -473,6 +486,11 @@ export function LocationMiller({ settingId }: { settingId: number }) {
             {hasMap ? " · карта" : ""}
           </span>
         </span>
+        {partyByPlace.has(l.id) && (
+          <span className="miller-item__party" title={`Партия: ${partyByPlace.get(l.id)!.join(", ")}`}>
+            <NavIcon name="flag" />
+          </span>
+        )}
         {navKids > 0 && <NavIcon name="arrowRight" />}
       </button>
     );
@@ -815,6 +833,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
                 locationId={focus.id}
                 onPick={pick}
                 onAddChild={(id) => setWizardParentId(id)}
+                partyCampaigns={(partyPlaces ?? []).filter((p) => p.location_id === focus.id).map((p) => p.campaign_name)}
               />
             </aside>
           )}

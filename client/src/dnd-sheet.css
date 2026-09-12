@@ -2,7 +2,7 @@
    чип — не строка, а свёрнутая запись, которая раскрывает свои поля прямо
    под собой. Модалка тут убила бы компактность, ради которой всё и берётся. */
 .dnd-effect-row {
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .dnd-effect-chip,
 .dnd-check-chip,
@@ -30,14 +30,14 @@
 .dnd-effect-chip-fields {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   flex: 1;
   min-width: 0;
 }
 .dnd-effect-chip-fields select,
 .dnd-effect-chip-fields input {
   font-size: var(--fs-meta);
-  padding: 1px 4px;
+  padding: var(--sp-0) var(--sp-2);
   min-width: 0;
 }
 .dnd-effect-dc {
@@ -51,28 +51,28 @@
 .dnd-effect-body {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
   border: var(--card-border-width, 1px) solid var(--line);
   border-top: none;
 }
 .dnd-effect-body input,
 .dnd-effect-body select {
   font-size: var(--fs-meta);
-  padding: 2px 5px;
+  padding: var(--sp-1) var(--sp-2);
   flex: 1 1 120px;
   min-width: 0;
 }
 .dnd-effect-when {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   flex: 1 1 100%;
 }
 .dnd-effect-half {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   font-size: var(--fs-meta);
   color: var(--muted);
   flex: 0 0 auto;
@@ -81,23 +81,23 @@
   flex: 0 0 auto;
 }
 .dnd-effect-add {
-  gap: 6px;
+  gap: var(--sp-3);
   font-size: var(--fs-meta);
 }
 .dnd-effect-add button {
   border-left: var(--card-border-width, 1px) solid var(--line);
-  padding: 0 6px;
+  padding: 0 var(--sp-3);
 }
 .dnd-effect-type-menu {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
-  padding: 5px;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
   border: var(--card-border-width, 1px) dashed var(--line);
 }
 .dnd-effect-type-menu button {
   font-size: var(--fs-meta);
-  padding: 2px 7px;
+  padding: var(--sp-1) var(--sp-3);
 }
 
 /* Таблица развития класса. Широкая по своей природе (у полного заклинателя
@@ -114,14 +114,14 @@
 .prog-table th,
 .prog-table td {
   border: var(--card-border-width, 1px) solid var(--line);
-  padding: 2px 4px;
+  padding: var(--sp-1) var(--sp-2);
   vertical-align: top;
 }
 .prog-table td input {
   border: none;
   background: transparent;
   font-size: var(--fs-meta);
-  padding: 1px 2px;
+  padding: var(--sp-0) var(--sp-1);
   width: 100%;
   min-width: 44px;
 }
@@ -132,28 +132,28 @@
 .prog-head {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
   min-width: 96px;
 }
 .prog-head input {
   font-size: var(--fs-meta);
-  padding: 1px 3px;
+  padding: var(--sp-0) var(--sp-1);
   width: 100%;
 }
 .prog-role {
   font-size: var(--fs-meta);
-  padding: 1px 2px;
+  padding: var(--sp-0) var(--sp-1);
   max-width: 150px;
 }
 .prog-rowactions {
   border: none;
-  padding-left: 4px;
+  padding-left: var(--sp-2);
 }
 .prog-table-view th {
   white-space: nowrap;
 }
 .prog-empty {
-  gap: 6px;
+  gap: var(--sp-3);
 }
 
 .litm-character-form > label,
@@ -161,14 +161,14 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 .dnd-card > label {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 /* Plain <input>/<label> siblings placed side by side in a .row (e.g. race,
    background, alignment) have no intrinsic width of their own, so the
@@ -190,7 +190,7 @@
 .dnd-card .row > label.dnd-inline-field {
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .dnd-title {
   font-size: var(--fs-h3);
@@ -202,14 +202,14 @@
 .dnd-abilities-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .dnd-ability-box {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 8px 4px;
+  gap: var(--sp-1);
+  padding: var(--sp-4) var(--sp-2);
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: var(--card-border-width, 1px) solid var(--line);
 }
@@ -223,7 +223,7 @@
   border: none;
   background: none;
   border-radius: 0;
-  padding: 4px;
+  padding: var(--sp-2);
 }
 .dnd-ability-label {
   font-size: var(--fs-micro);
@@ -239,7 +239,7 @@
 .dnd-ability-input {
   width: 44px;
   text-align: center;
-  padding: 2px;
+  padding: var(--sp-1);
   font-weight: 600;
 }
 .dnd-ability-mod {
@@ -294,7 +294,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-1);
   width: 100%;
 }
 .dice-shape-box {
@@ -354,7 +354,7 @@
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  margin-top: 1px;
+  margin-top: var(--sp-0);
 }
 .dice-md .dice-sub {
   font-size: var(--fs-meta);
@@ -411,7 +411,7 @@
 .dnd-abilities-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 /* A derived value shown where an editable <input> used to be (proficiency
    bonus, spell DC/attack bonus) — same box, but not focusable/editable. */
@@ -419,7 +419,7 @@
   display: inline-flex;
   align-items: center;
   min-height: 1.6em;
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
@@ -428,20 +428,20 @@
 .dnd-ability-col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .dnd-save-skill-col {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 4px;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-2);
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
   border: var(--card-border-width, 1px) solid var(--line);
 }
 .dnd-save-row {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: var(--sp-2);
   font-size: var(--fs-meta);
   line-height: 1.3;
 }
@@ -489,8 +489,8 @@
 }
 .dnd-save-row-throw {
   border-bottom: var(--card-border-width, 1px) solid var(--line);
-  padding-bottom: 3px;
-  margin-bottom: 2px;
+  padding-bottom: var(--sp-1);
+  margin-bottom: var(--sp-1);
   font-weight: 600;
 }
 /* Заливка строки навыка по источнику владения — класс / предыстория / оба.
@@ -538,7 +538,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--sb-muted);
-    margin-left: 6px;
+    margin-left: var(--sp-3);
   }
 }
 .dnd-skill-remaining {
@@ -559,12 +559,12 @@
    summary that .dnd-save-skill-col also serves), so it can afford — and
    benefits from — bigger, easier-to-read rows during play. */
 .dnd-skills-tab {
-  gap: 6px;
-  padding: 10px 8px;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4);
 }
 .dnd-skills-tab .dnd-save-row {
   font-size: var(--fs-meta);
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .dnd-skills-tab .dnd-save-name {
   font-size: var(--fs-meta);
@@ -585,10 +585,10 @@
 .dnd-equipment-section {
   border: none;
   border-top: var(--card-border-width, 1px) solid var(--line);
-  padding: 8px 0 0 0;
+  padding: var(--sp-4) 0 0 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .dnd-equipment-section:first-child {
   border-top: none;
@@ -598,7 +598,7 @@
   border: var(--card-border-width, 1px) dashed var(--accent);
   border-radius: 0;
   background: var(--bg-elevated);
-  padding: 8px;
+  padding: var(--sp-4);
 }
 .sb-entry.drag-over {
   border-color: var(--accent);
@@ -618,14 +618,14 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 /* Строка снаряжения — плашка: рамка держит строку между крупными кнопками,
    иначе имя теряется. Магическая кромка и заливки трансферов поверх живут. */
 .dnd-equipment-view-list > li {
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
-  padding: 2px;
+  padding: var(--sp-1);
 }
 /* Строка-предмет: плитка, имя, тихая вторая строка, правая клетка, трата,
    «⋮». Вся строка — мишень описания, поэтому курсор указательный; кнопки
@@ -633,7 +633,7 @@
 .dnd-equipment-quick-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   border-radius: 0;
   padding: 0;
   margin: 0;
@@ -683,8 +683,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 2px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
   font-size: var(--fs-micro);
   color: var(--muted);
 }
@@ -712,7 +712,7 @@
   font-size: var(--fs-micro);
   color: var(--muted);
   line-height: 1.1;
-  margin-top: 2px;
+  margin-top: var(--sp-1);
 }
 .dnd-spend-btn {
   flex: 0 0 auto;
@@ -747,7 +747,7 @@
 }
 .dnd-row-menu-item {
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0 var(--sp-5);
   text-align: left;
   background: none;
   border: none;
@@ -771,8 +771,8 @@
 .dnd-equipment-summary {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin-bottom: 8px;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
 }
 .dnd-weight-bar {
   flex: 1 1 auto;
@@ -801,7 +801,7 @@
 .dnd-purse-row {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: var(--sp-3);
   flex-wrap: wrap;
 }
 .dnd-purse-coin {
@@ -810,7 +810,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .dnd-purse-img {
   width: 38px;
@@ -908,7 +908,7 @@
   font-size: var(--fs-micro);
   letter-spacing: 0.06em;
   border: 1px solid var(--line);
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
   white-space: nowrap;
   flex: 0 0 auto;
 }
@@ -928,8 +928,8 @@
   background: var(--head-bg, var(--ink));
   color: var(--head-ink, var(--paper));
   border-radius: 0;
-  padding: 6px 8px;
-  margin: var(--sec-gap) 0 8px;
+  padding: var(--sp-3) var(--sp-4);
+  margin: var(--sec-gap) 0 var(--sp-4);
 }
 .dnd-summary-num {
   font-family: var(--font-mono);
@@ -938,11 +938,11 @@
 .dnd-frame {
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
-  padding: 8px;
-  margin: 8px 0 0;
+  padding: var(--sp-4);
+  margin: var(--sp-4) 0 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 /* Трансфер под ···: свёрнут в одну строку-статус, действия — по раскрытию.
    summary — тот же чип, маркер details гасим. */
@@ -961,7 +961,7 @@
   content: "";
 }
 .dnd-transfer-fold .row {
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 /* Печать снаряжения: стопка строк без интерактива — кнопки, поиск, фильтры
    и добавление на бумаге не нужны. */
@@ -987,22 +987,22 @@
    column, especially next to the 200px avatar sidebar on desktop. */
 .dnd-attacks-table-wrap {
   overflow-x: auto;
-  margin: 4px calc(-1 * var(--pad-x, 0px)) 0;
+  margin: var(--sp-2) calc(-1 * var(--pad-x, 0px)) 0;
   padding: 0 var(--pad-x, 0px);
 }
 .dnd-attacks-table {
   font-size: var(--fs-meta);
-  margin-top: 4px;
+  margin-top: var(--sp-2);
   min-width: 480px;
 }
 .dnd-attacks-table th {
   font-size: var(--fs-micro);
   text-transform: uppercase;
   color: var(--muted);
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .dnd-attacks-table td {
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   vertical-align: top;
 }
 /* Строка кликабельна мышью; имя внутри неё — кнопка, чтобы описание
@@ -1034,7 +1034,7 @@
      (the th text, carried via data-label) prefixes its value. */
   .dnd-attacks-table-wrap {
     overflow-x: visible;
-    margin: 4px 0 0;
+    margin: var(--sp-2) 0 0;
     padding: 0;
   }
   .dnd-attacks-table {
@@ -1050,7 +1050,7 @@
   }
   .dnd-attacks-table tr {
     display: block;
-    padding: 6px 0;
+    padding: var(--sp-3) 0;
     border-bottom: var(--card-border-width, 1px) solid var(--line);
   }
   .dnd-attacks-table tr:last-child {
@@ -1058,7 +1058,7 @@
   }
   .dnd-attacks-table td {
     display: block;
-    padding: 1px 0;
+    padding: var(--sp-0) 0;
   }
   .dnd-attacks-table td:first-child {
     font-weight: 600;
@@ -1094,7 +1094,7 @@
   }
   .session-attendance-table tr {
     display: block;
-    padding: var(--sp-2) 0;
+    padding: var(--sp-4) 0;
     border-bottom: var(--card-border-width, 1px) solid var(--line);
   }
   .session-attendance-table tr:last-child {
@@ -1104,8 +1104,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--sp-2);
-    padding: 2px 0;
+    gap: var(--sp-4);
+    padding: var(--sp-1) 0;
   }
   .session-attendance-table td:first-child {
     font-weight: 600;
@@ -1119,7 +1119,7 @@
 }
 
 .dnd-classes-block {
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .dnd-class-row {
   flex-wrap: wrap;
@@ -1136,7 +1136,7 @@
 .dnd-class-level-stepper {
   display: inline-flex;
   align-items: stretch;
-  gap: 2px;
+  gap: var(--sp-1);
   flex: 0 0 auto;
 }
 .dnd-level-step-btn {
@@ -1149,7 +1149,7 @@
 
 .dnd-proficiency-dropzone {
   border: var(--card-border-width, 1px) dashed var(--line);
-  padding: 8px;
+  padding: var(--sp-4);
   min-height: 36px;
 }
 .dnd-proficiency-dropzone.drag-over {
@@ -1173,19 +1173,19 @@
 .dnd-proficiency-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
 }
 /* Владения — чипами листа: рамка, капс, без скруглений. Крестик внутри —
    плоский, без круга. */
 .dnd-proficiency-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 5px 6px 5px 9px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.08em;
@@ -1196,14 +1196,14 @@
   border-radius: 0;
   background: transparent;
   line-height: 1;
-  padding: 2px 4px;
+  padding: var(--sp-1) var(--sp-2);
   cursor: pointer;
   color: inherit;
   font: inherit;
 }
 .dnd-proficiency-chip-add input {
   height: 24px;
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   font-size: calc(var(--fs, 15px) * 0.87);
   width: 130px;
 }
@@ -1224,8 +1224,8 @@
      гасят их той же переменной, так что менять её тут безопасно. */
   --pad-x: 10px;
   --pad-y: 10px;
-  padding-left: 10px;
-  padding-right: 10px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 
 /* Полоска названий колоды: одна на телефон и на десктоп. Прокручивается
@@ -1233,12 +1233,12 @@
    переключении карты, и содержимое прыгало под пальцем. */
 .dnd-deck-strip {
   display: flex;
-  gap: 14px;
+  gap: var(--sp-6);
   align-items: flex-end;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  margin: 0 0 10px;
+  margin: 0 0 var(--sp-5);
   border-bottom: 1px solid var(--line);
 }
 .dnd-deck-strip::-webkit-scrollbar {
@@ -1251,8 +1251,8 @@
   border: none;
   border-bottom: 1px solid transparent;
   border-radius: 0;
-  padding: 6px 0;
-  margin-bottom: -1px;
+  padding: var(--sp-3) 0;
+  margin-bottom: -var(--sp-0);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.14em;
@@ -1275,7 +1275,7 @@
 /* Первая карта: тот же стек, что и раньше был шапкой, — но теперь у неё
    есть верх и низ, и между блоками нужен воздух карты, а не вкладки. */
 .dnd-card-face {
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
 /* Портрет на первой карте. Высота фиксированная, а не по пропорции карты:
@@ -1401,7 +1401,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 0 12px 8px;
+  padding: 0 var(--sp-5) var(--sp-4);
 }
 .dnd-card-cartouche-name {
   font-family: var(--font-display);
@@ -1415,15 +1415,15 @@
 .dnd-card-cartouche-class {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 5px;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
   min-width: 0;
 }
 .dnd-card-level {
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   font-weight: 700;
-  padding: 1px 7px;
+  padding: var(--sp-0) var(--sp-3);
   flex: none;
 }
 /* Цифра уровня как вход в визард повышения. Внешне не меняется — это тот же
@@ -1464,7 +1464,7 @@ button.dnd-card-level:hover {
    компендиума («Человек [Human]»). Строке разрешено сложиться надвое —
    обрезанное «Бонус масте…» не говорит ничего. */
 .dnd-card-cartouche-origin {
-  margin-top: 3px;
+  margin-top: var(--sp-2);
   white-space: normal;
   line-height: 1.25;
 }
@@ -1573,7 +1573,7 @@ button.dnd-card-level:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: var(--sp-0);
   text-align: center;
 }
 .dnd-die-value {
@@ -1608,7 +1608,7 @@ button.dnd-card-level:hover {
    лицевой карте). Контур остаётся в DOM и возвращается на печати — фон при
    печати браузер обычно гасит, и без фолбэка числа остались бы без силуэта. */
 .dnd-die.is-textured {
-  background-image: url("/textures/dice-d20.png");
+  background-image: url("/textures/dice-d20.webp");
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
@@ -1617,7 +1617,7 @@ button.dnd-card-level:hover {
    кости на тёмной бумаге горела бы пятном. Переключение тем же атрибутом,
    что и остальная темизация (themes.ts ставит data-theme-mode на корень). */
 [data-theme-mode="dark"] .dnd-die.is-textured {
-  background-image: url("/textures/dice-d20-dark.png");
+  background-image: url("/textures/dice-d20-dark.webp");
 }
 /* На экране векторный контур не нужен — у текстуры свой край. Рёбра владения
    (sm) остаются: рисуются поверх текстуры цветом класса из --die-accent. */
@@ -1654,7 +1654,7 @@ button.dnd-card-level:hover {
 .dnd-ability-die {
   cursor: pointer;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 
 /* Шесть костей всегда в один ряд. auto-fit по minmax(56px) переносил шестую
@@ -1663,7 +1663,7 @@ button.dnd-card-level:hover {
    ввода, и ей ширина нужнее. */
 .dnd-abilities-row-dice {
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 5px;
+  gap: var(--sp-3);
   /* Без justify-items: center — оно ужимало колонку до ширины подписи
      («СИЛ»), и кость, тянущаяся на 100% этой колонки, выходила меньше
      собственного числа. Колонка занимает свою шестую часть, кость — её. */
@@ -1680,15 +1680,15 @@ button.dnd-card-level:hover {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   text-align: center;
-  gap: 4px;
-  margin-bottom: 6px;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
 }
 .dnd-triad > div {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 10px 0 0;
+  gap: var(--sp-2);
+  padding: var(--sp-4) 0 0;
   min-width: 0;
 }
 /* Подпись — под костью, как на макете. Порядком, а не перестановкой в
@@ -1714,7 +1714,7 @@ button.dnd-card-level:hover {
 @media (max-width: 360px) {
   .dnd-triad .sb-label {
     letter-spacing: 0;
-    font-size: 9px;
+    font-size: var(--fs-micro);
   }
 }
 /* Кость не растягивается на всю колонку: правильный шестиугольник живёт
@@ -1729,7 +1729,7 @@ button.dnd-card-level:hover {
 /* Подпись под рядом — прочие способы передвижения и старая свободная строка
    скорости. Кость отвечает только на «сколько я прохожу». */
 .dnd-triad-note {
-  margin: -2px 0 6px;
+  margin: calc(-1 * var(--sp-1)) 0 var(--sp-3);
   font-size: var(--fs-meta);
   text-align: center;
 }
@@ -1748,8 +1748,8 @@ button.dnd-card-level:hover {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 12px;
+  gap: var(--sp-1);
+  padding: var(--sp-5);
   text-decoration: none;
   color: inherit;
 }
@@ -1768,7 +1768,7 @@ button.dnd-card-level:hover {
 }
 .sheet-plate-remove {
   align-self: center;
-  margin-right: 8px;
+  margin-right: var(--sp-4);
 }
 
 /* Страница чарника. Панели приложения скрыты (body.sheet-fullscreen), сверху
@@ -1777,7 +1777,7 @@ button.dnd-card-level:hover {
 .sheet-page {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 /* Карта почти впритык к краям экрана: её держат в руках, она не лежит на
    странице. Но не в ноль: цветная рамка карты должна быть видна целиком,
@@ -1786,8 +1786,8 @@ button.dnd-card-level:hover {
    раскладку ждёт свой этап. */
 @media (max-width: 860px) {
   .sheet-page {
-    margin-left: -12px;
-    margin-right: -12px;
+    margin-left: calc(-1 * var(--sp-5));
+    margin-right: calc(-1 * var(--sp-5));
   }
 }
 .sheet-page-bar {
@@ -1796,8 +1796,8 @@ button.dnd-card-level:hover {
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
   background: var(--paper-2);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
@@ -1815,7 +1815,7 @@ body.sheet-fullscreen .mini-player-bar {
   display: none !important;
 }
 body.sheet-fullscreen .app-content {
-  padding: 0 10px 10px;
+  padding: 0 var(--sp-4) var(--sp-4);
 }
 
 /* Живой ряд — инициатива, концентрация, истощение: то, что меняется в бою.
@@ -1823,9 +1823,9 @@ body.sheet-fullscreen .app-content {
    при включении заливается, и в сетке она двигала соседей. */
 .dnd-live-row {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
   align-items: stretch;
-  margin-bottom: 6px;
+  margin-bottom: var(--sp-3);
 }
 /* Подпись и значение в одну строку: три плашки на ширину телефона, и
    каждая должна остаться одной строкой высотой. */
@@ -1838,8 +1838,8 @@ body.sheet-fullscreen .app-content {
   flex-direction: row;
   align-items: baseline;
   justify-content: center;
-  gap: 5px;
-  padding: 4px 6px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border: var(--card-border-width, 1px) solid var(--line);
   text-align: center;
   white-space: nowrap;
@@ -1880,16 +1880,16 @@ body.sheet-fullscreen .app-content {
 /* ---- Закладки: до трёх строк «Действий» на первой карте. Полоска слева —
    цвет класса, единственная краска на монохромной бумаге. ---- */
 .dnd-bookmarks {
-  gap: 5px;
-  margin-top: 8px;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
 }
 .dnd-bookmark {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--sp-4);
   width: 100%;
   text-align: left;
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   border: none;
   border-left: 3px solid var(--line);
   background: var(--paper-2);
@@ -1917,7 +1917,7 @@ body.sheet-fullscreen .app-content {
    название, и обрезалось именно имя. Моноширинные, как везде на листе. */
 .dnd-bookmark-meta {
   display: block;
-  margin-top: 1px;
+  margin-top: var(--sp-0);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--muted);
@@ -1932,21 +1932,21 @@ body.sheet-fullscreen .app-content {
 .dnd-companions {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
-  margin: 8px calc(var(--pad-x) * -1) 0;
-  padding: 7px var(--pad-x) 0;
+  margin: var(--sp-4) calc(var(--pad-x) * -1) 0;
+  padding: var(--sp-3) var(--pad-x) 0;
   border-top: 1px solid var(--muted);
 }
 .dnd-companion {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .dnd-companion-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   text-decoration: none;
   color: inherit;
   /* Кнопка, а не ссылка: жетон открывает окно со статблоком. Гасим
@@ -2009,7 +2009,7 @@ body.sheet-fullscreen .app-content {
   flex: 1 1 240px;
   min-width: min(100%, 240px);
   border-top: 1px solid var(--muted);
-  padding-top: 6px;
+  padding-top: var(--sp-3);
 }
 .dnd-companion-body.is-dead,
 .dnd-companion-body.is-dismissed {
@@ -2059,8 +2059,8 @@ body.sheet-fullscreen .app-content {
 .dnd-active-conditions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
 }
 .dnd-active-condition {
   display: inline-flex;
@@ -2068,7 +2068,7 @@ body.sheet-fullscreen .app-content {
   justify-content: center;
   min-width: 40px;
   min-height: 40px;
-  padding: 3px;
+  padding: var(--sp-1);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper);
   color: inherit;
@@ -2087,7 +2087,7 @@ body.sheet-fullscreen .app-content {
 .dnd-active-condition-text {
   font-size: var(--fs-micro);
   font-weight: 700;
-  padding: 0 6px;
+  padding: 0 var(--sp-3);
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2096,19 +2096,19 @@ body.sheet-fullscreen .app-content {
 /* Модалка состояний: строки со значком 40px и мишенью под палец, а не
    голый чекбокс. Список скроллится внутри окна, кнопка «Готово» видна. */
 .dnd-conditions-modal {
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .dnd-conditions-list {
-  gap: 4px;
+  gap: var(--sp-2);
   overflow-y: auto;
   min-height: 0;
 }
 .dnd-condition-option {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   min-height: 48px;
-  padding: 4px 8px 4px 4px;
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-2);
   border: var(--card-border-width, 1px) solid transparent;
   cursor: pointer;
 }
@@ -2133,7 +2133,7 @@ body.sheet-fullscreen .app-content {
 .dnd-card-editbar {
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: var(--sp-3);
 }
 .sheet-plate-edit {
   align-self: center;
@@ -2153,8 +2153,8 @@ body.sheet-fullscreen .app-content {
   color: var(--ink);
   background: var(--paper);
   display: inline-block;
-  padding: 1px 5px;
-  margin-bottom: 3px;
+  padding: var(--sp-0) var(--sp-2);
+  margin-bottom: var(--sp-2);
 }
 
 /* Оборот первой карты — входящие игрока (этап 4). Лицевая — relative: угол
@@ -2219,10 +2219,10 @@ span.dnd-card-corner {
   border-right: 5px solid var(--line);
   border-top: 1px solid var(--surface);
   border-bottom: 1px solid var(--surface);
-  padding: 14px 14px 60px;
+  padding: var(--sp-5) var(--sp-5) var(--sp-10);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-5);
   animation: dnd-card-in 0.32s ease;
 }
 /* Угол возврата: бумажный треугольник на чёрном, зеркало лицевого. */
@@ -2250,9 +2250,9 @@ span.dnd-card-corner {
 .dnd-card-back-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--sp-5);
   border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
+  padding-bottom: var(--sp-4);
 }
 .dnd-card-back-title {
   font-family: var(--font-display);
@@ -2268,23 +2268,23 @@ span.dnd-card-corner {
   opacity: 0.7;
 }
 .dnd-card-back-empty {
-  margin: 8px 0;
+  margin: var(--sp-4) 0;
 }
 .dnd-card-back-list {
-  gap: 10px;
+  gap: var(--sp-5);
 }
 /* Строка входящих: непрочитанная несёт кромку цвета класса (инлайн),
    прочитанная — приглушена, но не спрятана: дневник начинается отсюда. */
 .dnd-inbox-item {
   border-left: 3px solid var(--line);
-  padding-left: 10px;
+  padding-left: var(--sp-4);
   opacity: 0.72;
 }
 .dnd-inbox-item.is-new {
   opacity: 1;
 }
 .dnd-inbox-meta {
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
 }
 .dnd-inbox-badge {
@@ -2293,7 +2293,7 @@ span.dnd-card-corner {
   letter-spacing: 0.1em;
   text-transform: var(--label-transform);
   border: 1px solid var(--line);
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
 }
 .dnd-inbox-badge.is-new {
   border-color: transparent;
@@ -2307,16 +2307,16 @@ span.dnd-card-corner {
 .dnd-inbox-text {
   font-size: var(--fs-meta);
   line-height: 1.42;
-  margin: 7px 0 0;
+  margin: var(--sp-4) 0 0;
   white-space: pre-wrap;
 }
 .dnd-inbox-actions {
-  gap: 8px;
-  margin-top: 9px;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
 }
 .dnd-card-back-notice {
   font-size: var(--fs-meta);
-  margin: 4px 0 0;
+  margin: var(--sp-2) 0 0;
 }
 /* Оракул класса: листок-предсказание внизу оборота. Инверсия рубашки
    (on-surface на surface): в светлых темах — бумага на тёмном, в тёмных —
@@ -2325,8 +2325,8 @@ span.dnd-card-corner {
    цвета класса как у входящих, лёгкий наклон — как вытянутый из печенья
    листок. Заголовка нет: цитата говорит сама. */
 .dnd-oracle-slip {
-  margin: 6px 8px 0;
-  padding: 10px 14px;
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-4) var(--sp-5);
   background: var(--on-surface);
   color: var(--surface);
   border-left: 4px solid var(--line);
@@ -2369,15 +2369,15 @@ span.dnd-card-corner {
   font-size: var(--fs-micro);
   letter-spacing: 0.06em;
   border: 1px solid var(--line);
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
   white-space: nowrap;
 }
 /* Инструмент передач — тот же оборот, та же рубашка: светлого здесь нет,
 // всё наследует цвета .dnd-card-back. Подзаголовки секций — капсом. */
 .dnd-transfer-box {
   border-top: 1px solid var(--line);
-  padding-top: 10px;
-  gap: 10px;
+  padding-top: var(--sp-4);
+  gap: var(--sp-5);
 }
 .dnd-transfer-subtitle {
   font-family: var(--font-ui);
@@ -2399,7 +2399,7 @@ span.dnd-card-corner {
   color: var(--on-surface);
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   max-width: 100%;
 }
 .dnd-card-back select:disabled,
@@ -2415,11 +2415,11 @@ span.dnd-card-corner {
    в столбик на узкой карте). Текст в полях дублируется -webkit-fill на
    случай, если iOS перебивает color своей темой. */
 .dnd-transfer-form {
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .dnd-transfer-row {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
 }
 .dnd-transfer-row > select {
@@ -2442,7 +2442,7 @@ span.dnd-card-corner {
 .dnd-transfer-coins {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .dnd-transfer-coins > input {
   width: 100%;
@@ -2459,7 +2459,7 @@ span.dnd-card-corner {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -2510,10 +2510,10 @@ span.dnd-card-corner {
   flex: none;
   background: var(--surface);
   color: var(--on-surface);
-  padding: 9px 12px;
+  padding: var(--sp-4) var(--sp-5);
   display: flex;
   align-items: center;
-  gap: 9px 16px;
+  gap: var(--sp-4) var(--sp-6);
   flex-wrap: wrap;
 }
 .dnd-pool-band-label {
@@ -2534,7 +2534,7 @@ span.dnd-card-corner {
 .dnd-pool-resource {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--sp-4);
 }
 .dnd-pool-slot,
 .dnd-pool-count {
@@ -2552,7 +2552,7 @@ span.dnd-card-corner {
 .dnd-pool-meter {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--sp-4);
   flex: none;
 }
 .dnd-pool-step {
@@ -2560,7 +2560,7 @@ span.dnd-card-corner {
   width: 22px;
   height: 22px;
   padding: 0;
-  border: 1.5px solid currentColor;
+  border: var(--card-border-width, 1px) solid currentColor;
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -2586,11 +2586,11 @@ span.dnd-card-corner {
   flex: none;
   display: inline-flex;
   align-items: baseline;
-  gap: 1px;
+  gap: var(--sp-0);
   font-family: var(--font-mono);
 }
 .dnd-pool-meter-left {
-  font-size: 21px;
+  font-size: var(--fs-h3);
   font-weight: 700;
   line-height: 1;
 }
@@ -2635,7 +2635,7 @@ span.dnd-card-corner {
    маскота всегда, на любом фоне. */
 .dnd-tofu-pips {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--sp-2);
   flex: none;
   color: var(--muted);
 }
@@ -2679,8 +2679,8 @@ span.dnd-card-corner {
 .dnd-action-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 13px 0;
+  gap: var(--sp-5);
+  padding: var(--sp-5) 0;
   min-height: 60px;
 }
 .dnd-action-card[role="button"] {
@@ -2690,9 +2690,9 @@ span.dnd-card-corner {
    3px из левого поля, чтобы столбец значков не сдвигался. */
 .dnd-action-card.is-spending {
   background: var(--paper-2);
-  margin: 0 -12px;
-  padding-left: 9px;
-  padding-right: 12px;
+  margin: 0 calc(-1 * var(--sp-5));
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-5);
   border-left: 3px solid var(--line);
 }
 /* Значок типа: заклинание, оружие, способность, прочее. Он же кнопка
@@ -2703,7 +2703,7 @@ span.dnd-card-corner {
   width: 30px;
   height: 30px;
   padding: 0;
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
   background: transparent;
   color: var(--ink);
@@ -2729,7 +2729,7 @@ span.dnd-card-corner {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .dnd-action-name {
   font-size: var(--fs-h3);
@@ -2781,7 +2781,7 @@ span.dnd-card-corner {
   display: block;
   height: 15px;
   line-height: 15px;
-  margin-top: 3px;
+  margin-top: var(--sp-2);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--muted);
@@ -2799,7 +2799,7 @@ span.dnd-card-corner {
   text-transform: var(--label-transform);
   background: var(--ink);
   color: var(--paper);
-  padding: 3px 7px;
+  padding: var(--sp-1) var(--sp-3);
   line-height: 12px;
   max-width: 104px;
   overflow: hidden;
@@ -2811,7 +2811,7 @@ span.dnd-card-corner {
    которых в списке больше нет, поэтому звучит громче общего
    .dnd-section-title (тот centered и служит на «Снаряжении»). */
 .dnd-action-head {
-  padding: 20px 0 8px;
+  padding: var(--sp-6) 0 var(--sp-4);
 }
 .dnd-action-head > span {
   display: inline-block;
@@ -2821,7 +2821,7 @@ span.dnd-card-corner {
   letter-spacing: 0.13em;
   text-transform: var(--label-transform);
   line-height: 1;
-  padding-bottom: 6px;
+  padding-bottom: var(--sp-3);
   border-bottom: 3px solid var(--line);
 }
 /* Десктопный сплит (этап 7): лицевая в натуральную величину слева, вкладка
@@ -2831,7 +2831,7 @@ span.dnd-card-corner {
   .dnd-desktop-split {
     display: grid;
     grid-template-columns: 406px minmax(0, 1fr);
-    gap: 16px;
+    gap: var(--sp-6);
     align-items: start;
   }
   /* Лицевая в сплите — своя карта со своей рамкой цвета класса (цвет
@@ -2846,8 +2846,8 @@ span.dnd-card-corner {
     border-right-style: solid;
     border-bottom-width: 1px;
     border-bottom-style: solid;
-    padding-left: 13px;
-    padding-right: 13px;
+    padding-left: var(--sp-5);
+    padding-right: var(--sp-5);
   }
 }
 @media (max-width: 700px) {
@@ -2861,7 +2861,7 @@ span.dnd-card-corner {
 @media (min-width: 1200px) {
   .dnd-desktop-tab > div {
     columns: 2;
-    column-gap: 16px;
+    column-gap: var(--sp-6);
   }
   .dnd-desktop-tab > div > * {
     break-inside: avoid;
@@ -2890,11 +2890,11 @@ span.dnd-card-corner {
 .dnd-picker-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   min-width: 0;
   min-height: 48px;
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   background: transparent;
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
@@ -2931,14 +2931,14 @@ span.dnd-card-corner {
 }
 .dnd-spell-picker-head {
   flex: none;
-  padding: 16px 16px 12px;
+  padding: var(--sp-6) var(--sp-6) var(--sp-5);
   border-bottom: 1px solid var(--ink);
 }
 .dnd-spell-picker-title-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .dnd-spell-picker-title {
   font-family: var(--font-display);
@@ -2952,7 +2952,7 @@ span.dnd-card-corner {
   letter-spacing: 0.1em;
   text-transform: var(--label-transform);
   color: var(--muted);
-  margin-top: 5px;
+  margin-top: var(--sp-3);
 }
 .dnd-spell-picker-close {
   flex: none;
@@ -2965,12 +2965,12 @@ span.dnd-card-corner {
   border: 0;
   cursor: pointer;
   color: inherit;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 .dnd-spell-picker-search {
-  margin-top: 12px;
+  margin-top: var(--sp-5);
   border-bottom: 1px solid var(--line);
-  padding: 4px 0 6px;
+  padding: var(--sp-2) 0 var(--sp-3);
 }
 .dnd-spell-picker-search input {
   width: 100%;
@@ -2985,10 +2985,10 @@ span.dnd-card-corner {
 }
 .dnd-spell-picker-chips {
   display: flex;
-  gap: 6px;
-  margin-top: 12px;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding-bottom: var(--sp-1);
 }
 /* Чипсы — общий язык листа (из подборщика заклинаний): фильтры и режимы.
    Активное — инверсией. Постепенно переводятся все переключатели вкладок. */
@@ -2999,7 +2999,7 @@ span.dnd-card-corner {
   font-size: var(--fs-micro);
   letter-spacing: 0.1em;
   text-transform: var(--label-transform);
-  padding: 5px 9px;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
@@ -3021,8 +3021,8 @@ span.dnd-card-corner {
 .dnd-spell-picker-group {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 16px 7px;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6) var(--sp-3);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.14em;
@@ -3038,11 +3038,11 @@ span.dnd-card-corner {
 .dnd-spell-pick-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  padding: 9px 16px;
+  padding: var(--sp-4) var(--sp-6);
   box-sizing: border-box;
   background: transparent;
   border: 0;
@@ -3080,7 +3080,7 @@ span.dnd-card-corner {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .dnd-spell-pick-name {
   font-size: var(--fs-h3);
@@ -3108,10 +3108,10 @@ span.dnd-card-corner {
   flex: none;
   border-top: 1px solid var(--ink);
   background: var(--paper);
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  padding: var(--sp-5) var(--sp-6) calc(var(--sp-5) + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .dnd-spell-picker-count {
   flex: 1 1 auto;
@@ -3133,12 +3133,12 @@ span.dnd-card-corner {
 .dnd-edit-labeled {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   min-height: 40px;
 }
 /* Кости хитов в шапке Ресурсов: высотой как веер, пипсы в строку. */
 .dnd-hitdice-row {
-  gap: 10px;
+  gap: var(--sp-5);
   align-items: center;
   min-height: 40px;
   flex-wrap: wrap;
@@ -3146,12 +3146,12 @@ span.dnd-card-corner {
 /* Строка пула: сетка вместо space-between — переносы на узком экране
    больше не рвут выравнивание: название и тофу слева, бонус справа. */
 .dnd-pools {
-  margin-top: 10px;
+  margin-top: var(--sp-5);
 }
 .dnd-pool-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 8px;
+  gap: var(--sp-2) var(--sp-4);
   align-items: center;
 }
 .dnd-pool-row > .dnd-tofu-pips,
@@ -3171,12 +3171,12 @@ span.dnd-card-corner {
 .dnd-tab-tools {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   width: 100%;
 }
 /* Воздух под шапкой вкладки: кнопки не должны слипаться с верхней строкой. */
 .dnd-tab-tools + * {
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 /* Веер всегда у правого края — margin, а не только порядок: середина
    на разных вкладках разного наполнения, а край должен совпадать. */
@@ -3228,10 +3228,10 @@ span.dnd-tab-btn {
 }
 /* Монеты внизу вкладки — все в одну строку: пять кошельков в ряд. */
 .dnd-coins-bottom {
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: nowrap;
   overflow-x: auto;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 .dnd-coins-bottom .dnd-coin input {
   width: 44px;
@@ -3258,7 +3258,7 @@ span.dnd-tab-btn {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(4, 1fr);
-  gap: 2px;
+  gap: var(--sp-1);
   width: 18px;
   height: 26px;
 }
@@ -3279,8 +3279,8 @@ span.dnd-tab-btn {
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 2px 8px;
+  gap: var(--sp-4);
+  padding: var(--sp-1) var(--sp-4);
 }
 .dnd-initiative-btn:disabled {
   cursor: default;
@@ -3296,7 +3296,7 @@ span.dnd-tab-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 /* Заголовки разделов (Действия, Бонусные…): крупнее, по центру — это
    заголовки, и тонуть они не должны. */
@@ -3311,12 +3311,12 @@ span.dnd-tab-btn {
 /* Низ карты: поиск и возврат в профиль. Кнопка — во всю ширину, плашкой,
    как заголовки секций: это выход с экрана, а не действие в строке. */
 .dnd-sheet-foot {
-  margin-top: 10px;
-  gap: 8px;
+  margin-top: var(--sp-5);
+  gap: var(--sp-4);
 }
 .dnd-sheet-back {
   width: 100%;
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   background: transparent;
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
@@ -3354,7 +3354,7 @@ span.dnd-tab-btn {
     background: rgba(18, 18, 18, 0.62);
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: var(--sp-7);
     overflow-y: auto;
   }
   .dnd-deck-fan-modal {
@@ -3371,13 +3371,13 @@ span.dnd-tab-btn {
 }
 .dnd-deck-fan-head {
   flex: none;
-  padding: 18px 16px 4px;
+  padding: var(--sp-6) var(--sp-6) var(--sp-2);
   position: relative;
 }
 .dnd-deck-fan-title-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .dnd-deck-fan-title {
   font-family: var(--font-display);
@@ -3416,16 +3416,16 @@ span.dnd-tab-btn {
   letter-spacing: 0.12em;
   text-transform: var(--label-transform);
   color: #a3a099;
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 .dnd-deck-fan-grid {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 16px 0;
+  padding: var(--sp-5) var(--sp-6) 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--sp-5);
   align-content: start;
 }
 .dnd-deck-fan-card {
@@ -3436,10 +3436,10 @@ span.dnd-tab-btn {
   border-left: 4px solid #1c1c1c;
   border-right: 4px solid #1c1c1c;
   border-radius: 0;
-  padding: 9px 9px 8px;
+  padding: var(--sp-4) var(--sp-4) var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--sp-3);
   min-height: 118px;
   cursor: pointer;
   font: inherit;
@@ -3462,7 +3462,7 @@ span.dnd-tab-btn {
   text-transform: uppercase;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .dnd-fan-dot {
   width: 7px;
@@ -3484,7 +3484,7 @@ span.dnd-tab-btn {
 .dnd-fan-lines {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-2);
   margin-top: auto;
 }
 .dnd-fan-line {
@@ -3514,11 +3514,11 @@ span.dnd-tab-btn {
 }
 .dnd-deck-fan-foot {
   flex: none;
-  padding: 14px 16px 18px;
+  padding: var(--sp-5) var(--sp-6) var(--sp-6);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .dnd-deck-fan-grabber {
   width: 44px;
@@ -3539,13 +3539,13 @@ span.dnd-tab-btn {
 /* Сводка мёртвых ссылок (этап 8, вид — канвас Actions): тихая строка внизу
    листа. Треугольник — чистым CSS, без иконок. Имена — за раскрывашкой. */
 .dnd-dead-links {
-  margin-top: 10px;
+  margin-top: var(--sp-5);
   border-top: var(--card-border-width, 1px) solid var(--line);
-  padding-top: 8px;
+  padding-top: var(--sp-4);
   font-size: var(--fs-meta);
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
 }
 .dnd-dead-names {
@@ -3586,8 +3586,8 @@ span.dnd-tab-btn {
   flex-direction: row;
   align-items: baseline;
   justify-content: center;
-  gap: 5px;
-  padding: 4px 6px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border: var(--card-border-width, 1px) solid var(--line);
   text-align: center;
   white-space: nowrap;
@@ -3623,8 +3623,8 @@ span.dnd-tab-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 8px 12px;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-5);
   background: color-mix(in oklab, var(--ink) 82%, transparent);
   color: var(--paper);
 }
@@ -3637,12 +3637,12 @@ span.dnd-tab-btn {
 }
 .dnd-death-row {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .dnd-death-cell {
   width: 44px;
   height: 44px;
-  padding: 3px;
+  padding: var(--sp-1);
   border: var(--card-border-width, 1px) solid var(--paper);
   border-radius: 0;
   background: transparent;
@@ -3673,8 +3673,8 @@ span.dnd-tab-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
   background: color-mix(in oklab, var(--ink) 82%, transparent);
   color: var(--paper);
 }
@@ -3731,19 +3731,19 @@ span.dnd-tab-btn {
 .dnd-hp-modal {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--sp-6);
 }
 /* §1.4 — шапка карточки это плашка-инверсия, а не жирный текст. Отрицательные
    поля выводят её в край окна поверх 20px паддинга .modal. */
 .dnd-hp-plate {
-  margin: -20px -20px 0;
+  margin: calc(-1 * var(--sp-6)) calc(-1 * var(--sp-6)) 0;
   background: var(--surface);
   color: var(--on-surface);
   height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-left: 14px;
+  padding-left: var(--sp-5);
 }
 .dnd-hp-plate-title,
 .dnd-hp-caps {
@@ -3774,12 +3774,12 @@ span.dnd-tab-btn {
 .dnd-hp-state {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .dnd-hp-readout {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 /* §1.5 — моноширинный только под значения. */
 .dnd-hp-cur {
@@ -3804,7 +3804,7 @@ span.dnd-tab-btn {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   border: 1px solid var(--line);
-  padding: 3px 6px;
+  padding: var(--sp-1) var(--sp-3);
   color: var(--ink-2);
 }
 /* Сплошное — текущие хиты, штриховка — временные, и штриховка справа
@@ -3826,10 +3826,10 @@ span.dnd-tab-btn {
 .dnd-hp-undo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   border: 1px solid var(--line);
   background: var(--bg-elevated);
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
 }
 .dnd-hp-undo-text {
   font-family: var(--font-mono);
@@ -3840,10 +3840,10 @@ span.dnd-tab-btn {
 .dnd-hp-conc {
   border: 1px solid var(--line);
   background: var(--paper);
-  padding: 10px;
+  padding: var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .dnd-hp-conc-text {
   font-size: var(--fs-meta);
@@ -3857,7 +3857,7 @@ span.dnd-tab-btn {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--on-surface);
-  padding: 10px;
+  padding: var(--sp-4);
   font-size: var(--fs-meta);
   line-height: 1.35;
 }
@@ -3865,7 +3865,7 @@ span.dnd-tab-btn {
 .dnd-hp-apply {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .dnd-hp-amount {
   display: flex;
@@ -3874,7 +3874,7 @@ span.dnd-tab-btn {
   border: 1px solid var(--line);
   background: var(--paper);
   height: 46px;
-  padding: 0 12px;
+  padding: 0 var(--sp-5);
 }
 .dnd-hp-amount-value {
   font-family: var(--font-mono);
@@ -3888,7 +3888,7 @@ span.dnd-tab-btn {
 .dnd-hp-pad {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--sp-3);
 }
 /* 48px — мишень пальцем; ниже опускаться некуда, окном пользуются в бою. */
 .dnd-hp-key {
@@ -3913,7 +3913,7 @@ span.dnd-tab-btn {
 }
 .dnd-hp-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .dnd-hp-actions > button {
   flex: 1;
@@ -3934,7 +3934,7 @@ span.dnd-tab-btn {
   align-items: center;
   justify-content: space-between;
   height: 44px;
-  padding: 0 12px;
+  padding: 0 var(--sp-5);
   background: none;
 }
 .dnd-hp-manual.is-open {
@@ -3950,12 +3950,12 @@ span.dnd-tab-btn {
 .dnd-hp-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .dnd-hp-fields label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .dnd-hp-fields input {
   width: 100%;
@@ -3977,7 +3977,7 @@ span.dnd-tab-btn {
 .dnd-spell-level-label {
   display: inline-flex;
   align-items: baseline;
-  gap: 11px;
+  gap: var(--sp-5);
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -4029,9 +4029,25 @@ span.dnd-tab-btn {
 /* Разбор бонуса в модалке броска: «слагаемое — значение» в две колонки. */
 .dnd-init-row {
   font-size: var(--fs-meta);
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .dnd-init-breakdown {
   border-top: 1px solid var(--line);
-  padding-top: 6px;
+  padding-top: var(--sp-3);
+}
+
+/* Наклейки на печати гаснут — остаётся слово (правило растра п.5,
+   src/rasterAssets.ts). Цветной квадрат на чёрно-белом принтере становится
+   серым пятном и мешает читать строку; текстовая пара у наклейки есть
+   всегда (п.2), поэтому сведений печать не теряет. Кость сюда не входит:
+   у неё свой фолбэк — векторный контур возвращается выше по файлу. */
+@media print {
+  .dnd-active-condition img,
+  .dnd-condition-icon,
+  .dnd-spell-school-icon,
+  .dnd-item-icon,
+  .dnd-purse-img,
+  .dnd-token-img {
+    display: none;
+  }
 }

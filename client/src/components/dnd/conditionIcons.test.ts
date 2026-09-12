@@ -8,36 +8,36 @@ import { conditionIconSrc } from "./conditionIcons";
  */
 describe("conditionIconSrc", () => {
   const canonical: [string, string][] = [
-    ["Ослеплённый", "/conditions/blinded.png"],
-    ["Очарованный", "/conditions/charmed.png"],
-    ["Оглохший", "/conditions/deafened.png"],
-    ["Испуганный", "/conditions/frightened.png"],
-    ["Недееспособный", "/conditions/Incapacitated.png"],
-    ["Невидимый", "/conditions/Invisible.png"],
-    ["Парализованный", "/conditions/Paralyzed.png"],
-    ["Отравленный", "/conditions/posioned.png"],
-    ["Лежащий ничком", "/conditions/prone.png"],
-    ["Опутанный", "/conditions/restrained.png"],
-    ["Ошеломлённый", "/conditions/stunned.png"],
-    ["Бессознательный", "/conditions/unconscious.png"],
-    ["Истощённый", "/conditions/exhaustion.png"],
-    ["Схваченный", "/conditions/grappled.png"],
-    ["Окаменевший", "/conditions/petrified.png"],
+    ["Ослеплённый", "/conditions/blinded.webp"],
+    ["Очарованный", "/conditions/charmed.webp"],
+    ["Оглохший", "/conditions/deafened.webp"],
+    ["Испуганный", "/conditions/frightened.webp"],
+    ["Недееспособный", "/conditions/incapacitated.webp"],
+    ["Невидимый", "/conditions/invisible.webp"],
+    ["Парализованный", "/conditions/paralyzed.webp"],
+    ["Отравленный", "/conditions/poisoned.webp"],
+    ["Лежащий ничком", "/conditions/prone.webp"],
+    ["Опутанный", "/conditions/restrained.webp"],
+    ["Ошеломлённый", "/conditions/stunned.webp"],
+    ["Бессознательный", "/conditions/unconscious.webp"],
+    ["Истощённый", "/conditions/exhaustion.webp"],
+    ["Схваченный", "/conditions/grappled.webp"],
+    ["Окаменевший", "/conditions/petrified.webp"],
   ];
   it.each(canonical)("каноническое %s → %s", (name, src) => {
     expect(conditionIconSrc(name)).toBe(src);
   });
 
   it("варианты из книг и краткие формы тоже находятся", () => {
-    expect(conditionIconSrc("Сбит с ног")).toBe("/conditions/prone.png");
-    expect(conditionIconSrc("Опрокинут")).toBe("/conditions/prone.png");
-    expect(conditionIconSrc("Оглушённый")).toBe("/conditions/stunned.png");
-    expect(conditionIconSrc("Оглушён")).toBe("/conditions/stunned.png");
-    expect(conditionIconSrc("Парализован")).toBe("/conditions/Paralyzed.png");
-    expect(conditionIconSrc("Испугана")).toBe("/conditions/frightened.png");
-    expect(conditionIconSrc("Невидимость")).toBe("/conditions/Invisible.png");
-    expect(conditionIconSrc("Истощение")).toBe("/conditions/exhaustion.png");
-    expect(conditionIconSrc("blinded")).toBe("/conditions/blinded.png");
+    expect(conditionIconSrc("Сбит с ног")).toBe("/conditions/prone.webp");
+    expect(conditionIconSrc("Опрокинут")).toBe("/conditions/prone.webp");
+    expect(conditionIconSrc("Оглушённый")).toBe("/conditions/stunned.webp");
+    expect(conditionIconSrc("Оглушён")).toBe("/conditions/stunned.webp");
+    expect(conditionIconSrc("Парализован")).toBe("/conditions/paralyzed.webp");
+    expect(conditionIconSrc("Испугана")).toBe("/conditions/frightened.webp");
+    expect(conditionIconSrc("Невидимость")).toBe("/conditions/invisible.webp");
+    expect(conditionIconSrc("Истощение")).toBe("/conditions/exhaustion.webp");
+    expect(conditionIconSrc("blinded")).toBe("/conditions/blinded.webp");
   });
 
   it("не-состояния значка не получают", () => {

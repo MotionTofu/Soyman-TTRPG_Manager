@@ -19,8 +19,8 @@
 .creature-card__band {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
   border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
@@ -52,7 +52,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--on-surface-muted);
-  margin-top: 3px;
+  margin-top: var(--sp-2);
 }
 /* Плашка целиком — переключатель свёрнутости там, где сворачивание есть
    (докстанция). Цель размером с шапку, а не значок рядом с крестиком. */
@@ -74,7 +74,7 @@
   border: 0;
   color: var(--on-surface-muted);
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   align-self: flex-start;
 }
 /* Тип / роль / размер кодируются НАЧЕРТАНИЕМ, а не цветом и не эмодзи
@@ -84,8 +84,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px 0;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) 0;
 }
 .creature-card__chip {
   font-family: var(--font-ui);
@@ -93,7 +93,7 @@
   letter-spacing: 0.12em;
   font-size: var(--fs-micro);
   line-height: 1.6;
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
   border: var(--card-border-width) solid var(--ink);
   border-radius: 0;
   background: transparent;
@@ -105,7 +105,7 @@
 }
 .creature-card__chip.is-size {
   border: 0;
-  padding: 1px 0;
+  padding: var(--sp-0) 0;
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   letter-spacing: 0;
@@ -118,13 +118,13 @@
   letter-spacing: 0.1em;
   font-size: var(--fs-micro);
   color: var(--muted);
-  padding: 4px 10px 0;
+  padding: var(--sp-2) var(--sp-4) 0;
 }
 .creature-card__section-body .creature-card__inherited {
   padding: 0;
 }
 .creature-card__empty {
-  padding: 10px;
+  padding: var(--sp-4);
   font-family: var(--font-body);
   font-size: var(--fs-meta);
   line-height: 1.4;
@@ -137,9 +137,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 7px 10px;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
   background: none;
   border: 0;
   border-top: var(--card-border-width) solid var(--line);
@@ -159,18 +159,18 @@
 .creature-card__section-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 10px 10px;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-4) var(--sp-4);
 }
 .creature-card__rows {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .creature-card__row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .creature-card__label,
 .creature-card__sublabel {
@@ -187,7 +187,7 @@
 .creature-card__row--pair {
   display: grid;
   grid-template-columns: auto 1fr auto 1fr;
-  column-gap: 8px;
+  column-gap: var(--sp-4);
 }
 .creature-card__row--pair .creature-card__label {
   flex: none;
@@ -200,8 +200,8 @@
   overflow-wrap: anywhere;
 }
 .creature-card__tactics ul {
-  margin: 4px 0 0;
-  padding-left: 16px;
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-6);
 }
 .creature-card__tactics li,
 .creature-card__prose,
@@ -217,13 +217,13 @@
 .creature-card__secret > .creature-card__sublabel,
 .creature-card__tactics > .creature-card__sublabel {
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: var(--sp-1);
 }
 .creature-card__actions {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   margin-top: auto;
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   border-top: var(--card-border-width) solid var(--line);
 }
 /* Одна кнопка — ссылка, вторая — <button>, и без явных правил они расходились:
@@ -238,7 +238,7 @@
   justify-content: center;
   text-align: center;
   line-height: 1.2;
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   border: var(--card-border-width) solid var(--ink);
   border-radius: 0;
   background: var(--paper);
@@ -264,13 +264,13 @@
 .creature-card-editor {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
+  gap: var(--sp-6);
   align-items: start;
 }
 .creature-card-editor__roles {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .creature-card-editor__roles .creature-card__chip {
   cursor: pointer;
@@ -282,7 +282,7 @@
 .creature-card-editor__preview {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 
 
@@ -311,7 +311,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .sb-short-card-caption {
   font-family: var(--font-ui);
@@ -329,8 +329,8 @@
 .monster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
-  margin: 6px 0 2px;
+  gap: var(--sp-5);
+  margin: var(--sp-3) 0 var(--sp-1);
 }
 .monster-tile {
   border: var(--card-border-width) solid var(--ink);
@@ -355,8 +355,8 @@
 .monster-tile__band {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
   border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
@@ -375,7 +375,7 @@
   flex: 0 0 auto;
   background: none;
   border: 0;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   cursor: pointer;
   color: var(--on-surface-muted);
   display: flex;
@@ -393,8 +393,8 @@
 }
 .monster-tile__body {
   display: flex;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
   align-items: flex-start;
 }
 .monster-tile__portrait,
@@ -425,7 +425,7 @@
 .monster-tile__facts {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -435,7 +435,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--sp-1);
   margin-left: auto;
   flex: 0 0 auto;
 }
@@ -445,7 +445,7 @@
 }
 /* УВР отсаживается от чипов: только когда идёт после роли. */
 .monster-tile__role + .monster-tile__dpr {
-  margin-top: 8px;
+  margin-top: var(--sp-4);
 }
 /* Чипсы ролей в фильтрах бестиария: невыбранный — обычная кнопка ряда,
    выбранный — плашка-инверсия (§1.4), как тип существа на карточке. */
@@ -497,7 +497,7 @@ button.role-chip.is-on {
   cursor: pointer;
   width: 12px;
   height: 12px;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
   background: var(--paper);
   border: var(--card-border-width) solid var(--ink);
   border-radius: 0;
@@ -521,7 +521,7 @@ button.role-chip.is-on {
   letter-spacing: 0.03em;
   color: var(--muted);
   border: var(--card-border-width) solid var(--line);
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -545,7 +545,7 @@ button.role-chip.is-on {
 .monster-tile__value {
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
-  margin-top: 2px;
+  margin-top: var(--sp-1);
 }
 .monster-tile__actions {
   display: flex;
@@ -555,7 +555,7 @@ button.role-chip.is-on {
 .monster-tile__actions > * {
   flex: 1 1 0;
   text-align: center;
-  padding: 6px 4px;
+  padding: var(--sp-3) var(--sp-2);
   font-size: var(--fs-meta);
   background: none;
   border: 0;

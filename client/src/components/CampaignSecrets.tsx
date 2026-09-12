@@ -18,12 +18,23 @@ export const SECRET_KIND_LABELS: Record<string, string> = Object.fromEntries(
 // приключений плюс собственные записи кампании — одной моделью. Раньше это
 // были две разные сущности (тайны приключений и записи трекера), из-за чего
 // у собственной тайны не было ни вида, ни привязки к приключению.
+export interface SecretsNavStats {
+  own: { total: number; done: number };
+  groups: { id: number; name: string; total: number; done: number }[];
+}
+
 export function CampaignSecrets({
   campaignId,
   settingId,
+  groupId,
+  onStats,
 }: {
   campaignId: number;
   settingId: number | null;
+  // Master–Detail: показать одну группу ("own" — записи кампании, иначе
+  // id приключения). Не задано — все группы, как раньше.
+  groupId?: string | null;
+  onStats?: (s: SecretsNavStats) => void;
 }) {
   const [data, setData] = useState<CampaignGrouped<StorySecret>>({ groups: [], own: [] });
 
@@ -68,6 +79,19 @@ export function CampaignSecrets({
   // вехи и тайны в неё не кладут.
   const visibleGroups = data.groups.filter((g) => g.arc.is_default !== 1 || g.items.length > 0);
 
+  // Счётчики для левой навигации Master–Detail.
+  useEffect(() => {
+    if (!onStats) return;
+    const doneOf = (items: StorySecret[]) => items.filter((x) => x.state?.revealed === 1).length;
+    onStats({
+      own: { total: data.own.length, done: doneOf(data.own) },
+      groups: visibleGroups.map((g) => ({ id: g.arc.id, name: g.arc.name, total: g.items.length, done: doneOf(g.items) })),
+    });
+  }, [data, visibleGroups, onStats]);
+
+  const showOwn = groupId == null || groupId === "own";
+  const showGroups = visibleGroups.filter((g) => groupId == null || groupId === String(g.arc.id));
+
   return (
     <div className="stack">
       <p className="muted">
@@ -75,16 +99,18 @@ export function CampaignSecrets({
         тайн приключения правятся в сеттинге; свои можно завести здесь.
       </p>
 
-      <SecretGroup
-        title="Тайны кампании"
-        items={data.own}
-        arcId={null}
-        campaignId={campaignId}
-        onChange={refresh}
-        onRevealed={applyRevealed}
-      />
+      {showOwn && (
+        <SecretGroup
+          title="Тайны кампании"
+          items={data.own}
+          arcId={null}
+          campaignId={campaignId}
+          onChange={refresh}
+          onRevealed={applyRevealed}
+        />
+      )}
       {settingId != null &&
-        visibleGroups.map((g) => (
+        showGroups.map((g) => (
           <SecretGroup
             key={g.arc.id}
             title={g.arc.name}

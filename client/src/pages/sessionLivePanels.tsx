@@ -10,6 +10,7 @@ import { RemindersWidget } from "../components/RemindersWidget";
 import { MarkTargetPicker } from "../components/MarkTargetPicker";
 import { EntityPreviewModal } from "../components/EntityPreviewModal";
 import { MentionText } from "../components/mentions/MentionText";
+import { openPreviewDockCard } from "../previewDockStore";
 import type { CampaignDetail, CampaignGrouped, Character, SearchResult, SessionDetail, SessionUnionRow, StorySecret } from "../types";
 
 // Same module-level constants as SessionDetailPage.tsx — SectionDropZone is
@@ -18,6 +19,26 @@ import type { CampaignDetail, CampaignGrouped, Character, SearchResult, SessionD
 const PLOT_CHARACTER_TYPES = ["being", "character"];
 const LOCATION_TYPES = ["location"];
 const LOOT_TYPES = ["resource", "artifact"];
+
+// Место на пульте — в докстанцию, а не превью-модалкой (решения 2026-09-11,
+// §2): модалка закрывает пульт и требует закрытия перед следующей сценой.
+// Ctrl+клик — полная страница новым окном: уход из пульта сбросил бы док.
+// Функция модульная — SectionDropZone мемоизирован.
+//
+// Только на самом пульте: та же панель живёт в окне попаута
+// (/sessions/:id/live/panel/:key), где докстанции нет, — там щелчок остаётся
+// превью, как было, иначе он не делал бы ничего видимого.
+const LIVE_PULT_PATH = /^\/sessions\/\d+\/live$/;
+function openLocationInDock(type: string, id: number, event: React.MouseEvent): boolean {
+  if (type !== "location") return false;
+  if (!LIVE_PULT_PATH.test(window.location.pathname)) return false;
+  if (event.ctrlKey || event.metaKey) {
+    window.open(`/locations/${id}`, "_blank", "noopener");
+    return true;
+  }
+  openPreviewDockCard({ type, id });
+  return true;
+}
 
 export type SessionPanelKey =
   | "locations"
@@ -97,6 +118,7 @@ function LocationsContent({ sessionId, session, launches }: PanelProps) {
       mentionTypes={LOCATION_TYPES}
       origin="live"
       version={launches}
+      onEntityClick={openLocationInDock}
     />
   );
 }

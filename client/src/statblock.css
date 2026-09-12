@@ -10,7 +10,12 @@
 
    Здесь остаются только локальные величины вёрстки — кегли и поля. Они
    фиксированные: плотность (density: compact) убрана вместе с темами. */
+/* У статблока своё пространство токенов, намеренно не связанное с темой
+   приложения (DESIGN.md про .sb-scope). Толщина обводки — оттуда же: тело
+   карточки существа держит усиленную ступень, внутренности — обычную. */
 .sb-scope {
+  --card-border-width: 1.5px;
+  --card-border-width-strong: 2px;
   --border: var(--ink);
   --head-bg: var(--surface);
   --head-ink: var(--on-surface);
@@ -33,7 +38,7 @@
   --pad-x: 20px;
   --pad-y: 16px;
   --pad-head: 14px;
-  --sec-gap: 14px;
+  --sec-gap: var(--sp-6);
   --sb-paper: var(--paper);
   --sb-ink: var(--ink);
   --sb-muted: var(--muted);
@@ -87,13 +92,13 @@
   background: var(--head-bg);
   color: var(--head-ink);
   border-bottom: var(--head-rule);
-  padding: var(--pad-head) var(--pad-x) 14px;
+  padding: var(--pad-head) var(--pad-x) var(--sp-5);
 }
 .sb-head-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 14px;
+  gap: var(--sp-6);
 }
 .sb-head-clickable {
   cursor: pointer;
@@ -101,7 +106,7 @@
 .sb-head-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   flex-shrink: 0;
 }
 .sb-head-controls .comp-mini {
@@ -130,7 +135,7 @@
   letter-spacing: 0.12em;
   font-size: var(--fs-micro);
   color: var(--on-surface-muted);
-  margin-top: 5px;
+  margin-top: var(--sp-3);
 }
 .sb-body {
   padding: var(--pad-y) var(--pad-x) calc(var(--pad-y) + 4px);
@@ -143,12 +148,12 @@
   flex-wrap: wrap;
   text-align: center;
   border: var(--card-border-width, 1px) solid var(--line);
-  margin-bottom: 6px;
+  margin-bottom: var(--sp-3);
 }
 .sb-vitals > div {
   flex: 1;
   min-width: 70px;
-  padding: 8px 4px;
+  padding: var(--sp-4) var(--sp-2);
   border-radius: var(--radius-cell);
 }
 .sb-vitals > div + div {
@@ -194,14 +199,14 @@
 .sb-abilities {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
+  gap: var(--sp-3);
   text-align: center;
   margin-bottom: var(--sec-gap);
 }
 .sb-abilities > div {
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--radius-cell);
-  padding: 6px 2px;
+  padding: var(--sp-3) var(--sp-1);
 }
 .sb-score {
   font-family: var(--font-mono);
@@ -219,7 +224,7 @@
   line-height: 1.55;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
   margin-bottom: var(--sec-gap);
 }
 .sb-prop-label {
@@ -239,8 +244,8 @@
   letter-spacing: 0.12em;
   color: var(--ink);
   border-top: var(--card-border-width, 1px) solid var(--line);
-  padding-top: 8px;
-  margin: var(--sec-gap) 0 8px;
+  padding-top: var(--sp-4);
+  margin: var(--sec-gap) 0 var(--sp-4);
   text-transform: var(--section-transform);
 }
 .sb-section:first-child {
@@ -262,15 +267,15 @@ summary.sb-section {
   letter-spacing: 0.12em;
   color: var(--ink);
   border-top: var(--card-border-width, 1px) solid var(--line);
-  padding-top: 9px;
-  margin-top: 18px;
-  margin-bottom: 6px;
+  padding-top: var(--sp-4);
+  margin-top: var(--sp-6);
+  margin-bottom: var(--sp-3);
   text-transform: var(--section-transform);
   font-weight: 400;
   cursor: pointer;
 }
 .sb-entry {
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-4);
   font-size: var(--fs);
   line-height: 1.5;
 }
@@ -289,8 +294,8 @@ summary.sb-section {
 .cs-columns {
   display: grid;
   grid-template-columns: 1fr 1.25fr;
-  gap: var(--sec-gap) 24px;
-  margin-top: 10px;
+  gap: var(--sec-gap) var(--sp-7);
+  margin-top: var(--sp-5);
 }
 .cs-skill {
   display: flex;
@@ -300,21 +305,21 @@ summary.sb-section {
 .cs-skills {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .cs-note {
   font-size: var(--fs-meta);
   color: var(--muted);
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 .cs-spellpanel {
   display: flex;
-  gap: 6px 16px;
+  gap: var(--sp-3) var(--sp-6);
   align-items: baseline;
   font-size: var(--fs);
-  margin-top: 8px;
-  border: 1.5px solid var(--line);
-  padding: 7px 10px;
+  margin-top: var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: var(--sp-3) var(--sp-4);
   flex-wrap: wrap;
 }
 .cs-spellpanel > span {
@@ -323,7 +328,7 @@ summary.sb-section {
 .cs-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
   font-size: var(--fs);
   line-height: 1.45;
 }
@@ -334,7 +339,7 @@ summary.sb-section {
 /* ---- портрет статблока (лист персонажа; у существа свой, ниже) ---- */
 .sb-top-section {
   display: flex;
-  gap: 14px;
+  gap: var(--sp-6);
   align-items: stretch;
 }
 .sb-top-main {
@@ -348,7 +353,7 @@ summary.sb-section {
   display: flex;
   cursor: pointer;
   position: relative;
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   overflow: hidden;
   background: var(--paper);
 }
@@ -380,7 +385,7 @@ summary.sb-section {
   letter-spacing: 0.12em;
   font-size: var(--fs-micro);
   text-align: center;
-  padding: 6px;
+  padding: var(--sp-3);
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -404,7 +409,7 @@ summary.sb-section {
    снаряжение → заметки. Секция, которой нечего показать, не рисуется.
    ====================================================================== */
 .sbc {
-  border: 2px solid var(--ink);
+  border: var(--card-border-width-strong, 1px) solid var(--ink);
   border-radius: var(--radius-card);
   background: var(--paper);
   color: var(--ink);
@@ -417,8 +422,8 @@ summary.sb-section {
 .sbc__band {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
 }
@@ -429,7 +434,7 @@ summary.sb-section {
   width: 46px;
   height: 46px;
   flex: 0 0 auto;
-  border: 1.5px solid var(--on-surface);
+  border: var(--card-border-width, 1px) solid var(--on-surface);
   overflow: hidden;
   position: relative;
   display: flex;
@@ -472,7 +477,7 @@ summary.sb-section {
   letter-spacing: 0.12em;
   font-size: var(--fs-micro);
   color: var(--on-surface-muted);
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 .sbc__cr {
   font-family: var(--font-mono);
@@ -484,7 +489,7 @@ summary.sb-section {
 .sbc__controls {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   flex-shrink: 0;
   align-self: flex-start;
 }
@@ -495,10 +500,10 @@ summary.sb-section {
 }
 .sbc__side {
   border-right: 1.5px solid var(--line);
-  padding: 12px 14px 14px;
+  padding: var(--sp-5) var(--sp-5) var(--sp-5);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .sbc__scroll {
   min-width: 0;
@@ -507,18 +512,18 @@ summary.sb-section {
 .sbc__pair {
   display: grid;
   grid-template-columns: auto 1fr auto 1fr;
-  column-gap: 8px;
+  column-gap: var(--sp-4);
   align-items: baseline;
 }
 .sbc__rows {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--sp-3);
 }
 .sbc__row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .sbc__lab {
   font-family: var(--font-ui);
@@ -552,10 +557,10 @@ summary.sb-section {
 }
 .sbc__divider {
   border-top: 1.5px solid var(--line);
-  padding-top: 9px;
+  padding-top: var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--sp-3);
 }
 
 /* ---- кости характеристик ----
@@ -568,13 +573,13 @@ summary.sb-section {
 .sbc__dies {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 5px;
+  gap: var(--sp-3);
 }
 .sbc__die {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: var(--sp-2);
   background: none;
   border: 0;
   padding: 0;
@@ -619,7 +624,7 @@ summary.sb-section {
 .sbc__portrait {
   flex-grow: 1;
   min-height: 190px;
-  border: 1.5px solid var(--line);
+  border: var(--card-border-width, 1px) solid var(--line);
   overflow: hidden;
   position: relative;
   display: flex;
@@ -665,9 +670,9 @@ summary.sb-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   border-top: 1.5px solid var(--line);
-  padding: 10px 14px 6px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -680,13 +685,13 @@ summary.sb-section {
 .sbc__sec-tools {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .sbc__body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 2px 14px 14px;
+  gap: var(--sp-4);
+  padding: var(--sp-1) var(--sp-5) var(--sp-5);
 }
 .sbc__entry {
   font-size: var(--fs-meta);
@@ -711,8 +716,8 @@ summary.sb-section {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: var(--fs-micro);
-  padding: 3px 8px;
-  border: 1.5px solid var(--ink);
+  padding: var(--sp-1) var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--ink);
   border-radius: 0;
   background: transparent;
   color: var(--ink);
@@ -727,8 +732,8 @@ summary.sb-section {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: var(--fs-micro);
-  padding: 6px 10px;
-  border: 1.5px dashed var(--line);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--card-border-width, 1px) dashed var(--line);
   border-radius: 0;
   background: transparent;
   color: var(--muted);
@@ -737,8 +742,8 @@ summary.sb-section {
 .sbc__adds {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px 14px 14px;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
   border-top: 1.5px solid var(--line);
 }
 
@@ -749,9 +754,9 @@ summary.sb-section {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
   border-top: 1.5px solid var(--line);
-  padding: 12px 14px;
+  padding: var(--sp-5) var(--sp-5);
 }
 .sbc__invite-text {
   font-size: var(--fs-meta);
@@ -767,7 +772,7 @@ summary.sb-section {
 }
 .sbc__seg {
   flex-grow: 1;
-  padding: 9px 4px;
+  padding: var(--sp-4) var(--sp-2);
   border: 0;
   border-left: 1.5px solid var(--line);
   border-radius: 0;
@@ -801,7 +806,7 @@ summary.sb-section {
   border-bottom: 1.5px solid var(--line);
 }
 .sbc__cols.is-narrow .sbc__dies {
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 /* Кости хитов — под средним числом и мельче: «19к12+133» вдвое длиннее
@@ -812,7 +817,7 @@ summary.sb-section {
   font-size: var(--fs-micro);
   font-weight: 400;
   color: var(--muted);
-  margin-top: 1px;
+  margin-top: var(--sp-0);
 }
 
 /* ---- заклинания ----
@@ -821,7 +826,7 @@ summary.sb-section {
    «название + короткая выкладка», описание разворачивается по щелчку. */
 .sbc__spell-level {
   border-top: 1.5px solid var(--line);
-  padding-top: 7px;
+  padding-top: var(--sp-3);
 }
 .sbc__spell-level:first-child {
   border-top: 0;
@@ -831,7 +836,7 @@ summary.sb-section {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--sp-5);
   cursor: pointer;
   font-family: var(--font-ui);
   text-transform: uppercase;
@@ -846,32 +851,32 @@ summary.sb-section {
 .sbc__slots {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .sbc__slot {
   width: 8px;
   height: 8px;
-  border: 1.5px solid var(--ink);
+  border: var(--card-border-width, 1px) solid var(--ink);
   background: var(--accent);
 }
 .sbc__slot-count {
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   color: var(--muted);
-  margin-left: 4px;
+  margin-left: var(--sp-2);
 }
 .sbc__spells {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 5px;
+  gap: var(--sp-1);
+  margin-top: var(--sp-3);
 }
 .sbc__spell-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 3px 6px;
-  margin: 0 -6px;
+  gap: var(--sp-4);
+  padding: var(--sp-1) var(--sp-3);
+  margin: 0 calc(-1 * var(--sp-3));
 }
 .sbc__spell-row.is-toggle {
   cursor: pointer;
@@ -900,23 +905,23 @@ summary.sb-section {
   font-size: var(--fs-meta);
   line-height: 1.42;
   color: var(--ink-2);
-  padding: 2px 6px 6px;
+  padding: var(--sp-1) var(--sp-3) var(--sp-3);
   max-width: 78ch;
 }
 
 /* Строка заклинания в правке: название и частота всегда, механика и
    описание — по кнопке «Подробно». */
 .sbc__spell-edit {
-  border: 1.5px solid var(--line);
-  padding: 6px;
+  border: var(--card-border-width, 1px) solid var(--line);
+  padding: var(--sp-3);
 }
 .sbc__spell-edit + .sbc__spell-edit {
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 .sbc__spell-edit-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   flex-wrap: wrap;
 }
 .sbc__spell-edit-name {
@@ -928,13 +933,13 @@ summary.sb-section {
 .sbc__side-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap: 14px 22px;
+  gap: var(--sp-6) var(--sp-7);
   align-items: start;
 }
 .sbc__form {
   display: grid;
   grid-template-columns: 116px minmax(0, 1fr);
-  gap: 6px 10px;
+  gap: var(--sp-3) var(--sp-5);
   /* start, а не center: в графе может стоять список чувств или текстовое
      поле на две строки, и подпись уезжала бы к их середине. */
   align-items: start;
@@ -945,7 +950,7 @@ summary.sb-section {
 .sbc__form-block {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--sp-3);
   min-width: 0;
 }
 .sbc__form-lab {
@@ -955,7 +960,7 @@ summary.sb-section {
   font-size: var(--fs-micro);
   color: var(--muted);
   /* Ровно по первой строке поля рядом, а не по верхнему краю ячейки. */
-  padding-top: 8px;
+  padding-top: var(--sp-4);
 }
 .sbc__form-block > .sbc__form-lab {
   padding-top: 0;
@@ -982,7 +987,7 @@ summary.sb-section {
 .sbc__checks {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: var(--sp-2) var(--sp-5);
   font-size: var(--fs-meta);
 }
 /* Пока правится «Основное», левая колонка занимает всю карточку: в 300 px
@@ -999,13 +1004,13 @@ summary.sb-section {
 .sbc__editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 2px 14px 14px;
+  gap: var(--sp-5);
+  padding: var(--sp-1) var(--sp-5) var(--sp-5);
 }
 .sbc__editor-cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
 /* ---- Legend in the Mist: рамка карточки и чипы тегов ---- */
@@ -1042,7 +1047,7 @@ summary.sb-section {
 .sb-save-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   text-transform: uppercase;
@@ -1054,7 +1059,7 @@ summary.sb-section {
 /* «Вне лимита» у заклинания — знак бесконечности рядом с названием.
    Приписка словами занимала бы полстроки у каждой выдачи вида и класса. */
 .dnd-outside-mark {
-  margin-left: 5px;
+  margin-left: var(--sp-3);
   color: var(--muted);
   font-size: var(--fs-meta);
 }
@@ -1063,14 +1068,14 @@ summary.sb-section {
    правят чаще всего, поэтому они на виду и всегда, а не только когда
    непустые. */
 .dnd-coins {
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
-  margin: 4px 0 8px;
+  margin: var(--sp-2) 0 var(--sp-4);
 }
 .dnd-coin {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .dnd-coin input {
   width: 56px;
@@ -1091,7 +1096,7 @@ summary.sb-section {
   display: inline-block;
   width: 6px;
   height: 6px;
-  margin-left: 5px;
+  margin-left: var(--sp-3);
   border-radius: 50%;
   background: var(--accent);
   vertical-align: middle;
@@ -1104,9 +1109,9 @@ summary.sb-section {
   padding: 0;
 }
 .dnd-replica-row {
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
-  padding: 2px 0;
+  padding: var(--sp-1) 0;
 }
 .dnd-replica-modal {
   min-width: 0;
@@ -1130,7 +1135,7 @@ summary.sb-section {
   overflow-x: hidden;
 }
 .dnd-spell-list-row {
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
 }
 
@@ -1145,7 +1150,7 @@ summary.sb-section {
   letter-spacing: 0.06em;
 }
 .sb-trash__row {
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -1160,7 +1165,7 @@ summary.sb-section {
 /* Скорость до истощения — рядом с итогом и зачёркнутая: видно и сколько
    осталось, и от чего отняли. */
 .dnd-speed-was {
-  margin-left: 6px;
+  margin-left: var(--sp-3);
   color: var(--muted);
   text-decoration: line-through;
   font-size: var(--fs-meta);
@@ -1176,7 +1181,7 @@ summary.sb-section {
 .sb-save-status.is-error {
   color: var(--accent);
   border: var(--card-border-width, 1px) solid var(--accent);
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
 }
 .sb-save-status.is-error .comp-mini {
   border-color: currentColor;
@@ -1189,17 +1194,17 @@ summary.sb-section {
 .sb-vitals-caption {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
+  gap: var(--sp-2) var(--sp-6);
   margin-bottom: var(--sec-gap);
   font-family: var(--font-mono);
   font-size: var(--fs-sm2);
 }
 .sb-death-saves {
-  gap: 3px;
+  gap: var(--sp-2);
   align-items: center;
 }
 .sb-death-saves .row {
-  gap: 3px;
+  gap: var(--sp-2);
   font-size: var(--fs-label);
   justify-content: center;
 }
@@ -1228,7 +1233,7 @@ summary.sb-section {
    в ней же. Не карточка и не вторая шапка (§1.4): это продолжение шапки,
    отделённое линией, на бумаге-2. */
 .sb-origin-edit {
-  padding: 12px var(--pad-x);
+  padding: var(--sp-5) var(--pad-x);
   background: var(--paper-2);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
@@ -1240,7 +1245,7 @@ summary.sb-section {
    а не раздвигают его: подсказка живёт ровно пока набирают. */
 .dnd-sheet-search {
   position: relative;
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-4);
 }
 .dnd-sheet-search input {
   width: 100%;
@@ -1260,13 +1265,13 @@ summary.sb-section {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   text-align: left;
   background: transparent;
   border: none;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
-  padding: 7px 10px;
+  padding: var(--sp-3) var(--sp-4);
   cursor: pointer;
 }
 .dnd-sheet-search-hit:last-child {
@@ -1293,7 +1298,7 @@ summary.sb-section {
   color: var(--on-surface-muted);
 }
 .dnd-sheet-search-empty {
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
 }
 /* Строка, на которую увёл поиск. Не заливка акцентом — рамка: акцент на
    листе занят значениями навыков с владением (§1.8). */
@@ -1304,7 +1309,7 @@ summary.sb-section {
 
 /* Тумблер «только подготовленные» и счётчик скрытого — у самих заклинаний. */
 .dnd-prepared-filter {
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
   align-items: center;
 }
@@ -1319,18 +1324,18 @@ summary.sb-section {
 }
 .dnd-spell-hidden-note {
   display: block;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
   font-size: var(--fs-meta);
 }
 
 /* Дорожки костей хитов: по одной на пул, подписанные кубом. У мультикласса
    пулы независимы, и подпись — то, что игрок должен видеть перед тратой. */
 .dnd-hitdice-pools {
-  gap: 2px;
+  gap: var(--sp-1);
   align-items: center;
 }
 .dnd-hitdice-pool {
-  gap: 5px;
+  gap: var(--sp-3);
   align-items: center;
   justify-content: center;
 }
@@ -1357,14 +1362,14 @@ summary.sb-section {
    не решает за игрока — поэтому это строка с кнопкой, а не автоматика. */
 .dnd-concentration-check {
   border: var(--card-border-width, 1px) solid var(--accent);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
 }
 
 /* Истощение: дорожка в виталах и пометка причины под ними. Пометка —
    единственное место, где акцент оправдан вне бюджета страницы: она
    объясняет, почему все остальные числа листа стали меньше. */
 .dnd-exhaustion {
-  gap: 3px;
+  gap: var(--sp-2);
   align-items: center;
 }
 .dnd-exhaustion-dead {
@@ -1386,5 +1391,5 @@ summary.sb-section {
    об этом. Рамка акцентом — это состояние ошибки, а не украшение. */
 .dnd-entries-failed {
   border: var(--card-border-width, 1px) solid var(--accent);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
 }

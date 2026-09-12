@@ -168,6 +168,7 @@ import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
 import { conditionIconSrc } from "./conditionIcons";
+import { rasterAsset } from "../../rasterAssets";
 import { schoolIconSrc } from "./schoolIcons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
@@ -2120,9 +2121,12 @@ function EquipmentIcon({ item }: { item: DndEquipmentItem }) {
   return (
     <img
       className={`dnd-item-icon${item.equipped ? " is-active" : ""}`}
-      src={`/inventory/${equipmentIconKey(item)}.png`}
+      src={rasterAsset("inventory", equipmentIconKey(item)) ?? undefined}
       alt=""
       aria-hidden="true"
+      // Наклейка узнаёт, но не сообщает (правило растра п.2): имя предмета
+      // стоит в строке рядом, ховер повторяет его на самой плитке.
+      title={item.name}
       draggable={false}
     />
   );
@@ -2861,7 +2865,7 @@ function DndCoinPurse({
           const empty = raw.trim() === "" || raw.trim() === "0";
           return (
             <div key={key} className={`dnd-purse-coin${empty ? " is-empty" : ""}`}>
-              <img className="dnd-purse-img" src={`/coins/${key}.png`} alt="" aria-hidden="true" draggable={false} />
+              <img className="dnd-purse-img" src={rasterAsset("coins", key) ?? undefined} alt="" aria-hidden="true" draggable={false} />
               {onCommit && editingKey === key ? (
                 <input
                   className="dnd-purse-input"
@@ -10951,7 +10955,7 @@ export function DndCharacterView({
                   aria-label="Отдых"
                   onClick={() => setRestOpen(true)}
                 >
-                  <img className="dnd-token-img" src="/tokens/rest.png" alt="" aria-hidden="true" draggable={false} />
+                  <img className="dnd-token-img" src={rasterAsset("tokens", "rest") ?? undefined} alt="" aria-hidden="true" draggable={false} />
                 </button>
               )}
               {(value.inspiration || onQuickUpdate) && (
@@ -10965,7 +10969,7 @@ export function DndCharacterView({
                   disabled={!onQuickUpdate}
                   onClick={onQuickUpdate ? () => onQuickUpdate({ inspiration: !value.inspiration }) : undefined}
                 >
-                  <img className="dnd-token-img" src="/tokens/inspiration.png" alt="" aria-hidden="true" draggable={false} />
+                  <img className="dnd-token-img" src={rasterAsset("tokens", "inspiration") ?? undefined} alt="" aria-hidden="true" draggable={false} />
                 </button>
               )}
             {/* §1.11: постоянные ячейки — то, на что игрок смотрит каждый ход.
@@ -11352,7 +11356,7 @@ export function DndCharacterView({
                       aria-label="Добавить спутника"
                       onClick={() => setAddingCompanion(true)}
                     >
-                      <img className="dnd-token-img" src="/tokens/familiar.png" alt="" aria-hidden="true" draggable={false} />
+                      <img className="dnd-token-img" src={rasterAsset("tokens", "familiar") ?? undefined} alt="" aria-hidden="true" draggable={false} />
                     </button>
                   ))}
               </div>

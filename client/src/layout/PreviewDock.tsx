@@ -1,8 +1,18 @@
-import { useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { EntityPreviewContent } from "../components/EntityPreviewModal";
-import { addPreviewDockCard, removePreviewDockCard, usePreviewDockCards } from "../previewDockStore";
+import { PlaceCard } from "../components/PlaceCard";
+import {
+  PREVIEW_DOCK_EXPAND_EVENT,
+  addPreviewDockCard,
+  openPreviewDockCard,
+  removePreviewDockCard,
+  usePreviewDockCards,
+} from "../previewDockStore";
 import type { SearchResult } from "../types";
+
+const LIVE_SESSION_PATH = /^\/sessions\/(\d+)\/live$/;
 
 // Same types EntityPreviewContent knows how to render — anything else
 // dropped here is silently ignored, same as the other search-drop targets.
@@ -30,6 +40,20 @@ export function PreviewDock({ open }: { open?: boolean }) {
   const toggleCollapsed = (key: string) =>
     setCollapsed((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   const allCollapsed = cards.length > 0 && cards.every((c) => collapsed.includes(keyOf(c.type, c.id)));
+  // Сессия пульта: карточке места нужна для «Мы здесь» и истории кампании.
+  const { pathname } = useLocation();
+  const liveMatch = pathname.match(LIVE_SESSION_PATH);
+  const sessionId = liveMatch ? Number(liveMatch[1]) : null;
+
+  // «Открыть в доке» с пульта разворачивает карточку, даже свёрнутую раньше.
+  useEffect(() => {
+    const onExpand = (e: Event) => {
+      const key = (e as CustomEvent<string>).detail;
+      setCollapsed((prev) => prev.filter((k) => k !== key));
+    };
+    window.addEventListener(PREVIEW_DOCK_EXPAND_EVENT, onExpand);
+    return () => window.removeEventListener(PREVIEW_DOCK_EXPAND_EVENT, onExpand);
+  }, []);
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -84,16 +108,30 @@ export function PreviewDock({ open }: { open?: boolean }) {
       <div className="stack preview-dock-list">
         {cards.map((c) => (
           <div key={`${c.type}-${c.id}`} className="card preview-dock-card">
-            <EntityPreviewContent
-              type={c.type}
-              id={c.id}
-              // Уход в профиль сбрасывает док вместе с живой сессией —
-              // поэтому отсюда профиль открывается новым окном (шаг 4).
-              profileInNewWindow
-              collapsed={collapsed.includes(keyOf(c.type, c.id))}
-              onToggleCollapse={() => toggleCollapsed(keyOf(c.type, c.id))}
-              onClose={() => removePreviewDockCard(c.type, c.id)}
-            />
+            {c.type === "location" ? (
+              // Место — карточкой места (решения 2026-09-11, §2): та же
+              // раскладка, что в Географии, в плашечном виде.
+              <PlaceCard
+                variant="dock"
+                locationId={c.id}
+                sessionId={sessionId}
+                collapsed={collapsed.includes(keyOf(c.type, c.id))}
+                onToggleCollapse={() => toggleCollapsed(keyOf(c.type, c.id))}
+                onClose={() => removePreviewDockCard(c.type, c.id)}
+                onPick={(id) => openPreviewDockCard({ type: "location", id })}
+              />
+            ) : (
+              <EntityPreviewContent
+                type={c.type}
+                id={c.id}
+                // Уход в профиль сбрасывает док вместе с живой сессией —
+                // поэтому отсюда профиль открывается новым окном (шаг 4).
+                profileInNewWindow
+                collapsed={collapsed.includes(keyOf(c.type, c.id))}
+                onToggleCollapse={() => toggleCollapsed(keyOf(c.type, c.id))}
+                onClose={() => removePreviewDockCard(c.type, c.id)}
+              />
+            )}
           </div>
         ))}
       </div>

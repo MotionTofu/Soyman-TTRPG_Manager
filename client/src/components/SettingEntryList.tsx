@@ -5,6 +5,8 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { SettingEntry } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { EmptyState } from "./EmptyState";
+import { EntityTabWorkspace } from "./EntityTabWorkspace";
 
 interface Props {
   settingId: number;
@@ -13,9 +15,12 @@ interface Props {
   emptyLabel: string;
 }
 
+// Таб «Заметки» как Master–Detail: список записей слева, выбранная —
+// справа сразу в чтении (правка по кнопке). Верхний таб-бар не трогаем.
 export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: Props) {
   const [confirmDialog, confirm] = useConfirm();
   const [entries, setEntries] = useState<SettingEntry[]>([]);
+  const [selId, setSelId] = useState<number | null>(null);
 
   function refresh() {
     api
@@ -24,14 +29,25 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
   }
   useEffect(refresh, [settingId, category]);
 
+  // Выбор пережил удаление/перезагрузку: нет выбранной — берём первую.
+  useEffect(() => {
+    if (entries.length > 0 && !entries.some((e) => e.id === selId)) {
+      setSelId(entries[0].id);
+    }
+    if (entries.length === 0) setSelId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   async function addEntry() {
-    await api.post("/setting-entries", {
+    const created = await api.post<SettingEntry>("/setting-entries", {
       setting_id: settingId,
       category,
       title: `Запись ${entries.length + 1}`,
       content: "",
     });
     refresh();
+    // Сервер отдаёт созданную запись — выбираем её сразу в правке.
+    if (created?.id) setSelId(created.id);
   }
 
   async function removeEntry(id: number) {
@@ -41,17 +57,52 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
     refresh();
   }
 
+  const selected = entries.find((e) => e.id === selId);
+
   return (
-    <div className="stack">
+    <EntityTabWorkspace
+      sections={[
+        {
+          id: "all",
+          label: "Все записи",
+          count: entries.length,
+          items: entries.map((e) => ({ id: String(e.id), label: e.title || "Без названия" })),
+        },
+      ]}
+      selection={{ section: "all", item: selId != null ? String(selId) : undefined }}
+      onSelect={(next) => next.item != null && setSelId(Number(next.item))}
+      workspaceKey={settingId}
+      navFooter={
+        <button onClick={addEntry} style={{ alignSelf: "flex-start" }}>
+          {addLabel}
+        </button>
+      }
+    >
       {confirmDialog}
-      {entries.map((e) => (
-        <EntryCard key={e.id} entry={e} settingId={settingId} onChange={refresh} onRemove={removeEntry} />
-      ))}
-      <button onClick={addEntry} style={{ alignSelf: "flex-start" }}>
-        {addLabel}
-      </button>
-      {entries.length === 0 && <p className="muted">{emptyLabel}</p>}
-    </div>
+      {selected ? (
+        <EntryCard
+          key={selected.id}
+          entry={selected}
+          settingId={settingId}
+          forceOpen
+          onChange={refresh}
+          onRemove={removeEntry}
+        />
+      ) : (
+        <div className="card stack">
+          <EmptyState
+            title="Заметки помогают держать лор"
+            hint="Короткие записи мастера: имена, факты, хуки — всё, что не тянет на статью."
+            action={
+              <button className="primary" onClick={addEntry}>
+                {addLabel}
+              </button>
+            }
+          />
+          {entries.length === 0 && <p className="muted">{emptyLabel}</p>}
+        </div>
+      )}
+    </EntityTabWorkspace>
   );
 }
 
@@ -60,17 +111,20 @@ function EntryCard({
   settingId,
   onChange,
   onRemove,
+  forceOpen = false,
 }: {
   entry: SettingEntry;
   settingId: number;
   onChange: () => void;
   onRemove: (id: number) => void;
+  /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
+  forceOpen?: boolean;
 }) {
   const [editMode, setEditMode] = useState(() => !entry.content);
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState(entry.title);
   const [content, setContent] = useState(entry.content);
-  const open = editMode || expanded;
+  const open = editMode || expanded || forceOpen;
 
   async function save() {
     await api.put(`/setting-entries/${entry.id}`, { title, content });
@@ -83,11 +137,11 @@ function EntryCard({
     <div className="card stack">
       <div
         className="row collapsible-header"
-        style={{ justifyContent: "space-between", cursor: editMode ? "default" : "pointer" }}
-        onClick={() => !editMode && setExpanded((v) => !v)}
+        style={{ justifyContent: "space-between", cursor: editMode || forceOpen ? "default" : "pointer" }}
+        onClick={() => !editMode && !forceOpen && setExpanded((v) => !v)}
       >
         <span className="row" style={{ alignItems: "center" }}>
-          {!editMode && (
+          {!editMode && !forceOpen && (
             <span className="comp-toggle" aria-hidden="true">
               {expanded ? "▾" : "▸"}
             </span>

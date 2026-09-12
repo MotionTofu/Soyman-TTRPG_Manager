@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { GalleryTab } from "./GalleryTab";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
@@ -9,6 +9,7 @@ import { EmptyState } from "./EmptyState";
 import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
 import { Modal } from "./Modal";
+import { EntityTabWorkspace } from "./EntityTabWorkspace";
 import type { CampaignPlayerArticle, CampaignPlayerSection, CampaignPlayerSectionKind, RosterPlayer } from "../types";
 
 const SECTION_NAME_MAX = 80;
@@ -29,8 +30,12 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   const [confirmDialog, confirm] = useConfirm();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState("");
-  const [dragSectionId, setDragSectionId] = useState<number | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Master–Detail: выбранный раздел и (для статей) статья. Пункты статей
+  // в навигации — из кэша, который докладывает ArticlesList при загрузке.
+  const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number }>({ sectionId: null });
+  const [artCache, setArtCache] = useState<Record<number, CampaignPlayerArticle[]>>({});
+  const [galCounts, setGalCounts] = useState<Record<number, number>>({});
 
   function load(signal?: AbortSignal) {
     setLoading(true);
@@ -112,6 +117,79 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
 
   const filtered = filter.trim() ? sections.filter((s) => s.name.toLowerCase().includes(filter.trim().toLowerCase())) : sections;
 
+  // Выбор пережил удаление/фильтр: нет выбранного — берём первый раздел.
+  useEffect(() => {
+    if (filtered.length === 0) {
+      if (sel.sectionId !== null) setSel({ sectionId: null });
+      return;
+    }
+    if (!filtered.some((s) => s.id === sel.sectionId)) setSel({ sectionId: filtered[0].id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sel.sectionId]);
+
+  // Счётчики галерей для навигации (статьи докладывает ArticlesList сам).
+  useEffect(() => {
+    const galleries = sections.filter((s) => s.kind === "gallery");
+    if (galleries.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      galleries.map((s) =>
+        api
+          .get<CampaignPlayerArticle[]>(`/gallery?owner_type=campaign_player_section&owner_id=${s.id}`)
+          .then((rows) => [s.id, rows.length] as const)
+          .catch(() => [s.id, -1] as const)
+      )
+    ).then((pairs) => {
+      if (cancelled) return;
+      setGalCounts((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const [id, n] of pairs) {
+          if (n >= 0 && next[id] !== n) {
+            next[id] = n;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sections]);
+
+  const reportArticles = useCallback((sectionId: number, arts: CampaignPlayerArticle[]) => {
+    setArtCache((prev) => {
+      const old = prev[sectionId];
+      if (old && old.length === arts.length && old.every((a, i) => a.id === arts[i].id && a.title === arts[i].title))
+        return prev;
+      return { ...prev, [sectionId]: arts };
+    });
+  }, []);
+
+  function moveSection(id: number, dir: -1 | 1) {
+    const ids = sections.map((s) => s.id);
+    const from = ids.indexOf(id);
+    const to = from + dir;
+    if (from === -1 || to < 0 || to >= ids.length) return;
+    reorderSections(id, ids[to]);
+  }
+
+  const navSections = filtered.map((s) => {
+    const isGallery = s.kind === "gallery";
+    const arts = artCache[s.id];
+    return {
+      id: String(s.id),
+      label: `${s.name} · ${isGallery ? "Галерея" : "Статьи"}`,
+      count: isGallery ? galCounts[s.id] : arts?.length,
+      items: !isGallery && arts ? arts.map((a) => ({ id: String(a.id), label: a.title || "Без названия" })) : undefined,
+    };
+  });
+
+  const selectedSection = filtered.find((s) => s.id === sel.sectionId) ?? null;
+  const focusedKnown = selectedSection && sel.articleId != null ? artCache[selectedSection.id] : undefined;
+  const focusedFound = focusedKnown?.some((a) => a.id === sel.articleId) ?? null;
+
   return (
     <div className="stack campaign-player-overview">
       <p className="muted" style={{ maxWidth: "62ch" }}>
@@ -159,31 +237,72 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
           }
         />
       )}
-      {filtered.map((s) => (
-        <div
-          key={s.id}
-          draggable
-          onDragStart={() => setDragSectionId(s.id)}
-          onDragEnd={() => setDragSectionId(null)}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
-            if (dragSectionId != null) {
-              reorderSections(dragSectionId, s.id);
-              setDragSectionId(null);
-            }
+      {filtered.length > 0 && selectedSection && (
+        <EntityTabWorkspace
+          sections={navSections}
+          selection={{
+            section: String(selectedSection.id),
+            item: sel.articleId != null ? String(sel.articleId) : undefined,
           }}
-          style={{ opacity: dragSectionId === s.id ? 0.6 : 1 }}
+          onSelect={(next) =>
+            setSel(
+              next.item != null
+                ? { sectionId: Number(next.section), articleId: Number(next.item) }
+                : { sectionId: Number(next.section) }
+            )
+          }
+          workspaceKey={campaignId}
+          navFooter={
+            <button
+              className="primary"
+              onClick={() => nameInputRef.current?.focus()}
+              style={{ alignSelf: "flex-start" }}
+            >
+              + Добавить подраздел
+            </button>
+          }
         >
-          <SectionCard
-            campaignId={campaignId}
-            section={s}
-            roster={roster}
-            defaultSettingId={defaultSettingId}
-            onRemove={() => removeSection(s.id)}
-            onRenamed={refresh}
-          />
-        </div>
-      ))}
+          {(() => {
+            if (sel.articleId != null) {
+              if (focusedKnown && !focusedFound) {
+                return (
+                  <div className="card stack">
+                    <p className="muted">Статья удалена или перемещена.</p>
+                    <button onClick={() => setSel({ sectionId: selectedSection.id })} style={{ alignSelf: "flex-start" }}>
+                      К разделу
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <ArticlesList
+                  campaignId={campaignId}
+                  sectionId={selectedSection.id}
+                  roster={roster}
+                  defaultSettingId={defaultSettingId}
+                  focusedId={sel.articleId}
+                  onStats={(arts) => reportArticles(selectedSection.id, arts)}
+                />
+              );
+            }
+            const idx = sections.findIndex((s) => s.id === selectedSection.id);
+            return (
+              <SectionCard
+                campaignId={campaignId}
+                section={selectedSection}
+                roster={roster}
+                defaultSettingId={defaultSettingId}
+                forceExpanded
+                onMoveUp={idx > 0 ? () => moveSection(selectedSection.id, -1) : undefined}
+                onMoveDown={idx >= 0 && idx < sections.length - 1 ? () => moveSection(selectedSection.id, 1) : undefined}
+                onRemove={() => removeSection(selectedSection.id)}
+                onRenamed={refresh}
+                onArticlesStats={(arts) => reportArticles(selectedSection.id, arts)}
+              />
+            );
+          })()}
+        </EntityTabWorkspace>
+      )}
       {filter && filtered.length === 0 && <p className="muted">Ничего не найдено.</p>}
       {confirmDialog}
       {previewOpen && (
@@ -216,6 +335,10 @@ function SectionCard({
   defaultSettingId,
   onRemove,
   onRenamed,
+  forceExpanded = false,
+  onMoveUp,
+  onMoveDown,
+  onArticlesStats,
 }: {
   campaignId: number;
   section: CampaignPlayerSection;
@@ -223,6 +346,12 @@ function SectionCard({
   defaultSettingId?: number;
   onRemove: () => void;
   onRenamed: () => void;
+  /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
+  forceExpanded?: boolean;
+  /** Порядок разделов — стрелками вместо drag (в навигации drag нет). */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onArticlesStats?: (articles: CampaignPlayerArticle[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -260,11 +389,11 @@ function SectionCard({
     <div className="card stack">
       <div
         className="row collapsible-header campaign-player-header"
-        style={{ justifyContent: "space-between", cursor: renaming ? "default" : "pointer" }}
-        onClick={() => !renaming && setExpanded((v) => !v)}
+        style={{ justifyContent: "space-between", cursor: renaming || forceExpanded ? "default" : "pointer" }}
+        onClick={() => !renaming && !forceExpanded && setExpanded((v) => !v)}
       >
         <span className="row" style={{ alignItems: "center" }}>
-          <NavIcon name="chevron" className={`chevron-icon${expanded ? " is-open" : ""}`} />
+          {!forceExpanded && <NavIcon name="chevron" className={`chevron-icon${expanded ? " is-open" : ""}`} />}
           {renaming ? (
             <input
               value={nameDraft}
@@ -284,6 +413,16 @@ function SectionCard({
           {countLabel && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>· {countLabel}</span>}
         </span>
         <span className="row" onClick={(e) => e.stopPropagation()}>
+          {(onMoveUp || onMoveDown) && (
+            <span className="row" style={{ gap: 2 }}>
+              <button onClick={onMoveUp} disabled={!onMoveUp} title="Выше" aria-label="Переместить выше" style={{ width: 26, height: 26, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                ↑
+              </button>
+              <button onClick={onMoveDown} disabled={!onMoveDown} title="Ниже" aria-label="Переместить ниже" style={{ width: 26, height: 26, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                ↓
+              </button>
+            </span>
+          )}
           {renaming ? (
             <>
               <button className="primary" onClick={saveName} disabled={!nameDraft.trim() || nameDraft.trim().length > SECTION_NAME_MAX || savingName}>
@@ -302,11 +441,11 @@ function SectionCard({
           </button>
         </span>
       </div>
-      {expanded &&
+      {(expanded || forceExpanded) &&
         (section.kind === "gallery" ? (
           <GalleryTab ownerType="campaign_player_section" ownerId={section.id} />
         ) : (
-          <ArticlesList campaignId={campaignId} sectionId={section.id} roster={roster} defaultSettingId={defaultSettingId} />
+          <ArticlesList campaignId={campaignId} sectionId={section.id} roster={roster} defaultSettingId={defaultSettingId} onStats={onArticlesStats} />
         ))}
     </div>
   );
@@ -317,11 +456,17 @@ function ArticlesList({
   sectionId,
   roster,
   defaultSettingId,
+  focusedId,
+  onStats,
 }: {
   campaignId: number;
   sectionId: number;
   roster: RosterPlayer[];
   defaultSettingId?: number;
+  /** Master–Detail: показать только одну статью (навигация — снаружи). */
+  focusedId?: number | null;
+  /** Статьи для пунктов навигации (id + заголовки). */
+  onStats?: (articles: CampaignPlayerArticle[]) => void;
 }) {
   const [articles, setArticles] = useState<CampaignPlayerArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -351,6 +496,12 @@ function ArticlesList({
     load(c.signal);
     return () => c.abort();
   }, [sectionId]);
+
+  // Статьи для пунктов навигации Master–Detail.
+  useEffect(() => {
+    onStats?.(articles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articles]);
 
   function refresh() {
     load();
@@ -405,6 +556,8 @@ function ArticlesList({
     }
   }
 
+  const visible = focusedId != null ? articles.filter((a) => a.id === focusedId) : articles;
+
   return (
     <div className="stack">
       {loading && <p className="muted">Загрузка статей…</p>}
@@ -425,15 +578,15 @@ function ArticlesList({
           }
         />
       )}
-      {articles.map((a) => (
+      {visible.map((a) => (
         <div
           key={a.id}
-          draggable
-          onDragStart={() => setDragId(a.id)}
+          draggable={focusedId == null}
+          onDragStart={() => focusedId == null && setDragId(a.id)}
           onDragEnd={() => setDragId(null)}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => {
-            if (dragId != null) {
+            if (focusedId == null && dragId != null) {
               reorderArticles(dragId, a.id);
               setDragId(null);
             }
@@ -445,6 +598,7 @@ function ArticlesList({
             article={a}
             roster={roster}
             defaultSettingId={defaultSettingId}
+            forceOpen={focusedId != null}
             onChange={refresh}
             onRemove={() => removeArticle(a.id)}
           />
@@ -467,6 +621,7 @@ function ArticleCard({
   defaultSettingId,
   onChange,
   onRemove,
+  forceOpen = false,
 }: {
   campaignId: number;
   article: CampaignPlayerArticle;
@@ -474,6 +629,8 @@ function ArticleCard({
   defaultSettingId?: number;
   onChange: () => void;
   onRemove: () => void;
+  /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
+  forceOpen?: boolean;
 }) {
   const [editMode, setEditMode] = useState(() => !article.content);
   const [expanded, setExpanded] = useState(false);
@@ -482,7 +639,7 @@ function ArticleCard({
   const [saving, setSaving] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const [clampOpen, setClampOpen] = useState(false);
-  const open = editMode || expanded;
+  const open = editMode || expanded || forceOpen;
   const isDirty = title !== article.title || content !== article.content;
 
   async function save() {
@@ -512,11 +669,11 @@ function ArticleCard({
     <div className="card stack">
       <div
         className="row collapsible-header campaign-player-header"
-        style={{ justifyContent: "space-between", cursor: editMode ? "default" : "pointer" }}
-        onClick={() => !editMode && setExpanded((v) => !v)}
+        style={{ justifyContent: "space-between", cursor: editMode || forceOpen ? "default" : "pointer" }}
+        onClick={() => !editMode && !forceOpen && setExpanded((v) => !v)}
       >
         <span className="row" style={{ alignItems: "center" }}>
-          {!editMode && <NavIcon name="chevron" className={`chevron-icon${expanded ? " is-open" : ""}`} />}
+          {!editMode && !forceOpen && <NavIcon name="chevron" className={`chevron-icon${expanded ? " is-open" : ""}`} />}
           {editMode ? (
             <input
               value={title}

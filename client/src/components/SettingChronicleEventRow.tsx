@@ -34,9 +34,9 @@ export const SettingChronicleEventRow = memo(function SettingChronicleEventRow({
 }: SettingChronicleEventRowProps) {
   const mentionChips = extractMentionChips(ev.description ?? "");
   return (
-    <div className="stack" style={{ gap: "var(--sp-2)" }}>
+    <div className="stack" style={{ gap: "var(--sp-4)" }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <span className="row chronicle-row" style={{ alignItems: "center", flexWrap: "wrap", gap: "var(--sp-2)" }}>
+        <span className="row chronicle-row" style={{ alignItems: "center", flexWrap: "wrap", gap: "var(--sp-4)" }}>
           {ev.description && (
             <button style={{ padding: "2px 6px" }} onClick={() => onToggleExpand(ev.id)}>
               {expanded ? "▾" : "▸"}
@@ -52,7 +52,7 @@ export const SettingChronicleEventRow = memo(function SettingChronicleEventRow({
             </span>
           )}
         </span>
-        <div className="row" style={{ gap: "var(--sp-2)", alignItems: "center" }}>
+        <div className="row" style={{ gap: "var(--sp-4)", alignItems: "center" }}>
           <button
             onClick={() => onToggleImportant(ev)}
             title={ev.important ? "Убрать из избранного" : "В избранное"}

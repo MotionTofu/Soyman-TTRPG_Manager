@@ -8,12 +8,23 @@ import { useConfirm } from "../hooks/useConfirm";
 // плюс собственные вехи кампании. Тексты вех приключения принадлежат сеттингу
 // и правятся там; кампания отмечает достижение и может доложить свою веху —
 // свободную или прямо в чужое импортированное приключение.
+export interface MilestonesNavStats {
+  own: { total: number; done: number };
+  groups: { id: number; name: string; total: number; done: number }[];
+}
+
 export function CampaignMilestones({
   campaignId,
   settingId,
+  groupId,
+  onStats,
 }: {
   campaignId: number;
   settingId: number | null;
+  // Master–Detail: показать одну группу ("own" — вехи кампании, иначе
+  // id приключения). Не задано — все группы, как раньше.
+  groupId?: string | null;
+  onStats?: (s: MilestonesNavStats) => void;
 }) {
   const [data, setData] = useState<CampaignGrouped<StoryMilestone>>({ groups: [], own: [] });
 
@@ -49,6 +60,18 @@ export function CampaignMilestones({
     }));
   }, []);
 
+  // Счётчики для левой навигации Master–Detail. Выше ранних return:
+  // хуки обязаны вызываться в одном порядке каждый рендер.
+  useEffect(() => {
+    if (!onStats) return;
+    const doneOf = (items: StoryMilestone[]) => items.filter((m) => m.state?.achieved === 1).length;
+    const groups = data.groups.filter((g) => g.arc.is_default !== 1 || g.items.length > 0);
+    onStats({
+      own: { total: data.own.length, done: doneOf(data.own) },
+      groups: groups.map((g) => ({ id: g.arc.id, name: g.arc.name, total: g.items.length, done: doneOf(g.items) })),
+    });
+  }, [data, onStats]);
+
   if (settingId == null) {
     return (
       <p className="muted">
@@ -62,6 +85,9 @@ export function CampaignMilestones({
   // вехи и тайны в неё не кладут.
   const visibleGroups = data.groups.filter((g) => g.arc.is_default !== 1 || g.items.length > 0);
 
+  const showOwn = groupId == null || groupId === "own";
+  const showGroups = visibleGroups.filter((g) => groupId == null || groupId === String(g.arc.id));
+
   return (
     <div className="stack">
       <p className="muted">
@@ -69,15 +95,17 @@ export function CampaignMilestones({
         сеттинге; свои вехи можно завести здесь.
       </p>
 
-      <MilestoneGroup
-        title="Вехи кампании"
-        items={data.own}
-        arcId={null}
-        campaignId={campaignId}
-        onChange={refresh}
-        onAchieved={applyAchieved}
-      />
-      {visibleGroups.map((g) => (
+      {showOwn && (
+        <MilestoneGroup
+          title="Вехи кампании"
+          items={data.own}
+          arcId={null}
+          campaignId={campaignId}
+          onChange={refresh}
+          onAchieved={applyAchieved}
+        />
+      )}
+      {showGroups.map((g) => (
         <MilestoneGroup
           key={g.arc.id}
           title={g.arc.name}

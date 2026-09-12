@@ -78,7 +78,7 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
       {problems.length === 0 ? (
         <span className="muted">Всё готово — можно создавать.</span>
       ) : (
-        <div className="stack" style={{ gap: "var(--sp-1)" }}>
+        <div className="stack" style={{ gap: "var(--sp-2)" }}>
           <span className="muted">Перед созданием осталось:</span>
           {problems.map((p) => (
             <div key={p.text} className="row wizard-spread">
@@ -146,7 +146,7 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
       {/* Разбивка по источнику, а не общий список: в плоском перечне не
           видно, что чего-то НЕ пришло, а пустая строка «Вид: ничего»
           видна сразу (решение W4). */}
-      <div className="stack" style={{ gap: "var(--sp-2)" }}>
+      <div className="stack" style={{ gap: "var(--sp-4)" }}>
         {sources.map((src) => (
           <div key={src.label}>
             <strong>{src.label}:</strong>{" "}
@@ -172,7 +172,7 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
       )}
 
       {pendingPicks.length > 0 && (
-        <div className="stack" style={{ gap: "var(--sp-1)" }}>
+        <div className="stack" style={{ gap: "var(--sp-2)" }}>
           <span>
             <strong>Добрать на листе после создания:</strong>
           </span>

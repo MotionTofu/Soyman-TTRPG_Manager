@@ -8,22 +8,22 @@ import { schoolIconSrc } from "./schoolIcons";
  */
 describe("schoolIconSrc", () => {
   const canonical: [string, string][] = [
-    ["Ограждение", "/schools/Abjuration.png"],
-    ["Вызов", "/schools/conjuration.png"],
-    ["Прорицание", "/schools/Divination.png"],
-    ["Очарование", "/schools/Enchantment.png"],
-    ["Воплощение", "/schools/evocation.png"],
-    ["Иллюзия", "/schools/Illusion.png"],
-    ["Некромантия", "/schools/Necromancy.png"],
-    ["Преобразование", "/schools/Transmutation.png"],
+    ["Ограждение", "/schools/abjuration.webp"],
+    ["Вызов", "/schools/conjuration.webp"],
+    ["Прорицание", "/schools/divination.webp"],
+    ["Очарование", "/schools/enchantment.webp"],
+    ["Воплощение", "/schools/evocation.webp"],
+    ["Иллюзия", "/schools/illusion.webp"],
+    ["Некромантия", "/schools/necromancy.webp"],
+    ["Преобразование", "/schools/transmutation.webp"],
   ];
   it.each(canonical)("каноническое %s → %s", (name, src) => {
     expect(schoolIconSrc(name)).toBe(src);
   });
 
   it("английские имена тоже находятся", () => {
-    expect(schoolIconSrc("abjuration")).toBe("/schools/Abjuration.png");
-    expect(schoolIconSrc("Evocation")).toBe("/schools/evocation.png");
+    expect(schoolIconSrc("abjuration")).toBe("/schools/abjuration.webp");
+    expect(schoolIconSrc("Evocation")).toBe("/schools/evocation.webp");
   });
 
   it("не-школы значка не получают", () => {

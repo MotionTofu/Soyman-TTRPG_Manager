@@ -16,11 +16,16 @@ import type { SettingLocation } from "../types";
 
 interface Props {
   settingId: number;
+  // Подраздел «Список» географии как Master–Detail: всегда плоский список
+  // (а не только при активных фильтрах), клик выбирает элемент в превью
+  // справа вместо ухода на страницу.
+  flat?: boolean;
+  selectOnClick?: boolean;
 }
 
 const KIND_SUGGESTIONS = ["континент", "страна", "область", "город", "деревня", "район", "улица", "здание", "таверна", "храм", "замок", "башня", "подземелье", "лес", "гора", "река"] as const;
 
-export function LocationTree({ settingId }: Props) {
+export function LocationTree({ settingId, flat = false, selectOnClick = false }: Props) {
   const [locations, setLocations] = useState<SettingLocation[]>([]);
   const [creating, setCreating] = useState(false);
   const [wizardParentId, setWizardParentId] = useState<number | null>(null);
@@ -156,18 +161,6 @@ export function LocationTree({ settingId }: Props) {
     return { total: locations.length, withoutDesc, withoutMap, maxDepth };
   })();
 
-  function breadcrumb(loc: SettingLocation): string {
-    const parts: string[] = [];
-    let cur: SettingLocation | undefined = loc;
-    const visited = new Set<number>();
-    while (cur && !visited.has(cur.id)) {
-      visited.add(cur.id);
-      parts.unshift(cur.name);
-      cur = cur.parent_id != null ? byIdAll.get(cur.parent_id) : undefined;
-    }
-    return parts.join(" → ");
-  }
-
   function highlight(text: string, query: string): React.ReactNode {
     if (!query) return text;
     const idx = text.toLowerCase().indexOf(query.toLowerCase());
@@ -253,7 +246,75 @@ export function LocationTree({ settingId }: Props) {
     if (sortMode === "kind") return (a.kind ?? "").toLowerCase().localeCompare((b.kind ?? "").toLowerCase(), "ru") || a.name.localeCompare(b.name, "ru", { numeric: true });
     return a.name.localeCompare(b.name, "ru", { numeric: true });
   }) : null;
-  const flatList = matches ?? flatFiltered;
+  const flatList = flat
+    ? [...filteredLocations].sort((a, b) => {
+        if (sortMode === "kind") return (a.kind ?? "").toLowerCase().localeCompare((b.kind ?? "").toLowerCase(), "ru") || a.name.localeCompare(b.name, "ru", { numeric: true });
+        return a.name.localeCompare(b.name, "ru", { numeric: true });
+      })
+    : (matches ?? flatFiltered);
+
+  // Иерархический плоский список: порядок вглубь (родитель → дети),
+  // глубина — отступом. Совпадения поиска тянут предков приглушённым
+  // контекстом, чтобы вложенность не терялась при фильтрах.
+  function flatTreeRows(list: SettingLocation[]): { loc: SettingLocation; depth: number; dimmed: boolean }[] {
+    const visible = new Map<number, SettingLocation>();
+    for (const l of list) visible.set(l.id, l);
+    const inList = new Set(list.map((l) => l.id));
+    for (const l of list) {
+      let cur = l.parent_id != null ? byIdAll.get(l.parent_id) : undefined;
+      const seen = new Set<number>();
+      while (cur && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        if (!visible.has(cur.id)) visible.set(cur.id, cur);
+        cur = cur.parent_id != null ? byIdAll.get(cur.parent_id) : undefined;
+      }
+    }
+    const compare = (a: SettingLocation, b: SettingLocation) => {
+      if (sortMode === "kind")
+        return (
+          (a.kind ?? "").toLowerCase().localeCompare((b.kind ?? "").toLowerCase(), "ru") ||
+          a.name.localeCompare(b.name, "ru", { numeric: true })
+        );
+      return a.name.localeCompare(b.name, "ru", { numeric: true });
+    };
+    const kids = new Map<number | null, SettingLocation[]>();
+    for (const l of visible.values()) {
+      const pid = l.parent_id != null && visible.has(l.parent_id) ? l.parent_id : null;
+      const arr = kids.get(pid) ?? [];
+      arr.push(l);
+      kids.set(pid, arr);
+    }
+    for (const arr of kids.values()) arr.sort(compare);
+    const out: { loc: SettingLocation; depth: number; dimmed: boolean }[] = [];
+    const done = new Set<number>();
+    const walk = (pid: number | null, depth: number): void => {
+      for (const c of kids.get(pid) ?? []) {
+        if (done.has(c.id)) continue;
+        done.add(c.id);
+        out.push({ loc: c, depth, dimmed: !inList.has(c.id) });
+        walk(c.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    // Остатки циклов — хвостом, чтобы ничего не потерять.
+    for (const l of visible.values()) {
+      if (done.has(l.id)) continue;
+      let depth = 0;
+      let cur: SettingLocation | undefined = l;
+      const seen = new Set<number>();
+      while (cur && cur.parent_id != null && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        const p = byIdAll.get(cur.parent_id);
+        if (!p) break;
+        depth++;
+        cur = p;
+      }
+      out.push({ loc: l, depth, dimmed: !inList.has(l.id) });
+    }
+    return out;
+  }
+
+  const flatRows = flatList ? flatTreeRows(flatList) : null;
 
   // Auto-expand ancestors of search matches so highlight is visible in tree (when not using flat list)
   useEffect(() => {
@@ -448,18 +509,59 @@ export function LocationTree({ settingId }: Props) {
             paddingRight: flatList.length > 80 ? 4 : undefined,
           }}
         >
-          {flatList.map((l) => (
-            <Link
-              key={l.id}
-              to={`/locations/${l.id}`}
-              className="card row"
-              style={{ justifyContent: "space-between", contentVisibility: flatList.length > 80 ? ("auto" as const) : undefined, containIntrinsicSize: flatList.length > 80 ? "0 48px" : undefined }}
-            >
-              <span className="muted">{highlight(breadcrumb(l), debouncedQuery || kindFilter)}</span>
-              {l.kind && <span className="muted">{highlight(l.kind, debouncedQuery || kindFilter)}</span>}
-            </Link>
-          ))}
-          {flatList.length === 0 && (
+          {(flatRows ?? []).map(({ loc: l, depth, dimmed }) => {
+            const indent = Math.min(depth, 6) * 20;
+            const nameCell = (
+              <span
+                className="muted"
+                style={{
+                  paddingLeft: indent,
+                  opacity: dimmed ? 0.55 : undefined,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {highlight(l.name, debouncedQuery || kindFilter)}
+              </span>
+            );
+            const kindCell = l.kind ? (
+              <span className="muted" style={{ opacity: dimmed ? 0.55 : undefined }}>
+                {highlight(l.kind, debouncedQuery || kindFilter)}
+              </span>
+            ) : null;
+            return selectOnClick ? (
+              <div
+                key={l.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedId(l.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(l.id); } }}
+                className="card row"
+                style={{ justifyContent: "space-between", cursor: "pointer", contentVisibility: flatList.length > 80 ? ("auto" as const) : undefined, containIntrinsicSize: flatList.length > 80 ? "0 48px" : undefined, outline: selectedId === l.id ? "2px solid var(--accent)" : undefined, outlineOffset: -2 }}
+                aria-current={selectedId === l.id ? "true" : undefined}
+              >
+                {nameCell}
+                <span className="row" style={{ gap: 8, alignItems: "center" }}>
+                  {kindCell}
+                  <Link to={`/locations/${l.id}`} onClick={(e) => e.stopPropagation()} title="Открыть профиль локации">
+                    →
+                  </Link>
+                </span>
+              </div>
+            ) : (
+              <Link
+                key={l.id}
+                to={`/locations/${l.id}`}
+                className="card row"
+                style={{ justifyContent: "space-between", contentVisibility: flatList.length > 80 ? ("auto" as const) : undefined, containIntrinsicSize: flatList.length > 80 ? "0 48px" : undefined }}
+              >
+                {nameCell}
+                {kindCell}
+              </Link>
+            );
+          })}
+          {flatList.length === 0 && (q || kindFilterLower || mapFilter || descFilter ? (
             <EmptyState kind="search"
               title="Ничего не найдено"
               hint={`По запросу «${(debouncedQuery || kindFilter || mapFilter || descFilter).trim()}» локаций нет.`}
@@ -476,7 +578,17 @@ export function LocationTree({ settingId }: Props) {
                 </button>
               }
             />
-          )}
+          ) : (
+            <EmptyState
+              title="География пока пуста"
+              hint="Континенты, страны, города — начните с верхнего уровня."
+              action={
+                <button className="primary" onClick={() => setCreating(true)}>
+                  Создать локацию
+                </button>
+              }
+            />
+          ))}
         </div>
       ) : (
           <div

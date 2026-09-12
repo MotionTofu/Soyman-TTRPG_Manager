@@ -39,6 +39,15 @@ interface Props {
   // "В сеттинг" (promote an owned resource up to that setting) so the
   // same file doesn't get re-uploaded into every session that needs it.
   settingId?: number | null;
+  // Master–Detail: показать только выбранные категории (null — все, как
+  // раньше). Навигация сounts — через onStats.
+  visibleCategories?: string[] | null;
+  onStats?: (s: ResourceStats) => void;
+}
+
+export interface ResourceStats {
+  total: number;
+  byCategory: Record<string, number>;
 }
 
 // Shared "Ресурсы" UI for both sessions and settings: modal-based creation,
@@ -56,6 +65,8 @@ export const ResourcesSection = memo(function ResourcesSection({
   resources,
   onChange,
   settingId,
+  visibleCategories,
+  onStats,
 }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [draftFile, setDraftFile] = useState<File | null>(null);
@@ -240,6 +251,19 @@ export const ResourcesSection = memo(function ResourcesSection({
     ...c,
     items: allItems.filter((r) => (r.category ?? "other") === c.key),
   }));
+
+  // Счётчики для левой навигации Master–Detail (итог + по категориям).
+  useEffect(() => {
+    if (!onStats) return;
+    const byCategory: Record<string, number> = {};
+    for (const g of grouped) byCategory[g.key] = g.items.length;
+    onStats({ total: allItems.length, byCategory });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resources, attached, onStats]);
+
+  const visibleGrouped = grouped.filter(
+    (g) => g.items.length > 0 && (!visibleCategories || visibleCategories.includes(g.key))
+  );
   const noun = scope === "session" ? "сессии" : "сеттинга"; // genitive, e.g. "хранилище X"
   const withThis = scope === "session" ? "этой сессией" : "этим сеттингом"; // instrumental
 
@@ -276,8 +300,7 @@ export const ResourcesSection = memo(function ResourcesSection({
 
       {allItems.length === 0 && <p className="muted">Ресурсов пока нет.</p>}
 
-      {grouped
-        .filter((g) => g.items.length > 0)
+      {visibleGrouped
         .map((g) => (
           <details key={g.key} className="stack" style={{ gap: 4 }}>
             <summary className="row chevron-summary" style={{ gap: 10 }}>

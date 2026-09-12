@@ -8,18 +8,15 @@ import { NavIcon } from "./NavIcons";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
+import { artifactClassLabels, groupArtifacts, monogramLetter, type ArtifactGrouping } from "../artifactGroups";
 import type { Artifact, SettingLocation, SettingBeing, SettingCommunity } from "../types";
 
-const classLabels = Object.fromEntries(ITEM_CLASSES.map((c) => [c.value, c.label]));
+const classLabels = artifactClassLabels;
 
 function monogramTone(type: string): number {
   let hash = 0;
   for (const ch of type) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
   return hash;
-}
-
-function monogramLetter(name: string): string {
-  return (name.trim()[0] ?? "?").toUpperCase();
 }
 
 function metaLine(a: Artifact): string {
@@ -30,57 +27,9 @@ function metaLine(a: Artifact): string {
   return parts.join(" · ") || "Предмет";
 }
 
-type ArtifactGrouping = "alpha" | "item_class" | "rarity";
-
-const rarityOrder = Object.fromEntries(MAGIC_ITEM_RARITIES.map((r, i) => [r, i]));
-
-function groupArtifacts(
-  list: Artifact[],
-  grouping: ArtifactGrouping,
-  dir: "asc" | "desc" = "asc"
-): [string, Artifact[]][] {
-  const collator = (a: string, b: string) =>
-    dir === "asc" ? a.localeCompare(b, "ru") : b.localeCompare(a, "ru");
-
-  if (grouping === "alpha") {
-    const map = new Map<string, Artifact[]>();
-    for (const a of list) {
-      const k = monogramLetter(a.name);
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(a);
-    }
-    const keys = [...map.keys()].sort(collator);
-    return keys.map((k) => [k, map.get(k)!]);
-  }
-
-  if (grouping === "rarity") {
-    const map = new Map<string, Artifact[]>();
-    for (const a of list) {
-      const k = a.rarity || "Без редкости";
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(a);
-    }
-    const keys = [...map.keys()].sort((a, b) => {
-      const ai = rarityOrder[a] ?? 999;
-      const bi = rarityOrder[b] ?? 999;
-      return dir === "asc" ? ai - bi : bi - ai;
-    });
-    return keys.map((k) => [k, map.get(k)!]);
-  }
-
-  const map = new Map<string, Artifact[]>();
-  for (const a of list) {
-    const k = classLabels[a.item_class ?? ""] ?? "Без типа";
-    if (!map.has(k)) map.set(k, []);
-    map.get(k)!.push(a);
-  }
-  const keys = [...map.keys()].sort(collator);
-  return keys.map((k) => [k, map.get(k)!]);
-}
-
 /* ─── Edit Modal ─── */
 
-function ArtifactEditModal({
+export function ArtifactEditModal({
   artifact,
   onClose,
   onSaved,
@@ -180,7 +129,7 @@ function ArtifactEditModal({
 
 /* ─── Assign Modal (location + being) ─── */
 
-function ArtifactAssignModal({
+export function ArtifactAssignModal({
   artifact,
   settingId,
   onClose,

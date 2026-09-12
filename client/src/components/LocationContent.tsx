@@ -26,10 +26,13 @@ export function LocationContent({
   locationId,
   items,
   onChange,
+  readOnly = false,
 }: {
   locationId: number;
   items: LocationContentItem[];
   onChange: () => void;
+  /** Режим чтения: список без формы добавления и кнопок удаления. */
+  readOnly?: boolean;
 }) {
   const [kind, setKind] = useState<ContentKind>("secret");
   const [text, setText] = useState("");
@@ -74,33 +77,38 @@ export function LocationContent({
             {rows.map((r) => (
               <div key={r.id} className="row" style={{ gap: 8, alignItems: "flex-start" }}>
                 <span style={{ flex: 1, minWidth: 0 }}>{r.text}</span>
-                <button onClick={() => remove(r.id)} title="Убрать" aria-label={`Убрать: ${r.text.slice(0, 40)}`}>
-                  ✕
-                </button>
+                {!readOnly && (
+                  <button onClick={() => remove(r.id)} title="Убрать" aria-label={`Убрать: ${r.text.slice(0, 40)}`}>
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>
         );
       })}
       {error && <span style={{ color: "var(--status-cancelled)" }}>{error}</span>}
-      <div className="row" style={{ gap: 8 }}>
-        <select value={kind} onChange={(e) => setKind(e.target.value as ContentKind)} disabled={saving} title="Тип">
-          {KINDS.map(({ key, label }) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
-        <input
-          placeholder="Тайник под третьей плитой…"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") add(); }}
-          disabled={saving}
-          style={{ flex: 1, minWidth: 0 }}
-        />
-        <button className="primary" onClick={add} disabled={saving || !text.trim()}>
-          {saving ? "…" : "Добавить"}
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="row" style={{ gap: 8 }}>
+          <select value={kind} onChange={(e) => setKind(e.target.value as ContentKind)} disabled={saving} title="Тип">
+            {KINDS.map(({ key, label }) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+          <input
+            placeholder="Тайник под третьей плитой…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+            disabled={saving}
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          <button className="primary" onClick={add} disabled={saving || !text.trim()}>
+            {saving ? "…" : "Добавить"}
+          </button>
+        </div>
+      )}
+      {readOnly && items.length === 0 && <span className="muted">Пусто</span>}
     </div>
   );
 }

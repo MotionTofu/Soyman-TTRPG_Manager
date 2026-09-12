@@ -2298,7 +2298,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               {styleSlots.map((def, i) => {
                 const takenElsewhere = new Set(chosenStyle.filter((_, j) => j !== i));
                 return (
-                  <div key={`${def.sourceEntryId}:${i}`} className="stack" style={{ gap: "var(--sp-1)" }}>
+                  <div key={`${def.sourceEntryId}:${i}`} className="stack" style={{ gap: "var(--sp-2)" }}>
                     <div className="row">
                       <select
                         value={chosenStyle[i] ?? ""}
@@ -2356,7 +2356,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 const picked = chosenEntries[slot.key] ?? [];
                 const catalog = entryCatalog[slot.group];
                 return (
-                  <fieldset key={slot.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-1)" }}>
+                  <fieldset key={slot.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
                     <legend className="muted wizard-legend">
                       {slot.group}: выбери {slot.total} ({picked.length}/{slot.total})
                     </legend>
@@ -2630,7 +2630,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                     ))}
                   </select>
                 ) : method === "pointbuy" ? (
-                  <div className="row" style={{ gap: "var(--sp-1)" }}>
+                  <div className="row" style={{ gap: "var(--sp-2)" }}>
                     <button type="button" aria-label={`Уменьшить ${label}`} className="wizard-touch" onClick={() => adjustPointBuy(key, -1)}>
                       <NavIcon name="minus" />
                     </button>
@@ -2657,7 +2657,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           </div>
 
           {awardOptions.length > 0 && (
-            <div className="stack" style={{ gap: "var(--sp-1)" }}>
+            <div className="stack" style={{ gap: "var(--sp-2)" }}>
               <span className="muted">
                 {backgroundCustom !== null
                   ? "Прибавка (свой вариант — любые характеристики)"
@@ -2721,11 +2721,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           {skillGroups.map((group) => {
             const picked = chosenIn(group.key);
             return (
-              <fieldset key={group.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-1)" }}>
+              <fieldset key={group.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
                 <legend className="muted wizard-legend">
                   {group.label}: выберите {group.count} ({picked.length}/{group.count})
                 </legend>
-                <div className="stack" style={{ gap: "var(--sp-1)" }}>
+                <div className="stack" style={{ gap: "var(--sp-2)" }}>
                   {/* В списке ключ, на экране — имя из справочника. */}
                   {optionsFor(group)
                     .filter((key) => !grantedSkills.has(key))
@@ -2754,11 +2754,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             </span>
           )}
           {expertiseSlots > 0 && (
-            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-1)" }}>
+            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
               <legend className="muted wizard-legend">
                 Экспертность (умение класса): выберите {expertiseSlots} ({chosenExpertise.length}/{expertiseSlots})
               </legend>
-              <div className="stack" style={{ gap: "var(--sp-1)" }}>
+              <div className="stack" style={{ gap: "var(--sp-2)" }}>
                 {skills.rows.map((r) => (
                   <label key={r.original} className="row">
                     <input
@@ -2805,7 +2805,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             const q = spellSearch.trim().toLowerCase();
             const cands = spellCandidates(group).filter((e) => !q || e.name.toLowerCase().includes(q));
             return (
-              <fieldset key={group.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-1)" }}>
+              <fieldset key={group.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
                 <legend className="muted wizard-legend">
                   {group.label}: выберите {group.count} ({picked.length}/{group.count})
                 </legend>
@@ -2880,7 +2880,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             </select>
           </label>
           {autoLanguages.length > 0 && <span className="muted">От класса: {autoLanguages.join(", ")}</span>}
-          <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-1)" }}>
+          <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
             <legend className="muted wizard-legend">Языки — обычные</legend>
             {commonLangs
               .filter((o) => !autoLanguages.includes(o.name))
@@ -2896,7 +2896,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               ))}
           </fieldset>
           {rareLangs.filter((o) => !autoLanguages.includes(o.name)).length > 0 && (
-            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-1)" }}>
+            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
               <legend className="muted wizard-legend">Языки — редкие, только с разрешения Мастера</legend>
               {rareLangs
                 .filter((o) => !autoLanguages.includes(o.name))
@@ -2913,7 +2913,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             </fieldset>
           )}
           {otherLangs.length > 0 && (
-            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-1)" }}>
+            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
               <legend className="muted wizard-legend">Языки — прочие из справочника</legend>
               {otherLangs.map((o) => (
                 <label key={o.id} className="row">
@@ -2999,13 +2999,13 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           )}
           {startingSets.length > 0 && (
             startingSets.map((set) => (
-              <label key={set.label} className="row" style={{ alignItems: "flex-start", gap: "var(--sp-2)" }}>
+              <label key={set.label} className="row" style={{ alignItems: "flex-start", gap: "var(--sp-4)" }}>
                 <input
                   type="checkbox"
                   checked={setTaken(set.label)}
                   onChange={(e) => setTakenSets({ ...takenSets, [set.label]: e.target.checked })}
                 />
-                <span className="stack" style={{ gap: "var(--sp-1)" }}>
+                <span className="stack" style={{ gap: "var(--sp-2)" }}>
                   <strong>
                     {set.label}
                     {set.gold && ` — ${set.gold} ЗМ`}

@@ -51,6 +51,20 @@ export function addPreviewDockCard(card: PreviewDockCard) {
   }
 }
 
+/** Развернуть карточку в доке — свёрнутость живёт в PreviewDock, он и слушает. */
+export const PREVIEW_DOCK_EXPAND_EVENT = "preview-dock-expand";
+
+/**
+ * Положить карточку наверх дока развёрнутой: клик по месту на пульте
+ * (решения 2026-09-11, §2). Уже лежащая поднимается наверх и разворачивается,
+ * скрытый док показывается — иначе клик за столом ничего бы не сделал.
+ */
+export function openPreviewDockCard(card: PreviewDockCard) {
+  commit([card, ...cards.filter((c) => !(c.type === card.type && c.id === card.id))]);
+  window.dispatchEvent(new CustomEvent(PREVIEW_DOCK_EXPAND_EVENT, { detail: `${card.type}-${card.id}` }));
+  document.body.classList.remove("live-hide-dock");
+}
+
 export function removePreviewDockCard(type: string, id: number) {
   commit(cards.filter((c) => !(c.type === type && c.id === id)));
 }

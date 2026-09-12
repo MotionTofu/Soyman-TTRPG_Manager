@@ -29,6 +29,8 @@ import "../cockpit.css";
 import { sessionLabel } from "../sessionLabel";
 import { loadPultFinishAction } from "../pultPrefs";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
+import { PartyHereStrip } from "../components/PartyHereStrip";
+import { PARTY_PLACE_CHANGED } from "../partyPlaceEvents";
 
 function errorText(e: unknown, fallback: string): string {
   const message = e instanceof Error ? e.message : "";
@@ -52,6 +54,16 @@ export function SessionLivePage() {
   // «перечитайте», не таща состояние пульта через полстраницы.
   const [launches, setLaunches] = useState(0);
   const [union, setUnion] = useState<SessionUnionRow[]>([]);
+
+  // «Мы здесь» из докстанции кладёт место в «Локации» сессии: панели
+  // перечитываются тем же счётчиком, что и после запуска сцены.
+  useEffect(() => {
+    const onPartyPlace = (e: Event) => {
+      if ((e as CustomEvent<{ sessionId: number }>).detail?.sessionId === sessionId) setLaunches((n) => n + 1);
+    };
+    window.addEventListener(PARTY_PLACE_CHANGED, onPartyPlace);
+    return () => window.removeEventListener(PARTY_PLACE_CHANGED, onPartyPlace);
+  }, [sessionId]);
 
   const refresh = useCallback(() => {
     let cancelled = false;
@@ -160,6 +172,10 @@ export function SessionLivePage() {
           <Link to={`/sessions/${sessionId}`}>← К странице сессии</Link>
         </div>
       </div>
+
+      {/* Где партия (решения 2026-09-11, §3): между шапкой и переключателем
+          сцен — на вопрос «где мы» Мастер отвечает, не отводя глаз от пульта. */}
+      <PartyHereStrip sessionId={sessionId} version={launches} />
 
       {/* Порядок вечера сверху вниз: где мы во времени → что запускаем → что
           на экране у игроков → с чем сели играть → чем пользуемся.

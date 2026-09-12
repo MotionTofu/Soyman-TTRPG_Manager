@@ -6,10 +6,10 @@
 .tl {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .tl-toolbar {
-  gap: 8px;
+  gap: var(--sp-4);
   justify-content: space-between;
   flex-wrap: wrap;
 }
@@ -65,8 +65,8 @@
   position: absolute;
   top: 60px;
   height: 24px;
-  padding: 0 6px;
-  border: 1.5px solid var(--ink);
+  padding: 0 var(--sp-3);
+  border: var(--card-border-width, 1px) solid var(--ink);
   background: var(--paper-2);
   color: var(--ink);
   font-family: var(--font-ui);

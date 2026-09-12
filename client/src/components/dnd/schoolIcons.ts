@@ -1,8 +1,7 @@
 /**
- * Значки школ магии: рисованные PNG из `res/SoM` лежат в
- * `client/public/schools/` — сам `res/` в репозиторий не входит
- * (.gitignore), поэтому 8 файлов скопированы в раздачу как есть,
- * с исходными именами и регистром.
+ * Значки школ магии: имена файлов держит реестр `src/rasterAssets.ts`,
+ * там же записано правило растра. Здесь — только сопоставление имени
+ * школы с ключом реестра.
  *
  * Школа заклинания — строка из справочника («Школы магии»), единого
  * перечисления в коде нет. Сопоставление — по корню (нижний регистр,
@@ -10,15 +9,17 @@
  * значка, текст школы в подписи остаётся.
  * Сверено с живой базой (8 записей группы «Школы магии»).
  */
-const SCHOOL_ICONS: { file: string; match: RegExp }[] = [
-  { file: "Abjuration.png", match: /огражд|abjur/ },
-  { file: "conjuration.png", match: /вызов|conj/ },
-  { file: "Divination.png", match: /прориц|divin/ },
-  { file: "Enchantment.png", match: /очаров|enchant/ },
-  { file: "evocation.png", match: /воплощ|evoc/ },
-  { file: "Illusion.png", match: /иллюз|illus/ },
-  { file: "Necromancy.png", match: /некромант|necro/ },
-  { file: "Transmutation.png", match: /преобраз|transmut/ },
+import { rasterAsset } from "../../rasterAssets";
+
+const SCHOOL_ICONS: { key: string; match: RegExp }[] = [
+  { key: "abjuration", match: /огражд|abjur/ },
+  { key: "conjuration", match: /вызов|conj/ },
+  { key: "divination", match: /прориц|divin/ },
+  { key: "enchantment", match: /очаров|enchant/ },
+  { key: "evocation", match: /воплощ|evoc/ },
+  { key: "illusion", match: /иллюз|illus/ },
+  { key: "necromancy", match: /некромант|necro/ },
+  { key: "transmutation", match: /преобраз|transmut/ },
 ];
 
 /** Путь к значку школы по её имени из справочника, null — нет значка. */
@@ -27,5 +28,5 @@ export function schoolIconSrc(school: string | null | undefined): string | null 
   const text = school.toLowerCase().replace(/ё/g, "е").trim();
   if (!text) return null;
   const hit = SCHOOL_ICONS.find((s) => s.match.test(text));
-  return hit ? `/schools/${hit.file}` : null;
+  return hit ? rasterAsset("schools", hit.key) : null;
 }

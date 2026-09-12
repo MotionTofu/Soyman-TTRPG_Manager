@@ -69,6 +69,23 @@ interface Props {
   // Preselects the Сеттинг dropdown in the description's @-mention modal —
   // same convention as MentionTextarea elsewhere.
   defaultSettingId?: number;
+  // Master–Detail: показать только одну секцию таба (инструменты
+  // добавления, исходящие или входящие). Не задано — весь таб целиком,
+  // как раньше (остальные сущности).
+  section?: RelationsSection;
+  // Фильтр тона внутри секции. Не задан — все тона.
+  tone?: RelationTone | null;
+  // Счётчики для навигации: итоги и разбивка по тонам.
+  onStats?: (s: RelationStats) => void;
+}
+
+export type RelationsSection = "add" | "out" | "in";
+
+export interface RelationStats {
+  out: number;
+  in: number;
+  outTones: Partial<Record<RelationTone, number>>;
+  inTones: Partial<Record<RelationTone, number>>;
 }
 
 // Reusable "Отношения" tab for Beings/Characters/Communities: directional,
@@ -77,7 +94,7 @@ interface Props {
 // entity being viewed sees its own declared relations (outgoing) plus
 // whatever others have declared about it (incoming), since those can
 // legitimately disagree.
-export function RelationsTab({ entityType, entityId, entityName, defaultSettingId }: Props) {
+export function RelationsTab({ entityType, entityId, entityName, defaultSettingId, section, tone, onStats }: Props) {
   const [data, setData] = useState<EntityRelationsResponse | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("tone");
   const [relationFilter, setRelationFilter] = useState("");
@@ -108,6 +125,22 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
       .then(setData);
   }
   useEffect(load, [entityType, entityId]);
+
+  // Счётчики для левой навигации Master–Detail (итоги + разбивка по тонам).
+  useEffect(() => {
+    if (!data || !onStats) return;
+    const countTones = (list: EntityRelation[]) => {
+      const tones: Partial<Record<RelationTone, number>> = {};
+      for (const r of list) tones[r.tone] = (tones[r.tone] ?? 0) + 1;
+      return tones;
+    };
+    onStats({
+      out: data.outgoing.length,
+      in: data.incoming.length,
+      outTones: countTones(data.outgoing),
+      inTones: countTones(data.incoming),
+    });
+  }, [data, onStats]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -403,9 +436,16 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   const outgoing = sortRelations(data.outgoing, sortMode);
   const incoming = sortRelations(data.incoming, sortMode);
 
+  const showAdd = !section || section === "add";
+  const showOut = !section || section === "out";
+  const showIn = !section || section === "in";
+  const showList = showOut || showIn;
+
   return (
     <div className="stack">
       {confirmDialog}
+      {showAdd && (
+      <>
       <div className="row" style={{ position: "relative" }}>
         <input
           placeholder="Найти существо, персонажа, фракцию, место или предмет…"
@@ -557,7 +597,10 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
       )}
 
       {resultNote && <p className="muted">{resultNote}</p>}
-
+      </>
+      )}
+      {showList && (
+      <>
       <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span
           style={{
@@ -604,8 +647,8 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
           r.label.toLocaleLowerCase().includes(q) ||
           (r.other_name ?? "").toLocaleLowerCase().includes(q) ||
           RELATION_TONE_LABELS[r.tone].toLocaleLowerCase().includes(q);
-        const fOut = outgoing.filter(matches);
-        const fIn = incoming.filter(matches);
+        const fOut = (tone ? outgoing.filter((r) => r.tone === tone) : outgoing).filter(matches);
+        const fIn = (tone ? incoming.filter((r) => r.tone === tone) : incoming).filter(matches);
         const noMatch = q && fOut.length === 0 && fIn.length === 0;
         const grouped = (list: EntityRelation[]) => {
           if (sortMode !== "tone") return null;
@@ -625,6 +668,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
         return (
           <>
             {noMatch && <p className="muted">Ничего не нашлось по «{relationFilter}».</p>}
+            {showOut && (
             <div className="card stack relation-group">
               <div className="relation-group-header">
                 <span>
@@ -660,7 +704,9 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
                 fOut.map((r) => renderRelation(r, "out"))
               )}
             </div>
+            )}
 
+            {showIn && (
             <div className="card stack relation-group">
               <div className="relation-group-header">
                 <span>
@@ -691,9 +737,12 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
                 fIn.map((r) => renderRelation(r, "in"))
               )}
             </div>
+            )}
           </>
         );
       })()}
+      </>
+      )}
     </div>
   );
 }

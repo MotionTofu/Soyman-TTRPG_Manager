@@ -666,7 +666,7 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                     onChange={(e) => setMiscText(e.target.value)}
                   />
                 </label>
-                <div className="stack" style={{ gap: "var(--sp-1)" }}>
+                <div className="stack" style={{ gap: "var(--sp-2)" }}>
                   <span className="muted">
                     Кость {die != null ? `к${die}` : "—"} + ВЫН {formatModifier(conMod)}
                     {hasTough && " + Крепкий 2"}
@@ -779,7 +779,7 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                 )}
                 {chosenFeatEntry?.description && <EntryBlurb text={chosenFeatEntry.description} />}
                 {isAsi && (
-                  <div className="stack" style={{ gap: "var(--sp-1)" }}>
+                  <div className="stack" style={{ gap: "var(--sp-2)" }}>
                     <span className="muted">+2 одной или +1 двум (потолок 20):</span>
                     <div className="row">
                       <label className="row">

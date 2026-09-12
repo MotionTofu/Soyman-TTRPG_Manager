@@ -41,7 +41,7 @@ export function PosterButtons({
   }
 
   return (
-    <div className="stack" style={{ gap: "var(--sp-1)" }}>
+    <div className="stack" style={{ gap: "var(--sp-2)" }}>
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         <button type="button" onClick={() => void run("png")} disabled={busy !== null}>
           {busy === "png" ? "Собираю…" : "Скачать постер (PNG)"}

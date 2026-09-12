@@ -312,17 +312,19 @@ export function AdventuresTab({
                     ★
                   </button>
                 )}
-                <Link
-                  to={`/adventures/${a.id}${campaignId ? `?campaign=${campaignId}` : ""}`}
-                  className="entity-row-name"
-                  onClick={() => setSelectedId(a.id)}
-                >
-                  {a.name}
-                </Link>
-                <span className="muted">
-                  {!!a.chapter_count && `${a.chapter_count} ${chapterWord(a.chapter_count)} · `}
-                  {a.scene_count} {sceneWord(a.scene_count)}
-                  {a.recommended_level && ` · ${a.recommended_level}`}
+                <span className="adventure-row-main">
+                  <Link
+                    to={`/adventures/${a.id}${campaignId ? `?campaign=${campaignId}` : ""}`}
+                    className="entity-row-name adventure-row-name"
+                    onClick={() => setSelectedId(a.id)}
+                  >
+                    {a.name}
+                  </Link>
+                  <span className="muted adventure-row-meta">
+                    {!!a.chapter_count && `${a.chapter_count} ${chapterWord(a.chapter_count)} · `}
+                    {a.scene_count} {sceneWord(a.scene_count)}
+                    {a.recommended_level && ` · ${a.recommended_level}`}
+                  </span>
                 </span>
                 {a.is_default === 1 && <span className="badge tag">стандартное</span>}
               </AdventureRow>

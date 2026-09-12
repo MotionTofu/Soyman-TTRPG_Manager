@@ -5,7 +5,7 @@
    инверсией: разница должна переживать чёрно-белую печать. */
 
 .session-profile {
-  padding-bottom: 24px;
+  padding-bottom: var(--sp-7);
 }
 .app-content.has-player .session-profile {
   padding-bottom: calc(var(--player-bar-height) + 32px);
@@ -14,7 +14,7 @@
 /* Профиль сцены: нижний запас под оверлей аудиоплеера, иначе конец
    страницы уезжает под фиксированную плашку. */
 .scene-detail {
-  padding-bottom: 24px;
+  padding-bottom: var(--sp-7);
 }
 .app-content.has-player .scene-detail {
   padding-bottom: calc(var(--player-bar-height) + 25px);
@@ -25,13 +25,13 @@
 .sp-header {
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--sp-5);
 }
 
 .sp-h1 {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
   margin: 0;
 }
@@ -61,7 +61,7 @@
 .sp-pencil {
   display: flex;
   align-items: center;
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   border: var(--card-border-width) solid var(--ink);
   border-radius: 0;
   background: var(--paper);
@@ -89,8 +89,8 @@
 .sp-strip__cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 7px 14px;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-5);
   border-right: var(--card-border-width) solid var(--on-surface-muted);
   min-width: 0;
 }
@@ -100,7 +100,7 @@
 .sp-strip__status {
   display: flex;
   align-items: center;
-  padding: 4px 12px;
+  padding: var(--sp-2) var(--sp-5);
   margin-left: auto;
 }
 
@@ -166,7 +166,7 @@
 .sp-deal {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .sp-deal__cell {
   display: flex;
@@ -177,7 +177,7 @@
   overflow: hidden;
 }
 .sp-deal__label {
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: var(--card-border-width) solid var(--surface);
@@ -189,8 +189,8 @@
 .sp-deal__body {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
   min-width: 0;
 }
 /* Рамка и фон принадлежат карточке, а не полю внутри неё: иначе выходит
@@ -261,8 +261,8 @@
 .sp-time__head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: var(--card-border-width) solid var(--surface);
@@ -278,9 +278,9 @@
 }
 .sp-time__body {
   display: flex;
-  gap: 18px;
+  gap: var(--sp-6);
   flex-wrap: wrap;
-  padding: 11px 12px;
+  padding: var(--sp-5) var(--sp-5);
 }
 .sp-time__split {
   background: var(--line);
@@ -290,7 +290,7 @@
 .sp-field {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-2);
   min-width: 0;
 }
 
@@ -302,7 +302,7 @@
   border-radius: 0;
   background: var(--paper-2);
   color: var(--ink);
-  padding: 5px 10px;
+  padding: var(--sp-2) var(--sp-4);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   cursor: pointer;
@@ -366,9 +366,9 @@
 .sp-reveal-toast {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
-  padding: 8px 12px;
+  padding: var(--sp-4) var(--sp-5);
   border: var(--card-border-width) solid var(--ink);
   background: var(--paper);
   font-size: var(--fs-meta);
@@ -378,22 +378,22 @@
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .sp-reveal-toast__close {
   margin-left: auto;
   border: none;
   background: transparent;
   cursor: pointer;
-  padding: 4px;
+  padding: var(--sp-2);
 }
 
 .sp-secrets__head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
-  padding: 7px 12px;
+  padding: var(--sp-3) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: var(--card-border-width) solid var(--surface);
@@ -424,9 +424,9 @@
 .sp-secrets__group-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   width: 100%;
-  padding: 5px 12px;
+  padding: var(--sp-2) var(--sp-5);
   border: none;
   border-radius: 0;
   background: var(--paper-2);
@@ -462,8 +462,8 @@
 .sp-secret {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
   max-width: 100%;
   min-width: 0;
   overflow-wrap: break-word;
@@ -478,7 +478,7 @@
 }
 .sp-secret__content {
   white-space: pre-wrap;
-  margin: 2px 0 0 0;
+  margin: var(--sp-1) 0 0 0;
   font-size: var(--fs-meta);
   color: var(--muted);
   max-width: 100%;
@@ -490,9 +490,9 @@
 .sp-scenes__head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
-  padding: 7px 12px;
+  padding: var(--sp-3) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: var(--card-border-width) solid var(--surface);
@@ -514,7 +514,7 @@
   border-radius: 0;
   background: var(--paper);
   color: var(--ink);
-  padding: 4px 10px;
+  padding: var(--sp-2) var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
@@ -534,16 +534,16 @@
 .sp-tree {
   display: flex;
   flex-direction: column;
-  padding: 10px 14px;
+  padding: var(--sp-4) var(--sp-5);
   border-right: var(--card-border-width) solid var(--line);
   min-width: 0;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 
 .sp-adv {
   border-bottom: var(--card-border-width) solid var(--line);
-  padding-bottom: 5px;
-  margin-bottom: 5px;
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-3);
 }
 .sp-adv:last-child {
   border-bottom: none;
@@ -551,9 +551,9 @@
 .sp-adv__head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   width: 100%;
-  padding: 5px 0;
+  padding: var(--sp-2) 0;
   border: none;
   border-radius: 0;
   background: none;
@@ -593,18 +593,18 @@
 }
 
 .sp-chapter {
-  padding-left: 19px;
+  padding-left: var(--sp-6);
 }
 .sp-chapter__head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: var(--sp-4);
+  padding: var(--sp-2) 0;
 }
 .sp-chapter__name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   flex: 1;
   min-width: 0;
   padding: 0;
@@ -661,14 +661,14 @@
 .sp-scenes-list {
   display: flex;
   flex-direction: column;
-  padding-left: 21px;
+  padding-left: var(--sp-7);
 }
 .sp-scene {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   width: 100%;
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   border: none;
   border-radius: 0;
   background: none;
@@ -700,7 +700,7 @@
   letter-spacing: 0.14em;
   color: var(--muted);
   border: var(--card-border-width) solid var(--line);
-  padding: 1px 5px;
+  padding: var(--sp-0) var(--sp-2);
   white-space: nowrap;
 }
 
@@ -721,7 +721,7 @@
   border-bottom: none;
 }
 .sp-union__head {
-  padding: 5px 10px;
+  padding: var(--sp-2) var(--sp-4);
   border-bottom: var(--card-border-width) solid var(--line);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
@@ -734,7 +734,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 4px 10px 8px;
+  padding: var(--sp-2) var(--sp-4) var(--sp-4);
   font-size: var(--fs-meta);
 }
 .sp-union__body .muted {
@@ -749,10 +749,10 @@
 .sp-subcard {
   border: var(--card-border-width) solid var(--line);
   background: var(--paper);
-  padding: 12px;
+  padding: var(--sp-5);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .card .sp-subcard {
   border: none;
@@ -762,7 +762,7 @@
 .sp-union__row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--sp-4);
 }
 .sp-union__name {
   flex: 1;
@@ -782,7 +782,7 @@
 .sp-prep-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--sp-5);
   align-items: flex-start;
 }
 .sp-prep-row > details.card,
@@ -802,11 +802,11 @@
 .sp-idea-battle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
-  padding: 6px 0 2px;
+  padding: var(--sp-3) 0 var(--sp-1);
   border-top: var(--card-border-width) solid var(--line);
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 .sp-idea-battle__label {
   font-family: var(--font-ui);
@@ -829,14 +829,14 @@
 .sp-inworld-edit {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   min-width: 0;
 }
 .sp-inworld-edit__grid {
   display: grid;
   grid-template-columns: 116px minmax(0, 1fr);
-  gap: 8px 10px;
+  gap: var(--sp-4) var(--sp-5);
   align-items: center;
 }
 .sp-inworld-edit__label {
@@ -858,7 +858,7 @@
 .sp-inworld-edit__check {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   color: var(--muted);
@@ -866,7 +866,7 @@
 }
 .sp-inworld-edit__actions {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
 }
 .sp-inworld-edit__error {
@@ -901,7 +901,7 @@
 .sp-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .sp-stats {
   container-type: inline-size;
@@ -909,8 +909,8 @@
 .sp-stat {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 12px 14px;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-5);
   border: var(--card-border-width) solid var(--line);
   background: var(--paper);
 }
@@ -949,8 +949,8 @@
 .sp-pending {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-5);
   border: var(--card-border-width) solid var(--line);
   color: var(--muted);
   font-size: var(--fs-meta);
@@ -972,7 +972,7 @@
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   justify-content: flex-start !important;
 }
 .session-profile details.card > summary.row {
@@ -1014,7 +1014,7 @@
   background: #8A453E;
   color: #F8F6F1;
   border-bottom-color: #8A453E;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .session-profile details.sp-card--plot > summary::before,
 .scene-detail details.sp-card--plot > summary::before { border-left-color: #F8F6F1; }
@@ -1023,7 +1023,7 @@
   background: #345B75;
   color: #F8F6F1;
   border-bottom-color: #345B75;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .session-profile details.sp-card--location > summary::before,
 .scene-detail details.sp-card--location > summary::before { border-left-color: #F8F6F1; }
@@ -1032,7 +1032,7 @@
   background: #563A62;
   color: #F8F6F1;
   border-bottom-color: #563A62;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .session-profile details.sp-card--enemies > summary::before,
 .scene-detail details.sp-card--enemies > summary::before { border-left-color: #F8F6F1; }
@@ -1041,7 +1041,7 @@
   background: #7E6D27;
   color: #F8F6F1;
   border-bottom-color: #7E6D27;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .session-profile details.sp-card--loot > summary::before,
 .scene-detail details.sp-card--loot > summary::before { border-left-color: #F8F6F1; }
@@ -1062,7 +1062,7 @@ details.sp-card--plot > .drop-zone,
 details.sp-card--location > .drop-zone,
 details.sp-card--enemies > .drop-zone,
 details.sp-card--loot > .drop-zone {
-  margin: 12px;
+  margin: var(--sp-5);
 }
 .session-profile details.sp-card--plot > .drop-zone:empty,
 .session-profile details.sp-card--location > .drop-zone:empty,
@@ -1072,7 +1072,7 @@ details.sp-card--plot > .drop-zone:empty,
 details.sp-card--location > .drop-zone:empty,
 details.sp-card--enemies > .drop-zone:empty,
 details.sp-card--loot > .drop-zone:empty {
-  margin: 12px;
+  margin: var(--sp-5);
 }
 
 /* Вёрстка пульта (.session-live*, body.live-hide-*) переехала целиком в
@@ -1093,7 +1093,7 @@ details.sp-card--plot > summary,
 details.sp-card--location > summary,
 details.sp-card--enemies > summary,
 details.sp-card--loot > summary {
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   margin: 0;
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
@@ -1125,7 +1125,7 @@ details.sp-card--loot .entry-title {
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary {
   background: var(--surface);
   color: var(--on-surface);
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   margin: 0;
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
@@ -1153,7 +1153,7 @@ details.sp-card--loot .entry-title {
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary::marker { content: ""; }
 /* Внутренний отступ у нейтральных панелей пульта — чтобы компендиум/тайны не липли к левому краю */
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > .stack {
-  padding: 12px;
+  padding: var(--sp-5);
 }
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > div > .stack {
   padding: 0;
@@ -1162,19 +1162,19 @@ details.sp-card--loot .entry-title {
 /* sp-revealed — плотный список, а не stack с gap10. Иконка — коорд. отметка */
 .sp-revealed .sp-secrets__body {
   gap: 0;
-  padding: 4px 0;
+  padding: var(--sp-2) 0;
 }
 .sp-revealed .sp-secrets__body .row {
-  padding: 5px 12px;
+  padding: var(--sp-2) var(--sp-5);
   font-size: var(--fs-meta);
   line-height: 1.35;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .sp-revealed .sp-secrets__body .row + .row {
   border-top: var(--card-border-width) solid var(--line);
 }
 .sp-revealed .muted {
-  padding: 5px 12px;
+  padding: var(--sp-2) var(--sp-5);
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
 }
@@ -1183,7 +1183,7 @@ details.sp-card--loot .entry-title {
 .sp-visibility-row {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
@@ -1199,7 +1199,7 @@ details.sp-card--loot .entry-title {
 .sp-nav {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .sp-nav__btn {
   font-family: var(--font-ui);
@@ -1210,7 +1210,7 @@ details.sp-card--loot .entry-title {
   color: var(--muted);
   background: var(--paper);
   border: var(--card-border-width) solid var(--line);
-  padding: 5px 10px;
+  padding: var(--sp-2) var(--sp-4);
   cursor: pointer;
   max-width: 48%;
   overflow: hidden;
@@ -1234,14 +1234,14 @@ details.sp-card--loot .entry-title {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   border-bottom: var(--card-border-width) solid var(--line);
   white-space: nowrap;
 }
 .sp-check-head {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   cursor: pointer;
   color: var(--muted);
 }
@@ -1264,7 +1264,7 @@ details.sp-card--loot .entry-title {
   color: var(--ink);
 }
 .session-attendance-table tbody td {
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   font-size: var(--fs-meta);
   border-bottom: var(--card-border-width) solid var(--line);
   vertical-align: middle;
@@ -1289,7 +1289,7 @@ details.sp-card--loot .entry-title {
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   white-space: nowrap;
 }
 @media (max-width: 700px) {
@@ -1304,7 +1304,7 @@ details.sp-card--loot .entry-title {
 .sp-finish {
   align-self: flex-start;
   border-radius: 0;
-  padding: 9px 16px;
+  padding: var(--sp-4) var(--sp-6);
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }

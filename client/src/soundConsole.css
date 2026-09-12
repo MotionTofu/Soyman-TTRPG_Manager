@@ -47,8 +47,8 @@
 .sc-foot {
   display: flex;
   align-items: center;
-  gap: var(--sp-5);
-  padding: var(--sp-4) 22px;
+  gap: var(--sp-7);
+  padding: var(--sp-6) var(--sp-7);
   backdrop-filter: blur(24px) saturate(140%);
   background: linear-gradient(180deg, color-mix(in srgb, var(--ink) 10%, transparent), color-mix(in srgb, var(--ink) 3%, transparent));
 }
@@ -90,8 +90,8 @@
   border-radius: 0;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 12px;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -113,8 +113,8 @@
   min-height: 0;
   display: grid;
   grid-template-columns: 1.55fr 1fr 1fr 1.06fr;
-  gap: var(--sp-3);
-  padding: var(--sp-4) 22px;
+  gap: var(--sp-5);
+  padding: var(--sp-6) var(--sp-7);
 }
 
 .sc-channel {
@@ -126,8 +126,8 @@
 .sc-channel-head {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 9px 12px;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
   background: linear-gradient(180deg, color-mix(in srgb, var(--ink) 16%, transparent), color-mix(in srgb, var(--ink) 6%, transparent));
   font-family: var(--font-ui);
@@ -147,18 +147,18 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
-  padding: var(--sp-3);
+  gap: var(--sp-5);
+  padding: var(--sp-5);
 }
 
 .sc-pads {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-2);
+  gap: var(--sp-4);
 }
 .sc-pads.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 7px;
+  gap: var(--sp-4);
 }
 
 .sc-pad {
@@ -167,9 +167,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: var(--sp-3);
   height: 74px;
-  padding: 4px;
+  padding: var(--sp-2);
   border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
@@ -233,7 +233,7 @@
 
 .sc-more {
   border-radius: 0;
-  padding: 7px;
+  padding: var(--sp-3);
   border: 1px dashed color-mix(in srgb, var(--ink) 24%, transparent);
   background: transparent;
   color: var(--muted);
@@ -250,8 +250,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-3);
-  padding-top: var(--sp-3);
+  gap: var(--sp-5);
+  padding-top: var(--sp-5);
   border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
 }
 .sc-knob {
@@ -342,8 +342,8 @@
 .sc-duck {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 7px 9px;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
   border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   color: var(--muted);
@@ -361,10 +361,10 @@
 .sc-silence {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   flex: 0 0 auto;
   border-radius: 0;
-  padding: 13px 24px;
+  padding: var(--sp-5) var(--sp-7);
   border: 1px solid color-mix(in srgb, var(--accent) 85%, transparent);
   background: color-mix(in srgb, var(--accent) 72%, transparent);
   color: var(--accent-text, var(--paper));
@@ -410,16 +410,16 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-2);
   border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
-  padding-top: var(--sp-3);
+  padding-top: var(--sp-5);
 }
 .sc-track-row {
   display: flex;
   align-items: baseline;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
   width: 100%;
-  padding: 5px 6px;
+  padding: var(--sp-2) var(--sp-3);
   border: none;
   border-radius: 0;
   background: transparent;
@@ -477,8 +477,8 @@
 .sc-warn {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  padding: 8px 22px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-7);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
   background: color-mix(in srgb, var(--accent) 13%, transparent);
   backdrop-filter: blur(14px);
@@ -490,7 +490,7 @@
 .audio-player-bar .sc-bar-channels {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   flex: 0 0 auto;
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
@@ -498,7 +498,7 @@
 .audio-player-bar .sc-bar-channel {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--sp-3);
 }
 .audio-player-bar .sc-bar-channel.off {
   opacity: 0.45;

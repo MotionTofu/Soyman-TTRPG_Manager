@@ -144,7 +144,7 @@ export function InvitationsPage() {
   };
 
   return (
-    <div className="stack" style={{ position: "relative", gap: "var(--sp-5)", paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+    <div className="stack" style={{ position: "relative", gap: "var(--sp-7)", paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="invite" compact>Приглашения</SectionHeading>
@@ -178,7 +178,7 @@ export function InvitationsPage() {
             </button>
           )}
         </div>
-        <div className="stack" style={{ padding: 14, gap: "var(--sp-3)" }}>
+        <div className="stack" style={{ padding: 14, gap: "var(--sp-5)" }}>
           <p className="muted" style={{ margin: 0, maxWidth: "62ch" }}>
             Скопируйте адрес и отправьте игроку — он откроет его в браузере телефона/ПК или вставит в
             поле «Адрес сервера» в мобильном приложении, вместе с логином и паролем, которые вы ему

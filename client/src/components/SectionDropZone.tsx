@@ -64,6 +64,10 @@ interface Props {
   // Показывать ли кнопку «в трекер инициативы» у существ. Только на пульте:
   // на странице сессии до игры трекера ещё нет.
   toInitiative?: boolean;
+  // Свой обработчик щелчка по имени: true — обработан, превью не открывать.
+  // Пульт кладёт место в докстанцию (решения 2026-09-11, §2). Ссылка должна
+  // быть стабильной — компонент мемоизирован.
+  onEntityClick?: (type: string, id: number, event: React.MouseEvent) => boolean;
 }
 
 // Memoized — see ObstacleDropZone's comment. acceptTypes/mentionTypes are
@@ -76,6 +80,7 @@ export const SectionDropZone = memo(function SectionDropZone({
   section,
   acceptTypes,
   placeholder,
+  onEntityClick,
   mentionText,
   mentionTypes,
   origin,
@@ -268,7 +273,10 @@ export const SectionDropZone = memo(function SectionDropZone({
               {DETAIL_ROUTES[entry.type] ? (
                 <button
                   type="button"
-                  onClick={() => setPreview({ type: entry.type, id: entry.id })}
+                  onClick={(e) => {
+                    if (onEntityClick?.(entry.type, entry.id, e)) return;
+                    setPreview({ type: entry.type, id: entry.id });
+                  }}
                   style={{
                     fontWeight: 600,
                     background: "none",

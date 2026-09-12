@@ -79,7 +79,15 @@
   --app-search-width: 320px;
   --app-dock-width: 320px;
   --player-bar-height: 52px;
+  /* Толщина обводки — пара на поверхность: обычная и усиленная. В самом
+     приложении усиления толщиной нет, глубину даёт инверсия и обводка
+     (инвариант §1.2), поэтому обе ступени равны 1px. Поверхность, которой
+     тени запрещены, а глубина нужна, переопределяет пару у себя —
+     см. `.canvas-page` в canvas.css и `.sb-scope` в statblock.css.
+     Решение владельца 2026-09-12: замкнутость — правило, состав — дело
+     поверхности. Раньше те же толщины лежали россыпью в 41 месте. */
   --card-border-width: 1px;
+  --card-border-width-strong: 1px;
   --card-clip: none;
   --card-band-bg: var(--paper-2);
   --card-band-image: repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px);
@@ -145,14 +153,27 @@
   --fs-stat: clamp(24px, 3vw, 34px);
 
   /* Spacing scale (§6.2) */
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 24px;
-  --sp-6: 32px;
-  --sp-7: 48px;
-  --sp-8: 64px;
+  /* Шкала шага. Пересобрана по замеру 2026-09-12 (решение владельца), а не
+     взята из документа: прежние восемь ступеней 4/8/12/16/24/32/48/64 писались
+     до реализации и не описывали приложение. В коде самое частое значение —
+     6px (240 мест), и его в шкале не было; 2px (129) и 10px (137) тоже.
+     Поэтому ступеней десять: они покрывают массу, а редкие промежутки
+     (1, 3, 5, 7, 10, 14) расходятся по соседям.
+     Замкнутость — правило, состав — отделка: тот же порядок, что у шкалы
+     кегля, которую так же пересобрали по замеру, а не по спору. */
+  /* Нулевая ступень — волосок: отступ «чтобы не слиплось», 45 мест.
+     Ниже него в приложении ничего нет. */
+  --sp-0: 1px;
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 24px;
+  --sp-8: 32px;
+  --sp-9: 48px;
+  --sp-10: 64px;
 
   /* Motion (§9) — everything short and hard-edged */
   --ease: cubic-bezier(.2, .8, .2, 1);
@@ -236,8 +257,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 32px 24px;
+  gap: var(--sp-5);
+  padding: var(--sp-8) var(--sp-7);
   text-align: center;
   animation: soy-loading-in 0.45s ease-out 0.4s forwards;
   opacity: 0;
@@ -246,7 +267,7 @@
 .soy-loading--full {
   min-height: 100%;
   justify-content: center;
-  padding: 48px 24px;
+  padding: var(--sp-9) var(--sp-7);
 }
 
 .soy-loading p {
@@ -353,7 +374,7 @@ button {
   border: var(--card-border-width, 1px) solid var(--line);
   color: var(--text-bright);
   border-radius: 0;
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -377,7 +398,7 @@ button.danger:not(.comp-mini) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--sp-3);
   background: var(--danger-bg);
   border-color: var(--danger-bg);
   color: var(--danger-text);
@@ -395,7 +416,7 @@ input, select, textarea {
   background: var(--paper);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
 }
 
 /* Type voices (design doc §4.1) — Display for h1/h2, narrow UI grotesk for
@@ -408,7 +429,7 @@ input, select, textarea {
    button.primary, and the explicit text-transform:uppercase rules on
    label-only classes like .badge/.tabs/.player-section-header). */
 h1, h2 {
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--sp-4) 0;
   font-family: var(--font-display);
   letter-spacing: -0.01em;
   line-height: .92;
@@ -416,7 +437,7 @@ h1, h2 {
 h1 { font-size: var(--fs-h1); }
 h2 { font-size: var(--fs-h2); }
 h3, h4 {
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--sp-4) 0;
   font-family: var(--font-ui);
   font-weight: 600;
   line-height: 1.15;
@@ -430,7 +451,7 @@ h4 { font-size: var(--fs-h3); }
   border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
   clip-path: var(--card-clip);
-  padding: 14px;
+  padding: var(--sp-5);
 }
 /* A card nested inside another card inherits the parent's frame instead of
     drawing a second border/background/padding box — one frame per region,
@@ -447,7 +468,7 @@ h4 { font-size: var(--fs-h3); }
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
-  padding: 14px;
+  padding: var(--sp-5);
   clip-path: none;
 }
 /* Исключение Обзора кампании: блоки Продакшен/Препродакшен внутри details.card
@@ -457,7 +478,7 @@ h4 { font-size: var(--fs-h3); }
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
-  padding: 14px;
+  padding: var(--sp-5);
   clip-path: none;
 }
 /* Исключение Обзора сеттинга — плитки Кампаний/Персонажей и дерево Географии.
@@ -466,7 +487,7 @@ h4 { font-size: var(--fs-h3); }
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
-  padding: 14px;
+  padding: var(--sp-5);
   clip-path: none;
 }
 .geography-tree .card .card,
@@ -474,21 +495,21 @@ h4 { font-size: var(--fs-h3); }
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
-  padding: 14px;
+  padding: var(--sp-5);
   clip-path: none;
 }
 /* Ритм Обзора: внешний gap щедрый (§1.9), внутренние compact. Перебивает
     глобальный .stack{10px} только на первом уровне Обзора. */
 .campaign-overview {
-  gap: var(--sp-5);
+  gap: var(--sp-7);
 }
 .setting-overview {
-  gap: var(--sp-5);
+  gap: var(--sp-7);
 }
 .overview-two-col {
   display: flex;
-  gap: 16px;
-  margin-top: 8px;
+  gap: var(--sp-6);
+  margin-top: var(--sp-4);
 }
 .overview-two-col__left,
 .overview-two-col__right {
@@ -496,15 +517,15 @@ h4 { font-size: var(--fs-h3); }
   min-width: 0;
 }
 .geography-tree {
-  gap: var(--sp-5);
+  gap: var(--sp-7);
 }
 /* Обитатели локации: внешний gap щедрый (§1.9), как у Обзоров/Географии. D-P0-3 */
 .inhabitants-tab {
-  gap: var(--sp-5);
+  gap: var(--sp-7);
 }
 .inhabitants-tab .entity-group > .entity-row-list {
-  margin-left: 12px;
-  padding-left: 12px;
+  margin-left: var(--sp-5);
+  padding-left: var(--sp-5);
   border-left: 1px solid var(--line);
 }
 /* Плашка-инверсия для шапки группы Обитателей — §1.4, как .geography-node-header (D-P0-2) */
@@ -512,9 +533,9 @@ h4 { font-size: var(--fs-h3); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: 1px solid var(--line);
@@ -568,7 +589,7 @@ h4 { font-size: var(--fs-h3); }
 @media (pointer: coarse) {
   .inhabitants-tab .entity-row-actions button,
   .inhabitants-tab .entity-row-actions a {
-    padding: 8px 10px;
+    padding: var(--sp-4) var(--sp-4);
     min-height: 44px;
   }
 }
@@ -584,7 +605,7 @@ h4 { font-size: var(--fs-h3); }
 .inhabitants-drop {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
   max-width: 62ch;
 }
@@ -593,7 +614,7 @@ h4 { font-size: var(--fs-h3); }
 }
 /* Чекбокс вложенных — D2-P1-2: все стили через класс, без инлайна */
 .inhabitants-nested-toggle {
-  gap: 6px;
+  gap: var(--sp-3);
   align-items: center;
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
@@ -609,7 +630,7 @@ h4 { font-size: var(--fs-h3); }
   background: transparent;
   border: 1px solid var(--line);
   color: var(--ink);
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -619,19 +640,19 @@ h4 { font-size: var(--fs-h3); }
 }
 /* Здоровье: внешний gap щедрый (§1.9), как у Обзоров. D-P1-1 / U-P0-2 */
 .health-page {
-  gap: var(--sp-5);
+  gap: var(--sp-7);
 }
 .health-group {
   border: 1px solid var(--line);
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
 .health-group--pad12 {
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
 }
 .health-value {
   font-family: var(--font-mono);
@@ -649,7 +670,7 @@ h4 { font-size: var(--fs-h3); }
 .health-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
   justify-content: space-between;
 }
@@ -675,10 +696,10 @@ h4 { font-size: var(--fs-h3); }
 .health-section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
-  margin: -14px -14px 10px;
-  padding: 8px 12px;
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: 1px solid var(--line);
@@ -720,8 +741,8 @@ h4 { font-size: var(--fs-h3); }
 }
 .health-hint {
   border-left: 3px solid var(--accent);
-  padding: 6px 10px;
-  margin: 4px 0;
+  padding: var(--sp-3) var(--sp-4);
+  margin: var(--sp-2) 0;
   background: var(--surface);
   border-radius: 0 4px 4px 0;
   font-size: var(--fs-meta);
@@ -744,14 +765,14 @@ h4 { font-size: var(--fs-h3); }
 }
 .dead-uid-modal__head {
   margin: 0;
-  padding: 10px 14px;
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
   flex-shrink: 0;
 }
 .dead-uid-modal__title {
@@ -770,12 +791,12 @@ h4 { font-size: var(--fs-h3); }
   letter-spacing: 0.04em;
   text-transform: none;
   color: var(--on-surface-muted);
-  margin-left: 8px;
+  margin-left: var(--sp-4);
   white-space: nowrap;
 }
 .dead-uid-modal__hint {
   margin: 0;
-  padding: 8px 14px;
+  padding: var(--sp-4) var(--sp-5);
   font-family: var(--font-body);
   font-size: var(--fs-meta);
   line-height: 1.35;
@@ -785,11 +806,11 @@ h4 { font-size: var(--fs-h3); }
   flex-shrink: 0;
 }
 .dead-uid-modal__filter {
-  padding: 8px 14px;
+  padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--line);
   background: var(--paper-2);
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
   flex-shrink: 0;
 }
@@ -798,7 +819,7 @@ h4 { font-size: var(--fs-h3); }
   min-width: 0;
   font-family: var(--font-body);
   font-size: var(--fs-meta);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink);
@@ -813,16 +834,16 @@ h4 { font-size: var(--fs-h3); }
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 14px;
+  padding: var(--sp-5) var(--sp-5);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-5);
   background: var(--paper-2);
 }
 .dead-uid-group__head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
 }
 .dead-uid-group__type {
@@ -859,7 +880,7 @@ h4 { font-size: var(--fs-h3); }
   line-height: 1.4;
 }
 .dead-uid-group__samples a { color: var(--accent); }
-.dead-uid-group__controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dead-uid-group__controls { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
 .dead-uid-group__label-cap {
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
@@ -874,18 +895,18 @@ h4 { font-size: var(--fs-h3); }
   min-width: 0;
   font-family: var(--font-body);
   font-size: var(--fs-meta);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink);
   text-overflow: ellipsis;
 }
 .dead-uid-group__select option[value="__strip"] { color: var(--danger, #c0392b); }
-.dead-uid-tier { display: inline-flex; align-items: center; gap: 4px; }
+.dead-uid-tier { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .dead-uid-tier__badge {
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
-  padding: 1px 5px;
+  padding: var(--sp-0) var(--sp-2);
   border: 1px solid var(--line);
   line-height: 1.2;
 }
@@ -895,25 +916,25 @@ h4 { font-size: var(--fs-h3); }
 .dead-uid-modal__foot {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
-  padding: 10px 14px;
+  padding: var(--sp-4) var(--sp-5);
   border-top: 1px solid var(--line);
   background: var(--paper-2);
   flex-shrink: 0;
 }
 .dead-uid-search {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
   align-items: center;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 .dead-uid-search input {
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-body);
   font-size: var(--fs-meta);
-  padding: 5px 7px;
+  padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink);
@@ -924,7 +945,7 @@ h4 { font-size: var(--fs-h3); }
   color: var(--muted);
   background: var(--bg-elevated);
   border: 1px solid var(--line);
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   word-break: break-all;
 }
 @media (max-width: 520px) {
@@ -951,7 +972,7 @@ h4 { font-size: var(--fs-h3); }
 }
 .orphan-browser__head,
 .orphan-browser__foot {
-  padding: 10px 14px;
+  padding: var(--sp-4) var(--sp-5);
   flex-shrink: 0;
 }
 .orphan-browser__head {
@@ -961,18 +982,18 @@ h4 { font-size: var(--fs-h3); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .orphan-browser__foot {
   border-top: 1px solid var(--line);
   background: var(--paper-2);
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
 }
 .orphan-browser__body {
-  padding: 10px 14px;
+  padding: var(--sp-4) var(--sp-5);
   overflow-y: auto;
   min-height: 0;
 }
@@ -988,9 +1009,9 @@ h4 { font-size: var(--fs-h3); }
 }
 .orphan-attach-wizard {
   display: flex;
-  gap: 16px;
+  gap: var(--sp-6);
   flex-wrap: wrap;
-  padding: 14px;
+  padding: var(--sp-5);
   overflow-y: auto;
   min-height: 0;
 }
@@ -1015,7 +1036,7 @@ h4 { font-size: var(--fs-h3); }
 /* Для игроков: тот же приём §1.9 — внешний gap 24px, внутренние .card .card
    не схлопываются (иначе ArticleCard без рамки). R2-CRIT-0 / D-P0-1. */
 .campaign-player-overview {
-  gap: var(--sp-5);
+  gap: var(--sp-7);
   display: flex;
   flex-direction: column;
 }
@@ -1023,7 +1044,7 @@ h4 { font-size: var(--fs-h3); }
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
-  padding: 14px;
+  padding: var(--sp-5);
   clip-path: none;
 }
 .campaign-player-overview .card .card .card {
@@ -1037,9 +1058,9 @@ h4 { font-size: var(--fs-h3); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin: -14px -14px 10px;
-  padding: 8px 12px;
+  gap: var(--sp-4);
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: 1px solid var(--line);
@@ -1062,11 +1083,11 @@ h4 { font-size: var(--fs-h3); }
 .geography-children {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
-  padding-left: 12px;
+  gap: var(--sp-5);
+  margin-top: var(--sp-5);
+  padding-left: var(--sp-5);
   border-left: 1px solid var(--line);
-  margin-left: 4px;
+  margin-left: var(--sp-2);
 }
 /* Шапка узла географии — плашка-инверсия §1.4 (D-P0-3).
    Тёмная полоса внутри светлой карточки, а не жирный текст на бумаге. */
@@ -1074,9 +1095,9 @@ h4 { font-size: var(--fs-h3); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin: -14px -14px 10px;
-  padding: 8px 12px;
+  gap: var(--sp-4);
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: 1px solid var(--line);
@@ -1111,7 +1132,7 @@ h4 { font-size: var(--fs-h3); }
 .geography-node-meta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .geography-node-count {
   font-family: var(--font-mono);
@@ -1125,10 +1146,10 @@ h4 { font-size: var(--fs-h3); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: var(--sp-2);
   height: 24px;
   min-width: 24px;
-  padding: 0 8px;
+  padding: 0 var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -1159,12 +1180,12 @@ h4 { font-size: var(--fs-h3); }
    перебивается в токены под скоупом .geography-root. */
 .geography-root__toolbar {
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
 }
 .geography-root__stats {
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--sp-5);
   font-size: var(--fs-meta);
   font-family: var(--font-mono);
 }
@@ -1173,7 +1194,7 @@ h4 { font-size: var(--fs-h3); }
 }
 .geography-root__debt-btn {
   font-size: var(--fs-meta);
-  padding: 2px 6px;
+  padding: var(--sp-1) var(--sp-3);
 }
 .geography-root__hint {
   font-size: var(--fs-meta);
@@ -1181,10 +1202,10 @@ h4 { font-size: var(--fs-h3); }
 .geography-root__undo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
-  padding: 8px 12px;
+  padding: var(--sp-4) var(--sp-5);
   font-size: var(--fs-meta);
 }
 .geography-root__canvas {
@@ -1197,9 +1218,9 @@ h4 { font-size: var(--fs-h3); }
 .geography-root-node__header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   margin: 0;
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: var(--card-border-width) solid var(--line);
@@ -1231,7 +1252,7 @@ h4 { font-size: var(--fs-h3); }
   justify-content: center;
   min-width: 32px;
   height: 32px;
-  padding: 0 6px;
+  padding: 0 var(--sp-3);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   line-height: 1;
@@ -1254,8 +1275,8 @@ h4 { font-size: var(--fs-h3); }
 .geography-root-node__meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
   font-size: var(--fs-meta);
 }
 .geography-root-node__kind {
@@ -1271,7 +1292,7 @@ h4 { font-size: var(--fs-h3); }
 .geography-root-node__map {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   font-family: var(--font-mono);
   color: var(--muted);
   white-space: nowrap;
@@ -1291,11 +1312,11 @@ h4 { font-size: var(--fs-h3); }
   white-space: nowrap;
 }
 .geography-root__stepper {
-  gap: 4px;
+  gap: var(--sp-2);
   align-items: center;
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
-  padding: 2px 4px 2px 8px;
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-4);
 }
 .geography-root__stepper-name {
   font-size: var(--fs-meta);
@@ -1320,7 +1341,7 @@ h4 { font-size: var(--fs-h3); }
 .geography-root__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   border: var(--card-border-width) solid var(--line);
   border-radius: 0;
   background: transparent;
@@ -1330,7 +1351,7 @@ h4 { font-size: var(--fs-h3); }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1360,7 +1381,7 @@ h4 { font-size: var(--fs-h3); }
 /* Колонки Миллера: один путь — братья | дети | внуки. */
 .geography-miller__toolbar {
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
 }
 .geography-miller__target {
@@ -1375,10 +1396,10 @@ h4 { font-size: var(--fs-h3); }
 .miller-roots {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: nowrap;
   min-width: 0;
-  padding: 2px 0;
+  padding: var(--sp-1) 0;
 }
 .miller-roots.drag-over {
   outline: 2px dashed var(--accent);
@@ -1390,7 +1411,7 @@ h4 { font-size: var(--fs-h3); }
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--muted);
-  margin-right: 4px;
+  margin-right: var(--sp-2);
 }
 .miller-chip .nav-icon {
   width: 13px;
@@ -1412,9 +1433,9 @@ h4 { font-size: var(--fs-h3); }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 14px;
+  gap: var(--sp-2) var(--sp-6);
   min-width: 0;
-  padding: 2px 0;
+  padding: var(--sp-1) 0;
 }
 .miller-root__thumb {
   width: 72px;
@@ -1429,7 +1450,7 @@ h4 { font-size: var(--fs-h3); }
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .miller-root__title {
   align-self: flex-start;
@@ -1465,7 +1486,7 @@ h4 { font-size: var(--fs-h3); }
   background: transparent;
   color: var(--ink);
   border-radius: 999px;
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   font-size: var(--fs-meta);
   cursor: pointer;
   max-width: 100%;
@@ -1487,14 +1508,14 @@ h4 { font-size: var(--fs-h3); }
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
   font-size: var(--fs-meta);
 }
 .miller-crumb {
   background: none;
   border: none;
-  padding: 2px 4px;
+  padding: var(--sp-1) var(--sp-2);
   color: var(--muted);
   cursor: pointer;
   font-size: var(--fs-meta);
@@ -1513,7 +1534,7 @@ button.miller-crumb:hover {
 /* Рабочая область: колонки слева, карточка места справа вне аккордеона. */
 .miller-work {
   display: flex;
-  gap: 20px;
+  gap: var(--sp-7);
   align-items: stretch;
   min-height: 0;
 }
@@ -1524,10 +1545,10 @@ button.miller-crumb:hover {
   flex: 1;
   min-width: 0;
   display: flex;
-  gap: 20px;
+  gap: var(--sp-7);
   overflow-x: auto;
   align-items: stretch;
-  padding-bottom: 4px;
+  padding-bottom: var(--sp-2);
 }
 /* Колонки без тяжёлых рамок: воздух по умолчанию, подложка — только у активной. */
 .miller-col {
@@ -1540,7 +1561,7 @@ button.miller-crumb:hover {
   flex-direction: column;
   max-height: 60vh;
   overflow: hidden;
-  padding-left: 12px;
+  padding-left: var(--sp-5);
 }
 .miller-col:first-child {
   border-left: none;
@@ -1549,19 +1570,19 @@ button.miller-crumb:hover {
 .miller-col.is-active-col {
   background: var(--paper-2);
   border-left: 1px solid var(--line);
-  padding: 0 10px 4px 12px;
+  padding: 0 var(--sp-4) var(--sp-2) var(--sp-5);
 }
 .miller-col:first-child.is-active-col {
   border-left: none;
-  padding-left: 10px;
+  padding-left: var(--sp-4);
 }
 .miller-col__title {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
   width: 100%;
-  padding: 6px 2px;
+  padding: var(--sp-3) var(--sp-1);
   background: none;
   color: var(--muted);
   border: none;
@@ -1594,8 +1615,8 @@ button.miller-crumb:hover {
   writing-mode: vertical-rl;
   border-bottom: none;
   border-left: none;
-  padding: 10px 6px;
-  gap: 6px;
+  padding: var(--sp-4) var(--sp-3);
+  gap: var(--sp-3);
 }
 .miller-col__count {
   font-family: var(--font-mono);
@@ -1606,20 +1627,20 @@ button.miller-crumb:hover {
 }
 .miller-col__body {
   overflow-y: auto;
-  padding: 2px;
+  padding: var(--sp-1);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .miller-col__empty {
   font-size: var(--fs-meta);
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
 }
 /* Карточка проводника: глиф + имя + бейдж типа, рамка — только у выбранной. */
 .miller-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   text-align: left;
   border: none;
@@ -1627,7 +1648,7 @@ button.miller-crumb:hover {
   border-radius: 0;
   background: transparent;
   color: var(--ink);
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   cursor: pointer;
   font-size: var(--fs-meta);
 }
@@ -1659,7 +1680,7 @@ button.miller-crumb:hover {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .miller-item__name {
   overflow: hidden;
@@ -1694,7 +1715,7 @@ button.miller-crumb:hover {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted);
-  padding: 10px 10px 0;
+  padding: var(--sp-4) var(--sp-4) 0;
 }
 /* Карточка места в Географии: постоянная ширина справа. */
 .miller-card {
@@ -1725,13 +1746,13 @@ button.miller-crumb:hover {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 14px 16px 16px;
+  gap: var(--sp-6);
+  padding: var(--sp-5) var(--sp-6) var(--sp-6);
 }
 .place-card__hero {
   display: block;
   width: calc(100% + 32px);
-  margin: -14px -16px 0;
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-6)) 0;
   aspect-ratio: 16 / 9;
   object-fit: cover;
   background: var(--paper-2);
@@ -1740,12 +1761,12 @@ button.miller-crumb:hover {
 .place-card__head {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .place-card__badge {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -1770,7 +1791,7 @@ button.miller-crumb:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 5px;
+  gap: var(--sp-1) var(--sp-3);
   font-size: var(--fs-meta);
   color: var(--muted);
 }
@@ -1809,13 +1830,13 @@ button.miller-crumb:hover {
 .place-card__sec {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .place-card__sech {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 5px;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-2);
   border-bottom: var(--card-border-width) solid var(--line);
 }
 .place-card__title {
@@ -1835,7 +1856,7 @@ button.miller-crumb:hover {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   background: none;
   border: none;
   padding: 0;
@@ -1853,7 +1874,7 @@ button.miller-crumb:hover {
 .place-card__row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-4);
   min-width: 0;
   font-size: var(--fs-meta);
   line-height: 1.35;
@@ -1908,7 +1929,7 @@ button.place-card__row-name {
 .place-card__form {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .place-card__form input {
   flex: 1;
@@ -1916,8 +1937,8 @@ button.place-card__row-name {
 }
 .place-card__quick {
   display: flex;
-  gap: 16px;
-  padding-top: 10px;
+  gap: var(--sp-6);
+  padding-top: var(--sp-4);
   border-top: var(--card-border-width) solid var(--line);
 }
 .place-card__quick .place-card__add {
@@ -1926,8 +1947,8 @@ button.place-card__row-name {
 .place-card__foot {
   flex: none;
   display: flex;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6);
   border-top: var(--card-border-width) solid var(--line);
 }
 .place-card__open {
@@ -1935,8 +1956,8 @@ button.place-card__row-name {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   font-weight: 700;
@@ -1953,7 +1974,297 @@ button.place-card__row-name {
 .place-card__foot button {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
+}
+.place-card__end {
+  margin-left: auto;
+  padding-left: var(--sp-4);
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  white-space: nowrap;
+}
+.place-card__time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+/* Удаление строки — на наведении, чтобы не шуметь в каждой строке; на
+   сенсорном экране наведения нет, там крестик виден всегда. */
+.place-card__row-del {
+  flex: none;
+  align-self: center;
+  opacity: 0;
+}
+.place-card__end + .place-card__row-del {
+  margin-left: 0;
+}
+.place-card__row:not(:has(.place-card__end)) .place-card__row-del {
+  margin-left: auto;
+}
+.place-card__row:hover .place-card__row-del,
+.place-card__row:focus-within .place-card__row-del {
+  opacity: 1;
+}
+@media (hover: none) {
+  .place-card__row-del {
+    opacity: 1;
+  }
+}
+/* Форма нового выхода (решения 2026-09-11, §4). */
+.exit-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.exit-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.exit-form__input {
+  width: 100%;
+  min-width: 0;
+}
+.exit-form__options {
+  display: flex;
+  flex-direction: column;
+  border: var(--card-border-width) solid var(--line);
+  border-top: none;
+  background: var(--paper-2);
+}
+.exit-form__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  background: none;
+  border: none;
+  color: var(--ink);
+  text-align: left;
+  white-space: normal;
+}
+.exit-form__option.is-active,
+.exit-form__option:hover {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+.exit-form__option-name {
+  font-weight: 600;
+}
+.exit-form__option-path {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.exit-form__option.is-active .exit-form__option-path,
+.exit-form__option:hover .exit-form__option-path {
+  color: var(--on-surface-muted);
+}
+.exit-form__picked {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-2);
+}
+.exit-form__picked .nav-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+.exit-form__picked-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.exit-form__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.exit-form__chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: var(--sp-1) var(--sp-4);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-meta);
+}
+.exit-form__chip.is-active {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--ink);
+}
+.exit-form__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+}
+.exit-form__flags label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-meta);
+}
+.exit-form__actions {
+  display: flex;
+  gap: var(--sp-4);
+}
+/* «Что здесь было»: подзаголовки групп и дата сессии в строке. */
+.place-card__sub {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-2);
+  padding-top: var(--sp-1);
+}
+.place-card__date {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+/* Строка запускавшейся сцены: подпись и «пройдена» уходят на вторую строку,
+   если в ширину карточки не влезают. */
+.place-card__row--wrap {
+  flex-wrap: wrap;
+  row-gap: var(--sp-1);
+}
+.place-card__end .comp-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+/* «Партия здесь» (решения 2026-09-11, §3): флажок в строке проводника и
+   плашка в карточке. */
+.miller-item__party {
+  flex: none;
+  display: inline-flex;
+  color: var(--accent);
+}
+.miller-item__party .nav-icon {
+  width: 13px;
+  height: 13px;
+}
+.place-card__party {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--accent-soft);
+  font-size: var(--fs-meta);
+}
+.place-card__party .nav-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+/* Карточка места в докстанции пульта: заголовок — плашка дока, отступы
+   даёт сама карточка дока. */
+.place-card--dock .place-card__scroll {
+  padding: var(--sp-4) 0 0;
+  gap: var(--sp-5);
+  overflow: visible;
+}
+.place-card__plate {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  cursor: pointer;
+}
+.place-card__plate-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.place-card__plate .nav-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+.place-card--dock .place-card__foot {
+  align-items: center;
+  margin-top: var(--sp-5);
+  padding: var(--sp-4) 0 0;
+}
+.place-card--dock .place-card__foot button.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1;
+  justify-content: center;
+}
+.place-card__open-link {
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+}
+/* Строка «Партия здесь» на пульте: между шапкой и переключателем сцен. */
+.party-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--surface);
+  color: var(--on-surface);
+  border: var(--card-border-width) solid var(--line);
+}
+.party-strip > .nav-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+.party-strip__label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--on-surface-muted);
+}
+.party-strip__path {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+  color: var(--on-surface-muted);
+}
+.party-strip button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.party-strip button:hover {
+  text-decoration: underline;
+}
+.party-strip .party-strip__place {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.party-strip__source,
+.party-strip__also,
+.party-strip__empty {
+  font-size: var(--fs-meta);
+  color: var(--on-surface-muted);
+}
+.party-strip__also {
+  margin-left: auto;
 }
 /* Боковая карточка Списка: тамбнейл + имя + счётчики. */
 .location-sidecard {
@@ -1995,13 +2306,13 @@ button.place-card__row-name {
 .location-sidecard__stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: var(--sp-4);
   margin: 0;
 }
 .location-sidecard__stats > div {
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .location-sidecard__stats dt {
   font-family: var(--font-ui);
@@ -2011,7 +2322,7 @@ button.place-card__row-name {
   color: var(--muted);
 }
 .location-sidecard__stats dd {
-  margin: 2px 0 0;
+  margin: var(--sp-1) 0 0;
   font-family: var(--font-mono);
   font-size: var(--fs-h3);
 }
@@ -2079,9 +2390,9 @@ button.place-card__row-name {
   left: -1px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   max-width: 100%;
-  padding: 4px 6px 4px 8px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
   border: var(--card-border-width) solid var(--line);
@@ -2119,7 +2430,7 @@ button.place-card__row-name {
   justify-content: center;
   min-width: 28px;
   height: 28px;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   border: 1px solid var(--on-surface);
@@ -2155,8 +2466,8 @@ button.place-card__row-name {
   max-width: none;
 }
 .setting-overview .card > h3:first-child {
-  margin: -14px -14px 12px;
-  padding: 8px 12px;
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-ui);
@@ -2167,13 +2478,13 @@ button.place-card__row-name {
 }
 .setting-overview .genre-display {
   border-top: 1px solid var(--line);
-  padding-top: 12px;
-  margin-top: 12px !important;
+  padding-top: var(--sp-5);
+  margin-top: var(--sp-5) !important;
 }
 .setting-overview .genre-display + div {
   border-top: 1px solid var(--line);
-  padding-top: 12px;
-  margin-top: 12px !important;
+  padding-top: var(--sp-5);
+  margin-top: var(--sp-5) !important;
 }
 .editable-clamp {
   display: -webkit-box;
@@ -2192,7 +2503,7 @@ button.place-card__row-name {
   cursor: pointer;
 }
 .setting-overview [id^="section-"] {
-  scroll-margin-top: 16px;
+  scroll-margin-top: var(--sp-6);
 }
 .setting-overview-toc {
   position: sticky;
@@ -2200,9 +2511,9 @@ button.place-card__row-name {
   z-index: 5;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 0;
-  margin-bottom: 8px;
+  gap: var(--sp-4);
+  padding: var(--sp-4) 0;
+  margin-bottom: var(--sp-4);
   background: var(--paper);
   border-bottom: 1px solid var(--line);
 }
@@ -2213,7 +2524,7 @@ button.place-card__row-name {
   letter-spacing: 0.06em;
   color: var(--muted);
   text-decoration: none;
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid transparent;
   border-radius: var(--card-radius);
 }
@@ -2251,7 +2562,7 @@ button.place-card__row-name {
 .campaign-chapters .entity-group {
   border: 1px solid var(--line);
   background: var(--paper-2);
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
 }
 .campaign-chapters .entity-row {
   background: var(--paper);
@@ -2283,8 +2594,8 @@ button.place-card__row-name {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: var(--sp-3, 12px);
-  padding: var(--sp-7, 48px) var(--sp-5, 24px);
+  gap: var(--sp-5, 12px);
+  padding: var(--sp-9, 48px) var(--sp-7, 24px);
   color: var(--ink);
 }
 /* Маскот в пустом состоянии. Размер задаёт сам компонент (size="md"),
@@ -2292,7 +2603,7 @@ button.place-card__row-name {
    прилипает к заголовку. Приглушать маскот, как приглушалась марка
    ZineGraphics (opacity .85), нельзя — он и так светлый по построению. */
 .empty-state-mascot {
-  margin-bottom: 4px;
+  margin-bottom: var(--sp-2);
 }
 .empty-state-title {
   margin: 0;
@@ -2304,12 +2615,12 @@ button.place-card__row-name {
   line-height: 1.35;
 }
 .empty-state-action {
-  margin-top: var(--sp-2, 8px);
+  margin-top: var(--sp-4, 8px);
 }
 
 .badge {
   display: inline-block;
-  padding: 3px 10px;
+  padding: var(--sp-1) var(--sp-4);
   /* NOT force-capped: badges here often carry entity names (campaign name,
      compendium item name, system name) alongside genuine status/type
      labels, so text-transform is left to the caller rather than assumed —
@@ -2332,7 +2643,7 @@ button.place-card__row-name {
 .visibility-toggle {
   border: none;
   background: transparent;
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   font-size: 85%;
   color: var(--muted);
 }
@@ -2347,13 +2658,13 @@ button.place-card__row-name {
 .tag-chip-row {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-2);
   align-items: center;
 }
 .tag-chip-remove {
   background: none;
   border: none;
-  padding: 0 0 0 4px;
+  padding: 0 0 0 var(--sp-2);
   margin: 0;
   color: inherit;
   font-size: var(--fs-meta);
@@ -2362,7 +2673,7 @@ button.place-card__row-name {
 }
 .tag-chip-add {
   box-shadow: inset 0 0 0 1px dashed var(--line);
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
 }
 .tag-chip-add input {
   background: none;
@@ -2380,7 +2691,7 @@ button.place-card__row-name {
 .entity-row-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 /* Always rendered inside an already-framed `.card` (Население/Обитатели/
    Представители/etc. sections all wrap this list in `.card stack`) — its
@@ -2390,8 +2701,8 @@ button.place-card__row-name {
 .entity-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
   color: inherit;
   text-decoration: none;
@@ -2440,17 +2751,17 @@ button.place-card__row-name {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .entity-row-actions {
   flex-shrink: 0;
   display: flex;
-  gap: 4px;
+  gap: var(--sp-2);
   margin-left: auto;
 }
 .entity-row-actions button,
 .entity-row-actions a {
-  padding: 3px 8px;
+  padding: var(--sp-1) var(--sp-4);
   font-size: var(--fs-meta);
   line-height: 1.4;
   display: inline-flex;
@@ -2471,9 +2782,33 @@ button.place-card__row-name {
    справа. Одна рамка на область: колонки делит линия, а не вторая карточка. */
 .adventures-split {
   display: grid;
-  grid-template-columns: minmax(240px, 5fr) minmax(0, 7fr);
-  gap: 12px;
+  grid-template-columns: minmax(210px, 3fr) minmax(0, 7fr);
+  gap: var(--sp-5);
   align-items: start;
+}
+/* Строка приключения: название крупно, доп. инфа — строкой ниже, мельче
+   и блеклым. Левая колонка уже — это навигация, работа идёт справа. */
+.adventure-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0);
+  flex: 1;
+  min-width: 0;
+}
+.adventure-row-name {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  color: var(--ink);
+}
+.adventure-row-name:hover {
+  color: var(--ink);
+}
+.adventure-row-meta {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .adventures-list {
   min-width: 0;
@@ -2481,7 +2816,7 @@ button.place-card__row-name {
 .adventures-preview {
   min-width: 0;
   border-left: var(--card-border-width, 1px) solid var(--line);
-  padding-left: 12px;
+  padding-left: var(--sp-5);
 }
 .entity-row.selected {
   background: var(--paper-2);
@@ -2493,7 +2828,7 @@ button.place-card__row-name {
 .fav-star {
   background: none;
   border: none;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   cursor: pointer;
   color: var(--muted);
   line-height: 1;
@@ -2509,7 +2844,7 @@ button.place-card__row-name {
     border-left: none;
     padding-left: 0;
     border-top: var(--card-border-width, 1px) solid var(--line);
-    padding-top: 12px;
+    padding-top: var(--sp-5);
   }
 }
 
@@ -2518,13 +2853,13 @@ button.place-card__row-name {
 .entity-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .entity-group-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 2px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-1);
   font-weight: 600;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
@@ -2547,7 +2882,7 @@ button.place-card__row-name {
 /* Indents a group's rows relative to its own header, so the section label
    and the entities under it stay visually distinct at a glance. */
 .entity-group > .entity-row-list {
-  margin-left: 18px;
+  margin-left: var(--sp-6);
 }
 /* Plain-text Перейти/Убрать on a group header — deliberately not styled as
    buttons (unlike .entity-row-actions) so a habitat-section header doesn't
@@ -2555,7 +2890,7 @@ button.place-card__row-name {
 .entity-group-actions {
   margin-left: auto;
   display: flex;
-  gap: 12px;
+  gap: var(--sp-5);
   font-weight: 400;
   font-size: var(--fs-meta);
 }
@@ -2589,20 +2924,20 @@ button.place-card__row-name {
    .entity-row's) plus the accent-tinted rail keeps it visually tied to the
    row it expands without boxing it. */
 .entity-row-expanded {
-  padding: 8px 12px 10px 16px;
-  margin-top: -1px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-4) var(--sp-6);
+  margin-top: -var(--sp-0);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
   border-left: 2px solid var(--accent);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
   font-size: var(--fs-meta);
 }
 
 .location-cascade {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .location-cascade-breadcrumb {
   font-size: var(--fs-meta);
@@ -2610,7 +2945,7 @@ button.place-card__row-name {
 .location-cascade-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-3);
   align-items: center;
 }
 
@@ -2620,7 +2955,7 @@ button.place-card__row-name {
    tell chips apart at a glance; color no longer carries the distinction. */
 .entity-type-chip {
   display: inline-block;
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   font-size: var(--fs-meta);
   font-weight: 600;
   background: var(--bg-elevated);
@@ -2630,7 +2965,7 @@ button.place-card__row-name {
 
 .row {
   display: flex;
-  gap: 10px;
+  gap: var(--sp-5);
   align-items: center;
 }
 
@@ -2645,13 +2980,13 @@ button.place-card__row-name {
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-5);
 }
 
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
 /* "Список"/"Таблица" view modes (ViewModeToggle) — reuse each page's own
@@ -2664,7 +2999,7 @@ button.place-card__row-name {
 .grid-cards.mode-table {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .grid-cards.mode-table {
   gap: 0;
@@ -2677,14 +3012,14 @@ button.place-card__row-name {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 14px;
+  gap: var(--sp-6);
   flex-wrap: wrap;
 }
 .grid-cards.mode-table .card {
   border-radius: 0;
   border: none;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
 }
 .grid-cards.mode-table .card:last-child {
   border-bottom: none;
@@ -2719,8 +3054,8 @@ button.place-card__row-name {
   overflow: hidden;
 }
 .roster-card-body {
-  padding: 14px;
-  gap: 10px;
+  padding: var(--sp-5);
+  gap: var(--sp-5);
 }
 .roster-card-cover {
   position: relative;
@@ -2782,7 +3117,7 @@ button.place-card__row-name {
 }
 
 .roster-card-actions button {
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   font-size: var(--fs-meta);
   font-family: var(--font-ui);
   text-transform: uppercase;
@@ -2801,7 +3136,7 @@ button.place-card__row-name {
   letter-spacing: 0.10em;
   border: 1px solid var(--line);
   background: var(--paper);
-  padding: 4px 10px;
+  padding: var(--sp-2) var(--sp-4);
   line-height: 1;
 }
 .btn-capsule .btn-capsule-count {
@@ -2816,7 +3151,7 @@ button.place-card__row-name {
   position: absolute;
   right: 0;
   top: 100%;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
   z-index: 30;
   min-width: 200px;
   max-height: 240px;
@@ -2842,7 +3177,7 @@ button.place-card__row-name {
   left: 0;
   right: 0;
   z-index: 900;
-  padding: 12px 16px;
+  padding: var(--sp-5) var(--sp-6);
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -2851,8 +3186,8 @@ button.place-card__row-name {
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-6);
   border-radius: 0;
   background: var(--paper);
   border: var(--card-border-width, 1px) solid var(--line);
@@ -2870,17 +3205,17 @@ button.place-card__row-name {
 }
 .floating-action-bar-players {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
   flex-wrap: wrap;
 }
 .floating-action-bar-player {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-1);
   background: var(--paper-2, var(--paper));
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 2px 4px;
+  padding: var(--sp-1) var(--sp-2);
 }
 .floating-action-bar-player-name {
   font-family: var(--font-ui);
@@ -2896,7 +3231,7 @@ button.place-card__row-name {
   border: none;
   cursor: pointer;
   font-size: var(--fs-meta);
-  padding: 2px;
+  padding: var(--sp-1);
   border-radius: 0;
   line-height: 1;
 }
@@ -2913,7 +3248,7 @@ button.place-card__row-name {
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  margin-left: 4px;
+  margin-left: var(--sp-2);
 }
 .floating-action-bar-close:hover { background: var(--paper-2, var(--paper)); color: var(--ink); }
 
@@ -2993,7 +3328,7 @@ button.place-card__row-name {
   height: 90px;
   object-fit: cover;
   border-radius: var(--card-radius);
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-4);
 }
 
 /* Decorative stand-in for .campaign-thumb when a card has no uploaded
@@ -3003,7 +3338,7 @@ button.place-card__row-name {
   width: 100%;
   height: 90px;
   border-radius: var(--card-radius);
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-4);
   background: var(--card-band-bg);
   background-image: var(--card-band-image);
   background-size: cover;
@@ -3092,7 +3427,7 @@ button.place-card__row-name {
   .map-editor .res-toolbar[role="toolbar"] {
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding-bottom: 4px;
+    padding-bottom: var(--sp-2);
   }
   .map-editor .res-toolbar[role="toolbar"] > * {
     flex-shrink: 0;
@@ -3112,9 +3447,9 @@ button.place-card__row-name {
 }
 .campaign-tile-name {
   position: absolute;
-  left: var(--sp-3);
-  right: var(--sp-3);
-  bottom: var(--sp-2);
+  left: var(--sp-5);
+  right: var(--sp-5);
+  bottom: var(--sp-4);
   /* Над растром обложки (z-index 1 у .cover-halftone::before) — §5.2
      запрещает халфтон под текстом. */
   z-index: 2;
@@ -3145,8 +3480,8 @@ button.place-card__row-name {
 .campaign-tile-meta {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
   border-top: var(--card-border-width, 1px) solid var(--line);
 }
 .campaign-tile-system {
@@ -3157,7 +3492,7 @@ button.place-card__row-name {
 .campaign-tile-next {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   /* Дата — значение, значит моношрифт (§1.5). */
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
@@ -3200,14 +3535,14 @@ button.place-card__row-name {
 /* Campaign row: two-column layout — campaign on left, characters on right */
 .campaign-row {
   display: flex;
-  gap: 12px;
+  gap: var(--sp-5);
   align-items: flex-start;
 }
 .campaign-row-main {
   flex: 0 0 220px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .campaign-row-main .campaign-tile {
   width: 100%;
@@ -3216,7 +3551,7 @@ button.place-card__row-name {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 10px;
+  gap: var(--sp-5);
   min-height: 60px;
 }
 .campaign-row-chars .campaign-tile {
@@ -3276,10 +3611,10 @@ body.live-hide-search.live-hide-dock .app-content {
   position: relative;
   background: var(--paper-2);
   border-right: var(--card-border-width, 1px) solid var(--line);
-  padding: 16px 10px;
+  padding: var(--sp-6) var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 .preview-dock {
@@ -3293,15 +3628,15 @@ body.live-hide-search.live-hide-dock .app-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 4px 6px 8px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-4);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-4);
 }
 .preview-dock-header button {
   flex: 0 0 auto;
@@ -3312,14 +3647,14 @@ body.live-hide-search.live-hide-dock .app-content {
   font-weight: 400;
 }
 .preview-dock-placeholder {
-  padding: 8px 6px;
+  padding: var(--sp-4) var(--sp-3);
   font-size: 0.9em;
 }
 .preview-dock-list {
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .preview-dock-card {
-  padding: 10px;
+  padding: var(--sp-4);
   max-height: 480px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -3404,13 +3739,13 @@ body.live-hide-search.live-hide-dock .app-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
   width: 100%;
 }
 .section-heading-sub-title {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   margin: 0;
   font-family: var(--font-ui);
   font-size: var(--fs-h3);
@@ -3459,14 +3794,14 @@ body.live-hide-search.live-hide-dock .app-content {
   height: auto;
   display: block;
   border-radius: var(--card-radius);
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-6);
 }
 
 .app-nav a {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-4);
   border-radius: var(--card-radius);
   color: var(--ink);
   /* Desktop-only per the design brief — the <860px off-canvas drawer reuses
@@ -3491,8 +3826,8 @@ body.live-hide-search.live-hide-dock .app-content {
 .app-nav .nav-empty {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-4);
   border-radius: var(--card-radius);
   font-family: var(--font-display);
   color: var(--muted);
@@ -3500,10 +3835,10 @@ body.live-hide-search.live-hide-dock .app-content {
   opacity: 0.6;
 }
 .app-nav .nav-empty .nav-empty-count {
-  margin-left: 6px;
+  margin-left: var(--sp-3);
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
-  padding: 1px 5px;
+  padding: var(--sp-0) var(--sp-2);
 }
 
 /* Neon theme — each section's page-level <h1> (SectionHeading level="page",
@@ -3539,7 +3874,7 @@ body.live-hide-search.live-hide-dock .app-content {
      Locking it down here removes that independent scroll axis entirely. */
   overflow-x: hidden;
   overscroll-behavior-x: none;
-  padding: 24px 32px;
+  padding: var(--sp-7) var(--sp-8);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -3603,10 +3938,10 @@ body.live-hide-search.live-hide-dock .app-content {
 .search-panel {
   background: var(--paper-2);
   border-left: var(--card-border-width, 1px) solid var(--line);
-  padding: 16px;
+  padding: var(--sp-6);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-5);
   overflow-y: auto;
 }
 
@@ -3616,8 +3951,8 @@ body.live-hide-search.live-hide-dock .app-content {
   align-items: center;
   border-left: none;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
-  padding: 10px 16px;
-  gap: 12px;
+  padding: var(--sp-4) var(--sp-6);
+  gap: var(--sp-5);
   flex-shrink: 0;
 }
 .search-panel.horizontal input:not([type="checkbox"]) {
@@ -3639,7 +3974,7 @@ body.live-hide-search.live-hide-dock .app-content {
 }
 .search-input-wrap input {
   width: 100%;
-  padding-right: 26px;
+  padding-right: var(--sp-7);
 }
 .search-input-clear {
   position: absolute;
@@ -3648,7 +3983,7 @@ body.live-hide-search.live-hide-dock .app-content {
   transform: translateY(-50%);
   background: none;
   border: none;
-  padding: 2px 4px;
+  padding: var(--sp-1) var(--sp-2);
   font-size: var(--fs-meta);
   line-height: 1;
   color: var(--muted);
@@ -3658,16 +3993,16 @@ body.live-hide-search.live-hide-dock .app-content {
   color: var(--accent);
 }
 .search-panel.horizontal .filters {
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .search-panel.horizontal .stack {
   flex-direction: row;
   flex-wrap: wrap;
   flex: 1;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .search-panel.horizontal .search-result {
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .search-panel.horizontal .search-pins {
   flex-direction: row;
@@ -3680,7 +4015,7 @@ body.live-hide-search.live-hide-dock .app-content {
 .search-panel .filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 
 .search-panel .filters label {
@@ -3688,18 +4023,18 @@ body.live-hide-search.live-hide-dock .app-content {
   color: var(--muted);
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
-  padding: 3px 8px;
+  padding: var(--sp-1) var(--sp-4);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 .bag-widget {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-top: 10px;
+  gap: var(--sp-3);
+  padding-top: var(--sp-4);
   border-top: var(--card-border-width, 1px) solid var(--line);
   flex-shrink: 0;
 }
@@ -3708,17 +4043,17 @@ body.live-hide-search.live-hide-dock .app-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .bag-unload {
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   font-size: var(--fs-meta);
   line-height: 1.6;
 }
 .bag-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  gap: var(--sp-2);
   border-radius: var(--card-radius);
 }
 /* Мешок принимает перетаскивание целиком, а не отдельными ячейками: попасть в
@@ -3728,7 +4063,7 @@ body.live-hide-search.live-hide-dock .app-content {
   outline-offset: 3px;
 }
 .unload-plan {
-  gap: 6px;
+  gap: var(--sp-3);
   max-height: 320px;
   overflow-y: auto;
 }
@@ -3736,7 +4071,7 @@ body.live-hide-search.live-hide-dock .app-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .bag-cell {
   aspect-ratio: 1;
@@ -3747,7 +4082,7 @@ body.live-hide-search.live-hide-dock .app-content {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  padding: 2px;
+  padding: var(--sp-1);
 }
 .bag-cell-empty {
   background: transparent;
@@ -3803,13 +4138,13 @@ body.live-hide-search.live-hide-dock .app-content {
     background: var(--paper);
     border: var(--card-border-width, 1px) solid var(--line);
     /* 44px hit-area: visual 32 + 6px transparent padding */
-    padding: 6px;
+    padding: var(--sp-3);
   }
 }
 .bag-toast {
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   border-radius: var(--card-radius);
   border: var(--card-border-width, 1px) solid var(--line);
 }
@@ -3825,13 +4160,13 @@ body.live-hide-search.live-hide-dock .app-content {
 /* Верстак-модалка из мешка — боковая панель со списком предметов */
 .bag-verstak-sidebar {
   border-left: 1px solid var(--line);
-  padding-left: 8px;
+  padding-left: var(--sp-4);
 }
 .bag-verstak-item {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 4px 6px;
+  gap: var(--sp-0);
+  padding: var(--sp-2) var(--sp-3);
   border-radius: 3px;
   cursor: default;
   user-select: none;
@@ -3856,14 +4191,14 @@ body.live-hide-search.live-hide-dock .app-content {
   background: var(--bg-elevated);
   border: 1px solid var(--line);
   border-radius: var(--card-radius);
-  padding: 4px;
+  padding: var(--sp-2);
   min-width: 160px;
 }
 .bag-verstak-context-menu button {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   font-size: var(--fs-meta);
   border: none;
   background: transparent;
@@ -3883,22 +4218,22 @@ body.live-hide-search.live-hide-dock .app-content {
 .mini-calendar-widget {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
 }
 .mini-calendar-legend {
   display: flex;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   color: var(--muted);
 }
 .mini-calendar-legend-item.legend-planned {
   border-bottom: 1px dashed var(--ink);
-  padding-bottom: 1px;
+  padding-bottom: var(--sp-0);
 }
 .mini-calendar-legend-item.legend-held {
   border-bottom: 1px solid var(--ink);
-  padding-bottom: 1px;
+  padding-bottom: var(--sp-0);
 }
 .local-clock {
   font-family: var(--font-mono);
@@ -3912,7 +4247,7 @@ body.live-hide-search.live-hide-dock .app-content {
   justify-content: space-between;
 }
 .mini-calendar-nav button {
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
   font-size: var(--fs-meta);
   line-height: 1.4;
 }
@@ -3927,12 +4262,12 @@ body.live-hide-search.live-hide-dock .app-content {
 .mini-calendar-grid-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .mini-calendar {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .mini-calendar-weekday {
   font-family: var(--font-ui);
@@ -3957,15 +4292,15 @@ body.live-hide-search.live-hide-dock .app-content {
   position: relative;
   aspect-ratio: 1;
   min-width: 0;
-  border: 2px solid transparent;
+  border: var(--card-border-width, 1px) solid transparent;
   border-radius: var(--card-radius);
   background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  padding: 1px;
+  gap: var(--sp-0);
+  padding: var(--sp-0);
   overflow: hidden;
 }
 .mini-calendar-day.empty {
@@ -4029,7 +4364,7 @@ body.live-hide-search.live-hide-dock .app-content {
   color: var(--accent);
   font-weight: 700;
   border-bottom: 2px solid var(--accent);
-  padding-bottom: 1px;
+  padding-bottom: var(--sp-0);
 }
 .mini-calendar-day.today.has-many .mini-calendar-num {
   color: var(--on-surface);
@@ -4070,18 +4405,18 @@ body.live-hide-search.live-hide-dock .app-content {
   font-size: var(--fs-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 5px 9px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .mini-calendar-daylist-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   background: none;
   border: none;
   border-top: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
-  padding: 7px 9px;
+  padding: var(--sp-3) var(--sp-4);
   cursor: pointer;
   text-align: left;
   color: var(--ink);
@@ -4139,8 +4474,8 @@ body.live-hide-search.live-hide-dock .app-content {
 .search-pins {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-top: 10px;
+  gap: var(--sp-2);
+  padding-top: var(--sp-4);
   margin-top: auto;
   border-top: var(--card-border-width, 1px) solid var(--line);
   flex-shrink: 0;
@@ -4166,7 +4501,7 @@ body.live-hide-search.live-hide-dock .app-content {
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   cursor: grab;
 }
 .search-result:active {
@@ -4177,12 +4512,12 @@ body.live-hide-search.live-hide-dock .app-content {
   flex-wrap: nowrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .search-result-head__left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   min-width: 0;
 }
 /* Фишка типа не сжимается — сжимается контекст: «Запись компендиума» в две
@@ -4205,7 +4540,7 @@ body.live-hide-search.live-hide-dock .app-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   flex: 0 0 auto;
 }
 
@@ -4318,11 +4653,11 @@ body.live-hide-search.live-hide-dock .app-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: var(--sp-2);
   background: none;
   border: none;
   color: var(--ink-2);
-  padding: 8px 11px;
+  padding: var(--sp-4) var(--sp-5);
   border-radius: 0;
   cursor: pointer;
   /* Капс-подпись — голос Label (§1.5), а не проза. */
@@ -4345,7 +4680,7 @@ body.live-hide-search.live-hide-dock .app-content {
   height: 18px;
 }
 .nav-widget-compact .nav-widget-button {
-  padding: 8px;
+  padding: var(--sp-4);
 }
 
 /* «Пульт сессии» — единственная кнопка-ПЕРЕХОД среди четырёх утилит
@@ -4390,7 +4725,7 @@ body.live-hide-search.live-hide-dock .app-content {
 .drop-zone {
   border: var(--card-border-width, 1px) dashed var(--line);
   border-radius: var(--card-radius);
-  padding: 10px;
+  padding: var(--sp-4);
   min-height: 40px;
 }
 .drop-zone.drag-over {
@@ -4404,7 +4739,7 @@ table {
 }
 th, td {
   text-align: left;
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 
@@ -4415,7 +4750,7 @@ th, td {
   vertical-align: bottom;
 }
 .thumbnail-style-table th button {
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   font-size: var(--fs-meta);
 }
 .thumbnail-style-table input[type="radio"] {
@@ -4434,13 +4769,13 @@ th, td {
      since overflow-x:hidden clips rather than scrolls) gets pushed past the
      viewport and the right-hand columns/UI go dark. */
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .month-calendar .weekday {
   font-size: var(--fs-meta);
   color: var(--muted);
   text-align: center;
-  padding: 4px 4px 8px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-4);
 }
 .month-calendar .day {
   min-height: 0;
@@ -4448,12 +4783,12 @@ th, td {
   min-width: 0;
   border: var(--card-border-width) solid transparent;
   border-radius: var(--card-radius);
-  padding: 4px;
+  padding: var(--sp-2);
   background: transparent;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
   overflow: hidden;
 }
 .month-calendar .day:hover {
@@ -4468,7 +4803,7 @@ th, td {
   font-size: var(--fs-meta);
   color: var(--muted);
   display: inline-block;
-  padding-bottom: 5px;
+  padding-bottom: var(--sp-2);
 }
 .month-calendar .day.today .num {
   color: var(--ink);
@@ -4477,7 +4812,7 @@ th, td {
 .month-calendar .dot {
   font-size: var(--fs-meta);
   border-radius: var(--card-radius);
-  padding: 2px 6px;
+  padding: var(--sp-1) var(--sp-3);
   color: #0d0d10;
   overflow-wrap: anywhere;
 }
@@ -4525,7 +4860,7 @@ th, td {
   height: 4px;
   border-radius: 50%;
   background: var(--accent);
-  margin: 1px auto 0;
+  margin: var(--sp-0) auto 0;
 }
 .month-calendar .day.has-important.has-event .num::after {
   background: var(--paper);
@@ -4533,7 +4868,7 @@ th, td {
 .chronicle-split {
   display: grid;
   grid-template-columns: 1fr 380px;
-  gap: var(--sp-5);
+  gap: var(--sp-7);
   align-items: start;
 }
 .chronicle-left {
@@ -4554,9 +4889,9 @@ th, td {
 }
 .chronicle-date { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
 .chronicle-title { font-family: var(--font-display); font-weight: 600; }
-.chronicle-row { gap: var(--sp-3); }
-.chronicle-row__expanded { margin-left: var(--sp-5); }
-.chronicle-status { font-family: var(--font-ui); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border: 1px solid var(--line); }
+.chronicle-row { gap: var(--sp-5); }
+.chronicle-row__expanded { margin-left: var(--sp-7); }
+.chronicle-status { font-family: var(--font-ui); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: 0.06em; padding: var(--sp-1) var(--sp-3); border: var(--sp-0) solid var(--line); }
 .chronicle-status.is-upcoming { border-style: dashed; }
 .chronicle-status.is-cancelled { text-decoration: line-through; opacity: 0.7; }
 .chronicle-status.is-happened { border-style: solid; }
@@ -4586,14 +4921,14 @@ th, td {
   z-index: 50;
   /* Поля — здесь, а не в ширине модалки: vw-арифметика с паддингами,
      min-content и флексом давала переполнение на телефоне трижды. */
-  padding: 12px;
+  padding: var(--sp-5);
   box-sizing: border-box;
 }
 .modal {
   background: var(--paper-2);
   border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 20px;
+  padding: var(--sp-6);
   width: 420px;
   max-width: 90vw;
   max-height: 85vh;
@@ -4631,7 +4966,7 @@ th, td {
   position: sticky;
   bottom: 0;
   background: var(--paper-2);
-  padding-top: 10px;
+  padding-top: var(--sp-4);
 }
 
 .modal:has(.crop-viewport) {
@@ -4684,9 +5019,9 @@ th, td {
 .external-confirm__head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: -20px -20px 14px;
-  padding: 10px 14px;
+  gap: var(--sp-4);
+  margin: calc(-1 * var(--sp-6)) calc(-1 * var(--sp-6)) var(--sp-6);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-ui);
@@ -4701,7 +5036,7 @@ th, td {
   height: 16px;
 }
 .external-confirm__text {
-  margin: 0 0 18px;
+  margin: 0 0 var(--sp-6);
   font-family: var(--font-body);
   font-size: var(--fs-meta);
   line-height: 1.4;
@@ -4713,7 +5048,7 @@ th, td {
      никогда не вылезают за рамку (overflow у .modal:has(.external-confirm)
      скрыт ради углов плашки). */
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .external-confirm__actions button {
   width: 100%;
@@ -4726,33 +5061,33 @@ th, td {
 .mention-picker-community-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 .mention-picker-community-table td {
   border: var(--card-border-width, 1px) solid var(--line);
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   width: 50%;
 }
 .mention-picker-community-table label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   font-weight: normal;
   cursor: pointer;
 }
 .being-community-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 .being-community-table td {
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   width: 25%;
 }
 .being-community-table label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   font-weight: normal;
   font-size: var(--fs-meta);
   cursor: pointer;
@@ -4782,7 +5117,7 @@ th, td {
   gap: 0;
   border-bottom: none;
   box-shadow: inset 0 calc(-1 * var(--card-border-width)) 0 var(--line);
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-6);
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
@@ -4795,7 +5130,7 @@ th, td {
   background: transparent;
   border: var(--card-border-width) solid transparent;
   border-bottom: var(--card-border-width) solid var(--line);
-  padding: 6px 14px;
+  padding: var(--sp-3) var(--sp-5);
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
@@ -4823,8 +5158,8 @@ th, td {
   width: 100%;
   font-weight: 600;
   font-size: var(--fs-h3);
-  padding: 10px 12px;
-  margin-bottom: 12px;
+  padding: var(--sp-4) var(--sp-5);
+  margin-bottom: var(--sp-5);
 }
 /* CharacterDetailPage's tab row: equal-width buttons instead of the default
    content-hugging flex row, so the (up to 6) tabs fill the row evenly. */
@@ -4835,8 +5170,8 @@ th, td {
 .editable-title {
   cursor: pointer;
   border-radius: var(--card-radius);
-  padding: 2px 6px;
-  margin: -2px -6px;
+  padding: var(--sp-1) var(--sp-3);
+  margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-3));
 }
 .editable-title:hover {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
@@ -4854,7 +5189,7 @@ th, td {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border: var(--card-border-width) solid var(--line);
@@ -4871,7 +5206,7 @@ th, td {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 4px 0 0 0;
+  padding: var(--sp-2) 0 0 0;
 }
 /* Always rendered inside the accordion opened by `.player-section-header`
    (see PlayerCampaignPage.tsx) — the header already draws the region's one
@@ -4881,7 +5216,7 @@ th, td {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   background: transparent;
   border: none;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
@@ -4910,7 +5245,7 @@ th, td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: var(--sp-5) var(--sp-6);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .player-reader-section {
@@ -4921,21 +5256,21 @@ th, td {
 .player-reader-close {
   font-size: var(--fs-h2);
   line-height: 1;
-  padding: 4px 10px;
+  padding: var(--sp-2) var(--sp-4);
   background: transparent;
   border: none;
 }
 .player-reader-body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 20px 60px 20px;
+  padding: var(--sp-7) var(--sp-6) var(--sp-10) var(--sp-6);
   max-width: 720px;
   margin: 0 auto;
   width: 100%;
 }
 .player-reader-title {
   font-size: clamp(22px, 6vw, 34px);
-  margin: 0 0 16px 0;
+  margin: 0 0 var(--sp-6) 0;
 }
 .player-reader-tapzone {
   position: absolute;
@@ -4972,7 +5307,7 @@ th, td {
 .plane-grid {
   display: grid;
   grid-template-columns: 1fr 300px;
-  gap: 16px;
+  gap: var(--sp-6);
   align-items: start;
 }
 @media (max-width: 900px) {
@@ -4985,8 +5320,8 @@ details.card summary {
   cursor: pointer;
   font-weight: 600;
   border-radius: var(--card-radius);
-  margin: -4px -6px;
-  padding: 4px 6px;
+  margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-3));
+  padding: var(--sp-2) var(--sp-3);
 }
 details.card summary:hover {
   background: color-mix(in oklab, var(--sb-paper) 92%, var(--sb-ink));
@@ -4996,7 +5331,7 @@ details.card summary.campaign-overview-header:hover {
   color: var(--paper);
 }
 details.card[open] summary {
-  margin-bottom: 10px;
+  margin-bottom: var(--sp-5);
 }
 
 /* Tablet: everything visible, just narrower */
@@ -5006,7 +5341,7 @@ details.card[open] summary {
     --app-search-width: 260px;
     --app-dock-width: 260px;
   }
-  .app-content { padding: 12px; padding-bottom: calc(12px + 132px); }
+  .app-content { padding: var(--sp-5); padding-bottom: calc(12px + 132px); }
 }
 
 /* Below this width the 3-column app-shell (nav / content / search) doesn't
@@ -5032,8 +5367,8 @@ details.card[open] summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
     background: var(--paper-2);
     border-bottom: var(--card-border-width, 1px) solid var(--line);
   }
@@ -5042,7 +5377,7 @@ details.card[open] summary {
     border: none;
     font-size: var(--fs-h2);
     line-height: 1;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
     color: var(--ink);
   }
   .mobile-topbar-logo {
@@ -5088,7 +5423,7 @@ details.card[open] summary {
     height: 100%;
   }
   .app-content {
-    padding: 16px;
+    padding: var(--sp-6);
     /* Leave room for BOTH floating bars below — the bottom nav pill and,
        whenever a track is playing, MiniPlayerBar stacked above it — so the
        last bit of page content is never hidden behind either. Reserved
@@ -5136,7 +5471,7 @@ details.card[open] summary {
   }
   .entity-header-actions button:first-child:not(.danger),
   .entity-header-actions button.danger {
-    padding: 6px 10px;
+    padding: var(--sp-3) var(--sp-4);
     font-size: 0;
     position: relative;
   }
@@ -5170,8 +5505,8 @@ details.card[open] summary {
     bottom: calc(10px + env(safe-area-inset-bottom, 0));
     z-index: 40;
     display: flex;
-    gap: 2px;
-    padding: 4px;
+    gap: var(--sp-1);
+    padding: var(--sp-2);
     background: color-mix(in oklab, var(--paper-2) 92%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -5184,8 +5519,8 @@ details.card[open] summary {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    padding: 7px 4px 6px;
+    gap: var(--sp-1);
+    padding: var(--sp-3) var(--sp-2) var(--sp-3);
     background: transparent;
     border: none;
     border-radius: var(--card-radius);
@@ -5268,7 +5603,7 @@ details.card[open] summary {
     justify-content: center;
     background: var(--accent);
     color: var(--accent-text, var(--paper));
-    border: 2px solid var(--ink);
+    border: var(--card-border-width, 1px) solid var(--ink);
     border-radius: 50%;
     z-index: 1;
     padding: 0;
@@ -5299,10 +5634,10 @@ details.card[open] summary {
     z-index: 46;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--sp-4);
     max-height: 60vh;
     overflow-y: auto;
-    padding: 14px;
+    padding: var(--sp-5);
     background: var(--paper-2);
     border: var(--card-border-width, 1px) solid var(--line);
     border-radius: var(--card-radius);
@@ -5311,7 +5646,7 @@ details.card[open] summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--sp-4);
   }
   .mobile-quick-access-link {
     flex: 1;
@@ -5319,19 +5654,19 @@ details.card[open] summary {
     background: transparent;
     border: none;
     color: var(--ink);
-    padding: 6px 0;
+    padding: var(--sp-3) 0;
   }
   .mobile-quick-access-characters {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding-bottom: 4px;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-2);
     border-bottom: var(--card-border-width, 1px) solid var(--line);
   }
   .mobile-quick-access-characters .mobile-quick-access-link {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--sp-1);
   }
 
   /* "Now playing" capsule — only rendered at all while a track is playing
@@ -5348,8 +5683,8 @@ details.card[open] summary {
     z-index: 39;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-4);
     /* Intentionally different from desktop: translucent + blur for a floating
        capsule that overlays content, vs solid background for a docked bar.
        Font sizes and vertical padding match --player-bar-height for visual
@@ -5391,7 +5726,7 @@ details.card[open] summary {
     font-size: var(--fs-h3);
     line-height: 1;
     color: inherit;
-    padding: 2px 4px;
+    padding: var(--sp-1) var(--sp-2);
   }
   .mini-player-bar button:focus-visible {
     outline: 2px solid var(--accent);
@@ -5408,10 +5743,10 @@ details.card[open] summary {
 .now-playing-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--sp-7);
   max-width: 420px;
   margin: 0 auto;
-  padding: 8px 0 32px;
+  padding: var(--sp-4) 0 var(--sp-8);
 }
 .now-playing-topbar {
   display: flex;
@@ -5423,7 +5758,7 @@ details.card[open] summary {
   border: none;
   font-size: var(--fs-h2);
   line-height: 1;
-  padding: 4px 10px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .now-playing-cover {
   aspect-ratio: 1;
@@ -5461,23 +5796,23 @@ details.card[open] summary {
 .now-playing-queue {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
   border-top: 1px solid var(--line);
-  padding-top: 12px;
+  padding-top: var(--sp-5);
 }
 .now-playing-queue-head {
   font-size: var(--fs-micro);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding-bottom: 6px;
+  padding-bottom: var(--sp-3);
 }
 .now-playing-queue-row {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: var(--sp-5);
   width: 100%;
   min-height: 44px;
-  padding: 10px 8px;
+  padding: var(--sp-4) var(--sp-4);
   border: none;
   background: transparent;
   text-align: left;
@@ -5506,13 +5841,13 @@ details.card[open] summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .now-playing-controls button {
   background: transparent;
   border: none;
   line-height: 1;
-  padding: 6px;
+  padding: var(--sp-3);
   color: inherit;
 }
 .now-playing-controls .nav-icon {
@@ -5542,8 +5877,8 @@ details.card[open] summary {
   display: grid;
   grid-template-columns: 200px 1fr;
   grid-template-areas: "avatar name" "avatar tabs";
-  column-gap: 20px;
-  row-gap: 8px;
+  column-gap: var(--sp-7);
+  row-gap: var(--sp-4);
   align-items: start;
 }
 .character-avatar-col {
@@ -5568,7 +5903,7 @@ details.card[open] summary {
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: center;
 }
 .character-avatar {
@@ -5606,7 +5941,7 @@ details.card[open] summary {
   padding-top: 0;
 }
 .character-dossier {
-  gap: var(--sp-5);
+  gap: var(--sp-7);
   display: flex;
   flex-direction: column;
 }
@@ -5614,7 +5949,7 @@ details.card[open] summary {
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
-  padding: 14px;
+  padding: var(--sp-5);
   clip-path: none;
 }
 .character-dossier .card .card .card {
@@ -5628,7 +5963,7 @@ details.card[open] summary {
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   font-size: var(--fs-meta);
   text-align: center;
   width: 100%;
@@ -5654,7 +5989,7 @@ details.card[open] summary {
   color: var(--paper);
   font-size: var(--fs-meta);
   text-align: center;
-  padding: 8px;
+  padding: var(--sp-4);
   border-radius: var(--card-radius);
   opacity: 0;
   transition: opacity 0.15s;
@@ -5666,7 +6001,7 @@ details.card[open] summary {
 /* Поля в режиме правки EditableTextCard, когда рядом с текстом правится ещё
    и имя: подписи «Имя» / «Описание» над своими полями. */
 .editable-card-field {
-  gap: 4px;
+  gap: var(--sp-2);
   align-items: stretch;
 }
 .editable-card-field > span,
@@ -5684,8 +6019,8 @@ details.card[open] summary {
   z-index: 3000;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 14px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   border-radius: var(--card-radius);
   border: var(--card-border-width, 1px) solid var(--accent);
   background: var(--paper);
@@ -5705,10 +6040,10 @@ details.card[open] summary {
 .wizard-pick-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
   max-height: 220px;
   overflow-y: auto;
-  padding: 6px;
+  padding: var(--sp-3);
   border-radius: var(--card-radius);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
@@ -5716,7 +6051,7 @@ details.card[open] summary {
 .wizard-pick-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   cursor: pointer;
 }
 .wizard-relation-row {
@@ -5734,7 +6069,7 @@ details.card[open] summary {
   flex-wrap: wrap;
   align-items: center;
   border-top: var(--card-border-width, 1px) solid var(--line);
-  padding-top: 10px;
+  padding-top: var(--sp-4);
 }
 /* Визард персонажа в модалке: футер липнет к низу, длинные шаги
    (навыки, снаряжение) скроллятся под ним. Значения — из .card (14px) и
@@ -5742,8 +6077,8 @@ details.card[open] summary {
 .wizard-footer {
   position: sticky;
   bottom: -14px;
-  margin: 0 -14px -14px;
-  padding: 10px 14px 14px;
+  margin: 0 calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5));
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
   background: var(--paper-2);
   border-top: var(--card-border-width, 1px) solid var(--line);
 }
@@ -5774,7 +6109,7 @@ details.card[open] summary {
   .wizard-split {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
-    gap: var(--sp-2);
+    gap: var(--sp-4);
     align-items: start;
   }
   .wizard-main {
@@ -5786,7 +6121,7 @@ details.card[open] summary {
     max-height: 70vh;
     overflow-y: auto;
     border-left: var(--card-border-width, 1px) solid var(--line);
-    padding-left: var(--sp-2);
+    padding-left: var(--sp-4);
   }
 }
 @media (max-width: 1000px) {
@@ -5809,7 +6144,7 @@ details.card[open] summary {
 .wizard-back {
   position: relative;
   animation: dnd-card-in 0.32s ease;
-  padding-bottom: 56px;
+  padding-bottom: var(--sp-9);
 }
 .wizard-back-corner {
   position: absolute;
@@ -5832,7 +6167,7 @@ details.card[open] summary {
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
   border-radius: 0;
-  padding: var(--sp-2) var(--sp-1);
+  padding: var(--sp-4) var(--sp-2);
 }
 /* Модификаторы чернилами; акцентом — только разогнанные предысторией
    (§1.8: один горячий объект, а не двенадцать). */
@@ -5892,7 +6227,7 @@ details.card[open] summary {
   cursor: pointer;
 }
 .wizard-blurb-more {
-  margin-top: var(--sp-1);
+  margin-top: var(--sp-2);
 }
 .wizard-level-input {
   width: 60px;
@@ -5919,7 +6254,7 @@ details.card[open] summary {
    справа от неё. */
 .entity-field-row {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   align-items: baseline;
   flex-wrap: wrap;
 }
@@ -5932,11 +6267,11 @@ details.card[open] summary {
 .entity-image-slots {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: var(--sp-7);
   align-items: flex-start;
 }
 .entity-image-slot {
-  gap: 6px;
+  gap: var(--sp-3);
   flex: 1 1 280px;
   max-width: 100%;
 }
@@ -6042,7 +6377,7 @@ details.card[open] summary {
     position: static;
     flex-direction: row;
     align-items: center;
-    gap: 12px;
+    gap: var(--sp-5);
   }
   .character-avatar,
   .character-avatar-placeholder {
@@ -6073,7 +6408,7 @@ details.card[open] summary {
     margin: 0;
     overflow-y: auto;
     background: var(--paper-2);
-    padding: 12px;
+    padding: var(--sp-5);
     /* This <details> is normally a boxed .card floating on a page — its own
        border/rounded-corner/background-texture chrome is exactly the outer
        layer of the "рамка в рамке" the full-screen view doesn't need: it now
@@ -6088,8 +6423,8 @@ details.card[open] summary {
   .sb-fullscreen-mobile > summary {
     position: sticky;
     top: -12px;
-    margin: -12px -12px 10px;
-    padding: 12px;
+    margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-5);
+    padding: var(--sp-5);
     min-height: 20px;
     background: var(--paper-2);
     border-bottom: var(--card-border-width, 1px) solid var(--line);
@@ -6106,8 +6441,8 @@ details.card[open] summary {
     top: 32px;
     z-index: 2;
     background: var(--paper);
-    padding-top: 6px;
-    padding-bottom: 6px;
+    padding-top: var(--sp-3);
+    padding-bottom: var(--sp-3);
   }
   /* Second layer of the same nesting problem: the statblock's own themed
      frame (.sb-card — border + rounded corners) drawn a few pixels inside
@@ -6134,21 +6469,21 @@ details.card[open] summary {
   font-weight: 600;
   color: var(--accent);
   font-size: var(--fs-meta);
-  padding-left: 4px;
+  padding-left: var(--sp-2);
 }
 .player-list-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .player-list-info {
-  gap: 2px;
+  gap: var(--sp-1);
   min-width: 0;
 }
 .player-list-row {
   align-items: center;
-  gap: 10px;
-  padding: 8px 6px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-3);
   border-radius: var(--card-radius);
   color: inherit;
   text-decoration: none;
@@ -6242,7 +6577,7 @@ details.card[open] summary {
 .player-profile-header {
   background: var(--surface);
   color: var(--on-surface);
-  padding: 12px 16px;
+  padding: var(--sp-5) var(--sp-6);
   margin: 0;
   border: var(--card-border-width, 1px) solid var(--line);
 }
@@ -6253,7 +6588,7 @@ details.card[open] summary {
   line-height: 0.94;
 }
 .player-profile-notes {
-  margin-top: 6px;
+  margin-top: var(--sp-3);
   color: var(--on-surface-muted);
   font-size: var(--fs-meta);
 }
@@ -6263,9 +6598,9 @@ details.card[open] summary {
 .player-group-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   border-radius: var(--card-radius);
   border: 1px solid var(--line);
   background: transparent;
@@ -6280,7 +6615,7 @@ details.card[open] summary {
    рисуют только карточки, строки внутри — без своих рамок. */
 .players-workspace {
   display: flex;
-  gap: 16px;
+  gap: var(--sp-6);
   align-items: flex-start;
 }
 .players-workspace__list {
@@ -6302,7 +6637,7 @@ details.card[open] summary {
 .players-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .campaign-tile--active {
   outline: 2px solid var(--accent);
@@ -6313,13 +6648,13 @@ details.card[open] summary {
 .player-char-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .player-char-card {
   display: flex;
-  gap: 12px;
+  gap: var(--sp-5);
   align-items: flex-start;
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
   background: var(--paper);
@@ -6342,7 +6677,7 @@ details.card[open] summary {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .player-char-card__name {
   font-family: var(--font-ui);
@@ -6369,8 +6704,8 @@ details.card[open] summary {
 }
 .player-char-card__links {
   display: flex;
-  gap: 12px;
-  margin-top: 4px;
+  gap: var(--sp-5);
+  margin-top: var(--sp-2);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
 }
@@ -6380,7 +6715,7 @@ details.card[open] summary {
   background: none;
   color: var(--muted);
   cursor: pointer;
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   font-size: var(--fs-meta);
 }
 .player-char-card__remove:hover {
@@ -6415,6 +6750,159 @@ details.card[open] summary {
   background: var(--paper-2);
   display: block;
 }
+/* Master–Detail внутри таба сущности (см. EntityTabWorkspace): слева
+   компактная навигация по содержимому таба, справа рабочая область
+   выбранного объекта. Таб-бар выше не трогаем — он выбирает домен,
+   панель выбирает объект внутри домена. */
+.entity-tab-workspace {
+  display: flex;
+  gap: var(--sp-6);
+  align-items: flex-start;
+}
+.entity-tab-workspace__nav {
+  flex: 0 0 300px;
+  max-width: 32%;
+  min-width: 0;
+  padding: var(--sp-4);
+  position: sticky;
+  top: 12px;
+  /* Конец — чуть выше оверлея плеера: иначе низ списка виден только
+     после прокрутки правой области до конца. */
+  max-height: calc(100vh - var(--player-bar-height, 52px) - 32px);
+  overflow-y: auto;
+  /* Навигация крупнее базовых 12px: пункты читаются как рабочий инструмент.
+     кегль мимо шкалы намеренно — рабочему столу сущностей нужна ступень между Body 12 и Lead 16: в нём работают подолгу, а не ловят взглядом. Повторится ещё раз — ступень пора возвращать в шкалу. */
+  font-size: 14px;
+}
+.etw-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.etw-nav-header,
+.etw-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--card-radius);
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+/* кегль мимо шкалы намеренно — рабочему столу сущностей нужна ступень между Body 12 и Lead 16: в нём работают подолгу, а не ловят взглядом. Повторится ещё раз — ступень пора возвращать в шкалу. */
+.etw-nav-header {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.etw-nav-header:hover,
+.etw-nav-item:hover {
+  background: color-mix(in oklab, var(--paper-2, var(--paper)) 92%, var(--ink));
+}
+.etw-nav-header.is-selected,
+.etw-nav-item.is-selected {
+  background: var(--ink);
+  color: var(--paper);
+}
+.etw-nav-header.is-selected .etw-nav-count {
+  color: var(--paper);
+  border-color: var(--paper);
+}
+.etw-nav-chevron {
+  font-size: var(--fs-meta);
+  width: 14px;
+  flex-shrink: 0;
+}
+.etw-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.etw-nav-count {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: var(--sp-0) var(--sp-3);
+  flex-shrink: 0;
+}
+.etw-nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0);
+  margin: var(--sp-1) 0 var(--sp-2) var(--sp-7);
+}
+/* кегль мимо шкалы намеренно — рабочему столу сущностей нужна ступень между Body 12 и Lead 16: в нём работают подолгу, а не ловят взглядом. Повторится ещё раз — ступень пора возвращать в шкалу. */
+.etw-nav-item {
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.etw-nav-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.etw-nav-empty {
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-meta);
+}
+.etw-nav-footer {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.entity-tab-workspace__detail {
+  flex: 1;
+  min-width: 0;
+  /* Тело сущности крупнее базовых 12px: текст, строки и контролы (наследуют).
+     кегль мимо шкалы намеренно — рабочему столу сущностей нужна ступень между Body 12 и Lead 16: в нём работают подолгу, а не ловят взглядом. Повторится ещё раз — ступень пора возвращать в шкалу. */
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* Деталка личности: обычная карточка + статблок двумя столбцами.
+   На узком — в одну колонку. */
+.being-detail-split {
+  display: flex;
+  gap: var(--sp-6);
+  align-items: flex-start;
+}
+.being-detail-split > * {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .being-detail-split {
+    flex-direction: column;
+  }
+}
+@media (max-width: 900px) {
+  .entity-tab-workspace {
+    flex-direction: column;
+  }
+  .entity-tab-workspace__nav {
+    flex: none;
+    max-width: none;
+    width: 100%;
+    position: static;
+    max-height: none;
+  }
+}
 .community-avatar {
   width: 176px;
   height: 176px;
@@ -6443,18 +6931,18 @@ details.card[open] summary {
 }
 
 .gallery-tab {
-  gap: 16px;
+  gap: var(--sp-6);
 }
 .gallery-tab-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border: 1px solid var(--line);
-  margin: -1px -1px 0 -1px;
+  margin: -var(--sp-0) -var(--sp-0) 0 -var(--sp-0);
 }
 .gallery-tab-title {
   font-family: var(--font-ui);
@@ -6473,7 +6961,7 @@ details.card[open] summary {
   max-width: 62ch;
 }
 .gallery-thumbnail-upload {
-  gap: 10px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
 }
 .gallery-thumbnail-preview {
@@ -6493,7 +6981,7 @@ details.card[open] summary {
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 10px;
+  gap: var(--sp-5);
 }
 .gallery-thumb-wrap {
   aspect-ratio: 1;
@@ -6536,7 +7024,7 @@ details.card[open] summary {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 4px 6px;
+  padding: var(--sp-2) var(--sp-3);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   letter-spacing: 0.06em;
@@ -6598,7 +7086,7 @@ details.card[open] summary {
   font-size: var(--fs-meta);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 8px;
+  padding: var(--sp-4);
 }
 .gallery-upload-tile:hover {
   border-color: var(--accent);
@@ -6617,11 +7105,11 @@ details.card[open] summary {
 .lightbox-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-5);
   background: var(--paper-2);
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 16px;
+  padding: var(--sp-6);
 }
 .lightbox-image-wrap {
   position: relative;
@@ -6642,7 +7130,7 @@ details.card[open] summary {
   font-family: var(--font-ui);
   font-size: var(--fs-h1);
   line-height: 1;
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   background: color-mix(in srgb, var(--ink) 40%, transparent);
   color: var(--paper);
   border: none;
@@ -6665,23 +7153,23 @@ details.card[open] summary {
 .finance-summary-card {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
 }
 .stat-plate {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--sp-1);
   border: var(--card-border-width, 1px) solid var(--ink);
   border-radius: var(--card-radius);
   background: var(--paper);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
   min-width: 0;
 }
 .stat-plate-value {
   display: flex;
   align-items: baseline;
-  gap: 3px;
+  gap: var(--sp-2);
   font-family: var(--font-mono);
   font-size: var(--fs-h2);
   line-height: 1;
@@ -6707,7 +7195,7 @@ details.card[open] summary {
   align-items: flex-start;
   background: var(--accent);
   border-color: var(--accent);
-  padding: var(--sp-3);
+  padding: var(--sp-5);
 }
 .stat-plate-lead .stat-plate-value {
   font-family: var(--font-mono);
@@ -6725,19 +7213,19 @@ details.card[open] summary {
 .finance-summary-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-2);
+  gap: var(--sp-4);
 }
 
 /* Главная — "герой → плитки → плотный список" rhythm (design doc §6.1/
    §11.6, ticket 14): main column + a 320px rail of stacked widgets. Large
-   gap between the hero/tiles/list sections (var(--sp-6)); each section's
+   gap between the hero/tiles/list sections (var(--sp-8)); each section's
    own inner padding stays compact (cards keep their normal 12/16). */
 
 .context-menu {
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 4px;
+  padding: var(--sp-2);
   display: flex;
   flex-direction: column;
   min-width: 180px;
@@ -6754,8 +7242,8 @@ details.card[open] summary {
 /* Подпись меню, а не пункт: не кликается, не подсвечивается и отделена
    линией — иначе первая строка читалась бы как ещё одно действие. */
 .context-menu-title {
-  padding: 6px 10px 7px;
-  margin-bottom: 4px;
+  padding: var(--sp-3) var(--sp-4) var(--sp-3);
+  margin-bottom: var(--sp-2);
   border-bottom: 1px solid var(--line);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
@@ -6769,7 +7257,7 @@ details.card[open] summary {
   border: none;
   text-align: left;
   border-radius: var(--card-radius);
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .context-menu button:hover {
   background: var(--paper-2);
@@ -6801,14 +7289,14 @@ details.card[open] summary {
 .context-menu-submenu {
   display: flex;
   flex-direction: column;
-  padding-left: 12px;
+  padding-left: var(--sp-5);
   border-left: 2px solid var(--line);
-  margin: 2px 0 2px 10px;
+  margin: var(--sp-1) 0 var(--sp-1) var(--sp-5);
 }
 
 .entity-header-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 /* Кнопки шапки — flex внутри себя: у «Пульта сессии» рядом с текстом стоит
    значок 18px, и на базовой линии он поднимал строку — надпись садилась на
@@ -6819,7 +7307,7 @@ details.card[open] summary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 
 /* Profile page titles (Campaign/Setting/System) that now double as the "back
@@ -6844,16 +7332,16 @@ details.card[open] summary {
 .nav-bottom {
   position: relative;
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: var(--sp-4);
   border-top: var(--card-border-width, 1px) solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .nav-bottom a {
   color: var(--muted);
   font-size: var(--fs-meta);
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .nav-bottom a.active {
   color: var(--muted);
@@ -6866,13 +7354,13 @@ details.card[open] summary {
 .nav-bottom-button {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   background: none;
   border: none;
   color: var(--muted);
   font-size: var(--fs-meta);
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   border-radius: var(--card-radius);
   cursor: pointer;
   white-space: nowrap;
@@ -6894,18 +7382,18 @@ details.card[open] summary {
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 .timeline-entry {
   border-left: 2px solid var(--accent);
-  padding-left: 12px;
+  padding-left: var(--sp-5);
 }
 .timeline-entry p {
-  margin: 4px 0 0 0;
+  margin: var(--sp-2) 0 0 0;
 }
 .timeline-date {
   display: flex;
-  gap: 10px;
+  gap: var(--sp-5);
   align-items: center;
   font-family: var(--font-mono);
   font-weight: 600;
@@ -6934,20 +7422,20 @@ details.card[open] summary {
 .litm-theme-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: var(--sp-5);
   align-items: start;
 }
 .litm-theme-card {
   min-width: 0;
 }
 .litm-theme-header {
-  margin: -14px -14px 8px -14px;
-  padding: 8px 14px;
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-4) calc(-1 * var(--sp-5));
+  padding: var(--sp-4) var(--sp-5);
   border-radius: var(--card-radius) var(--card-radius) 0 0;
   background: var(--bg-elevated);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .litm-theme-header.litm-power-origin { background: rgba(76, 175, 80, 0.28); }
 .litm-theme-header.litm-power-adventure { background: rgba(229, 57, 53, 0.28); }
@@ -6960,7 +7448,7 @@ details.card[open] summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .litm-theme-title {
   font-size: var(--fs-h3);
@@ -6969,7 +7457,7 @@ details.card[open] summary {
 input.litm-theme-title {
   background: transparent;
   border: none;
-  padding: 2px 4px;
+  padding: var(--sp-1) var(--sp-2);
   width: 100%;
 }
 .litm-theme-subtitle {
@@ -6979,14 +7467,14 @@ input.litm-theme-title {
 
 .litm-tracks {
   display: flex;
-  gap: 12px;
+  gap: var(--sp-5);
   flex-wrap: wrap;
 }
 .litm-track {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: var(--sp-2);
 }
 .litm-track-label {
   font-size: var(--fs-micro);
@@ -6996,15 +7484,15 @@ input.litm-theme-title {
 .litm-tag-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
 }
 .litm-tag {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-4);
   border-radius: var(--card-radius);
   font-size: var(--fs-meta);
   border: var(--card-border-width, 1px) solid var(--line);
@@ -7020,7 +7508,7 @@ input.litm-theme-title {
 .litm-tag button {
   background: transparent;
   border: none;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   line-height: 1;
   color: inherit;
 }
@@ -7033,7 +7521,7 @@ input.litm-theme-title {
   border: none;
   background: transparent;
   flex: 1;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   font-size: var(--fs-meta);
 }
 .litm-tag-add button {
@@ -7060,9 +7548,9 @@ input.litm-theme-title {
 }
 .dnd-spell-row.comp-row {
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 8px 11px;
-  margin: 0 -8px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-4) var(--sp-5);
+  margin: 0 calc(-1 * var(--sp-4));
 }
 /* Три состояния подготовки различаются подложкой и полосой, а не жирностью:
    имя и так набрано дисплейным 700, и «жирнее» ему уже некуда — прежний
@@ -7070,7 +7558,7 @@ input.litm-theme-title {
 .dnd-spell-row.is-prepared {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   border-left: 3px solid var(--accent);
-  padding-left: 5px;
+  padding-left: var(--sp-2);
 }
 .dnd-spell-row.is-prepared-once {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
@@ -7083,7 +7571,7 @@ input.litm-theme-title {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--sp-3);
 }
 /* Имя и оригинал на одной строке — одинаково и у кнопки (заклинание можно
    использовать), и у простого span (нельзя). */
@@ -7091,7 +7579,7 @@ input.litm-theme-title {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-4);
   min-width: 0;
   max-width: 100%;
   text-align: left;
@@ -7139,18 +7627,18 @@ input.litm-theme-title {
 }
 .dnd-feat-section + .dnd-feat-section,
 .dnd-tab-tools + .dnd-feat-section {
-  margin-top: 12px;
+  margin-top: var(--sp-5);
 }
 .dnd-feat-section-head {
   min-height: 36px;
   box-sizing: border-box;
-  padding: 0 12px;
+  padding: 0 var(--sp-5);
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--sp-4);
   list-style: none;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: var(--label-transform, uppercase);
@@ -7178,7 +7666,7 @@ summary.dnd-feat-section-head {
 }
 .dnd-feat-section-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0;
   opacity: 0.6;
 }
@@ -7200,12 +7688,12 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 .dnd-feat-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   min-height: 44px;
   box-sizing: border-box;
   margin: 0;
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   background: none;
   border: 0;
   border-radius: 0;
@@ -7226,7 +7714,7 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 .dnd-feat-name {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 15px;
+  font-size: var(--fs-h3);
   font-weight: 600;
   line-height: 20px;
   overflow-wrap: anywhere;
@@ -7236,10 +7724,10 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 }
 .dnd-feat-level {
   flex: none;
-  padding: 2px 6px;
+  padding: var(--sp-1) var(--sp-3);
   border: 1px solid color-mix(in oklab, var(--level-ink, var(--ink-2)) 30%, transparent);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   line-height: 14px;
   color: var(--level-ink, var(--ink-2));
   white-space: nowrap;
@@ -7274,8 +7762,8 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   outline-offset: -1px;
 }
 .dnd-feat-description {
-  padding: 0 36px 14px 12px;
-  font-size: 13px;
+  padding: 0 var(--sp-8) var(--sp-5) var(--sp-5);
+  font-size: var(--fs-meta);
   line-height: 20px;
   color: var(--ink);
   white-space: pre-wrap;
@@ -7284,25 +7772,25 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 10px;
-  padding: 10px 12px;
+  gap: var(--sp-1) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   border-top: 1px solid color-mix(in oklab, var(--line) 40%, transparent);
 }
 .dnd-feat-prop-label {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.12em;
   text-transform: var(--label-transform, uppercase);
   color: var(--muted);
 }
 .dnd-feat-prop-value {
-  font-size: 15px;
+  font-size: var(--fs-h3);
   color: var(--ink);
 }
 .dnd-feat-notes {
-  padding: 10px 12px 12px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
   border-top: 1px solid color-mix(in oklab, var(--line) 40%, transparent);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 20px;
   white-space: pre-wrap;
 }
@@ -7343,7 +7831,7 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   display: inline;
 }
 .dnd-spell-meta-sep {
-  margin: 0 5px;
+  margin: 0 var(--sp-3);
   color: color-mix(in srgb, var(--sb-muted) 55%, transparent);
 }
 /* Школа — маленькая категория, а не первое слово серой ленты: между
@@ -7359,8 +7847,8 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   text-transform: uppercase;
   color: var(--ink);
   background: color-mix(in oklab, var(--sb-paper) 88%, var(--sb-ink));
-  padding: 2px 7px 3px;
-  margin-right: 1px;
+  padding: var(--sp-1) var(--sp-3) var(--sp-1);
+  margin-right: var(--sp-0);
   line-height: 1.15;
   white-space: nowrap;
 }
@@ -7399,7 +7887,7 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 .dnd-spell-description {
   font-size: calc(var(--fs, 15px) * 0.87);
   color: var(--sb-muted);
-  padding: 4px 8px 8px;
+  padding: var(--sp-2) var(--sp-4) var(--sp-4);
   white-space: pre-wrap;
 }
 /* Характеристики заклинания парой колонок: подписи слева, значения ровным
@@ -7410,10 +7898,10 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 .dnd-spell-fields {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  gap: 5px 14px;
+  gap: var(--sp-3) var(--sp-6);
   align-items: baseline;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
+  padding-bottom: var(--sp-4);
+  margin-bottom: var(--sp-5);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
   white-space: normal;
 }
@@ -7444,20 +7932,20 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   font-size: var(--fs-meta);
   letter-spacing: 0.04em;
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 /* В окне характеристики отбиты линейкой и сверху — заголовок там крупный и
    стоит отдельным блоком. В раскрытии под строкой верхней линейки нет
    намеренно: она читалась бы как разделитель строк списка. */
 .dnd-spell-modal .dnd-spell-fields {
-  padding-top: 14px;
+  padding-top: var(--sp-5);
   border-top: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
 }
 .dnd-equipment-tags {
   font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--ink, inherit);
-  padding: 4px 8px 0;
+  padding: var(--sp-2) var(--sp-4) 0;
 }
 .sb-compendium-link {
   color: inherit;
@@ -7470,13 +7958,13 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 .dnd-personality-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px 16px;
-  margin-top: 8px;
+  gap: var(--sp-4) var(--sp-6);
+  margin-top: var(--sp-4);
 }
 .dnd-personality-grid label {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .dnd-spell-actions {
   /* Unlike the compendium's browse-only hover reveal, these are the primary
@@ -7488,19 +7976,19 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   margin-left: auto;
   /* Строка теперь выровнена по верху (две ступени), поэтому звёздочку
      приходится опускать на пиксель-другой к базовой линии имени. */
-  margin-top: 2px;
+  margin-top: var(--sp-1);
 }
 .dnd-spell-add {
   position: relative;
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
   align-items: center;
 }
 
 .dnd-feature-section {
   border-top: var(--card-border-width, 1px) solid var(--line);
-  padding-top: 8px;
-  margin-top: 2px;
+  padding-top: var(--sp-4);
+  margin-top: var(--sp-1);
 }
 .dnd-feature-section.drag-over {
   border-color: var(--accent);
@@ -7513,8 +8001,8 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   font-size: var(--fs-meta);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin: -2px -2px 8px -2px;
-  padding: 4px 8px;
+  margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-1)) var(--sp-4) calc(-1 * var(--sp-1));
+  padding: var(--sp-2) var(--sp-4);
   border-radius: var(--card-radius);
   background: var(--bg-elevated);
 }
@@ -7525,7 +8013,7 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 .dnd-feature-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 .mention-link {
@@ -7563,7 +8051,7 @@ button.mention-link:focus-visible {
    янтарный, а не серый: серый здесь уже означает «выключено». */
 .xl-tier {
   border-left: 3px solid transparent;
-  padding-left: 10px;
+  padding-left: var(--sp-4);
 }
 
 .xl-tier-exact {
@@ -7592,7 +8080,7 @@ button.mention-link:focus-visible {
 
 .xl-tabs {
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 /* Ссылка, чья цель не установлена. Зачёркнута и приглушена, но остаётся
@@ -7626,7 +8114,7 @@ button.mention-link:focus-visible {
   font-size: var(--fs-meta, 12px);
   text-transform: uppercase;
   letter-spacing: .10em;
-  padding: 4px 10px;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--line);
   background: transparent;
   color: var(--ink);
@@ -7634,7 +8122,7 @@ button.mention-link:focus-visible {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .graph-tb-btn:hover {
   border-color: var(--ink);
@@ -7694,8 +8182,8 @@ button.mention-link:focus-visible {
 .entity-search-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   cursor: pointer;
   font-size: var(--fs-meta);
 }
@@ -7751,10 +8239,10 @@ button.mention-link:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-wrap: wrap;
-  margin: -14px -14px 10px;
-  padding: 8px 12px;
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   background: var(--surface);
   color: var(--on-surface);
   border-bottom: 1px solid var(--line);
@@ -7789,7 +8277,7 @@ button.mention-link:focus-visible {
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
   background-image: var(--card-body-texture);
-  padding: 14px;
+  padding: var(--sp-5);
   clip-path: none;
 }
 
@@ -7797,8 +8285,8 @@ button.mention-link:focus-visible {
 .relation-tone-separator {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 2px 2px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-1) var(--sp-1);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -7806,14 +8294,14 @@ button.mention-link:focus-visible {
   letter-spacing: 0.06em;
   color: var(--muted);
   border-bottom: 1px dashed var(--line);
-  margin-bottom: 2px;
+  margin-bottom: var(--sp-1);
 }
 .relation-drop-zone-mobile-hint {
   display: none;
 }
 @media (max-width: 760px) {
   .relation-drop-zone {
-    padding: 6px 8px;
+    padding: var(--sp-3) var(--sp-4);
     min-height: 28px;
   }
   .relation-drop-zone .muted {
@@ -7828,14 +8316,14 @@ button.mention-link:focus-visible {
 .relation-target-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
   font-size: var(--fs-meta);
 }
 .relation-target-chip button {
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   line-height: 1;
 }
 .relation-pick-list {
@@ -7843,26 +8331,26 @@ button.mention-link:focus-visible {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 .relation-graph-focus-panel {
   align-items: center;
-  gap: 10px;
-  padding: 4px 10px;
+  gap: var(--sp-5);
+  padding: var(--sp-2) var(--sp-4);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
 }
 .relation-graph-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 /* Ссылка «Показать в графе» рядом с заголовком сущности — вспомогательная,
    поэтому по размеру и цвету ближе к подписи, чем к кнопке. */
 .graph-neighbourhood-link {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   font-size: var(--fs-meta, 12px);
   color: var(--muted);
   white-space: nowrap;
@@ -7887,7 +8375,7 @@ button.mention-link:focus-visible {
 .relation-graph-isolated-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: var(--sp-2) var(--sp-6);
   max-height: 220px;
   overflow-y: auto;
   font-size: var(--fs-meta);
@@ -7899,13 +8387,13 @@ button.mention-link:focus-visible {
   background: var(--paper);
   display: flex;
   flex-direction: column;
-  padding: 12px;
-  gap: 8px;
+  padding: var(--sp-5);
+  gap: var(--sp-4);
 }
 .relation-graph-fullscreen-bar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-shrink: 0;
 }
 .relation-graph-fullscreen .relation-graph-wrap {
@@ -7917,7 +8405,7 @@ button.mention-link:focus-visible {
   min-height: 32px;
   border: var(--card-border-width, 1px) dashed var(--line);
   border-radius: var(--card-radius);
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   display: flex;
   align-items: center;
 }
@@ -7933,15 +8421,15 @@ button.mention-link:focus-visible {
 
 .litm-improvements {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--sp-6);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .litm-improvement-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   list-style: none;
 }
 .litm-improvement-text {
@@ -7962,7 +8450,7 @@ button.mention-link:focus-visible {
 .resource-drop-zone {
   border: 1px dashed transparent;
   border-radius: var(--card-radius);
-  padding: 6px;
+  padding: var(--sp-3);
   transition: border-color 0.15s, background 0.15s;
 }
 .resource-drop-zone.drag-over {
@@ -7971,8 +8459,8 @@ button.mention-link:focus-visible {
 }
 .resource-drop-zone > details > summary {
   border-radius: var(--card-radius);
-  padding: 4px 6px;
-  margin: -4px -6px;
+  padding: var(--sp-2) var(--sp-3);
+  margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-3));
   transition: background 0.1s;
 }
 .resource-drop-zone > details > summary:hover {
@@ -7986,8 +8474,8 @@ button.mention-link:focus-visible {
   background: var(--bg-elevated);
 }
 .resource-row {
-  gap: 8px;
-  padding: 4px 8px;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .resource-row:last-child {
@@ -7996,14 +8484,14 @@ button.mention-link:focus-visible {
 .initiative-current {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   border-left: 3px solid var(--accent);
-  padding-left: 5px;
+  padding-left: var(--sp-2);
 }
 .initiative-tile {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
   overflow: hidden;
 }
@@ -8014,19 +8502,19 @@ button.mention-link:focus-visible {
   opacity: 0.45;
 }
 .initiative-actions .comp-mini {
-  padding: 2px 5px;
+  padding: var(--sp-1) var(--sp-2);
   min-width: 0;
 }
 .initiative-conditions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .initiative-condition-chip {
   font-size: var(--fs-micro);
   font-weight: 600;
   color: #fff;
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
   white-space: nowrap;
 }
 /* Прицел метки (Метка охотника / Сглаз): condition-строка «Метка охотника:
@@ -8036,8 +8524,8 @@ button.mention-link:focus-visible {
   content: "⌖ ";
 }
 .initiative-condition-picker {
-  gap: 2px;
-  padding: 6px 4px 2px;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-2) var(--sp-1);
   border-top: var(--card-border-width, 1px) dashed var(--line);
   font-size: 0.9em;
 }
@@ -8062,7 +8550,7 @@ button.mention-link:focus-visible {
   transition: width 0.2s ease;
 }
 .initiative-hp-editor {
-  padding: 4px 2px 2px;
+  padding: var(--sp-2) var(--sp-1) var(--sp-1);
   border-top: var(--card-border-width, 1px) dashed var(--line);
 }
 .resource-row-thumb {
@@ -8081,7 +8569,7 @@ button.mention-link:focus-visible {
   background-color: transparent;
 }
 .playlist-block {
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   transition: border-color 0.15s, background 0.15s;
 }
 .playlist-block.drag-over {
@@ -8089,14 +8577,14 @@ button.mention-link:focus-visible {
   background: var(--bg-elevated);
 }
 .playlist-track-row {
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .playlist-track-row:last-child {
   border-bottom: none;
 }
 .playlist-track-play-btn {
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   border: none;
   background: none;
   cursor: pointer;
@@ -8119,14 +8607,14 @@ button.mention-link:focus-visible {
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
   background: var(--bg-elevated);
   border: var(--card-border-width, 1px) solid var(--line);
   border-radius: var(--card-radius);
-  padding: 8px;
+  padding: var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
   min-width: 200px;
   max-height: 300px;
   overflow-y: auto;
@@ -8135,20 +8623,20 @@ button.mention-link:focus-visible {
 .playlist-nav-group > summary {
   font-weight: 600;
   cursor: pointer;
-  padding: 4px 0;
+  padding: var(--sp-2) 0;
 }
 .playlist-nav-subgroup > summary {
   cursor: pointer;
-  padding: 2px 0 2px 10px;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);
   color: var(--muted);
 }
 .playlist-nav-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   width: 100%;
   text-align: left;
-  padding: 4px 10px 4px 20px;
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-6);
   background: none;
   border: none;
   cursor: pointer;
@@ -8175,13 +8663,13 @@ button.mention-link:focus-visible {
 .backup-block {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .backup-info {
   font-size: var(--fs-meta);
   color: var(--muted);
   word-break: break-all;
-  padding: 0 10px;
+  padding: 0 var(--sp-4);
 }
 .backup-info.error {
   color: var(--status-cancelled);
@@ -8190,9 +8678,9 @@ button.mention-link:focus-visible {
 .archive-row {
   display: grid;
   grid-template-columns: 100px 1fr auto auto;
-  gap: 10px;
+  gap: var(--sp-5);
   align-items: center;
-  padding: 6px 0;
+  padding: var(--sp-3) 0;
   border-bottom: var(--card-border-width, 1px) solid var(--line);
   color: var(--muted);
   font-size: var(--fs-meta);
@@ -8211,15 +8699,15 @@ button.mention-link:focus-visible {
 .comp-row {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 6px 8px;
-  margin: 0 -8px;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  margin: 0 calc(-1 * var(--sp-4));
   border-radius: 0;
   font-size: var(--text-name);
 }
 .comp-row--group {
-  margin: 0 -8px;
-  padding: 6px 8px;
+  margin: 0 calc(-1 * var(--sp-4));
+  padding: var(--sp-3) var(--sp-4);
   background: none;
   color: var(--ink);
   border-bottom: none;
@@ -8229,7 +8717,7 @@ button.mention-link:focus-visible {
   text-transform: none;
   letter-spacing: normal;
   line-height: 1.4;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .comp-row--group .comp-name {
   color: var(--ink);
@@ -8275,8 +8763,8 @@ summary.card-header--inverted input[type="checkbox"]:hover {
 .collapsible-header {
   cursor: pointer;
   border-radius: 0;
-  margin: -4px -6px;
-  padding: 4px 6px;
+  margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-3));
+  padding: var(--sp-2) var(--sp-3);
 }
 .collapsible-header:hover {
   background: color-mix(in oklab, var(--paper-2) 92%, var(--ink));
@@ -8320,7 +8808,7 @@ summary.chevron-summary {
   list-style: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 summary.chevron-summary::-webkit-details-marker {
   display: none;
@@ -8389,7 +8877,7 @@ details[open] > summary.chevron-summary .chevron-icon,
 .comp-actions {
   margin-left: auto;
   display: flex;
-  gap: 4px;
+  gap: var(--sp-2);
   opacity: 0;
   font-size: 0.5em;
 }
@@ -8403,7 +8891,7 @@ details[open] > summary.chevron-summary .chevron-icon,
   }
 }
 .comp-mini {
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
   font-size: var(--fs-meta);
   line-height: 1.4;
 }
@@ -8421,7 +8909,7 @@ details[open] > summary.chevron-summary .chevron-icon,
   border-color: var(--accent);
 }
 .sort-toggle button {
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   font-size: var(--fs-meta);
   background: transparent;
 }
@@ -8432,14 +8920,14 @@ details[open] > summary.chevron-summary .chevron-icon,
 }
 .comp-body {
   margin-left: 1em;
-  padding: 2px 0 8px;
+  padding: var(--sp-1) 0 var(--sp-4);
 }
 .comp-fields {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--sp-0);
   font-size: var(--fs-meta);
-  margin-bottom: 4px;
+  margin-bottom: var(--sp-2);
 }
 .comp-children {
   margin-left: 1em;
@@ -8451,11 +8939,11 @@ details[open] > summary.chevron-summary .chevron-icon,
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--muted);
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 .setting-player-row {
-  padding: 4px 6px;
-  margin: 0 -6px;
+  padding: var(--sp-2) var(--sp-3);
+  margin: 0 calc(-1 * var(--sp-3));
   border-radius: var(--card-radius);
 }
 .setting-player-row:hover {
@@ -8466,8 +8954,8 @@ details[open] > summary.chevron-summary .chevron-icon,
 .card-header--inverted {
   background: var(--ink);
   color: var(--paper);
-  padding: 8px 14px;
-  margin: -14px -14px 12px -14px;
+  padding: var(--sp-4) var(--sp-5);
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) var(--sp-5) calc(-1 * var(--sp-5));
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   text-transform: uppercase;
@@ -8486,7 +8974,7 @@ details[open] > summary.chevron-summary .chevron-icon,
   font-size: var(--fs-micro);
   color: var(--muted);
   border: 1px solid var(--line);
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
 }
 /* Тематическая шапка категории справочника — без инверсии: бумага, акцентный
    заголовок, тонкий разделитель. Hover — чуть заметнее. */
@@ -8512,14 +9000,14 @@ summary.card-header--inverted.is-themed:hover {
 }
 .comp-category summary.comp-level-label {
   cursor: pointer;
-  margin-top: 10px;
+  margin-top: var(--sp-5);
   font-family: var(--font-display);
   font-size: var(--fs-h3);
   font-weight: 700;
   text-transform: none;
   letter-spacing: normal;
   color: var(--text-bright, inherit);
-  padding: 6px 4px;
+  padding: var(--sp-3) var(--sp-2);
 }
 .comp-category summary.comp-level-label:hover {
   color: var(--accent);
@@ -8527,15 +9015,15 @@ summary.card-header--inverted.is-themed:hover {
 .comp-level-label-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 20px;
-  margin-bottom: 5px;
+  gap: var(--sp-3);
+  margin-top: var(--sp-7);
+  margin-bottom: var(--sp-3);
 }
 .comp-level-label-row .comp-level-label {
   margin-top: 0;
 }
 .comp-level-label-row .comp-mini {
-  padding: 0 5px;
+  padding: 0 var(--sp-2);
   line-height: 1.3;
 }
 
@@ -8563,7 +9051,7 @@ body.printing-cheatsheet #root {
 .cheatsheet-live-wrap {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: var(--sp-7);
   align-items: flex-start;
 }
 .cheatsheet-sheet {
@@ -8583,13 +9071,13 @@ body.printing-cheatsheet #root {
 }
 .cheatsheet-fill-list {
   margin: 0;
-  padding-left: 22px;
+  padding-left: var(--sp-7);
 }
 .cheatsheet-fill-list li {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  padding: 3px 0;
+  gap: var(--sp-3);
+  padding: var(--sp-1) 0;
 }
 .cheatsheet-fill-label {
   flex-shrink: 0;
@@ -8603,7 +9091,7 @@ body.printing-cheatsheet #root {
   background: transparent;
   font: inherit;
   color: inherit;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
 }
 .cheatsheet-fill-input:focus {
   outline: none;
@@ -8619,14 +9107,14 @@ body.printing-cheatsheet #root {
 .cheatsheet-fill-textview {
   min-height: 48px;
   border-top: 1px solid #d8cfb8;
-  padding: 6px 0;
+  padding: var(--sp-3) 0;
   line-height: 24px;
   cursor: text;
   white-space: pre-wrap;
 }
 .cheatsheet-fill-mentionarea {
   border-top: 1px solid #d8cfb8;
-  padding: 6px 0;
+  padding: var(--sp-3) 0;
 }
 .cheatsheet-fill-mentionarea .mention-textarea-wrap textarea {
   width: 100%;
@@ -8643,7 +9131,7 @@ body.printing-cheatsheet #root {
   outline: none;
 }
 .cheatsheet-fill-mentionarea > button {
-  margin-top: 6px;
+  margin-top: var(--sp-3);
 }
 .cheatsheet-quest-list {
   list-style: none;
@@ -8653,8 +9141,8 @@ body.printing-cheatsheet #root {
 .cheatsheet-quest-list li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: var(--sp-4);
+  padding: var(--sp-2) 0;
 }
 .cheatsheet-quest-box {
   display: inline-block;
@@ -8682,17 +9170,17 @@ body.printing-cheatsheet #root {
   border-right: none;
 }
 .cheatsheet-sheet h2 {
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-4);
 }
 .cheatsheet-sheet h3 {
-  margin: 10px 0 4px;
+  margin: var(--sp-5) 0 var(--sp-2);
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 .cheatsheet-columns {
   display: flex;
-  gap: 16px;
+  gap: var(--sp-6);
 }
 .cheatsheet-columns section {
   flex: 1;
@@ -8700,8 +9188,8 @@ body.printing-cheatsheet #root {
 .cheatsheet-lines {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 6px;
+  gap: var(--sp-5);
+  margin-top: var(--sp-3);
 }
 .cheatsheet-line {
   border-bottom: 1px solid #999;
@@ -8710,9 +9198,9 @@ body.printing-cheatsheet #root {
 .combat-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-5);
   border-bottom: 1px solid #ccc;
-  padding: 6px 0;
+  padding: var(--sp-3) 0;
 }
 .combat-row-name {
   min-width: 160px;
@@ -8723,7 +9211,7 @@ body.printing-cheatsheet #root {
 .combat-field {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -8739,7 +9227,7 @@ body.printing-cheatsheet #root {
 .combat-boxes {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: var(--sp-1);
   flex: 1;
 }
 .combat-boxes span {
@@ -8759,17 +9247,17 @@ body.printing-cheatsheet #root {
 .dnd-cheatsheet-preview {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .dnd-cheatsheet-card-preview {
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
 }
 
 .dnd-cheatsheet-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
 }
 .dnd-cheatsheet-card {
   border: 1.5px solid #141414;
@@ -8779,7 +9267,7 @@ body.printing-cheatsheet #root {
 }
 .dnd-cheatsheet-card-head {
   border-bottom: 1.5px solid #141414;
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
 }
 .dnd-cheatsheet-card-note {
   font-size: 10px;
@@ -8788,19 +9276,19 @@ body.printing-cheatsheet #root {
 }
 .dnd-cheatsheet-card-vitals {
   display: flex;
-  gap: 10px;
-  margin-top: 4px;
+  gap: var(--sp-5);
+  margin-top: var(--sp-2);
   font-size: 11px;
 }
 .dnd-cheatsheet-card-vitals strong {
-  margin-left: 4px;
+  margin-left: var(--sp-2);
 }
 .dnd-cheatsheet-card-classline {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   font-size: 10.5px;
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: var(--sp-2);
 }
 .dnd-cheatsheet-card-body {
   display: flex;
@@ -8810,7 +9298,7 @@ body.printing-cheatsheet #root {
 }
 .dnd-cheatsheet-card-skills {
   width: 50%;
-  padding: 6px 8px;
+  padding: var(--sp-3) var(--sp-4);
   border-right: 1.5px solid #141414;
   font-size: 11px;
   line-height: 1.5;
@@ -8831,7 +9319,7 @@ body.printing-cheatsheet #root {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.03em;
-  padding: 4px 8px 0;
+  padding: var(--sp-2) var(--sp-4) 0;
 }
 
 /* Точка «доступно обновление» на пункте «Настройки» (см. updateAvailable.ts).
@@ -8855,7 +9343,7 @@ body.printing-cheatsheet #root {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-4);
   background: none;
   color: var(--ink);
   font-family: var(--font-ui);
@@ -8863,13 +9351,13 @@ body.printing-cheatsheet #root {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   line-height: 1.25;
-  padding: 7px 12px;
+  padding: var(--sp-3) var(--sp-5);
   border-bottom: var(--card-border-width, 1px) solid var(--line);
 }
 .sys-card-body {
-  padding: var(--sp-3);
+  padding: var(--sp-5);
   display: grid;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
   align-content: start;
 }
 .sys-card-body img {
@@ -8885,7 +9373,7 @@ body.printing-cheatsheet #root {
 .sys-hero-body {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
-  gap: var(--sp-3);
+  gap: var(--sp-5);
   align-items: start;
   align-content: start;
 }
@@ -8901,11 +9389,11 @@ body.printing-cheatsheet #root {
 /* Плитки кампаний — бескаркасная секция с капс-заголовком (§4.3):
    рамку держат сами плитки, снаружи только отступ от заголовка. */
 .sys-campaigns-body {
-  padding-top: var(--sp-3);
+  padding-top: var(--sp-5);
 }
 .sys-hero-meta {
   display: grid;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .sys-hero-meta-label {
   font-family: var(--font-ui);
@@ -8919,7 +9407,7 @@ body.printing-cheatsheet #root {
   font-size: var(--fs-meta);
   border: var(--card-border-width, 1px) solid var(--line);
   background: var(--paper-2);
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   cursor: pointer;
   white-space: nowrap;
   color: var(--muted);
@@ -8959,7 +9447,7 @@ body.printing-cheatsheet #root {
   font-size: var(--fs-meta);
   line-height: 1;
   border: var(--card-border-width) solid var(--ink);
-  padding: 2px 6px;
+  padding: var(--sp-1) var(--sp-3);
   display: inline-block;
 }
 .sys-tabs button {
@@ -8976,7 +9464,7 @@ body.printing-cheatsheet #root {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1.5;
-  padding: 1px 6px;
+  padding: var(--sp-0) var(--sp-3);
   border-radius: 0;
 }
 
@@ -8986,14 +9474,14 @@ body.printing-cheatsheet #root {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: var(--sp-3);
 }
-.litm-q { margin-bottom: 4px; font-size: var(--fs-h3); line-height: 1.4; }
+.litm-q { margin-bottom: var(--sp-2); font-size: var(--fs-h3); line-height: 1.4; }
 .litm-ideas { list-style: none; padding-left: 0; }
 .litm-ideas li {
-  padding-left: 18px;
+  padding-left: var(--sp-6);
   position: relative;
-  margin-bottom: 4px;
+  margin-bottom: var(--sp-2);
   font-size: var(--fs-h3);
 }
 .litm-ideas li::before {
@@ -9018,12 +9506,12 @@ body.printing-cheatsheet #root {
 .res-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   flex-wrap: wrap;
 }
 .res-toolbar .genre-chips {
   flex: 0 1 auto;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .res-toolbar__search {
   flex: 1 1 220px;
@@ -9043,7 +9531,7 @@ body.printing-cheatsheet #root {
   border-left: var(--card-border-width, 1px) solid var(--line);
   border-radius: 0;
   background: transparent;
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
@@ -9060,14 +9548,14 @@ body.printing-cheatsheet #root {
 .res-toolbar__filters {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   flex: 0 1 auto;
   min-width: 0;
 }
 .res-toolbar__filters label {
   display: flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   margin: 0;
   min-width: 0;
 }
@@ -9085,14 +9573,14 @@ body.printing-cheatsheet #root {
 .res-toolbar__filters-toggle {
   display: none;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
 }
 .res-toolbar__filters-count {
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   background: var(--surface);
   color: var(--on-surface);
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
 }
 .res-toolbar__add {
   flex: 0 0 auto;
@@ -9104,7 +9592,7 @@ body.printing-cheatsheet #root {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
 }
 
 /* --- Подраздел ------------------------------------------------------- */
@@ -9116,10 +9604,10 @@ body.printing-cheatsheet #root {
   list-style: none;
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
-  padding: 7px var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
   cursor: pointer;
 }
 .res-group__band::-webkit-details-marker {
@@ -9130,7 +9618,7 @@ body.printing-cheatsheet #root {
    бумагу. Плашке они не нужны: она и есть шапка карточки. */
 details.card summary.res-group__band {
   margin: 0;
-  padding: 7px var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
   border-radius: 0;
   font-weight: inherit;
 }
@@ -9204,8 +9692,8 @@ details[open] > .res-group__band .chevron-icon {
 .res-row__line {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 4px var(--sp-3);
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-5);
   min-height: 34px;
 }
 .res-row:hover {
@@ -9261,13 +9749,13 @@ details[open] > .res-group__band .chevron-icon {
 .res-row__tags {
   flex: 0 1 auto;
   display: flex;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   overflow: hidden;
 }
 .res-row__tag {
   flex: 0 0 auto;
   border: 1px solid var(--line);
-  padding: 0 5px;
+  padding: 0 var(--sp-2);
   font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
@@ -9290,7 +9778,7 @@ details[open] > .res-group__band .chevron-icon {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
 }
 /* Все действия — один квадрат: счётчик сеттингов ушёл в угол, иначе
    кнопка меняла ширину и ломала вертикаль колонки. */
@@ -9318,7 +9806,7 @@ details[open] > .res-group__band .chevron-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-mono);
@@ -9327,7 +9815,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 /* Правка раскрывается под строкой, соседние строки не двигаются. */
 .res-row__form {
-  padding: var(--sp-2) var(--sp-3) var(--sp-3) 48px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5) var(--sp-9);
   border-top: var(--card-border-width, 1px) solid var(--line);
 }
 .res-row.is-editing {
@@ -9351,7 +9839,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 .theme-card.is-selected .muted { color: var(--on-surface-muted); }
 /* Свотчи темы — квадраты 1:1, без радиусов (§1.1). */
-.theme-swatches { display: flex; gap: 6px; margin-bottom: 10px; }
+.theme-swatches { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-5); }
 .theme-swatch {
   width: 18px; height: 18px;
   border: 1px solid var(--line);
@@ -9379,7 +9867,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 @media (max-width: 520px) {
   .import-drop-zone {
-    padding: 10px 8px !important;
+    padding: var(--sp-4) var(--sp-4) !important;
   }
   .import-drop-zone .character-avatar-upload {
     width: 100%;
@@ -9390,7 +9878,7 @@ details[open] > .res-group__band .chevron-icon {
   background: var(--surface);
   color: var(--on-surface);
   border: 1px solid var(--surface);
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   letter-spacing: 0.04em;
@@ -9421,7 +9909,7 @@ details[open] > .res-group__band .chevron-icon {
 
 /* Статья мастерения — лонгрид как у Long Story Short, во всю ширину, без разрыва посередине слова */
 .mastering-article {
-  padding: 12px 16px 12px 44px;
+  padding: var(--sp-5) var(--sp-6) var(--sp-5) var(--sp-9);
   font-family: var(--font-body);
   font-size: var(--fs-h3);
   line-height: 1.65;
@@ -9455,7 +9943,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 @media (max-width: 760px) {
   .mastering-article {
-    padding: 10px 12px 10px 12px;
+    padding: var(--sp-4) var(--sp-5) var(--sp-4) var(--sp-5);
     font-size: var(--fs-h3);
     line-height: 1.6;
   }
@@ -9472,7 +9960,7 @@ details[open] > .res-group__band .chevron-icon {
 .genre-display {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 .genre-display-header {
   display: flex;
@@ -9503,14 +9991,14 @@ details[open] > .res-group__band .chevron-icon {
 .genre-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .genre-chip {
   --genre-color: #888;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-4);
   border: 1px solid var(--line);
   background: var(--bg-elevated);
   color: var(--ink);
@@ -9526,11 +10014,11 @@ details[open] > .res-group__band .chevron-icon {
   height: 14px;
   color: var(--genre-color);
 }
-.campaign-tile .genre-chips { gap: 4px; }
+.campaign-tile .genre-chips { gap: var(--sp-2); }
 .campaign-tile .genre-chip {
   font-size: var(--fs-micro);
-  padding: 2px 6px;
-  gap: 3px;
+  padding: var(--sp-1) var(--sp-3);
+  gap: var(--sp-2);
 }
 .campaign-tile .genre-chip-icon {
   width: 10px;
@@ -9539,7 +10027,7 @@ details[open] > .res-group__band .chevron-icon {
 .genre-picker {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--sp-6);
   max-width: 480px;
 }
 .genre-picker h2 {
@@ -9551,12 +10039,12 @@ details[open] > .res-group__band .chevron-icon {
 .genre-category {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-3);
 }
 .genre-category-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .genre-category-toggle {
   display: flex;
@@ -9582,7 +10070,7 @@ details[open] > .res-group__band .chevron-icon {
   transform: rotate(90deg);
 }
 .genre-category-count {
-  margin-left: 6px;
+  margin-left: var(--sp-3);
   font-size: var(--fs-micro);
   opacity: 0.55;
   font-weight: 400;
@@ -9590,8 +10078,8 @@ details[open] > .res-group__band .chevron-icon {
 .genre-category-header {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-4);
   border: 1px solid var(--line);
   background: var(--bg-elevated);
   color: var(--ink);
@@ -9625,8 +10113,8 @@ details[open] > .res-group__band .chevron-icon {
 .genre-subgenres {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  padding-left: 24px;
+  gap: var(--sp-3);
+  padding-left: var(--sp-7);
 }
 .genre-subgenres .genre-chip {
   cursor: pointer;
@@ -9650,7 +10138,7 @@ details[open] > .res-group__band .chevron-icon {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 8px;
+  padding-top: var(--sp-4);
   border-top: 1px solid var(--line);
 }
 
@@ -9659,7 +10147,7 @@ details[open] > .res-group__band .chevron-icon {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 1px 4px;
+  padding: var(--sp-0) var(--sp-2);
   font: inherit;
   color: var(--ink);
   width: 120px;
@@ -9667,14 +10155,14 @@ details[open] > .res-group__band .chevron-icon {
 .setting-group-create-inline {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 0;
+  gap: var(--sp-4);
+  padding: var(--sp-4) 0;
 }
 .setting-group-create-input {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   font: inherit;
   color: var(--ink);
   width: 200px;
@@ -9685,7 +10173,7 @@ details[open] > .res-group__band .chevron-icon {
   background: var(--paper-2);
   border: 1px solid var(--line);
   border-radius: 0;
-  padding: 4px 0;
+  padding: var(--sp-2) 0;
   min-width: 160px;
 }
 .setting-group-context-menu button {
@@ -9694,7 +10182,7 @@ details[open] > .res-group__band .chevron-icon {
   text-align: left;
   background: transparent;
   border: none;
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   font: inherit;
   font-size: var(--fs-meta);
   color: var(--ink);
@@ -9726,7 +10214,7 @@ details[open] > .res-group__band .chevron-icon {
   font-size: var(--fs-meta);
 }
 .detail-table td {
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   vertical-align: top;
   border-bottom: 1px solid var(--line);
 }
@@ -9751,7 +10239,7 @@ details[open] > .res-group__band .chevron-icon {
 .campaign-overview-header {
   background: var(--ink);
   color: var(--paper);
-  padding: 6px 10px;
+  padding: var(--sp-3) var(--sp-4);
   margin: 0;
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
@@ -9790,13 +10278,13 @@ details[open] > .res-group__band .chevron-icon {
   text-transform: uppercase;
   letter-spacing: 0.10em;
   color: var(--muted);
-  margin-bottom: 2px;
+  margin-bottom: var(--sp-1);
   display: block;
 }
 .campaign-edit-form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 .campaign-edit-form label {
   display: flex;
@@ -9809,9 +10297,9 @@ details[open] > .res-group__band .chevron-icon {
 .campaign-group-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   border-radius: 0;
   border: 1px solid var(--line);
   background: transparent;
@@ -9830,7 +10318,7 @@ details[open] > .res-group__band .chevron-icon {
   height: 6px;
   background: var(--accent);
   flex-shrink: 0;
-  margin-right: 2px;
+  margin-right: var(--sp-1);
 }
 .campaign-group-chip input[type="checkbox"] {
   width: auto;
@@ -9839,15 +10327,15 @@ details[open] > .res-group__band .chevron-icon {
 .campaign-actions {
   display: flex;
   justify-content: flex-start;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--sp-4);
+  margin-top: var(--sp-2);
 }
 .campaign-actions button {
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   text-transform: uppercase;
   letter-spacing: 0.10em;
-  padding: 6px 12px;
+  padding: var(--sp-3) var(--sp-5);
   border: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
@@ -9873,8 +10361,8 @@ details[open] > .res-group__band .chevron-icon {
 .export-progress {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
 }
 .export-progress-bar {
   height: 8px;
@@ -9920,7 +10408,7 @@ details[open] > .res-group__band .chevron-icon {
   z-index: 3000;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
   max-width: min(420px, calc(100vw - 32px));
   pointer-events: none;
 }
@@ -9928,8 +10416,8 @@ details[open] > .res-group__band .chevron-icon {
   pointer-events: auto;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-4);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
   background: var(--status-cancelled);
@@ -9944,7 +10432,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 .save-notice__actions {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
   flex-shrink: 0;
 }
 .save-notice__retry,
@@ -9954,7 +10442,7 @@ details[open] > .res-group__band .chevron-icon {
   background: transparent;
   border: var(--card-border-width, 1px) solid currentColor;
   border-radius: var(--card-radius);
-  padding: 2px 8px;
+  padding: var(--sp-1) var(--sp-4);
   cursor: pointer;
 }
 .save-notice__retry:disabled {
@@ -9963,7 +10451,7 @@ details[open] > .res-group__band .chevron-icon {
 }
 .save-notice__close {
   border-color: transparent;
-  padding: 2px 6px;
+  padding: var(--sp-1) var(--sp-3);
 }
 @media (max-width: 860px) {
   /* Над нижней навигацией: она висит на 10px от края и сама около 60px, а

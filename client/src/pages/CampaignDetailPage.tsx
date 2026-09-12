@@ -13,9 +13,9 @@ import { CampaignEntryList } from "../components/CampaignEntryList";
 import { WorldExplorationTab } from "../components/WorldExplorationTab";
 import { CampaignPlayerSectionsTab } from "../components/CampaignPlayerSectionsTab";
 import { TaskTracker } from "../components/TaskTracker";
-import { CampaignSecrets } from "../components/CampaignSecrets";
-import { CampaignMilestones } from "../components/CampaignMilestones";
-import { CampaignChaptersScenes } from "../components/CampaignChaptersScenes";
+import { CampaignSecrets, type SecretsNavStats } from "../components/CampaignSecrets";
+import { CampaignMilestones, type MilestonesNavStats } from "../components/CampaignMilestones";
+import { CampaignChaptersScenes, type ChaptersNavStats } from "../components/CampaignChaptersScenes";
 import { CampaignAdventuresCard } from "../components/CampaignAdventuresCard";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { EmptyState } from "../components/EmptyState";
@@ -79,6 +79,7 @@ import type {
 } from "../types";
 import { Timeline } from "../components/Timeline";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
+import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
 
 // Три вида одних и тех же событий: сетка показывает месяц, список — порядок,
@@ -124,6 +125,16 @@ export function CampaignDetailPage() {
   );
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
+  // Навигация внутри таба «Игроки и персонажи» (Master–Detail).
+  const [playersSel, setPlayersSel] = useState<{ section: string; item?: string }>({ section: "roster" });
+  // Навигация сюжетных табов: главы/сцены (приключение → глава),
+  // вехи и тайны (свои → приключения).
+  const [chapSel, setChapSel] = useState<{ section: string; item?: string }>({ section: "all" });
+  const [chapStats, setChapStats] = useState<ChaptersNavStats | null>(null);
+  const [mileSel, setMileSel] = useState<{ section: string; item?: string }>({ section: "all" });
+  const [mileStats, setMileStats] = useState<MilestonesNavStats | null>(null);
+  const [secSel, setSecSel] = useState<{ section: string; item?: string }>({ section: "all" });
+  const [secStats, setSecStats] = useState<SecretsNavStats | null>(null);
   const { deleteWithUndo } = useUndoDelete();
   // Третий вид рядом с сеткой и списком: сетка показывает месяц, список —
   // порядок, ось — расстояния и «сколько у них осталось».
@@ -680,6 +691,7 @@ export function CampaignDetailPage() {
           addLabel="+ Добавить заметку"
           emptyLabel="Заметок пока нет."
           defaultSettingId={campaign.setting_id ?? undefined}
+          layout="master-detail"
         />
       )}
 
@@ -688,15 +700,88 @@ export function CampaignDetailPage() {
       )}
 
       {tab === "Главы и сцены" && (
-        <CampaignChaptersScenes campaignId={campaignId} settingId={campaign.setting_id} />
+        <EntityTabWorkspace
+          sections={[
+            {
+              id: "all",
+              label: "Все",
+              count: (chapStats?.adventures ?? []).reduce((n, a) => n + a.scenes, 0),
+            },
+            ...(chapStats?.adventures ?? []).map((a) => ({
+              id: String(a.id),
+              label: a.name,
+              count: a.scenes,
+              items: a.chapters.map((c) => ({ id: String(c.id), label: `${c.name} · ${c.scenes}` })),
+            })),
+          ]}
+          selection={chapSel}
+          onSelect={setChapSel}
+          workspaceKey={campaignId}
+        >
+          <CampaignChaptersScenes
+            campaignId={campaignId}
+            settingId={campaign.setting_id}
+            adventureId={chapSel.section === "all" ? null : Number(chapSel.section)}
+            chapterId={chapSel.item != null ? Number(chapSel.item) : null}
+            onStats={(s) => setChapStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
+          />
+        </EntityTabWorkspace>
       )}
 
       {tab === "Вехи" && (
-        <CampaignMilestones campaignId={campaignId} settingId={campaign.setting_id} />
+        <EntityTabWorkspace
+          sections={[
+            { id: "all", label: "Все" },
+            {
+              id: "own",
+              label: `Вехи кампании · ${mileStats?.own.done ?? 0}/${mileStats?.own.total ?? 0}`,
+              count: mileStats?.own.total ?? 0,
+            },
+            ...(mileStats?.groups ?? []).map((g) => ({
+              id: String(g.id),
+              label: `${g.name} · ${g.done}/${g.total}`,
+              count: g.total,
+            })),
+          ]}
+          selection={mileSel}
+          onSelect={setMileSel}
+          workspaceKey={campaignId}
+        >
+          <CampaignMilestones
+            campaignId={campaignId}
+            settingId={campaign.setting_id}
+            groupId={mileSel.section === "all" ? null : mileSel.section}
+            onStats={(s) => setMileStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
+          />
+        </EntityTabWorkspace>
       )}
 
       {tab === "Тайны и зацепки" && (
-        <CampaignSecrets campaignId={campaignId} settingId={campaign.setting_id} />
+        <EntityTabWorkspace
+          sections={[
+            { id: "all", label: "Все" },
+            {
+              id: "own",
+              label: `Тайны кампании · ${secStats?.own.done ?? 0}/${secStats?.own.total ?? 0}`,
+              count: secStats?.own.total ?? 0,
+            },
+            ...(secStats?.groups ?? []).map((g) => ({
+              id: String(g.id),
+              label: `${g.name} · ${g.done}/${g.total}`,
+              count: g.total,
+            })),
+          ]}
+          selection={secSel}
+          onSelect={setSecSel}
+          workspaceKey={campaignId}
+        >
+          <CampaignSecrets
+            campaignId={campaignId}
+            settingId={campaign.setting_id}
+            groupId={secSel.section === "all" ? null : secSel.section}
+            onStats={(s) => setSecStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
+          />
+        </EntityTabWorkspace>
       )}
 
         {tab === "Обзор" && campaign.role !== "player" && (
@@ -719,7 +804,17 @@ export function CampaignDetailPage() {
       )}
 
       {tab === "Игроки и персонажи" && (
-        <div className="stack" style={{ gap: 24 }}>
+        <EntityTabWorkspace
+          sections={[
+            { id: "roster", label: "Состав", count: campaign.roster.length },
+            { id: "reminders", label: "Напоминания" },
+            { id: "journals", label: "Путевые заметки" },
+          ]}
+          selection={playersSel}
+          onSelect={setPlayersSel}
+          workspaceKey={campaignId}
+        >
+          {playersSel.section === "roster" && (
           <section className="stack">
             <div className="section-heading-sub">
               <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◆</span> Состав</h3>
@@ -748,6 +843,8 @@ export function CampaignDetailPage() {
               </div>
             )}
           </section>
+          )}
+          {playersSel.section === "reminders" && (
           <section className="stack">
             <div className="section-heading-sub">
               <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">✦</span> Напоминания игрокам</h3>
@@ -755,6 +852,8 @@ export function CampaignDetailPage() {
             </div>
             <RemindersWidget targetType="campaign" targetId={campaignId} />
           </section>
+          )}
+          {playersSel.section === "journals" && (
           <section className="stack">
             <div className="section-heading-sub">
               <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◈</span> Путевые заметки игроков</h3>
@@ -762,7 +861,8 @@ export function CampaignDetailPage() {
             </div>
             <PlayerJournalsSection campaignId={campaignId} />
           </section>
-        </div>
+          )}
+        </EntityTabWorkspace>
       )}
 
       {tab === "Хроника игр" && (
@@ -857,7 +957,7 @@ export function CampaignDetailPage() {
               );
             })()}
           </div>
-          <div className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
+          <div className="chronicle-right stack" style={{ gap: "var(--sp-6)" }}>
             {(() => {
               const todayKey = toLocalDateKey(new Date());
               const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
@@ -922,7 +1022,7 @@ export function CampaignDetailPage() {
       {tab === "Исследование Мира" && <WorldExplorationTab campaignId={campaignId} />}
 
       {tab === "Хроника мира" && (
-        <div className="stack" style={{ gap: "var(--sp-5)" }}>
+        <div className="stack" style={{ gap: "var(--sp-7)" }}>
           <div ref={axisRef} className="card stack" style={{ gap: 8 }}>
             <Timeline
               title="Ось времени"
@@ -1004,7 +1104,7 @@ export function CampaignDetailPage() {
                                 <span className="chronicle-title">{ev.title}</span>
                               </span>
                             </span>
-                            <div className="row" style={{ gap: "var(--sp-2)", alignItems: "center" }}>
+                            <div className="row" style={{ gap: "var(--sp-4)", alignItems: "center" }}>
                               <button
                                 onClick={() => toggleEventImportant(ev)}
                                 title={ev.important ? "Убрать из избранного" : "В избранное"}
@@ -1032,7 +1132,7 @@ export function CampaignDetailPage() {
                 </div>
               </details>
             </div>
-            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-4)" }}>
+            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-6)" }}>
               <details className="card res-group" open>
                 <summary className="res-group__band">
                   <span className="res-group__title">Календарь</span>
@@ -2210,6 +2310,8 @@ function OverviewTab({
   const campaignId = campaign.id;
   const [editingMain, setEditingMain] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Навигация внутри «Обзора» (Master–Detail): 7 секций слева.
+  const [ovSel, setOvSel] = useState<{ section: string; item?: string }>({ section: "main" });
   const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
   const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
   const [adventuresCount, setAdventuresCount] = useState<number | null>(null);
@@ -2297,7 +2399,21 @@ function OverviewTab({
     : safeBackgroundImage(thumbUrl);
 
   return (
-    <div className="stack campaign-overview">
+    <EntityTabWorkspace
+      sections={[
+        { id: "main", label: "Основное" },
+        { id: "adventures", label: "Приключения", count: adventuresCount ?? 0 },
+        { id: "pre", label: "Препродакшен" },
+        { id: "prod", label: "Продакшен" },
+        ...(sessions.some((s) => s.status === "held") ? [{ id: "post", label: "Пост-продакшен" }] : []),
+        { id: "images", label: "Изображения" },
+        { id: "present", label: "Заглавное представление" },
+      ]}
+      selection={ovSel}
+      onSelect={setOvSel}
+      workspaceKey={campaignId}
+    >
+      {ovSel.section === "main" && (
       <details className="card res-group" open>
         <summary className="res-group__band">
           <span className="res-group__title">Основное</span>
@@ -2450,6 +2566,8 @@ function OverviewTab({
         </div>
       </details>
 
+      )}
+      {ovSel.section === "adventures" && (
       <details className="card res-group">
         <summary className="res-group__band">
           <span className="res-group__title">Приключения</span>
@@ -2459,7 +2577,8 @@ function OverviewTab({
           <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} onCount={setAdventuresCount} />
         </div>
       </details>
-
+      )}
+      {ovSel.section === "pre" && (
       <details className="card res-group">
         <summary className="res-group__band">
           <span className="res-group__title">Препродакшен</span>
@@ -2468,7 +2587,8 @@ function OverviewTab({
           <PreproductionTab campaign={campaign} systems={systems} settingsList={settingsList} />
         </div>
       </details>
-
+      )}
+      {ovSel.section === "prod" && (
       <details className="card res-group" open>
         <summary className="res-group__band">
           <span className="res-group__title">Продакшен</span>
@@ -2478,9 +2598,11 @@ function OverviewTab({
           <ProductionDashboard campaign={campaign} sessions={sessions} onSchedule={onSchedule} />
         </div>
       </details>
+      )}
 
-      <PostProductionSection campaign={campaign} sessions={sessions} />
+      {ovSel.section === "post" && <PostProductionSection campaign={campaign} sessions={sessions} />}
 
+      {ovSel.section === "images" && (
       <details className="card res-group">
         <summary className="res-group__band">
           <span className="res-group__title">Изображения</span>
@@ -2540,7 +2662,8 @@ function OverviewTab({
         </div>
         </div>
       </details>
-
+      )}
+      {ovSel.section === "present" && (
       <details className="card res-group">
         <summary className="res-group__band">
           <span className="res-group__title">Заглавное представление</span>
@@ -2553,8 +2676,9 @@ function OverviewTab({
           <PresentationEditor owner={{ kind: "campaign", campaignId: campaign.id, campaignName: campaign.name }} />
         </div>
       </details>
+      )}
       {ovConfirmDialog}
-    </div>
+    </EntityTabWorkspace>
   );
 }
 

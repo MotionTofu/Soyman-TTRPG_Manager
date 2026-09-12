@@ -13,12 +13,32 @@ import type { CampaignAdventureTree, SceneStatus, StoryScene } from "../types";
 // Сцена раскрывается своей сводкой и ссылкой на полную страницу: разворачивать
 // весь текст сцены прямо здесь — снова бесконечный свиток, а строка без сводки
 // заставляет открывать страницу только чтобы вспомнить, о чём сцена.
+export interface ChaptersNavStats {
+  adventures: {
+    id: number;
+    name: string;
+    chapters: { id: number; name: string; scenes: number }[];
+    scenes: number;
+    done: number;
+    pending: number;
+    skipped: number;
+  }[];
+}
+
 export function CampaignChaptersScenes({
   campaignId,
   settingId,
+  adventureId,
+  chapterId,
+  onStats,
 }: {
   campaignId: number;
   settingId: number | null;
+  // Master–Detail: показать одно приключение (и внутри — одну главу).
+  // Не задано — всё дерево, как раньше.
+  adventureId?: number | null;
+  chapterId?: number | null;
+  onStats?: (s: ChaptersNavStats) => void;
 }) {
   const [tree, setTree] = useState<CampaignAdventureTree[]>([]);
 
@@ -28,6 +48,26 @@ export function CampaignChaptersScenes({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Счётчики для левой навигации Master–Detail.
+  useEffect(() => {
+    if (!onStats) return;
+    onStats({
+      adventures: tree.map((adv) => {
+        const all = [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
+        const { done, skipped, pending } = countByStatus(all);
+        return {
+          id: adv.id,
+          name: adv.name,
+          chapters: adv.chapters.map((c) => ({ id: c.id, name: c.name, scenes: c.scenes.length })),
+          scenes: all.length,
+          done,
+          pending,
+          skipped,
+        };
+      }),
+    });
+  }, [tree, onStats]);
 
   // Нетронутые сцены сохраняют ссылочное равенство: вместе с memo на строке
   // это оставляет коммит React в пределах одной сцены, а не всего дерева.
@@ -76,20 +116,26 @@ export function CampaignChaptersScenes({
     );
   }
 
+  const visibleTree = adventureId != null ? tree.filter((a) => a.id === adventureId) : tree;
+
   return (
     <div className="stack campaign-chapters">
       <p className="muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
         Приключения кампании со своими главами и сценами. Правка сцены создаёт её версию для этой кампании, оригинал в сеттинге не меняется.
       </p>
-      {tree.map((adv) => {
+      {adventureId != null && visibleTree.length === 0 && (
+        <p className="muted">Приключение не найдено — возможно, его открепили.</p>
+      )}
+      {visibleTree.map((adv) => {
         const total =
           adv.scenes.length + adv.chapters.reduce((n, c) => n + c.scenes.length, 0);
         const { done, skipped, pending } = countByStatus([
           ...adv.scenes,
           ...adv.chapters.flatMap((c) => c.scenes),
         ]);
+        const advChapters = chapterId == null ? adv.chapters : adv.chapters.filter((c) => c.id === chapterId);
         return (
-          <details key={adv.id} className="card res-group">
+          <details key={adv.id} className="card res-group" open={adventureId === adv.id ? true : undefined}>
             <summary className="res-group__band">
               <span className="res-group__title" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adv.name}</span>
               <span className="res-group__count">
@@ -101,7 +147,7 @@ export function CampaignChaptersScenes({
             <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
               {/* Сцены, лежащие прямо на приключении: у книжного импорта их
                   почти не бывает, у самодельного — наоборот, все. */}
-              {adv.scenes.length > 0 && (
+              {adv.scenes.length > 0 && chapterId == null && (
                 <SceneList
                   scenes={adv.scenes}
                   campaignId={campaignId}
@@ -109,7 +155,7 @@ export function CampaignChaptersScenes({
                   title={adv.chapters.length > 0 ? "Без главы" : null}
                 />
               )}
-              {adv.chapters.map((c) => {
+              {advChapters.map((c) => {
                 const chDone = c.scenes.filter((s) => s.state?.status === "done").length;
                 const chSkipped = c.scenes.filter((s) => s.state?.status === "skipped").length;
                 const chPending = c.scenes.length - chDone - chSkipped;
@@ -128,7 +174,7 @@ export function CampaignChaptersScenes({
                     </div>
                   </details>
                 );
-              })}
+                })}
               {total === 0 && (
                 <div className="card" style={{ borderStyle: "dashed" }}>
                   <p className="muted" style={{ maxWidth: "62ch" }}>Сцен пока нет — добавьте первую в сеттинге или создайте «только в кампании».</p>
