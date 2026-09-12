@@ -1361,42 +1361,16 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     }
   }
 
-  // Unified relations: extend entity_relations with section and origin from
-  // generic_links, then migrate all generic_links rows into entity_relations.
+  // Колонки от попытки объединить две таблицы связей (лето 2026). Само
+  // объединение откатано 2026-09-12 — см. шаг «Откат объединения» в конце
+  // миграции и `MainWorks/CodeBase/Два_графа_—_решения_2026-09-12.md`.
+  // Колонки остаются: `ALTER TABLE DROP COLUMN` на старых базах друга не
+  // выполнить, а пустая колонка ничему не мешает.
   if (!columnExists(database, "entity_relations", "section")) {
     database.exec("ALTER TABLE entity_relations ADD COLUMN section TEXT");
   }
   if (!columnExists(database, "entity_relations", "origin")) {
     database.exec("ALTER TABLE entity_relations ADD COLUMN origin TEXT NOT NULL DEFAULT 'planned'");
-  }
-  // Migrate generic_links → entity_relations (one-time, idempotent via NOT EXISTS)
-  if (tableExists(database, "generic_links")) {
-    const glCount = (database.prepare("SELECT COUNT(*) as c FROM generic_links").get() as { c: number }).c;
-    const erCount = (database.prepare("SELECT COUNT(*) as c FROM entity_relations").get() as { c: number }).c;
-    // Only migrate if generic_links has rows that aren't yet in entity_relations
-    if (glCount > 0) {
-      const existingPairs = new Set(
-        (database.prepare("SELECT from_type, from_id, to_type, to_id, section FROM entity_relations").all() as {
-          from_type: string; from_id: number; to_type: string; to_id: number; section: string | null;
-        }[]).map((r) => `${r.from_type}:${r.from_id}:${r.to_type}:${r.to_id}:${r.section ?? ""}`)
-      );
-      const links = database.prepare("SELECT * FROM generic_links").all() as {
-        id: number; from_type: string; from_id: number; to_type: string; to_id: number;
-        section: string | null; origin: string; created_at: string;
-      }[];
-      const insert = database.prepare(
-        `INSERT OR IGNORE INTO entity_relations (from_type, from_id, to_type, to_id, tone, label, description, section, origin, created_at)
-         VALUES (?, ?, ?, ?, 'neutral', '', '', ?, ?, ?)`
-      );
-      let migrated = 0;
-      for (const l of links) {
-        const key = `${l.from_type}:${l.from_id}:${l.to_type}:${l.to_id}:${l.section ?? ""}`;
-        if (existingPairs.has(key)) continue;
-        insert.run(l.from_type, l.from_id, l.to_type, l.to_id, l.section, l.origin ?? "planned", l.created_at);
-        migrated++;
-      }
-      if (migrated > 0) console.log(`[db] Migrated ${migrated} generic_links → entity_relations`);
-    }
   }
 
   // Sub-grouping within a resource's "type" — currently only used by the
@@ -6245,6 +6219,67 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
       session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
       set_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
     )`);
+  }
+
+  // Кабинет игрока, шаг 2 (решения 2026-09-12, §4): ступень выдачи и игроцкий
+  // текст. Умолчание ступени — 'open': грант исторически означал «открыта», и
+  // любое другое умолчание молча урезало бы уже розданное (ошибка здесь
+  // невидима — игрок просто перестал бы видеть то, что видел вчера).
+  // Нормализация ниже — страховка: пустое и неизвестное читается как 'open',
+  // а не как «спрятать».
+  if (tableExists(database, "player_visibility_grants") && !columnExists(database, "player_visibility_grants", "access_level")) {
+    database.exec("ALTER TABLE player_visibility_grants ADD COLUMN access_level TEXT NOT NULL DEFAULT 'open'");
+  }
+  if (columnExists(database, "player_visibility_grants", "access_level")) {
+    database.exec("UPDATE player_visibility_grants SET access_level = 'open' WHERE access_level IS NULL OR access_level NOT IN ('mentioned', 'open')");
+  }
+  for (const table of ["setting_locations", "setting_beings", "setting_communities", "setting_calendar_events"]) {
+    if (tableExists(database, table) && !columnExists(database, table, "player_text")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN player_text TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
+  // --- Откат объединения двух таблиц связей (2026-09-12) ---
+  //
+  // Летом 2026 `entity_relations` получила колонки `section`/`origin`, а в
+  // миграции появился копир `generic_links → entity_relations`, подписанный
+  // «one-time». Флага у него не было, и он шёл при КАЖДОМ открытии базы:
+  // добавленная связь попадала в граф только после перезапуска сервера, а
+  // удалённая оставалась там навсегда — копий копир не убирал.
+  //
+  // Решение (`MainWorks/CodeBase/Два_графа_—_решения_2026-09-12.md`, п. 1):
+  // это два понятия, а не два хранилища одного. `generic_links` — членство в
+  // списке (секция, происхождение, заметка, количество), `entity_relations` —
+  // авторское мнение (тон, подпись, описание, направление). Копир убран, граф
+  // читает обе таблицы.
+  //
+  // Шаг разбирает то, что копир и сломанные зоны успели наделать, и потому
+  // смотрит на тон с подписью: пустые — это списочная строка, заполненные —
+  // мнение, которое трогать нельзя, даже если у него есть секция.
+  if (tableExists(database, "generic_links") && columnExists(database, "entity_relations", "section")) {
+    const listLike = "section IS NOT NULL AND tone = 'neutral' AND TRIM(label) = '' AND TRIM(description) = ''";
+    const twin = `EXISTS (SELECT 1 FROM generic_links gl
+        WHERE gl.from_type = er.from_type AND gl.from_id = er.from_id
+          AND gl.to_type = er.to_type AND gl.to_id = er.to_id
+          AND IFNULL(gl.section, '') = IFNULL(er.section, ''))`;
+    // Строки, которых в списках нет: их писали зоны, чинённые в тот же день
+    // (зона сцены и «приложить ресурс» писали в таблицу мнений, а читали
+    // списки, и добавленное не показывалось вовсе). Переезжают в списки, а не
+    // удаляются: это работа Мастера. У владельца таких две — существа в
+    // сцене 311 от 8 сентября.
+    const moved = database
+      .prepare(
+        `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section, origin, created_at)
+         SELECT er.from_type, er.from_id, er.to_type, er.to_id, er.section, IFNULL(er.origin, 'planned'), er.created_at
+           FROM entity_relations er
+          WHERE ${listLike} AND NOT ${twin}`
+      )
+      .run().changes;
+    // Копии: та же пара в той же секции уже есть в списках.
+    const dropped = database.prepare(`DELETE FROM entity_relations WHERE ${listLike}`).run().changes;
+    if (moved > 0 || dropped > 0) {
+      console.log(`[db] Откат объединения связей: перенесено в generic_links ${moved}, убрано копий ${dropped - moved}`);
+    }
   }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.

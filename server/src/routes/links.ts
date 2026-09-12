@@ -209,12 +209,25 @@ linksRouter.get("/graph", (req, res) => {
   // campaign_id is the narrower scope, so it wins if both are given.
   const scopeQueries = buildScope(campaign_id, setting_id, includeSpots);
 
-  // Unified: all relations now live in entity_relations. Rows migrated from
-  // generic_links have section set and tone='neutral'; original entity_relations
-  // rows have tone/label set. We read everything and classify below.
-  const allRelations = db
-    .prepare("SELECT from_type, from_id, to_type, to_id, section, tone, label FROM entity_relations")
-    .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null; tone: string; label: string }[];
+  // Две таблицы — два понятия (решения 2026-09-12, «Два графа», п. 1):
+  // `generic_links` — членство в списке (секция говорит, в каком),
+  // `entity_relations` без секции — авторское мнение с тоном и подписью.
+  // Граф читает обе и различает их по наличию секции, как и раньше.
+  //
+  // Читал он до 2026-09-12 только `entity_relations`, куда списки копировались
+  // при каждом старте сервера. Копир копии не убирал: удалённая связь
+  // оставалась в графе навсегда, а добавленная появлялась лишь после
+  // перезапуска. Копир убран, копии убраны шагом миграции.
+  const allRelations = [
+    ...(db
+      .prepare("SELECT from_type, from_id, to_type, to_id, section, 'neutral' as tone, '' as label FROM generic_links")
+      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null; tone: string; label: string }[]),
+    ...(db
+      .prepare(
+        "SELECT from_type, from_id, to_type, to_id, NULL as section, tone, label FROM entity_relations WHERE section IS NULL"
+      )
+      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null; tone: string; label: string }[]),
+  ];
 
   // Structural membership (who belongs to a faction) and habitat (who lives
   // where) links — not authored opinions like entity_relations, just
