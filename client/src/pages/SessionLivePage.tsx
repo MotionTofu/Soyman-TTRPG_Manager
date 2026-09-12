@@ -161,6 +161,7 @@ export function SessionLivePage() {
     <div className="stack session-live">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
+          {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
           <h1>
             <Link to={`/campaigns/${campaign.id}`}>{campaign.name}</Link> —{" "}
             {sessionLabel(session)}

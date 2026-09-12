@@ -126,6 +126,7 @@ export function PlayerCabinetPage() {
   return (
     <div className="stack">
       <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кабинет" }]} />
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <h1>Кабинет</h1>
 
       <div className="card row" style={{ alignItems: "flex-start", gap: 16 }}>

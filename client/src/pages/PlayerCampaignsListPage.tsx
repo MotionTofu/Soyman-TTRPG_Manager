@@ -33,6 +33,7 @@ export function PlayerCampaignsListPage() {
 
   return (
     <div className="stack">
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <h1>Кампании</h1>
       {campaigns.length === 0 && <p className="muted">Вы пока не состоите ни в одной кампании.</p>}
       <div className="stack" style={{ gap: 8 }}>

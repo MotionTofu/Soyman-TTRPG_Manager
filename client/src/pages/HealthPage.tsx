@@ -427,6 +427,7 @@ export function HealthPage() {
       )}
 
       {/* Таббар */}
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <div className="tabs" role="tablist" aria-label="Разделы здоровья">
         {TABS.map((t) => (
           <button

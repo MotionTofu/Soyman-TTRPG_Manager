@@ -1120,6 +1120,7 @@ export function SettingDetailPage() {
 
           <div className="chronicle-split">
             <div className="chronicle-left stack">
+              {/* каркас в обход намеренно — переключатель внутри вкладки, а не вкладки страницы: полоса каркаса одна на карточку */}
               {(calendarEvents.length > 0 || timelines.length > 0 || cycles.length > 0 || eras.length > 0 || importantDates.length > 0) && (
                 <div className="tabs">
                   {(["Хронология", "Повторяющиеся", "Циклы", "Календарь"] as const).map((t) => (
@@ -1448,6 +1449,7 @@ function GeographyTab({ settingId }: { settingId: number }) {
   );
   return (
     <div className="stack">
+      {/* каркас в обход намеренно — переключатель внутри вкладки, а не вкладки страницы: полоса каркаса одна на карточку */}
       <div className="tabs" role="tablist" aria-label="Режим просмотра географии">
         {tab("columns", "Колонки")}
         {tab("list", "Список")}
@@ -1557,6 +1559,7 @@ function PopulationTab({ settingId }: { settingId: number }) {
 
   return (
     <div className="card stack population-tab" id="population">
+      {/* каркас в обход намеренно — переключатель внутри вкладки, а не вкладки страницы: полоса каркаса одна на карточку */}
       <div className="tabs" role="tablist">
         {POPULATION_SECTIONS.map((s) => (
           <button key={s} role="tab" aria-selected={section === s} className={section === s ? "active" : ""} onClick={() => setSection(s)}>

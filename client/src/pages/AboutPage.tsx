@@ -50,6 +50,7 @@ export function AboutPage() {
     <div className="stack">
       <SectionHeading section="about" compact>Справка</SectionHeading>
 
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <div className="tabs">
         {TABS.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>

@@ -463,6 +463,7 @@ export function ArchivePage() {
   return (
     <div className="stack">
       <SectionHeading section="archive" compact>Архив</SectionHeading>
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <div className="tabs">
         {TABS.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>

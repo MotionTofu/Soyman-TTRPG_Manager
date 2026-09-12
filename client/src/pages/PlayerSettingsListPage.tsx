@@ -73,6 +73,7 @@ export function PlayerSettingsListPage() {
     return (
       <div className="stack" aria-busy="true" aria-label="Загрузка сеттингов">
         <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Сеттинги" }]} />
+        {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
         <h1>Сеттинги</h1>
         <div className="card" style={{ height: 80, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
         <div className="card" style={{ height: 80, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: "120ms" }} />
@@ -84,6 +85,7 @@ export function PlayerSettingsListPage() {
     return (
       <div className="stack">
         <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Сеттинги" }]} />
+        {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
         <h1>Сеттинги</h1>
         <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось загрузить сеттинги: {loadError}</span>
@@ -96,6 +98,7 @@ export function PlayerSettingsListPage() {
   return (
     <div className="stack">
       <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Сеттинги" }]} />
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <h1>Сеттинги</h1>
       {settings!.length === 0 && <p className="muted">Ваши кампании пока не привязаны к сеттингу.</p>}
       <div className="stack" style={{ gap: 8 }}>

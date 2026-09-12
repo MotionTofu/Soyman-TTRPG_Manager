@@ -128,6 +128,7 @@ export function PlayerSheetsPage() {
   return (
     <div className="stack">
       <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Чарники" }]} />
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <h1>Чарники</h1>
       {listError && <p className="error">Не загрузилось: {listError}</p>}
       {characters === null && !listError && <p className="muted">Загрузка…</p>}

@@ -114,6 +114,7 @@ export function ResourcesListPage() {
       <SectionBackground />
       <SectionHeading section="resources" compact>Ресурсы</SectionHeading>
 
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <div className="tabs">
         <button className={section === "all" ? "active" : ""} onClick={() => setSection("all")}>
           Все

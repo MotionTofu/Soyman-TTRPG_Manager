@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EmptyState } from "../components/EmptyState";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";
 import { toLocalDateKey } from "../utils/date";

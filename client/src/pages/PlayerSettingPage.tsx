@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatEventDate } from "../inworldCalendar";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";

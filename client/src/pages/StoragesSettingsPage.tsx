@@ -459,6 +459,7 @@ export function StoragesSettingsPage() {
       )}
       {error && <div id="storage-error" className="backup-info error" role="alert">{error}</div>}
 
+      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <div className="tabs" role="tablist" aria-label="Разделы настроек">
         <button role="tab" aria-selected={activeTab === "interface"} className={activeTab === "interface" ? "active" : ""} onClick={() => setActiveTab("interface")}>
           Интерфейс
