@@ -7,7 +7,7 @@ import { EmptyState } from "../components/EmptyState";
 import { MentionText } from "../components/mentions/MentionText";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
-import { SystemGroupTabs } from "../components/SystemGroupTabs";
+import { GroupTabs } from "../components/GroupTabs";
 import { SystemGroupMembersModal } from "../components/SystemGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
@@ -169,7 +169,10 @@ export function SystemsListPage() {
         </div>
       </div>
 
-      <SystemGroupTabs
+      <GroupTabs
+        endpoint="/system-groups"
+        label="Группы систем"
+        deleteNote="Системы не будут удалены — они останутся в разделе «Все системы»."
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onGroupsChanged={loadGroups}

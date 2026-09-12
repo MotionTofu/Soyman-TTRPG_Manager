@@ -7,7 +7,7 @@ import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
-import { PlayerGroupTabs } from "../components/PlayerGroupTabs";
+import { GroupTabs } from "../components/GroupTabs";
 import { PlayerGroupMembersModal } from "../components/PlayerGroupMembersModal";
 import { formatNearestDate } from "../nearestDate";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
@@ -199,7 +199,10 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
       </div>
 
       {players.length > 0 && (
-        <PlayerGroupTabs
+        <GroupTabs
+          endpoint="/player-groups"
+          label="Группы игроков"
+          deleteNote="Игроки не будут удалены — они останутся в разделе «Все игроки»."
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onGroupsChanged={refresh}

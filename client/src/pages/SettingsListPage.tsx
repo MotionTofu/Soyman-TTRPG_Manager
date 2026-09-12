@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { SettingWizard } from "../components/SettingWizard";
-import { SettingGroupTabs } from "../components/SettingGroupTabs";
+import { GroupTabs } from "../components/GroupTabs";
 import { GroupMembersModal } from "../components/GroupMembersModal";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
@@ -165,7 +165,10 @@ export function SettingsListPage() {
         </div>
       </div>
 
-      <SettingGroupTabs
+      <GroupTabs
+        endpoint="/setting-groups"
+        label="Группы сеттингов"
+        deleteNote="Сеттинги не будут удалены — они останутся в разделе «Все сеттинги»."
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onGroupsChanged={refresh}

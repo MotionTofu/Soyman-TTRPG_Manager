@@ -150,33 +150,20 @@ export interface Setting {
   imported_at: string | null;
 }
 
-export interface SettingGroup {
+/** Группа в списке — папка, которую владелец заводит сам. Таблицы у каждого
+ *  вида свои (`setting_groups`, `campaign_groups`, `system_groups`,
+ *  `player_groups`), а строка одна и та же; полоса групп — `GroupTabs`. */
+export interface EntityGroup {
   id: number;
   name: string;
   sort_order: number;
   created_at: string;
 }
 
-export interface CampaignGroup {
-  id: number;
-  name: string;
-  sort_order: number;
-  created_at: string;
-}
-
-export interface SystemGroup {
-  id: number;
-  name: string;
-  sort_order: number;
-  created_at: string;
-}
-
-export interface PlayerGroup {
-  id: number;
-  name: string;
-  sort_order: number;
-  created_at: string;
-}
+export type SettingGroup = EntityGroup;
+export type CampaignGroup = EntityGroup;
+export type SystemGroup = EntityGroup;
+export type PlayerGroup = EntityGroup;
 
 export interface CalendarMonth {
   id: number;

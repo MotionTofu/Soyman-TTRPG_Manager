@@ -4,11 +4,20 @@ import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignWizard } from "../components/CampaignWizard";
-import { CampaignGroupTabs } from "../components/CampaignGroupTabs";
+import { GroupTabs } from "../components/GroupTabs";
 import { CampaignGroupMembersModal } from "../components/CampaignGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
 import type { Campaign, CampaignGroup, Setting, System } from "../types";
+
+// Две вкладки, которых нет у других списков: не группы, а взгляд на список по
+// `campaigns.role` — «эту веду» против «в этой играю». Ключи совпадают с теми,
+// по которым фильтрует `visible` ниже, и с проверкой на строке 153, где кнопка
+// состава группы прячется у неизменяемых вкладок.
+const CAMPAIGN_ROLE_TABS = [
+  { id: "role:gm", label: "Я мастер" },
+  { id: "role:player", label: "Я игрок" },
+] as const;
 
 export function CampaignsListPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -100,7 +109,11 @@ export function CampaignsListPage() {
         </button>
       </div>
 
-      <CampaignGroupTabs
+      <GroupTabs
+        endpoint="/campaign-groups"
+        label="Кампании"
+        deleteNote="Кампании не будут удалены — они останутся в разделе «Все кампании»."
+        extraTabs={CAMPAIGN_ROLE_TABS}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onGroupsChanged={refresh}
