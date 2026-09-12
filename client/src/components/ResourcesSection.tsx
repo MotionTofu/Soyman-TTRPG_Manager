@@ -142,16 +142,17 @@ export const ResourcesSection = memo(function ResourcesSection({
     await api.post("/resources", form);
   }
 
+  // Приложенный по ссылке ресурс — членство в списке, а не мнение: читает и
+  // удаляет этот блок `/links`, поэтому и пишет туда же (решения 2026-09-12,
+  // «Два графа», п. 1). Запись в `/entity-relations` ложилась в таблицу
+  // мнений, и приложенный ресурс в списке не появлялся вовсе.
   async function attachResource(resourceId: number) {
-    await api.post("/entity-relations", {
+    await api.post("/links", {
       from_type: scope,
       from_id: entityId,
       to_type: "resource",
       to_id: resourceId,
       section: "attached_resource",
-      tone: "neutral",
-      label: "",
-      description: "",
     });
     loadAttached();
   }

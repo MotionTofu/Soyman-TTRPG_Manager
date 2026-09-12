@@ -176,31 +176,24 @@ export const SectionDropZone = memo(function SectionDropZone({
 
   // Добавить связь. Повтор на плашке не предлагается: ответ мог потеряться
   // после того, как связь уже легла, и повтор завёл бы вторую.
+  //
+  // Читает зона `/links`, поэтому и пишет туда же — членство в списке живёт в
+  // одной таблице (решения 2026-09-12, «Два графа», п. 1). Раньше зона сцены
+  // писала в `/entity-relations`: строка ложилась в таблицу мнений, зона её не
+  // видела вовсе, а удаление уносило в `DELETE FROM entity_relations` id из
+  // списков — на базе владельца 409 из 1029 id пересекались, 27 попадали в
+  // мнения, и щелчок по крестику стирал не то, на что нажали.
   async function addLink(result: SearchResult): Promise<boolean> {
     const done = await run(
       async () => {
-        if (entityType === "session") {
-          await write.post("/links", {
-            from_type: entityType,
-            from_id: entityId,
-            to_type: result.type,
-            to_id: result.id,
-            section,
-            origin: origin === "live" ? "live" : "planned",
-          });
-        } else {
-          await write.post("/entity-relations", {
-            from_type: entityType,
-            from_id: entityId,
-            to_type: result.type,
-            to_id: result.id,
-            section,
-            origin,
-            tone: "neutral",
-            label: "",
-            description: "",
-          });
-        }
+        await write.post("/links", {
+          from_type: entityType,
+          from_id: entityId,
+          to_type: result.type,
+          to_id: result.id,
+          section,
+          origin: origin === "live" ? "live" : "planned",
+        });
         return true;
       },
       { affects: linkAffects(entityType, entityId), retry: false }
@@ -234,10 +227,7 @@ export const SectionDropZone = memo(function SectionDropZone({
 
   async function remove(relationId: number) {
     setPendingDelete(null);
-    await run(
-      () => (entityType === "session" ? write.del(`/links/${relationId}`) : write.del(`/entity-relations/${relationId}`)),
-      { affects: linkAffects(entityType, entityId) }
-    );
+    await run(() => write.del(`/links/${relationId}`), { affects: linkAffects(entityType, entityId) });
   }
 
   const filteredEntries = filter.trim()
