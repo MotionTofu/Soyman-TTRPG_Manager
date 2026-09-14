@@ -10,6 +10,7 @@ import { MentionsTab } from "../components/MentionsTab";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityPage } from "../components/EntityPage";
+import { LoadErrorCard } from "../components/Loadable";
 import { RelationsTab, type RelationsSection, type RelationStats } from "../components/RelationsTab";
 import { RELATION_TONE_LABELS } from "../relations";
 import { LocationInfoTab } from "../components/LocationInfoTab";
@@ -1346,21 +1347,10 @@ export function LocationDetailPage() {
             )}
           </div>
           {loadError && (
-            <div
-              className="card"
-              style={{
-                borderLeft: "3px solid var(--status-cancelled)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <span>Не удалось обновить обитателей: {loadError}</span>
-              <button className="primary" onClick={() => refresh()}>
-                Повторить
-              </button>
-            </div>
+            <LoadErrorCard
+              message={<>Не удалось обновить обитателей: {loadError}</>}
+              onRetry={() => refresh()}
+            />
           )}
           {(allInhabitants.length > 0 || location.inhabitant_communities.length > 0) && (
             <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: "var(--fs-meta)", fontFamily: "var(--font-mono)" }} aria-live="polite">

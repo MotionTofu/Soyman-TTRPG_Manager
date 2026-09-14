@@ -275,6 +275,8 @@ export interface SettingCalendarEvent extends EventTimeFields {
   description: string;
   full_description: string;
   consequences: string;
+  /** Игроцкий текст (Кабинет игрока, шаг 2): что рассказываем игрокам. */
+  player_text: string;
   inworld_year: number;
   inworld_month: number;
   inworld_day: number;
@@ -803,6 +805,8 @@ export interface SettingLocation {
   /** Название в оригинале книги: «Sea Ward». */
   name_original: string;
   description: string;
+  /** Игроцкий текст (Кабинет игрока, шаг 2): что рассказываем игрокам. */
+  player_text: string;
   folder_path: string | null;
   avatar_image_path: string | null;
   avatar_image_url: string | null;
@@ -899,6 +903,8 @@ export interface SettingBeing {
   history: string;
   behavior: string;
   description: string;
+  /** Игроцкий текст (Кабинет игрока, шаг 2): что рассказываем игрокам. */
+  player_text: string;
   creature_meta: CreatureMeta | null;
   /** Сколько карточек статблока заведено: списки помечают значком тех, у кого хотя бы одна. */
   statblock_count?: number;
@@ -926,6 +932,8 @@ export interface SettingCommunity {
   current_situation: string;
   features: string;
   goals: string;
+  /** Игроцкий текст (Кабинет игрока, шаг 2): что рассказываем игрокам. */
+  player_text: string;
   tags: string[];
   folder_path: string | null;
   avatar_image_path: string | null;
@@ -1396,6 +1404,10 @@ export interface WorldExplorationEntry {
   kind: WorldExplorationTag;
   name: string;
   description: string;
+  /** Вкладка дневника; NULL — Лента. */
+  folder_path: string | null;
+  /** Ручной порядок внутри вкладки: меньше — выше. */
+  position: number;
   created_at: string;
 }
 
@@ -1505,12 +1517,15 @@ export type VisibilityTargetType =
   | "setting_community"
   | "setting_calendar_event";
 
+export type AccessLevel = "mentioned" | "open";
+
 export interface PlayerVisibilityGrant {
   id: number;
   campaign_id: number;
   player_id: number;
   target_type: VisibilityTargetType;
   target_id: number;
+  access_level: AccessLevel;
   created_at: string;
 }
 
@@ -1590,31 +1605,53 @@ export interface PlayerSection {
 
 export interface SettingPlayerLocation {
   id: number;
+  parent_id: number | null;
   name: string;
-  description: string;
+  kind: string;
+  description?: string;
+  player_text?: string;
+  avatar_image_url?: string | null;
+  thumbnail_image_url?: string | null;
+  access_level: AccessLevel;
 }
 
 export interface SettingPlayerBeing {
   id: number;
   name: string;
   category: string;
-  history: string;
-  behavior: string;
+  history?: string;
+  player_text?: string;
+  avatar_image_url?: string | null;
+  thumbnail_image_url?: string | null;
+  access_level: AccessLevel;
 }
 
 export interface SettingPlayerCommunity {
   id: number;
   name: string;
-  description: string;
+  description?: string;
+  player_text?: string;
+  avatar_image_url?: string | null;
+  thumbnail_image_url?: string | null;
+  access_level: AccessLevel;
 }
 
 export interface SettingPlayerChronicleEvent {
   id: number;
   title: string;
-  description: string;
+  description?: string;
+  player_text?: string;
   inworld_year: number;
   inworld_month: number;
   inworld_day: number;
+  access_level: AccessLevel;
+}
+
+// Превью «Глазами игрока» (GET /visibility-grants/preview): та же форма, что
+// игрок получает через /player/* — тем же расчётом на сервере.
+export interface PlayerPreview {
+  setting: SettingPlayerContent;
+  sections: PlayerSection[];
 }
 
 export interface SettingPlayerContent {

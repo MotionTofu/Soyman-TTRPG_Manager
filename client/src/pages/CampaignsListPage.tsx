@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { SectionHeading } from "../components/SectionHeading";
-import { CampaignCoverTile } from "../components/CampaignCoverTile";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
+import { ListPage } from "../components/ListPage";
+import { CampaignCover, CampaignCoverTile } from "../components/CampaignCoverTile";
+import { ContextMenu } from "../components/ContextMenu";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignWizard } from "../components/CampaignWizard";
-import { GroupTabs } from "../components/GroupTabs";
 import { CampaignGroupMembersModal } from "../components/CampaignGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
+import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useUndoDelete } from "../hooks/useUndoDelete";
 import type { Campaign, CampaignGroup, Setting, System } from "../types";
 
 // Две вкладки, которых нет у других списков: не группы, а взгляд на список по
@@ -18,6 +22,93 @@ const CAMPAIGN_ROLE_TABS = [
   { id: "role:gm", label: "Я мастер" },
   { id: "role:player", label: "Я игрок" },
 ] as const;
+
+// Предпросмотр кампании (Q48): лицо, сводка, связи, действия. Действий
+// два, а не три: первое — «Открыть», под «…» — «Архивировать» с карточки.
+// Третье появится вместе с карточкой, а не выдумывается здесь.
+function CampaignPreview({
+  campaign: c,
+  onArchived,
+}: {
+  campaign: Campaign;
+  onArchived: (id: number, name: string) => void;
+}) {
+  const navigate = useNavigate();
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+
+  function openMenu() {
+    const r = moreRef.current?.getBoundingClientRect();
+    if (r) setMenuAt({ x: r.right, y: r.bottom });
+  }
+
+  return (
+    <div className="stack">
+      <div className="card campaign-tile">
+        <CampaignCover campaign={c} />
+      </div>
+      <div className="card stack">
+        <div className="entity-field-row">
+          <span className="muted">Роль</span>
+          <span>{c.role === "player" ? "Я игрок" : "Я мастер"}</span>
+        </div>
+        <div className="entity-field-row">
+          <span className="muted">Ближайшая</span>
+          <span>{c.next_planned_date ?? "нет запланированных"}</span>
+        </div>
+        <div className="entity-field-row">
+          <span className="muted">Состав</span>
+          <span>
+            Игроков: {c.player_count ?? "—"} · Сессий: {c.held_sessions_count ?? "—"}
+          </span>
+        </div>
+      </div>
+      <div className="card stack">
+        <span className="muted">Связи</span>
+        {c.setting_id != null && (
+          <Link to={`/settings/${c.setting_id}`}>Сеттинг: {c.setting_name ?? "—"}</Link>
+        )}
+        {c.system_id != null && (
+          <Link to={`/systems/${c.system_id}`}>Система: {c.system_name ?? "—"}</Link>
+        )}
+        {c.setting_id == null && c.system_id == null && (
+          <span className="muted">Ни с чем не связана.</span>
+        )}
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="primary" onClick={() => navigate(`/campaigns/${c.id}`)}>
+          Открыть
+        </button>
+        <button
+          ref={moreRef}
+          type="button"
+          aria-label="Ещё действия"
+          aria-haspopup="menu"
+          onClick={openMenu}
+        >
+          …
+        </button>
+      </div>
+      {menuAt && (
+        <ContextMenu
+          x={menuAt.x}
+          y={menuAt.y}
+          items={[
+            {
+              label: "Архивировать",
+              danger: true,
+              onClick: () => {
+                setMenuAt(null);
+                onArchived(c.id, c.name);
+              },
+            },
+          ]}
+          onClose={() => setMenuAt(null)}
+        />
+      )}
+    </div>
+  );
+}
 
 export function CampaignsListPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -31,6 +122,11 @@ export function CampaignsListPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [groupCounts, setGroupCounts] = useState<Record<number, number>>({});
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
+  const [alertDialog, showAlert] = useAlert();
+  const { deleteWithUndo } = useUndoDelete();
 
   function openCreate() {
     setCreating(true);
@@ -63,12 +159,37 @@ export function CampaignsListPage() {
     }
   }
 
+  // Группы со счётчиками для левой панели: состав нужен и странице
+  // (кнопка «добавить в группу»), поэтому список живёт здесь, а не в
+  // каркасе. Каркас делает только операции и их состояние.
+  async function loadGroups() {
+    try {
+      const data = await api.get<CampaignGroup[]>("/campaign-groups");
+      setGroups(data);
+      const counts = await Promise.all(
+        data.map(async (g) => {
+          try {
+            const members = await api.get<Campaign[]>(`/campaign-groups/${g.id}/members`);
+            return [g.id, members.length] as const;
+          } catch {
+            return [g.id, undefined] as const;
+          }
+        })
+      );
+      setGroupCounts(
+        Object.fromEntries(counts.filter(([, c]) => c !== undefined) as [number, number][])
+      );
+    } catch {
+      // silent — как было у полосы групп
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     loadCampaigns(controller.signal);
     api.get<System[]>("/systems", { signal: controller.signal }).then(setSystems).catch(() => {});
     api.get<Setting[]>("/settings", { signal: controller.signal }).then(setSettings).catch(() => {});
-    api.get<CampaignGroup[]>("/campaign-groups", { signal: controller.signal }).then(setGroups).catch(() => {});
+    void loadGroups();
     return () => controller.abort();
   }, []);
 
@@ -78,7 +199,30 @@ export function CampaignsListPage() {
 
   function refresh() {
     void loadCampaigns();
+    void loadGroups();
     void loadGroupMembers();
+  }
+
+  async function archiveCampaign(id: number, name: string) {
+    const ok = await confirm({
+      title: "Архивировать кампанию?",
+      message: "Отправить кампанию в архив? Она пропадёт из основных разделов.",
+      confirmLabel: "Архивировать",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteWithUndo({
+        entityName: name,
+        deleteFn: () => api.del(`/campaigns/${id}`),
+        restoreFn: () => api.put(`/campaigns/${id}/restore`),
+      });
+    } catch (e) {
+      showAlert(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    setSelectedId(null);
+    refresh();
   }
 
   const filtered = useMemo(() => {
@@ -99,66 +243,52 @@ export function CampaignsListPage() {
     );
   }, [campaigns, activeTab, groupMemberIds, q]);
 
+  const selected = campaigns.find((c) => String(c.id) === selectedId) ?? null;
+
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <SectionHeading section="campaigns" compact>Кампании</SectionHeading>
-        <button className="primary" onClick={openCreate}>
-          + Новая кампания
-        </button>
-      </div>
-
-      <GroupTabs
-        endpoint="/campaign-groups"
-        label="Кампании"
-        deleteNote="Кампании не будут удалены — они останутся в разделе «Все кампании»."
+      <ListPage
+        headingSection="campaigns"
+        title="Кампании"
         extraTabs={CAMPAIGN_ROLE_TABS}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+        groups={groups.map((g) => ({ id: String(g.id), label: g.name, count: groupCounts[g.id] }))}
+        groupsEndpoint="/campaign-groups"
+        groupsDeleteNote="Кампании не будут удалены — они останутся в разделе «Все кампании»."
         onGroupsChanged={refresh}
-      />
-
-      <div className="res-toolbar" style={{ marginTop: 4 }}>
-        <input
-          className="res-toolbar__search"
-          placeholder="Поиск по имени, системе, сеттингу…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Поиск по кампаниям"
-        />
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-          {filtered.length} / {campaigns.length}
-        </span>
-        {q && (
-          <button
-            onClick={() => setQ("")}
-            style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
-            title="Сбросить поиск"
-          >
-            Сбросить
-          </button>
+        createLabel="+ Новая кампания"
+        onCreate={openCreate}
+        activeGroup={activeTab}
+        onGroupChange={setActiveTab}
+        search={q}
+        onSearch={setQ}
+        searchPlaceholder="Поиск по имени, системе, сеттингу…"
+        searchLabel="Поиск по кампаниям"
+        filteredCount={filtered.length}
+        totalCount={campaigns.length}
+        onResetSearch={() => setQ("")}
+        selectedId={selected ? selectedId : null}
+        onSelect={setSelectedId}
+        preview={
+          selected && (
+            <CampaignPreview campaign={selected} onArchived={(id, name) => void archiveCampaign(id, name)} />
+          )
+        }
+      >
+        {loadError && (
+          <LoadErrorCard
+            message={<>Не удалось загрузить кампании: {loadError}</>}
+            onRetry={refresh}
+          />
         )}
-      </div>
 
-      {loadError && (
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось загрузить кампании: {loadError}</span>
-          <button className="primary" onClick={refresh}>Повторить</button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="grid-cards" aria-busy="true" aria-label="Загрузка кампаний">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card" style={{ height: 220, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: `${i * 120}ms` }} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid-cards">
-          {filtered.map((c) => (
-            <CampaignCoverTile key={c.id} campaign={c} />
-          ))}
+        {loading ? (
+          <ListSkeleton variant="tiles" label="Загрузка кампаний" />
+        ) : (
+          <div className="grid-cards">
+            {filtered.map((c) => (
+              <CampaignCoverTile key={c.id} campaign={c} onSelect={(cc) => setSelectedId(String(cc.id))} />
+            ))}
           {activeTab !== null && activeTab !== "ungrouped" && activeTab !== "role:gm" && activeTab !== "role:player" && (
             <button
               className="card campaign-tile setting-group-empty-add"
@@ -206,12 +336,21 @@ export function CampaignsListPage() {
         />
       )}
 
+      </ListPage>
+
       {creating && (
         <CampaignWizard
           systems={systems}
           settings={settings}
           onClose={() => setCreating(false)}
-          onCreated={refresh}
+          onCreated={(created) => {
+            refresh();
+            // Q47: новое становится выбранным — открывается его предпросмотр.
+            // Визард не знает групп, поэтому смотрим «Все», иначе новое
+            // может оказаться за фильтром и выбрать будет нечего.
+            setActiveTab(null);
+            if (created) setSelectedId(String(created.id));
+          }}
         />
       )}
 
@@ -223,6 +362,8 @@ export function CampaignsListPage() {
           onUpdated={refresh}
         />
       )}
+      {confirmDialog}
+      {alertDialog}
     </div>
   );
 }

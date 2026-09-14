@@ -3,11 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useCurrentUser } from "../api/currentUser";
 import { Modal } from "../components/Modal";
-import { SectionHeading } from "../components/SectionHeading";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
+import { ListPage } from "../components/ListPage";
 import {
   MAP_GRID_LABELS,
   MAP_SCALE_LABELS,
@@ -27,8 +28,6 @@ function formatUpdated(value: string): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// Кэш превью (P1-1): ключ — id + updated_at, правка карты инвалидирует сама.
-// Без кэша и с веером запросов список из 50 карт давал залп из 50 превью.
 const thumbCache = new Map<string, string | null>();
 const THUMB_CONCURRENCY = 4;
 const THUMB_CACHE_CAP = 200;
@@ -48,8 +47,6 @@ function thumbCacheSet(map: MapSummary, thumb: string | null) {
 function MapTile({ map, canEdit, onDeleted }: { map: MapSummary; canEdit: boolean; onDeleted: () => void }) {
   const [dialog, confirm] = useConfirm();
 
-  // Пояс: сервер с P0-6 принимает только data:image/png;base64, но в старых
-  // строках может лежать произвольный мусор — его в style не вставляем.
   const thumb =
     map.thumbnail && map.thumbnail.startsWith("data:image/png;base64,") ? map.thumbnail : null;
 
@@ -152,12 +149,8 @@ export function MapsListPage() {
     setLoadError(null);
     try {
       const data = await api.get<MapSummary[]>("/maps", signal ? { signal } : undefined);
-      // Миниатюры в список не входят (P0-2) — догружаем точечно, плитка до
-      // этого показывает заглушку. Ошибка превью — не ошибка списка.
       setMaps(data);
       if (signal?.aborted) return;
-      // Готовое из кэша — сразу, остальное — пулом по 4: без залпа N запросов
-      // и без повторной печи превью неизменных карт при каждом открытии.
       const byId = new Map<number, string | null>();
       const pending = data.filter((m) => {
         const hit = thumbCacheGet(m);
@@ -231,8 +224,6 @@ export function MapsListPage() {
     setCreating(true);
   }
 
-  // Д-17: быстрый черновик в один клик — имя потом, настройки потом.
-  // Дефолты: гексы, континент 40×30. Имя неуникальное — сервер уникальности не требует.
   async function quickDraft() {
     setCreateError(null);
     try {
@@ -250,7 +241,8 @@ export function MapsListPage() {
     }
   }
 
-  async function create() {    if (!name.trim()) {
+  async function create() {
+    if (!name.trim()) {
       setCreateError("Название обязательно.");
       return;
     }
@@ -276,170 +268,149 @@ export function MapsListPage() {
     }
   }
 
+  const hasActiveFilters = q.trim() !== "" || scaleFilter !== "all" || gridFilter !== "all" || visFilter !== "all";
+
+  const filterToolbar = (
+    <>
+      <select
+        value={scaleFilter}
+        onChange={(e) => setScaleFilter(e.target.value as "all" | MapScale)}
+        aria-label="Фильтр по масштабу"
+        title="Фильтр по масштабу"
+      >
+        <option value="all">Все масштабы</option>
+        {MAP_SCALE_ORDER.map((s) => (
+          <option key={s} value={s}>
+            {MAP_SCALE_LABELS[s]}
+          </option>
+        ))}
+      </select>
+      <select
+        value={gridFilter}
+        onChange={(e) => setGridFilter(e.target.value as "all" | MapGrid)}
+        aria-label="Фильтр по сетке"
+        title="Фильтр по сетке"
+      >
+        <option value="all">Любая сетка</option>
+        <option value="square">Квадраты</option>
+        <option value="hex">Гексы</option>
+      </select>
+      {canEdit && (
+        <select
+          value={visFilter}
+          onChange={(e) => setVisFilter(e.target.value as "all" | "visible" | "hidden")}
+          aria-label="Фильтр по видимости игрокам"
+          title='Фильтр по видимости: игроки видят только карты с меткой "видят игроки"'
+        >
+          <option value="all">Все карты</option>
+          <option value="visible">Видят игроки</option>
+          <option value="hidden">Скрыты</option>
+        </select>
+      )}
+      <select value={sort} onChange={(e) => setSort(e.target.value as "recent" | "az")} aria-label="Сортировка">
+        <option value="recent">Недавние</option>
+        <option value="az">А–Я</option>
+      </select>
+    </>
+  );
+
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
-      <div className="page-header-row row">
-        <SectionHeading section="map" compact>
-          Карты
-        </SectionHeading>
-        {canEdit && (
-          <div className="row">
-            <button type="button" title="Пустая карта с дефолтами: гексы, континент 40×30. Имя — потом" onClick={quickDraft}>
-              + Черновик
-            </button>
-            <button className="primary" onClick={openCreate}>
-              + Новая карта
+      <ListPage
+        headingSection="map"
+        title="Карты"
+        groups={[]}
+        allLabel={null}
+        ungroupedLabel={null}
+        activeGroup={null}
+        onGroupChange={() => {}}
+        createLabel="+ Новая карта"
+        onCreate={canEdit ? openCreate : undefined}
+        actions={canEdit ? (
+          <button type="button" title="Пустая карта с дефолтами: гексы, континент 40×30. Имя — потом" onClick={quickDraft}>
+            + Черновик
+          </button>
+        ) : undefined}
+        search={q}
+        onSearch={setQ}
+        searchPlaceholder="Поиск по названию…"
+        searchLabel="Поиск по картам"
+        filteredCount={filtered.length}
+        totalCount={maps.length}
+        onResetSearch={() => {
+          setQ("");
+          setScaleFilter("all");
+          setGridFilter("all");
+          setVisFilter("all");
+        }}
+        showReset={hasActiveFilters}
+        resetTitle="Сбросить поиск и фильтры"
+        toolbarExtra={filterToolbar}
+      >
+        {createError && !creating && (
+          <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <span>Не удалось создать черновик: {createError}</span>
+            <button type="button" onClick={() => setCreateError(null)}>
+              Понятно
             </button>
           </div>
         )}
-      </div>
 
-      <div className="res-toolbar" style={{ marginTop: 4 }}>
-        <input
-          className="res-toolbar__search"
-          placeholder="Поиск по названию…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Поиск по картам"
-        />
-        <select
-          value={scaleFilter}
-          onChange={(e) => setScaleFilter(e.target.value as "all" | MapScale)}
-          aria-label="Фильтр по масштабу"
-          title="Фильтр по масштабу"
-        >
-          <option value="all">Все масштабы</option>
-          {MAP_SCALE_ORDER.map((s) => (
-            <option key={s} value={s}>
-              {MAP_SCALE_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <select
-          value={gridFilter}
-          onChange={(e) => setGridFilter(e.target.value as "all" | MapGrid)}
-          aria-label="Фильтр по сетке"
-          title="Фильтр по сетке"
-        >
-          <option value="all">Любая сетка</option>
-          <option value="square">Квадраты</option>
-          <option value="hex">Гексы</option>
-        </select>
-        {canEdit && (
-          <select
-            value={visFilter}
-            onChange={(e) => setVisFilter(e.target.value as "all" | "visible" | "hidden")}
-            aria-label="Фильтр по видимости игрокам"
-            title='Фильтр по видимости: игроки видят только карты с меткой "видят игроки"'
-          >
-            <option value="all">Все карты</option>
-            <option value="visible">Видят игроки</option>
-            <option value="hidden">Скрыты</option>
-          </select>
+        {loadError && (
+          <LoadErrorCard
+            message={<>Не удалось загрузить карты: {loadError}</>}
+            onRetry={() => void load()}
+          />
         )}
-        <select value={sort} onChange={(e) => setSort(e.target.value as "recent" | "az")} aria-label="Сортировка">
-          <option value="recent">Недавние</option>
-          <option value="az">А–Я</option>
-        </select>
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-          {filtered.length} / {maps.length}
-        </span>
-        {(q.trim() || scaleFilter !== "all" || gridFilter !== "all" || visFilter !== "all") && (
-          <button
-            type="button"
-            title="Сбросить поиск и фильтры"
-            onClick={() => {
-              setQ("");
-              setScaleFilter("all");
-              setGridFilter("all");
-              setVisFilter("all");
-            }}
-            style={{ padding: "2px 8px" }}
-          >
-            Сбросить
-          </button>
+
+        {loading ? (
+          <ListSkeleton variant="tiles" label="Загрузка карт" />
+        ) : (
+          <div className="grid-cards">
+            {filtered.map((m) => (
+              <MapTile key={m.id} map={m} canEdit={canEdit} onDeleted={() => load()} />
+            ))}
+          </div>
         )}
-      </div>
 
-      {createError && !creating && (
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось создать черновик: {createError}</span>
-          <button type="button" onClick={() => setCreateError(null)}>
-            Понятно
-          </button>
-        </div>
-      )}
-
-      {loadError && (
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось загрузить карты: {loadError}</span>
-          <button className="primary" onClick={() => load()}>
-            Повторить
-          </button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="grid-cards" aria-busy="true" aria-label="Загрузка карт">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="card"
-              style={{
-                height: 220,
-                opacity: 0.45,
-                background: "var(--bg-elevated)",
-                animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-                animationDelay: `${i * 120}ms`,
-              }}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="grid-cards">
-          {filtered.map((m) => (
-            <MapTile key={m.id} map={m} canEdit={canEdit} onDeleted={() => load()} />
-          ))}
-        </div>
-      )}
-
-      {!loading && !loadError && maps.length > 0 && filtered.length === 0 && (
-        <EmptyState kind="search"
-          title="Ничего не найдено"
-          hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Под фильтры ничего не попало."}
-          action={
-            <button
-              onClick={() => {
-                setQ("");
-                setScaleFilter("all");
-                setGridFilter("all");
-                setVisFilter("all");
-              }}
-            >
-              Сбросить фильтры
-            </button>
-          }
-        />
-      )}
-
-      {!loading && !loadError && maps.length === 0 && (
-        <EmptyState
-          title="Мир не начерчен"
-          hint={
-            canEdit
-              ? "Ни одной карты пока нет — начертите первую."
-              : "Мастер пока не открыл ни одной карты."
-          }
-          action={
-            canEdit ? (
-              <button className="primary" onClick={openCreate}>
-                + Новая карта
+        {!loading && !loadError && maps.length > 0 && filtered.length === 0 && (
+          <EmptyState kind="search"
+            title="Ничего не найдено"
+            hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Под фильтры ничего не попало."}
+            action={
+              <button
+                onClick={() => {
+                  setQ("");
+                  setScaleFilter("all");
+                  setGridFilter("all");
+                  setVisFilter("all");
+                }}
+              >
+                Сбросить фильтры
               </button>
-            ) : undefined
-          }
-        />
-      )}
+            }
+          />
+        )}
+
+        {!loading && !loadError && maps.length === 0 && (
+          <EmptyState
+            title="Мир не начерчен"
+            hint={
+              canEdit
+                ? "Ни одной карты пока нет — начертите первую."
+                : "Мастер пока не открыл ни одной карты."
+            }
+            action={
+              canEdit ? (
+                <button className="primary" onClick={openCreate}>
+                  + Новая карта
+                </button>
+              ) : undefined
+            }
+          />
+        )}
+      </ListPage>
 
       {creating && (
         <Modal onClose={() => setCreating(false)}>

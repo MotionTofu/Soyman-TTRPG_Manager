@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { EntityPreviewModal } from "./EntityPreviewModal";
+import { LoadErrorCard } from "./Loadable";
 import { MentionText } from "./mentions/MentionText";
 
 interface RandomArticle {
@@ -57,7 +58,7 @@ export function HomeArticleCard() {
 
   if (article === undefined) return null;
   if (article === null) {
-    if (error) return <div className="home-section"><div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><span>Не загрузилось: {error}</span><button onClick={() => { setArticle(undefined); setReloadKey((k) => k + 1); }}>Повторить</button></div></div>;
+    if (error) return <div className="home-section"><LoadErrorCard message={<>Не загрузилось: {error}</>} onRetry={() => { setArticle(undefined); setReloadKey((k) => k + 1); }} /></div>;
     return null;
   }
 

@@ -171,6 +171,7 @@ const SHORT_NAME_KINDS = new Set([
 const GRAPH_NODES = new Set([
   "campaign", "setting", "player", "character", "location", "being", "artifact",
   "community", "resource", "mastering", "scene", "adventure", "compendium_entry",
+  "session",
 ]);
 
 const RELATION_CREATABLE = new Set([

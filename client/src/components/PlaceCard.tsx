@@ -9,6 +9,7 @@ import { plainMentions } from "../utils/plainMentions";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import type { LocationContentItem, SettingLocation } from "../types";
 import { EntityTypeChip } from "./EntityTypeChip";
+import { SkeletonBlock } from "./Loadable";
 import { MentionText } from "./mentions/MentionText";
 import { NavIcon, type NavIconName } from "./NavIcons";
 import { PlaceExitForm } from "./PlaceExitForm";
@@ -205,8 +206,8 @@ export function PlaceCard({
       <div className={`place-card${dock ? " place-card--dock" : ""}`} aria-busy="true" aria-label="Загрузка карточки">
         {plate}
         <div className="place-card__scroll">
-          <div className="search-skeleton-pulse" style={{ height: 26 }} />
-          <div className="search-skeleton-pulse" style={{ height: 80 }} />
+          <SkeletonBlock height={26} />
+          <SkeletonBlock height={80} />
         </div>
       </div>
     );

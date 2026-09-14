@@ -35,7 +35,10 @@ interface Props {
   settings: Setting[];
   defaultSettingId?: number | string;
   onClose: () => void;
-  onCreated?: () => void;
+  /** Созданная кампания — чтобы список мог её выбрать (Q47: новое
+   *  становится выбранным). Необязательный: прежние вызовы без аргумента
+   *  работают как раньше. */
+  onCreated?: (created?: Campaign) => void;
 }
 
 export function CampaignWizard({ systems, settings, defaultSettingId, onClose, onCreated }: Props) {
@@ -108,7 +111,7 @@ export function CampaignWizard({ systems, settings, defaultSettingId, onClose, o
         session_rate: role === "gm" && paymentType === "paid" ? Math.max(0, Math.min(999999, Math.trunc(rateNum))) : 0,
         currency: currency.trim() || "RUB",
       });
-      onCreated?.();
+      onCreated?.(created);
       if (then === "campaign") navigate(`/campaigns/${created.id}`);
       onClose();
     } catch (e) {

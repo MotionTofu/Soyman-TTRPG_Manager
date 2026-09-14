@@ -92,6 +92,12 @@ interface Props {
   emptyMessage?: string;
   layoutKey?: string;
   scopeBar?: React.ReactNode;
+  /** Ключи видов рёбер, доступных в этом графе. По умолчанию — все из EDGE_KINDS. */
+  edgeKinds?: EdgeKind[];
+  /** Текущий набор включённых видов рёбер (управление извне). */
+  activeKinds?: Set<EdgeKind>;
+  /** Колбэк смены набора видов рёбер (управление извне). */
+  onActiveKindsChange?: (next: Set<EdgeKind>) => void;
 }
 
 interface ManualLayout {
@@ -527,7 +533,7 @@ function GraphCanvas({
 
 // ─── Outer component — React state for toolbar/legend ────────────
 
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange }: Props) {
   const navigate = useNavigate();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -542,7 +548,15 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
   const [nodeScales, setNodeScales] = useState<Map<string, number>>(() => new Map());
   const [resizeTarget, setResizeTarget] = useState<GraphNode | null>(null);
-  const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => new Set(DEFAULT_EDGE_KINDS));
+  const [activeKinds, setActiveKindsInternal] = useState<Set<EdgeKind>>(() => activeKindsProp ?? new Set(DEFAULT_EDGE_KINDS));
+  // Виды рёбер управляются извне (GraphPage), если переданы.
+  const setActiveKinds = onActiveKindsChange ?? setActiveKindsInternal;
+  const effectiveActiveKinds = activeKindsProp ?? activeKinds;
+  // Полные объекты видов рёбер для отрисовки фильтров.
+  const visibleEdgeKinds = useMemo(
+    () => edgeKinds ? EDGE_KINDS.filter((k) => edgeKinds.includes(k.key)) : EDGE_KINDS,
+    [edgeKinds]
+  );
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN_TYPES));
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [isolatedOpen, setIsolatedOpen] = useState(false);
@@ -647,7 +661,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   // ── Pipeline: filter → group → isolate ────────────────────────
   const pipeline = useMemo(() => {
     if (!data) return null;
-    const kindEdges = data.edges.filter((e) => activeKinds.has(e.kind));
+    const kindEdges = data.edges.filter((e) => effectiveActiveKinds.has(e.kind));
     const visibleNodes = data.nodes.filter(
       (n) => !hiddenTypes.has(n.type),
     );
@@ -658,7 +672,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       ? buildIsolation(grouped.nodes, grouped.edges, isolation.key, isolation.depth)
       : null;
     return { grouped, isolationView };
-  }, [data, activeKinds, hiddenTypes, expandedGroups, isolation]);
+  }, [data, effectiveActiveKinds, hiddenTypes, expandedGroups, isolation]);
 
   const isolationView = pipeline?.isolationView ?? null;
   const grouped = pipeline?.grouped;
@@ -931,20 +945,27 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
               </div>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
-                  onClick={() => setActiveKinds(new Set(EDGE_KINDS.map((k) => k.key)))}>Все</button>
+                  onClick={() => {
+                    const next = new Set(visibleEdgeKinds.map((k) => k.key));
+                    setActiveKinds(next);
+                  }}>Все</button>
                 <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
                   onClick={() => setActiveKinds(new Set())}>Нет</button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {EDGE_KINDS.map((k) => {
-                  const on = activeKinds.has(k.key);
+                {visibleEdgeKinds.map((k) => {
+                  const on = effectiveActiveKinds.has(k.key);
                   const count = edgeKindCounts.get(k.key) ?? 0;
                   const dash = k.dash;
                   return (
                     <button key={k.key} type="button"
                       className={`graph-tb-btn${on ? " active" : ""}`}
                       style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "10px", padding: "3px 6px", opacity: on ? 1 : 0.45, textAlign: "left" }}
-                      onClick={() => setActiveKinds((prev) => { const next = new Set(prev); if (next.has(k.key)) next.delete(k.key); else next.add(k.key); return next; })}>
+                      onClick={() => {
+                        const next = new Set(effectiveActiveKinds);
+                        if (next.has(k.key)) next.delete(k.key); else next.add(k.key);
+                        setActiveKinds(next);
+                      }}>
                       <svg width="20" height="2" style={{ flexShrink: 0 }}>
                         <line x1="0" y1="1" x2="20" y2="1" stroke="var(--ink)" strokeWidth={k.width}
                           strokeDasharray={dash || "none"} />

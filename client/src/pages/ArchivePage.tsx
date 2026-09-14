@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { api, getAuthToken } from "../api/client";
 import { refreshMentionIndex } from "../mentions";
 import { NavIcon } from "../components/NavIcons";
-import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
+import { ListPage } from "../components/ListPage";
 import { Modal } from "../components/Modal";
 import type { ArchiveItem, ArchivedFile } from "../types";
 
@@ -42,8 +42,6 @@ const TYPE_LABELS: Record<string, string> = {
   community: "сообщество",
   canvas_board: "доска",
 };
-
-const TABS = ["Сущности", "Файлы"] as const;
 
 // Что необратимо оборвётся вместе с сущностью (server/src/routes/archive.ts).
 // Кампании перечисляются поимённо: сводное «5 кампаний» не даёт понять, что
@@ -173,7 +171,7 @@ function fileKey(f: ArchivedFile): string {
 }
 
 export function ArchivePage() {
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Сущности");
+  const [activeGroup, setActiveGroup] = useState<string | null>("entities");
   const [items, setItems] = useState<ArchiveItem[]>([]);
   const [files, setFiles] = useState<ArchivedFile[]>([]);
   const [q, setQ] = useState("");
@@ -247,17 +245,17 @@ export function ArchivePage() {
   // Сброс выбора при смене таба/фильтра — иначе в наборе повиснут скрытые
   useEffect(() => {
     setSelected(new Set());
-  }, [tab, q, typeFilter]);
+  }, [activeGroup, q, typeFilter]);
 
   // Пагинация — виртуализация без зависимостей: показываем по 50, «ещё» догружает. Сброс при смене фильтра.
-  useEffect(() => { setVisible(50); }, [q, typeFilter, sortBy, sortDir, tab]);
-  useEffect(() => { setVisibleFiles(50); }, [q, tab]);
+  useEffect(() => { setVisible(50); }, [q, typeFilter, sortBy, sortDir, activeGroup]);
+  useEffect(() => { setVisibleFiles(50); }, [q, activeGroup]);
   const visibleItems = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
   const visibleFilesList = useMemo(() => filteredFiles.slice(0, visibleFiles), [filteredFiles, visibleFiles]);
 
   const selectedFilteredItems = useMemo(() => filtered.filter((it) => selected.has(itemKey(it))), [filtered, selected]);
   const selectedFilteredFiles = useMemo(() => filteredFiles.filter((f) => selected.has(fileKey(f))), [filteredFiles, selected]);
-  const allFilteredSelected = tab === "Сущности"
+  const allFilteredSelected = activeGroup === "entities"
     ? filtered.length > 0 && filtered.every((it) => selected.has(itemKey(it)))
     : filteredFiles.length > 0 && filteredFiles.every((f) => selected.has(fileKey(f)));
 
@@ -270,7 +268,7 @@ export function ArchivePage() {
     });
   }
   function toggleAllFiltered() {
-    if (tab === "Сущности") {
+    if (activeGroup === "entities") {
       if (allFilteredSelected) {
         setSelected((prev) => {
           const next = new Set(prev);
@@ -460,19 +458,74 @@ export function ArchivePage() {
     await api.get("/archived-files/open-folder");
   }
 
-  return (
-    <div className="stack">
-      <SectionHeading section="archive" compact>Архив</SectionHeading>
-      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-            {t}
-            <span className="archive-tab-count">{t === "Сущности" ? items.length : files.length}</span>
-          </button>
-        ))}
-      </div>
+  const groups = [
+    { id: "entities", label: "Сущности", count: items.length },
+    { id: "files", label: "Файлы", count: files.length },
+  ];
 
+  const isEntities = activeGroup === "entities";
+  const filteredCount = isEntities ? filtered.length : filteredFiles.length;
+  const totalCount = isEntities ? items.length : files.length;
+
+  return (
+    <ListPage
+      headingSection="archive"
+      title="Архив"
+      allLabel={null}
+      ungroupedLabel={null}
+      groups={groups}
+      activeGroup={activeGroup}
+      onGroupChange={setActiveGroup}
+      search={q}
+      onSearch={setQ}
+      searchPlaceholder={isEntities ? "Поиск по имени…" : "Поиск по имени файла…"}
+      filteredCount={filteredCount}
+      totalCount={totalCount}
+      onResetSearch={() => { setQ(""); setTypeFilter("all"); }}
+      toolbarExtra={
+        isEntities ? (
+          <>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="archive-toolbar__select"
+              aria-label="Фильтр по типу"
+            >
+              <option value="all">Все типы</option>
+              {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+            <div className="seg archive-toolbar__seg" role="group" aria-label="Сортировка">
+              <button className={sortBy === "date" ? "is-active" : ""} onClick={() => { setSortBy("date"); setSortDir((d) => (sortBy === "date" ? (d === "desc" ? "asc" : "desc") : "desc")); }}>
+                Дата {sortBy === "date" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+              </button>
+              <button className={sortBy === "name" ? "is-active" : ""} onClick={() => { setSortBy("name"); setSortDir((d) => (sortBy === "name" && d === "asc" ? "desc" : "asc")); }}>
+                Имя {sortBy === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+              </button>
+              <button className={sortBy === "type" ? "is-active" : ""} onClick={() => { setSortBy("type"); setSortDir((d) => (sortBy === "type" && d === "asc" ? "desc" : "asc")); }}>
+                Тип {sortBy === "type" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+              </button>
+            </div>
+            <button className="danger" onClick={() => setClearOpen("entities")} title="Удалить все отфильтрованные сущности навсегда">
+              Очистить
+            </button>
+          </>
+        ) : (
+          <>
+            {files.length > 0 && (
+              <button className="danger" onClick={() => setClearOpen("files")}>Очистить файлы</button>
+            )}
+            <button onClick={openArchiveFolder}>
+              <NavIcon name="folder" /> Открыть папку архива
+            </button>
+          </>
+        )
+      }
+      actions={null}
+    >
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--danger-bg)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось загрузить архив: {loadError}</span>
@@ -489,7 +542,7 @@ export function ArchivePage() {
         <div className="card" style={{ padding: 16, opacity: 0.6 }} aria-busy="true">Загрузка архива…</div>
       )}
 
-      {tab === "Сущности" && (
+      {isEntities && (
         <>
           {items.length === 0 ? (
             <EmptyState
@@ -498,43 +551,6 @@ export function ArchivePage() {
             />
           ) : (
             <>
-              <div className="archive-toolbar">
-                <div className="archive-toolbar__search">
-                  <input
-                    type="search"
-                    placeholder="Поиск по имени…"
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                  />
-                </div>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="archive-toolbar__select"
-                  aria-label="Фильтр по типу"
-                >
-                  <option value="all">Все типы</option>
-                  {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-                <div className="seg archive-toolbar__seg" role="group" aria-label="Сортировка">
-                  <button className={sortBy === "date" ? "is-active" : ""} onClick={() => { setSortBy("date"); setSortDir((d) => (sortBy === "date" ? (d === "desc" ? "asc" : "desc") : "desc")); }}>
-                    Дата {sortBy === "date" ? (sortDir === "desc" ? "↓" : "↑") : ""}
-                  </button>
-                  <button className={sortBy === "name" ? "is-active" : ""} onClick={() => { setSortBy("name"); setSortDir((d) => (sortBy === "name" && d === "asc" ? "desc" : "asc")); }}>
-                    Имя {sortBy === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
-                  </button>
-                  <button className={sortBy === "type" ? "is-active" : ""} onClick={() => { setSortBy("type"); setSortDir((d) => (sortBy === "type" && d === "asc" ? "desc" : "asc")); }}>
-                    Тип {sortBy === "type" ? (sortDir === "asc" ? "↑" : "↓") : ""}
-                  </button>
-                </div>
-                <button className="danger" onClick={() => setClearOpen("entities")} title="Удалить все отфильтрованные сущности навсегда">
-                  Очистить
-                </button>
-              </div>
               {filtered.length === 0 ? (
                 <div className="card" style={{ padding: 16 }}>
                   <p className="muted">Ничего не найдено по запросу «{q}»{typeFilter !== "all" ? ` в типе «${TYPE_LABELS[typeFilter] ?? typeFilter}»` : ""}.</p>
@@ -608,27 +624,12 @@ export function ArchivePage() {
         </>
       )}
 
-      {tab === "Файлы" && (
+      {!isEntities && (
         <>
-          <div className="row">
-            <button onClick={openArchiveFolder}>
-              <NavIcon name="folder" /> Открыть папку архива
-            </button>
-            {files.length > 0 && (
-              <button className="danger" onClick={() => setClearOpen("files")}>Очистить файлы</button>
-            )}
-          </div>
           <p className="muted" style={{ maxWidth: "62ch" }}>
             Отдельные файлы, удалённые из последнего места использования с выбором «отправить в
             архив» вместо «удалить навсегда».
           </p>
-          {files.length > 0 && (
-            <div className="archive-toolbar">
-              <div className="archive-toolbar__search">
-                <input type="search" placeholder="Поиск по имени файла…" value={q} onChange={(e) => setQ(e.target.value)} />
-              </div>
-            </div>
-          )}
           {files.length === 0 ? (
             <EmptyState
               title="В файловом архиве чисто"
@@ -848,6 +849,6 @@ export function ArchivePage() {
           </div>
         </div>
       )}
-    </div>
+    </ListPage>
   );
 }

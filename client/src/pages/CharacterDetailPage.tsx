@@ -8,6 +8,7 @@ import { StatblockList } from "../components/StatblockList";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
 import { EntityPage } from "../components/EntityPage";
+import { LoadErrorCard } from "../components/Loadable";
 import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -139,10 +140,10 @@ export function CharacterDetailPage() {
   if (loadError) {
     return (
       <div className="stack" style={{ padding: 24 }}>
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось загрузить персонажа: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>Повторить</button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить персонажа: {loadError}</>}
+          onRetry={() => refresh()}
+        />
       </div>
     );
   }
@@ -620,14 +621,15 @@ function CharacterInventoryTab({
   if (statblocks === null) return <p className="muted">Загрузка…</p>;
   if (invError) {
     return (
-      <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <span>Не удалось загрузить инвентарь: {invError}</span>
-        <button className="primary" onClick={listState.reload}>Повторить</button>
-      </div>
+      <LoadErrorCard
+        message={<>Не удалось загрузить инвентарь: {invError}</>}
+        onRetry={listState.reload}
+      />
     );
   }
   if (dataParseError) {
-    return <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)" }}>Чарник повреждён: <span className="muted">{dataParseError}</span> — пересоздайте чарник на вкладке «Чарник».</div>;
+    // Битые данные повтором не чинятся — кнопки нет, следующий шаг в тексте.
+    return <LoadErrorCard message={<>Чарник повреждён: <span className="muted">{dataParseError}</span> — пересоздайте чарник на вкладке «Чарник».</>} />;
   }
   return (
     <div className="stack">

@@ -6636,7 +6636,7 @@ details.card[open] summary {
 }
 .players-tiles {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-5);
 }
 .campaign-tile--active {
@@ -6901,6 +6901,38 @@ details.card[open] summary {
     width: 100%;
     position: static;
     max-height: none;
+  }
+}
+
+/* Каркас списка/каталога (компонент `ListPage.tsx`, мастер-детейл Q41–Q50).
+   Шапка — заголовок и действия врозь; левая панель — тот же
+   `EntityTabWorkspace`, правая — тулбар и тело. Предпросмотр заменяет
+   содержимое, а не встаёт третьей колонкой (Q46). */
+.list-page__head {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.list-page.is-preview .list-page__content {
+  display: none;
+}
+/* Узкий экран — два экрана, а не две панели (Q43). Предпросмотр —
+   фиксированный оверлей со своим скроллом: список под ним не
+   размонтируется, и «назад» возвращает на то же место само. Ниже меню
+   (100), модалок и планки плеера; фон — бумага страницы. */
+@media (max-width: 900px) {
+  .list-page.is-preview .entity-tab-workspace__nav {
+    display: none;
+  }
+  .list-page.is-preview .list-page__preview {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    overflow-y: auto;
+    background: var(--paper);
+    background-image: var(--page-texture);
+    padding: var(--sp-4);
+    padding-bottom: calc(var(--player-bar-height, 52px) + var(--sp-4));
   }
 }
 .community-avatar {

@@ -55,6 +55,14 @@ export const DEFAULT_EDGE_KINDS = new Set<EdgeKind>(
   EDGE_KINDS.filter((k) => k.defaultOn).map((k) => k.key)
 );
 
+// Два графа вместо одного (решения 2026-09-12, п. 1): набор видов рёбер у
+// каждого свой. В фильтрах показываются только виды данного графа.
+export type GraphView = "world" | "adventures";
+export const GRAPH_VIEW_EDGE_KINDS: Record<GraphView, EdgeKind[]> = {
+  world: ["relation", "membership", "habitat", "nesting", "mention"],
+  adventures: ["scene", "link", "mention"],
+};
+
 export const TYPE_LABELS: Record<string, string> = {
   campaign: "Кампании",
   setting: "Сеттинги",
@@ -68,6 +76,7 @@ export const TYPE_LABELS: Record<string, string> = {
   mastering: "Мастерение",
   scene: "Сцены",
   adventure: "Приключения",
+  session: "Сессии",
   compendium_entry: "Компендиум",
 };
 
@@ -89,6 +98,7 @@ export const TYPE_COLORS: Record<string, string> = {
   mastering: "#B3B3B3",     // gray — мастерение
   scene: "#AA4499",         // purple — сюжет
   adventure: "#332288",     // dark blue-purple — приключения (тёмный, отличен от purple)
+  session: "#6A3D9A",       // dark purple — сессии (среднее между purple и dark blue-purple)
   compendium_entry: "#44AA99", // teal — компендиум
 };
 
@@ -109,6 +119,7 @@ export const TYPE_SHAPES: Record<string, GraphNodeShape> = {
   mastering: "rect",
   scene: "rect",
   adventure: "rect",
+  session: "rect",
   compendium_entry: "rect",
 };
 
@@ -125,7 +136,23 @@ export const TYPE_ROUTES: Record<string, string> = {
   mastering: "/mastering",
   scene: "/scenes",
   adventure: "/adventures",
+  session: "/sessions",
   compendium_entry: "/compendium",
+};
+
+// «Показать в графе» с карточки ведёт в тот граф, где живёт тип (п. 5 задания).
+// Существо, персонаж, сообщество, локация, артефакт → мир. Сцена, приключение,
+// сессия, кампания → приключения.
+export const TYPE_GRAPH_VIEW: Record<string, GraphView> = {
+  being: "world",
+  location: "world",
+  community: "world",
+  artifact: "world",
+  character: "world",
+  scene: "adventures",
+  adventure: "adventures",
+  session: "adventures",
+  campaign: "adventures",
 };
 
 /**

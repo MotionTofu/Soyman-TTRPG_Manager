@@ -4,6 +4,7 @@ import { brandLogo } from "../brandLogo";
 import { ParticleField } from "./ParticleField";
 import { SoyManResponsive } from "./SoyMan";
 import { Loading } from "./Loading";
+import { LoadErrorCard } from "./Loadable";
 import { setCachedUser } from "../api/currentUser";
 
 // Shown whenever there's no valid token (see LoginGate.tsx) — auth is always
@@ -153,7 +154,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
             </label>
           )}
 
-          {error && <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", background: "var(--paper)", color: "var(--status-cancelled-fg)", padding: "8px 10px", fontSize: "var(--fs-meta)" }}>{error}</div>}
+          {error && <LoadErrorCard message={error} />}
 
           <button className="primary" type="submit" disabled={connecting || !username.trim() || !password} style={{ width: "100%", justifyContent: "center", fontFamily: "var(--font-ui)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
             {connecting ? "…" : needsSetup ? "Создать и войти" : "Войти"}

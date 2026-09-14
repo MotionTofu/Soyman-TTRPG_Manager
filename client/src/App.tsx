@@ -23,9 +23,6 @@ const HomeCalendarPage = lazy(() => import("./pages/HomeCalendarPage").then((m) 
 const PlayerHomePage = lazy(() => import("./pages/PlayerHomePage").then((m) => ({ default: m.PlayerHomePage })));
 const CampaignsListPage = lazy(() => import("./pages/CampaignsListPage").then((m) => ({ default: m.CampaignsListPage })));
 const LibraryPage = lazy(() => import("./pages/LibraryPage").then((m) => ({ default: m.LibraryPage })));
-const PlayerLibraryPage = lazy(() =>
-  import("./pages/PlayerLibraryPage").then((m) => ({ default: m.PlayerLibraryPage }))
-);
 const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage").then((m) => ({ default: m.NowPlayingPage })));
 const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage").then((m) => ({ default: m.CampaignDetailPage })));
 const SessionDetailPage = lazy(() => import("./pages/SessionDetailPage").then((m) => ({ default: m.SessionDetailPage })));
@@ -81,14 +78,10 @@ const PlayerCabinetPage = lazy(() =>
 const PlayerSheetsPage = lazy(() =>
   import("./pages/PlayerSheetsPage").then((m) => ({ default: m.PlayerSheetsPage }))
 );
-const PlayerCampaignsListPage = lazy(() =>
-  import("./pages/PlayerCampaignsListPage").then((m) => ({ default: m.PlayerCampaignsListPage }))
+const PlayerDiariesPage = lazy(() =>
+  import("./pages/PlayerDiariesPage").then((m) => ({ default: m.PlayerDiariesPage }))
 );
 const PlayerCampaignPage = lazy(() => import("./pages/PlayerCampaignPage").then((m) => ({ default: m.PlayerCampaignPage })));
-const PlayerSettingsListPage = lazy(() =>
-  import("./pages/PlayerSettingsListPage").then((m) => ({ default: m.PlayerSettingsListPage }))
-);
-const PlayerSettingPage = lazy(() => import("./pages/PlayerSettingPage").then((m) => ({ default: m.PlayerSettingPage })));
 
 // GM tokens see the full CampaignsListPage/CampaignDetailPage (unfiltered
 // admin data); player tokens get the read-only "what the GM revealed"
@@ -103,17 +96,20 @@ function HomeRoute() {
 function CampaignsRoute() {
   const { user, loading } = useCurrentUser();
   if (loading) return <Loading full />;
-  return user?.role === "player" ? <PlayerCampaignsListPage /> : <CampaignsListPage />;
+  return user?.role === "player" ? <PlayerDiariesPage /> : <CampaignsListPage />;
 }
 function CampaignDetailRoute() {
   const { user, loading } = useCurrentUser();
   if (loading) return <Loading full />;
   return user?.role === "player" ? <PlayerCampaignPage /> : <CampaignDetailPage />;
 }
+// Отдельных «Сеттингов» у игрока нет (Кабинет игрока, шаг 5): сеттинг виден
+// только вкладкой «Мир» внутри дневника. Старые ссылки ведут в Дневники —
+// там каждая кампания со своим Миром.
 function SettingsRoute() {
   const { user, loading } = useCurrentUser();
   if (loading) return <Loading full />;
-  return user?.role === "player" ? <PlayerSettingsListPage /> : <SettingsListPage />;
+  return user?.role === "player" ? <Navigate to="/campaigns" replace /> : <SettingsListPage />;
 }
 // Импорт книги приключений — инструмент мастера: игроку тут делать нечего.
 function ImportRoute() {
@@ -130,12 +126,14 @@ function ImportSystemRoute() {
 function SettingDetailRoute() {
   const { user, loading } = useCurrentUser();
   if (loading) return <Loading full />;
-  return user?.role === "player" ? <PlayerSettingPage /> : <SettingDetailPage />;
+  return user?.role === "player" ? <Navigate to="/campaigns" replace /> : <SettingDetailPage />;
 }
+// Отдельной «Библиотеки» у игрока нет (Кабинет игрока, шаг 5): ближайшее —
+// Дневники (кампании и их Мир), ближайшие сессии — на Главной.
 function LibraryRoute() {
   const { user, loading } = useCurrentUser();
   if (loading) return <Loading full />;
-  return user?.role === "player" ? <PlayerLibraryPage /> : <LibraryPage />;
+  return user?.role === "player" ? <Navigate to="/campaigns" replace /> : <LibraryPage />;
 }
 
 function NotFoundPage() {
@@ -212,7 +210,8 @@ function App() {
               <Route path="/events/:id" element={<EventDetailPage />} />
               <Route path="/compendium/:id" element={<CompendiumEntryRedirectPage />} />
               <Route path="/canvas" element={<CanvasPage />} />
-              <Route path="/graph" element={<GraphPage />} />
+              <Route path="/graph" element={<Navigate to="/graph/world" replace />} />
+              <Route path="/graph/:view" element={<GraphPage />} />
               <Route path="/maps" element={<MapsListPage />} />
               <Route path="/maps/:id" element={<MapEditorPage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />

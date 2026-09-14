@@ -636,6 +636,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
     history,
     behavior,
     description,
+    player_text,
     tags,
     base_monster_id,
     short_name,
@@ -652,6 +653,8 @@ settingBeingsRouter.put("/:id", (req, res) => {
     history?: string;
     behavior?: string;
     description?: string;
+    // Игроцкий текст (Кабинет игрока, шаг 2): что Мастер рассказывает игрокам.
+    player_text?: string;
     tags?: string[];
     base_monster_id?: number | null;
     short_name?: string;
@@ -688,6 +691,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
        statblock_full = COALESCE(?, statblock_full),
        history = COALESCE(?, history), behavior = COALESCE(?, behavior),
        description = COALESCE(?, description),
+       player_text = COALESCE(?, player_text),
        tags = COALESCE(?, tags),
        base_monster_id = CASE WHEN ? THEN ? ELSE base_monster_id END,
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
@@ -706,6 +710,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
       history ?? null,
       behavior ?? null,
       description ?? null,
+      player_text ?? null,
       tags ? JSON.stringify(tags.slice(0, 12).map((t) => String(t).slice(0, 24))) : null,
       base_monster_id !== undefined ? 1 : 0,
       base_monster_id ?? null,

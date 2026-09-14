@@ -8,7 +8,6 @@ import { syncMentionLinks } from "../mentions";
 import { EmptyState } from "./EmptyState";
 import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
-import { Modal } from "./Modal";
 import { EntityTabWorkspace } from "./EntityTabWorkspace";
 import type { CampaignPlayerArticle, CampaignPlayerSection, CampaignPlayerSectionKind, RosterPlayer } from "../types";
 
@@ -30,7 +29,6 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   const [confirmDialog, confirm] = useConfirm();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState("");
-  const [previewOpen, setPreviewOpen] = useState(false);
   // Master–Detail: выбранный раздел и (для статей) статья. Пункты статей
   // в навигации — из кэша, который докладывает ArticlesList при загрузке.
   const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number }>({ sectionId: null });
@@ -200,12 +198,6 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <input placeholder="Поиск по подразделам" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ flex: "1 1 200px" }} />
           {filter && <button onClick={() => setFilter("")}>Сбросить</button>}
-          <button onClick={() => setPreviewOpen(true)}>Предпросмотр как игрок</button>
-        </div>
-      )}
-      {sections.length === 1 && (
-        <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button onClick={() => setPreviewOpen(true)}>Предпросмотр как игрок</button>
         </div>
       )}
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
@@ -305,25 +297,6 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
       )}
       {filter && filtered.length === 0 && <p className="muted">Ничего не найдено.</p>}
       {confirmDialog}
-      {previewOpen && (
-        <Modal onClose={() => setPreviewOpen(false)}>
-          <div className="stack">
-            <h3>Предпросмотр как игрок</h3>
-            <p className="muted" style={{ maxWidth: "62ch" }}>Так видит раздел игрок — только открытые ему подразделы и статьи. Сейчас это превью по данным мастера (глаз показывает кому что открыто).</p>
-            <div className="stack">
-              {sections.map((s) => (
-                <div key={s.id} className="card" style={{ padding: 12 }}>
-                  <strong style={{ fontFamily: "var(--font-ui)", textTransform: "uppercase", fontSize: "var(--fs-meta)" }}>{s.name}</strong> <span className="badge tag">{s.kind === "gallery" ? "Галерея" : "Статьи"}</span>
-                </div>
-              ))}
-              {sections.length === 0 && <p className="muted">Подразделов нет.</p>}
-            </div>
-            <div className="row" style={{ justifyContent: "flex-end" }}>
-              <button className="primary" onClick={() => setPreviewOpen(false)}>Закрыть</button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

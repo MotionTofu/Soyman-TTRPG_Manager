@@ -547,7 +547,7 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
 settingsRouter.put("/calendar-events/:eventId", (req, res) => {
   const {
     title, description, inworld_year, inworld_month, inworld_day, important, visible_to_players,
-    full_description, consequences,
+    full_description, consequences, player_text,
   } = req.body as {
       title?: string;
       description?: string;
@@ -558,6 +558,8 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
       visible_to_players?: boolean;
       full_description?: string;
       consequences?: string;
+      // Игроцкий текст (Кабинет игрока, шаг 2): что Мастер рассказывает игрокам.
+      player_text?: string;
     };
   if (title !== undefined && typeof title === "string" && title.trim().length === 0) {
     return res.status(400).json({ error: "title cannot be empty" });
@@ -567,6 +569,9 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
   }
   if (description !== undefined && typeof description === "string" && description.length > 5000) {
     return res.status(400).json({ error: "description too long" });
+  }
+  if (player_text !== undefined && typeof player_text === "string" && player_text.length > 5000) {
+    return res.status(400).json({ error: "player_text too long" });
   }
   for (const [k, v] of [["inworld_month", inworld_month], ["inworld_day", inworld_day]] as const) {
     if (v !== undefined && v !== null) {
@@ -601,7 +606,8 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
        important = COALESCE(?, important),
        visible_to_players = COALESCE(?, visible_to_players),
        full_description = COALESCE(?, full_description),
-       consequences = COALESCE(?, consequences)
+       consequences = COALESCE(?, consequences),
+       player_text = COALESCE(?, player_text)
      WHERE id = ?`
   ).run(
     title !== undefined ? (title === null ? null : String(title).trim() || null) : null,
@@ -613,6 +619,7 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
     visible_to_players === undefined ? null : visible_to_players === true ? 1 : 0,
     full_description ?? null,
     consequences ?? null,
+    player_text ?? null,
     req.params.eventId
   );
   // Точность, конец периода, статус и «чем отменилось» — отдельным патчем:

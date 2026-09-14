@@ -11,7 +11,7 @@ import { LinkDropZone } from "../components/LinkDropZone";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { CampaignEntryList } from "../components/CampaignEntryList";
 import { WorldExplorationTab } from "../components/WorldExplorationTab";
-import { CampaignPlayerSectionsTab } from "../components/CampaignPlayerSectionsTab";
+import { CampaignIssuanceTab } from "../components/CampaignIssuanceTab";
 import { TaskTracker } from "../components/TaskTracker";
 import { CampaignSecrets, type SecretsNavStats } from "../components/CampaignSecrets";
 import { CampaignMilestones, type MilestonesNavStats } from "../components/CampaignMilestones";
@@ -44,6 +44,7 @@ import { useTabState } from "../hooks/useTabState";
 import { formatInworldDate, formatEventDate } from "../inworldCalendar";
 import { InworldCalendar, type InworldDatedItem } from "../components/InworldCalendar";
 import { EntityPage } from "../components/EntityPage";
+import { LoadErrorCard } from "../components/Loadable";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { cardThumbnailProps, loadThumbnailStyles, type ThumbnailStyle } from "../thumbnailStyles";
 import { loadHideFinance } from "../financePrivacy";
@@ -97,11 +98,11 @@ const GM_TABS = [
   "Заметки",
   "Хроника игр",
   "Хроника мира",
-  "Для игроков",
+  "Выдача",
 ] as const;
 
 // Сохранённые ссылки на прежнее имя вкладки не должны падать на «Обзор».
-const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки" } as const;
+const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки", "Для игроков": "Выдача" } as const;
 const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Трекер задач", "Хроника игр", "Исследование Мира"] as const;
 
 export function CampaignDetailPage() {
@@ -772,11 +773,11 @@ export function CampaignDetailPage() {
            </>
         )}
 
-      {tab === "Для игроков" && (
-        <CampaignPlayerSectionsTab
+      {tab === "Выдача" && (
+        <CampaignIssuanceTab
           campaignId={campaignId}
+          settingId={campaign.setting_id}
           roster={campaign.roster}
-          defaultSettingId={campaign.setting_id ?? undefined}
         />
       )}
 
@@ -1685,10 +1686,10 @@ function PlayerJournalsSection({ campaignId }: { campaignId: number }) {
   if (rows === null) return <p className="muted">Загрузка…</p>;
   if (error) {
     return (
-      <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <span>Заметки не загрузились: {error}</span>
-        <button className="primary" onClick={load}>Повторить</button>
-      </div>
+      <LoadErrorCard
+        message={<>Заметки не загрузились: {error}</>}
+        onRetry={load}
+      />
     );
   }
   if (rows.length === 0) return <p className="muted">Игроки пока ничего не записали.</p>;

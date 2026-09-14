@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
-import { SectionHeading } from "../components/SectionHeading";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
-import { GroupTabs } from "../components/GroupTabs";
 import { PlayerGroupMembersModal } from "../components/PlayerGroupMembersModal";
 import { formatNearestDate } from "../nearestDate";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { SectionBackground } from "../components/SectionBackground";
 import { PlayerProfilePanel } from "../components/players/PlayerProfilePanel";
+import { ListPage } from "../components/ListPage";
 import type { Player, PlayerGroup } from "../types";
 
 function PlayerCoverTile({ player: p, active }: { player: Player; active: boolean }) {
@@ -56,13 +56,8 @@ function PlayerCoverTile({ player: p, active }: { player: Player; active: boolea
   );
 }
 
-/**
- * Раздел «Игроки» — две колонки на десктопе: слева плитка игроков (две в ряд),
- * справа просмотр выбранного профиля (первым блоком — персонажи игрока).
- * Выборка живёт в адресе (/players/:id), так что работают глубокие ссылки и
- * кнопка «назад». На узких экранах колонки складываются в одну.
- */
 export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
+  const navigate = useNavigate();
   const [players, setPlayers] = useState<Player[]>([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -142,10 +137,8 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
     );
   }, [players, activeTab, groupMemberships, q]);
 
-  const effectiveSelectedId = selectedId ?? filteredPlayers[0]?.id ?? null;
+  const effectiveSelectedId = selectedId ?? null;
 
-  // На телефоне список и профиль — одна колонка: после выбора игрока
-  // подматываем к профилю, чтобы не оставаться вверху списка.
   useEffect(() => {
     if (selectedId == null) return;
     if (!window.matchMedia("(max-width: 900px)").matches) return;
@@ -166,12 +159,23 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
     }
   }
 
+  const selectedPlayer = effectiveSelectedId != null
+    ? players.find((p) => p.id === effectiveSelectedId) ?? null
+    : null;
+
   return (
-    <div className="stack" style={{ position: "relative", paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+    <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
-      <div className="page-header-row row">
-        <SectionHeading section="players" compact>Игроки</SectionHeading>
-        <div className="row" style={{ gap: 8 }}>
+      <ListPage
+        headingSection="players"
+        title="Игроки"
+        groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
+        groupsEndpoint="/player-groups"
+        groupsDeleteNote="Игроки не будут удалены — они останутся в разделе «Все игроки»."
+        onGroupsChanged={refresh}
+        createLabel="+ Новый игрок"
+        onCreate={() => setCreating(true)}
+        actions={
           <Link
             to="/invitations"
             style={{
@@ -192,119 +196,95 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
           >
             Пригласить →
           </Link>
-          <button className="primary" onClick={() => setCreating(true)}>
-            + Новый игрок
-          </button>
-        </div>
-      </div>
-
-      {players.length > 0 && (
-        <GroupTabs
-          endpoint="/player-groups"
-          label="Группы игроков"
-          deleteNote="Игроки не будут удалены — они останутся в разделе «Все игроки»."
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onGroupsChanged={refresh}
-        />
-      )}
-
-      <div className="res-toolbar" style={{ marginTop: 4 }}>
-        <input
-          className="res-toolbar__search"
-          placeholder="Поиск по имени, заметкам…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Поиск по игрокам"
-        />
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-          {filteredPlayers.length} / {players.length}
-        </span>
-        {q && (
-          <button
-            onClick={() => setQ("")}
-            style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
-            title="Сбросить поиск"
-          >
-            Сбросить
-          </button>
+        }
+        activeGroup={activeTab}
+        onGroupChange={(g) => { setActiveTab(g); navigate("/players"); }}
+        search={q}
+        onSearch={setQ}
+        searchPlaceholder="Поиск по имени, заметкам…"
+        searchLabel="Поиск по игрокам"
+        filteredCount={filteredPlayers.length}
+        totalCount={players.length}
+        onResetSearch={() => setQ("")}
+        selectedId={effectiveSelectedId != null ? String(effectiveSelectedId) : null}
+        onSelect={(id) => {
+          if (id) {
+            navigate(`/players/${id}`);
+            if (window.matchMedia("(max-width: 900px)").matches) {
+              requestAnimationFrame(() => {
+                document.getElementById("player-detail")?.scrollIntoView({ block: "start" });
+              });
+            }
+          } else {
+            navigate("/players");
+          }
+        }}
+        preview={
+          selectedPlayer ? (
+            <PlayerProfilePanel key={selectedPlayer.id} playerId={selectedPlayer.id} />
+          ) : undefined
+        }
+      >
+        {loadError && (
+          <LoadErrorCard
+            message={<>Не удалось загрузить игроков: {loadError}</>}
+            onRetry={refresh}
+          />
         )}
-      </div>
 
-      {loadError && (
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось загрузить игроков: {loadError}</span>
-          <button className="primary" onClick={refresh}>Повторить</button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="players-workspace" aria-busy="true" aria-label="Загрузка игроков">
-          <div className="players-workspace__list">
-            <div className="players-tiles">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="card" style={{ height: 220, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: `${i * 120}ms` }} />
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="players-workspace">
-          <div className="players-workspace__list">
-            <div className="players-tiles">
-              {filteredPlayers.map((p) => (
-                <PlayerCoverTile key={p.id} player={p} active={p.id === effectiveSelectedId} />
-              ))}
-              {activeTab !== null && activeTab !== "ungrouped" && (
-                <button
-                  className="card campaign-tile setting-group-empty-add"
-                  onClick={() => {
-                    const g = groups.find((gr) => gr.id === Number(activeTab));
-                    if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
-                  }}
-                >
-                  <div className="campaign-tile-cover cover-halftone">
-                    <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-                    <div className="campaign-tile-scrim" />
-                    <h3 className="campaign-tile-name">+</h3>
-                  </div>
-                  <div className="campaign-tile-meta">
-                    <div className="campaign-tile-system muted">нажми, чтобы добавить игрока в группу</div>
-                  </div>
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="players-workspace__detail" id="player-detail">
-            {effectiveSelectedId != null ? (
-              <PlayerProfilePanel key={effectiveSelectedId} playerId={effectiveSelectedId} />
-            ) : (
-              <EmptyState kind="search"
-                title="Ничего не найдено"
-                hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
-                action={
-                  <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                    {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
-                    {activeTab !== null && <button onClick={() => setActiveTab(null)}>Показать всех</button>}
-                  </div>
-                }
-              />
+        {loading ? (
+          <ListSkeleton variant="tiles" tilesClassName="players-tiles" label="Загрузка игроков" />
+        ) : (
+          <div className="players-tiles">
+            {filteredPlayers.map((p) => (
+              <PlayerCoverTile key={p.id} player={p} active={p.id === effectiveSelectedId} />
+            ))}
+            {activeTab !== null && activeTab !== "ungrouped" && (
+              <button
+                className="card campaign-tile setting-group-empty-add"
+                onClick={() => {
+                  const g = groups.find((gr) => gr.id === Number(activeTab));
+                  if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+                }}
+              >
+                <div className="campaign-tile-cover cover-halftone">
+                  <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+                  <div className="campaign-tile-scrim" />
+                  <h3 className="campaign-tile-name">+</h3>
+                </div>
+                <div className="campaign-tile-meta">
+                  <div className="campaign-tile-system muted">нажми, чтобы добавить игрока в группу</div>
+                </div>
+              </button>
             )}
           </div>
-        </div>
-      )}
+        )}
 
-      {!loading && !loadError && players.length === 0 && (
-        <EmptyState
-          title="Стол пустует"
-          hint="Ни одного игрока ещё не заведено — добавьте первого."
-          action={
-            <button className="primary" onClick={() => setCreating(true)}>
-              + Новый игрок
-            </button>
-          }
-        />
-      )}
+        {!loading && !loadError && filteredPlayers.length === 0 && players.length > 0 && (
+          <EmptyState kind="search"
+            title="Ничего не найдено"
+            hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
+            action={
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+                {activeTab !== null && <button onClick={() => setActiveTab(null)}>Показать всех</button>}
+              </div>
+            }
+          />
+        )}
+
+        {!loading && !loadError && players.length === 0 && (
+          <EmptyState
+            title="Стол пустует"
+            hint="Ни одного игрока ещё не заведено — добавьте первого."
+            action={
+              <button className="primary" onClick={() => setCreating(true)}>
+                + Новый игрок
+              </button>
+            }
+          />
+        )}
+      </ListPage>
 
       {creating && (
         <Modal onClose={() => setCreating(false)}>

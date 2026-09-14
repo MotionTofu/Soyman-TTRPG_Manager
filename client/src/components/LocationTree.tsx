@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "./NavIcons";
 import { EntityWizard } from "./entityWizard/EntityWizard";
+import { ListSkeleton, LoadErrorCard, SkeletonBlock } from "./Loadable";
 import { EmptyState } from "./EmptyState";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import { useConfirm, useAlert, usePrompt } from "../hooks/useConfirm";
@@ -343,29 +344,7 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
   }, [debouncedQuery, locations, flatList]);
 
   if (loading && locations.length === 0 && !loadError) {
-    return (
-      <div className="stack" aria-busy="true" aria-label="Загрузка географии">
-        <div
-          className="card"
-          style={{
-            height: 80,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-          }}
-        />
-        <div
-          className="card"
-          style={{
-            height: 120,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-            animationDelay: "120ms",
-          }}
-        />
-      </div>
-    );
+    return <ListSkeleton variant="paragraph" label="Загрузка географии" />;
   }
 
   return (
@@ -410,21 +389,10 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
         </div>
       )}
       {loadError && (
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Не удалось загрузить географию: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить географию: {loadError}</>}
+          onRetry={() => refresh()}
+        />
       )}
       {creating && (
         <EntityWizard
@@ -739,9 +707,9 @@ function LocationSideCard({
       )}
       {locationId != null && loading && !shown && (
         <>
-          <div className="search-skeleton-pulse" style={{ height: 140 }} />
-          <div className="search-skeleton-pulse" style={{ height: 20 }} />
-          <div className="search-skeleton-pulse" style={{ height: 60 }} />
+          <SkeletonBlock height={140} />
+          <SkeletonBlock height={20} />
+          <SkeletonBlock height={60} />
         </>
       )}
       {locationId != null && loadError && !shown && (

@@ -160,14 +160,19 @@ const GRAPH_CACHE_TTL = 30_000;
 export const graphCache = new Map<string, { data: unknown; expires: number }>();
 
 linksRouter.get("/graph", (req, res) => {
-  const { types, setting_id, campaign_id, focus, depth, spots } = req.query as {
+  const { types, setting_id, campaign_id, focus, depth, spots, view: viewParam } = req.query as {
     types?: string;
     setting_id?: string;
     campaign_id?: string;
     focus?: string; // "being:416" — центр окрестности
     depth?: string; // сколько шагов от центра, 1..3
     spots?: string; // "1" — показывать точки (план «Зоны», этап 10)
+    view?: string; // "world" | "adventures"
   };
+  // Два графа вместо одного (решения 2026-09-12, «Два графа», п. 1, 7):
+  // world — «кто с кем и что где», adventures — «что от чего зависит и где
+  // всплывает». Старая закладка /graph без view отдаёт world (п. 4).
+  const view: "world" | "adventures" = viewParam === "adventures" ? "adventures" : "world";
   // Валидация focus: формат "type:id", где type — известный тип, id — число.
   if (focus && !/^[a-z_]+:\d+$/.test(focus)) {
     return res.status(400).json({ error: "Invalid focus format, expected 'type:id'" });
@@ -200,7 +205,7 @@ linksRouter.get("/graph", (req, res) => {
   }
 
   // Cache check — graph data is expensive to build but changes rarely.
-  const cacheKey = `${types ?? ""}|${setting_id ?? ""}|${campaign_id ?? ""}|${focus ?? ""}|${depth ?? ""}|${includeSpots ? "spots" : ""}`;
+  const cacheKey = `${view}|${types ?? ""}|${setting_id ?? ""}|${campaign_id ?? ""}|${focus ?? ""}|${depth ?? ""}|${includeSpots ? "spots" : ""}`;
   const cached = graphCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return res.json(cached.data);
@@ -208,87 +213,6 @@ linksRouter.get("/graph", (req, res) => {
 
   // campaign_id is the narrower scope, so it wins if both are given.
   const scopeQueries = buildScope(campaign_id, setting_id, includeSpots);
-
-  // Две таблицы — два понятия (решения 2026-09-12, «Два графа», п. 1):
-  // `generic_links` — членство в списке (секция говорит, в каком),
-  // `entity_relations` без секции — авторское мнение с тоном и подписью.
-  // Граф читает обе и различает их по наличию секции, как и раньше.
-  //
-  // Читал он до 2026-09-12 только `entity_relations`, куда списки копировались
-  // при каждом старте сервера. Копир копии не убирал: удалённая связь
-  // оставалась в графе навсегда, а добавленная появлялась лишь после
-  // перезапуска. Копир убран, копии убраны шагом миграции.
-  const allRelations = [
-    ...(db
-      .prepare("SELECT from_type, from_id, to_type, to_id, section, 'neutral' as tone, '' as label FROM generic_links")
-      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null; tone: string; label: string }[]),
-    ...(db
-      .prepare(
-        "SELECT from_type, from_id, to_type, to_id, NULL as section, tone, label FROM entity_relations WHERE section IS NULL"
-      )
-      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null; tone: string; label: string }[]),
-  ];
-
-  // Structural membership (who belongs to a faction) and habitat (who lives
-  // where) links — not authored opinions like entity_relations, just
-  // existing roster data, so they render as plain untoned edges.
-  // Без точек обитание/базирование перепривязывается на родителя точки
-  // (этап 10): связь «Грик — Подземелье» правдива и без узла «Караулка».
-  // Точка с мёртвым/безвестным родителем отбрасывается вместе с ребром.
-  const rawMemberships = db
-    .prepare("SELECT being_id, community_id FROM being_communities")
-    .all() as { being_id: number; community_id: number }[];
-  const rawHabitats = (
-    includeSpots
-      ? db.prepare("SELECT being_id, location_id FROM being_locations").all()
-      : db
-          .prepare(
-            `SELECT bl.being_id,
-                    CASE WHEN sl.role = 'spot' THEN p.id ELSE bl.location_id END AS location_id
-             FROM being_locations bl
-             JOIN setting_locations sl ON sl.id = bl.location_id
-             LEFT JOIN setting_locations p ON p.id = sl.parent_id AND p.archived_at IS NULL
-             WHERE sl.role != 'spot' OR p.id IS NOT NULL`
-          )
-          .all()
-  ) as { being_id: number; location_id: number }[];
-
-  // Location nesting (a district inside a city, a room inside a building) —
-  // same self-referencing parent_id used by the Geography tree. Точки-дети
-  // не ведут в граф (их дело — карточка родителя), родители-точки невозможны
-  // по инварианту весов.
-  const rawLocationNesting = (
-    includeSpots
-      ? db
-          .prepare("SELECT id, parent_id FROM setting_locations WHERE parent_id IS NOT NULL AND archived_at IS NULL")
-          .all()
-      : db
-          .prepare(
-            `SELECT sl.id, sl.parent_id FROM setting_locations sl
-             WHERE sl.parent_id IS NOT NULL AND sl.archived_at IS NULL AND sl.role != 'spot'`
-          )
-          .all()
-  ) as { id: number; parent_id: number }[];
-
-  // Сообщество тоже где-то базируется — таблица симметрична being_locations,
-  // но в граф до сих пор не попадала.
-  const rawCommunityLocations = (
-    includeSpots
-      ? db.prepare("SELECT community_id, location_id FROM community_locations").all()
-      : db
-          .prepare(
-            `SELECT cl.community_id,
-                    CASE WHEN sl.role = 'spot' THEN p.id ELSE cl.location_id END AS location_id
-             FROM community_locations cl
-             JOIN setting_locations sl ON sl.id = cl.location_id
-             LEFT JOIN setting_locations p ON p.id = sl.parent_id AND p.archived_at IS NULL
-             WHERE sl.role != 'spot' OR p.id IS NOT NULL`
-          )
-          .all()
-  ) as { community_id: number; location_id: number }[];
-
-  const edges: GraphEdge[] = [];
-  const wanted = new Map<string, { type: string; id: number }>();
 
   // Мнения про точки (рёбра entity_relations с концом-точкой) в граф без
   // точек не идут: перепривязать мнение нельзя, оно адресовано именно
@@ -303,6 +227,9 @@ linksRouter.get("/graph", (req, res) => {
         ).map((r) => r.id)
       );
   const touchesSpot = (type: string, id: number) => type === "location" && spotIds.has(id);
+
+  const edges: GraphEdge[] = [];
+  const wanted = new Map<string, { type: string; id: number }>();
 
   // Отбор по типам живёт здесь, а не в каждом цикле: раньше ребро проходило,
   // если нужного типа был хотя бы один его конец, и узлы снятого типа всё
@@ -332,26 +259,145 @@ linksRouter.get("/graph", (req, res) => {
     if (from && to && from !== to) edges.push({ from, to, section, tone, kind });
   };
 
-  for (const r of allRelations) {
-    // Rows with section set (migrated from generic_links) use linkKind;
-    // rows with label/tone set (original relations) use "relation" kind.
-    if (!includeSpots && (touchesSpot(r.from_type, r.from_id) || touchesSpot(r.to_type, r.to_id))) {
-      continue;
-    }
-    if (r.section) {
-      connect(r.from_type, r.from_id, r.to_type, r.to_id, r.section, null, linkKind(r.section));
-    } else {
+  if (view === "world") {
+    // ── Граф мира/лора: «кто с кем и что где» ──────────────────────
+    // Мнения (entity_relations, section IS NULL) с тоном и подписью.
+    const opinionRows = db
+      .prepare(
+        "SELECT from_type, from_id, to_type, to_id, NULL as section, tone, label FROM entity_relations WHERE section IS NULL"
+      )
+      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null; tone: string; label: string }[];
+    for (const r of opinionRows) {
+      if (!includeSpots && (touchesSpot(r.from_type, r.from_id) || touchesSpot(r.to_type, r.to_id))) continue;
       connect(r.from_type, r.from_id, r.to_type, r.to_id, r.label || null, r.tone, "relation");
     }
+    // Участие в сообществах, обитание, базирование, вложенность мест.
+    const rawMemberships = db
+      .prepare("SELECT being_id, community_id FROM being_communities")
+      .all() as { being_id: number; community_id: number }[];
+    const rawHabitats = (
+      includeSpots
+        ? db.prepare("SELECT being_id, location_id FROM being_locations").all()
+        : db.prepare(
+            `SELECT bl.being_id,
+                    CASE WHEN sl.role = 'spot' THEN p.id ELSE bl.location_id END AS location_id
+             FROM being_locations bl
+             JOIN setting_locations sl ON sl.id = bl.location_id
+             LEFT JOIN setting_locations p ON p.id = sl.parent_id AND p.archived_at IS NULL
+             WHERE sl.role != 'spot' OR p.id IS NOT NULL`
+          ).all()
+    ) as { being_id: number; location_id: number }[];
+    const rawLocationNesting = (
+      includeSpots
+        ? db.prepare("SELECT id, parent_id FROM setting_locations WHERE parent_id IS NOT NULL AND archived_at IS NULL").all()
+        : db.prepare(
+            `SELECT sl.id, sl.parent_id FROM setting_locations sl
+             WHERE sl.parent_id IS NOT NULL AND sl.archived_at IS NULL AND sl.role != 'spot'`
+          ).all()
+    ) as { id: number; parent_id: number }[];
+    const rawCommunityLocations = (
+      includeSpots
+        ? db.prepare("SELECT community_id, location_id FROM community_locations").all()
+        : db.prepare(
+            `SELECT cl.community_id,
+                    CASE WHEN sl.role = 'spot' THEN p.id ELSE cl.location_id END AS location_id
+             FROM community_locations cl
+             JOIN setting_locations sl ON sl.id = cl.location_id
+             LEFT JOIN setting_locations p ON p.id = sl.parent_id AND p.archived_at IS NULL
+             WHERE sl.role != 'spot' OR p.id IS NOT NULL`
+          ).all()
+    ) as { community_id: number; location_id: number }[];
+    for (const m of rawMemberships)
+      connect("community", m.community_id, "being", m.being_id, "участник", null, "membership");
+    for (const h of rawHabitats)
+      connect("location", h.location_id, "being", h.being_id, "обитает", null, "habitat");
+    for (const n of rawLocationNesting)
+      connect("location", n.parent_id, "location", n.id, "вложенная локация", null, "nesting");
+    for (const c of rawCommunityLocations)
+      connect("location", c.location_id, "community", c.community_id, "базируется", null, "habitat");
+    // Упоминания, у которых источник — сущность мира (решения 2026-09-12, п. 3).
+    const WORLD_TYPES = new Set(["being", "location", "community", "artifact", "character"]);
+    const worldMentions = db
+      .prepare("SELECT from_type, from_id, to_type, to_id, section FROM generic_links WHERE section = 'mention'")
+      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string }[];
+    for (const r of worldMentions) {
+      if (!includeSpots && (touchesSpot(r.from_type, r.from_id) || touchesSpot(r.to_type, r.to_id))) continue;
+      if (WORLD_TYPES.has(r.from_type)) {
+        connect(r.from_type, r.from_id, r.to_type, r.to_id, "mention", null, "mention");
+      }
+    }
+  } else {
+    // ── Граф приключений: «что от чего зависит и где всплывает」 ────
+    // Сцены → приключения (arc_id).
+    const sceneArcs = db
+      .prepare("SELECT id, arc_id FROM story_scenes WHERE arc_id IS NOT NULL AND archived_at IS NULL")
+      .all() as { id: number; arc_id: number }[];
+    for (const s of sceneArcs)
+      connect("scene", s.id, "adventure", s.arc_id, "сцена приключения", null, "scene");
+    // Переходы приключений (набор кампании перебивает набор сеттинга — п. 1 задания).
+    const campaignTransitions = campaign_id
+      ? db.prepare(
+          "SELECT from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id = ?"
+        ).all(campaign_id) as { from_arc_id: number; to_arc_id: number; label: string }[]
+      : [];
+    const settingTransitions = setting_id
+      ? db.prepare(
+          "SELECT from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id IS NULL AND from_arc_id IN (SELECT id FROM story_arcs WHERE setting_id = ?)"
+        ).all(setting_id) as { from_arc_id: number; to_arc_id: number; label: string }[]
+      : [];
+    // Набор кампании перебивает наследованный от сеттинга.
+    const seenTransitions = new Set<string>();
+    for (const t of campaignTransitions) {
+      const key = `${t.from_arc_id}|${t.to_arc_id}`;
+      seenTransitions.add(key);
+      connect("adventure", t.from_arc_id, "adventure", t.to_arc_id, t.label || "переход", null, "link");
+    }
+    for (const t of settingTransitions) {
+      const key = `${t.from_arc_id}|${t.to_arc_id}`;
+      if (!seenTransitions.has(key))
+        connect("adventure", t.from_arc_id, "adventure", t.to_arc_id, t.label || "переход", null, "link");
+    }
+    // Сессии → сцены: набрано и сыграно — два разных вида ребра (п. 1 задания).
+    const plannedScenes = db
+      .prepare(
+        `SELECT sp.session_id, sp.scene_id FROM session_planned_scenes sp
+         JOIN sessions s ON s.id = sp.session_id AND s.archived_at IS NULL`
+      )
+      .all() as { session_id: number; scene_id: number }[];
+    for (const p of plannedScenes)
+      connect("session", p.session_id, "scene", p.scene_id, "набрано", null, "scene");
+    const playedScenes = db
+      .prepare(
+        `SELECT ss.session_id, ss.scene_id FROM session_scenes ss
+         JOIN sessions s ON s.id = ss.session_id AND s.archived_at IS NULL`
+      )
+      .all() as { session_id: number; scene_id: number }[];
+    for (const p of playedScenes)
+      connect("session", p.session_id, "scene", p.scene_id, "сыграно", null, "scene");
+    // Содержимое сцен и списки кампаний/сессий из generic_links (п. 1 задания).
+    const ADVENTURE_TYPES = new Set(["scene", "adventure", "session", "campaign"]);
+    const adventureLinks = db
+      .prepare(
+        "SELECT from_type, from_id, to_type, to_id, section FROM generic_links WHERE section != 'mention'"
+      )
+      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string | null }[];
+    for (const r of adventureLinks) {
+      if (!includeSpots && (touchesSpot(r.from_type, r.from_id) || touchesSpot(r.to_type, r.to_id))) continue;
+      if (ADVENTURE_TYPES.has(r.from_type) || ADVENTURE_TYPES.has(r.to_type)) {
+        connect(r.from_type, r.from_id, r.to_type, r.to_id, r.section, null, linkKind(r.section));
+      }
+    }
+    // Упоминания, у которых источник — приключенческая сущность (п. 3 задания).
+    const adventureMentions = db
+      .prepare("SELECT from_type, from_id, to_type, to_id, section FROM generic_links WHERE section = 'mention'")
+      .all() as { from_type: string; from_id: number; to_type: string; to_id: number; section: string }[];
+    for (const r of adventureMentions) {
+      if (!includeSpots && (touchesSpot(r.from_type, r.from_id) || touchesSpot(r.to_type, r.to_id))) continue;
+      if (ADVENTURE_TYPES.has(r.from_type)) {
+        connect(r.from_type, r.from_id, r.to_type, r.to_id, "mention", null, "mention");
+      }
+    }
   }
-  for (const m of rawMemberships)
-    connect("community", m.community_id, "being", m.being_id, "участник", null, "membership");
-  for (const h of rawHabitats)
-    connect("location", h.location_id, "being", h.being_id, "обитает", null, "habitat");
-  for (const n of rawLocationNesting)
-    connect("location", n.parent_id, "location", n.id, "вложенная локация", null, "nesting");
-  for (const c of rawCommunityLocations)
-    connect("location", c.location_id, "community", c.community_id, "базируется", null, "habitat");
 
   const byType = new Map<string, number[]>();
   for (const { type, id } of wanted.values()) {
@@ -374,7 +420,7 @@ linksRouter.get("/graph", (req, res) => {
       )
       .all(...ids) as { id: number; name: string }[];
     for (const r of rows) {
-      nodes.push({ key: `${type}:${r.id}`, type, id: r.id, title: r.name });
+      nodes.push({ key: `${type}:${r.id}`, type, id: r.id, title: r.name ?? "" });
     }
   }
 
@@ -451,10 +497,10 @@ linksRouter.get("/graph", (req, res) => {
       for (const r of rows) {
         const key = `${type}:${r.id}`;
         if (connected.has(key)) continue;
-        isolated.push({ key, type, id: r.id, title: r.name });
+        isolated.push({ key, type, id: r.id, title: r.name ?? "" });
       }
     }
-    isolated.sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
+    isolated.sort((a, b) => a.type.localeCompare(b.type) || (a.title ?? "").localeCompare(b.title ?? ""));
   }
 
   const result = { nodes, edges: visibleEdges, isolated };

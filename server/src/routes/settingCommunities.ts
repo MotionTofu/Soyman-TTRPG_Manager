@@ -313,7 +313,7 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
   const {
-    name, description, history, current_situation, features, goals, tags, aliases, name_original,
+    name, description, player_text, history, current_situation, features, goals, tags, aliases, name_original,
     parent_id,
   } = req.body as {
     name?: string;
@@ -321,6 +321,8 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     // созданному сообществу уже существующие вложенные).
     parent_id?: number | null;
     description?: string;
+    // Игроцкий текст (Кабинет игрока, шаг 2): что Мастер рассказывает игрокам.
+    player_text?: string;
     history?: string;
     current_situation?: string;
     features?: string;
@@ -336,6 +338,7 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
   db.prepare(
     `UPDATE setting_communities SET
        name = COALESCE(?, name), description = COALESCE(?, description),
+       player_text = COALESCE(?, player_text),
        history = COALESCE(?, history), current_situation = COALESCE(?, current_situation),
        features = COALESCE(?, features), goals = COALESCE(?, goals),
        tags = COALESCE(?, tags),
@@ -347,6 +350,7 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
   ).run(
     name ?? null,
     description ?? null,
+    player_text ?? null,
     history ?? null,
     current_situation ?? null,
     features ?? null,

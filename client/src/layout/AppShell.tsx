@@ -39,18 +39,18 @@ const GM_NAV_ITEMS: NavItem[] = [
   { to: "/mastering", label: "Мастерение", icon: "mastering" },
   { to: "/resources", label: "Ресурсы", icon: "resources" },
   { to: "/canvas", label: "Полотно", icon: "canvas" },
-  { to: "/graph", label: "Граф связей", icon: "graph" },
+  { to: "/graph/world", label: "Граф мира", icon: "graph" },
+  { to: "/graph/adventures", label: "Граф приключений", icon: "graph" },
   { to: "/maps", label: "Карты", icon: "map" },
 ];
 
-// Player role: no GM tooling (Мастерение/Ресурсы/Граф связей). The player's
-// own characters live inside "Кабинет" (ticket 13), not a standalone item.
+// Player role: четыре места (Кабинет игрока, шаг 5) — Главная, Дневники,
+// Персонажи, Кабинет. Отдельных Сеттингов и Библиотеки нет: сеттинг виден
+// только вкладкой «Мир» внутри дневника. GM-инструментов нет вовсе.
 const PLAYER_NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Главная", icon: "home", end: true },
-  { to: "/campaigns", label: "Кампании", icon: "campaigns" },
-  { to: "/settings", label: "Сеттинги", icon: "settings" },
-  { to: "/systems", label: "Системы", icon: "systems" },
-  { to: "/maps", label: "Карты", icon: "map" },
+  { to: "/campaigns", label: "Дневники", icon: "campaigns" },
+  { to: "/sheets", label: "Персонажи", icon: "card" },
   { to: "/cabinet", label: "Кабинет", icon: "storages" },
 ];
 
@@ -72,9 +72,9 @@ const PLAYER_NAV_BOTTOM_ITEMS: NavItem[] = [
 // Beyond's app nav per the user's request — the hamburger menu stays for
 // everything else (Настройки/Внешний вид/Архив/etc.), this is just the 3-4
 // things worth one tap. GM's "Библиотека" points at the new /library page
-// (see LibraryPage.tsx); the player-role variant still points at /campaigns
-// as the closest existing equivalent until Phase 7 builds its own read-only
-// version. Отдельной страницы «Плеер» больше нет:
+// (see LibraryPage.tsx); the player-role slots are Дневники (left) and
+// Персонажи (right) — те же четыре места, что в боковой навигации.
+// Отдельной страницы «Плеер» больше нет:
 // музыкой управляет пульт, а состояние воспроизведения видно в MiniPlayerBar
 // (см. AudioPlayerBar/MiniPlayerBar в audioPlayer.tsx).
 interface BottomNavItem {
@@ -376,7 +376,7 @@ const CRUMB_LABEL: Record<string, string> = {
   compendium: "Компендиум",
 };
 
-function buildCrumbs(pathname: string) {
+function buildCrumbs(pathname: string, isPlayer: boolean) {
   if (pathname === "/" || pathname === "") return [{ label: "Главная" }];
   const parts = pathname.split("/").filter(Boolean);
   const crumbs: { label: string; to?: string }[] = [{ label: "Главная", to: "/" }];
@@ -391,7 +391,8 @@ function buildCrumbs(pathname: string) {
       continue;
     }
     acc += `/${seg}`;
-    const label = CRUMB_LABEL[seg] ?? seg;
+    // У игрока /campaigns — это Дневники, а не Кампании мастера.
+    const label = seg === "campaigns" && isPlayer ? "Дневники" : (CRUMB_LABEL[seg] ?? seg);
     const isLast = i === parts.length - 1 || (i + 1 < parts.length && /^\d+$/.test(parts[i + 1]) && i + 1 === parts.length - 1);
     crumbs.push({ label, to: isLast ? undefined : acc });
   }
@@ -399,9 +400,9 @@ function buildCrumbs(pathname: string) {
 }
 
 export function AppShell() {
-  // Role decides which navigation renders: players get no GM tooling
-  // (Мастерение/Ресурсы/Граф связей/Игроки/Бэкап/Приглашения/Архив) and see
-  // "Персонажи" (their own characters) instead of the "Игроки" roster.
+  // Role decides which navigation renders: players get four places
+  // (Главная/Дневники/Персонажи/Кабинет) and no GM tooling
+  // (Мастерение/Ресурсы/Граф связей/Игроки/Бэкап/Приглашения/Архив).
   const { user, loading: userLoading } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
@@ -468,17 +469,17 @@ export function AppShell() {
 
   // Flanking slots around the raised center button — see MobileBottomNav's
   // comment for the symmetric 2+center+2 / 1+center+1 split. GM's old
-  // leftmost slot ("Сессия") is "Главная"; the player's rightmost slot is
-  // "Чарники" (решение владельца 2026-09-06): от приложения до чарника —
+  // leftmost slot ("Сессия") is "Главная"; the player's slots are Дневники
+  // (left) and Персонажи (right): от приложения до дневника и чарника —
   // один тап, создание — там же. Кабинет остаётся в шторке.
   const bottomNavLeft: BottomNavItem[] = isPlayer
-    ? [{ key: "library", label: "Библиотека", icon: "library", to: "/library" }]
+    ? [{ key: "diaries", label: "Дневники", icon: "campaigns", to: "/campaigns" }]
     : [
         { key: "home", label: "Главная", icon: "home", to: "/" },
         { key: "library", label: "Библиотека", icon: "library", to: "/library" },
       ];
   const bottomNavRight: BottomNavItem[] = isPlayer
-    ? [{ key: "sheets", label: "Чарники", icon: "card", to: "/sheets" }]
+    ? [{ key: "sheets", label: "Персонажи", icon: "card", to: "/sheets" }]
     : [
         { key: "players", label: "Игроки", icon: "players", to: "/players" },
       ];
@@ -716,7 +717,7 @@ export function AppShell() {
           !/^\/sessions\/\d+\/live\/panel\/\w+/.test(pathname) &&
           !/^\/characters\/\d+\/sheet$/.test(pathname) && (
           <div style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-            <Breadcrumbs items={buildCrumbs(pathname)} />
+            <Breadcrumbs items={buildCrumbs(pathname, !!isPlayer)} />
             {!isPlayer && activeStorageName && (
               <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
                 {activeStorageName}

@@ -19,6 +19,7 @@ import { parseDateKey, toLocalDateKey } from "../utils/date";
 import { safeBackgroundImage } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { LocalClock } from "../components/LocalClock";
+import { LoadErrorCard } from "../components/Loadable";
 import type { AppSettings, Campaign, Player, SessionSummary, Setting, System } from "../types";
 
 interface FinanceSummary {
@@ -331,10 +332,10 @@ export function HomeCalendarPage() {
       )}
 
       {(calendarError || campaignsError) && (
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <span>Не удалось загрузить: {[calendarError, campaignsError].filter(Boolean).join(" · ")}</span>
-          <button onClick={loadInitial}>Повторить</button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить: {[calendarError, campaignsError].filter(Boolean).join(" · ")}</>}
+          onRetry={loadInitial}
+        />
       )}
 
       <div className="home-layout">
@@ -595,7 +596,7 @@ export function HomeCalendarPage() {
                 </select>
               </label>
             )}
-            {createError && <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", color: "var(--status-cancelled-fg)" }}>{createError}</div>}
+            {createError && <LoadErrorCard message={createError} />}
             <div className="row">
               <button className="primary" onClick={createSessionFromModal} disabled={!createModal.campaignId || creating}>
                 {creating ? "Создаю…" : "Создать"}

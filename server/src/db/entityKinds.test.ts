@@ -326,7 +326,7 @@ describe("производные карты вычисляются, а не пи
       [
         "adventure", "artifact", "being", "campaign", "character", "community",
         "compendium_entry", "location", "mastering", "player", "resource",
-        "scene", "setting",
+        "scene", "session", "setting",
       ]
     );
   });

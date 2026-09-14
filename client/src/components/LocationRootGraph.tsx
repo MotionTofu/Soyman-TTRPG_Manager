@@ -16,6 +16,7 @@ import "@xyflow/react/dist/style.css";
 import { api } from "../api/client";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "./EmptyState";
+import { LoadErrorCard, SkeletonBlock } from "./Loadable";
 import { NavIcon } from "./NavIcons";
 import { EntityWizard } from "./entityWizard/EntityWizard";
 import { LocationRootNode } from "./LocationRootNode";
@@ -702,10 +703,11 @@ export function LocationRootGraph({ settingId }: Props) {
   );
 
   if (loading && locations.length === 0 && !loadError) {
+    // Мелочь панели древа, а не форма списка: точные высоты сохранены.
     return (
       <div className="stack" aria-busy="true" aria-label="Загрузка древа">
-        <div className="search-skeleton-pulse" style={{ height: 34 }} />
-        <div className="search-skeleton-pulse" style={{ height: 120 }} />
+        <SkeletonBlock height={34} />
+        <SkeletonBlock height={120} />
       </div>
     );
   }
@@ -924,12 +926,10 @@ export function LocationRootGraph({ settingId }: Props) {
         </div>
       )}
       {loadError && (
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)" }}>
-          Не удалось загрузить географию: {loadError}{" "}
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить географию: {loadError}</>}
+          onRetry={() => refresh()}
+        />
       )}
       {creating && (
         <EntityWizard

@@ -1256,16 +1256,20 @@ settingLocationsRouter.put("/:id", (req, res) => {
     | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
-  const { name, kind, role, description, short_name, aliases, name_original } = req.body as {
+  const { name, kind, role, description, player_text, short_name, aliases, name_original } = req.body as {
     name?: string;
     kind?: string;
     role?: string;
     description?: string;
+    player_text?: string;
     short_name?: string;
     aliases?: string[];
     name_original?: string;
   };
   const err = validateLocationPayload({ name, kind, role, description, short_name, aliases, name_original });
+  if (player_text !== undefined && player_text !== null && String(player_text).length > MAX_DESC) {
+    return res.status(400).json({ error: `player_text must be ≤${MAX_DESC} chars` });
+  }
   if (err) return res.status(400).json({ error: err });
   // В точку — только лист: у неё не должно быть живых детей, иначе правило
   // «точки без папок и без вложенности» ломается (конвертация непустых —
@@ -1302,6 +1306,7 @@ settingLocationsRouter.put("/:id", (req, res) => {
        name = COALESCE(?, name), kind = COALESCE(?, kind),
        role = COALESCE(?, role),
        description = COALESCE(?, description),
+       player_text = COALESCE(?, player_text),
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
        aliases = COALESCE(?, aliases),
        name_original = COALESCE(?, name_original),
@@ -1312,6 +1317,7 @@ settingLocationsRouter.put("/:id", (req, res) => {
     kind ?? null,
     isLocationRole(role) ? role : null,
     description ?? null,
+    player_text ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
     aliases ? JSON.stringify(aliases) : null,

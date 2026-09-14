@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { useConfirm } from "../hooks/useConfirm";
 import { Modal } from "./Modal";
+import { LoadErrorCard } from "./Loadable";
 import { EmptyState } from "./EmptyState";
 import { formatImportantDate, formatCustomRule } from "../inworldCalendar";
 import { DATE_GROUP_LABELS, DATE_GROUP_ORDER } from "../locationDateGroups";
@@ -319,7 +320,7 @@ export function LocationImportantDatesTab({ locationId, locationName, settingId,
         <Modal onClose={handleClose}>
           <h3>{editingId ? "Редактировать важную дату" : "Новая важная дата"} — {locationName}</h3>
           <div className="stack">
-            {errors.form && <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", fontSize: "var(--fs-meta)" }}>{errors.form}</div>}
+            {errors.form && <LoadErrorCard message={errors.form} />}
             {/* Название */}
             <div className="stack" style={{ gap: 2 }}>
               <input

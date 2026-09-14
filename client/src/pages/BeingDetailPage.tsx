@@ -15,6 +15,7 @@ import { RelationsTab } from "../components/RelationsTab";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatImportantDate } from "../inworldCalendar";
 import { EntityPage } from "../components/EntityPage";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { useTabState } from "../hooks/useTabState";
@@ -214,49 +215,20 @@ export function BeingDetailPage() {
       <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
         {confirmDialog}
         {alertDialog}
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Не удалось загрузить существо: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить существо: {loadError}</>}
+          onRetry={() => refresh()}
+        />
       </div>
     );
   }
 
   if (loading && !being) {
     return (
-      <div className="stack" aria-busy="true" aria-label="Загрузка существа">
+      <div className="stack">
         {confirmDialog}
         {alertDialog}
-        <div
-          className="card"
-          style={{
-            height: 140,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-          }}
-        />
-        <div
-          className="card"
-          style={{
-            height: 220,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-            animationDelay: "120ms",
-          }}
-        />
+        <ListSkeleton variant="paragraph" label="Загрузка существа" />
       </div>
     );
   }

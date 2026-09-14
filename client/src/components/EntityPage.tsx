@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { Breadcrumbs, type Crumb } from "./Breadcrumbs";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EntityTypeChip } from "./EntityTypeChip";
+import { ListSkeleton, LoadErrorCard } from "./Loadable";
 
 // Каркас карточки сущности.
 //
@@ -32,6 +33,8 @@ import { EntityTypeChip } from "./EntityTypeChip";
 // страницы, и раскладка подпрыгивала, когда данные приходили. Каркас рисует
 // раму сразу, а тело — скелетом в размер будущего содержимого. Ошибка и
 // «не найдено» тоже проходят через каркас, а не через голый абзац.
+// Ошибка и скелет — общие (`Loadable.tsx`): у показа состояний одна
+// реализация на всё приложение, а не своя в каждом каркасе.
 //
 // ЧЕГО КАРКАС НЕ РЕШАЕТ. Чем наполнено тело вкладки — дело страницы. Такое
 // правило было («список, мастер-детейл или форма») и снято 2026-09-12: его
@@ -254,24 +257,13 @@ export function EntityPage({
       )}
 
       {error ? (
-        <div className="card entity-page__error">
-          <span>Ошибка загрузки: {error}</span>
-          {onRetry && (
-            <button className="primary" onClick={onRetry}>
-              Повторить
-            </button>
-          )}
-        </div>
+        <LoadErrorCard message={<>Ошибка загрузки: {error}</>} onRetry={onRetry} />
       ) : missing ? (
         <div className="card entity-page__missing muted">
           Записи нет — её удалили или ссылка ведёт не туда.
         </div>
       ) : loading ? (
-        <div className="entity-page__skeleton" aria-live="polite" aria-busy="true">
-          <span className="sr-only">Загрузка…</span>
-          <div className="entity-page__skeleton-card" />
-          <div className="entity-page__skeleton-card entity-page__skeleton-card--short" />
-        </div>
+        <ListSkeleton variant="paragraph" label="Загрузка" />
       ) : (
         children
       )}

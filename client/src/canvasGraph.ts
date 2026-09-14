@@ -268,11 +268,11 @@ export function drawNode(
   ctx.textBaseline = "middle";
   ctx.fillStyle = resolveColor("--ink", "#1a1a1a");
   const textX = pos.x - chipW / 2 + padX + shapeIconSize * 2 + 4 * s;
-  ctx.fillText(n.title, textX, pos.y + 1);
+  ctx.fillText(n.title ?? "", textX, pos.y + 1);
   if (options.foldedCount > 0) {
     ctx.font = `600 ${8 * s}px var(--font-mono, monospace)`;
     ctx.fillStyle = resolveColor("--muted", "#999");
-    ctx.fillText(` +${options.foldedCount}`, textX + ctx.measureText(n.title).width, pos.y + 1);
+    ctx.fillText(` +${options.foldedCount}`, textX + ctx.measureText(n.title ?? "").width, pos.y + 1);
   }
 
   // Pin indicator
@@ -505,7 +505,7 @@ export function hitTestNode(
     if (!p) continue;
     const s = nodeScales.get(n.key) ?? 1;
     const shapeIconSize = 5 * s;
-    const estTitleW = Math.min(n.title.length * 6.6, 180);
+  const estTitleW = Math.min((n.title ?? "").length * 6.6, 180);
     const chipW = Math.max(48, (estTitleW + shapeIconSize * 2 + 16) * s);
     const chipH = 22 * s;
     if (
@@ -559,7 +559,7 @@ export function edgeTooltip(e: GraphEdge, nodesByKey: Map<string, GraphNode>): s
 
 export function nodeTooltip(n: GraphNode, foldedCount: number): string {
   return (
-    `${TYPE_LABELS_FULL[n.type] ?? n.type}: ${n.title}` +
+    `${TYPE_LABELS_FULL[n.type] ?? n.type}: ${n.title ?? "?"}` +
     (foldedCount > 0 ? ` — свёрнуто внутрь: ${foldedCount}, нажмите, чтобы раскрыть` : "") +
     " — клик фокус, двойной клик — окрестность"
   );

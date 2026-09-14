@@ -6,6 +6,7 @@ import { ArtifactCardEditor } from "../components/ArtifactCardEditor";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
+import { ListSkeleton } from "../components/Loadable";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { MentionsTab } from "../components/MentionsTab";
@@ -124,29 +125,7 @@ export function ArtifactDetailPage() {
   }, [artifact?.item_class, artifact?.item_type]);
 
   if (!artifact) {
-    return (
-      <div className="stack" aria-busy="true" aria-label="Загрузка артефакта">
-        <div
-          className="card"
-          style={{
-            height: 140,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-          }}
-        />
-        <div
-          className="card"
-          style={{
-            height: 220,
-            opacity: 0.45,
-            background: "var(--bg-elevated)",
-            animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate",
-            animationDelay: "120ms",
-          }}
-        />
-      </div>
-    );
+    return <ListSkeleton variant="paragraph" label="Загрузка артефакта" />;
   }
 
   async function archiveArtifact() {

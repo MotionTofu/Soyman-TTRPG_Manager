@@ -5326,6 +5326,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   //
   // Список должен совпадать с MENTIONABLE в services/mentions.ts — там он
   // источник истины для типов, здесь для таблиц.
+  //
+  // Исключение: world_exploration_entries (Кабинет игрока, 2026-09-12, шаг 1).
+  // Записям дневника uid нужен как устойчивое имя для будущего обмена пакетом
+  // игрока между базами, но mentionable дневник не становится: ссылаться из
+  // текста на чужую личную заметку нельзя. Поэтому UID здесь — надмножество
+  // MENTIONABLE на одну таблицу, и это намеренно.
   const UID_TABLES = [
     "campaigns",
     "settings",
@@ -5342,6 +5348,7 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     "sessions",
     "compendium_entries",
     "setting_calendar_events",
+    "world_exploration_entries",
   ];
   for (const table of UID_TABLES) {
     if (!tableExists(database, table)) continue;

@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { SettingWizard } from "../components/SettingWizard";
-import { GroupTabs } from "../components/GroupTabs";
 import { GroupMembersModal } from "../components/GroupMembersModal";
-import { SectionHeading } from "../components/SectionHeading";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
 import { SectionBackground } from "../components/SectionBackground";
 import { ZineGraphic } from "../components/ZineGraphics";
@@ -13,6 +12,7 @@ import { GENRE_CATEGORIES } from "../genreData";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { NavIcon } from "../components/NavIcons";
+import { ListPage } from "../components/ListPage";
 
 import type { Setting, SettingGroup } from "../types";
 
@@ -65,7 +65,6 @@ function SettingCoverTile({ setting: s }: { setting: Setting }) {
 }
 
 export function SettingsListPage() {
-  const navigate = useNavigate();
   const [settings, setSettings] = useState<Setting[]>([]);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -153,137 +152,117 @@ export function SettingsListPage() {
     );
   }, [settings, activeTab, groupMemberships, q, genreFilter]);
 
+  const genreToolbar = (
+    <div className="genre-chips">
+      {GENRE_CATEGORIES.map((cat) => (
+        <button
+          key={cat.name}
+          className={`genre-chip${genreFilter === cat.name ? " genre-chip--selected" : ""}`}
+          style={{ "--genre-color": cat.color } as React.CSSProperties}
+          onClick={() => setGenreFilter(genreFilter === cat.name ? null : cat.name)}
+        >
+          <ZineGraphic name={cat.icon} className="genre-chip-icon" />
+          {cat.name}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
-      <div className="page-header-row row">
-        <SectionHeading section="settings" compact>Сеттинги</SectionHeading>
-        <div className="row">
-          <button className="primary" onClick={() => setCreating(true)}>
-            + Новый сеттинг
-          </button>
-        </div>
-      </div>
-
-      <GroupTabs
-        endpoint="/setting-groups"
-        label="Группы сеттингов"
-        deleteNote="Сеттинги не будут удалены — они останутся в разделе «Все сеттинги»."
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+      <ListPage
+        headingSection="settings"
+        title="Сеттинги"
+        groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
+        groupsEndpoint="/setting-groups"
+        groupsDeleteNote="Сеттинги не будут удалены — они останутся в разделе «Все сеттинги»."
         onGroupsChanged={refresh}
-      />
-
-      <div className="res-toolbar" style={{ marginTop: 4 }}>
-        <input
-          className="res-toolbar__search"
-          placeholder="Поиск по имени, описанию, коду…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Поиск по сеттингам"
-        />
-        <div className="genre-chips">
-          {GENRE_CATEGORIES.map((cat) => (
-            <button
-              key={cat.name}
-              className={`genre-chip${genreFilter === cat.name ? " genre-chip--selected" : ""}`}
-              style={{ "--genre-color": cat.color } as React.CSSProperties}
-              onClick={() => setGenreFilter(genreFilter === cat.name ? null : cat.name)}
-            >
-              <ZineGraphic name={cat.icon} className="genre-chip-icon" />
-              {cat.name}
-            </button>
-          ))}
-        </div>
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-          {filteredSettings.length} / {settings.length}
-        </span>
-        {q && (
-          <button
-            onClick={() => setQ("")}
-            style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
-            title="Сбросить поиск"
-          >
-            Сбросить
-          </button>
+        createLabel="+ Новый сеттинг"
+        onCreate={() => setCreating(true)}
+        activeGroup={activeTab}
+        onGroupChange={setActiveTab}
+        search={q}
+        onSearch={setQ}
+        searchPlaceholder="Поиск по имени, описанию, коду…"
+        searchLabel="Поиск по сеттингам"
+        filteredCount={filteredSettings.length}
+        totalCount={settings.length}
+        onResetSearch={() => setQ("")}
+        toolbarExtra={genreToolbar}
+      >
+        {loadError && (
+          <LoadErrorCard
+            message={<>Не удалось загрузить сеттинги: {loadError}</>}
+            onRetry={refresh}
+          />
         )}
-      </div>
 
-      {loadError && (
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось загрузить сеттинги: {loadError}</span>
-          <button className="primary" onClick={refresh}>Повторить</button>
-        </div>
-      )}
+        {loading ? (
+          <ListSkeleton variant="tiles" label="Загрузка сеттингов" />
+        ) : (
+          <div className="grid-cards">
+            {filteredSettings.map((s) => (
+              <SettingCoverTile key={s.id} setting={s} />
+            ))}
+            {activeTab !== null && activeTab !== "ungrouped" && (
+              <button
+                className="card campaign-tile setting-group-empty-add"
+                onClick={() => {
+                  const g = groups.find((gr) => gr.id === Number(activeTab));
+                  if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+                }}
+              >
+                <div className="campaign-tile-cover cover-halftone">
+                  <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+                  <div className="campaign-tile-scrim" />
+                  <span className="group-add-icon"><NavIcon name="galaxy" /></span>
+                  <h3 className="campaign-tile-name">+</h3>
+                </div>
+                <div className="campaign-tile-meta">
+                  <div className="campaign-tile-system muted">нажми, чтобы добавить сеттинг в группу</div>
+                </div>
+              </button>
+            )}
+          </div>
+        )}
 
-      {loading ? (
-        <div className="grid-cards" aria-busy="true" aria-label="Загрузка сеттингов">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card" style={{ height: 220, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: `${i * 120}ms` }} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid-cards">
-          {filteredSettings.map((s) => (
-            <SettingCoverTile key={s.id} setting={s} />
-          ))}
-          {activeTab !== null && activeTab !== "ungrouped" && (
-            <button
-              className="card campaign-tile setting-group-empty-add"
-              onClick={() => {
-                const g = groups.find((gr) => gr.id === Number(activeTab));
-                if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
-              }}
-            >
-              <div className="campaign-tile-cover cover-halftone">
-                <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-                <div className="campaign-tile-scrim" />
-                <span className="group-add-icon"><NavIcon name="galaxy" /></span>
-                <h3 className="campaign-tile-name">+</h3>
+        {!loading && !loadError && filteredSettings.length === 0 && settings.length > 0 && (
+          <EmptyState kind="search"
+            title="Ничего не найдено"
+            hint={q.trim() ? `По «${q.trim()}» ничего нет.` : genreFilter ? `Нет сеттингов с жанром «${genreFilter}».` : activeTab !== null ? "В этой группе пока пусто — добавьте сеттинг." : "Ничего не найдено."}
+            action={
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+                {genreFilter && <button onClick={() => setGenreFilter(null)}>Сбросить жанр</button>}
+                {activeTab !== null && activeTab !== "ungrouped" && (
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      const g = groups.find((gr) => gr.id === Number(activeTab));
+                      if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+                    }}
+                  >
+                    Добавить в группу
+                  </button>
+                )}
               </div>
-              <div className="campaign-tile-meta">
-                <div className="campaign-tile-system muted">нажми, чтобы добавить сеттинг в группу</div>
-              </div>
-            </button>
-          )}
-        </div>
-      )}
+            }
+          />
+        )}
 
-      {!loading && !loadError && filteredSettings.length === 0 && settings.length > 0 && (
-        <EmptyState kind="search"
-          title="Ничего не найдено"
-          hint={q.trim() ? `По «${q.trim()}» ничего нет.` : genreFilter ? `Нет сеттингов с жанром «${genreFilter}».` : activeTab !== null ? "В этой группе пока пусто — добавьте сеттинг." : "Ничего не найдено."}
-          action={
-            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-              {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
-              {genreFilter && <button onClick={() => setGenreFilter(null)}>Сбросить жанр</button>}
-              {activeTab !== null && activeTab !== "ungrouped" && (
-                <button
-                  className="primary"
-                  onClick={() => {
-                    const g = groups.find((gr) => gr.id === Number(activeTab));
-                    if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
-                  }}
-                >
-                  Добавить в группу
-                </button>
-              )}
-            </div>
-          }
-        />
-      )}
-
-      {!loading && !loadError && settings.length === 0 && (
-        <EmptyState
-          title="Мир не начерчен"
-          hint="Ни одного сеттинга ещё нет — создайте первый."
-          action={
-            <button className="primary" onClick={() => setCreating(true)}>
-              + Новый сеттинг
-            </button>
-          }
-        />
-      )}
+        {!loading && !loadError && settings.length === 0 && (
+          <EmptyState
+            title="Мир не начерчен"
+            hint="Ни одного сеттинга ещё нет — создайте первый."
+            action={
+              <button className="primary" onClick={() => setCreating(true)}>
+                + Новый сеттинг
+              </button>
+            }
+          />
+        )}
+      </ListPage>
 
       {creating && <SettingWizard onClose={() => { setCreating(false); refresh(); }} />}
 

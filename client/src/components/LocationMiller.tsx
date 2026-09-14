@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import { invalidateAffects } from "../data/entities";
 import { useResource } from "../data/hooks";
 import { EmptyState } from "./EmptyState";
+import { LoadErrorCard, SkeletonBlock } from "./Loadable";
 import { NavIcon } from "./NavIcons";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Modal } from "./Modal";
@@ -534,10 +535,11 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   }
 
   if (loading && locations.length === 0 && !loadError) {
+    // Мелочь панели колонок, а не форма списка: точные высоты сохранены.
     return (
       <div className="stack" aria-busy="true" aria-label="Загрузка колонок">
-        <div className="search-skeleton-pulse" style={{ height: 34 }} />
-        <div className="search-skeleton-pulse" style={{ height: 120 }} />
+        <SkeletonBlock height={34} />
+        <SkeletonBlock height={120} />
       </div>
     );
   }
@@ -676,12 +678,10 @@ export function LocationMiller({ settingId }: { settingId: number }) {
       )}
 
       {loadError && (
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)" }}>
-          Не удалось загрузить географию: {loadError}{" "}
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить географию: {loadError}</>}
+          onRetry={() => refresh()}
+        />
       )}
       {creating && (
         <EntityWizard

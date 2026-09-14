@@ -391,6 +391,10 @@ CREATE TABLE IF NOT EXISTS setting_locations (
   -- позже, колонка уже собирается.
   origin_location_id INTEGER REFERENCES setting_locations(id) ON DELETE SET NULL,
   description TEXT DEFAULT '',
+  -- Игроцкий текст (Кабинет игрока, 2026-09-12): что Мастер рассказывает
+  -- игрокам (слух), отдельно от того, что там на самом деле. Один на все
+  -- кампании, урезанием мастерского текста не заменяется.
+  player_text TEXT NOT NULL DEFAULT '',
   folder_path TEXT,
   avatar_image_path TEXT,
   thumbnail_image_path TEXT,
@@ -479,6 +483,8 @@ CREATE TABLE IF NOT EXISTS setting_beings (
   secret TEXT NOT NULL DEFAULT '',
   history TEXT DEFAULT '',
   behavior TEXT DEFAULT '',
+  -- Игроцкий текст (Кабинет игрока, 2026-09-12): см. setting_locations.
+  player_text TEXT NOT NULL DEFAULT '',
   avatar_image_path TEXT,
   thumbnail_image_path TEXT, -- wide crop shown in the Население list, independent of the square avatar
   folder_path TEXT,
@@ -500,6 +506,8 @@ CREATE TABLE IF NOT EXISTS setting_communities (
   current_situation TEXT DEFAULT '',
   features TEXT DEFAULT '',
   goals TEXT DEFAULT '',
+  -- Игроцкий текст (Кабинет игрока, 2026-09-12): см. setting_locations.
+  player_text TEXT NOT NULL DEFAULT '',
   folder_path TEXT,
   avatar_image_path TEXT,
   thumbnail_image_path TEXT,
@@ -1116,6 +1124,8 @@ CREATE TABLE IF NOT EXISTS setting_calendar_events (
   description TEXT DEFAULT '',
   full_description TEXT DEFAULT '',
   consequences TEXT DEFAULT '',
+  -- Игроцкий текст (Кабинет игрока, 2026-09-12): см. setting_locations.
+  player_text TEXT NOT NULL DEFAULT '',
   inworld_year INTEGER NOT NULL,
   inworld_month INTEGER NOT NULL,
   inworld_day INTEGER NOT NULL,
@@ -1343,6 +1353,11 @@ CREATE TABLE IF NOT EXISTS player_visibility_grants (
   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   target_type TEXT NOT NULL, -- campaign_player_section | campaign_player_article | setting_location | setting_being | setting_community | setting_calendar_event
   target_id INTEGER NOT NULL,
+  -- Ступень выдачи (Кабинет игрока, 2026-09-12): 'mentioned' (упомянута — имя,
+  -- вид, картинка) | 'open' (открыта — всё, кроме мастерских полей). Умолчание
+  -- 'open': грант исторически означал именно это, и любое другое умолчание
+  -- молча урезало бы уже розданное.
+  access_level TEXT NOT NULL DEFAULT 'open',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(campaign_id, player_id, target_type, target_id)
 );

@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api/client";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
 import { Modal } from "../components/Modal";
@@ -154,15 +155,10 @@ export function InvitationsPage() {
       </div>
 
       {loadError && (
-        <div
-          className="card"
-          style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}
-        >
-          <span>Не удалось загрузить адреса: {loadError}</span>
-          <button className="primary" onClick={() => load()}>
-            Повторить
-          </button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить адреса: {loadError}</>}
+          onRetry={() => load()}
+        />
       )}
 
       <div className="card" style={{ padding: 0, overflow: "hidden", maxWidth: "64ch", width: "100%", alignSelf: "flex-start" }}>
@@ -189,10 +185,7 @@ export function InvitationsPage() {
           </p>
 
           {loading ? (
-            <div className="stack" aria-busy="true" aria-label="Загрузка адресов">
-              <div className="card" style={{ height: 44, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
-              <div className="card" style={{ height: 44, opacity: 0.35, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: "120ms" }} />
-            </div>
+            <ListSkeleton variant="rows" label="Загрузка адресов" />
           ) : entries.length === 0 ? (
             !loadError && (
               <EmptyState kind="error"

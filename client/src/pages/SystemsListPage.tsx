@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
-import { SectionHeading } from "../components/SectionHeading";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
 import { MentionText } from "../components/mentions/MentionText";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
-import { GroupTabs } from "../components/GroupTabs";
+import { ListPage } from "../components/ListPage";
 import { SystemGroupMembersModal } from "../components/SystemGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
@@ -58,7 +58,6 @@ export function SystemsListPage() {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [groups, setGroups] = useState<SystemGroup[]>([]);
@@ -118,6 +117,13 @@ export function SystemsListPage() {
     }
   }, [systems, groups]);
 
+  function refresh() {
+    void loadSystems();
+    void loadGroups();
+  }
+
+  useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
+
   const filteredSystems = useMemo(() => {
     const qq = q.trim().toLowerCase();
     const byTab = (() => {
@@ -137,12 +143,6 @@ export function SystemsListPage() {
     );
   }, [systems, activeTab, groupMembers, ungroupedIds, q]);
 
-  function refresh() {
-    void loadSystems();
-  }
-
-  useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
-
   async function create() {
     if (!name.trim()) return;
     try {
@@ -160,110 +160,86 @@ export function SystemsListPage() {
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
-      <div className="page-header-row row">
-        <SectionHeading section="systems" compact>Системы</SectionHeading>
-        <div className="row">
-          <button className="primary" onClick={() => setCreating(true)}>
-            + Новая система
-          </button>
-        </div>
-      </div>
-
-      <GroupTabs
-        endpoint="/system-groups"
-        label="Группы систем"
-        deleteNote="Системы не будут удалены — они останутся в разделе «Все системы»."
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onGroupsChanged={loadGroups}
-      />
-
-      <div className="res-toolbar" style={{ marginTop: 4 }}>
-        <input
-          className="res-toolbar__search"
-          placeholder="Поиск по имени, коду, описанию…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Поиск по системам"
-        />
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-          {filteredSystems.length} / {systems.length}
-        </span>
-        {q && (
-          <button
-            onClick={() => setQ("")}
-            style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}
-            title="Сбросить поиск"
-          >
-            Сбросить
-          </button>
+      <ListPage
+        headingSection="systems"
+        title="Системы"
+        groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
+        groupsEndpoint="/system-groups"
+        groupsDeleteNote="Системы не будут удалены — они останутся в разделе «Все системы»."
+        onGroupsChanged={refresh}
+        createLabel="+ Новая система"
+        onCreate={() => setCreating(true)}
+        activeGroup={activeTab}
+        onGroupChange={setActiveTab}
+        search={q}
+        onSearch={setQ}
+        searchPlaceholder="Поиск по имени, коду, описанию…"
+        searchLabel="Поиск по системам"
+        filteredCount={filteredSystems.length}
+        totalCount={systems.length}
+        onResetSearch={() => setQ("")}
+      >
+        {loadError && (
+          <LoadErrorCard
+            message={<>Не удалось загрузить системы: {loadError}</>}
+            onRetry={refresh}
+          />
         )}
-      </div>
 
-      {loadError && (
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось загрузить системы: {loadError}</span>
-          <button className="primary" onClick={refresh}>Повторить</button>
-        </div>
-      )}
+        {loading ? (
+          <ListSkeleton variant="tiles" label="Загрузка систем" />
+        ) : (
+          <div className="grid-cards">
+            {filteredSystems.map((s) => (
+              <SystemCoverTile key={s.id} system={s} />
+            ))}
+            {activeTab !== null && activeTab !== "ungrouped" && (
+              <button
+                className="card campaign-tile setting-group-empty-add"
+                onClick={() => {
+                  const g = groups.find((gr) => gr.id === Number(activeTab));
+                  if (g) setGroupModalGroupId(g.id);
+                }}
+              >
+                <div className="campaign-tile-cover cover-halftone">
+                  <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+                  <div className="campaign-tile-scrim" />
+                  <span className="group-add-icon"><NavIcon name="gears" /></span>
+                  <h3 className="campaign-tile-name">+</h3>
+                </div>
+                <div className="campaign-tile-meta">
+                  <div className="campaign-tile-system muted">нажми, чтобы добавить систему в группу</div>
+                </div>
+              </button>
+            )}
+          </div>
+        )}
 
-      {loading ? (
-        <div className="grid-cards" aria-busy="true" aria-label="Загрузка систем">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card" style={{ height: 220, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: `${i * 120}ms` }} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid-cards">
-          {filteredSystems.map((s) => (
-            <SystemCoverTile key={s.id} system={s} />
-          ))}
-          {activeTab !== null && activeTab !== "ungrouped" && (
-            <button
-              className="card campaign-tile setting-group-empty-add"
-              onClick={() => {
-                const g = groups.find((gr) => gr.id === Number(activeTab));
-                if (g) setGroupModalGroupId(g.id);
-              }}
-            >
-              <div className="campaign-tile-cover cover-halftone">
-                <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-                <div className="campaign-tile-scrim" />
-                <span className="group-add-icon"><NavIcon name="gears" /></span>
-                <h3 className="campaign-tile-name">+</h3>
+        {!loading && !loadError && filteredSystems.length === 0 && systems.length > 0 && (
+          <EmptyState kind="search"
+            title="Ничего не найдено"
+            hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет систем в этой группе."}
+            action={
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+                <button onClick={() => setActiveTab(null)}>Показать все</button>
               </div>
-              <div className="campaign-tile-meta">
-                <div className="campaign-tile-system muted">нажми, чтобы добавить систему в группу</div>
-              </div>
-            </button>
-          )}
-        </div>
-      )}
+            }
+          />
+        )}
 
-      {!loading && !loadError && filteredSystems.length === 0 && systems.length > 0 && (
-        <EmptyState kind="search"
-          title="Ничего не найдено"
-          hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет систем в этой группе."}
-          action={
-            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-              {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
-              <button onClick={() => setActiveTab(null)}>Показать все</button>
-            </div>
-          }
-        />
-      )}
-
-      {!loading && !loadError && systems.length === 0 && (
-        <EmptyState
-          title="Правил ещё нет"
-          hint="Ни одной системы не заведено — добавьте первую."
-          action={
-            <button className="primary" onClick={() => setCreating(true)}>
-              + Новая система
-            </button>
-          }
-        />
-      )}
+        {!loading && !loadError && systems.length === 0 && (
+          <EmptyState
+            title="Правил ещё нет"
+            hint="Ни одной системы не заведено — добавьте первую."
+            action={
+              <button className="primary" onClick={() => setCreating(true)}>
+                + Новая система
+              </button>
+            }
+          />
+        )}
+      </ListPage>
 
       {creating && (
         <Modal onClose={() => setCreating(false)}>

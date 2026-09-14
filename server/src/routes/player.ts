@@ -9,6 +9,7 @@ import {
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { unpaidSessionsForPlayer } from "../services/finance";
+import { getPlayerSectionsFor, getSettingPlayerContent, getSettingPlayerContentUnion } from "../services/playerContent";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { mergeContentPatch } from "../db/statblockContent";
 import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
@@ -639,73 +640,9 @@ playerRouter.get("/campaigns/:id/player-sections", (req: AuthedRequest, res) => 
   if (!myCampaignIds(playerId).includes(campaignId)) {
     return res.status(404).json({ error: "not found" });
   }
-  const grants = db
-    .prepare(
-      "SELECT target_type, target_id FROM player_visibility_grants WHERE campaign_id = ? AND player_id = ?"
-    )
-    .all(campaignId, playerId) as { target_type: string; target_id: number }[];
-  const grantedSectionIds = new Set(
-    grants.filter((g) => g.target_type === "campaign_player_section").map((g) => g.target_id)
-  );
-  const grantedArticleIds = new Set(
-    grants.filter((g) => g.target_type === "campaign_player_article").map((g) => g.target_id)
-  );
-
-  const allSections = db
-    .prepare("SELECT * FROM campaign_player_sections WHERE campaign_id = ? ORDER BY position, id")
-    .all(campaignId) as { id: number; kind: string; name: string }[];
-
-  // Batch load to avoid N+1 per-section queries (C-P2-4 / Phase 1.2)
-  const gallerySectionIds = allSections.filter((s) => s.kind === "gallery" && grantedSectionIds.has(s.id)).map((s) => s.id);
-  const galleryImagesBySection = new Map<number, { image_path: string; image_url: string }[]>();
-  if (gallerySectionIds.length) {
-    const inClause = gallerySectionIds.map(() => "?").join(",");
-    const galleryRows = db
-      .prepare(
-        `SELECT * FROM gallery_images WHERE owner_type = 'campaign_player_section' AND owner_id IN (${inClause}) ORDER BY position, id`
-      )
-      .all(...gallerySectionIds) as ({ owner_id: number; image_path: string } & Record<string, unknown>)[];
-    for (const r of galleryRows) {
-      const arr = galleryImagesBySection.get(r.owner_id) ?? [];
-      arr.push({ ...(r as object), image_url: toFileUrl(r.image_path) } as { image_path: string; image_url: string });
-      galleryImagesBySection.set(r.owner_id, arr);
-    }
-  }
-
-  const articleSectionIds = allSections.filter((s) => s.kind !== "gallery").map((s) => s.id);
-  const articlesBySection = new Map<number, { id: number }[]>();
-  if (articleSectionIds.length) {
-    const inClause = articleSectionIds.map(() => "?").join(",");
-    const articleRows = db
-      .prepare(`SELECT * FROM campaign_player_articles WHERE section_id IN (${inClause}) ORDER BY position, id`)
-      .all(...articleSectionIds) as { id: number; section_id: number }[];
-    for (const r of articleRows) {
-      const arr = articlesBySection.get(r.section_id) ?? [];
-      arr.push(r as { id: number });
-      articlesBySection.set(r.section_id, arr);
-    }
-  }
-
-  const result = [];
-  for (const section of allSections) {
-    const sectionGranted = grantedSectionIds.has(section.id);
-    if (section.kind === "gallery") {
-      if (!sectionGranted) continue;
-      const images = galleryImagesBySection.get(section.id) ?? [];
-      result.push({ ...section, images });
-    } else {
-      const own = (articlesBySection.get(section.id) ?? []) as { id: number }[];
-      let articles: { id: number }[];
-      if (sectionGranted) {
-        articles = own;
-      } else {
-        articles = own.filter((a) => grantedArticleIds.has(a.id));
-        if (articles.length === 0) continue;
-      }
-      result.push({ ...section, articles });
-    }
-  }
-  res.json(result);
+  // Расчёт — в services/playerContent.ts: тот же код кормит превью
+  // «Глазами игрока», иначе превью врало бы при раздаче доступов.
+  res.json(getPlayerSectionsFor(campaignId, playerId));
 });
 
 // Setting content reused into the campaign's "Для игроков" tab (fixed
@@ -719,41 +656,9 @@ playerRouter.get("/campaigns/:id/setting-player-content", (req: AuthedRequest, r
   if (!myCampaignIds(playerId).includes(campaignId)) {
     return res.status(404).json({ error: "not found" });
   }
-  const campaign = db.prepare("SELECT setting_id FROM campaigns WHERE id = ?").get(campaignId) as
-    | { setting_id: number | null }
-    | undefined;
-  if (!campaign || !campaign.setting_id) {
-    return res.json({ locations: [], beings: [], communities: [], chronicleEvents: [] });
-  }
-  const grants = db
-    .prepare(
-      "SELECT target_type, target_id FROM player_visibility_grants WHERE campaign_id = ? AND player_id = ?"
-    )
-    .all(campaignId, playerId) as { target_type: string; target_id: number }[];
-  const idsFor = (type: string) => grants.filter((g) => g.target_type === type).map((g) => g.target_id);
-  const inClause = (ids: number[]) => (ids.length ? ids.map(() => "?").join(",") : "-1");
-
-  const locationIds = idsFor("setting_location");
-  const locations = db
-    .prepare(`SELECT id, name, description FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locationIds)})`)
-    .all(campaign.setting_id, ...locationIds);
-
-  const beingIds = idsFor("setting_being");
-  const beings = db
-    .prepare(`SELECT id, name, history FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beingIds)})`)
-    .all(campaign.setting_id, ...beingIds);
-
-  const communityIds = idsFor("setting_community");
-  const communities = db
-    .prepare(`SELECT id, name, description FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(communityIds)})`)
-    .all(campaign.setting_id, ...communityIds);
-
-  const eventIds = idsFor("setting_calendar_event");
-  const chronicleEvents = db
-    .prepare(`SELECT id, title, description, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(eventIds)})`)
-    .all(campaign.setting_id, ...eventIds);
-
-  res.json({ locations, beings, communities, chronicleEvents });
+  // Расчёт — в services/playerContent.ts: тот же код кормит превью
+  // «Глазами игрока», иначе превью врало бы при раздаче доступов.
+  res.json(getSettingPlayerContent(campaignId, playerId));
 });
 
 // Settings used by any of the player's campaigns — a setting can be shared
@@ -801,44 +706,10 @@ playerRouter.get("/settings/:id", (req: AuthedRequest, res) => {
     | undefined;
   if (!setting) return res.status(404).json({ error: "not found" });
 
+  // Расчёт — в services/playerContent.ts: тот же код кормит превью
+  // «Глазами игрока», иначе превью врало бы при раздаче доступов.
   const campaignIdList = myCampaignsWithSetting.map((c) => c.id);
-  const inClause = (ids: number[]) => (ids.length ? ids.map(() => "?").join(",") : "-1");
-
-  // Single batch query instead of N per-campaign queries
-  const grantRows = campaignIdList.length
-    ? (db
-        .prepare(
-          `SELECT DISTINCT target_type, target_id FROM player_visibility_grants WHERE campaign_id IN (${inClause(campaignIdList)}) AND player_id = ?`
-        )
-        .all(...campaignIdList, playerId) as { target_type: string; target_id: number }[])
-    : [];
-
-  const locationIds: number[] = [];
-  const beingIds: number[] = [];
-  const communityIds: number[] = [];
-  const eventIds: number[] = [];
-  for (const g of grantRows) {
-    if (g.target_type === "setting_location") locationIds.push(g.target_id);
-    else if (g.target_type === "setting_being") beingIds.push(g.target_id);
-    else if (g.target_type === "setting_community") communityIds.push(g.target_id);
-    else if (g.target_type === "setting_calendar_event") eventIds.push(g.target_id);
-  }
-
-  // Minimal fields — players don't need statblocks, behavior, tags, etc.
-  const locations = db
-    .prepare(`SELECT id, name, description FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locationIds)})`)
-    .all(settingId, ...locationIds);
-  const beings = db
-    .prepare(`SELECT id, name, history FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beingIds)})`)
-    .all(settingId, ...beingIds);
-  const communities = db
-    .prepare(`SELECT id, name, description FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(communityIds)})`)
-    .all(settingId, ...communityIds);
-  const chronicleEvents = db
-    .prepare(`SELECT id, title, description, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(eventIds)})`)
-    .all(settingId, ...eventIds);
-
-  res.json({ setting, locations, beings, communities, chronicleEvents });
+  res.json({ setting, ...getSettingPlayerContentUnion(settingId, campaignIdList, playerId) });
 });
 
 // Read-only rules reference — not secret content, so no per-campaign
@@ -945,7 +816,29 @@ playerRouter.get("/creature-card/compendium_entry/:id", (req: AuthedRequest, res
 // персонажа, или у него их несколько и он ещё не сказал, чей это дневник.
 // Такие записи показываются автору отдельной группой с предложением выбрать.
 const WORLD_ENTRY_COLUMNS =
-  "id, campaign_id, player_id, character_id, kind, name, description, created_at";
+  "id, campaign_id, player_id, character_id, kind, name, description, folder_path, position, created_at";
+
+// Вкладки дневника — это папки записей (Кабинет игрока, 2026-09-12, шаг 4).
+// Пусто/NULL — Лента, непустое — именная вкладка. Порядок везде один:
+// position по возрастанию (меньше — выше), затем свежие сверху. Новые записи
+// встают наверх (min - 1): старые строки живут с position 0 и сортируются
+// как раньше — по дате, отдельная добивка не нужна.
+function clampFolder(value: unknown): string | null {
+  const s = typeof value === "string" ? value.trim().slice(0, 80) : "";
+  return s ? s : null;
+}
+
+// Верх списка в папке: на единицу меньше текущего минимума.
+function topPosition(campaignId: number, playerId: number, folder: string | null): number {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(MIN(position), 0) AS m FROM world_exploration_entries
+       WHERE campaign_id = ? AND player_id = ? AND COALESCE(folder_path, '') = COALESCE(?, '')
+         AND archived_at IS NULL`
+    )
+    .get(campaignId, playerId, folder) as { m: number };
+  return row.m - 1;
+}
 
 // Метка типа теперь необязательна: пустая строка — «без метки». Белый список
 // нужен, чтобы в базу не попадали значения, которых нет ни на одной вкладке —
@@ -1008,14 +901,13 @@ playerRouter.get("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
   if (!myCampaignIds(playerId).includes(campaignId)) {
     return res.status(404).json({ error: "not found" });
   }
-  // Свежее сверху: дневник читают, чтобы вспомнить последнее, а не чтобы
-  // листать алфавит. Порядок задаётся здесь, а не на клиенте, чтобы поиск и
-  // лента не разъезжались.
+  // Порядок задаётся здесь, а не на клиенте, чтобы поиск и лента не
+  // разъезжались: сначала ручной (position — меньше выше), затем свежие.
   const rows = db
     .prepare(
       `SELECT ${WORLD_ENTRY_COLUMNS} FROM world_exploration_entries
        WHERE campaign_id = ? AND player_id = ? AND archived_at IS NULL
-       ORDER BY created_at DESC, id DESC`
+       ORDER BY position ASC, created_at DESC, id DESC`
     )
     .all(campaignId, playerId);
   res.json(rows);
@@ -1030,21 +922,23 @@ playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
   if (!canWriteInCampaign(playerId, campaignId)) {
     return res.status(403).json({ error: "read only in this campaign" });
   }
-  const { kind, name, description, character_id } = req.body as {
+  const { kind, name, description, character_id, folder_path } = req.body as {
     kind?: string;
     name?: string;
     description?: string;
     character_id?: number | null;
+    folder_path?: string | null;
   };
   const cleanKind = typeof kind === "string" ? kind : "";
   if (!WORLD_ENTRY_KINDS.has(cleanKind)) return res.status(400).json({ error: "unknown kind" });
   const cleanName = clampField(name, 80);
   const cleanDescription = clampField(description, 5000);
   if (!cleanName && !cleanDescription) return res.status(400).json({ error: "empty entry" });
+  const folder = clampFolder(folder_path);
   const info = db
     .prepare(
-      `INSERT INTO world_exploration_entries (campaign_id, player_id, character_id, kind, name, description)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO world_exploration_entries (campaign_id, player_id, character_id, kind, name, description, folder_path, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       campaignId,
@@ -1052,7 +946,9 @@ playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
       writableCharacter(playerId, campaignId, character_id),
       cleanKind,
       cleanName,
-      cleanDescription
+      cleanDescription,
+      folder,
+      topPosition(campaignId, playerId, folder)
     );
   res
     .status(201)
@@ -1074,23 +970,70 @@ function requireMyWritableEntry(playerId: number, entryId: string | number) {
   return entry;
 }
 
+// Ручной порядок записей: клиент присылает id сверху вниз, сервер
+// проставляет 0..n. Все записи — свои и из одной кампании, иначе 404:
+// чужой порядок не правится, а смесь кампаний расползлась бы молча.
+//
+// Стоит ВЫШЕ `/:id`: иначе «reorder» разбирается как id записи.
+playerRouter.put("/world-entries/reorder", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const { ids } = req.body as { ids?: number[] };
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => Number.isInteger(id))) {
+    return res.status(400).json({ error: "ids must be a non-empty array of integers" });
+  }
+  const rows = db
+    .prepare(
+      `SELECT id, campaign_id FROM world_exploration_entries WHERE id IN (${ids.map(() => "?").join(",")}) AND player_id = ? AND archived_at IS NULL`
+    )
+    .all(...ids, playerId) as { id: number; campaign_id: number }[];
+  if (rows.length !== ids.length) return res.status(404).json({ error: "not found" });
+  if (new Set(rows.map((r) => r.campaign_id)).size !== 1) {
+    return res.status(400).json({ error: "entries must be from one campaign" });
+  }
+  if (!canWriteInCampaign(playerId, rows[0].campaign_id)) {
+    return res.status(403).json({ error: "read only in this campaign" });
+  }
+  const set = db.prepare("UPDATE world_exploration_entries SET position = ? WHERE id = ?");
+  const run = db.transaction(() => {
+    ids.forEach((id, i) => set.run(i, id));
+  });
+  run();
+  res.json({ ok: true });
+});
+
 playerRouter.put("/world-entries/:id", (req: AuthedRequest, res) => {
   const playerId = req.user!.playerId!;
   const entry = requireMyWritableEntry(playerId, req.params.id);
   if (!entry) return res.status(404).json({ error: "not found" });
-  const { name, description, kind, character_id } = req.body as {
+  const { name, description, kind, character_id, folder_path, position } = req.body as {
     name?: string;
     description?: string;
     kind?: string;
     character_id?: number | null;
+    folder_path?: string | null;
+    position?: number;
   };
   if (kind !== undefined && !WORLD_ENTRY_KINDS.has(kind)) {
     return res.status(400).json({ error: "unknown kind" });
   }
+  if (position !== undefined && !Number.isFinite(position)) {
+    return res.status(400).json({ error: "invalid position" });
+  }
+  const full = db
+    .prepare("SELECT folder_path FROM world_exploration_entries WHERE id = ?")
+    .get(entry.id) as { folder_path: string | null };
+  const newFolder = folder_path === undefined ? full.folder_path : clampFolder(folder_path);
+  const folderChanged =
+    (full.folder_path ?? null) !== (newFolder ?? null);
+  // Переезд во вкладку без явной позиции — наверх: запись должна встречать
+  // читателя, а не прятаться в конце.
+  const newPosition =
+    position !== undefined ? Math.trunc(position) : folderChanged ? topPosition(entry.campaign_id, playerId, newFolder) : undefined;
   db.prepare(
     `UPDATE world_exploration_entries SET
        name = COALESCE(?, name), description = COALESCE(?, description),
-       kind = COALESCE(?, kind), character_id = COALESCE(?, character_id)
+       kind = COALESCE(?, kind), character_id = COALESCE(?, character_id),
+       folder_path = COALESCE(?, folder_path), position = COALESCE(?, position)
      WHERE id = ?`
   ).run(
     name === undefined ? null : clampField(name, 80),
@@ -1099,12 +1042,15 @@ playerRouter.put("/world-entries/:id", (req: AuthedRequest, res) => {
     // Привязать заметку к персонажу можно, отвязать обратно в «ничьё» — нет:
     // это не действие, которого кто-то хочет, а способ потерять запись из виду.
     character_id === undefined ? null : writableCharacter(playerId, entry.campaign_id, character_id),
+    folder_path === undefined ? null : newFolder,
+    newPosition ?? null,
     entry.id
   );
   res.json(
     db.prepare(`SELECT ${WORLD_ENTRY_COLUMNS} FROM world_exploration_entries WHERE id = ?`).get(entry.id)
   );
 });
+
 
 playerRouter.delete("/world-entries/:id", (req: AuthedRequest, res) => {
   const entry = requireMyWritableEntry(req.user!.playerId!, req.params.id);

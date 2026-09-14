@@ -3,12 +3,14 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EmptyState } from "../components/EmptyState";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";
 import { toLocalDateKey } from "../utils/date";
 import { useTabState } from "../hooks/useTabState";
-import { CharacterJournal } from "../components/player/CharacterJournal";
+import { CampaignJournal } from "../components/player/CampaignJournal";
+import { buildSettingReaderGroups } from "../components/player/settingReaderEntries";
 import type {
   PartyMember,
   PlayerSection,
@@ -28,42 +30,45 @@ function formatIsoDate(iso: string): string {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
 }
 
-const TABS = ["От мастера", "Путевые заметки", "Группа"] as const;
-type Tab = (typeof TABS)[number];
+// Дневник кампании (Кабинет игрока, 2026-09-12, шаг 4): Лента и папки игрока,
+// две постоянные — «Мир» (выдача из сеттинга) и «От мастера» (то, что Мастер
+// выдаёт в руки) — плюс «Группа». Имена ровно эти: «Лор» означает и то и
+// другое сразу, то есть не различает там, где нужно различать.
+// Вкладка звалась «Путевые заметки», пока дневник делился по персонажам;
+// сохранённые ссылки должны открывать Ленту, а не падать.
+const TAB_ALIASES = { "Исследование мира": "Лента", "Путевые заметки": "Лента" } as const;
 
-// Вкладка звалась «Исследование мира», пока была картотекой мира на всю
-// партию. Сохранённые ссылки на прежнее имя должны открывать её же, а не
-// падать на «От мастера».
-const TAB_ALIASES = { "Исследование мира": "Путевые заметки" } as const;
-
-// Player-role campaign view: everything the GM has explicitly revealed
-// (sessions, secrets, lore articles, "Для игроков" sections), плюс «Путевые
-// заметки» — личный дневник персонажа (components/player/CharacterJournal) —
-// и остальная партия. Всё через /api/player/*, где фильтрует сервер. Это то,
-// что мастеру показала бы CampaignDetailPage; игрок в GM-роут
-// /api/campaigns/:id не ходит вовсе (см. services/playerAccess.ts).
+// Player-role campaign view: everything the GM has explicitly revealed.
+// Всё через /api/player/*, где фильтрует сервер. Это то, что мастеру показала
+// бы CampaignDetailPage; игрок в GM-роут /api/campaigns/:id не ходит вовсе
+// (см. services/playerAccess.ts).
 export function PlayerCampaignPage() {
   const { id } = useParams();
   const campaignId = Number(id);
   const invalidCampaignId = !Number.isFinite(campaignId);
-  const [tab, setTab] = useTabState<Tab>(TABS, "От мастера", TAB_ALIASES);
   const [content, setContent] = useState<VisibleCampaignContent | null>(null);
   const [sections, setSections] = useState<PlayerSection[]>([]);
   const [setting, setSetting] = useState<SettingPlayerContent | null>(null);
   const [party, setParty] = useState<PartyMember[]>([]);
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const [readerIndex, setReaderIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [masterQuery, setMasterQuery] = useState("");
-  // Счётчик, а не общий стейт записей: страница заметки не показывает и не
-  // хранит — ей нужно только сказать вкладке «перечитайся», когда со статьи
-  // лора ушла новая заметка.
+  // Счётчик, а не общий стейт записей: странице нужно только сказать вкладке
+  // «перечитайся», когда со статьи лора ушла новая заметка.
   const [journalRefresh, setJournalRefresh] = useState(0);
   const [loreToast, setLoreToast] = useState<string | null>(null);
-  // Чьи заметки сейчас открыты — знает вкладка, а нужно это и здесь: запись
-  // со статьи лора должна лечь к тому же персонажу, а не в «ничьи».
-  const [journalCharacterId, setJournalCharacterId] = useState<number | null>(null);
+  // Чьим именем пишется новое и куда падает «+ В журнал» со статей лора.
+  const [writingCharacterId, setWritingCharacterId] = useState<number | null>(null);
+  // Вкладки-папки дневника — из записей (CampaignJournal докладывает).
+  const [folders, setFolders] = useState<string[]>([]);
+
+  const tabs = useMemo(() => ["Лента", ...folders, "Мир", "От мастера", "Группа"], [folders]);
+  const [tab, setTab] = useTabState(tabs, "Лента", TAB_ALIASES);
+  // Папка вкладки: именная — сама, остальное — Лента (null).
+  const activeFolder = folders.includes(tab) ? tab : null;
+
+  const handleFoldersKnown = useCallback((next: string[]) => {
+    setFolders((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+  }, []);
 
   useEffect(() => {
     if (invalidCampaignId) {
@@ -96,19 +101,6 @@ export function PlayerCampaignPage() {
   // меньше, чем второй, и страница целиком падала в ErrorBoundary
   // («Rendered more hooks than during the previous render»). Отсюда же и
   // `content?.` вместо `content.` — до загрузки его ещё нет.
-  const nothingVisible =
-    (content?.sessions?.length ?? 0) === 0 &&
-    (content?.secrets?.length ?? 0) === 0 &&
-    (content?.locationArticles?.length ?? 0) === 0 &&
-    (content?.beingArticles?.length ?? 0) === 0 &&
-    (content?.chronicleEvents?.length ?? 0) === 0 &&
-    (sections?.length ?? 0) === 0 &&
-    (!setting ||
-      ((setting.locations?.length ?? 0) === 0 &&
-        (setting.beings?.length ?? 0) === 0 &&
-        (setting.communities?.length ?? 0) === 0 &&
-        (setting.chronicleEvents?.length ?? 0) === 0));
-
   const today = toLocalDateKey();
   const nextSession = useMemo(
     () =>
@@ -133,14 +125,9 @@ export function PlayerCampaignPage() {
     [content, today]
   );
 
-  // Flat, ordered entries for the full-screen reader (see
-  // components/PlayerContentReader.tsx) grouped back into accordion
-  // sections for the collapsed list view — each group only shows its item
-  // titles until opened, and clicking an item jumps the reader straight to
-  // its position in the flat list so prev/next carries across section
-  // boundaries instead of stopping at the section it was opened from.
-  // Memoized — building ReaderEntry bodies allocates arrays on every keystroke (newName) otherwise.
-  const { groupsWithOffset, flatEntries } = useMemo(() => {
+  // «От мастера»: сессии, хроника, статьи лора, тайны и разделы. Мир сюда не
+  // входит — у него своя постоянная вкладка.
+  const contentGroups = useMemo(() => {
     const groups: { key: string; label: string; entries: ReaderEntry[] }[] = [];
     if (content) {
       if (content.sessions.length > 0) {
@@ -262,82 +249,12 @@ export function PlayerCampaignPage() {
         });
       }
     }
-    if (setting) {
-      if (setting.locations.length > 0) {
-        groups.push({
-          key: "setting-locations",
-          label: "Локации сеттинга",
-          entries: setting.locations.map((l) => ({
-            key: `setting-loc-${l.id}`,
-            section: "Локации сеттинга",
-            title: l.name,
-            body: l.description ? (
-              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={l.description} />
-              </div>
-            ) : null,
-          })),
-        });
-      }
-      if (setting.beings.length > 0 || setting.communities.length > 0) {
-        groups.push({
-          key: "setting-factions",
-          label: "Личности и фракции",
-          entries: [
-            ...setting.beings.map((b) => ({
-              key: `setting-being-${b.id}`,
-              section: "Личности и фракции",
-              title: b.name,
-              body: b.history ? (
-                <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                  <MentionText text={b.history} />
-                </div>
-              ) : null,
-            })),
-            ...setting.communities.map((c) => ({
-              key: `setting-community-${c.id}`,
-              section: "Личности и фракции",
-              title: c.name,
-              body: c.description ? (
-                <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                  <MentionText text={c.description} />
-                </div>
-              ) : null,
-            })),
-          ],
-        });
-      }
-      if (setting.chronicleEvents.length > 0) {
-        groups.push({
-          key: "setting-history",
-          label: "История",
-          entries: setting.chronicleEvents.map((e) => ({
-            key: `setting-event-${e.id}`,
-            section: "История",
-            title: e.title,
-            body: (
-              <div className="stack" style={{ gap: 10 }}>
-                <span className="muted">{formatDate(e.inworld_year, e.inworld_month, e.inworld_day)}</span>
-                {e.description && (
-                  <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={e.description} />
-                  </div>
-                )}
-              </div>
-            ),
-          })),
-        });
-      }
-    }
-    let runningOffset = 0;
-    const groupsWithOffset = groups.map((g) => {
-      const offset = runningOffset;
-      runningOffset += g.entries.length;
-      return { ...g, offset };
-    });
-    const flatEntries = groupsWithOffset.flatMap((g) => g.entries);
-    return { groupsWithOffset, flatEntries };
-  }, [content, sections, setting]);
+    return groups;
+  }, [content, sections]);
+
+  // Мир — общим строителем с превью «Глазами игрока»: превью обязано
+  // показывать то же, что видит игрок, а не свой разбор тех же данных.
+  const settingGroups = useMemo(() => buildSettingReaderGroups(setting), [setting]);
 
   // Phase 3.1 — последние 3 раскрытия от мастера для виджета «вспомнить за минуту»
   const recentMaster = useMemo(() => {
@@ -388,36 +305,6 @@ export function PlayerCampaignPage() {
     return out.slice(0, 3);
   }, [content]);
 
-  // Phase 3.3 — фильтр «От мастера» по заголовку/секции
-  const filteredGroupsWithOffset = useMemo(() => {
-    const q = masterQuery.trim().toLowerCase();
-    if (!q) return groupsWithOffset;
-    return groupsWithOffset
-      .map((g) => ({
-        ...g,
-        entries: g.entries.filter(
-          (e) => e.title.toLowerCase().includes(q) || e.section.toLowerCase().includes(q)
-        ),
-      }))
-      .filter((g) => g.entries.length > 0)
-      .map((g, idx, arr) => {
-        // recompute offsets after filtering
-        let off = 0;
-        for (let i = 0; i < idx; i++) off += arr[i].entries.length;
-        return { ...g, offset: off };
-      });
-  }, [groupsWithOffset, masterQuery]);
-
-  const filteredFlatEntries = useMemo(
-    () => filteredGroupsWithOffset.flatMap((g) => g.entries),
-    [filteredGroupsWithOffset]
-  );
-
-  // Один и тот же список отдаётся читалке и адресуется индексами: пока
-  // «Последнее от мастера» искало индекс в полном flatEntries, а читалка
-  // получала отфильтрованный, при активном поиске открывалась чужая статья.
-  const readerEntries = masterQuery.trim() ? filteredFlatEntries : flatEntries;
-
   // «+ В журнал» на строке лора. Заголовком становится название статьи, текст
   // остаётся пустым — дневник про то, что человек подумал, а не про то, откуда
   // он это взял. Вкладка НЕ переключается: игрок читает, и выдёргивать его из
@@ -431,7 +318,7 @@ export function PlayerCampaignPage() {
       else if (section.includes("сесс") || section.includes("хроник") || section.includes("истор") || section.includes("тайн")) kind = "event";
       try {
         await api.post(`/player/campaigns/${campaignId}/world-entries`, {
-          character_id: journalCharacterId,
+          character_id: writingCharacterId,
           kind,
           name: entry.title.slice(0, 80),
           description: "",
@@ -442,7 +329,7 @@ export function PlayerCampaignPage() {
         setLoreToast("Не удалось записать — попробуйте ещё раз");
       }
     },
-    [campaignId, journalCharacterId]
+    [campaignId, writingCharacterId]
   );
 
   // Тост живёт четыре секунды: он сообщает об уже случившемся и ничего не
@@ -457,23 +344,23 @@ export function PlayerCampaignPage() {
     return (
       <div className="stack">
         <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кампания" }]} />
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Кампания не найдена — проверьте ссылку.</span>
-          <Link to="/campaigns" className="primary" style={{ display: "inline-block", padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>
-            К списку кампаний
-          </Link>
-        </div>
+        <LoadErrorCard
+          message="Кампания не найдена — проверьте ссылку."
+          action={
+            <Link to="/campaigns" className="primary" style={{ display: "inline-block", padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>
+              К дневникам
+            </Link>
+          }
+        />
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="stack" aria-busy="true" aria-label="Загрузка кампании">
+      <div className="stack">
         <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Загрузка…" }]} />
-        <div className="card" style={{ height: 28, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
-        <div className="card" style={{ height: 44, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: "80ms" }} />
-        <div className="card" style={{ height: 160, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: "160ms" }} />
+        <ListSkeleton variant="paragraph" label="Загрузка кампании" />
       </div>
     );
   }
@@ -482,12 +369,10 @@ export function PlayerCampaignPage() {
     return (
       <div className="stack">
         <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: content?.campaign.name ?? "Кампания" }]} />
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Не удалось загрузить кампанию: {loadError}</span>
-          <button className="primary" onClick={() => window.location.reload()}>
-            Повторить
-          </button>
-        </div>
+        <LoadErrorCard
+          message={<>Не удалось загрузить кампанию: {loadError}</>}
+          onRetry={() => window.location.reload()}
+        />
       </div>
     );
   }
@@ -496,10 +381,12 @@ export function PlayerCampaignPage() {
     return (
       <div className="stack">
         <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кампания" }]} />
-        <div className="card" style={{ borderLeft: "3px solid var(--status-cancelled)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Кампания не найдена.</span>
-          <Link to="/campaigns" style={{ padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>К списку кампаний</Link>
-        </div>
+        <LoadErrorCard
+          message="Кампания не найдена."
+          action={
+            <Link to="/campaigns" style={{ padding: "8px 16px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--ink)", textDecoration: "none" }}>К дневникам</Link>
+          }
+        />
       </div>
     );
   }
@@ -507,183 +394,94 @@ export function PlayerCampaignPage() {
 
   return (
     <EntityPage
-      crumbs={[{ label: "Кампании", to: "/campaigns" }, { label: content.campaign.name }]}
+      crumbs={[{ label: "Дневники", to: "/campaigns" }, { label: content.campaign.name }]}
       entityType="campaign"
       title={content.campaign.name}
-      tabs={TABS}
+      tabs={tabs}
       tab={tab}
-      onTab={(t) => setTab(t as Tab)}
+      onTab={(t) => setTab(t)}
     >
+
+      {(tab === "Лента" || activeFolder != null) && (
+        <CampaignJournal
+          campaignId={campaignId}
+          schedule={content.schedule}
+          refreshKey={journalRefresh}
+          activeFolder={activeFolder}
+          folders={folders}
+          onFoldersKnown={handleFoldersKnown}
+          onOpenFolder={(f) => setTab(f ?? "Лента")}
+          writingCharacterId={writingCharacterId}
+          onWritingCharacterChange={setWritingCharacterId}
+        />
+      )}
+
+      {tab === "Мир" && (
+        <div className="stack">
+          {settingGroups.length === 0 ? (
+            <EmptyState
+              title="Мастер пока молчит"
+              hint="Мастер пока ничего не рассказал вам о мире — попросите его поделиться."
+            />
+          ) : (
+            <LoreGroups groups={settingGroups} onAdd={handleAddFromLore} />
+          )}
+        </div>
+      )}
 
       {tab === "От мастера" && (
         <div className="stack">
-          <div className="card stack" style={{ gap: 6 }}>
-            {prevSession && (
-              <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Прошлая
-                </span>
-                <span style={{ fontFamily: "var(--font-mono)" }}>{formatIsoDate(prevSession.date)}</span>
-                {prevSession.title && <span>— {prevSession.title}</span>}
-                {(() => {
-                  // Сводка прошлой сессии показывается, только если мастер её
-                  // открыл (main_events_visible) — тогда она уже лежит в ленте
-                  // читалки, и её место в ней мы и открываем.
-                  const idx = flatEntries.findIndex((e) => e.key === `session-${prevSession.id}`);
-                  if (idx === -1) return null;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMasterQuery("");
-                        setReaderIndex(idx);
-                      }}
-                      style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 24 }}
-                    >
-                      Чем кончилось
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
-            <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-              <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Следующая
-              </span>
-              {nextSession ? (
-                <>
-                  <span style={{ fontFamily: "var(--font-mono)" }}>
-                    {formatIsoDate(nextSession.date)}
-                    {nextSession.start_time ? ` ${nextSession.start_time}` : ""}
-                  </span>
-                  {nextSession.title && <span>— {nextSession.title}</span>}
-                </>
-              ) : (
-                <span className="muted">пока не назначена</span>
-              )}
-            </div>
-          </div>
-
-          {nothingVisible && (
+          {contentGroups.length === 0 ? (
             <EmptyState
               title="Мастер пока молчит"
               hint="Мастер пока ничего не открыл игрокам в этой кампании — попросите его поделиться лором."
             />
-          )}
-
-          {!nothingVisible && recentMaster.length > 0 && (
-            <div className="card stack" style={{ gap: 8, borderLeft: "3px solid var(--accent)" }}>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>
-                Последнее от мастера
-              </span>
-              {recentMaster.map((e) => (
-                <button
-                  key={e.key}
-                  type="button"
-                  className="player-section-item"
-                  style={{ textAlign: "left" }}
-                  onClick={() => {
-                    const inReader = readerEntries.findIndex((fe) => fe.key === e.key);
-                    if (inReader !== -1) {
-                      setReaderIndex(inReader);
-                      return;
-                    }
-                    // Статья отфильтрована поиском: снимаем фильтр, иначе индекс
-                    // полного списка попадёт в отфильтрованный.
-                    const idx = flatEntries.findIndex((fe) => fe.key === e.key);
-                    if (idx === -1) return;
-                    setMasterQuery("");
-                    setReaderIndex(idx);
-                  }}
-                >
-                  <span style={{ fontSize: "var(--fs-meta)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{e.section}</span> — {e.title}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {!nothingVisible && groupsWithOffset.length > 0 && (
-            <div className="row" style={{ gap: 8 }}>
-              <input
-                className="res-toolbar__search"
-                placeholder="Поиск по открытому…"
-                value={masterQuery}
-                onChange={(e) => setMasterQuery(e.target.value)}
-                aria-label="Поиск по открытому лору"
-                style={{ flex: 1 }}
-              />
-              {masterQuery && (
-                <button onClick={() => setMasterQuery("")} style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}>
-                  Сбросить
-                </button>
-              )}
-              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", whiteSpace: "nowrap" }}>
-                {filteredFlatEntries.length} / {flatEntries.length}
-              </span>
-            </div>
-          )}
-
-          {filteredGroupsWithOffset.length === 0 && !nothingVisible && masterQuery.trim() && (
-            <p className="muted">По «{masterQuery.trim()}» ничего не найдено.</p>
-          )}
-
-          {filteredGroupsWithOffset.map((g) => (
-            <div key={g.key} className="stack" style={{ gap: 4 }}>
-              <button
-                type="button"
-                className={`player-section-header${openGroup === g.key ? " open" : ""}`}
-                onClick={() => setOpenGroup(openGroup === g.key ? null : g.key)}
-                aria-expanded={openGroup === g.key}
-                aria-controls={`player-section-${g.key}`}
-              >
-                {g.label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· {g.entries.length}</span>
-              </button>
-              {openGroup === g.key && (
-                <div id={`player-section-${g.key}`} className="player-section-items">
-                  {g.entries.map((e, i) => (
-                    <div key={e.key} className="row" style={{ gap: 4, alignItems: "stretch" }}>
-                      <button
-                        type="button"
-                        className="player-section-item"
-                        onClick={() => setReaderIndex(g.offset + i)}
-                        style={{ flex: "1 1 0", minWidth: 0 }}
-                      >
-                        {e.title}
-                      </button>
-                      <button
-                        type="button"
-                        title="Добавить в мой журнал"
-                        aria-label={`Добавить «${e.title}» в мой журнал`}
-                        onClick={() => handleAddFromLore(e)}
-                        style={{ flex: "0 0 auto", fontSize: "var(--fs-meta)", padding: "6px 8px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--muted)" }}
-                      >
-                        + В журнал
-                      </button>
+          ) : (
+            <LoreGroups
+              groups={contentGroups}
+              recent={recentMaster}
+              onAdd={handleAddFromLore}
+              header={(openEntry) => (
+                <div className="card stack" style={{ gap: 6 }}>
+                  {prevSession && (
+                    <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Прошлая
+                      </span>
+                      <span style={{ fontFamily: "var(--font-mono)" }}>{formatIsoDate(prevSession.date)}</span>
+                      {prevSession.title && <span>— {prevSession.title}</span>}
+                      {content?.sessions.some((s) => s.id === prevSession.id) && (
+                        <button
+                          type="button"
+                          onClick={() => openEntry(`session-${prevSession.id}`)}
+                          style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 24 }}
+                        >
+                          Чем кончилось
+                        </button>
+                      )}
                     </div>
-                  ))}
+                  )}
+                  <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Следующая
+                    </span>
+                    {nextSession ? (
+                      <>
+                        <span style={{ fontFamily: "var(--font-mono)" }}>
+                          {formatIsoDate(nextSession.date)}
+                          {nextSession.start_time ? ` ${nextSession.start_time}` : ""}
+                        </span>
+                        {nextSession.title && <span>— {nextSession.title}</span>}
+                      </>
+                    ) : (
+                      <span className="muted">пока не назначена</span>
+                    )}
+                  </div>
                 </div>
               )}
-            </div>
-          ))}
+            />
+          )}
         </div>
-      )}
-
-      {readerIndex != null && (
-        <PlayerContentReader
-          entries={readerEntries}
-          index={readerIndex}
-          onNavigate={setReaderIndex}
-          onClose={() => setReaderIndex(null)}
-        />
-      )}
-
-      {tab === "Путевые заметки" && (
-        <CharacterJournal
-          campaignId={campaignId}
-          schedule={content.schedule}
-          refreshKey={journalRefresh}
-          onActiveCharacterChange={setJournalCharacterId}
-        />
       )}
 
       {tab === "Группа" && (
@@ -719,12 +517,172 @@ export function PlayerCampaignPage() {
         <div className="archive-toast" role="status" aria-live="polite">
           <span className="archive-toast__msg">{loreToast}</span>
           <div className="archive-toast__actions">
-            <button className="archive-toast__undo" onClick={() => setTab("Путевые заметки")}>
+            <button className="archive-toast__undo" onClick={() => setTab("Лента")}>
               Открыть
             </button>
           </div>
         </div>
       )}
     </EntityPage>
+  );
+}
+
+// Группы лора со своей читалкой: Мир и От мастера — два независимых списка,
+// читалка открывается из обоих. Поиск живёт внутри, у каждой вкладки свой.
+function LoreGroups({
+  groups,
+  recent,
+  onAdd,
+  header,
+}: {
+  groups: { key: string; label: string; entries: ReaderEntry[] }[];
+  recent?: ReaderEntry[];
+  onAdd: (entry: ReaderEntry) => void;
+  /** Шапка над списками с доступом к открытию записи (сводка прошлой сессии). */
+  header?: (openEntry: (key: string) => void) => React.ReactNode;
+}) {
+  const [query, setQuery] = useState("");
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [readerIndex, setReaderIndex] = useState<number | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return groups.map((g, idx, arr) => {
+      let off = 0;
+      for (let i = 0; i < idx; i++) off += arr[i].entries.length;
+      return { ...g, offset: off };
+    });
+    return groups
+      .map((g) => ({
+        ...g,
+        entries: g.entries.filter(
+          (e) => e.title.toLowerCase().includes(q) || e.section.toLowerCase().includes(q)
+        ),
+      }))
+      .filter((g) => g.entries.length > 0)
+      .map((g, idx, arr) => {
+        let off = 0;
+        for (let i = 0; i < idx; i++) off += arr[i].entries.length;
+        return { ...g, offset: off };
+      });
+  }, [groups, query]);
+
+  const flatEntries = useMemo(() => groups.flatMap((g) => g.entries), [groups]);
+  const readerEntries = query.trim() ? filtered.flatMap((g) => g.entries) : flatEntries;
+
+  // Открыть запись по ключу (виджет «Последнее от мастера» и сводка прошлой
+  // сессии): ищет в полном списке, при активном поиске снимает фильтр, иначе
+  // индекс полного списка попал бы в отфильтрованный.
+  const openByKey = useCallback(
+    (key: string) => {
+      const inReader = readerEntries.findIndex((fe) => fe.key === key);
+      if (inReader !== -1) {
+        setReaderIndex(inReader);
+        return;
+      }
+      const idx = flatEntries.findIndex((fe) => fe.key === key);
+      if (idx === -1) return;
+      setQuery("");
+      setReaderIndex(idx);
+    },
+    [readerEntries, flatEntries]
+  );
+
+  return (
+    <div className="stack">
+      {header?.(openByKey)}
+      {recent && recent.length > 0 && (
+        <div className="card stack" style={{ gap: 8, borderLeft: "3px solid var(--accent)" }}>
+          <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>
+            Последнее от мастера
+          </span>
+          {recent.map((e) => (
+            <button
+              key={e.key}
+              type="button"
+              className="player-section-item"
+              style={{ textAlign: "left" }}
+              // Ключи виджета — с префиксом recent-, записи в ленте — без него.
+              onClick={() => openByKey(e.key.replace(/^recent-/, ""))}
+            >
+              <span style={{ fontSize: "var(--fs-meta)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{e.section}</span> — {e.title}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {flatEntries.length > 0 && (
+        <div className="row" style={{ gap: 8 }}>
+          <input
+            className="res-toolbar__search"
+            placeholder="Поиск по открытому…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Поиск по открытому лору"
+            style={{ flex: 1 }}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }}>
+              Сбросить
+            </button>
+          )}
+          <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", whiteSpace: "nowrap" }}>
+            {readerEntries.length} / {flatEntries.length}
+          </span>
+        </div>
+      )}
+
+      {filtered.length === 0 && query.trim() && (
+        <p className="muted">По «{query.trim()}» ничего не найдено.</p>
+      )}
+
+      {filtered.map((g) => (
+        <div key={g.key} className="stack" style={{ gap: 4 }}>
+          <button
+            type="button"
+            className={`player-section-header${openGroup === g.key ? " open" : ""}`}
+            onClick={() => setOpenGroup(openGroup === g.key ? null : g.key)}
+            aria-expanded={openGroup === g.key}
+            aria-controls={`player-section-${g.key}`}
+          >
+            {g.label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· {g.entries.length}</span>
+          </button>
+          {openGroup === g.key && (
+            <div id={`player-section-${g.key}`} className="player-section-items">
+              {g.entries.map((e, i) => (
+                <div key={e.key} className="row" style={{ gap: 4, alignItems: "stretch" }}>
+                  <button
+                    type="button"
+                    className="player-section-item"
+                    onClick={() => setReaderIndex(g.offset + i)}
+                    style={{ flex: "1 1 0", minWidth: 0 }}
+                  >
+                    {e.title}
+                  </button>
+                  <button
+                    type="button"
+                    title="Добавить в мой журнал"
+                    aria-label={`Добавить «${e.title}» в мой журнал`}
+                    onClick={() => onAdd(e)}
+                    style={{ flex: "0 0 auto", fontSize: "var(--fs-meta)", padding: "6px 8px", border: "1px solid var(--line)", background: "var(--paper-2)", color: "var(--muted)" }}
+                  >
+                    + В журнал
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {readerIndex != null && (
+        <PlayerContentReader
+          entries={readerEntries}
+          index={readerIndex}
+          onNavigate={setReaderIndex}
+          onClose={() => setReaderIndex(null)}
+        />
+      )}
+    </div>
   );
 }

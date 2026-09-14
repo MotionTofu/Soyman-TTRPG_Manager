@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { RelationGraph } from "../components/RelationGraph";
-import { TYPE_LABELS, type GraphData } from "../graphTypes";
+import { TYPE_LABELS, GRAPH_VIEW_EDGE_KINDS, type GraphData, type GraphView, type EdgeKind } from "../graphTypes";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import type { Campaign, Setting } from "../types";
@@ -15,7 +15,14 @@ const DEPTH_OPTIONS = [1, 2, 3];
 const DEFAULT_DISABLED_TYPES = new Set(["scene", "adventure", "campaign"]);
 const DEFAULT_ACTIVE_TYPES = new Set(Object.keys(TYPE_LABELS).filter((t) => !DEFAULT_DISABLED_TYPES.has(t)));
 
+// Виды рёбер, включённые по умолчанию для каждого графа.
+function defaultEdgeKinds(view: GraphView): Set<EdgeKind> {
+  return new Set(GRAPH_VIEW_EDGE_KINDS[view].filter((k) => k !== "mention"));
+}
+
 export function GraphPage() {
+  const { view: viewParam } = useParams<{ view?: string }>();
+  const view: GraphView = viewParam === "adventures" ? "adventures" : "world";
   const [data, setData] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Окрестность одной сущности живёт в адресе, а не в состоянии: на неё ведут
@@ -32,6 +39,12 @@ export function GraphPage() {
   // Точки (`role=spot`) в граф по умолчанию не идут: 25 комнат данжа давали
   // паутину (план «Зоны», этап 10). Обитание перепривязано на родителя.
   const [showSpots, setShowSpots] = useState(false);
+  const [activeKinds, setActiveKinds] = useState<Set<EdgeKind>>(() => defaultEdgeKinds(view));
+
+  // Смена графа сбрасывает виды рёбер на умолчания нового графа.
+  useEffect(() => {
+    setActiveKinds(defaultEdgeKinds(view));
+  }, [view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +60,7 @@ export function GraphPage() {
   useEffect(() => {
     const controller = new AbortController();
     const types = Array.from(activeTypes).join(",");
-    const params = new URLSearchParams({ types });
+    const params = new URLSearchParams({ types, view });
     if (campaignId) params.set("campaign_id", String(campaignId));
     else if (settingId) params.set("setting_id", String(settingId));
     if (showSpots) params.set("spots", "1");
@@ -62,7 +75,7 @@ export function GraphPage() {
         setError(e instanceof Error ? e.message : "Ошибка загрузки графа");
       });
     return () => controller.abort();
-  }, [activeTypes, settingId, campaignId, focus, depth, showSpots]);
+  }, [activeTypes, settingId, campaignId, focus, depth, showSpots, view]);
 
   // Campaigns belong to a setting, so narrowing by campaign only makes sense
   // within the currently chosen setting (or "any" if none chosen yet).
@@ -70,10 +83,12 @@ export function GraphPage() {
     ? campaigns.filter((c) => c.setting_id === settingId)
     : campaigns;
 
+  const viewTitle = view === "adventures" ? "Граф приключений" : "Граф мира";
+
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
-      <SectionHeading section="graph">Граф связей</SectionHeading>
+      <SectionHeading section="graph">{viewTitle}</SectionHeading>
       {scopeError && (
         <div className="error-banner">
           {scopeError}
@@ -126,8 +141,11 @@ export function GraphPage() {
       )}
       <RelationGraph
         data={data}
-        layoutKey={campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}
+        layoutKey={`${view}:${campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}`}
         emptyMessage={undefined}
+        activeKinds={activeKinds}
+        onActiveKindsChange={setActiveKinds}
+        edgeKinds={GRAPH_VIEW_EDGE_KINDS[view]}
         scopeBar={
           <>
             <select

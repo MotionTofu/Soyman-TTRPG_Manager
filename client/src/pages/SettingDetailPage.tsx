@@ -15,6 +15,7 @@ import { SettingCalendarSettings } from "../components/SettingCalendarSettings";
 import { ImportantDatesSection } from "../components/ImportantDatesSection";
 import { EntityTypeChip } from "../components/EntityTypeChip";
 import { EntityPage } from "../components/EntityPage";
+import { ListSkeleton, Loadable } from "../components/Loadable";
 import { useTabState } from "../hooks/useTabState";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
@@ -47,7 +48,7 @@ import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendiu
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { RelationGraph } from "../components/RelationGraph";
 import { SETTING_SCOPED_TYPES } from "../components/GraphTypeFilters";
-import { SettingPlayerContentTab } from "../components/SettingPlayerContentTab";
+
 import type { GraphData } from "../graphTypes";
 import { NAMED_BEING_CATEGORIES } from "../beingCategories";
 import { NavIcon } from "../components/NavIcons";
@@ -146,7 +147,6 @@ const TABS = [
   "Граф связей",
   "Хроника мира",
   "Заметки",
-  "Для игроков",
   "Ресурсы",
 ] as const;
 
@@ -1211,8 +1211,6 @@ export function SettingDetailPage() {
         </div>
         )}
 
-      {tab === "Для игроков" && <SettingPlayerContentTab settingId={settingId} campaigns={campaigns} />}
-
       {tab === "Ресурсы" && (
         <EntityTabWorkspace
           sections={[
@@ -1384,6 +1382,7 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
     const params = new URLSearchParams({
       types: Array.from(activeTypes).join(","),
       setting_id: String(settingId),
+      view: "world",
     });
     api.get<GraphData>(`/links/graph?${params.toString()}`, { signal: controller.signal })
       .then((d) => { setData(d); setError(null); })
@@ -1866,39 +1865,24 @@ function BeingsSection({ settingId }: { settingId: number }) {
           <button onClick={() => { const all = new Set(beings.map((b) => b.id)); setSelectedIds(all); }}>Выбрать всех</button>
         </div>
       )}
-      {loadError && (
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Не удалось загрузить личностей: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
-      )}
-      {loading && beings.length === 0 && !loadError ? (
-        <div className="stack" aria-busy="true" aria-label="Загрузка личностей">
-          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
-          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate", animationDelay: "120ms" }} />
-        </div>
-      ) : beings.length === 0 && !loading && !loadError ? (
-        <EmptyState
-          title="Личностей пока нет"
-          hint="Ключевые фигуры, влиятельные и примечательные — начните с первой."
-          action={
-            <button className="primary" onClick={() => setCreating(true)}>
-              Создать личность
-            </button>
-          }
-        />
-      ) : (
+      <Loadable
+        loading={loading && beings.length === 0}
+        error={loadError}
+        errorTitle="Не удалось загрузить личностей"
+        onRetry={() => refresh()}
+        skeleton={<ListSkeleton variant="rows" label="Загрузка личностей" />}
+        empty={beings.length === 0 ? (
+          <EmptyState
+            title="Личностей пока нет"
+            hint="Ключевые фигуры, влиятельные и примечательные — начните с первой."
+            action={
+              <button className="primary" onClick={() => setCreating(true)}>
+                Создать личность
+              </button>
+            }
+          />
+        ) : null}
+      >
         <EntityTabWorkspace
           sections={beingSections}
           selection={beingSel}
@@ -1924,7 +1908,7 @@ function BeingsSection({ settingId }: { settingId: number }) {
             </div>
           )}
         </EntityTabWorkspace>
-      )}
+      </Loadable>
     </div>
   );
 }
@@ -2326,38 +2310,24 @@ function BestiarySection({ settingId }: { settingId: number }) {
           Создать запись бестиария
         </button>
       </div>
-      {loadError && (
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Не удалось загрузить бестиарий: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
-      )}
-      {loading && beings.length === 0 && !loadError ? (
-        <div className="stack" aria-busy="true" aria-label="Загрузка бестиария">
-          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
-        </div>
-      ) : beings.length === 0 && !loading && !loadError ? (
-        <EmptyState
-          title="Бестиарий пока пуст"
-          hint="Виды без имени — гоблины, утопленники, духи леса. Добавьте первый."
-          action={
-            <button className="primary" onClick={() => setCreating(true)}>
-              Создать запись бестиария
-            </button>
-          }
-        />
-      ) : (
+      <Loadable
+        loading={loading && beings.length === 0}
+        error={loadError}
+        errorTitle="Не удалось загрузить бестиарий"
+        onRetry={() => refresh()}
+        skeleton={<ListSkeleton variant="rows" count={1} label="Загрузка бестиария" />}
+        empty={beings.length === 0 ? (
+          <EmptyState
+            title="Бестиарий пока пуст"
+            hint="Виды без имени — гоблины, утопленники, духи леса. Добавьте первый."
+            action={
+              <button className="primary" onClick={() => setCreating(true)}>
+                Создать запись бестиария
+              </button>
+            }
+          />
+        ) : null}
+      >
         <EntityTabWorkspace
           sections={[
             {
@@ -2390,7 +2360,7 @@ function BestiarySection({ settingId }: { settingId: number }) {
             </div>
           )}
         </EntityTabWorkspace>
-      )}
+      </Loadable>
     </div>
   );
 }
@@ -2531,38 +2501,24 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
         </span>
       )}
       {debouncedQuery.trim() && <span className="muted">Поиск по имени — {communities.length} найдено</span>}
-      {loadError && (
-        <div
-          className="card"
-          style={{
-            borderLeft: "3px solid var(--status-cancelled)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <span>Не удалось загрузить сообщества: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
-            Повторить
-          </button>
-        </div>
-      )}
-      {loading && communities.length === 0 && !loadError ? (
-        <div className="stack" aria-busy="true" aria-label="Загрузка сообществ">
-          <div className="card" style={{ height: 48, opacity: 0.45, background: "var(--bg-elevated)", animation: "search-skeleton-pulse 1.1s ease-in-out infinite alternate" }} />
-        </div>
-      ) : communities.length === 0 && !loading && !loadError ? (
-        <EmptyState
-          title="Сообществ пока нет"
-          hint="Народы, культуры, фракции, гильдии — начните с первого объединения."
-          action={
-            <button className="primary" onClick={() => setCreating(true)}>
-              Создать сообщество
-            </button>
-          }
-        />
-      ) : (
+      <Loadable
+        loading={loading && communities.length === 0}
+        error={loadError}
+        errorTitle="Не удалось загрузить сообщества"
+        onRetry={() => refresh()}
+        skeleton={<ListSkeleton variant="rows" count={1} label="Загрузка сообществ" />}
+        empty={communities.length === 0 ? (
+          <EmptyState
+            title="Сообществ пока нет"
+            hint="Народы, культуры, фракции, гильдии — начните с первого объединения."
+            action={
+              <button className="primary" onClick={() => setCreating(true)}>
+                Создать сообщество
+              </button>
+            }
+          />
+        ) : null}
+      >
         <EntityTabWorkspace
           sections={[
             {
@@ -2594,7 +2550,7 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
             </div>
           )}
         </EntityTabWorkspace>
-      )}
+      </Loadable>
     </div>
   );
 }

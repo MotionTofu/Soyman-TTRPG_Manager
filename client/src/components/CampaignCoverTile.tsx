@@ -16,7 +16,9 @@ import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 // Правило, по которому выбрано, что осталось: сводка отвечает «которая это и
 // когда следующая», а не описывает объект. Сеттинг, счётчики и оплата никуда
 // не делись — они внутри кампании, куда плитка и ведёт.
-export function CampaignCoverTile({ campaign: c }: { campaign: Campaign }) {
+/** Лицо кампании: обложка с именем. Отдельно от плитки — нужно и
+ *  предпросмотру в каркасе списка. */
+export function CampaignCover({ campaign: c }: { campaign: Campaign }) {
   const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
   const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
   const authBlob = useAuthenticatedFileUrl(imageUrl);
@@ -26,32 +28,72 @@ export function CampaignCoverTile({ campaign: c }: { campaign: Campaign }) {
     : safeBackgroundImage(imageUrl);
 
   return (
-    <Link to={`/campaigns/${c.id}`} className="card campaign-tile">
-      <div className="campaign-tile-cover cover-halftone">
-        {bg ? (
-          // Обложка — изображение-ФОН, поэтому проходит дуотон (zine.css).
-          // Отдельный слой под картинкой нужен, чтобы grayscale-фильтр не
-          // достался подписи поверх неё.
-          <div className="cover-art cover-photo">
-            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
-          </div>
-        ) : (
-          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-        )}
-        <div className="campaign-tile-scrim" />
-        <h3 className="campaign-tile-name">{c.name}</h3>
-      </div>
-      <div className="campaign-tile-meta">
-        <div className="campaign-tile-system">{c.system_name ?? "система не выбрана"}</div>
-        <div className="campaign-tile-next">
-          {/* Ромб — «история/дальше» из словаря разъёмов референса: тип
-              кодируется формой, а не цветом (§1.7). */}
-          <span className="campaign-tile-next-mark" aria-hidden="true" />
-          <span>
-            {c.next_planned_date ? formatNearestDate(c.next_planned_date) : "нет запланированных"}
-          </span>
+    <div className="campaign-tile-cover cover-halftone">
+      {bg ? (
+        // Обложка — изображение-ФОН, поэтому проходит дуотон (zine.css).
+        // Отдельный слой под картинкой нужен, чтобы grayscale-фильтр не
+        // достался подписи поверх неё.
+        <div className="cover-art cover-photo">
+          <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
         </div>
+      ) : (
+        <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+      )}
+      <div className="campaign-tile-scrim" />
+      <h3 className="campaign-tile-name">{c.name}</h3>
+    </div>
+  );
+}
+
+export function CampaignCoverTile({
+  campaign: c,
+  onSelect,
+}: {
+  campaign: Campaign;
+  /** Выбор вместо перехода: плитка становится кнопкой предпросмотра в
+   *  каркасе списка. Нет — обычная ссылка на карточку, как раньше. */
+  onSelect?: (campaign: Campaign) => void;
+}) {
+  const cover = <CampaignCover campaign={c} />;
+  const meta = (
+    <div className="campaign-tile-meta">
+      <div className="campaign-tile-system">{c.system_name ?? "система не выбрана"}</div>
+      <div className="campaign-tile-next">
+        {/* Ромб — «история/дальше» из словаря разъёмов референса: тип
+            кодируется формой, а не цветом (§1.7). */}
+        <span className="campaign-tile-next-mark" aria-hidden="true" />
+        <span>
+          {c.next_planned_date ? formatNearestDate(c.next_planned_date) : "нет запланированных"}
+        </span>
       </div>
+    </div>
+  );
+
+  if (onSelect) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Предпросмотр: ${c.name}`}
+        className="card campaign-tile"
+        onClick={() => onSelect(c)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect(c);
+          }
+        }}
+      >
+        {cover}
+        {meta}
+      </div>
+    );
+  }
+
+  return (
+    <Link to={`/campaigns/${c.id}`} className="card campaign-tile">
+      {cover}
+      {meta}
     </Link>
   );
 }
