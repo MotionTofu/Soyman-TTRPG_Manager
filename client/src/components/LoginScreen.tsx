@@ -11,6 +11,8 @@ import { setCachedUser } from "../api/currentUser";
 // on now, including the local desktop app. On a fresh install with no GM
 // account yet, /api/auth/status reports needsSetup and this renders a
 // one-time "create GM account" form instead of a login no one could pass.
+const REMEMBER_KEY = "loginRemember";
+
 export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void }) {
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [username, setUsername] = useState("");
@@ -21,6 +23,11 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // «Не выходить на этом компьютере»: сам выбор запоминается здесь же, чтобы
+  // после «Выйти» галочка стояла так, как её оставили. По умолчанию включена.
+  const [remember, setRemember] = useState(() => {
+    try { return localStorage.getItem(REMEMBER_KEY) !== "0"; } catch { return true; }
+  });
 
   useEffect(() => {
     fetch("/api/auth/status")
@@ -45,11 +52,12 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
       const res = await fetch(needsSetup ? "/api/auth/setup" : "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ username: username.trim(), password, remember }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Не удалось войти");
       setAuthToken(data.token);
+      try { localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0"); } catch {}
       if (data.user) setCachedUser(data.user);
       if (needsSetup) {
         try { sessionStorage.setItem("justCreated", data.user?.username || "1"); } catch {}
@@ -153,6 +161,11 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated?: () => void 
               </span>
             </label>
           )}
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "var(--fs-meta)" }}>
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ margin: 0, accentColor: "var(--accent)" }} />
+            <span>Не выходить на этом компьютере</span>
+          </label>
 
           {error && <LoadErrorCard message={error} />}
 

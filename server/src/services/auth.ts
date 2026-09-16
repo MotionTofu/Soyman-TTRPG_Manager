@@ -39,8 +39,11 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export function signToken(user: AuthUser): string {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
+// «Не выходить на этом компьютере» (галочка на экране входа): такой пропуск
+// не истекает и живёт, пока на этом компьютере не нажмут «Выйти». Отзывается
+// он так же, как обычный, — сменой пароля или роли (token_version).
+export function signToken(user: AuthUser, options: { remember?: boolean } = {}): string {
+  return jwt.sign(user, JWT_SECRET, options.remember ? {} : { expiresIn: "7d" });
 }
 
 // Exported (not just used internally) so routes/index.ts can accept a

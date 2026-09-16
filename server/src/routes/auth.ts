@@ -38,7 +38,7 @@ authRouter.get("/status", (_req, res) => {
 // only be changed by the GM themselves.
 authRouter.post("/setup", async (req, res) => {
   if (!needsSetup()) return res.status(403).json({ error: "setup already completed" });
-  const { username, password } = req.body as { username?: string; password?: string };
+  const { username, password, remember } = req.body as { username?: string; password?: string; remember?: boolean };
   if (!username?.trim() || !password) {
     return res.status(400).json({ error: "username and password are required" });
   }
@@ -50,18 +50,18 @@ authRouter.post("/setup", async (req, res) => {
     .run(username.trim(), passwordHash);
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid) as UserRow;
   const user = toAuthUser(row);
-  res.status(201).json({ token: signToken(user), user });
+  res.status(201).json({ token: signToken(user, { remember: remember === true }), user });
 });
 
 authRouter.post("/login", async (req, res) => {
-  const { username, password } = req.body as { username?: string; password?: string };
+  const { username, password, remember } = req.body as { username?: string; password?: string; remember?: boolean };
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
   const row = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as UserRow | undefined;
   if (!row || !(await verifyPassword(password, row.password_hash))) {
     return res.status(401).json({ error: "invalid username or password" });
   }
   const user = toAuthUser(row);
-  res.json({ token: signToken(user), user });
+  res.json({ token: signToken(user, { remember: remember === true }), user });
 });
 
 authRouter.get("/me", requireAuth(), (req: AuthedRequest, res) => {
@@ -96,7 +96,10 @@ authRouter.put("/me", requireAuth(), async (req: AuthedRequest, res) => {
   const updated = toAuthUser(
     db.prepare("SELECT * FROM users WHERE id = ?").get(row.id) as UserRow
   );
-  res.json({ token: signToken(updated), user: updated });
+  // Новый пропуск наследует «не выходить»: смена логина в Кабинете не должна
+  // тихо превращать бессрочный вход в недельный.
+  const remember = (req.user as { exp?: number }).exp === undefined;
+  res.json({ token: signToken(updated, { remember }), user: updated });
 });
 
 // GM-only: which players already have a login — lets the GM's "Игроки" page
