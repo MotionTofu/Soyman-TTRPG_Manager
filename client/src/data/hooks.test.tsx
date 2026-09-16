@@ -114,6 +114,23 @@ describe("слой данных", () => {
     await waitFor(() => expect(result.current.being.data?.name).toBe("Не сохранится"));
   });
 
+  it("отказ сервера не перечитывает карточку и не будит другие окна", async () => {
+    const { result } = renderHook(useBeing, { wrapper });
+    await waitFor(() => expect(result.current.being.data).toBeDefined());
+    const getsBefore = server.gets.length;
+
+    server.failNextPut = "502 Bad Gateway";
+    await act(async () => {
+      await result.current.saver.save({ name: "Не сохранится" });
+    });
+    // Откат уже вернул то, что было: перечитывание при лежащем сервере упало бы
+    // вторым сообщением «Ошибка загрузки» рядом с плашкой — два сообщения об одном.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(server.gets.length).toBe(getsBefore);
+    expect(broadcasts).toEqual([]);
+    expect(result.current.being.error).toBeNull();
+  });
+
   it("прочее действие обновляет задетое, а при ошибке без повтора плашка без кнопки", async () => {
     const { result } = renderHook(() => ({ being: useEntity<{ name: string }>("being", 408), run: useAction() }), { wrapper });
     await waitFor(() => expect(result.current.being.data).toBeDefined());

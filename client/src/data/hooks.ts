@@ -162,7 +162,10 @@ export function useSaveEntity<T extends object>(
     onError: (_error, _patch, context) => {
       if (context?.previous !== undefined) client.setQueryData(dataKeys.entity(kind, id as number), context.previous);
     },
-    onSettled: () => {
+    // Только после удачной записи. Отказ уже откатил значение, а перечитывание
+    // при лежащем сервере упало бы баннером «Ошибка загрузки» рядом с плашкой:
+    // два сообщения об одном. Будить другие окна тоже нечем — ничего не изменилось.
+    onSuccess: () => {
       if (id == null) return;
       afterWrite(client, [{ kind, id }, ...extraAffects.current]);
     },
